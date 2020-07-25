@@ -176,41 +176,6 @@ pub struct FileAccount {
     pub extra: HashMap<String, String>, /* use custom deserializer to convert any given value (eg bool, number, etc) to string */
 }
 
-impl From<FileAccount> for AccountConf {
-    fn from(x: FileAccount) -> Self {
-        let format = x.format.to_lowercase();
-        let root_mailbox = x.root_mailbox.clone();
-        let identity = x.identity.clone();
-        let display_name = x.display_name.clone();
-        let mailboxes = x
-            .mailboxes
-            .iter()
-            .map(|(k, v)| (k.clone(), v.mailbox_conf.clone()))
-            .collect();
-
-        let acc = AccountSettings {
-            name: String::new(),
-            root_mailbox,
-            format,
-            identity,
-            read_only: x.read_only,
-            display_name,
-            subscribed_mailboxes: x.subscribed_mailboxes.clone(),
-            mailboxes,
-            manual_refresh: x.manual_refresh,
-            extra: x.extra.clone(),
-        };
-
-        let mailbox_confs = x.mailboxes.clone();
-        AccountConf {
-            account: acc,
-            conf_override: x.conf_override.clone(),
-            conf: x,
-            mailbox_confs,
-        }
-    }
-}
-
 impl FileAccount {
     pub fn mailboxes(&self) -> &HashMap<String, FileMailboxConf> {
         &self.mailboxes
@@ -272,19 +237,39 @@ impl AccountConf {
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize)]
-pub struct Settings {
-    pub accounts: HashMap<String, AccountConf>,
-    pub pager: PagerSettings,
-    pub listing: ListingSettings,
-    pub notifications: NotificationsSettings,
-    pub shortcuts: Shortcuts,
-    pub tags: TagsSettings,
-    pub composing: ComposingSettings,
-    pub pgp: PGPSettings,
-    pub terminal: TerminalSettings,
-    pub plugins: HashMap<String, Plugin>,
-    pub log: LogSettings,
+impl From<FileAccount> for AccountConf {
+    fn from(x: FileAccount) -> Self {
+        let format = x.format.to_lowercase();
+        let root_mailbox = x.root_mailbox.clone();
+        let identity = x.identity.clone();
+        let display_name = x.display_name.clone();
+        let mailboxes = x
+            .mailboxes
+            .iter()
+            .map(|(k, v)| (k.clone(), v.mailbox_conf.clone()))
+            .collect();
+
+        let acc = AccountSettings {
+            name: String::new(),
+            root_mailbox,
+            format,
+            identity,
+            read_only: x.read_only,
+            display_name,
+            subscribed_mailboxes: x.subscribed_mailboxes.clone(),
+            mailboxes,
+            manual_refresh: x.manual_refresh,
+            extra: x.extra.clone(),
+        };
+
+        let mailbox_confs = x.mailboxes.clone();
+        AccountConf {
+            account: acc,
+            conf_override: x.conf_override.clone(),
+            conf: x,
+            mailbox_confs,
+        }
+    }
 }
 
 pub fn get_config_file() -> Result<PathBuf> {
@@ -442,6 +427,21 @@ impl FileSettings {
 
         Ok(s)
     }
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct Settings {
+    pub accounts: HashMap<String, AccountConf>,
+    pub pager: PagerSettings,
+    pub listing: ListingSettings,
+    pub notifications: NotificationsSettings,
+    pub shortcuts: Shortcuts,
+    pub tags: TagsSettings,
+    pub composing: ComposingSettings,
+    pub pgp: PGPSettings,
+    pub terminal: TerminalSettings,
+    pub plugins: HashMap<String, Plugin>,
+    pub log: LogSettings,
 }
 
 impl Settings {
