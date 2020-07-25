@@ -65,19 +65,14 @@ impl Drop for PluginBackend {
 }
 
 impl MailBackend for PluginBackend {
-    fn is_async(&self) -> bool {
-        // TODO
-        false
-    }
-
-    fn is_remote(&self) -> bool {
-        // TODO
-        false
-    }
-
-    fn supports_search(&self) -> bool {
-        // TODO
-        false
+    fn capabilities(&self) -> MailBackendCapabilities {
+        const CAPABILITIES: MailBackendCapabilities = MailBackendCapabilities {
+            is_async: false,
+            is_remote: false,
+            supports_search: false,
+            supports_tags: false,
+        };
+        CAPABILITIES
     }
 
     fn is_online(&self) -> Result<()> {

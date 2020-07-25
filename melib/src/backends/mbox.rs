@@ -694,16 +694,14 @@ pub struct MboxType {
 }
 
 impl MailBackend for MboxType {
-    fn is_async(&self) -> bool {
-        false
-    }
-
-    fn is_remote(&self) -> bool {
-        false
-    }
-
-    fn supports_search(&self) -> bool {
-        false
+    fn capabilities(&self) -> MailBackendCapabilities {
+        const CAPABILITIES: MailBackendCapabilities = MailBackendCapabilities {
+            is_async: false,
+            is_remote: false,
+            supports_search: false,
+            supports_tags: false,
+        };
+        CAPABILITIES
     }
 
     fn is_online(&self) -> Result<()> {

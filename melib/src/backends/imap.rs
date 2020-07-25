@@ -186,15 +186,14 @@ pub struct ImapType {
 }
 
 impl MailBackend for ImapType {
-    fn is_async(&self) -> bool {
-        true
-    }
-    fn is_remote(&self) -> bool {
-        true
-    }
-
-    fn supports_search(&self) -> bool {
-        true
+    fn capabilities(&self) -> MailBackendCapabilities {
+        const CAPABILITIES: MailBackendCapabilities = MailBackendCapabilities {
+            is_async: true,
+            is_remote: true,
+            supports_search: true,
+            supports_tags: true,
+        };
+        CAPABILITIES
     }
 
     fn fetch_async(

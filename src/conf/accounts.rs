@@ -26,11 +26,7 @@
 use super::{AccountConf, FileMailboxConf};
 use crate::jobs::{JobChannel, JobExecutor, JobId, JoinHandle};
 use melib::async_workers::{Async, AsyncBuilder, AsyncStatus, WorkContext};
-use melib::backends::{
-    AccountHash, BackendOp, Backends, EnvelopeHashBatch, MailBackend, Mailbox, MailboxHash,
-    NotifyFn, ReadOnlyOp, RefreshEvent, RefreshEventConsumer, RefreshEventKind, ResultFuture,
-    SpecialUsageMailbox,
-};
+use melib::backends::*;
 use melib::email::*;
 use melib::error::{MeliError, Result};
 use melib::text_processing::GlobMatch;
@@ -160,8 +156,7 @@ pub struct Account {
     sender: Sender<ThreadEvent>,
     event_queue: VecDeque<(MailboxHash, RefreshEvent)>,
     notify_fn: Arc<NotifyFn>,
-    pub is_async: bool,
-    pub is_remote: bool,
+    pub backend_capabilities: MailBackendCapabilities,
 }
 
 pub enum JobRequest {
@@ -366,7 +361,7 @@ impl Account {
 
         let mut active_jobs = HashMap::default();
         let mut active_job_instants = BTreeMap::default();
-        if backend.is_async() {
+        if backend.capabilities().is_async {
             if let Ok(mailboxes_job) = backend.mailboxes_async() {
                 if let Ok(online_job) = backend.is_online_async() {
                     let (rcvr, handle, job_id) =
@@ -380,7 +375,7 @@ impl Account {
             index,
             hash,
             name,
-            is_online: if !backend.is_remote() {
+            is_online: if !backend.capabilities().is_remote {
                 Ok(())
             } else {
                 Err(MeliError::new("Attempting connection."))
@@ -399,12 +394,11 @@ impl Account {
             active_jobs,
             active_job_instants,
             event_queue: VecDeque::with_capacity(8),
-            is_async: backend.is_async(),
-            is_remote: backend.is_remote(),
+            backend_capabilities: backend.capabilities(),
             backend: Arc::new(RwLock::new(backend)),
         };
 
-        if !ret.is_remote && !ret.is_async {
+        if !ret.backend_capabilities.is_remote && !ret.backend_capabilities.is_async {
             ret.init(None)?;
         }
 
@@ -543,7 +537,7 @@ impl Account {
                     || entry.ref_mailbox.special_usage() == SpecialUsageMailbox::Inbox
                 {
                     entry.status = MailboxStatus::Parsing(0, 0);
-                    if self.is_async {
+                    if self.backend_capabilities.is_async {
                         if let Ok(mailbox_job) = self.backend.write().unwrap().fetch_async(*h) {
                             let mailbox_job = mailbox_job.into_future();
                             let (rcvr, handle, job_id) =
@@ -916,7 +910,7 @@ impl Account {
         let r = RefreshEventConsumer::new(Box::new(move |r| {
             sender_.send(ThreadEvent::from(r)).unwrap();
         }));
-        if self.is_async {
+        if self.backend_capabilities.is_async {
             if let Ok(refresh_job) = self.backend.write().unwrap().refresh_async(mailbox_hash, r) {
                 let (rcvr, handle, job_id) = self.job_executor.spawn_specialized(refresh_job);
                 self.sender
@@ -944,7 +938,7 @@ impl Account {
         let r = RefreshEventConsumer::new(Box::new(move |r| {
             sender_.send(ThreadEvent::from(r)).unwrap();
         }));
-        if self.is_async {
+        if self.backend_capabilities.is_async {
             if !self.active_jobs.values().any(|j| j.is_watch()) {
                 match self.backend.read().unwrap().watch_async(r) {
                     Ok(fut) => {
@@ -1044,7 +1038,7 @@ impl Account {
                             Ok(())
                         }
                         MailboxStatus::None => {
-                            if self.is_async {
+                            if self.backend_capabilities.is_async {
                                 if !self.active_jobs.values().any(|j| j.is_fetch(mailbox_hash)) {
                                     let mailbox_job =
                                         self.backend.write().unwrap().fetch_async(mailbox_hash);
@@ -1572,11 +1566,11 @@ impl Account {
     /* Call only in Context::is_online, since only Context can launch the watcher threads if an
      * account goes from offline to online. */
     pub fn is_online(&mut self) -> Result<()> {
-        if !self.is_remote && !self.is_async {
+        if !self.backend_capabilities.is_remote && !self.backend_capabilities.is_async {
             return Ok(());
         }
 
-        if self.is_async {
+        if self.backend_capabilities.is_async {
             if self.is_online.is_ok() {
                 return Ok(());
             }
@@ -1617,7 +1611,7 @@ impl Account {
             #[cfg(feature = "sqlite3")]
             crate::conf::SearchBackend::Sqlite3 => crate::sqlite3::search(search_term, _sort),
             crate::conf::SearchBackend::None => {
-                if self.backend.read().unwrap().supports_search() {
+                if self.backend_capabilities.supports_search {
                     self.backend
                         .read()
                         .unwrap()

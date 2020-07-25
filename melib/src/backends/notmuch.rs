@@ -318,16 +318,14 @@ impl NotmuchDb {
 }
 
 impl MailBackend for NotmuchDb {
-    fn is_async(&self) -> bool {
-        false
-    }
-
-    fn is_remote(&self) -> bool {
-        false
-    }
-
-    fn supports_search(&self) -> bool {
-        true
+    fn capabilities(&self) -> MailBackendCapabilities {
+        const CAPABILITIES: MailBackendCapabilities = MailBackendCapabilities {
+            is_async: false,
+            is_remote: false,
+            supports_search: true,
+            supports_tags: true,
+        };
+        CAPABILITIES
     }
 
     fn is_online(&self) -> Result<()> {

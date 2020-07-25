@@ -436,7 +436,7 @@ impl Component for AccountStatus {
             None,
         );
         write_string_to_grid(
-            if backend_lck.tags().is_some() {
+            if a.backend_capabilities.supports_tags {
                 "yes"
             } else {
                 "no"
@@ -459,30 +459,19 @@ impl Component for AccountStatus {
             None,
         );
         write_string_to_grid(
-            &if a.settings.account().format() == "imap"
-                && *a.settings.conf.search_backend() == SearchBackend::None
-            {
-                "server-side search".to_string()
-            } else if a.settings.account().format() == "notmuch"
-                && *a.settings.conf.search_backend() == SearchBackend::None
-            {
-                "notmuch database".to_string()
-            } else {
+            &match (
+                a.settings.conf.search_backend(),
+                a.backend_capabilities.supports_search,
+            ) {
+                (SearchBackend::None, true) => "backend-side search".to_string(),
+                (SearchBackend::None, false) => "none (search will be slow)".to_string(),
                 #[cfg(feature = "sqlite3")]
-                {
-                    if *a.settings.conf.search_backend() == SearchBackend::Sqlite3 {
-                        if let Ok(path) = crate::sqlite3::db_path() {
-                            format!("sqlite3 database {}", path.display())
-                        } else {
-                            "sqlite3 database".to_string()
-                        }
+                (SearchBackend::Sqlite3, _) => {
+                    if let Ok(path) = crate::sqlite3::db_path() {
+                        format!("sqlite3 database {}", path.display())
                     } else {
-                        "none (search will be slow)".to_string()
+                        "sqlite3 database".to_string()
                     }
-                }
-                #[cfg(not(feature = "sqlite3"))]
-                {
-                    "none (search will be slow)".to_string()
                 }
             },
             &mut self.content,

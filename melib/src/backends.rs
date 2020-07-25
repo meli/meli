@@ -282,12 +282,18 @@ impl NotifyFn {
     }
 }
 
+#[derive(Debug, Copy, Clone)]
+pub struct MailBackendCapabilities {
+    pub is_async: bool,
+    pub is_remote: bool,
+    pub supports_search: bool,
+    pub supports_tags: bool,
+}
+
 pub type ResultFuture<T> = Result<Pin<Box<dyn Future<Output = Result<T>> + Send + 'static>>>;
 
 pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
-    fn is_async(&self) -> bool;
-    fn is_remote(&self) -> bool;
-    fn supports_search(&self) -> bool;
+    fn capabilities(&self) -> MailBackendCapabilities;
     fn is_online(&self) -> Result<()> {
         Err(MeliError::new("Unimplemented."))
     }
