@@ -24,6 +24,82 @@ use crate::components::utilities::PageMovement;
 use std::cmp;
 use std::convert::TryInto;
 
+macro_rules! row_attr {
+    ($color_cache:expr, $even: expr, $unseen:expr, $highlighted:expr, $selected:expr  $(,)*) => {{
+        ThemeAttribute {
+            fg: if $highlighted {
+                if $even {
+                    $color_cache.even_highlighted.fg
+                } else {
+                    $color_cache.odd_highlighted.fg
+                }
+            } else if $selected {
+                if $even {
+                    $color_cache.even_selected.fg
+                } else {
+                    $color_cache.odd_selected.fg
+                }
+            } else if $unseen {
+                if $even {
+                    $color_cache.even_unseen.fg
+                } else {
+                    $color_cache.odd_unseen.fg
+                }
+            } else if $even {
+                $color_cache.even.fg
+            } else {
+                $color_cache.odd.fg
+            },
+            bg: if $highlighted {
+                if $even {
+                    $color_cache.even_highlighted.bg
+                } else {
+                    $color_cache.odd_highlighted.bg
+                }
+            } else if $selected {
+                if $even {
+                    $color_cache.even_selected.bg
+                } else {
+                    $color_cache.odd_selected.bg
+                }
+            } else if $unseen {
+                if $even {
+                    $color_cache.even_unseen.bg
+                } else {
+                    $color_cache.odd_unseen.bg
+                }
+            } else if $even {
+                $color_cache.even.bg
+            } else {
+                $color_cache.odd.bg
+            },
+            attrs: if $highlighted {
+                if $even {
+                    $color_cache.even_highlighted.attrs
+                } else {
+                    $color_cache.odd_highlighted.attrs
+                }
+            } else if $selected {
+                if $even {
+                    $color_cache.even_selected.attrs
+                } else {
+                    $color_cache.odd_selected.attrs
+                }
+            } else if $unseen {
+                if $even {
+                    $color_cache.even_unseen.attrs
+                } else {
+                    $color_cache.odd_unseen.attrs
+                }
+            } else if $even {
+                $color_cache.even.attrs
+            } else {
+                $color_cache.odd.attrs
+            },
+        }
+    }};
+}
+
 /// A list of all mail (`Envelope`s) in a `Mailbox`. On `\n` it opens the `Envelope` content in a
 /// `MailView`.
 #[derive(Debug)]
@@ -80,19 +156,25 @@ impl MailListingTrait for ThreadListing {
         self.cursor_pos.0 = self.new_cursor_pos.0;
 
         self.color_cache = ColorCache {
-            unseen: crate::conf::value(context, "mail.listing.plain.even_unseen"),
-            highlighted: crate::conf::value(context, "mail.listing.plain.even_highlighted"),
+            even_unseen: crate::conf::value(context, "mail.listing.plain.even_unseen"),
+            even_selected: crate::conf::value(context, "mail.listing.plain.even_selected"),
+            even_highlighted: crate::conf::value(context, "mail.listing.plain.even_highlighted"),
+            odd_unseen: crate::conf::value(context, "mail.listing.plain.odd_unseen"),
+            odd_selected: crate::conf::value(context, "mail.listing.plain.odd_selected"),
+            odd_highlighted: crate::conf::value(context, "mail.listing.plain.odd_highlighted"),
             even: crate::conf::value(context, "mail.listing.plain.even"),
             odd: crate::conf::value(context, "mail.listing.plain.odd"),
-            even_unseen: crate::conf::value(context, "mail.listing.plain.even_unseen"),
-            odd_unseen: crate::conf::value(context, "mail.listing.plain.odd_unseen"),
-            selected: crate::conf::value(context, "mail.listing.plain.even_selected"),
             attachment_flag: crate::conf::value(context, "mail.listing.attachment_flag"),
             thread_snooze_flag: crate::conf::value(context, "mail.listing.thread_snooze_flag"),
+            tag_default: crate::conf::value(context, "mail.listing.tag_default"),
+            theme_default: crate::conf::value(context, "theme_default"),
             ..self.color_cache
         };
         if !context.settings.terminal.use_color() {
             self.color_cache.highlighted.attrs |= Attr::REVERSE;
+            self.color_cache.tag_default.attrs |= Attr::REVERSE;
+            self.color_cache.even_highlighted.attrs |= Attr::REVERSE;
+            self.color_cache.odd_highlighted.attrs |= Attr::REVERSE;
         }
 
         // Get mailbox as a reference.
@@ -636,21 +718,21 @@ impl ListingTrait for ThreadListing {
             .collection
             .get_env(env_hash);
 
-        let fg_color = if !envelope.is_seen() {
-            Color::Byte(0)
-        } else {
-            Color::Default
-        };
-        let bg_color = if self.cursor_pos.2 == idx {
-            Color::Byte(246)
-        } else if !envelope.is_seen() {
-            Color::Byte(251)
-        } else if idx % 2 == 0 {
-            Color::Byte(236)
-        } else {
-            Color::Default
-        };
-        change_colors(grid, area, fg_color, bg_color);
+        let row_attr = row_attr!(
+            self.color_cache,
+            idx % 2 == 0,
+            !envelope.is_seen(),
+            self.cursor_pos.2 == idx,
+            false,
+        );
+        for row in grid.bounds_iter(area) {
+            for c in row {
+                grid[c]
+                    .set_fg(row_attr.fg)
+                    .set_bg(row_attr.bg)
+                    .set_attrs(row_attr.attrs);
+            }
+        }
     }
 
     fn set_movement(&mut self, mvm: PageMovement) {
@@ -842,17 +924,7 @@ impl ThreadListing {
 
                 panic!();
             }
-            let row_attr = if *is_seen {
-                if idx % 2 == 0 {
-                    self.color_cache.even
-                } else {
-                    self.color_cache.odd
-                }
-            } else if idx % 2 == 0 {
-                self.color_cache.even_unseen
-            } else {
-                self.color_cache.odd_unseen
-            };
+            let row_attr = row_attr!(self.color_cache, idx % 2 == 0, !*is_seen, false, false,);
             let (x, _) = write_string_to_grid(
                 &idx.to_string(),
                 &mut self.data_columns.columns[0],

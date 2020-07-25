@@ -141,6 +141,9 @@ impl MailListingTrait for PlainListing {
         };
         if !context.settings.terminal.use_color() {
             self.color_cache.highlighted.attrs |= Attr::REVERSE;
+            self.color_cache.tag_default.attrs |= Attr::REVERSE;
+            self.color_cache.even_highlighted.attrs |= Attr::REVERSE;
+            self.color_cache.odd_highlighted.attrs |= Attr::REVERSE;
         }
 
         // Get mailbox as a reference.
