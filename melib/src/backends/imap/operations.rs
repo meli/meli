@@ -129,7 +129,7 @@ impl BackendOp for ImapOp {
                     response.len(),
                     response.lines().collect::<Vec<&str>>().len()
                 );
-                let v = protocol_parser::uid_fetch_flags_response(response.as_bytes())
+                let v = protocol_parser::uid_fetch_flags_responses(response.as_bytes())
                     .map(|(_, v)| v)
                     .map_err(MeliError::from)?;
                 if v.len() != 1 {

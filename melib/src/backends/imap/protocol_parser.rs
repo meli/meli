@@ -139,7 +139,7 @@ fn test_imap_required_responses() {
         }
     }
     assert_eq!(&ret, "* 1040 FETCH (UID 1064 FLAGS ())\r\n");
-    let v = protocol_parser::uid_fetch_flags_response(response.as_bytes())
+    let v = protocol_parser::uid_fetch_flags_responses(response.as_bytes())
         .unwrap()
         .1;
     assert_eq!(v.len(), 1);
@@ -727,24 +727,28 @@ pub fn uid_fetch_response_(
     )(input)
 }
 
-pub fn uid_fetch_flags_response(input: &[u8]) -> IResult<&[u8], Vec<(usize, (Flag, Vec<String>))>> {
-    many0(|input| -> IResult<&[u8], (usize, (Flag, Vec<String>))> {
-        let (input, _) = tag("* ")(input)?;
-        let (input, _msn) = take_while(is_digit)(input)?;
-        let (input, _) = tag(" FETCH (")(input)?;
-        let (input, uid_flags) = permutation((
-            preceded(
-                alt((tag("UID "), tag(" UID "))),
-                map_res(digit1, |s| usize::from_str(to_str!(s))),
-            ),
-            preceded(
-                alt((tag("FLAGS "), tag(" FLAGS "))),
-                delimited(tag("("), byte_flags, tag(")")),
-            ),
-        ))(input)?;
-        let (input, _) = tag(")\r\n")(input)?;
-        Ok((input, (uid_flags.0, uid_flags.1)))
-    })(input)
+pub fn uid_fetch_flags_responses(
+    input: &[u8],
+) -> IResult<&[u8], Vec<(usize, (Flag, Vec<String>))>> {
+    many0(uid_fetch_flags_response)(input)
+}
+
+pub fn uid_fetch_flags_response(input: &[u8]) -> IResult<&[u8], (usize, (Flag, Vec<String>))> {
+    let (input, _) = tag("* ")(input)?;
+    let (input, _msn) = take_while(is_digit)(input)?;
+    let (input, _) = tag(" FETCH (")(input)?;
+    let (input, uid_flags) = permutation((
+        preceded(
+            alt((tag("UID "), tag(" UID "))),
+            map_res(digit1, |s| usize::from_str(to_str!(s))),
+        ),
+        preceded(
+            alt((tag("FLAGS "), tag(" FLAGS "))),
+            delimited(tag("("), byte_flags, tag(")")),
+        ),
+    ))(input)?;
+    let (input, _) = tag(")\r\n")(input)?;
+    Ok((input, (uid_flags.0, uid_flags.1)))
 }
 
 macro_rules! flags_to_imap_list {
@@ -871,18 +875,20 @@ pub enum UntaggedResponse {
     /// ```
     Recent(usize),
     Fetch(usize, (Flag, Vec<String>)),
+    UIDFetch(UID, (Flag, Vec<String>)),
     Bye {
         reason: String,
     },
 }
 
 pub fn untagged_responses(input: &[u8]) -> IResult<&[u8], Option<UntaggedResponse>> {
+    let orig_input = input;
     let (input, _) = tag("* ")(input)?;
     let (input, num) = map_res(digit1, |s| usize::from_str(to_str!(s)))(input)?;
     let (input, _) = tag(" ")(input)?;
     let (input, _tag) = take_until("\r\n")(input)?;
     let (input, _) = tag("\r\n")(input)?;
-    debug!("Parse untagged response from {:?}", to_str!(input));
+    debug!("Parse untagged response from {:?}", to_str!(orig_input));
     Ok((input, {
         use UntaggedResponse::*;
         match _tag {
@@ -890,18 +896,23 @@ pub fn untagged_responses(input: &[u8]) -> IResult<&[u8], Option<UntaggedRespons
             b"EXISTS" => Some(Exists(num)),
             b"RECENT" => Some(Recent(num)),
             _ if _tag.starts_with(b"FETCH ") => {
-                let f = flags(unsafe {
-                    std::str::from_utf8_unchecked(&_tag[b"FETCH (FLAGS (".len()..])
-                })
-                .map(|(_, flags)| Fetch(num, flags));
-                if let Err(ref err) = f {
-                    debug!(
-                        "untagged_response malformed fetch: {} {}",
-                        unsafe { std::str::from_utf8_unchecked(_tag) },
-                        err
-                    )
+                if to_str!(_tag).contains("UID") {
+                    let (uid, flags) = uid_fetch_flags_response(orig_input)?.1;
+                    Some(UIDFetch(uid, flags))
+                } else {
+                    let f = flags(unsafe {
+                        std::str::from_utf8_unchecked(&_tag[b"FETCH (FLAGS (".len()..])
+                    })
+                    .map(|(_, flags)| Fetch(num, flags));
+                    if let Err(ref err) = f {
+                        debug!(
+                            "untagged_response malformed fetch: {} {}",
+                            unsafe { std::str::from_utf8_unchecked(_tag) },
+                            err
+                        )
+                    }
+                    f.ok()
                 }
-                f.ok()
             }
             _ => {
                 debug!("unknown untagged_response: {}", to_str!(_tag));

@@ -279,6 +279,24 @@ impl ImapConnection {
                     }
                 }
             }
+            UntaggedResponse::UIDFetch(uid, flags) => {
+                debug!("fetch uid {} {:?}", uid, flags);
+                let lck = self.uid_store.uid_index.lock().unwrap();
+                let env_hash = lck.get(&(mailbox_hash, uid)).copied();
+                drop(lck);
+                if let Some(env_hash) = env_hash {
+                    if !flags.0.intersects(crate::email::Flag::SEEN) {
+                        mailbox.unseen.lock().unwrap().insert_new(env_hash);
+                    } else {
+                        mailbox.unseen.lock().unwrap().remove(env_hash);
+                    }
+                    self.add_refresh_event(RefreshEvent {
+                        account_hash: self.uid_store.account_hash,
+                        mailbox_hash,
+                        kind: NewFlags(env_hash, flags),
+                    });
+                };
+            }
             UntaggedResponse::Fetch(msg_seq, flags) => {
                 /* a * {msg_seq} FETCH (FLAGS ({flags})) was received, so find out UID from msg_seq
                  * and send update
@@ -288,7 +306,7 @@ impl ImapConnection {
                         mailbox_hash,
                 self.send_command(
                     &[
-                    b"UID SEARCH ",
+                    b"UID SEARCH",
                     format!("{}", msg_seq).as_bytes(),
                     ]
                     .join(&b' '),

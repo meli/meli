@@ -444,6 +444,27 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
                     }
                 }
             }
+            Ok(Some(UIDFetch(uid, flags))) => {
+                let res = uid_store
+                    .uid_index
+                    .lock()
+                    .unwrap()
+                    .get(&(mailbox_hash, uid))
+                    .map(|h| *h);
+                if let Some(env_hash) = res {
+                    if !flags.0.intersects(crate::email::Flag::SEEN) {
+                        mailbox.unseen.lock().unwrap().insert_new(env_hash);
+                    } else {
+                        mailbox.unseen.lock().unwrap().remove(env_hash);
+                    }
+                    let mut conn = main_conn.lock().await;
+                    conn.add_refresh_event(RefreshEvent {
+                        account_hash: uid_store.account_hash,
+                        mailbox_hash,
+                        kind: NewFlags(env_hash, flags),
+                    });
+                }
+            }
             Ok(Some(Fetch(msg_seq, flags))) => {
                 /* a * {msg_seq} FETCH (FLAGS ({flags})) was received, so find out UID from msg_seq
                  * and send update
@@ -456,7 +477,7 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
                     conn.examine_mailbox(mailbox_hash, &mut response, false).await
                     conn.send_command(
                         &[
-                        b"UID SEARCH ",
+                        b"UID SEARCH",
                         format!("{}", msg_seq).as_bytes(),
                         ]
                         .join(&b' '),
