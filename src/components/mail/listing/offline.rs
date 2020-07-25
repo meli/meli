@@ -26,6 +26,7 @@ use crate::components::utilities::PageMovement;
 pub struct OfflineListing {
     cursor_pos: (usize, MailboxHash),
     _row_updates: SmallVec<[ThreadHash; 8]>,
+    _selection: HashMap<ThreadHash, bool>,
     dirty: bool,
     id: ComponentId,
 }
@@ -33,6 +34,10 @@ pub struct OfflineListing {
 impl MailListingTrait for OfflineListing {
     fn row_updates(&mut self) -> &mut SmallVec<[ThreadHash; 8]> {
         &mut self._row_updates
+    }
+
+    fn selection(&mut self) -> &mut HashMap<ThreadHash, bool> {
+        &mut self._selection
     }
 
     fn get_focused_items(&self, _context: &Context) -> SmallVec<[ThreadHash; 8]> {
@@ -88,6 +93,7 @@ impl OfflineListing {
         OfflineListing {
             cursor_pos,
             _row_updates: SmallVec::new(),
+            _selection: HashMap::default(),
             dirty: true,
             id: ComponentId::new_v4(),
         }

@@ -66,6 +66,7 @@ pub struct PlainListing {
     filtered_selection: Vec<EnvelopeHash>,
     filtered_order: HashMap<EnvelopeHash, usize>,
     selection: HashMap<EnvelopeHash, bool>,
+    _selection: HashMap<ThreadHash, bool>,
     thread_node_hashes: HashMap<EnvelopeHash, ThreadNodeHash>,
     local_collection: Vec<EnvelopeHash>,
     /// If we must redraw on next redraw event
@@ -86,6 +87,10 @@ pub struct PlainListing {
 impl MailListingTrait for PlainListing {
     fn row_updates(&mut self) -> &mut SmallVec<[ThreadHash; 8]> {
         &mut self._row_updates
+    }
+
+    fn selection(&mut self) -> &mut HashMap<ThreadHash, bool> {
+        &mut self._selection
     }
 
     fn get_focused_items(&self, _context: &Context) -> SmallVec<[ThreadHash; 8]> {
@@ -707,6 +712,7 @@ impl PlainListing {
             filtered_selection: Vec::new(),
             filtered_order: HashMap::default(),
             selection: HashMap::default(),
+            _selection: HashMap::default(),
             row_updates: SmallVec::new(),
             _row_updates: SmallVec::new(),
             data_columns: DataColumns::default(),

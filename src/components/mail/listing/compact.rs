@@ -44,71 +44,78 @@ macro_rules! address_list {
 }
 
 macro_rules! row_attr {
-    ($color_cache:expr, $even: expr, $unseen:expr, $highlighted:expr, $selected:expr) => {{
-        let fg = if $unseen {
-            if $even {
-                $color_cache.even_unseen.fg
+    ($color_cache:expr, $even: expr, $unseen:expr, $highlighted:expr, $selected:expr  $(,)*) => {{
+        ThemeAttribute {
+            fg: if $highlighted {
+                if $even {
+                    $color_cache.even_highlighted.fg
+                } else {
+                    $color_cache.odd_highlighted.fg
+                }
+            } else if $selected {
+                if $even {
+                    $color_cache.even_selected.fg
+                } else {
+                    $color_cache.odd_selected.fg
+                }
+            } else if $unseen {
+                if $even {
+                    $color_cache.even_unseen.fg
+                } else {
+                    $color_cache.odd_unseen.fg
+                }
+            } else if $even {
+                $color_cache.even.fg
             } else {
-                $color_cache.odd_unseen.fg
-            }
-        } else if $highlighted {
-            if $even {
-                $color_cache.even_highlighted.fg
+                $color_cache.odd.fg
+            },
+            bg: if $highlighted {
+                if $even {
+                    $color_cache.even_highlighted.bg
+                } else {
+                    $color_cache.odd_highlighted.bg
+                }
+            } else if $selected {
+                if $even {
+                    $color_cache.even_selected.bg
+                } else {
+                    $color_cache.odd_selected.bg
+                }
+            } else if $unseen {
+                if $even {
+                    $color_cache.even_unseen.bg
+                } else {
+                    $color_cache.odd_unseen.bg
+                }
+            } else if $even {
+                $color_cache.even.bg
             } else {
-                $color_cache.odd_highlighted.fg
-            }
-        } else if $even {
-            $color_cache.even.fg
-        } else {
-            $color_cache.odd.fg
-        };
-        let bg = if $highlighted {
-            if $even {
-                $color_cache.even_highlighted.bg
+                $color_cache.odd.bg
+            },
+            attrs: if $highlighted {
+                if $even {
+                    $color_cache.even_highlighted.attrs
+                } else {
+                    $color_cache.odd_highlighted.attrs
+                }
+            } else if $selected {
+                if $even {
+                    $color_cache.even_selected.attrs
+                } else {
+                    $color_cache.odd_selected.attrs
+                }
+            } else if $unseen {
+                if $even {
+                    $color_cache.even_unseen.attrs
+                } else {
+                    $color_cache.odd_unseen.attrs
+                }
+            } else if $even {
+                $color_cache.even.attrs
             } else {
-                $color_cache.odd_highlighted.bg
-            }
-        } else if $selected {
-            if $even {
-                $color_cache.even_selected.bg
-            } else {
-                $color_cache.odd_selected.bg
-            }
-        } else if $unseen {
-            if $even {
-                $color_cache.even_unseen.bg
-            } else {
-                $color_cache.odd_unseen.bg
-            }
-        } else if $even {
-            $color_cache.even.bg
-        } else {
-            $color_cache.odd.bg
-        };
-        let attrs = if $highlighted {
-            if $even {
-                $color_cache.even_highlighted.attrs
-            } else {
-                $color_cache.odd_highlighted.attrs
-            }
-        } else if $selected {
-            if $even {
-                $color_cache.even_selected.attrs
-            } else {
-                $color_cache.odd_selected.attrs
-            }
-        } else if $unseen {
-            if $even {
-                $color_cache.even_unseen.attrs
-            } else {
-                $color_cache.odd_unseen.attrs
-            }
-        } else if $even {
-            $color_cache.even.attrs
-        } else {
-            $color_cache.odd.attrs
-        };
-        ThemeAttribute { fg, bg, attrs }
+                $color_cache.odd.attrs
+            },
+        }
     }};
 }
 
@@ -159,6 +166,10 @@ pub struct CompactListing {
 impl MailListingTrait for CompactListing {
     fn row_updates(&mut self) -> &mut SmallVec<[ThreadHash; 8]> {
         &mut self.row_updates
+    }
+
+    fn selection(&mut self) -> &mut HashMap<ThreadHash, bool> {
+        &mut self.selection
     }
 
     fn get_focused_items(&self, _context: &Context) -> SmallVec<[ThreadHash; 8]> {
@@ -981,17 +992,13 @@ impl CompactListing {
                 return;
             }
             let idx = self.order[&thread_hash];
-            let row_attr = if thread.unseen() > 0 {
-                if idx % 2 == 0 {
-                    self.color_cache.even_unseen
-                } else {
-                    self.color_cache.odd_unseen
-                }
-            } else if idx % 2 == 0 {
-                self.color_cache.even
-            } else {
-                self.color_cache.odd
-            };
+            let row_attr = row_attr!(
+                self.color_cache,
+                idx % 2 == 0,
+                thread.unseen() > 0,
+                false,
+                false,
+            );
             let envelope: EnvelopeRef = account.collection.get_env(env_hash);
             let strings = self.make_entry_string(&envelope, context, &threads, thread_hash);
             drop(envelope);

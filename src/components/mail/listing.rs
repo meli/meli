@@ -341,6 +341,7 @@ pub trait MailListingTrait: ListingTrait {
     }
 
     fn row_updates(&mut self) -> &mut SmallVec<[ThreadHash; 8]>;
+    fn selection(&mut self) -> &mut HashMap<ThreadHash, bool>;
     fn get_focused_items(&self, _context: &Context) -> SmallVec<[ThreadHash; 8]>;
     fn redraw_threads_list(
         &mut self,
@@ -743,6 +744,14 @@ impl Component for Listing {
                     | Action::Listing(a @ ListingAction::Tag(_)) => {
                         let focused = self.component.get_focused_items(context);
                         self.component.perform_action(context, focused, a);
+                        let mut row_updates: SmallVec<[ThreadHash; 8]> = SmallVec::new();
+                        for (k, v) in self.component.selection().iter_mut() {
+                            if *v {
+                                *v = false;
+                                row_updates.push(*k);
+                            }
+                        }
+                        self.component.row_updates().extend(row_updates.drain(..));
                         self.component.set_dirty(true);
                         return true;
                     }

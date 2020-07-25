@@ -131,6 +131,10 @@ impl MailListingTrait for ConversationsListing {
         &mut self.row_updates
     }
 
+    fn selection(&mut self) -> &mut HashMap<ThreadHash, bool> {
+        &mut self.selection
+    }
+
     fn get_focused_items(&self, _context: &Context) -> SmallVec<[ThreadHash; 8]> {
         let is_selection_empty = self.selection.values().cloned().any(std::convert::identity);
         let i = [self.get_thread_under_cursor(self.cursor_pos.2)];

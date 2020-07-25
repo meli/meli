@@ -41,6 +41,7 @@ pub struct ThreadListing {
     rows_drawn: SegmentTree,
     rows: Vec<((usize, bool, bool, EnvelopeHash), EntryStrings)>,
     row_updates: SmallVec<[ThreadHash; 8]>,
+    selection: HashMap<ThreadHash, bool>,
     order: HashMap<EnvelopeHash, usize>,
     /// If we must redraw on next redraw event
     dirty: bool,
@@ -55,6 +56,10 @@ pub struct ThreadListing {
 impl MailListingTrait for ThreadListing {
     fn row_updates(&mut self) -> &mut SmallVec<[ThreadHash; 8]> {
         &mut self.row_updates
+    }
+
+    fn selection(&mut self) -> &mut HashMap<ThreadHash, bool> {
+        &mut self.selection
     }
 
     fn get_focused_items(&self, _context: &Context) -> SmallVec<[ThreadHash; 8]> {
@@ -673,6 +678,7 @@ impl ThreadListing {
             rows_drawn: SegmentTree::default(),
             rows: vec![],
             row_updates: SmallVec::new(),
+            selection: HashMap::default(),
             order: HashMap::default(),
             dirty: true,
             unfocused: false,
