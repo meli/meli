@@ -44,6 +44,9 @@ GREEN ?= `[ -z $${NO_COLOR+x} ] && ([ -z $${TERM} ] && echo "" || tput setaf 2) 
 
 .POSIX:
 .SUFFIXES:
+meli: check-deps
+	@${CARGO_BIN} build ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" ${FEATURES} --release
+
 help:
 	@echo "For a quick start, build and install locally:\n ${BOLD}${GREEN}PREFIX=~/.local make install${ANSI_RESET}\n"
 	@echo "Available subcommands:"
@@ -79,9 +82,9 @@ help:
 	@echo ${ANSI_RESET}
 	@#@echo "* CARGO_COLOR = ${CARGO_COLOR}"
 
-meli: check-deps
-	@${CARGO_BIN} build ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" ${FEATURES} --release
-
+.PHONY: check
+check:
+	@${CARGO_BIN} test ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" --workspace
 
 .PHONY: check-deps
 check-deps:

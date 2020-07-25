@@ -33,7 +33,7 @@ to get it on your system can be found here: <https://doc.rust-lang.org/cargo/get
 With Cargo available, the project can be built with
 
 ```sh
-make meli
+make
 ```
 
 The resulting binary will then be found under `target/release/meli`
