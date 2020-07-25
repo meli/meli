@@ -1148,6 +1148,13 @@ impl Component for StatusBar {
                     .process_event(&mut UIEvent::InsertInput(k.clone()), context);
                 return true;
             }
+            UIEvent::ExInput(Key::Esc) => {
+                self.ex_buffer.clear();
+                context
+                    .replies
+                    .push_back(UIEvent::ChangeMode(UIMode::Normal));
+                return true;
+            }
             UIEvent::Resize => {
                 self.dirty = true;
             }

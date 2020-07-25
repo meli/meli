@@ -423,7 +423,7 @@ fn run_app(opt: Opt) -> Result<()> {
                                 }
                                 UIMode::Execute => {
                                     match k {
-                                        Key::Char('\n') | Key::Esc => {
+                                        Key::Char('\n') => {
                                             state.mode = UIMode::Normal;
                                             state.rcv_event(UIEvent::ChangeMode(UIMode::Normal));
                                             state.redraw();
