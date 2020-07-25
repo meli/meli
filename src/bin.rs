@@ -343,6 +343,13 @@ fn run_app(opt: Opt) -> Result<()> {
         state.register_component(xdg_notifications);
         state.register_component(Box::new(components::notifications::NotificationFilter {}));
     }
+    let enter_command_mode: Key = state
+        .context
+        .settings
+        .shortcuts
+        .general
+        .enter_command_mode
+        .clone();
 
     /* Keep track of the input mode. See UIMode for details */
     'main: loop {
@@ -397,7 +404,7 @@ fn run_app(opt: Opt) -> Result<()> {
                                                 state.redraw();
                                             }
                                         },
-                                        Key::Char(' ') => {
+                                        _ if k == enter_command_mode => {
                                             state.mode = UIMode::Command;
                                             state.rcv_event(UIEvent::ChangeMode(UIMode::Command));
                                             state.redraw();

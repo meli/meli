@@ -79,7 +79,7 @@ macro_rules! shortcut_key_values {
         #[serde(default)]
         #[serde(rename = $cname)]
         pub struct $name {
-            $($fname : Key),*
+            $(pub $fname : Key),*
         }
 
         impl $name {
@@ -163,6 +163,7 @@ shortcut_key_values! { "pager",
 
 shortcut_key_values! { "general",
     pub struct GeneralShortcuts {
+        enter_command_mode |> "Enter COMMAND mode." |> Key::Char(' '),
         go_to_tab |> "Go to the nth tab" |> Key::Alt('n'),
         next_tab |> "Next tab." |> Key::Char('T'),
         scroll_right |> "Generic scroll right (catch-all setting)" |> Key::Right,
