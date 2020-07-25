@@ -1102,6 +1102,9 @@ impl Component for StatusBar {
                 self.dirty = true;
             }
             UIEvent::CmdInput(Key::Ctrl('p')) => {
+                if self.cmd_history.is_empty() {
+                    return true;
+                }
                 let pos = self.ex_buffer_cmd_history_pos.map(|p| p + 1).unwrap_or(0);
                 let pos = Some(std::cmp::min(pos, self.cmd_history.len().saturating_sub(1)));
                 if pos != self.ex_buffer_cmd_history_pos {
@@ -1121,6 +1124,9 @@ impl Component for StatusBar {
                 return true;
             }
             UIEvent::CmdInput(Key::Ctrl('n')) => {
+                if self.cmd_history.is_empty() {
+                    return true;
+                }
                 if Some(0) == self.ex_buffer_cmd_history_pos {
                     self.ex_buffer_cmd_history_pos = None;
                     self.ex_buffer.clear();
