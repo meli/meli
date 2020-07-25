@@ -1606,10 +1606,11 @@ impl Account {
         mailbox_hash: MailboxHash,
     ) -> ResultFuture<SmallVec<[EnvelopeHash; 512]>> {
         use melib::parsec::Parser;
+        use melib::search::QueryTrait;
         let query = melib::search::query().parse(search_term)?.1;
         match self.settings.conf.search_backend {
             #[cfg(feature = "sqlite3")]
-            crate::conf::SearchBackend::Sqlite3 => crate::sqlite3::search(search_term, _sort),
+            crate::conf::SearchBackend::Sqlite3 => crate::sqlite3::search(&query, _sort),
             crate::conf::SearchBackend::None => {
                 if self.backend_capabilities.supports_search {
                     self.backend
@@ -1619,27 +1620,11 @@ impl Account {
                 } else {
                     let mut ret = SmallVec::new();
                     let envelopes = self.collection.envelopes.read().unwrap();
-
                     for &env_hash in self.collection.get_mailbox(mailbox_hash).iter() {
-                        let envelope = &envelopes[&env_hash];
-                        if envelope.subject().contains(&search_term) {
-                            ret.push(env_hash);
-                            continue;
-                        }
-                        if envelope.field_from_to_string().contains(&search_term) {
-                            ret.push(env_hash);
-                            continue;
-                        }
-                        let op = if let Ok(op) = self.operation(env_hash) {
-                            op
-                        } else {
-                            continue;
-                        };
-                        let body = envelope.body(op)?;
-                        let decoded = decode_rec(&body, None);
-                        let body_text = String::from_utf8_lossy(&decoded);
-                        if body_text.contains(&search_term) {
-                            ret.push(env_hash);
+                        if let Some(envelope) = envelopes.get(&env_hash) {
+                            if envelope.is_match(&query) {
+                                ret.push(env_hash);
+                            }
                         }
                     }
                     Ok(Box::pin(async { Ok(ret) }))

@@ -21,10 +21,9 @@
 
 /*! Use an sqlite3 database for fast searching.
  */
-use crate::melib::parsec::Parser;
 use crate::melib::ResultIntoMeliError;
 use melib::search::{
-    escape_double_quote, query,
+    escape_double_quote,
     Query::{self, *},
 };
 use melib::{
@@ -338,7 +337,7 @@ pub fn index(context: &mut crate::state::Context, account_index: usize) -> Resul
 }
 
 pub fn search(
-    term: &str,
+    query: &Query,
     (sort_field, sort_order): (SortField, SortOrder),
 ) -> ResultFuture<SmallVec<[EnvelopeHash; 512]>> {
     let db_path = melib_sqlite3::db_path(DB_NAME)?;
@@ -364,7 +363,7 @@ pub fn search(
         .prepare(
             debug!(format!(
                 "SELECT hash FROM envelopes WHERE {} ORDER BY {} {};",
-                query_to_sql(&query().parse(term)?.1),
+                query_to_sql(&query),
                 sort_field,
                 sort_order
             ))
@@ -496,6 +495,8 @@ pub fn query_to_sql(q: &Query) -> String {
 
 #[test]
 fn test_query_to_sql() {
+    use melib::parsec::Parser;
+    use melib::search::query;
     assert_eq!(
         "(subject LIKE \"%test%\" ) AND (body_text LIKE \"%i%\" ) ",
         &query_to_sql(&query().parse_complete("subject: test and i").unwrap().1)
