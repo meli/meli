@@ -362,6 +362,7 @@ impl MailBackend for MaildirType {
         debug!("watching {:?}", root_path);
         let hash_indexes = self.hash_indexes.clone();
         let mailbox_index = self.mailbox_index.clone();
+        let root_mailbox_hash: MailboxHash = self.mailboxes.values().find(|m| m.parent.is_none()).map(|m| m.hash()).unwrap();
         let mailbox_counts = self
             .mailboxes
             .iter()
@@ -561,10 +562,10 @@ impl MailBackend for MaildirType {
 
                                 let mut hash_indexes_lock = hash_indexes.lock().unwrap();
                                 let index_lock = hash_indexes_lock.entry(mailbox_hash).or_default();
-                                // TODO: Represent index states with an enum: make illegal
-                                // states unrepresentable.
-                                let was_seen: bool = src.flags().contains(Flag::SEEN);
-                                let is_seen: bool = dest.flags().contains(Flag::SEEN);
+                                let old_flags = src.flags();
+                                let new_flags = dest.flags();
+                                let was_seen: bool = old_flags.contains(Flag::SEEN);
+                                let is_seen: bool = new_flags.contains(Flag::SEEN);
 
                                 if index_lock.contains_key(&old_hash)
                                     && !index_lock[&old_hash].removed
@@ -584,6 +585,13 @@ impl MailBackend for MaildirType {
                                         *lck = lck.saturating_sub(1);
                                     } else if was_seen && !is_seen {
                                         *mailbox_counts[&mailbox_hash].0.lock().unwrap() += 1;
+                                    }
+                                    if old_flags != new_flags {
+                                        sender.send(RefreshEvent {
+                                            account_hash,
+                                            mailbox_hash: get_path_hash!(dest),
+                                            kind: NewFlags(new_hash, (new_flags, vec![])),
+                                        });
                                     }
                                     mailbox_index.lock().unwrap().insert(new_hash,get_path_hash!(dest) );
                                     index_lock.insert(new_hash, dest.into());
@@ -651,6 +659,13 @@ impl MailBackend for MaildirType {
                                         kind: Rename(old_hash, new_hash),
                                     });
                                     debug!("contains_new_key");
+                                    if old_flags != new_flags {
+                                        sender.send(RefreshEvent {
+                                            account_hash,
+                                            mailbox_hash: get_path_hash!(dest),
+                                            kind: NewFlags(new_hash, (new_flags, vec![])),
+                                        });
+                                    }
                                 }
 
                                 /* Maybe a re-read should be triggered here just to be safe.
@@ -663,8 +678,11 @@ impl MailBackend for MaildirType {
                             }
                             /* Trigger rescan of mailbox */
                             DebouncedEvent::Rescan => {
-                                /* Actually should rescan all mailboxes */
-                                unreachable!("Unimplemented: rescan of all mailboxes in MaildirType")
+                                sender.send(RefreshEvent {
+                                    account_hash,
+                                    mailbox_hash: root_mailbox_hash,
+                                    kind: Rescan,
+                                });
                             }
                             _ => {}
                         },
