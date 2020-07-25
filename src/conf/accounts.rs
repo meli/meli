@@ -1390,9 +1390,9 @@ impl Account {
 
     pub fn mailbox_operation(
         &mut self,
-        op: crate::execute::actions::MailboxOperation,
+        op: crate::command::actions::MailboxOperation,
     ) -> Result<String> {
-        use crate::execute::actions::MailboxOperation;
+        use crate::command::actions::MailboxOperation;
         if self.settings.account.read_only() {
             return Err(MeliError::new("Account is read-only."));
         }

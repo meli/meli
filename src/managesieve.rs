@@ -50,8 +50,8 @@ pub mod terminal;
 use crate::terminal::*;
 
 #[macro_use]
-pub mod execute;
-use crate::execute::*;
+pub mod command;
+use crate::command::*;
 
 pub mod state;
 use crate::state::*;

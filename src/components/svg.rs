@@ -415,7 +415,7 @@ impl Component for SVGScreenshotFilter {
         if let UIEvent::Input(Key::F(6)) = event {
             self.save_screenshot = true;
             true
-        } else if let UIEvent::ExInput(Key::F(6)) = event {
+        } else if let UIEvent::CmdInput(Key::F(6)) = event {
             self.save_screenshot = true;
             true
         } else if let UIEvent::EmbedInput((Key::F(6), _)) = event {

@@ -35,7 +35,7 @@ extern crate serde;
 mod helpers;
 pub use self::helpers::*;
 
-use super::execute::Action;
+use super::command::Action;
 use super::jobs::JobId;
 use super::terminal::*;
 use crate::components::{Component, ComponentId};
@@ -101,7 +101,7 @@ pub enum NotificationType {
 #[derive(Debug)]
 pub enum UIEvent {
     Input(Key),
-    ExInput(Key),
+    CmdInput(Key),
     InsertInput(Key),
     EmbedInput((Key, Vec<u8>)),
     //Quit?
@@ -144,7 +144,7 @@ pub enum UIMode {
     Insert,
     /// Forward input to an embed pseudoterminal.
     Embed,
-    Execute,
+    Command,
     Fork,
 }
 
@@ -156,7 +156,7 @@ impl fmt::Display for UIMode {
             match *self {
                 UIMode::Normal => "NORMAL",
                 UIMode::Insert => "INSERT",
-                UIMode::Execute => "EX",
+                UIMode::Command => "COMMAND",
                 UIMode::Fork => "FORK",
                 UIMode::Embed => "EMBED",
             }

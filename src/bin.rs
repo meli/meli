@@ -62,8 +62,8 @@ pub mod terminal;
 use crate::terminal::*;
 
 #[macro_use]
-pub mod execute;
-use crate::execute::*;
+pub mod command;
+use crate::command::*;
 
 pub mod state;
 use crate::state::*;
@@ -398,8 +398,8 @@ fn run_app(opt: Opt) -> Result<()> {
                                             }
                                         },
                                         Key::Char(' ') => {
-                                            state.mode = UIMode::Execute;
-                                            state.rcv_event(UIEvent::ChangeMode(UIMode::Execute));
+                                            state.mode = UIMode::Command;
+                                            state.rcv_event(UIEvent::ChangeMode(UIMode::Command));
                                             state.redraw();
                                         }
                                         key  => {
@@ -421,7 +421,7 @@ fn run_app(opt: Opt) -> Result<()> {
                                         },
                                     }
                                 }
-                                UIMode::Execute => {
+                                UIMode::Command => {
                                     match k {
                                         Key::Char('\n') => {
                                             state.mode = UIMode::Normal;
@@ -429,7 +429,7 @@ fn run_app(opt: Opt) -> Result<()> {
                                             state.redraw();
                                         },
                                         k => {
-                                            state.rcv_event(UIEvent::ExInput(k));
+                                            state.rcv_event(UIEvent::CmdInput(k));
                                             state.redraw();
                                         },
                                     }

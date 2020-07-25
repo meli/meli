@@ -127,8 +127,7 @@ for the location of the mailcap files and
 .Xr mailcap 5
 for their syntax.
 You can save individual attachments with the
-.Em EXECUTE
-command
+.Em COMMAND
 .Cm save-attachment Ar INDEX Ar path-to-file
 where
 .Ar INDEX
@@ -325,8 +324,7 @@ On complete failure to save your draft or sent message it will be saved in your
 directory instead and you will be notified of its location.
 .Ss Drafts
 To save your draft without sending it, issue
-.Em EXECUTE
-command
+.Em COMMAND
 .Cm close
 and select 'save as draft'.
 .sp
@@ -359,9 +357,9 @@ for the complete account configuration values.
 .Bl -tag -compact -width 8n
 .It NORMAL
 is the default mode
-.It EXECUTE
+.It COMMAND
 commands are issued in
-.Em EXECUTE
+.Em COMMAND
 mode, by default started with Space and exited with
 .Cm Esc
 key.
@@ -372,7 +370,7 @@ captures all input as text input, and is exited with
 .Cm Esc
 key.
 .El
-.Ss EXECUTE Mode
+.Ss COMMAND Mode
 .Ss Mail listing commands
 .Bl -tag -width 36n
 .It Cm set Ar plain | threaded | compact | conversations

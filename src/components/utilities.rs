@@ -666,7 +666,7 @@ impl StatusBar {
             auto_complete: AutoComplete::new(Vec::new()),
             progress_spinner: ProgressSpinner::new(3),
             in_progress_jobs: HashSet::default(),
-            cmd_history: crate::execute::history::old_cmd_history(),
+            cmd_history: crate::command::history::old_cmd_history(),
         }
     }
     fn draw_status_bar(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
@@ -714,7 +714,7 @@ impl StatusBar {
         context.dirty_areas.push_back(area);
     }
 
-    fn draw_execute_bar(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+    fn draw_command_bar(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         clear_area(grid, area, crate::conf::value(context, "theme_default"));
         let (_, y) = write_string_to_grid(
             self.ex_buffer.as_str(),
@@ -770,7 +770,7 @@ impl Component for StatusBar {
             );
         }
 
-        if self.mode != UIMode::Execute && !self.is_dirty() {
+        if self.mode != UIMode::Command && !self.is_dirty() {
             return;
         }
         self.dirty = false;
@@ -781,8 +781,8 @@ impl Component for StatusBar {
         );
         match self.mode {
             UIMode::Normal => {}
-            UIMode::Execute => {
-                self.draw_execute_bar(
+            UIMode::Command => {
+                self.draw_command_bar(
                     grid,
                     (
                         set_y(upper_left, get_y(bottom_right) - height + 1),
@@ -810,7 +810,7 @@ impl Component for StatusBar {
                     })
                     .collect();
                 let command_completion_suggestions =
-                    crate::execute::command_completion_suggestions(self.ex_buffer.as_str());
+                    crate::command::command_completion_suggestions(self.ex_buffer.as_str());
 
                 suggestions.extend(command_completion_suggestions.iter().filter_map(|e| {
                     if !unique_suggestions.contains(e.as_str()) {
@@ -821,7 +821,7 @@ impl Component for StatusBar {
                     }
                 }));
                 /*
-                suggestions.extend(crate::execute::COMMAND_COMPLETION.iter().filter_map(|e| {
+                suggestions.extend(crate::command::COMMAND_COMPLETION.iter().filter_map(|e| {
                     if e.0.starts_with(self.ex_buffer.as_str()) {
                         Some(e.into())
                     } else {
@@ -1031,13 +1031,13 @@ impl Component for StatusBar {
                             && self.cmd_history.last().map(String::as_str)
                                 != Some(self.ex_buffer.as_str())
                         {
-                            crate::execute::history::log_cmd(self.ex_buffer.as_str().to_string());
+                            crate::command::history::log_cmd(self.ex_buffer.as_str().to_string());
                             self.cmd_history.push(self.ex_buffer.as_str().to_string());
                         }
                         self.ex_buffer.clear();
                         self.ex_buffer_cmd_history_pos.take();
                     }
-                    UIMode::Execute => {
+                    UIMode::Command => {
                         self.height = 2;
                     }
                     _ => {
@@ -1045,7 +1045,7 @@ impl Component for StatusBar {
                     }
                 };
             }
-            UIEvent::ExInput(Key::Char('\t')) => {
+            UIEvent::CmdInput(Key::Char('\t')) => {
                 if let Some(suggestion) = self.auto_complete.get_suggestion() {
                     let mut utext = UText::new(suggestion);
                     let len = utext.as_str().len();
@@ -1055,33 +1055,33 @@ impl Component for StatusBar {
                     self.ex_buffer = Field::Text(utext, None);
                 }
             }
-            UIEvent::ExInput(Key::Char(c)) => {
+            UIEvent::CmdInput(Key::Char(c)) => {
                 self.dirty = true;
                 self.ex_buffer
                     .process_event(&mut UIEvent::InsertInput(Key::Char(*c)), context);
                 return true;
             }
-            UIEvent::ExInput(Key::Paste(s)) => {
+            UIEvent::CmdInput(Key::Paste(s)) => {
                 self.dirty = true;
                 self.ex_buffer
                     .process_event(&mut UIEvent::InsertInput(Key::Paste(s.clone())), context);
                 return true;
             }
-            UIEvent::ExInput(Key::Ctrl('u')) => {
+            UIEvent::CmdInput(Key::Ctrl('u')) => {
                 self.dirty = true;
                 self.ex_buffer.clear();
                 self.ex_buffer_cmd_history_pos.take();
                 return true;
             }
-            UIEvent::ExInput(Key::Up) => {
+            UIEvent::CmdInput(Key::Up) => {
                 self.auto_complete.dec_cursor();
                 self.dirty = true;
             }
-            UIEvent::ExInput(Key::Down) => {
+            UIEvent::CmdInput(Key::Down) => {
                 self.auto_complete.inc_cursor();
                 self.dirty = true;
             }
-            UIEvent::ExInput(Key::Left) => {
+            UIEvent::CmdInput(Key::Left) => {
                 if let Field::Text(ref mut utext, _) = self.ex_buffer {
                     utext.cursor_dec();
                 } else {
@@ -1091,7 +1091,7 @@ impl Component for StatusBar {
                 }
                 self.dirty = true;
             }
-            UIEvent::ExInput(Key::Right) => {
+            UIEvent::CmdInput(Key::Right) => {
                 if let Field::Text(ref mut utext, _) = self.ex_buffer {
                     utext.cursor_inc();
                 } else {
@@ -1101,7 +1101,7 @@ impl Component for StatusBar {
                 }
                 self.dirty = true;
             }
-            UIEvent::ExInput(Key::Ctrl('p')) => {
+            UIEvent::CmdInput(Key::Ctrl('p')) => {
                 let pos = self.ex_buffer_cmd_history_pos.map(|p| p + 1).unwrap_or(0);
                 let pos = Some(std::cmp::min(pos, self.cmd_history.len().saturating_sub(1)));
                 if pos != self.ex_buffer_cmd_history_pos {
@@ -1120,7 +1120,7 @@ impl Component for StatusBar {
 
                 return true;
             }
-            UIEvent::ExInput(Key::Ctrl('n')) => {
+            UIEvent::CmdInput(Key::Ctrl('n')) => {
                 if Some(0) == self.ex_buffer_cmd_history_pos {
                     self.ex_buffer_cmd_history_pos = None;
                     self.ex_buffer.clear();
@@ -1142,13 +1142,13 @@ impl Component for StatusBar {
 
                 return true;
             }
-            UIEvent::ExInput(k @ Key::Backspace) | UIEvent::ExInput(k @ Key::Ctrl(_)) => {
+            UIEvent::CmdInput(k @ Key::Backspace) | UIEvent::CmdInput(k @ Key::Ctrl(_)) => {
                 self.dirty = true;
                 self.ex_buffer
                     .process_event(&mut UIEvent::InsertInput(k.clone()), context);
                 return true;
             }
-            UIEvent::ExInput(Key::Esc) => {
+            UIEvent::CmdInput(Key::Esc) => {
                 self.ex_buffer.clear();
                 context
                     .replies
@@ -1430,7 +1430,7 @@ impl Component for Tabbed {
             }
             let mut max_length = 6;
             let mut max_width =
-                "Press ? to close, use EXECUTE command \"search\" to find shortcuts".len() + 3;
+                "Press ? to close, use COMMAND \"search\" to find shortcuts".len() + 3;
 
             let mut shortcuts = children_maps.iter().collect::<Vec<_>>();
             shortcuts.sort_by_key(|(k, _)| *k);
@@ -1481,7 +1481,7 @@ impl Component for Tabbed {
                 None,
             );
             write_string_to_grid(
-                "use EXECUTE command \"search\" to find shortcuts",
+                "use COMMAND \"search\" to find shortcuts",
                 &mut self.help_content,
                 Color::Default,
                 Color::Default,
@@ -1809,10 +1809,10 @@ impl Component for Tabbed {
             {
                 context
                     .replies
-                    .push_back(UIEvent::ExInput(Key::Paste("search ".to_string())));
+                    .push_back(UIEvent::CmdInput(Key::Paste("search ".to_string())));
                 context
                     .replies
-                    .push_back(UIEvent::ChangeMode(UIMode::Execute));
+                    .push_back(UIEvent::ChangeMode(UIMode::Command));
                 return true;
             }
             UIEvent::Input(ref key) if self.show_shortcuts => {

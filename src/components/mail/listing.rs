@@ -872,10 +872,10 @@ impl Component for Listing {
                 {
                     context
                         .replies
-                        .push_back(UIEvent::ExInput(Key::Paste("search ".to_string())));
+                        .push_back(UIEvent::CmdInput(Key::Paste("search ".to_string())));
                     context
                         .replies
-                        .push_back(UIEvent::ChangeMode(UIMode::Execute));
+                        .push_back(UIEvent::ChangeMode(UIMode::Command));
                     return true;
                 }
                 UIEvent::Input(ref key)
