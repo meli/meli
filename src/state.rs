@@ -932,7 +932,6 @@ impl State {
                 ));
             }
             AccountAction(ref account_name, PrintAccountSetting(ref setting)) => {
-                /*
                 let path = setting.split(".").collect::<SmallVec<[&str; 16]>>();
                 if let Some(pos) = self
                     .context
@@ -957,7 +956,6 @@ impl State {
                     ));
                     return;
                 }
-                */
             }
             PrintSetting(ref setting) => {
                 let path = setting.split(".").collect::<SmallVec<[&str; 16]>>();

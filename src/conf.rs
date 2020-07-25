@@ -216,10 +216,10 @@ pub struct FileSettings {
 
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct AccountConf {
-    pub(crate) account: AccountSettings,
-    pub(crate) conf: FileAccount,
+    pub account: AccountSettings,
+    pub conf: FileAccount,
     pub conf_override: MailUIConf,
-    pub(crate) mailbox_confs: HashMap<String, FileMailboxConf>,
+    pub mailbox_confs: HashMap<String, FileMailboxConf>,
 }
 
 impl AccountConf {
@@ -828,85 +828,238 @@ pub struct LogSettings {
     maximum_level: melib::LoggingLevel,
 }
 
-pub trait DotAddressable: Serialize {
-    fn lookup(&self, parent_field: &str, path: &[&str]) -> Result<String> {
-        if !path.is_empty() {
-            Err(MeliError::new(format!(
-                "{} has no fields, it is of type {}",
-                parent_field,
-                std::any::type_name::<Self>()
-            )))
-        } else {
-            Ok(toml::to_string(self).map_err(|err| err.to_string())?)
+pub use dotaddressable::*;
+mod dotaddressable {
+    use super::*;
+    pub trait DotAddressable: Serialize {
+        fn lookup(&self, parent_field: &str, path: &[&str]) -> Result<String> {
+            if !path.is_empty() {
+                Err(MeliError::new(format!(
+                    "{} has no fields, it is of type {}",
+                    parent_field,
+                    std::any::type_name::<Self>()
+                )))
+            } else {
+                Ok(toml::to_string(self).map_err(|err| err.to_string())?)
+            }
         }
     }
-}
 
-impl DotAddressable for bool {}
+    impl DotAddressable for bool {}
 
-impl DotAddressable for String {}
-impl DotAddressable for IndexStyle {}
-impl DotAddressable for u64 {}
-impl DotAddressable for crate::terminal::Color {}
-impl DotAddressable for crate::terminal::Attr {}
-impl DotAddressable for crate::terminal::Key {}
-impl DotAddressable for usize {}
-impl DotAddressable for Query {}
-impl DotAddressable for melib::LoggingLevel {}
-impl DotAddressable for PathBuf {}
-impl DotAddressable for ToggleFlag {}
-impl<T: DotAddressable> DotAddressable for Option<T> {}
-impl<K: DotAddressable + std::cmp::Eq + std::hash::Hash, V: DotAddressable> DotAddressable
-    for HashMap<K, V>
-{
-}
-impl<K: DotAddressable + std::cmp::Eq + std::hash::Hash> DotAddressable for HashSet<K> {}
+    impl DotAddressable for String {}
+    impl DotAddressable for IndexStyle {}
+    impl DotAddressable for u64 {}
+    impl DotAddressable for crate::terminal::Color {}
+    impl DotAddressable for crate::terminal::Attr {}
+    impl DotAddressable for crate::terminal::Key {}
+    impl DotAddressable for usize {}
+    impl DotAddressable for Query {}
+    impl DotAddressable for melib::LoggingLevel {}
+    impl DotAddressable for PathBuf {}
+    impl DotAddressable for ToggleFlag {}
+    impl DotAddressable for SearchBackend {}
+    impl DotAddressable for melib::SpecialUsageMailbox {}
+    impl<T: DotAddressable> DotAddressable for Option<T> {}
+    impl<T: DotAddressable> DotAddressable for Vec<T> {}
+    impl<K: DotAddressable + std::cmp::Eq + std::hash::Hash, V: DotAddressable> DotAddressable
+        for HashMap<K, V>
+    {
+    }
+    impl<K: DotAddressable + std::cmp::Eq + std::hash::Hash> DotAddressable for HashSet<K> {}
 
-impl DotAddressable for LogSettings {
-    fn lookup(&self, parent_field: &str, path: &[&str]) -> Result<String> {
-        match path.first() {
-            Some(field) => {
-                let tail = &path[1..];
-                match *field {
-                    "log_file" => self.log_file.lookup(field, tail),
-                    "maximum_level" => self.maximum_level.lookup(field, tail),
+    impl DotAddressable for LogSettings {
+        fn lookup(&self, parent_field: &str, path: &[&str]) -> Result<String> {
+            match path.first() {
+                Some(field) => {
+                    let tail = &path[1..];
+                    match *field {
+                        "log_file" => self.log_file.lookup(field, tail),
+                        "maximum_level" => self.maximum_level.lookup(field, tail),
 
-                    other => Err(MeliError::new(format!(
-                        "{} has no field named {}",
-                        parent_field, other
-                    ))),
+                        other => Err(MeliError::new(format!(
+                            "{} has no field named {}",
+                            parent_field, other
+                        ))),
+                    }
                 }
+                None => Ok(toml::to_string(self).map_err(|err| err.to_string())?),
             }
-            None => Ok(toml::to_string(self).map_err(|err| err.to_string())?),
         }
     }
-}
 
-impl DotAddressable for Settings {
-    fn lookup(&self, parent_field: &str, path: &[&str]) -> Result<String> {
-        match path.first() {
-            Some(field) => {
-                let tail = &path[1..];
-                match *field {
-                    "accounts" => Err(MeliError::new("unimplemented")),
-                    "pager" => self.pager.lookup(field, tail),
-                    "listing" => self.listing.lookup(field, tail),
-                    "notifications" => Err(MeliError::new("unimplemented")),
-                    "shortcuts" => self.shortcuts.lookup(field, tail),
-                    "tags" => Err(MeliError::new("unimplemented")),
-                    "composing" => Err(MeliError::new("unimplemented")),
-                    "pgp" => Err(MeliError::new("unimplemented")),
-                    "terminal" => self.terminal.lookup(field, tail),
-                    "plugins" => Err(MeliError::new("unimplemented")),
-                    "log" => self.log.lookup(field, tail),
+    impl DotAddressable for Settings {
+        fn lookup(&self, parent_field: &str, path: &[&str]) -> Result<String> {
+            match path.first() {
+                Some(field) => {
+                    let tail = &path[1..];
+                    match *field {
+                        "accounts" => self.accounts.lookup(field, tail),
+                        "pager" => self.pager.lookup(field, tail),
+                        "listing" => self.listing.lookup(field, tail),
+                        "notifications" => Err(MeliError::new("unimplemented")),
+                        "shortcuts" => self.shortcuts.lookup(field, tail),
+                        "tags" => Err(MeliError::new("unimplemented")),
+                        "composing" => Err(MeliError::new("unimplemented")),
+                        "pgp" => Err(MeliError::new("unimplemented")),
+                        "terminal" => self.terminal.lookup(field, tail),
+                        "plugins" => Err(MeliError::new("unimplemented")),
+                        "log" => self.log.lookup(field, tail),
 
-                    other => Err(MeliError::new(format!(
-                        "{} has no field named {}",
-                        parent_field, other
-                    ))),
+                        other => Err(MeliError::new(format!(
+                            "{} has no field named {}",
+                            parent_field, other
+                        ))),
+                    }
                 }
+                None => Ok(toml::to_string(self).map_err(|err| err.to_string())?),
             }
-            None => Ok(toml::to_string(self).map_err(|err| err.to_string())?),
+        }
+    }
+
+    impl DotAddressable for AccountConf {
+        fn lookup(&self, parent_field: &str, path: &[&str]) -> Result<String> {
+            match path.first() {
+                Some(field) => {
+                    let tail = &path[1..];
+                    match *field {
+                        "account" => self.account.lookup(field, tail),
+                        "conf" => self.conf.lookup(field, tail),
+                        "conf_override" => self.conf_override.lookup(field, tail),
+                        "mailbox_confs" => self.mailbox_confs.lookup(field, tail),
+                        other => Err(MeliError::new(format!(
+                            "{} has no field named {}",
+                            parent_field, other
+                        ))),
+                    }
+                }
+                None => Ok(toml::to_string(self).map_err(|err| err.to_string())?),
+            }
+        }
+    }
+
+    impl DotAddressable for MailUIConf {
+        fn lookup(&self, parent_field: &str, path: &[&str]) -> Result<String> {
+            match path.first() {
+                Some(field) => {
+                    let _tail = &path[1..];
+                    match *field {
+                        "pager" => Err(MeliError::new("unimplemented")), //self.pager.lookup(field, tail),
+                        "listing" => Err(MeliError::new("unimplemented")), // self.listing.lookup(field, tail),
+                        "notifications" => Err(MeliError::new("unimplemented")), // self.notifications.lookup(field, tail),
+                        "shortcuts" => Err(MeliError::new("unimplemented")), //self.shortcuts.lookup(field, tail),
+                        "composing" => Err(MeliError::new("unimplemented")), //self.composing.lookup(field, tail),
+                        "identity" => Err(MeliError::new("unimplemented")), //self.identity.lookup(field, tail)<String>,
+                        "tags" => Err(MeliError::new("unimplemented")), //self.tags.lookup(field, tail),
+                        "themes" => Err(MeliError::new("unimplemented")), //self.themes.lookup(field, tail)<Themes>,
+                        "pgp" => Err(MeliError::new("unimplemented")), //self.pgp.lookup(field, tail),
+
+                        other => Err(MeliError::new(format!(
+                            "{} has no field named {}",
+                            parent_field, other
+                        ))),
+                    }
+                }
+                None => Ok(toml::to_string(self).map_err(|err| err.to_string())?),
+            }
+        }
+    }
+
+    impl DotAddressable for FileMailboxConf {
+        fn lookup(&self, parent_field: &str, path: &[&str]) -> Result<String> {
+            match path.first() {
+                Some(field) => {
+                    let tail = &path[1..];
+                    match *field {
+                        "conf_override" => self.conf_override.lookup(field, tail),
+                        "mailbox_conf" => self.mailbox_conf.lookup(field, tail),
+                        other => Err(MeliError::new(format!(
+                            "{} has no field named {}",
+                            parent_field, other
+                        ))),
+                    }
+                }
+                None => Ok(toml::to_string(self).map_err(|err| err.to_string())?),
+            }
+        }
+    }
+
+    impl DotAddressable for FileAccount {
+        fn lookup(&self, parent_field: &str, path: &[&str]) -> Result<String> {
+            match path.first() {
+                Some(field) => {
+                    let tail = &path[1..];
+                    match *field {
+                        "root_mailbox" => self.root_mailbox.lookup(field, tail),
+                        "format" => self.format.lookup(field, tail),
+                        "identity" => self.identity.lookup(field, tail),
+                        "display_name" => self.display_name.lookup(field, tail),
+                        "read_only" => self.read_only.lookup(field, tail),
+                        "subscribed_mailboxes" => self.subscribed_mailboxes.lookup(field, tail),
+                        "mailboxes" => self.mailboxes.lookup(field, tail),
+                        "search_backend" => self.search_backend.lookup(field, tail),
+                        "manual_refresh" => self.manual_refresh.lookup(field, tail),
+                        "refresh_command" => self.refresh_command.lookup(field, tail),
+                        "conf_override" => self.conf_override.lookup(field, tail),
+                        "extra" => self.extra.lookup(field, tail),
+                        other => Err(MeliError::new(format!(
+                            "{} has no field named {}",
+                            parent_field, other
+                        ))),
+                    }
+                }
+                None => Ok(toml::to_string(self).map_err(|err| err.to_string())?),
+            }
+        }
+    }
+
+    impl DotAddressable for melib::AccountSettings {
+        fn lookup(&self, parent_field: &str, path: &[&str]) -> Result<String> {
+            match path.first() {
+                Some(field) => {
+                    let tail = &path[1..];
+                    match *field {
+                        "name" => self.name.lookup(field, tail),
+                        "root_mailbox" => self.root_mailbox.lookup(field, tail),
+                        "format" => self.format.lookup(field, tail),
+                        "identity" => self.identity.lookup(field, tail),
+                        "read_only" => self.read_only.lookup(field, tail),
+                        "display_name" => self.display_name.lookup(field, tail),
+                        "subscribed_mailboxes" => self.subscribed_mailboxes.lookup(field, tail),
+                        "mailboxes" => self.mailboxes.lookup(field, tail),
+                        "manual_refresh" => self.manual_refresh.lookup(field, tail),
+                        "extra" => self.extra.lookup(field, tail),
+                        other => Err(MeliError::new(format!(
+                            "{} has no field named {}",
+                            parent_field, other
+                        ))),
+                    }
+                }
+                None => Ok(toml::to_string(self).map_err(|err| err.to_string())?),
+            }
+        }
+    }
+
+    impl DotAddressable for melib::MailboxConf {
+        fn lookup(&self, parent_field: &str, path: &[&str]) -> Result<String> {
+            match path.first() {
+                Some(field) => {
+                    let tail = &path[1..];
+                    match *field {
+                        "alias" => self.alias.lookup(field, tail),
+                        "autoload" => self.autoload.lookup(field, tail),
+                        "subscribe" => self.subscribe.lookup(field, tail),
+                        "ignore" => self.ignore.lookup(field, tail),
+                        "usage" => self.usage.lookup(field, tail),
+                        "extra" => self.extra.lookup(field, tail),
+                        other => Err(MeliError::new(format!(
+                            "{} has no field named {}",
+                            parent_field, other
+                        ))),
+                    }
+                }
+                None => Ok(toml::to_string(self).map_err(|err| err.to_string())?),
+            }
         }
     }
 }
