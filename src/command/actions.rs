@@ -91,7 +91,7 @@ pub enum ComposeAction {
 #[derive(Debug)]
 pub enum AccountAction {
     ReIndex,
-    PrintSetting(String),
+    PrintAccountSetting(String),
 }
 
 #[derive(Debug)]
@@ -120,6 +120,7 @@ pub enum Action {
     Compose(ComposeAction),
     Mailbox(AccountName, MailboxOperation),
     AccountAction(AccountName, AccountAction),
+    PrintSetting(String),
 }
 
 impl Action {
@@ -138,6 +139,7 @@ impl Action {
             Action::Compose(_) => false,
             Action::Mailbox(_, _) => true,
             Action::AccountAction(_, _) => false,
+            Action::PrintSetting(_) => false,
         }
     }
 }

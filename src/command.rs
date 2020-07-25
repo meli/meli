@@ -651,13 +651,27 @@ define_commands!([
                   desc: "print ACCOUNT SETTING",
                   tokens: &[One(Literal("print")), One(AccountName), One(QuotedStringValue)],
                   parser:(
-                      fn print_setting(input: &[u8]) -> IResult<&[u8], Action> {
+                      fn print_account_setting(input: &[u8]) -> IResult<&[u8], Action> {
                           let (input, _) = tag("print")(input.trim())?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, account) = quoted_argument(input)?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, setting) = quoted_argument(input)?;
-                          Ok((input, AccountAction(account.to_string(), PrintSetting(setting.to_string()))))
+                          let (input, _) = eof(input)?;
+                          Ok((input, AccountAction(account.to_string(), PrintAccountSetting(setting.to_string()))))
+                      }
+                  )
+                },
+                { tags: ["print "],
+                  desc: "print SETTING",
+                  tokens: &[One(Literal("print")), One(QuotedStringValue)],
+                  parser:(
+                      fn print_setting(input: &[u8]) -> IResult<&[u8], Action> {
+                          let (input, _) = tag("print")(input.trim())?;
+                          let (input, _) = is_a(" ")(input)?;
+                          let (input, setting) = quoted_argument(input)?;
+                          let (input, _) = eof(input)?;
+                          Ok((input, PrintSetting(setting.to_string())))
                       }
                   )
                 }
@@ -719,7 +733,7 @@ fn compose_action(input: &[u8]) -> IResult<&[u8], Action> {
 }
 
 fn account_action(input: &[u8]) -> IResult<&[u8], Action> {
-    alt((reindex, print_setting))(input)
+    alt((reindex, print_account_setting))(input)
 }
 
 fn view(input: &[u8]) -> IResult<&[u8], Action> {
@@ -744,6 +758,7 @@ pub fn parse_command(input: &[u8]) -> Result<Action, MeliError> {
         delete_mailbox,
         rename_mailbox,
         account_action,
+        print_setting,
     ))(input)
     .map(|(_, v)| v)
     .map_err(|err| err.into())

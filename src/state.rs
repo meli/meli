@@ -931,7 +931,35 @@ impl State {
                     Some(NotificationType::ERROR),
                 ));
             }
-            AccountAction(ref _account_name, PrintSetting(ref setting)) => {
+            AccountAction(ref account_name, PrintAccountSetting(ref setting)) => {
+                /*
+                let path = setting.split(".").collect::<SmallVec<[&str; 16]>>();
+                if let Some(pos) = self
+                    .context
+                    .accounts
+                    .iter()
+                    .position(|a| a.name() == account_name)
+                {
+                    self.context.replies.push_back(UIEvent::StatusEvent(
+                        StatusEvent::UpdateStatus(format!(
+                            "{}",
+                            self.context.accounts[pos]
+                                .settings
+                                .lookup("settings", &path)
+                                .unwrap_or_else(|err| err.to_string())
+                        )),
+                    ));
+                } else {
+                    self.context.replies.push_back(UIEvent::Notification(
+                        None,
+                        format!("Account {} was not found.", account_name),
+                        Some(NotificationType::ERROR),
+                    ));
+                    return;
+                }
+                */
+            }
+            PrintSetting(ref setting) => {
                 let path = setting.split(".").collect::<SmallVec<[&str; 16]>>();
                 self.context
                     .replies

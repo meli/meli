@@ -849,6 +849,7 @@ impl DotAddressable for IndexStyle {}
 impl DotAddressable for u64 {}
 impl DotAddressable for crate::terminal::Color {}
 impl DotAddressable for crate::terminal::Attr {}
+impl DotAddressable for crate::terminal::Key {}
 impl DotAddressable for usize {}
 impl DotAddressable for Query {}
 impl DotAddressable for melib::LoggingLevel {}
@@ -880,6 +881,7 @@ impl DotAddressable for LogSettings {
         }
     }
 }
+
 impl DotAddressable for Settings {
     fn lookup(&self, parent_field: &str, path: &[&str]) -> Result<String> {
         match path.first() {
@@ -890,7 +892,7 @@ impl DotAddressable for Settings {
                     "pager" => self.pager.lookup(field, tail),
                     "listing" => self.listing.lookup(field, tail),
                     "notifications" => Err(MeliError::new("unimplemented")),
-                    "shortcuts" => Err(MeliError::new("unimplemented")),
+                    "shortcuts" => self.shortcuts.lookup(field, tail),
                     "tags" => Err(MeliError::new("unimplemented")),
                     "composing" => Err(MeliError::new("unimplemented")),
                     "pgp" => Err(MeliError::new("unimplemented")),

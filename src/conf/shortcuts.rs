@@ -19,7 +19,9 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use super::DotAddressable;
 use crate::terminal::Key;
+use melib::{MeliError, Result};
 use std::collections::HashMap;
 
 #[macro_export]
@@ -67,6 +69,33 @@ impl Default for Shortcuts {
     }
 }
 
+impl DotAddressable for Shortcuts {
+    fn lookup(&self, parent_field: &str, path: &[&str]) -> Result<String> {
+        match path.first() {
+            Some(field) => {
+                let tail = &path[1..];
+                match *field {
+                    "general" => self.general.lookup(field, tail),
+                    "listing" => self.listing.lookup(field, tail),
+                    "composing" => self.composing.lookup(field, tail),
+                    "compact_listing" | "compact-listing" => {
+                        self.compact_listing.lookup(field, tail)
+                    }
+                    "contact_list" | "contact-list" => self.contact_list.lookup(field, tail),
+                    "envelope_view" | "envelope-view" => self.envelope_view.lookup(field, tail),
+                    "thread_view" | "thread-view" => self.thread_view.lookup(field, tail),
+                    "pager" => self.pager.lookup(field, tail),
+                    other => Err(MeliError::new(format!(
+                        "{} has no field named {}",
+                        parent_field, other
+                    ))),
+                }
+            }
+            None => Ok(toml::to_string(self).map_err(|err| err.to_string())?),
+        }
+    }
+}
+
 /// Create a struct holding all of a Component's shortcuts.
 #[macro_export]
 macro_rules! shortcut_key_values {
@@ -102,6 +131,24 @@ macro_rules! shortcut_key_values {
             fn default() -> Self {
                 Self {
                     $($fname: $default),*
+                }
+            }
+        }
+
+        impl DotAddressable for $name {
+            fn lookup(&self, parent_field: &str, path: &[&str]) -> Result<String> {
+                match path.first() {
+                    Some(field) => {
+                        let tail = &path[1..];
+                        match *field {
+                            $(stringify!($fname) => self.$fname.lookup(field, tail),)*
+                            other => Err(MeliError::new(format!(
+                                        "{} has no field named {}",
+                                        parent_field, other
+                            ))),
+                        }
+                    }
+                    None => Ok(toml::to_string(self).map_err(|err| err.to_string())?),
                 }
             }
         }
