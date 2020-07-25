@@ -504,7 +504,7 @@ impl MailBackend for ImapType {
                     for env_hash in env_hashes.rest {
                         cmd = format!("{},{}", cmd, hash_index_lck[&env_hash].0);
                     }
-                    format!("{} +FLAGS.SILENT (\\Deleted)", cmd)
+                    format!("{} +FLAGS (\\Deleted)", cmd)
                 };
                 conn.send_command(command.as_bytes()).await?;
                 conn.read_response(&mut response, RequiredResponses::empty())
@@ -535,7 +535,7 @@ impl MailBackend for ImapType {
                     for env_hash in &env_hashes.rest {
                         cmd = format!("{},{}", cmd, hash_index_lck[env_hash].0);
                     }
-                    cmd = format!("{} +FLAGS.SILENT (", cmd);
+                    cmd = format!("{} +FLAGS (", cmd);
                     for (f, v) in flags.iter() {
                         if !*v {
                             continue;
@@ -579,7 +579,7 @@ impl MailBackend for ImapType {
                     cmd
                 };
                 conn.send_command(command.as_bytes()).await?;
-                conn.read_response(&mut response, RequiredResponses::STORE_REQUIRED)
+                conn.read_response(&mut response, RequiredResponses::empty())
                     .await?;
             }
             if flags.iter().any(|(_, b)| !*b) {
@@ -590,7 +590,7 @@ impl MailBackend for ImapType {
                     for env_hash in &env_hashes.rest {
                         cmd = format!("{},{}", cmd, hash_index_lck[env_hash].0);
                     }
-                    cmd = format!("{} -FLAGS.SILENT (", cmd);
+                    cmd = format!("{} -FLAGS (", cmd);
                     for (f, v) in flags.iter() {
                         if *v {
                             continue;
@@ -634,7 +634,7 @@ impl MailBackend for ImapType {
                     cmd
                 };
                 conn.send_command(command.as_bytes()).await?;
-                conn.read_response(&mut response, RequiredResponses::STORE_REQUIRED)
+                conn.read_response(&mut response, RequiredResponses::empty())
                     .await?;
             }
             Ok(())

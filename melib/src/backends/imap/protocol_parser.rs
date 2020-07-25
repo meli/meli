@@ -59,7 +59,6 @@ bitflags! {
         const LIST_REQUIRED       = Self::LIST.bits;
         const LSUB_REQUIRED       = Self::LSUB.bits;
         const FETCH_REQUIRED      = Self::FETCH.bits;
-        const STORE_REQUIRED      = Self::FETCH.bits;
     }
 }
 
