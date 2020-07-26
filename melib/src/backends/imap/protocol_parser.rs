@@ -29,7 +29,7 @@ use nom::{
     character::complete::digit1,
     character::is_digit,
     combinator::{map, map_res, opt},
-    multi::{length_data, many0, many1, separated_list, separated_nonempty_list},
+    multi::{fold_many1, length_data, many0, separated_list, separated_nonempty_list},
     sequence::{delimited, preceded},
 };
 use std::str::FromStr;
@@ -1179,7 +1179,7 @@ pub fn envelope(input: &[u8]) -> IResult<&[u8], Envelope> {
             }
 
             if let Some(bcc) = bcc {
-                env.set_bcc(bcc);
+                env.set_bcc(bcc.to_vec());
             }
             if let Some(in_reply_to) = in_reply_to {
                 env.set_in_reply_to(&in_reply_to);
@@ -1268,13 +1268,21 @@ macro_rules! str_builder {
 }
 
 // Parse a list of addresses in the format of the ENVELOPE structure
-pub fn envelope_addresses<'a>(input: &'a [u8]) -> IResult<&'a [u8], Option<Vec<Address>>> {
+pub fn envelope_addresses<'a>(
+    input: &'a [u8],
+) -> IResult<&'a [u8], Option<SmallVec<[Address; 1]>>> {
     alt((
         map(tag("NIL"), |_| None),
-        |input: &'a [u8]| -> IResult<&'a [u8], Option<Vec<Address>>> {
+        |input: &'a [u8]| -> IResult<&'a [u8], Option<SmallVec<[Address; 1]>>> {
             let (input, _) = tag("(")(input)?;
-            let (input, envelopes) =
-                many1(delimited(tag("("), envelope_address, tag(")")))(input.ltrim())?;
+            let (input, envelopes) = fold_many1(
+                delimited(tag("("), envelope_address, tag(")")),
+                SmallVec::new(),
+                |mut acc, item| {
+                    acc.push(item);
+                    acc
+                },
+            )(input.ltrim())?;
             let (input, _) = tag(")")(input)?;
             Ok((input, Some(envelopes)))
         },

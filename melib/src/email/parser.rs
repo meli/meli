@@ -1348,8 +1348,8 @@ pub mod address {
         // ws!(alt_complete!(mailbox | group))
     }
 
-    pub fn rfc2822address_list(input: &[u8]) -> IResult<&[u8], Vec<Address>> {
-        separated_list(is_a(","), address)(input.ltrim())
+    pub fn rfc2822address_list(input: &[u8]) -> IResult<&[u8], SmallVec<[Address; 1]>> {
+        separated_list_smallvec(is_a(","), address)(input.ltrim())
         // ws!( separated_list!(is_a!(","), address))
     }
 
@@ -1416,6 +1416,70 @@ pub mod address {
     pub fn references(input: &[u8]) -> IResult<&[u8], Vec<&[u8]>> {
         separated_list(is_a(" \n\t\r"), message_id_peek)(input)
         // separated_list!(complete!(is_a!(" \n\t\r")), message_id_peek));
+    }
+
+    use smallvec::SmallVec;
+    pub fn separated_list_smallvec<I, O, Sep, E, F, G>(
+        sep: G,
+        f: F,
+    ) -> impl FnMut(I) -> IResult<I, SmallVec<[O; 1]>, E>
+    where
+        I: Clone + PartialEq,
+        F: Fn(I) -> IResult<I, O, E>,
+        G: Fn(I) -> IResult<I, Sep, E>,
+        E: nom::error::ParseError<I>,
+    {
+        move |i: I| {
+            let mut res = SmallVec::new();
+            let mut i = i.clone();
+
+            // Parse the first element
+            match f(i.clone()) {
+                Err(e) => return Err(e),
+                Ok((i1, o)) => {
+                    if i1 == i {
+                        return Err(nom::Err::Error(E::from_error_kind(
+                            i1,
+                            ErrorKind::SeparatedList,
+                        )));
+                    }
+
+                    res.push(o);
+                    i = i1;
+                }
+            }
+
+            loop {
+                match sep(i.clone()) {
+                    Err(nom::Err::Error(_)) => return Ok((i, res)),
+                    Err(e) => return Err(e),
+                    Ok((i1, _)) => {
+                        if i1 == i {
+                            return Err(nom::Err::Error(E::from_error_kind(
+                                i1,
+                                ErrorKind::SeparatedList,
+                            )));
+                        }
+
+                        match f(i1.clone()) {
+                            Err(nom::Err::Error(_)) => return Ok((i, res)),
+                            Err(e) => return Err(e),
+                            Ok((i2, o)) => {
+                                if i2 == i {
+                                    return Err(nom::Err::Error(E::from_error_kind(
+                                        i2,
+                                        ErrorKind::SeparatedList,
+                                    )));
+                                }
+
+                                res.push(o);
+                                i = i2;
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1497,7 +1561,7 @@ mod tests {
         assert_eq!(
             (
                 &s[0..0],
-                vec![
+                smallvec::smallvec![
                     make_address!("Obit Oppidum", "user@domain"),
                     make_address!("list", "list@domain.tld"),
                     make_address!("list2", "list2@domain.tld"),

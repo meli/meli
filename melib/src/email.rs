@@ -131,9 +131,9 @@ pub type EnvelopeHash = u64;
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Envelope {
     date: String,
-    from: Vec<Address>,
-    to: Vec<Address>,
-    cc: Vec<Address>,
+    from: SmallVec<[Address; 1]>,
+    to: SmallVec<[Address; 1]>,
+    cc: SmallVec<[Address; 1]>,
     bcc: Vec<Address>,
     subject: Option<String>,
     message_id: MessageID,
@@ -175,9 +175,9 @@ impl Envelope {
     pub fn new(hash: EnvelopeHash) -> Self {
         Envelope {
             date: String::new(),
-            from: Vec::new(),
-            to: Vec::new(),
-            cc: Vec::new(),
+            from: SmallVec::new(),
+            to: SmallVec::new(),
+            cc: SmallVec::new(),
             bcc: Vec::new(),
             subject: None,
             message_id: MessageID::default(),
@@ -279,7 +279,7 @@ impl Envelope {
                 let parse_result = parser::address::rfc2822address_list(value);
                 if parse_result.is_ok() {
                     let value = parse_result.unwrap().1;
-                    self.set_bcc(value);
+                    self.set_bcc(value.to_vec());
                 };
             } else if name.eq_ignore_ascii_case(b"from") {
                 let parse_result = parser::address::rfc2822address_list(value);
@@ -384,31 +384,102 @@ impl Envelope {
     pub fn date_as_str(&self) -> &str {
         &self.date
     }
-    pub fn from(&self) -> &Vec<Address> {
-        &self.from
+    pub fn from(&self) -> &[Address] {
+        self.from.as_slice()
     }
     pub fn field_bcc_to_string(&self) -> String {
-        let _strings: Vec<String> = self.bcc.iter().map(|a| format!("{}", a)).collect();
-        _strings.join(", ")
+        if self.bcc.is_empty() {
+            self.other_headers
+                .get("Bcc")
+                .map(|s| s.as_str())
+                .unwrap_or_default()
+                .to_string()
+        } else {
+            self.bcc.iter().fold(String::new(), |mut acc, x| {
+                if !acc.is_empty() {
+                    acc.push_str(", ");
+                }
+                acc.push_str(&x.to_string());
+                acc
+            })
+        }
     }
     pub fn field_cc_to_string(&self) -> String {
-        let _strings: Vec<String> = self.cc.iter().map(|a| format!("{}", a)).collect();
-        _strings.join(", ")
+        if self.cc.is_empty() {
+            self.other_headers
+                .get("Cc")
+                .map(|s| s.as_str())
+                .unwrap_or_default()
+                .to_string()
+        } else {
+            self.cc.iter().fold(String::new(), |mut acc, x| {
+                if !acc.is_empty() {
+                    acc.push_str(", ");
+                }
+                acc.push_str(&x.to_string());
+                acc
+            })
+        }
     }
     pub fn field_from_to_string(&self) -> String {
-        let _strings: Vec<String> = self.from().iter().map(|a| format!("{}", a)).collect();
-        _strings.join(", ")
+        if self.from.is_empty() {
+            self.other_headers
+                .get("From")
+                .map(|s| s.as_str())
+                .unwrap_or_default()
+                .to_string()
+        } else {
+            self.from.iter().fold(String::new(), |mut acc, x| {
+                if !acc.is_empty() {
+                    acc.push_str(", ");
+                }
+                acc.push_str(&x.to_string());
+                acc
+            })
+        }
     }
-    pub fn to(&self) -> &Vec<Address> {
-        &self.to
+    pub fn to(&self) -> &[Address] {
+        self.to.as_slice()
     }
     pub fn field_to_to_string(&self) -> String {
-        let _strings: Vec<String> = self.to.iter().map(|a| format!("{}", a)).collect();
-        _strings.join(", ")
+        if self.to.is_empty() {
+            self.other_headers
+                .get("To")
+                .map(|s| s.as_str())
+                .unwrap_or_default()
+                .to_string()
+        } else {
+            self.to
+                .iter()
+                .map(|a| format!("{}", a))
+                .fold(String::new(), |mut acc, x| {
+                    if !acc.is_empty() {
+                        acc.push_str(", ");
+                    }
+                    acc.push_str(&x);
+                    acc
+                })
+        }
     }
     pub fn field_references_to_string(&self) -> String {
-        let _strings: Vec<String> = self.references().iter().map(|a| a.to_string()).collect();
-        _strings.join(", ")
+        let refs = self.references();
+        if refs.is_empty() {
+            self.other_headers
+                .get("References")
+                .map(|s| s.as_str())
+                .unwrap_or_default()
+                .to_string()
+        } else {
+            refs.iter()
+                .map(|a| a.to_string())
+                .fold(String::new(), |mut acc, x| {
+                    if !acc.is_empty() {
+                        acc.push_str(", ");
+                    }
+                    acc.push_str(&x);
+                    acc
+                })
+        }
     }
 
     pub fn body_bytes(&self, bytes: &[u8]) -> Attachment {
@@ -474,13 +545,13 @@ impl Envelope {
     pub fn set_bcc(&mut self, new_val: Vec<Address>) {
         self.bcc = new_val;
     }
-    pub fn set_cc(&mut self, new_val: Vec<Address>) {
+    pub fn set_cc(&mut self, new_val: SmallVec<[Address; 1]>) {
         self.cc = new_val;
     }
-    pub fn set_from(&mut self, new_val: Vec<Address>) {
+    pub fn set_from(&mut self, new_val: SmallVec<[Address; 1]>) {
         self.from = new_val;
     }
-    pub fn set_to(&mut self, new_val: Vec<Address>) {
+    pub fn set_to(&mut self, new_val: SmallVec<[Address; 1]>) {
         self.to = new_val;
     }
     pub fn set_in_reply_to(&mut self, new_val: &[u8]) {
@@ -563,16 +634,13 @@ impl Envelope {
             }
         }
     }
-    pub fn references(&self) -> Vec<&MessageID> {
+    pub fn references(&self) -> SmallVec<[&MessageID; 8]> {
         match self.references {
-            Some(ref s) => s
-                .refs
-                .iter()
-                .fold(Vec::with_capacity(s.refs.len()), |mut acc, x| {
-                    acc.push(x);
-                    acc
-                }),
-            None => Vec::new(),
+            Some(ref s) => s.refs.iter().fold(SmallVec::new(), |mut acc, x| {
+                acc.push(x);
+                acc
+            }),
+            None => SmallVec::new(),
         }
     }
 

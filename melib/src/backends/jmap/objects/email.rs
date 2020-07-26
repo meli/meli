@@ -141,17 +141,17 @@ pub struct EmailObject {
     #[serde(default)]
     message_id: Vec<String>,
     #[serde(default)]
-    to: Vec<EmailAddress>,
+    to: SmallVec<[EmailAddress; 1]>,
     #[serde(default)]
     bcc: Option<Vec<EmailAddress>>,
     #[serde(default)]
     reply_to: Option<Vec<EmailAddress>>,
     #[serde(default)]
-    cc: Option<Vec<EmailAddress>>,
+    cc: Option<SmallVec<[EmailAddress; 1]>>,
     #[serde(default)]
     sender: Option<Vec<EmailAddress>>,
     #[serde(default)]
-    from: Vec<EmailAddress>,
+    from: SmallVec<[EmailAddress; 1]>,
     #[serde(default)]
     in_reply_to: Option<Vec<String>>,
     #[serde(default)]
@@ -269,24 +269,24 @@ impl std::convert::From<EmailObject> for crate::Envelope {
         }
 
         env.set_from(
-            std::mem::replace(&mut t.from, Vec::new())
+            std::mem::replace(&mut t.from, SmallVec::new())
                 .into_iter()
                 .map(|addr| addr.into())
-                .collect::<Vec<crate::email::Address>>(),
+                .collect::<SmallVec<[crate::email::Address; 1]>>(),
         );
         env.set_to(
-            std::mem::replace(&mut t.to, Vec::new())
+            std::mem::replace(&mut t.to, SmallVec::new())
                 .into_iter()
                 .map(|addr| addr.into())
-                .collect::<Vec<crate::email::Address>>(),
+                .collect::<SmallVec<[crate::email::Address; 1]>>(),
         );
 
         if let Some(ref mut cc) = t.cc {
             env.set_cc(
-                std::mem::replace(cc, Vec::new())
+                std::mem::replace(cc, SmallVec::new())
                     .into_iter()
                     .map(|addr| addr.into())
-                    .collect::<Vec<crate::email::Address>>(),
+                    .collect::<SmallVec<[crate::email::Address; 1]>>(),
             );
         }
 
