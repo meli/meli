@@ -396,6 +396,7 @@ impl MailView {
                         format!("Failed to open envelope: {}", err.to_string()),
                         ERROR,
                     );
+                    self.init_futures(context);
                     return;
                 }
             }
@@ -798,6 +799,7 @@ impl Component for MailView {
                             Some(NotificationType::ERROR),
                         ));
                         log(format!("Failed to open envelope: {}", e.to_string()), ERROR);
+                        self.init_futures(context);
                         return;
                     }
                 }
@@ -1227,6 +1229,7 @@ impl Component for MailView {
                                         Some(NotificationType::ERROR),
                                     ));
                                     log(e.to_string(), ERROR);
+                                    self.init_futures(context);
                                     return true;
                                 }
                             };
@@ -1301,6 +1304,7 @@ impl Component for MailView {
                                 format!("Failed to open envelope: {}", err.to_string()),
                                 ERROR,
                             );
+                            self.init_futures(context);
                             return true;
                         }
                     }
