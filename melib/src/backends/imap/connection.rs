@@ -38,10 +38,23 @@ use std::time::Instant;
 use super::protocol_parser;
 use super::{Capabilities, ImapServerConf, UIDStore};
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy)]
 pub enum ImapProtocol {
-    IMAP,
+    IMAP { extension_use: ImapExtensionUse },
     ManageSieve,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct ImapExtensionUse {
+    pub idle: bool,
+}
+
+impl Default for ImapExtensionUse {
+    fn default() -> Self {
+        Self {
+            idle: true,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -116,7 +129,7 @@ impl ImapStream {
             if server_conf.use_starttls {
                 let mut buf = vec![0; 1024];
                 match server_conf.protocol {
-                    ImapProtocol::IMAP => socket
+                    ImapProtocol::IMAP { .. } => socket
                         .write_all(format!("M{} STARTTLS\r\n", cmd_id).as_bytes())
                         .await
                         .chain_err_kind(crate::error::ErrorKind::Network)?,
@@ -142,7 +155,7 @@ impl ImapStream {
                         .chain_err_kind(crate::error::ErrorKind::Network)?;
                     response.push_str(unsafe { std::str::from_utf8_unchecked(&buf[0..len]) });
                     match server_conf.protocol {
-                        ImapProtocol::IMAP => {
+                        ImapProtocol::IMAP { .. } => {
                             if response.starts_with("* OK ") && response.find("\r\n").is_some() {
                                 if let Some(pos) = response.as_bytes().find(b"\r\n") {
                                     response.drain(0..pos + 2);
@@ -338,7 +351,7 @@ impl ImapStream {
 
     pub async fn read_response(&mut self, ret: &mut String) -> Result<()> {
         let id = match self.protocol {
-            ImapProtocol::IMAP => format!("M{} ", self.cmd_id - 1),
+            ImapProtocol::IMAP { .. } => format!("M{} ", self.cmd_id - 1),
             ImapProtocol::ManageSieve => String::new(),
         };
         self.read_lines(ret, &id, true).await?;
@@ -408,7 +421,7 @@ impl ImapStream {
         if let Err(err) = try_await(async move {
             let command = command.trim();
             match self.protocol {
-                ImapProtocol::IMAP => {
+                ImapProtocol::IMAP { .. } => {
                     self.stream.write_all(b"M").await?;
                     self.stream
                         .write_all(self.cmd_id.to_string().as_bytes())
@@ -422,7 +435,7 @@ impl ImapStream {
             self.stream.write_all(command).await?;
             self.stream.write_all(b"\r\n").await?;
             match self.protocol {
-                ImapProtocol::IMAP => {
+                ImapProtocol::IMAP { .. } => {
                     debug!("sent: M{} {}", self.cmd_id - 1, unsafe {
                         std::str::from_utf8_unchecked(command)
                     });
@@ -514,7 +527,7 @@ impl ImapConnection {
             self.stream.as_mut()?.read_response(&mut response).await?;
 
             match self.server_conf.protocol {
-                ImapProtocol::IMAP => {
+                ImapProtocol::IMAP { .. } => {
                     let r: ImapResponse = ImapResponse::from(&response);
                     match r {
                         ImapResponse::Bye(ref response_code) => {

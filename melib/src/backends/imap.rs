@@ -335,13 +335,20 @@ impl MailBackend for ImapType {
         let main_conn = self.connection.clone();
         *self.uid_store.sender.write().unwrap() = Some(sender);
         let uid_store = self.uid_store.clone();
+        let has_idle: bool = match self.server_conf.protocol {
+            ImapProtocol::IMAP {
+                extension_use: ImapExtensionUse { idle, .. },
+            } => {
+                idle && uid_store
+                    .capabilities
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .any(|cap| cap.eq_ignore_ascii_case(b"IDLE"))
+            }
+            _ => false,
+        };
         Ok(Box::pin(async move {
-            let has_idle: bool = uid_store
-                .capabilities
-                .lock()
-                .unwrap()
-                .iter()
-                .any(|cap| cap.eq_ignore_ascii_case(b"IDLE"));
             debug!(has_idle);
             let kit = ImapWatchKit {
                 conn,
@@ -1071,7 +1078,11 @@ impl ImapType {
             use_tls,
             use_starttls,
             danger_accept_invalid_certs,
-            protocol: ImapProtocol::IMAP,
+            protocol: ImapProtocol::IMAP {
+                extension_use: ImapExtensionUse {
+                    idle: get_conf_val!(s["use_idle"], true)?,
+                },
+            },
         };
         let account_hash = {
             let mut hasher = DefaultHasher::new();
@@ -1257,6 +1268,7 @@ impl ImapType {
         }
         get_conf_val!(s["danger_accept_invalid_certs"], false)?;
         get_conf_val!(s["X_header_caching"], false)?;
+        get_conf_val!(s["use_idle"], true)?;
         Ok(())
     }
 
