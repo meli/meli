@@ -327,3 +327,10 @@ impl<'a> From<&'a mut MeliError> for MeliError {
         kind.clone()
     }
 }
+
+impl<'a> From<&'a MeliError> for MeliError {
+    #[inline]
+    fn from(kind: &'a MeliError) -> MeliError {
+        kind.clone()
+    }
+}
