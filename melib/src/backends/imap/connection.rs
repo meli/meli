@@ -46,9 +46,10 @@ pub enum ImapProtocol {
 
 #[derive(Debug)]
 pub struct ImapStream {
-    cmd_id: usize,
-    stream: AsyncWrapper<Connection>,
-    protocol: ImapProtocol,
+    pub cmd_id: usize,
+    pub stream: AsyncWrapper<Connection>,
+    pub protocol: ImapProtocol,
+    pub current_mailbox: MailboxSelection,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -73,7 +74,6 @@ pub struct ImapConnection {
     pub stream: Result<ImapStream>,
     pub server_conf: ImapServerConf,
     pub uid_store: Arc<UIDStore>,
-    pub current_mailbox: MailboxSelection,
 }
 
 impl Drop for ImapStream {
@@ -220,6 +220,7 @@ impl ImapStream {
             cmd_id,
             stream,
             protocol: server_conf.protocol,
+            current_mailbox: MailboxSelection::None,
         };
         if let ImapProtocol::ManageSieve = server_conf.protocol {
             use data_encoding::BASE64;
@@ -476,7 +477,6 @@ impl ImapConnection {
             stream: Err(MeliError::new("Offline".to_string())),
             server_conf: server_conf.clone(),
             uid_store,
-            current_mailbox: MailboxSelection::None,
         }
     }
 
@@ -615,7 +615,8 @@ impl ImapConnection {
         ret: &mut String,
         force: bool,
     ) -> Result<()> {
-        if !force && self.current_mailbox == MailboxSelection::Select(mailbox_hash) {
+        if !force && self.stream.as_ref()?.current_mailbox == MailboxSelection::Select(mailbox_hash)
+        {
             return Ok(());
         }
         self.send_command(
@@ -629,7 +630,7 @@ impl ImapConnection {
         self.read_response(ret, RequiredResponses::SELECT_REQUIRED)
             .await?;
         debug!("select response {}", ret);
-        self.current_mailbox = MailboxSelection::Select(mailbox_hash);
+        self.stream.as_mut()?.current_mailbox = MailboxSelection::Select(mailbox_hash);
         Ok(())
     }
 
@@ -639,7 +640,9 @@ impl ImapConnection {
         ret: &mut String,
         force: bool,
     ) -> Result<()> {
-        if !force && self.current_mailbox == MailboxSelection::Examine(mailbox_hash) {
+        if !force
+            && self.stream.as_ref()?.current_mailbox == MailboxSelection::Examine(mailbox_hash)
+        {
             return Ok(());
         }
         self.send_command(
@@ -653,12 +656,12 @@ impl ImapConnection {
         self.read_response(ret, RequiredResponses::EXAMINE_REQUIRED)
             .await?;
         debug!("examine response {}", ret);
-        self.current_mailbox = MailboxSelection::Examine(mailbox_hash);
+        self.stream.as_mut()?.current_mailbox = MailboxSelection::Examine(mailbox_hash);
         Ok(())
     }
 
     pub async fn unselect(&mut self) -> Result<()> {
-        match self.current_mailbox.take() {
+        match self.stream.as_mut()?.current_mailbox.take() {
             MailboxSelection::Examine(mailbox_hash) |
             MailboxSelection::Select(mailbox_hash) =>{
             let mut response = String::with_capacity(8 * 1024);

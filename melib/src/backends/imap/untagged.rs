@@ -51,8 +51,7 @@ impl ImapConnection {
                 } else { Ok(()) }?;)+
             };
         }
-        //FIXME
-        let mailbox_hash = match self.current_mailbox {
+        let mailbox_hash = match self.stream.as_ref()?.current_mailbox {
             MailboxSelection::Select(h) | MailboxSelection::Examine(h) => h,
             MailboxSelection::None => return Ok(false),
         };

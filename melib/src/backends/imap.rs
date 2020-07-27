@@ -752,9 +752,10 @@ impl MailBackend for ImapType {
             let mut response = String::with_capacity(8 * 1024);
             {
                 let mut conn_lck = connection.lock().await;
+                let current_mailbox = conn_lck.stream.as_ref()?.current_mailbox;
                 if !no_select
-                    && (conn_lck.current_mailbox == MailboxSelection::Examine(mailbox_hash)
-                        || conn_lck.current_mailbox == MailboxSelection::Select(mailbox_hash))
+                    && (current_mailbox == MailboxSelection::Examine(mailbox_hash)
+                        || current_mailbox == MailboxSelection::Select(mailbox_hash))
                 {
                     /* make sure mailbox is not selected before it gets deleted, otherwise
                      * connection gets dropped by server */
