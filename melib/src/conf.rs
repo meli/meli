@@ -107,11 +107,15 @@ impl MailboxConf {
     }
 }
 
-pub(in crate::conf) fn false_val() -> bool {
+pub fn true_val() -> bool {
+    true
+}
+
+pub fn false_val() -> bool {
     false
 }
 
-pub(in crate::conf) fn none<T>() -> Option<T> {
+pub fn none<T>() -> Option<T> {
     None
 }
 

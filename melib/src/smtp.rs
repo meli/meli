@@ -173,20 +173,31 @@ pub struct SmtpServerConf {
 /// Configured SMTP extensions to use
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SmtpExtensionSupport {
+    #[serde(default = "crate::conf::true_val")]
     pipelining: bool,
+    #[serde(default = "crate::conf::true_val")]
     chunking: bool,
     //Essentially, the PRDR extension to SMTP allows (but does not require) an SMTP server to
     //issue multiple responses after a message has been transferred, by mutual consent of the
     //client and server. SMTP clients that support the PRDR extension then use the expanded
     //responses as supplemental data to the responses that were received during the earlier
     //envelope exchange.
+    #[serde(default = "crate::conf::true_val")]
     prdr: bool,
+    #[serde(default = "crate::conf::false_val")]
     binarymime: bool,
     //Resources:
     //- http://www.postfix.org/SMTPUTF8_README.html
+    #[serde(default = "crate::conf::true_val")]
     smtputf8: bool,
+    #[serde(default = "crate::conf::true_val")]
     auth: bool,
+    #[serde(default = "default_dsn")]
     dsn_notify: Option<Cow<'static, str>>,
+}
+
+fn default_dsn() -> Option<Cow<'static, str>> {
+    Some("FAILURE".into())
 }
 
 impl Default for SmtpExtensionSupport {
