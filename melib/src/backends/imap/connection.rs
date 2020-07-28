@@ -47,12 +47,16 @@ pub enum ImapProtocol {
 #[derive(Debug, Clone, Copy)]
 pub struct ImapExtensionUse {
     pub idle: bool,
+    #[cfg(feature = "deflate_compression")]
+    pub deflate: bool,
 }
 
 impl Default for ImapExtensionUse {
     fn default() -> Self {
         Self {
             idle: true,
+            #[cfg(feature = "deflate_compression")]
+            deflate: false,
         }
     }
 }
@@ -89,12 +93,6 @@ pub struct ImapConnection {
     pub uid_store: Arc<UIDStore>,
 }
 
-impl Drop for ImapStream {
-    fn drop(&mut self) {
-        //self.send_command(b"LOGOUT").ok().take();
-    }
-}
-
 impl ImapStream {
     pub async fn new_connection(
         server_conf: &ImapServerConf,
@@ -127,7 +125,7 @@ impl ImapStream {
             ))
             .chain_err_kind(crate::error::ErrorKind::Network)?;
             if server_conf.use_starttls {
-                let mut buf = vec![0; 1024];
+                let mut buf = vec![0; Connection::IO_BUF_SIZE];
                 match server_conf.protocol {
                     ImapProtocol::IMAP { .. } => socket
                         .write_all(format!("M{} STARTTLS\r\n", cmd_id).as_bytes())
@@ -364,7 +362,7 @@ impl ImapStream {
         termination_string: &str,
         keep_termination_string: bool,
     ) -> Result<()> {
-        let mut buf: [u8; 1024] = [0; 1024];
+        let mut buf: Vec<u8> = vec![0; Connection::IO_BUF_SIZE];
         ret.clear();
         let mut last_line_idx: usize = 0;
         loop {
@@ -434,6 +432,7 @@ impl ImapStream {
 
             self.stream.write_all(command).await?;
             self.stream.write_all(b"\r\n").await?;
+            self.stream.flush().await?;
             match self.protocol {
                 ImapProtocol::IMAP { .. } => {
                     debug!("sent: M{} {}", self.cmd_id - 1, unsafe {
@@ -493,27 +492,72 @@ impl ImapConnection {
         }
     }
 
-    pub async fn connect(&mut self) -> Result<()> {
-        if let (instant, ref mut status @ Ok(())) = *self.uid_store.is_online.lock().unwrap() {
-            if Instant::now().duration_since(instant) >= std::time::Duration::new(60 * 30, 0) {
-                *status = Err(MeliError::new("Connection timed out"));
-                self.stream = Err(MeliError::new("Connection timed out"));
+    pub fn connect<'a>(&'a mut self) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>> {
+        Box::pin(async move {
+            if let (instant, ref mut status @ Ok(())) = *self.uid_store.is_online.lock().unwrap() {
+                if Instant::now().duration_since(instant) >= std::time::Duration::new(60 * 30, 0) {
+                    *status = Err(MeliError::new("Connection timed out"));
+                    self.stream = Err(MeliError::new("Connection timed out"));
+                }
             }
-        }
-        if self.stream.is_ok() {
-            self.uid_store.is_online.lock().unwrap().0 = Instant::now();
-            return Ok(());
-        }
-        let new_stream = debug!(ImapStream::new_connection(&self.server_conf).await);
-        if let Err(err) = new_stream.as_ref() {
-            *self.uid_store.is_online.lock().unwrap() = (Instant::now(), Err(err.clone()));
-        } else {
-            *self.uid_store.is_online.lock().unwrap() = (Instant::now(), Ok(()));
-        }
-        let (capabilities, stream) = new_stream?;
-        self.stream = Ok(stream);
-        *self.uid_store.capabilities.lock().unwrap() = capabilities;
-        Ok(())
+            if self.stream.is_ok() {
+                self.uid_store.is_online.lock().unwrap().0 = Instant::now();
+                return Ok(());
+            }
+            let new_stream = debug!(ImapStream::new_connection(&self.server_conf).await);
+            if let Err(err) = new_stream.as_ref() {
+                *self.uid_store.is_online.lock().unwrap() = (Instant::now(), Err(err.clone()));
+            } else {
+                *self.uid_store.is_online.lock().unwrap() = (Instant::now(), Ok(()));
+            }
+            let (capabilities, stream) = new_stream?;
+            self.stream = Ok(stream);
+            match self.stream.as_ref()?.protocol {
+                ImapProtocol::IMAP {
+                    extension_use:
+                        ImapExtensionUse {
+                            #[cfg(feature = "deflate_compression")]
+                            deflate,
+                            idle: _idle,
+                        },
+                } =>
+                {
+                    #[cfg(feature = "deflate_compression")]
+                    if capabilities.contains(&b"COMPRESS=DEFLATE"[..]) && deflate {
+                        let mut ret = String::new();
+                        self.send_command(b"COMPRESS DEFLATE").await?;
+                        self.read_response(&mut ret, RequiredResponses::empty())
+                            .await?;
+                        match ImapResponse::from(&ret) {
+                            ImapResponse::No(code)
+                            | ImapResponse::Bad(code)
+                            | ImapResponse::Preauth(code)
+                            | ImapResponse::Bye(code) => {
+                                crate::log(format!("Could not use COMPRESS=DEFLATE in account `{}`: server replied with `{}`", self.uid_store.account_name, code), crate::LoggingLevel::WARN);
+                            }
+                            ImapResponse::Ok(_) => {
+                                let ImapStream {
+                                    cmd_id,
+                                    stream,
+                                    protocol,
+                                    current_mailbox,
+                                } = std::mem::replace(&mut self.stream, Err(MeliError::new("")))?;
+                                let stream = stream.into_inner()?;
+                                self.stream = Ok(ImapStream {
+                                    cmd_id,
+                                    stream: AsyncWrapper::new(stream.deflate())?,
+                                    protocol,
+                                    current_mailbox,
+                                });
+                            }
+                        }
+                    }
+                }
+                ImapProtocol::ManageSieve => {}
+            }
+            *self.uid_store.capabilities.lock().unwrap() = capabilities;
+            Ok(())
+        })
     }
 
     pub fn read_response<'a>(
@@ -742,7 +786,7 @@ impl ImapConnection {
 }
 
 pub struct ImapBlockingConnection {
-    buf: [u8; 1024],
+    buf: Vec<u8>,
     result: Vec<u8>,
     prev_res_length: usize,
     pub conn: ImapConnection,
@@ -752,7 +796,7 @@ pub struct ImapBlockingConnection {
 impl From<ImapConnection> for ImapBlockingConnection {
     fn from(conn: ImapConnection) -> Self {
         ImapBlockingConnection {
-            buf: [0; 1024],
+            buf: vec![0; Connection::IO_BUF_SIZE],
             conn,
             prev_res_length: 0,
             result: Vec::with_capacity(8 * 1024),

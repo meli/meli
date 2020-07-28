@@ -61,6 +61,8 @@ pub static SUPPORTED_CAPABILITIES: &[&str] = &[
     "LOGIN",
     "LOGINDISABLED",
     "LIST-STATUS",
+    #[cfg(feature = "deflate_compression")]
+    "COMPRESS=DEFLATE",
     "ENABLE",
     "IMAP4REV1",
     "SPECIAL-USE",
@@ -137,6 +139,7 @@ macro_rules! get_conf_val {
 pub struct UIDStore {
     account_hash: AccountHash,
     cache_headers: bool,
+    account_name: Arc<String>,
     capabilities: Arc<Mutex<Capabilities>>,
     uidvalidity: Arc<Mutex<HashMap<MailboxHash, UID>>>,
     hash_index: Arc<Mutex<HashMap<EnvelopeHash, (UID, MailboxHash)>>>,
@@ -157,6 +160,7 @@ impl Default for UIDStore {
         UIDStore {
             account_hash: 0,
             cache_headers: false,
+            account_name: Arc::new(String::new()),
             capabilities: Default::default(),
             uidvalidity: Default::default(),
             hash_index: Default::default(),
@@ -177,7 +181,6 @@ impl Default for UIDStore {
 
 #[derive(Debug)]
 pub struct ImapType {
-    account_name: String,
     is_subscribed: Arc<IsSubscribedFn>,
     connection: Arc<FutureMutex<ImapConnection>>,
     server_conf: ImapServerConf,
@@ -1081,6 +1084,8 @@ impl ImapType {
             protocol: ImapProtocol::IMAP {
                 extension_use: ImapExtensionUse {
                     idle: get_conf_val!(s["use_idle"], true)?,
+                    #[cfg(feature = "deflate_compression")]
+                    deflate: get_conf_val!(s["use_deflate"], true)?,
                 },
             },
         };
@@ -1089,18 +1094,18 @@ impl ImapType {
             hasher.write(s.name.as_bytes());
             hasher.finish()
         };
+        let account_name = Arc::new(s.name().to_string());
         let uid_store: Arc<UIDStore> = Arc::new(UIDStore {
             account_hash,
             cache_headers: get_conf_val!(s["X_header_caching"], false)?,
+            account_name,
             ..UIDStore::default()
         });
         let connection = ImapConnection::new_connection(&server_conf, uid_store.clone());
 
         Ok(Box::new(ImapType {
-            account_name: s.name().to_string(),
             server_conf,
             is_subscribed: Arc::new(IsSubscribedFn(is_subscribed)),
-
             can_create_flags: Arc::new(Mutex::new(false)),
             connection: Arc::new(FutureMutex::new(connection)),
             uid_store,
@@ -1269,6 +1274,15 @@ impl ImapType {
         get_conf_val!(s["danger_accept_invalid_certs"], false)?;
         get_conf_val!(s["X_header_caching"], false)?;
         get_conf_val!(s["use_idle"], true)?;
+        #[cfg(feature = "deflate_compression")]
+        get_conf_val!(s["use_deflate"], true)?;
+        #[cfg(not(feature = "deflate_compression"))]
+        if s.extra.contains_key("use_deflate") {
+            return Err(MeliError::new(format!(
+                "Configuration error ({}): setting `use_deflate` is set but this version of meli isn't compiled with DEFLATE support.",
+                s.name.as_str(),
+            )));
+        }
         Ok(())
     }
 

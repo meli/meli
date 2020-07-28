@@ -18,6 +18,8 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
+#[cfg(feature = "deflate_compression")]
+use flate2::{read::DeflateDecoder, write::DeflateEncoder, Compression};
 
 #[derive(Debug)]
 pub enum Connection {
@@ -25,11 +27,26 @@ pub enum Connection {
     Fd(std::os::unix::io::RawFd),
     #[cfg(feature = "imap_backend")]
     Tls(native_tls::TlsStream<Self>),
+    #[cfg(feature = "deflate_compression")]
+    Deflate {
+        inner: DeflateEncoder<DeflateDecoder<Box<Self>>>,
+    },
 }
 
 use Connection::*;
 
 impl Connection {
+    pub const IO_BUF_SIZE: usize = 64 * 1024;
+    #[cfg(feature = "deflate_compression")]
+    pub fn deflate(self) -> Self {
+        Connection::Deflate {
+            inner: DeflateEncoder::new(
+                DeflateDecoder::new_with_buf(Box::new(self), vec![0; Self::IO_BUF_SIZE]),
+                Compression::default(),
+            ),
+        }
+    }
+
     pub fn set_nonblocking(&self, nonblocking: bool) -> std::io::Result<()> {
         match self {
             Tcp(ref t) => t.set_nonblocking(nonblocking),
@@ -50,6 +67,8 @@ impl Connection {
                 })?;
                 Ok(())
             }
+            #[cfg(feature = "deflate_compression")]
+            Deflate { ref inner, .. } => inner.get_ref().get_ref().set_nonblocking(nonblocking),
         }
     }
 
@@ -59,6 +78,8 @@ impl Connection {
             #[cfg(feature = "imap_backend")]
             Tls(ref t) => t.get_ref().set_read_timeout(dur),
             Fd(_) => Ok(()),
+            #[cfg(feature = "deflate_compression")]
+            Deflate { ref inner, .. } => inner.get_ref().get_ref().set_read_timeout(dur),
         }
     }
 
@@ -68,6 +89,8 @@ impl Connection {
             #[cfg(feature = "imap_backend")]
             Tls(ref t) => t.get_ref().set_write_timeout(dur),
             Fd(_) => Ok(()),
+            #[cfg(feature = "deflate_compression")]
+            Deflate { ref inner, .. } => inner.get_ref().get_ref().set_write_timeout(dur),
         }
     }
 }
@@ -93,6 +116,8 @@ impl std::io::Read for Connection {
                 let _ = f.into_raw_fd();
                 ret
             }
+            #[cfg(feature = "deflate_compression")]
+            Deflate { ref mut inner, .. } => inner.read(buf),
         }
     }
 }
@@ -110,6 +135,8 @@ impl std::io::Write for Connection {
                 let _ = f.into_raw_fd();
                 ret
             }
+            #[cfg(feature = "deflate_compression")]
+            Deflate { ref mut inner, .. } => inner.write(buf),
         }
     }
 
@@ -125,6 +152,8 @@ impl std::io::Write for Connection {
                 let _ = f.into_raw_fd();
                 ret
             }
+            #[cfg(feature = "deflate_compression")]
+            Deflate { ref mut inner, .. } => inner.flush(),
         }
     }
 }
@@ -136,6 +165,8 @@ impl std::os::unix::io::AsRawFd for Connection {
             #[cfg(feature = "imap_backend")]
             Tls(ref t) => t.get_ref().as_raw_fd(),
             Fd(f) => *f,
+            #[cfg(feature = "deflate_compression")]
+            Deflate { ref inner, .. } => inner.get_ref().get_ref().as_raw_fd(),
         }
     }
 }
