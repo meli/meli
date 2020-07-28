@@ -57,17 +57,18 @@ use std::time::Instant;
 pub type UID = usize;
 
 pub static SUPPORTED_CAPABILITIES: &[&str] = &[
-    "IDLE",
-    "LOGIN",
-    "LOGINDISABLED",
-    "LIST-STATUS",
     #[cfg(feature = "deflate_compression")]
     "COMPRESS=DEFLATE",
     "ENABLE",
+    "IDLE",
     "IMAP4REV1",
+    "LIST-STATUS",
+    "LITERAL+",
+    "LOGIN",
+    "LOGINDISABLED",
+    "MOVE",
     "SPECIAL-USE",
     "UNSELECT",
-    "LITERAL+",
 ];
 
 #[derive(Debug, Default)]
@@ -465,6 +466,13 @@ impl MailBackend for ImapType {
     ) -> ResultFuture<()> {
         let uid_store = self.uid_store.clone();
         let connection = self.connection.clone();
+        let has_move: bool = move_
+            && uid_store
+                .capabilities
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|cap| cap.eq_ignore_ascii_case(b"MOVE"));
         Ok(Box::pin(async move {
             let dest_path = {
                 let mailboxes = uid_store.mailboxes.lock().await;
@@ -493,32 +501,46 @@ impl MailBackend for ImapType {
             let mut conn = connection.lock().await;
             conn.select_mailbox(source_mailbox_hash, &mut response, false)
                 .await?;
-            let command = {
-                let hash_index_lck = uid_store.hash_index.lock().unwrap();
-                let mut cmd = format!("UID COPY {}", hash_index_lck[&env_hashes.first].0);
-                for env_hash in &env_hashes.rest {
-                    cmd = format!("{},{}", cmd, hash_index_lck[env_hash].0);
-                }
-                format!("{} \"{}\"", cmd, dest_path)
-            };
-            conn.send_command(command.as_bytes()).await?;
-            conn.read_response(&mut response, RequiredResponses::empty())
-                .await?;
-            if let Some(_flags) = destination_flags {
-                //FIXME
-            }
-            if move_ {
+            if has_move {
                 let command = {
                     let hash_index_lck = uid_store.hash_index.lock().unwrap();
-                    let mut cmd = format!("UID STORE {}", hash_index_lck[&env_hashes.first].0);
-                    for env_hash in env_hashes.rest {
-                        cmd = format!("{},{}", cmd, hash_index_lck[&env_hash].0);
+                    let mut cmd = format!("UID MOVE {}", hash_index_lck[&env_hashes.first].0);
+                    for env_hash in &env_hashes.rest {
+                        cmd = format!("{},{}", cmd, hash_index_lck[env_hash].0);
                     }
-                    format!("{} +FLAGS (\\Deleted)", cmd)
+                    format!("{} \"{}\"", cmd, dest_path)
                 };
                 conn.send_command(command.as_bytes()).await?;
                 conn.read_response(&mut response, RequiredResponses::empty())
                     .await?;
+            } else {
+                let command = {
+                    let hash_index_lck = uid_store.hash_index.lock().unwrap();
+                    let mut cmd = format!("UID COPY {}", hash_index_lck[&env_hashes.first].0);
+                    for env_hash in &env_hashes.rest {
+                        cmd = format!("{},{}", cmd, hash_index_lck[env_hash].0);
+                    }
+                    format!("{} \"{}\"", cmd, dest_path)
+                };
+                conn.send_command(command.as_bytes()).await?;
+                conn.read_response(&mut response, RequiredResponses::empty())
+                    .await?;
+                if let Some(_flags) = destination_flags {
+                    //FIXME
+                }
+                if move_ {
+                    let command = {
+                        let hash_index_lck = uid_store.hash_index.lock().unwrap();
+                        let mut cmd = format!("UID STORE {}", hash_index_lck[&env_hashes.first].0);
+                        for env_hash in env_hashes.rest {
+                            cmd = format!("{},{}", cmd, hash_index_lck[&env_hash].0);
+                        }
+                        format!("{} +FLAGS (\\Deleted)", cmd)
+                    };
+                    conn.send_command(command.as_bytes()).await?;
+                    conn.read_response(&mut response, RequiredResponses::empty())
+                        .await?;
+                }
             }
             Ok(())
         }))
