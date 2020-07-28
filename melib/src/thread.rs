@@ -575,6 +575,9 @@ impl Threads {
                 tree_index.remove(i);
             }
         }
+        if let Some((message_id, _)) = self.message_ids.iter().find(|(_, h)| **h == t_id) {
+            self.missing_message_ids.insert(message_id.to_vec());
+        }
     }
 
     pub fn amend(&mut self, envelopes: &mut Envelopes) {
@@ -1193,9 +1196,7 @@ impl Index<&ThreadNodeHash> for Threads {
     type Output = ThreadNode;
 
     fn index(&self, index: &ThreadNodeHash) -> &ThreadNode {
-        self.thread_nodes
-            .get(index)
-            .expect("thread index out of bounds")
+        self.thread_nodes.get(index).expect("thread node not found")
     }
 }
 
