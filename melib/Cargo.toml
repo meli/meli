@@ -1,6 +1,6 @@
 [package]
 name = "melib"
-version = "0.5.0"
+version = "0.6.0"
 authors = ["Manos Pitsidianakis <epilys@nessuent.xyz>"]
 workspace = ".."
 edition = "2018"

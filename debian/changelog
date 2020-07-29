@@ -1,3 +1,8 @@
+meli (0.6.0-1) buster; urgency=low
+
+  * Update to 0.6.0
+
+ -- Manos Pitsidianakis <epilys@nessuent.xyz>  Wed, 29 Jul 2020 22:24:08 +0200
 meli (0.5.1-1) buster; urgency=low
 
   * Update to 0.5.1

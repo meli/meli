@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [alpha-0.6.0] - 2020-07-29
+
 ### Added
 
 - Add `select` command to select threads that match search query
@@ -67,3 +69,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 [unreleased]: #
 [alpha-0.5.1]: https://github.com/meli/meli/releases/tag/alpha-0.5.1
+[alpha-0.6.0]: https://github.com/meli/meli/releases/tag/alpha-0.6.0

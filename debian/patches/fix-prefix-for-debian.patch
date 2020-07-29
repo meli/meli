@@ -9,6 +9,6 @@ Last-Update: 2020-01-30
  # Options
 -PREFIX ?= /usr/local
 +PREFIX ?= /usr
- BINDIR ?= ${PREFIX}/bin
- MANDIR ?= ${PREFIX}/share/man
- 
+ EXPANDED_PREFIX := `cd ${PREFIX} && pwd -P`
+ BINDIR ?= ${EXPANDED_PREFIX}/bin
+ MANDIR ?= ${EXPANDED_PREFIX}/share/man
