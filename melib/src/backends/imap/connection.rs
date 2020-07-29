@@ -396,9 +396,6 @@ impl ImapStream {
                         last_line_idx += pos + "\r\n".len();
                     }
                 }
-                Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                    continue;
-                }
                 Err(e) => {
                     return Err(MeliError::from(e).set_err_kind(crate::error::ErrorKind::Network));
                 }
@@ -634,6 +631,7 @@ impl ImapConnection {
         if let Err(err) =
             try_await(async { self.stream.as_mut()?.send_command(command).await }).await
         {
+            self.stream = Err(err.clone());
             if err.kind.is_network() {
                 self.connect().await?;
             }
@@ -646,6 +644,7 @@ impl ImapConnection {
     pub async fn send_literal(&mut self, data: &[u8]) -> Result<()> {
         if let Err(err) = try_await(async { self.stream.as_mut()?.send_literal(data).await }).await
         {
+            self.stream = Err(err.clone());
             if err.kind.is_network() {
                 self.connect().await?;
             }
@@ -657,6 +656,7 @@ impl ImapConnection {
 
     pub async fn send_raw(&mut self, raw: &[u8]) -> Result<()> {
         if let Err(err) = try_await(async { self.stream.as_mut()?.send_raw(raw).await }).await {
+            self.stream = Err(err.clone());
             if err.kind.is_network() {
                 self.connect().await?;
             }
@@ -862,27 +862,12 @@ async fn read(
             }
             *prev_failure = None;
         }
-        Err(e)
-            if e.kind() == std::io::ErrorKind::WouldBlock
-                || e.kind() == std::io::ErrorKind::Interrupted =>
-        {
-            debug!(&e);
-            if let Some(prev_failure) = prev_failure.as_ref() {
-                if Instant::now().duration_since(*prev_failure)
-                    >= std::time::Duration::new(60 * 5, 0)
-                {
-                    *err = Some(e.to_string());
-                    *break_flag = true;
-                }
-            } else {
-                *prev_failure = Some(Instant::now());
-            }
-        }
         Err(e) => {
             debug!(&conn.stream);
             debug!(&e);
             *err = Some(e.to_string());
             *break_flag = true;
+            *prev_failure = Some(Instant::now());
         }
     }
     None

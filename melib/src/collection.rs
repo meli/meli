@@ -155,7 +155,7 @@ impl Collection {
         new_hash: EnvelopeHash,
         mailbox_hash: MailboxHash,
     ) -> bool {
-        if !self.envelopes.write().unwrap().contains_key(&old_hash) {
+        if !self.envelopes.read().unwrap().contains_key(&old_hash) {
             return false;
         }
         let mut envelope = self.envelopes.write().unwrap().remove(&old_hash).unwrap();

@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add `select` command to select threads that match search query
+- Add support for mass copying/deleting/flagging/moving of messages
+- IMAP: add support for COMPRESS=DEFLATE and others
+  Extension use can be configured with individual flags such as `use_deflate`
+- Rename EXECUTE mode to COMMAND
+- add async IMAP backend
+- add in-app SMTP support
 - ui: Show decoded source by default when viewing an Envelope's source
 - ui: Add search in pagers
 - Add managesieve REPL binary for managesieve script management

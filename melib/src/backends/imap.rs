@@ -306,10 +306,19 @@ impl MailBackend for ImapType {
     fn is_online_async(&self) -> ResultFuture<()> {
         let connection = self.connection.clone();
         Ok(Box::pin(async move {
-            let mut conn = connection.lock().await;
-            conn.connect().await?;
-
-            Ok(())
+            match timeout(std::time::Duration::from_secs(3), connection.lock()).await {
+                Ok(mut conn) => {
+                    debug!("is_online_async");
+                    match debug!(timeout(std::time::Duration::from_secs(3), conn.connect()).await) {
+                        Ok(Ok(())) => Ok(()),
+                        Err(err) | Ok(Err(err)) => {
+                            conn.stream = Err(err.clone());
+                            debug!(conn.connect().await)
+                        }
+                    }
+                }
+                Err(err) => Err(err),
+            }
         }))
     }
 
@@ -1626,4 +1635,16 @@ async fn fetch_hlpr(
         ))
     };
     Ok(payload)
+}
+
+use futures::future::{self, Either};
+
+async fn timeout<O>(dur: std::time::Duration, f: impl Future<Output = O>) -> Result<O> {
+    futures::pin_mut!(f);
+    match future::select(f, smol::Timer::after(dur)).await {
+        Either::Left((out, _)) => Ok(out),
+        Either::Right(_) => {
+            Err(MeliError::new("Timed out.").set_kind(crate::error::ErrorKind::Network))
+        }
+    }
 }

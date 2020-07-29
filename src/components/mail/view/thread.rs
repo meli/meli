@@ -733,12 +733,10 @@ impl ThreadView {
         let total_rows = height!(area);
 
         let pager_ratio = context.runtime_settings.pager.pager_ratio;
-        let bottom_entity_rows = (pager_ratio * total_rows) / 100;
+        let mut bottom_entity_rows = (pager_ratio * total_rows) / 100;
 
         if bottom_entity_rows > total_rows {
-            clear_area(grid, area, crate::conf::value(context, "theme_default"));
-            context.dirty_areas.push_back(area);
-            return;
+            bottom_entity_rows = total_rows.saturating_sub(1);
         }
 
         let mut mid = get_y(upper_left) + total_rows - bottom_entity_rows;
@@ -950,6 +948,9 @@ impl Component for ThreadView {
         let total_cols = width!(area);
         if self.entries.is_empty() {
             self.dirty = false;
+            return;
+        }
+        if !self.is_dirty() {
             return;
         }
 

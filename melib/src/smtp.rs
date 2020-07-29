@@ -903,9 +903,6 @@ async fn read_lines<'r>(
             Ok(b) => {
                 ret.push_str(unsafe { std::str::from_utf8_unchecked(&buf[0..b]) });
             }
-            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                panic!("block");
-            }
             Err(e) => {
                 return Err(MeliError::from(e).set_kind(crate::error::ErrorKind::Network));
             }

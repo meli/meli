@@ -1063,7 +1063,7 @@ impl fmt::Display for ProgressSpinner {
 impl Component for ProgressSpinner {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if self.dirty {
-            let theme_attr = crate::conf::value(context, "theme_default");
+            let theme_attr = crate::conf::value(context, "status.bar");
             clear_area(grid, area, theme_attr);
             let stage = self.stage;
             self.stage = (self.stage + 1).wrapping_rem(Self::KINDS[self.kind].len());

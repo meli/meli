@@ -384,7 +384,7 @@ impl StatusPanel {
                 .enumerate()
             {
                 write_string_to_grid(
-                    &format!("{}: {}", f.path(), f.special_usage()),
+                    &format!("{}: {}", f.special_usage(), f.path()),
                     &mut self.content,
                     self.theme_default.fg,
                     self.theme_default.bg,
