@@ -33,6 +33,8 @@ macro_rules! tag_hash {
 
 #[cfg(feature = "imap_backend")]
 pub mod imap;
+#[cfg(feature = "imap_backend")]
+pub mod nntp;
 #[cfg(feature = "notmuch_backend")]
 pub mod notmuch;
 #[cfg(feature = "notmuch_backend")]
@@ -47,6 +49,7 @@ pub mod mbox;
 pub use self::imap::ImapType;
 #[cfg(feature = "jmap_backend")]
 pub use self::jmap::JmapType;
+pub use self::nntp::NntpType;
 use crate::async_workers::*;
 use crate::conf::AccountSettings;
 use crate::error::{MeliError, Result};
@@ -142,6 +145,13 @@ impl Backends {
                 Backend {
                     create_fn: Box::new(|| Box::new(|f, i| imap::ImapType::new(f, i))),
                     validate_conf_fn: Box::new(imap::ImapType::validate_config),
+                },
+            );
+            b.register(
+                "nntp".to_string(),
+                Backend {
+                    create_fn: Box::new(|| Box::new(|f, i| nntp::NntpType::new(f, i))),
+                    validate_conf_fn: Box::new(nntp::NntpType::validate_config),
                 },
             );
         }
