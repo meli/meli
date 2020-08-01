@@ -1,3 +1,10 @@
+meli (0.6.1-1) buster; urgency=low
+
+  * added experimental NNTP backend
+  * added server extension support and use in account status tab
+  * imap: fixed IDLE connection getting stuck when using DEFLATE
+
+ -- Manos Pitsidianakis <epilys@nessuent.xyz>  Sun, 02 Aug 2020 01:09:05 +0200
 meli (0.6.0-1) buster; urgency=low
 
   * Update to 0.6.0

@@ -1,6 +1,6 @@
 [package]
 name = "meli"
-version = "0.6.0"
+version = "0.6.1"
 authors = ["Manos Pitsidianakis <el13635@mail.ntua.gr>"]
 edition = "2018"
 
@@ -17,10 +17,9 @@ default-run = "meli"
 name = "meli"
 path = "src/bin.rs"
 
-
-[[bin]]
-name = "managesieve"
-path = "src/managesieve.rs"
+#[[bin]]
+#name = "managesieve-meli"
+#path = "src/managesieve.rs"
 
 #[[bin]]
 #name = "async"
@@ -32,7 +31,7 @@ crossbeam = "0.7.2"
 signal-hook = "0.1.12"
 signal-hook-registry = "1.2.0"
 nix = "0.17.0"
-melib = { path = "melib", version = "0.6.0" }
+melib = { path = "melib", version = "0.6.1" }
 
 serde = "1.0.71"
 serde_derive = "1.0.71"

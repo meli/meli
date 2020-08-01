@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [alpha-0.6.1] - 2020-08-02
+
+### Added
+
+- added experimental NNTP backend
+- added server extension support and use in account status tab
+
+### Fixed
+
+- imap: fixed IDLE connection getting stuck when using DEFLATE
+
 ## [alpha-0.6.0] - 2020-07-29
 
 ### Added
@@ -70,3 +81,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [unreleased]: #
 [alpha-0.5.1]: https://github.com/meli/meli/releases/tag/alpha-0.5.1
 [alpha-0.6.0]: https://github.com/meli/meli/releases/tag/alpha-0.6.0
+[alpha-0.6.1]: https://github.com/meli/meli/releases/tag/alpha-0.6.1
