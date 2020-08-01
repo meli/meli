@@ -49,6 +49,7 @@ pub mod mbox;
 pub use self::imap::ImapType;
 #[cfg(feature = "jmap_backend")]
 pub use self::jmap::JmapType;
+#[cfg(feature = "imap_backend")]
 pub use self::nntp::NntpType;
 use crate::async_workers::*;
 use crate::conf::AccountSettings;
