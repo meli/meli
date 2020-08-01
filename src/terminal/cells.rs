@@ -1794,9 +1794,9 @@ macro_rules! inspect_bounds {
     ($grid:ident, $area:ident, $x: ident, $y: ident, $line_break:ident) => {
         let bounds = $grid.size();
         let (upper_left, bottom_right) = $area;
-        if $x > (get_x(bottom_right)) || $x > get_x(bounds) {
+        if $x > (get_x(bottom_right)) || $x >= get_x(bounds) {
             if $grid.growable {
-                $grid.resize($grid.cols * 2, $grid.rows, Cell::default());
+                $grid.resize($x + 1, $grid.rows, Cell::default());
             } else {
                 $x = get_x(upper_left);
                 $y += 1;
@@ -1807,9 +1807,9 @@ macro_rules! inspect_bounds {
                 }
             }
         }
-        if $y > (get_y(bottom_right)) || $y > get_y(bounds) {
+        if $y > (get_y(bottom_right)) || $y >= get_y(bounds) {
             if $grid.growable {
-                $grid.resize($grid.cols, $grid.rows * 2, Cell::default());
+                $grid.resize($grid.cols, $y + 1, Cell::default());
             } else {
                 return ($x, $y - 1);
             }
@@ -1835,8 +1835,8 @@ pub fn write_string_to_grid(
     if y == get_y(bounds) || x == get_x(bounds) {
         if grid.growable {
             grid.resize(
-                std::cmp::max(grid.cols, x),
-                std::cmp::max(grid.rows, y) * 4,
+                std::cmp::max(grid.cols, x + 1),
+                std::cmp::max(grid.rows, y + 1),
                 Cell::default(),
             );
         } else {
@@ -1851,8 +1851,8 @@ pub fn write_string_to_grid(
     {
         if grid.growable {
             grid.resize(
-                std::cmp::max(grid.cols, x),
-                std::cmp::max(grid.rows, y) * 4,
+                std::cmp::max(grid.cols, x + 1),
+                std::cmp::max(grid.rows, y + 1),
                 Cell::default(),
             );
         } else {
