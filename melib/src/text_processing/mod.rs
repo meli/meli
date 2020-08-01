@@ -31,11 +31,46 @@ pub use line_break::*;
 pub use wcwidth::*;
 
 pub trait Truncate {
-    fn truncate_at_boundary(self, new_len: usize);
+    fn truncate_at_boundary(&mut self, new_len: usize);
+    fn trim_at_boundary(&self, new_len: usize) -> &str;
 }
 
-impl Truncate for &mut String {
-    fn truncate_at_boundary(self, new_len: usize) {
+impl Truncate for &str {
+    fn truncate_at_boundary(&mut self, new_len: usize) {
+        if new_len >= self.len() {
+            return;
+        }
+
+        extern crate unicode_segmentation;
+        use unicode_segmentation::UnicodeSegmentation;
+        if let Some((last, _)) = UnicodeSegmentation::grapheme_indices(*self, true)
+            .take(new_len)
+            .last()
+        {
+            *self = &self[..last];
+        }
+    }
+
+    fn trim_at_boundary(&self, new_len: usize) -> &str {
+        if new_len >= self.len() {
+            return self;
+        }
+
+        extern crate unicode_segmentation;
+        use unicode_segmentation::UnicodeSegmentation;
+        if let Some((last, _)) = UnicodeSegmentation::grapheme_indices(*self, true)
+            .take(new_len)
+            .last()
+        {
+            &self[..last]
+        } else {
+            self
+        }
+    }
+}
+
+impl Truncate for String {
+    fn truncate_at_boundary(&mut self, new_len: usize) {
         if new_len >= self.len() {
             return;
         }
@@ -47,6 +82,23 @@ impl Truncate for &mut String {
             .last()
         {
             String::truncate(self, last);
+        }
+    }
+
+    fn trim_at_boundary(&self, new_len: usize) -> &str {
+        if new_len >= self.len() {
+            return self;
+        }
+
+        extern crate unicode_segmentation;
+        use unicode_segmentation::UnicodeSegmentation;
+        if let Some((last, _)) = UnicodeSegmentation::grapheme_indices(self.as_str(), true)
+            .take(new_len)
+            .last()
+        {
+            &self[..last]
+        } else {
+            self.as_str()
         }
     }
 }

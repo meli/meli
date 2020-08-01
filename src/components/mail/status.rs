@@ -548,7 +548,11 @@ impl Component for AccountStatus {
             );
             let max_name_width = std::cmp::max(
                 "Server Extensions:".len(),
-                extensions.iter().map(|(n, _)| n.len()).max().unwrap_or(0),
+                extensions
+                    .iter()
+                    .map(|(n, _)| std::cmp::min(30, n.len()))
+                    .max()
+                    .unwrap_or(0),
             );
             write_string_to_grid(
                 "meli support:",
@@ -563,7 +567,7 @@ impl Component for AccountStatus {
             for (i, (name, status)) in extensions.into_iter().enumerate() {
                 let (width, height) = self.content.size();
                 write_string_to_grid(
-                    &name,
+                    name.trim_at_boundary(30),
                     &mut self.content,
                     self.theme_default.fg,
                     self.theme_default.bg,
