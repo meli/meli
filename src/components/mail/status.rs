@@ -414,7 +414,6 @@ impl Component for AccountStatus {
         self.dirty = false;
         let (width, height) = self.content.size();
         let a = &context.accounts[self.account_pos];
-        let backend_lck = a.backend.read().unwrap();
         let (_x, _y) = write_string_to_grid(
             "(Press Esc to return)",
             &mut self.content,
@@ -450,7 +449,7 @@ impl Component for AccountStatus {
         );
         line += 1;
         let (_x, _y) = write_string_to_grid(
-            "Cache backend: ",
+            "Search backend: ",
             &mut self.content,
             self.theme_default.fg,
             self.theme_default.bg,
@@ -537,72 +536,108 @@ impl Component for AccountStatus {
         }
 
         line += 1;
-        if a.settings.account().format() == "imap" {
-            let b = (*backend_lck).as_any();
-            if let Some(imap_backend) = b.downcast_ref::<melib::backends::ImapType>() {
+        if let Some(ref extensions) = a.backend_capabilities.extensions {
+            write_string_to_grid(
+                "Server Extensions:",
+                &mut self.content,
+                self.theme_default.fg,
+                self.theme_default.bg,
+                Attr::BOLD,
+                ((1, line), (width - 1, height - 1)),
+                None,
+            );
+            let max_name_width = std::cmp::max(
+                "Server Extensions:".len(),
+                extensions.iter().map(|(n, _)| n.len()).max().unwrap_or(0),
+            );
+            write_string_to_grid(
+                "meli support:",
+                &mut self.content,
+                self.theme_default.fg,
+                self.theme_default.bg,
+                self.theme_default.attrs,
+                ((max_name_width + 6, line), (width - 1, height - 1)),
+                None,
+            );
+            line += 1;
+            for (i, (name, status)) in extensions.into_iter().enumerate() {
+                let (width, height) = self.content.size();
                 write_string_to_grid(
-                    "Server Capabilities:",
-                    &mut self.content,
-                    self.theme_default.fg,
-                    self.theme_default.bg,
-                    Attr::BOLD,
-                    ((1, line), (width - 1, height - 1)),
-                    None,
-                );
-                let mut capabilities = imap_backend.capabilities();
-                let max_name_width = std::cmp::max(
-                    "Server Capabilities:".len(),
-                    capabilities.iter().map(String::len).max().unwrap_or(0),
-                );
-                write_string_to_grid(
-                    "meli support:",
+                    &name,
                     &mut self.content,
                     self.theme_default.fg,
                     self.theme_default.bg,
                     self.theme_default.attrs,
-                    ((max_name_width + 6, line), (width - 1, height - 1)),
+                    ((1, line + i), (width - 1, height - 1)),
                     None,
                 );
-                capabilities.sort();
-                line += 1;
-                for (i, cap) in capabilities.into_iter().enumerate() {
-                    let (width, height) = self.content.size();
-                    write_string_to_grid(
-                        &cap,
+
+                use melib::backends::MailBackendExtensionStatus;
+                let (width, height) = self.content.size();
+                let (x, y) = match status {
+                    MailBackendExtensionStatus::Unsupported { comment: _ } => write_string_to_grid(
+                        "not supported",
                         &mut self.content,
-                        self.theme_default.fg,
+                        Color::Red,
                         self.theme_default.bg,
                         self.theme_default.attrs,
-                        ((1, line + i), (width - 1, height - 1)),
+                        ((max_name_width + 6, line + i), (width - 1, height - 1)),
                         None,
-                    );
-
-                    let (width, height) = self.content.size();
-                    if melib::backends::imap::SUPPORTED_CAPABILITIES
-                        .iter()
-                        .any(|c| cap.eq_ignore_ascii_case(c))
-                    {
-                        write_string_to_grid(
-                            "supported",
-                            &mut self.content,
-                            Color::Green,
-                            self.theme_default.bg,
-                            self.theme_default.attrs,
-                            ((max_name_width + 6, line + i), (width - 1, height - 1)),
-                            None,
-                        );
-                    } else {
-                        write_string_to_grid(
-                            "not supported",
-                            &mut self.content,
-                            Color::Red,
-                            self.theme_default.bg,
-                            self.theme_default.attrs,
-                            ((max_name_width + 6, line + i), (width - 1, height - 1)),
-                            None,
-                        );
+                    ),
+                    MailBackendExtensionStatus::Supported { comment: _ } => write_string_to_grid(
+                        "supported",
+                        &mut self.content,
+                        Color::Green,
+                        self.theme_default.bg,
+                        self.theme_default.attrs,
+                        ((max_name_width + 6, line + i), (width - 1, height - 1)),
+                        None,
+                    ),
+                    MailBackendExtensionStatus::Enabled { comment: _ } => write_string_to_grid(
+                        "enabled",
+                        &mut self.content,
+                        Color::Green,
+                        self.theme_default.bg,
+                        self.theme_default.attrs,
+                        ((max_name_width + 6, line + i), (width - 1, height - 1)),
+                        None,
+                    ),
+                };
+                match status {
+                    MailBackendExtensionStatus::Unsupported { comment }
+                    | MailBackendExtensionStatus::Supported { comment }
+                    | MailBackendExtensionStatus::Enabled { comment } => {
+                        if let Some(s) = comment {
+                            let (x, y) = write_string_to_grid(
+                                " (",
+                                &mut self.content,
+                                self.theme_default.fg,
+                                self.theme_default.bg,
+                                self.theme_default.attrs,
+                                ((x, y), (width - 1, height - 1)),
+                                None,
+                            );
+                            let (x, y) = write_string_to_grid(
+                                s,
+                                &mut self.content,
+                                self.theme_default.fg,
+                                self.theme_default.bg,
+                                self.theme_default.attrs,
+                                ((x, y), (width - 1, height - 1)),
+                                None,
+                            );
+                            write_string_to_grid(
+                                ")",
+                                &mut self.content,
+                                self.theme_default.fg,
+                                self.theme_default.bg,
+                                self.theme_default.attrs,
+                                ((x, y), (width - 1, height - 1)),
+                                None,
+                            );
+                        }
                     }
-                }
+                };
             }
         }
 

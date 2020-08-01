@@ -191,13 +191,70 @@ pub struct ImapType {
 
 impl MailBackend for ImapType {
     fn capabilities(&self) -> MailBackendCapabilities {
-        const CAPABILITIES: MailBackendCapabilities = MailBackendCapabilities {
+        let mut extensions = self
+            .uid_store
+            .capabilities
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|c| {
+                (
+                    String::from_utf8_lossy(c).into(),
+                    MailBackendExtensionStatus::Unsupported { comment: None },
+                )
+            })
+            .collect::<Vec<(String, MailBackendExtensionStatus)>>();
+        if let ImapProtocol::IMAP {
+            extension_use:
+                ImapExtensionUse {
+                    idle,
+                    #[cfg(feature = "deflate_compression")]
+                    deflate,
+                },
+        } = self.server_conf.protocol
+        {
+            for (name, status) in extensions.iter_mut() {
+                match name.as_str() {
+                    "IDLE" => {
+                        if idle {
+                            *status = MailBackendExtensionStatus::Enabled { comment: None };
+                        } else {
+                            *status = MailBackendExtensionStatus::Supported {
+                                comment: Some("Disabled by user configuration"),
+                            };
+                        }
+                    }
+                    "COMPRESS=DEFLATE" => {
+                        if cfg!(feature = "deflate_compression") {
+                            if deflate {
+                                *status = MailBackendExtensionStatus::Enabled { comment: None };
+                            } else {
+                                *status = MailBackendExtensionStatus::Supported {
+                                    comment: Some("Disabled by user configuration"),
+                                };
+                            }
+                        } else {
+                            *status = MailBackendExtensionStatus::Unsupported {
+                                comment: Some("melib not compiled with DEFLATE."),
+                            };
+                        }
+                    }
+                    _ => {
+                        if SUPPORTED_CAPABILITIES.contains(&name.as_str()) {
+                            *status = MailBackendExtensionStatus::Enabled { comment: None };
+                        }
+                    }
+                }
+            }
+        }
+        extensions.sort_by(|a, b| a.0.cmp(&b.0));
+        MailBackendCapabilities {
             is_async: true,
             is_remote: true,
             supports_search: true,
+            extensions: Some(extensions),
             supports_tags: true,
-        };
-        CAPABILITIES
+        }
     }
 
     fn fetch_async(

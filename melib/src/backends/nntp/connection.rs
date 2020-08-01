@@ -99,7 +99,7 @@ impl NntpStream {
         let mut res = String::with_capacity(8 * 1024);
         let mut ret = NntpStream {
             stream,
-            extension_use: NntpExtensionUse::default(),
+            extension_use: server_conf.extension_use,
             current_mailbox: MailboxSelection::None,
         };
 
@@ -196,11 +196,10 @@ impl NntpStream {
                 &server_conf.server_hostname, res
             )));
         }
-        let capabilities: HashSet<Vec<u8>> =
-            res.lines().skip(1).map(|l| l.as_bytes().to_vec()).collect();
+        let capabilities: HashSet<String> = res.lines().skip(1).map(|l| l.to_string()).collect();
         #[cfg(feature = "deflate_compression")]
         #[cfg(feature = "deflate_compression")]
-        if capabilities.contains(&b"COMPRESS DEFLATE"[..]) && ret.extension_use.deflate {
+        if capabilities.contains("COMPRESS DEFLATE") && ret.extension_use.deflate {
             ret.send_command(b"COMPRESS DEFLATE").await?;
             ret.read_response(&mut res, false).await?;
             if !res.starts_with("206 ") {

@@ -293,12 +293,20 @@ impl NotifyFn {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct MailBackendCapabilities {
     pub is_async: bool,
     pub is_remote: bool,
+    pub extensions: Option<Vec<(String, MailBackendExtensionStatus)>>,
     pub supports_search: bool,
     pub supports_tags: bool,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum MailBackendExtensionStatus {
+    Unsupported { comment: Option<&'static str> },
+    Supported { comment: Option<&'static str> },
+    Enabled { comment: Option<&'static str> },
 }
 
 pub type ResultFuture<T> = Result<Pin<Box<dyn Future<Output = Result<T>> + Send + 'static>>>;

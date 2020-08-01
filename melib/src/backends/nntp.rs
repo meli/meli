@@ -81,7 +81,7 @@ impl std::ops::Deref for IsSubscribedFn {
         &self.0
     }
 }
-type Capabilities = HashSet<Vec<u8>>;
+type Capabilities = HashSet<String>;
 
 #[derive(Debug)]
 pub struct UIDStore {
@@ -129,13 +129,57 @@ pub struct NntpType {
 
 impl MailBackend for NntpType {
     fn capabilities(&self) -> MailBackendCapabilities {
-        const CAPABILITIES: MailBackendCapabilities = MailBackendCapabilities {
+        let mut extensions = self
+            .uid_store
+            .capabilities
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|c| {
+                (
+                    c.to_string(),
+                    MailBackendExtensionStatus::Unsupported { comment: None },
+                )
+            })
+            .collect::<Vec<(String, MailBackendExtensionStatus)>>();
+        let NntpExtensionUse {
+            #[cfg(feature = "deflate_compression")]
+            deflate,
+        } = self.server_conf.extension_use;
+        {
+            for (name, status) in extensions.iter_mut() {
+                match name.as_str() {
+                    "COMPRESS DEFLATE" => {
+                        if cfg!(feature = "deflate_compression") {
+                            if deflate {
+                                *status = MailBackendExtensionStatus::Enabled { comment: None };
+                            } else {
+                                *status = MailBackendExtensionStatus::Supported {
+                                    comment: Some("Disabled by user configuration"),
+                                };
+                            }
+                        } else {
+                            *status = MailBackendExtensionStatus::Unsupported {
+                                comment: Some("melib not compiled with DEFLATE."),
+                            };
+                        }
+                    }
+                    _ => {
+                        if SUPPORTED_CAPABILITIES.contains(&name.as_str()) {
+                            *status = MailBackendExtensionStatus::Enabled { comment: None };
+                        }
+                    }
+                }
+            }
+        }
+        extensions.sort_by(|a, b| a.0.cmp(&b.0));
+        MailBackendCapabilities {
             is_async: true,
             is_remote: true,
             supports_search: false,
+            extensions: Some(extensions),
             supports_tags: false,
-        };
-        CAPABILITIES
+        }
     }
 
     fn fetch_async(
@@ -372,7 +416,10 @@ impl NntpType {
             use_tls,
             use_starttls,
             danger_accept_invalid_certs,
-            extension_use: NntpExtensionUse::default(),
+            extension_use: NntpExtensionUse {
+                #[cfg(feature = "deflate_compression")]
+                deflate: get_conf_val!(s["use_deflate"], true)?,
+            },
         };
         let account_hash = {
             let mut hasher = DefaultHasher::new();
@@ -488,7 +535,7 @@ impl NntpType {
             .lock()
             .unwrap()
             .iter()
-            .map(|c| String::from_utf8_lossy(c).into())
+            .map(|c| c.clone())
             .collect::<Vec<String>>()
     }
 }

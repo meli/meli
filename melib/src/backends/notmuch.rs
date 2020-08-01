@@ -323,6 +323,7 @@ impl MailBackend for NotmuchDb {
             is_async: false,
             is_remote: false,
             supports_search: true,
+            extensions: None,
             supports_tags: true,
         };
         CAPABILITIES

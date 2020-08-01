@@ -56,7 +56,7 @@ impl Default for ImapExtensionUse {
         Self {
             idle: true,
             #[cfg(feature = "deflate_compression")]
-            deflate: false,
+            deflate: true,
         }
     }
 }

@@ -445,6 +445,7 @@ impl Account {
         } else {
             self.backend.read().unwrap().mailboxes()?
         };
+        self.backend_capabilities = self.backend.read().unwrap().capabilities();
         let mut mailbox_entries: HashMap<MailboxHash, MailboxEntry> =
             HashMap::with_capacity_and_hasher(ref_mailboxes.len(), Default::default());
         let mut mailboxes_order: Vec<MailboxHash> = Vec::with_capacity(ref_mailboxes.len());

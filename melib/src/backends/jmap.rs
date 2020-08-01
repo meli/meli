@@ -195,6 +195,7 @@ impl MailBackend for JmapType {
             is_async: false,
             is_remote: true,
             supports_search: true,
+            extensions: None,
             supports_tags: true,
         };
         CAPABILITIES

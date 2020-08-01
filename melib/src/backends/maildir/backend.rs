@@ -180,6 +180,7 @@ impl MailBackend for MaildirType {
             is_async: false,
             is_remote: false,
             supports_search: false,
+            extensions: None,
             supports_tags: false,
         };
         CAPABILITIES
