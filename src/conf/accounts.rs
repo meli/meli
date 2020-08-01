@@ -1627,6 +1627,16 @@ impl Account {
         for j in drain {
             self.active_job_instants.remove(&j);
         }
+        if self.is_online.is_err()
+            && self
+                .is_online
+                .as_ref()
+                .unwrap_err()
+                .kind
+                .is_authentication()
+        {
+            return self.is_online.clone();
+        }
         if self.backend_capabilities.is_async {
             if self.is_online.is_ok() && !timeout {
                 return Ok(());
@@ -1708,7 +1718,19 @@ impl Account {
             match self.active_jobs.remove(job_id).unwrap() {
                 JobRequest::Mailboxes(_, ref mut chan) => {
                     if let Some(mailboxes) = chan.try_recv().unwrap() {
-                        if mailboxes.is_err() || self.init(Some(mailboxes.unwrap())).is_err() {
+                        if let Err(err) = mailboxes.and_then(|mailboxes| self.init(Some(mailboxes)))
+                        {
+                            if err.kind.is_authentication() {
+                                self.sender
+                                    .send(ThreadEvent::UIEvent(UIEvent::Notification(
+                                        Some(format!("{}: authentication error", &self.name)),
+                                        err.to_string(),
+                                        Some(crate::types::NotificationType::ERROR),
+                                    )))
+                                    .expect("Could not send event on main channel");
+                                self.is_online = Err(err);
+                                return true;
+                            }
                             if let Ok(mailboxes_job) =
                                 self.backend.read().unwrap().mailboxes_async()
                             {
@@ -1761,6 +1783,13 @@ impl Account {
                         .insert(std::time::Instant::now(), job_id);
                     let payload = payload.unwrap();
                     if let Err(err) = payload {
+                        self.sender
+                            .send(ThreadEvent::UIEvent(UIEvent::Notification(
+                                Some(format!("{}: could not fetch mailbox", &self.name)),
+                                err.to_string(),
+                                Some(crate::types::NotificationType::ERROR),
+                            )))
+                            .expect("Could not send event on main channel");
                         self.mailbox_entries
                             .entry(mailbox_hash)
                             .and_modify(|entry| {
@@ -1807,7 +1836,14 @@ impl Account {
                             )))
                             .unwrap();
                         if is_online.is_ok() {
-                            if self.is_online.is_err() {
+                            if self.is_online.is_err()
+                                && !self
+                                    .is_online
+                                    .as_ref()
+                                    .unwrap_err()
+                                    .kind
+                                    .is_authentication()
+                            {
                                 self.watch();
                             }
                             self.last_online_request = std::time::Instant::now();
@@ -1829,17 +1865,33 @@ impl Account {
                     let r = chan.try_recv().unwrap();
                     if let Some(r) = r {
                         if r.is_ok() {
-                            if self.is_online.is_err() {
+                            if self.is_online.is_err()
+                                && !self
+                                    .is_online
+                                    .as_ref()
+                                    .unwrap_err()
+                                    .kind
+                                    .is_authentication()
+                            {
                                 self.watch();
                             }
                         }
-                        self.last_online_request = std::time::Instant::now();
-                        self.is_online = Ok(());
-                        self.sender
-                            .send(ThreadEvent::UIEvent(UIEvent::AccountStatusChange(
-                                self.index,
-                            )))
-                            .unwrap();
+                        if !(self.is_online.is_err()
+                            && self
+                                .is_online
+                                .as_ref()
+                                .unwrap_err()
+                                .kind
+                                .is_authentication())
+                        {
+                            self.last_online_request = std::time::Instant::now();
+                            self.is_online = Ok(());
+                            self.sender
+                                .send(ThreadEvent::UIEvent(UIEvent::AccountStatusChange(
+                                    self.index,
+                                )))
+                                .unwrap();
+                        }
                     }
                     self.sender
                         .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
