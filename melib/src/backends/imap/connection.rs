@@ -142,6 +142,10 @@ impl ImapStream {
                             .chain_err_kind(crate::error::ErrorKind::Network)?;
                     }
                 }
+                socket
+                    .flush()
+                    .await
+                    .chain_err_kind(crate::error::ErrorKind::Network)?;
                 let mut response = String::with_capacity(1024);
                 let mut broken = false;
                 let now = std::time::Instant::now();
@@ -452,6 +456,7 @@ impl ImapStream {
         if let Err(err) = try_await(async move {
             self.stream.write_all(data).await?;
             self.stream.write_all(b"\r\n").await?;
+            self.stream.flush().await?;
             Ok(())
         })
         .await
@@ -466,6 +471,7 @@ impl ImapStream {
         if let Err(err) = try_await(async move {
             self.stream.write_all(raw).await?;
             self.stream.write_all(b"\r\n").await?;
+            self.stream.flush().await?;
             Ok(())
         })
         .await

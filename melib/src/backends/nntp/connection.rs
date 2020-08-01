@@ -138,6 +138,10 @@ impl NntpStream {
                     .write_all(b"STARTTLS\r\n")
                     .await
                     .chain_err_kind(crate::error::ErrorKind::Network)?;
+                ret.stream
+                    .flush()
+                    .await
+                    .chain_err_kind(crate::error::ErrorKind::Network)?;
                 ret.read_response(&mut res, false).await?;
                 if !res.starts_with("382 ") {
                     return Err(MeliError::new(format!(
