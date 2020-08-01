@@ -36,7 +36,7 @@ use crate::async_workers::{Async, WorkContext};
 use crate::backends::*;
 use crate::conf::AccountSettings;
 use crate::email::*;
-use crate::error::{MeliError, Result};
+use crate::error::{MeliError, Result, ResultIntoMeliError};
 use futures::lock::Mutex as FutureMutex;
 use futures::stream::Stream;
 use std::collections::{hash_map::DefaultHasher, BTreeMap};
@@ -59,10 +59,11 @@ pub static SUPPORTED_CAPABILITIES: &[&str] = &[
 pub struct NntpServerConf {
     pub server_hostname: String,
     pub server_username: String,
-    //pub server_password: String,
+    pub server_password: String,
     pub server_port: u16,
     pub use_starttls: bool,
     pub use_tls: bool,
+    pub require_auth: bool,
     pub danger_accept_invalid_certs: bool,
     pub extension_use: NntpExtensionUse,
 }
@@ -404,14 +405,24 @@ impl NntpType {
         };
         */
         let server_port = get_conf_val!(s["server_port"], 119)?;
-        let use_tls = get_conf_val!(s["use_tls"], true)?;
-        let use_starttls = use_tls && get_conf_val!(s["use_starttls"], !(server_port == 993))?;
+        let use_tls = get_conf_val!(s["use_tls"], server_port == 563)?;
+        let use_starttls = use_tls && get_conf_val!(s["use_starttls"], !(server_port == 563))?;
         let danger_accept_invalid_certs: bool =
             get_conf_val!(s["danger_accept_invalid_certs"], false)?;
+        let require_auth = get_conf_val!(s["require_auth"], true)?;
         let server_conf = NntpServerConf {
             server_hostname: server_hostname.to_string(),
-            server_username: String::new(),
-            //server_password,
+            server_username: if require_auth {
+                get_conf_val!(s["server_username"])?.to_string()
+            } else {
+                get_conf_val!(s["server_username"], String::new())?
+            },
+            server_password: if require_auth {
+                get_conf_val!(s["server_password"])?.to_string()
+            } else {
+                get_conf_val!(s["server_password"], String::new())?
+            },
+            require_auth,
             server_port,
             use_tls,
             use_starttls,
@@ -451,7 +462,7 @@ impl NntpType {
         let uid_store: Arc<UIDStore> = Arc::new(UIDStore {
             account_hash,
             account_name,
-            offline_cache: get_conf_val!(s["X_header_caching"], false)?,
+            offline_cache: false, //get_conf_val!(s["X_header_caching"], false)?,
             mailboxes: Arc::new(FutureMutex::new(mailboxes)),
             ..UIDStore::default()
         });
@@ -482,13 +493,14 @@ impl NntpType {
                 })
         };
         conn.send_command(command.as_bytes()).await?;
-        conn.read_response(&mut res, true).await?;
-        if !res.starts_with("215 ") {
-            return Err(MeliError::new(format!(
-                "Could not get newsgroups {}: expected LIST ACTIVE response but got: {}",
-                &conn.uid_store.account_name, res
-            )));
-        }
+        conn.read_response(&mut res, true, &["215 "])
+            .await
+            .chain_err_summary(|| {
+                format!(
+                    "Could not get newsgroups {}: expected LIST ACTIVE response but got: {}",
+                    &conn.uid_store.account_name, res
+                )
+            })?;
         debug!(&res);
         let mut mailboxes_lck = conn.uid_store.mailboxes.lock().await;
         for l in res.split_rn().skip(1) {
@@ -517,11 +529,20 @@ impl NntpType {
             )));
         }
         let server_port = get_conf_val!(s["server_port"], 119)?;
-        let use_tls = get_conf_val!(s["use_tls"], true)?;
-        let use_starttls = get_conf_val!(s["use_starttls"], !(server_port == 993))?;
+        let use_tls = get_conf_val!(s["use_tls"], server_port == 563)?;
+        let use_starttls = get_conf_val!(s["use_starttls"], !(server_port == 563))?;
         if !use_tls && use_starttls {
             return Err(MeliError::new(format!(
                 "Configuration error ({}): incompatible use_tls and use_starttls values: use_tls = false, use_starttls = true",
+                s.name.as_str(),
+            )));
+        }
+        #[cfg(feature = "deflate_compression")]
+        get_conf_val!(s["use_deflate"], true)?;
+        #[cfg(not(feature = "deflate_compression"))]
+        if s.extra.contains_key("use_deflate") {
+            return Err(MeliError::new(format!(
+                "Configuration error ({}): setting `use_deflate` is set but this version of meli isn't compiled with DEFLATE support.",
                 s.name.as_str(),
             )));
         }
@@ -552,13 +573,14 @@ async fn fetch_envs(
         .to_string();
     conn.send_command(format!("GROUP {}", path).as_bytes())
         .await?;
-    conn.read_response(&mut res, false).await?;
-    if !res.starts_with("211 ") {
-        return Err(MeliError::new(format!(
-            "{} Could not select newsgroup {}: expected GROUP response but got: {}",
-            &uid_store.account_name, path, res
-        )));
-    }
+    conn.read_response(&mut res, false, &["211 "])
+        .await
+        .chain_err_summary(|| {
+            format!(
+                "{} Could not select newsgroup {}: expected GROUP response but got: {}",
+                &uid_store.account_name, path, res
+            )
+        })?;
     /*
      *   Parameters
              group     Name of newsgroup
@@ -578,22 +600,22 @@ async fn fetch_envs(
     let high = usize::from_str(&s[3]).unwrap_or(0);
     drop(s);
 
-    conn.send_command(format!("OVER {}-{}", high.saturating_sub(250), high).as_bytes())
+    conn.send_command(format!("OVER {}-{}", high.saturating_sub(100), high).as_bytes())
         .await?;
-    conn.read_response(&mut res, true).await?;
-    if !res.starts_with("224 ") {
-        return Err(MeliError::new(format!(
-            "{} Could not select newsgroup {}: expected OVER response but got: {}",
-            &uid_store.account_name, path, res
-        )));
-    }
+    conn.read_response(&mut res, true, &["224 "])
+        .await
+        .chain_err_summary(|| {
+            format!(
+                "{} Could not select newsgroup {}: expected OVER response but got: {}",
+                &uid_store.account_name, path, res
+            )
+        })?;
     let mut ret = Vec::with_capacity(total);
     //hash_index: Arc<Mutex<HashMap<EnvelopeHash, (UID, MailboxHash)>>>,
     //uid_index: Arc<Mutex<HashMap<(MailboxHash, UID), EnvelopeHash>>>,
     let mut hash_index_lck = uid_store.hash_index.lock().unwrap();
     let mut uid_index_lck = uid_store.uid_index.lock().unwrap();
     for l in res.split_rn().skip(1) {
-        debug!(&l);
         let (_, (num, env)) = debug!(protocol_parser::over_article(&l))?;
         hash_index_lck.insert(env.hash(), (num, mailbox_hash));
         uid_index_lck.insert((mailbox_hash, num), env.hash());

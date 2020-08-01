@@ -103,27 +103,6 @@ impl NntpStream {
             current_mailbox: MailboxSelection::None,
         };
 
-        ret.read_response(&mut res, false).await?;
-        ret.send_command(b"CAPABILITIES").await?;
-        ret.read_response(&mut res, true).await?;
-        if !res.starts_with("101 ") {
-            return Err(MeliError::new(format!(
-                "Could not connect to {}: expected CAPABILITIES response but got:{}",
-                &server_conf.server_hostname, res
-            )));
-        }
-        let capabilities: Vec<&str> = res.lines().skip(1).collect();
-
-        if !capabilities
-            .iter()
-            .any(|cap| cap.eq_ignore_ascii_case("VERSION 2"))
-        {
-            return Err(MeliError::new(format!(
-                "Could not connect to {}: server is not NNTP compliant",
-                &server_conf.server_hostname
-            )));
-        }
-
         if server_conf.use_tls {
             let mut connector = TlsConnector::builder();
             if server_conf.danger_accept_invalid_certs {
@@ -134,6 +113,37 @@ impl NntpStream {
                 .chain_err_kind(crate::error::ErrorKind::Network)?;
 
             if server_conf.use_starttls {
+                ret.read_response(&mut res, false, &["200 ", "201 "])
+                    .await?;
+                ret.send_command(b"CAPABILITIES").await?;
+                ret.read_response(&mut res, true, command_to_replycodes("CAPABILITIES"))
+                    .await?;
+                if !res.starts_with("101 ") {
+                    return Err(MeliError::new(format!(
+                        "Could not connect to {}: expected CAPABILITIES response but got:{}",
+                        &server_conf.server_hostname, res
+                    )));
+                }
+                let capabilities: Vec<&str> = res.lines().skip(1).collect();
+
+                if !capabilities
+                    .iter()
+                    .any(|cap| cap.eq_ignore_ascii_case("VERSION 2"))
+                {
+                    return Err(MeliError::new(format!(
+                        "Could not connect to {}: server is not NNTP compliant",
+                        &server_conf.server_hostname
+                    )));
+                }
+                if !capabilities
+                    .iter()
+                    .any(|cap| cap.eq_ignore_ascii_case("STARTTLS"))
+                {
+                    return Err(MeliError::new(format!(
+                        "Could not connect to {}: server does not support STARTTLS",
+                        &server_conf.server_hostname
+                    )));
+                }
                 ret.stream
                     .write_all(b"STARTTLS\r\n")
                     .await
@@ -142,7 +152,8 @@ impl NntpStream {
                     .flush()
                     .await
                     .chain_err_kind(crate::error::ErrorKind::Network)?;
-                ret.read_response(&mut res, false).await?;
+                ret.read_response(&mut res, false, command_to_replycodes("STARTTLS"))
+                    .await?;
                 if !res.starts_with("382 ") {
                     return Err(MeliError::new(format!(
                         "Could not connect to {}: could not begin TLS negotiation, got: {}",
@@ -192,8 +203,11 @@ impl NntpStream {
         //)
         //.await?;
 
+        ret.read_response(&mut res, false, &["200 ", "201 "])
+            .await?;
         ret.send_command(b"CAPABILITIES").await?;
-        ret.read_response(&mut res, true).await?;
+        ret.read_response(&mut res, true, command_to_replycodes("CAPABILITIES"))
+            .await?;
         if !res.starts_with("101 ") {
             return Err(MeliError::new(format!(
                 "Could not connect to {}: expected CAPABILITIES response but got:{}",
@@ -201,46 +215,92 @@ impl NntpStream {
             )));
         }
         let capabilities: HashSet<String> = res.lines().skip(1).map(|l| l.to_string()).collect();
-        #[cfg(feature = "deflate_compression")]
+        if !capabilities
+            .iter()
+            .any(|cap| cap.eq_ignore_ascii_case("VERSION 2"))
+        {
+            return Err(MeliError::new(format!(
+                "Could not connect to {}: server is not NNTP compliant",
+                &server_conf.server_hostname
+            )));
+        }
+
+        if server_conf.require_auth {
+            if capabilities.iter().any(|c| c.starts_with("AUTHINFO USER")) {
+                ret.send_command(
+                    format!("AUTHINFO USER {}", server_conf.server_username).as_bytes(),
+                )
+                .await?;
+                ret.read_response(&mut res, false, command_to_replycodes("AUTHINFO USER"))
+                    .await
+                    .chain_err_summary(|| format!("Authentication state error: {}", res))
+                    .chain_err_kind(ErrorKind::Authentication)?;
+                if res.starts_with("381 ") {
+                    ret.send_command(
+                        format!("AUTHINFO PASS {}", server_conf.server_password).as_bytes(),
+                    )
+                    .await?;
+                    ret.read_response(&mut res, false, command_to_replycodes("AUTHINFO PASS"))
+                        .await
+                        .chain_err_summary(|| format!("Authentication state error: {}", res))
+                        .chain_err_kind(ErrorKind::Authentication)?;
+                }
+            } else {
+                return Err(MeliError::new(format!(
+                    "Could not connect: no supported auth mechanisms in server capabilities: {:?}",
+                    capabilities
+                ))
+                .set_err_kind(ErrorKind::Authentication));
+            }
+        }
+
         #[cfg(feature = "deflate_compression")]
         if capabilities.contains("COMPRESS DEFLATE") && ret.extension_use.deflate {
             ret.send_command(b"COMPRESS DEFLATE").await?;
-            ret.read_response(&mut res, false).await?;
-            if !res.starts_with("206 ") {
-                crate::log(
+            ret.read_response(&mut res, false, command_to_replycodes("COMPRESS DEFLATE"))
+                .await
+                .chain_err_summary(|| {
                     format!(
-                        "Could not use COMPRESS=DEFLATE in account `{}`: server replied with `{}`",
+                        "Could not use COMPRESS DEFLATE in account `{}`: server replied with `{}`",
                         server_conf.server_hostname, res
-                    ),
-                    crate::LoggingLevel::WARN,
-                );
-            } else {
-                let NntpStream {
-                    stream,
+                    )
+                })?;
+            let NntpStream {
+                stream,
+                extension_use,
+                current_mailbox,
+            } = ret;
+            let stream = stream.into_inner()?;
+            return Ok((
+                capabilities,
+                NntpStream {
+                    stream: AsyncWrapper::new(stream.deflate())?,
                     extension_use,
                     current_mailbox,
-                } = ret;
-                let stream = stream.into_inner()?;
-                return Ok((
-                    capabilities,
-                    NntpStream {
-                        stream: AsyncWrapper::new(stream.deflate())?,
-                        extension_use,
-                        current_mailbox,
-                    },
-                ));
-            }
+                },
+            ));
         }
 
         Ok((capabilities, ret))
     }
 
-    pub async fn read_response(&mut self, ret: &mut String, is_multiline: bool) -> Result<()> {
-        self.read_lines(ret, is_multiline).await?;
+    pub async fn read_response(
+        &mut self,
+        ret: &mut String,
+        is_multiline: bool,
+        expected_reply_code: &[&str],
+    ) -> Result<()> {
+        self.read_lines(ret, is_multiline, expected_reply_code)
+            .await?;
         Ok(())
     }
 
-    pub async fn read_lines(&mut self, ret: &mut String, is_multiline: bool) -> Result<()> {
+    pub async fn read_lines(
+        &mut self,
+        ret: &mut String,
+        is_multiline: bool,
+        expected_reply_code: &[&str],
+    ) -> Result<()> {
         let mut buf: Vec<u8> = vec![0; Connection::IO_BUF_SIZE];
         ret.clear();
         let mut last_line_idx: usize = 0;
@@ -249,15 +309,30 @@ impl NntpStream {
                 Ok(0) => break,
                 Ok(b) => {
                     ret.push_str(unsafe { std::str::from_utf8_unchecked(&buf[0..b]) });
+                    if ret.len() > 4 {
+                        if ret.starts_with("205 ") {
+                            return Err(MeliError::new(format!("Disconnected: {}", ret)));
+                        } else if ret.starts_with("501 ") || ret.starts_with("500 ") {
+                            return Err(MeliError::new(format!("Syntax error: {}", ret)));
+                        } else if ret.starts_with("403 ") {
+                            return Err(MeliError::new(format!("Internal error: {}", ret)));
+                        } else if ret.starts_with("502 ")
+                            || ret.starts_with("480 ")
+                            || ret.starts_with("483 ")
+                            || ret.starts_with("401 ")
+                        {
+                            return Err(MeliError::new(format!("Connection state error: {}", ret))
+                                .set_err_kind(ErrorKind::Authentication));
+                        } else if !expected_reply_code.iter().any(|r| ret.starts_with(r)) {
+                            return Err(MeliError::new(format!("Unexpected reply code: {}", ret)));
+                        }
+                    }
                     if let Some(mut pos) = ret[last_line_idx..].rfind("\r\n") {
                         if !is_multiline {
                             break;
                         } else if let Some(pos) = ret.find("\r\n.\r\n") {
                             ret.replace_range(pos + "\r\n".len()..pos + "\r\n.\r\n".len(), "");
                             break;
-                        }
-                        if ret[last_line_idx..].starts_with("205 ") {
-                            return Err(MeliError::new(format!("Disconnected: {}", ret)));
                         }
                         if let Some(prev_line) =
                             ret[last_line_idx..pos + last_line_idx].rfind("\r\n")
@@ -339,15 +414,27 @@ impl NntpConnection {
         &'a mut self,
         ret: &'a mut String,
         is_multiline: bool,
+        expected_reply_code: &'static [&str],
     ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>> {
         Box::pin(async move {
             ret.clear();
-            self.stream.as_mut()?.read_response(ret, is_multiline).await
+            self.stream
+                .as_mut()?
+                .read_response(ret, is_multiline, expected_reply_code)
+                .await
         })
     }
 
-    pub async fn read_lines(&mut self, ret: &mut String, is_multiline: bool) -> Result<()> {
-        self.stream.as_mut()?.read_lines(ret, is_multiline).await?;
+    pub async fn read_lines(
+        &mut self,
+        ret: &mut String,
+        is_multiline: bool,
+        expected_reply_code: &[&str],
+    ) -> Result<()> {
+        self.stream
+            .as_mut()?
+            .read_lines(ret, is_multiline, expected_reply_code)
+            .await?;
         Ok(())
     }
 
@@ -375,5 +462,33 @@ impl NntpConnection {
         } else {
             self.uid_store.refresh_events.lock().unwrap().push(ev);
         }
+    }
+}
+
+fn command_to_replycodes(c: &str) -> &'static [&'static str] {
+    if c.starts_with("OVER") {
+        &["224 "]
+    } else if c.starts_with("LIST") {
+        &["215 "]
+    } else if c.starts_with("STARTTLS") {
+        &["382 "]
+    } else if c.starts_with("GROUP") {
+        &["211 "]
+    } else if c.starts_with("CAPABILITIES") {
+        &["101 "]
+    } else if c.starts_with("ARTICLE") {
+        &["220 "]
+    } else if c.starts_with("DATE") {
+        &["111 "]
+    } else if c.starts_with("NEWNEWS") {
+        &["230 "]
+    } else if c.starts_with("AUTHINFO USER") {
+        &["281 ", "381 "]
+    } else if c.starts_with("AUTHINFO PASS") {
+        &["281 "]
+    } else if c.starts_with("COMPRESS DEFLATE") {
+        &["206 "]
+    } else {
+        &[]
     }
 }

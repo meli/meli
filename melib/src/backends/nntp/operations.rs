@@ -65,7 +65,7 @@ impl BackendOp for NntpOp {
                 .to_string();
             conn.send_command(format!("GROUP {}", path).as_bytes())
                 .await?;
-            conn.read_response(&mut res, false).await?;
+            conn.read_response(&mut res, false, &["211 "]).await?;
             if !res.starts_with("211 ") {
                 return Err(MeliError::new(format!(
                     "{} Could not select newsgroup {}: expected GROUP response but got: {}",
@@ -74,7 +74,7 @@ impl BackendOp for NntpOp {
             }
             conn.send_command(format!("ARTICLE {}", uid).as_bytes())
                 .await?;
-            conn.read_response(&mut res, true).await?;
+            conn.read_response(&mut res, true, &["220 "]).await?;
             if !res.starts_with("220 ") {
                 return Err(MeliError::new(format!(
                     "{} Could not select article {}: expected ARTICLE response but got: {}",
