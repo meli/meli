@@ -1796,7 +1796,11 @@ macro_rules! inspect_bounds {
         let (upper_left, bottom_right) = $area;
         if $x > (get_x(bottom_right)) || $x >= get_x(bounds) {
             if $grid.growable {
-                $grid.resize($x + 1, $grid.rows, Cell::default());
+                $grid.resize(
+                    std::cmp::max($x + 1, $grid.cols),
+                    $grid.rows,
+                    Cell::default(),
+                );
             } else {
                 $x = get_x(upper_left);
                 $y += 1;
@@ -1809,7 +1813,11 @@ macro_rules! inspect_bounds {
         }
         if $y > (get_y(bottom_right)) || $y >= get_y(bounds) {
             if $grid.growable {
-                $grid.resize($grid.cols, $y + 1, Cell::default());
+                $grid.resize(
+                    $grid.cols,
+                    std::cmp::max($y + 1, $grid.rows),
+                    Cell::default(),
+                );
             } else {
                 return ($x, $y - 1);
             }
