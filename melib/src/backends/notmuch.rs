@@ -350,14 +350,10 @@ impl MailBackend for NotmuchDb {
                     return;
                 }
                 let database = Arc::new(database.unwrap());
-                let mut ret: Vec<Envelope> = Vec::new();
                 let database_lck = database.inner.read().unwrap();
-                let mut mailboxes_lck = mailboxes.write().unwrap();
-                let mailbox = mailboxes_lck.get_mut(&mailbox_hash).unwrap();
-                let mut total_lck = mailbox.total.lock().unwrap();
-                let mut unseen_lck = mailbox.unseen.lock().unwrap();
-                *total_lck = 0;
-                *unseen_lck = 0;
+                let mut mailboxes_lck = mailboxes.read().unwrap();
+                let mailbox = mailboxes_lck.get(&mailbox_hash).unwrap();
+                let mut unseen_count = 0;
                 let query: Query =
                     match Query::new(lib.clone(), &database_lck, mailbox.query_str.as_str()) {
                         Ok(q) => q,
@@ -367,40 +363,53 @@ impl MailBackend for NotmuchDb {
                             return;
                         }
                     };
-                let iter = match query.search() {
-                    Ok(i) => i,
+                let iter: Vec<<MessageIterator as Iterator>::Item> = match query.search() {
+                    Ok(i) => i.collect(),
                     Err(err) => {
                         tx.send(AsyncStatus::Payload(Err(err))).unwrap();
                         tx.send(AsyncStatus::Finished).unwrap();
                         return;
                     }
                 };
-                let mut mailbox_index_lck = mailbox_index.write().unwrap();
-                for message in iter {
-                    match notmuch_message_into_envelope(
-                        lib.clone(),
-                        index.clone(),
-                        tag_index.clone(),
-                        database.clone(),
-                        message,
-                    ) {
-                        Ok(env) => {
-                            mailbox_index_lck
-                                .entry(env.hash())
-                                .or_default()
-                                .push(mailbox_hash);
-                            *total_lck += 1;
-                            if !env.is_seen() {
-                                *unseen_lck += 1;
+                {
+                    let mut total_lck = mailbox.total.lock().unwrap();
+                    let mut unseen_lck = mailbox.unseen.lock().unwrap();
+                    *total_lck = iter.len();
+                    *unseen_lck = 0;
+                }
+                let chunk_size = 250;
+                for chunk in iter.chunks(chunk_size) {
+                    let mut ret: Vec<Envelope> = Vec::with_capacity(chunk_size);
+                    let mut mailbox_index_lck = mailbox_index.write().unwrap();
+                    for &message in chunk {
+                        match notmuch_message_into_envelope(
+                            lib.clone(),
+                            index.clone(),
+                            tag_index.clone(),
+                            database.clone(),
+                            message,
+                        ) {
+                            Ok(env) => {
+                                mailbox_index_lck
+                                    .entry(env.hash())
+                                    .or_default()
+                                    .push(mailbox_hash);
+                                if !env.is_seen() {
+                                    unseen_count += 1;
+                                }
+                                ret.push(env);
                             }
-                            ret.push(env);
-                        }
-                        Err(err) => {
-                            debug!("could not parse message {:?}", err);
+                            Err(err) => {
+                                debug!("could not parse message {:?}", err);
+                            }
                         }
                     }
+                    {
+                        let mut unseen_lck = mailbox.unseen.lock().unwrap();
+                        *unseen_lck = unseen_count;
+                    }
+                    tx.send(AsyncStatus::Payload(Ok(ret))).unwrap();
                 }
-                tx.send(AsyncStatus::Payload(Ok(ret))).unwrap();
                 tx.send(AsyncStatus::Finished).unwrap();
             };
             Box::new(closure)
