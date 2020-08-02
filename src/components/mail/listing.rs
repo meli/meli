@@ -1172,18 +1172,19 @@ impl Component for Listing {
         let account = &context.accounts[self.cursor_pos.0];
         use crate::conf::accounts::MailboxStatus;
         match account[&mailbox_hash].status {
-            MailboxStatus::Available | MailboxStatus::Parsing(_, _) => format!(
-                "Mailbox: {}, Messages: {}, New: {}",
-                account[&mailbox_hash].name(),
-                // FIXME
-                account.collection.get_mailbox(mailbox_hash).len(),
-                account[&mailbox_hash]
+            MailboxStatus::Available | MailboxStatus::Parsing(_, _) => {
+                let (unseen, total) = account[&mailbox_hash]
                     .ref_mailbox
                     .count()
                     .ok()
-                    .map(|(v, _)| v)
-                    .unwrap_or(0),
-            ),
+                    .unwrap_or((0, 0));
+                format!(
+                    "Mailbox: {}, Messages: {}, New: {}",
+                    account[&mailbox_hash].name(),
+                    total,
+                    unseen
+                )
+            }
             MailboxStatus::Failed(_) | MailboxStatus::None => account[&mailbox_hash].status(),
         }
     }
