@@ -23,6 +23,7 @@ use super::default_vals::*;
 
 /// Settings for digital signing and encryption
 #[derive(Debug, Deserialize, Clone, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct PGPSettings {
     /// auto verify signed e-mail according to RFC3156
     #[serde(default = "true_val", alias = "auto-verify-signatures")]

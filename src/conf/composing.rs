@@ -25,6 +25,7 @@ use std::collections::HashMap;
 
 /// Settings for writing and sending new e-mail
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct ComposingSettings {
     /// A command to pipe new emails to
     /// Required

@@ -25,6 +25,7 @@ use melib::{MeliError, Result};
 
 /// Settings for mail listings
 #[derive(Debug, Deserialize, Clone, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct ListingSettings {
     /// Number of context lines when going to next page.
     /// Default: 0

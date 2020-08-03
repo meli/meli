@@ -134,6 +134,7 @@ use super::*;
 
                 let literal_struct = quote! {
                     #[derive(Debug, Serialize, Deserialize, Clone)]
+                    #[serde(deny_unknown_fields)]
                     pub struct #override_ident {
                         #(#field_tokentrees),*
                     }

@@ -29,6 +29,7 @@ use std::collections::{hash_map::DefaultHasher, HashMap, HashSet};
 use std::hash::Hasher;
 
 #[derive(Debug, Deserialize, Clone, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct TagsSettings {
     #[serde(default, deserialize_with = "tag_color_de")]
     pub colors: HashMap<u64, Color>,

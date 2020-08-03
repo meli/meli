@@ -28,6 +28,7 @@ use melib::{MeliError, Result, ToggleFlag};
 
 /// Settings for the pager function.
 #[derive(Debug, Deserialize, Clone, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct PagerSettings {
     /// Number of context lines when going to next page.
     /// Default: 0

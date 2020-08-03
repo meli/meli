@@ -306,6 +306,7 @@ const DEFAULT_KEYS: &[&str] = &[
 
 /// `ThemeAttributeInner` but with the links resolved.
 #[derive(Debug, PartialEq, Eq, Clone, Default, Copy, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ThemeAttribute {
     pub fg: Color,
     pub bg: Color,
@@ -314,6 +315,7 @@ pub struct ThemeAttribute {
 
 /// Holds {fore,back}ground color and terminal attribute values.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ThemeAttributeInner {
     #[serde(default)]
     fg: ThemeValue<Color>,
@@ -799,6 +801,7 @@ impl<'de> Deserialize<'de> for Themes {
             rest: ThemeAttributeInnerOptions,
         }
         #[derive(Deserialize, Default)]
+        #[serde(deny_unknown_fields)]
         struct ThemeAttributeInnerOptions {
             #[serde(default)]
             fg: Option<ThemeValue<Color>>,

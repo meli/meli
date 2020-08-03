@@ -108,6 +108,7 @@ macro_rules! mailbox_settings {
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct MailUIConf {
     #[serde(default)]
     pub pager: PagerSettingsOverride,
@@ -191,6 +192,7 @@ impl FileAccount {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct FileSettings {
     pub accounts: HashMap<String, FileAccount>,
     #[serde(default)]
@@ -821,6 +823,7 @@ mod pp {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct LogSettings {
     #[serde(default)]
     log_file: Option<PathBuf>,

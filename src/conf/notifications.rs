@@ -23,6 +23,7 @@ use super::default_vals::{internal_value_false, none};
 
 /// Settings for the notifications function.
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct NotificationsSettings {
     /// A command to pipe notifications through
     /// Default: None

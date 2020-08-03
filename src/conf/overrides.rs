@@ -23,6 +23,7 @@
 use super::*;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct PagerSettingsOverride {
     #[doc = " Number of context lines when going to next page."]
     #[doc = " Default: 0"]
@@ -94,6 +95,7 @@ impl Default for PagerSettingsOverride {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct ListingSettingsOverride {
     #[doc = " Number of context lines when going to next page."]
     #[doc = " Default: 0"]
@@ -131,6 +133,7 @@ impl Default for ListingSettingsOverride {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct NotificationsSettingsOverride {
     #[doc = " A command to pipe notifications through"]
     #[doc = " Default: None"]
@@ -161,6 +164,7 @@ impl Default for NotificationsSettingsOverride {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct ShortcutsOverride {
     #[serde(default)]
     pub general: Option<GeneralShortcuts>,
@@ -199,6 +203,7 @@ impl Default for ShortcutsOverride {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct ComposingSettingsOverride {
     #[doc = " A command to pipe new emails to"]
     #[doc = " Required"]
@@ -235,6 +240,7 @@ impl Default for ComposingSettingsOverride {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct TagsSettingsOverride {
     #[serde(deserialize_with = "tag_color_de")]
     #[serde(default)]
@@ -253,6 +259,7 @@ impl Default for TagsSettingsOverride {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct PGPSettingsOverride {
     #[doc = " auto verify signed e-mail according to RFC3156"]
     #[serde(alias = "auto-verify-signatures")]

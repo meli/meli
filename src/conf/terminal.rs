@@ -28,7 +28,7 @@ use melib::{MeliError, Result, ToggleFlag};
 
 /// Settings for terminal display
 #[derive(Debug, Deserialize, Clone, Serialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct TerminalSettings {
     /// light, dark
     pub theme: String,
