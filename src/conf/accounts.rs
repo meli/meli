@@ -117,9 +117,13 @@ pub struct MailboxEntry {
 impl MailboxEntry {
     pub fn status(&self) -> String {
         match self.status {
-            MailboxStatus::Available => self.name().to_string(),
+            MailboxStatus::Available => format!(
+                "{} [{} messages]",
+                self.name(),
+                self.ref_mailbox.count().ok().unwrap_or((0, 0)).1
+            ),
             MailboxStatus::Failed(ref e) => e.to_string(),
-            MailboxStatus::None => "Retrieving mailbox".to_string(),
+            MailboxStatus::None => "Retrieving mailbox.".to_string(),
             MailboxStatus::Parsing(done, total) => {
                 format!("Parsing messages. [{}/{}]", done, total)
             }
@@ -572,7 +576,8 @@ impl Account {
                 if entry.conf.mailbox_conf.autoload
                     || entry.ref_mailbox.special_usage() == SpecialUsageMailbox::Inbox
                 {
-                    entry.status = MailboxStatus::Parsing(0, 0);
+                    let total = entry.ref_mailbox.count().ok().unwrap_or((0, 0)).1;
+                    entry.status = MailboxStatus::Parsing(0, total);
                     if self.backend_capabilities.is_async {
                         if let Ok(mailbox_job) = self.backend.write().unwrap().fetch_async(*h) {
                             let mailbox_job = mailbox_job.into_future();

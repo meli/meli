@@ -239,7 +239,7 @@ impl MailListingTrait for ThreadListing {
             ret
         };
         if threads.len() == 0 {
-            let message = format!("Mailbox `{}` is empty.", account[&self.cursor_pos.1].name());
+            let message: String = account[&self.cursor_pos.1].status();
             self.data_columns.columns[0] =
                 CellBuffer::new_with_context(message.len(), 1, default_cell, context);
             write_string_to_grid(

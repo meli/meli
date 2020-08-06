@@ -980,7 +980,7 @@ impl PlainListing {
             }
         }
         if self.length == 0 && self.filter_term.is_empty() {
-            let message = format!("{} is empty", account[&self.cursor_pos.1].name());
+            let message: String = account[&self.cursor_pos.1].status();
             self.data_columns.columns[0] =
                 CellBuffer::new_with_context(message.len(), self.length + 1, default_cell, context);
             write_string_to_grid(

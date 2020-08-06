@@ -471,7 +471,7 @@ impl MailListingTrait for ConversationsListing {
                     .set_attrs(self.color_cache.theme_default.attrs);
                 ret
             };
-            let message = format!("{} is empty", account[&self.cursor_pos.1].name());
+            let message: String = account[&self.cursor_pos.1].status();
             self.content = CellBuffer::new_with_context(message.len(), 1, default_cell, context);
             write_string_to_grid(
                 &message,
