@@ -626,21 +626,52 @@ impl From<crate::search::Query> for Filter<EmailFilterCondition, EmailObject> {
                     //TODO
                 }
                 Flags(v) => {
+                    fn flag_to_filter(f: &str) -> Filter<EmailFilterCondition, EmailObject> {
+                        match f {
+                            "draft" => Filter::Condition(
+                                EmailFilterCondition::new()
+                                    .has_keyword("$draft".to_string())
+                                    .into(),
+                            ),
+                            "flagged" => Filter::Condition(
+                                EmailFilterCondition::new()
+                                    .has_keyword("$flagged".to_string())
+                                    .into(),
+                            ),
+                            "seen" | "read" => Filter::Condition(
+                                EmailFilterCondition::new()
+                                    .has_keyword("$seen".to_string())
+                                    .into(),
+                            ),
+                            "unseen" | "unread" => Filter::Condition(
+                                EmailFilterCondition::new()
+                                    .not_keyword("$seen".to_string())
+                                    .into(),
+                            ),
+                            "answered" => Filter::Condition(
+                                EmailFilterCondition::new()
+                                    .has_keyword("$answered".to_string())
+                                    .into(),
+                            ),
+                            "unanswered" => Filter::Condition(
+                                EmailFilterCondition::new()
+                                    .not_keyword("$answered".to_string())
+                                    .into(),
+                            ),
+                            keyword => Filter::Condition(
+                                EmailFilterCondition::new()
+                                    .not_keyword(keyword.to_string())
+                                    .into(),
+                            ),
+                        }
+                    }
                     let mut accum = if let Some(first) = v.first() {
-                        Filter::Condition(
-                            EmailFilterCondition::new()
-                                .has_keyword(first.to_string())
-                                .into(),
-                        )
+                        flag_to_filter(first.as_str())
                     } else {
                         Filter::Condition(EmailFilterCondition::new().into())
                     };
                     for f in v.iter().skip(1) {
-                        accum &= Filter::Condition(
-                            EmailFilterCondition::new()
-                                .has_keyword(f.as_str().to_string())
-                                .into(),
-                        );
+                        accum &= flag_to_filter(f.as_str());
                     }
                     *f = accum;
                 }
