@@ -46,6 +46,7 @@ pub use futures::stream::Stream;
 use futures::stream::StreamExt;
 use std::borrow::Cow;
 use std::collections::VecDeque;
+use std::convert::TryFrom;
 use std::fs;
 use std::io;
 use std::ops::{Index, IndexMut};
@@ -388,7 +389,7 @@ impl Account {
             }
         };
 
-        if settings.account().format() == "imap" {
+        if ["imap", "jmap", "notmuch"].contains(&settings.account().format()) {
             settings.conf.search_backend = crate::conf::SearchBackend::None;
         }
 
@@ -1673,9 +1674,7 @@ impl Account {
         _sort: (SortField, SortOrder),
         mailbox_hash: MailboxHash,
     ) -> ResultFuture<SmallVec<[EnvelopeHash; 512]>> {
-        use melib::parsec::Parser;
-        use melib::search::QueryTrait;
-        let query = melib::search::query().parse(search_term)?.1;
+        let query = melib::search::Query::try_from(search_term)?;
         match self.settings.conf.search_backend {
             #[cfg(feature = "sqlite3")]
             crate::conf::SearchBackend::Sqlite3 => crate::sqlite3::search(&query, _sort),
@@ -1686,6 +1685,7 @@ impl Account {
                         .unwrap()
                         .search(query, Some(mailbox_hash))
                 } else {
+                    use melib::search::QueryTrait;
                     let mut ret = SmallVec::new();
                     let envelopes = self.collection.envelopes.read().unwrap();
                     for &env_hash in self.collection.get_mailbox(mailbox_hash).iter() {

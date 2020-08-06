@@ -26,6 +26,7 @@ use crate::email::*;
 use crate::error::{MeliError, Result};
 use reqwest::blocking::Client;
 use std::collections::{BTreeMap, HashMap};
+use std::convert::TryFrom;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Instant;
@@ -281,6 +282,66 @@ impl MailBackend for JmapType {
 
     fn tags(&self) -> Option<Arc<RwLock<BTreeMap<u64, String>>>> {
         Some(self.tag_index.clone())
+    }
+
+    fn search(
+        &self,
+        q: crate::search::Query,
+        mailbox_hash: Option<MailboxHash>,
+    ) -> ResultFuture<SmallVec<[EnvelopeHash; 512]>> {
+        let conn = self.connection.clone();
+        let filter = if let Some(mailbox_hash) = mailbox_hash {
+            let mailbox_id = self.mailboxes.read().unwrap()[&mailbox_hash].id.clone();
+
+            let mut f = Filter::Condition(
+                EmailFilterCondition::new()
+                    .in_mailbox(Some(mailbox_id))
+                    .into(),
+            );
+            f &= Filter::<EmailFilterCondition, EmailObject>::from(q);
+            f
+        } else {
+            Filter::<EmailFilterCondition, EmailObject>::from(q)
+        };
+
+        let email_call: EmailQuery = EmailQuery::new(
+            Query::new()
+                .account_id(conn.mail_account_id().to_string())
+                .filter(Some(filter))
+                .position(0),
+        )
+        .collapse_threads(false);
+
+        let mut req = Request::new(conn.request_no.clone());
+        req.add_call(&email_call);
+
+        let res = conn
+            .client
+            .lock()
+            .unwrap()
+            .post(&conn.session.api_url)
+            .basic_auth(
+                &conn.server_conf.server_username,
+                Some(&conn.server_conf.server_password),
+            )
+            .json(&req)
+            .send();
+
+        let res_text = res?.text()?;
+        let mut v: MethodResponse = serde_json::from_str(&res_text).unwrap();
+        *conn.online_status.lock().unwrap() = (std::time::Instant::now(), Ok(()));
+        let m = QueryResponse::<EmailObject>::try_from(v.method_responses.remove(0))?;
+        let QueryResponse::<EmailObject> { ids, .. } = m;
+        let ret = ids
+            .into_iter()
+            .map(|id| {
+                use std::hash::Hasher;
+                let mut h = std::collections::hash_map::DefaultHasher::new();
+                h.write(id.as_bytes());
+                h.finish()
+            })
+            .collect();
+        Ok(Box::pin(async move { Ok(ret) }))
     }
 }
 

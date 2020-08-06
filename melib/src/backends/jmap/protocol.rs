@@ -175,9 +175,11 @@ pub fn get_message_list(conn: &JmapConnection, mailbox: &JmapMailbox) -> Result<
     let email_call: EmailQuery = EmailQuery::new(
         Query::new()
             .account_id(conn.mail_account_id().to_string())
-            .filter(Some(
-                EmailFilterCondition::new().in_mailbox(Some(mailbox.id.clone())),
-            ))
+            .filter(Some(Filter::Condition(
+                EmailFilterCondition::new()
+                    .in_mailbox(Some(mailbox.id.clone()))
+                    .into(),
+            )))
             .position(0),
     )
     .collapse_threads(false);
@@ -245,9 +247,11 @@ pub fn get(
     let email_query_call: EmailQuery = EmailQuery::new(
         Query::new()
             .account_id(conn.mail_account_id().to_string())
-            .filter(Some(
-                EmailFilterCondition::new().in_mailbox(Some(mailbox.id.clone())),
-            ))
+            .filter(Some(Filter::Condition(
+                EmailFilterCondition::new()
+                    .in_mailbox(Some(mailbox.id.clone()))
+                    .into(),
+            )))
             .position(0),
     )
     .collapse_threads(false);

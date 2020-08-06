@@ -51,11 +51,3 @@ impl<OBJ: Object> Comparator<OBJ> {
     _impl!(collation: Option<String>);
     _impl!(additional_properties: Vec<String>);
 }
-
-#[derive(Serialize, Debug)]
-#[serde(rename_all = "UPPERCASE")]
-pub enum FilterOperator {
-    And,
-    Or,
-    Not,
-}

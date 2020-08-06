@@ -396,7 +396,7 @@ pub struct EmailQueryResponse {
 #[serde(rename_all = "camelCase")]
 pub struct EmailQuery {
     #[serde(flatten)]
-    pub query_call: Query<EmailFilterCondition, EmailObject>,
+    pub query_call: Query<Filter<EmailFilterCondition, EmailObject>, EmailObject>,
     //pub filter: EmailFilterCondition, /* "inMailboxes": [ mailbox.id ] },*/
     pub collapse_threads: bool,
 }
@@ -412,7 +412,7 @@ impl EmailQuery {
             _ph: PhantomData,
         };
 
-    pub fn new(query_call: Query<EmailFilterCondition, EmailObject>) -> Self {
+    pub fn new(query_call: Query<Filter<EmailFilterCondition, EmailObject>, EmailObject>) -> Self {
         EmailQuery {
             query_call,
             collapse_threads: false,
@@ -540,6 +540,15 @@ impl EmailFilterCondition {
 
 impl FilterTrait<EmailObject> for EmailFilterCondition {}
 
+impl From<EmailFilterCondition> for FilterCondition<EmailFilterCondition, EmailObject> {
+    fn from(val: EmailFilterCondition) -> FilterCondition<EmailFilterCondition, EmailObject> {
+        FilterCondition {
+            cond: val,
+            _ph: PhantomData,
+        }
+    }
+}
+
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub enum MessageProperty {
@@ -566,4 +575,149 @@ pub enum MessageProperty {
     MessageId,
     InReplyTo,
     Sender,
+}
+
+impl From<crate::search::Query> for Filter<EmailFilterCondition, EmailObject> {
+    fn from(val: crate::search::Query) -> Self {
+        let mut ret = Filter::Condition(EmailFilterCondition::new().into());
+        fn rec(q: &crate::search::Query, f: &mut Filter<EmailFilterCondition, EmailObject>) {
+            use crate::search::Query::*;
+            match q {
+                Subject(t) => {
+                    *f = Filter::Condition(EmailFilterCondition::new().subject(t.clone()).into());
+                }
+                From(t) => {
+                    *f = Filter::Condition(EmailFilterCondition::new().from(t.clone()).into());
+                }
+                To(t) => {
+                    *f = Filter::Condition(EmailFilterCondition::new().to(t.clone()).into());
+                }
+                Cc(t) => {
+                    *f = Filter::Condition(EmailFilterCondition::new().cc(t.clone()).into());
+                }
+                Bcc(t) => {
+                    *f = Filter::Condition(EmailFilterCondition::new().bcc(t.clone()).into());
+                }
+                AllText(t) => {
+                    *f = Filter::Condition(EmailFilterCondition::new().text(t.clone()).into());
+                }
+                Body(t) => {
+                    *f = Filter::Condition(EmailFilterCondition::new().body(t.clone()).into());
+                }
+                Before(_) => {
+                    //TODO, convert UNIX timestamp into UtcDate
+                }
+                After(_) => {
+                    //TODO
+                }
+                Between(_, _) => {
+                    //TODO
+                }
+                On(_) => {
+                    //TODO
+                }
+                InReplyTo(_) => {
+                    //TODO, look inside Headers
+                }
+                References(_) => {
+                    //TODO
+                }
+                AllAddresses(_) => {
+                    //TODO
+                }
+                Flags(v) => {
+                    let mut accum = if let Some(first) = v.first() {
+                        Filter::Condition(
+                            EmailFilterCondition::new()
+                                .has_keyword(first.to_string())
+                                .into(),
+                        )
+                    } else {
+                        Filter::Condition(EmailFilterCondition::new().into())
+                    };
+                    for f in v.iter().skip(1) {
+                        accum &= Filter::Condition(
+                            EmailFilterCondition::new()
+                                .has_keyword(f.as_str().to_string())
+                                .into(),
+                        );
+                    }
+                    *f = accum;
+                }
+                HasAttachment => {
+                    *f = Filter::Condition(
+                        EmailFilterCondition::new()
+                            .has_attachment(Some(true))
+                            .into(),
+                    );
+                }
+                And(q1, q2) => {
+                    let mut rhs = Filter::Condition(EmailFilterCondition::new().into());
+                    let mut lhs = Filter::Condition(EmailFilterCondition::new().into());
+                    rec(q1, &mut rhs);
+                    rec(q2, &mut lhs);
+                    rhs &= lhs;
+                    *f = rhs;
+                }
+                Or(q1, q2) => {
+                    let mut rhs = Filter::Condition(EmailFilterCondition::new().into());
+                    let mut lhs = Filter::Condition(EmailFilterCondition::new().into());
+                    rec(q1, &mut rhs);
+                    rec(q2, &mut lhs);
+                    rhs |= lhs;
+                    *f = rhs;
+                }
+                Not(q) => {
+                    let mut qhs = Filter::Condition(EmailFilterCondition::new().into());
+                    rec(q, &mut qhs);
+                    *f = !qhs;
+                }
+            }
+        }
+        rec(&val, &mut ret);
+        ret
+    }
+}
+
+#[test]
+fn test_jmap_query() {
+    use std::sync::{Arc, Mutex};
+    let q: crate::search::Query = crate::search::Query::try_from(
+        "subject:wah or (from:Manos and (subject:foo or subject:bar))",
+    )
+    .unwrap();
+    let f: Filter<EmailFilterCondition, EmailObject> = Filter::from(q);
+    assert_eq!(
+        r#"{"operator":"OR","conditions":[{"subject":"wah"},{"operator":"AND","conditions":[{"from":"Manos"},{"operator":"OR","conditions":[{"subject":"foo"},{"subject":"bar"}]}]}]}"#,
+        serde_json::to_string(&f).unwrap().as_str()
+    );
+    let filter = {
+        let mailbox_id = "mailbox_id".to_string();
+
+        let mut r = Filter::Condition(
+            EmailFilterCondition::new()
+                .in_mailbox(Some(mailbox_id))
+                .into(),
+        );
+        r &= f;
+        r
+    };
+
+    let email_call: EmailQuery = EmailQuery::new(
+        Query::new()
+            .account_id("account_id".to_string())
+            .filter(Some(filter))
+            .position(0),
+    )
+    .collapse_threads(false);
+
+    let request_no = Arc::new(Mutex::new(0));
+    let mut req = Request::new(request_no.clone());
+    req.add_call(&email_call);
+
+    assert_eq!(
+        r#"{"using":["urn:ietf:params:jmap:core","urn:ietf:params:jmap:mail"],"methodCalls":[["Email/query",{"accountId":"account_id","calculateTotal":false,"collapseThreads":false,"filter":{"conditions":[{"inMailbox":"mailbox_id"},{"conditions":[{"subject":"wah"},{"conditions":[{"from":"Manos"},{"conditions":[{"subject":"foo"},{"subject":"bar"}],"operator":"OR"}],"operator":"AND"}],"operator":"OR"}],"operator":"AND"},"position":0,"sort":null},"m0"]]}"#,
+        serde_json::to_string(&req).unwrap().as_str()
+    );
+    assert_eq!(*request_no.lock().unwrap(), 1);
 }

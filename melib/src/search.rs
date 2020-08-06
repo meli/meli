@@ -22,6 +22,7 @@
 use crate::parsec::*;
 use crate::UnixTimestamp;
 use std::borrow::Cow;
+use std::convert::TryFrom;
 
 pub use query_parser::query;
 use Query::*;
@@ -87,6 +88,16 @@ impl QueryTrait for crate::Envelope {
             Not(q) => !self.is_match(q),
             _ => false,
         }
+    }
+}
+
+impl TryFrom<&str> for Query {
+    type Error = crate::error::MeliError;
+    fn try_from(t: &str) -> crate::error::Result<Query> {
+        query()
+            .parse_complete(t)
+            .map(|(_, q)| q)
+            .map_err(|err| err.into())
     }
 }
 
@@ -360,6 +371,14 @@ pub mod query_parser {
         assert_eq!(
             query().parse_complete("flags:test,testtest"),
             query().parse_complete("tags:test,testtest")
+        );
+        assert_eq!(
+            query().parse_complete("flags:seen"),
+            query().parse_complete("tags:seen")
+        );
+        assert_eq!(
+            Ok(("", Flags(vec!["f".to_string()]))),
+            query().parse_complete("tags:f")
         );
     }
 }
