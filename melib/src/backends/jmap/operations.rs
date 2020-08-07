@@ -20,72 +20,69 @@
  */
 
 use super::*;
-use std::cell::Cell;
 use std::sync::{Arc, RwLock};
 
 /// `BackendOp` implementor for Imap
 #[derive(Debug, Clone)]
 pub struct JmapOp {
     hash: EnvelopeHash,
-    connection: Arc<JmapConnection>,
+    connection: Arc<FutureMutex<JmapConnection>>,
     store: Arc<RwLock<Store>>,
-    bytes: Option<String>,
-    flags: Cell<Option<Flag>>,
-    headers: Option<String>,
-    body: Option<String>,
 }
 
 impl JmapOp {
     pub fn new(
         hash: EnvelopeHash,
-        connection: Arc<JmapConnection>,
+        connection: Arc<FutureMutex<JmapConnection>>,
         store: Arc<RwLock<Store>>,
     ) -> Self {
         JmapOp {
             hash,
             connection,
             store,
-            bytes: None,
-            headers: None,
-            body: None,
-            flags: Cell::new(None),
         }
     }
 }
 
 impl BackendOp for JmapOp {
     fn as_bytes(&mut self) -> ResultFuture<Vec<u8>> {
-        if self.bytes.is_none() {
-            let mut store_lck = self.store.write().unwrap();
-            if !(store_lck.byte_cache.contains_key(&self.hash)
-                && store_lck.byte_cache[&self.hash].bytes.is_some())
+        {
+            let store_lck = self.store.read().unwrap();
+            if store_lck.byte_cache.contains_key(&self.hash)
+                && store_lck.byte_cache[&self.hash].bytes.is_some()
             {
-                let blob_id = &store_lck.blob_id_store[&self.hash];
-                let res = self
-                    .connection
-                    .client
-                    .lock()
-                    .unwrap()
-                    .get(&download_request_format(
-                        &self.connection.session,
-                        self.connection.mail_account_id(),
-                        blob_id,
-                        None,
-                    ))
-                    .basic_auth(
-                        &self.connection.server_conf.server_username,
-                        Some(&self.connection.server_conf.server_password),
-                    )
-                    .send();
-
-                let res_text = res?.text()?;
-
-                store_lck.byte_cache.entry(self.hash).or_default().bytes = Some(res_text);
+                let ret = store_lck.byte_cache[&self.hash].bytes.clone().unwrap();
+                return Ok(Box::pin(async move { Ok(ret.into_bytes()) }));
             }
-            self.bytes = store_lck.byte_cache[&self.hash].bytes.clone();
         }
-        let ret = self.bytes.as_ref().unwrap().as_bytes().to_vec();
-        Ok(Box::pin(async move { Ok(ret) }))
+        let store = self.store.clone();
+        let hash = self.hash;
+        let connection = self.connection.clone();
+        Ok(Box::pin(async move {
+            let blob_id = store.read().unwrap().blob_id_store[&hash].clone();
+            let mut conn = connection.lock().await;
+            conn.connect().await?;
+            let mut res = conn
+                .client
+                .get_async(&download_request_format(
+                    &conn.session,
+                    conn.mail_account_id(),
+                    &blob_id,
+                    None,
+                ))
+                .await?;
+
+            let res_text = res.text_async().await?;
+
+            store
+                .write()
+                .unwrap()
+                .byte_cache
+                .entry(hash)
+                .or_default()
+                .bytes = Some(res_text.clone());
+            Ok(res_text.into_bytes())
+        }))
     }
 
     fn fetch_flags(&self) -> ResultFuture<Flag> {

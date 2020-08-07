@@ -47,8 +47,6 @@ pub mod maildir;
 pub mod mbox;
 #[cfg(feature = "imap_backend")]
 pub use self::imap::ImapType;
-#[cfg(feature = "jmap_backend")]
-pub use self::jmap::JmapType;
 #[cfg(feature = "imap_backend")]
 pub use self::nntp::NntpType;
 use crate::async_workers::*;
@@ -173,8 +171,8 @@ impl Backends {
             b.register(
                 "jmap".to_string(),
                 Backend {
-                    create_fn: Box::new(|| Box::new(|f, i| JmapType::new(f, i))),
-                    validate_conf_fn: Box::new(JmapType::validate_config),
+                    create_fn: Box::new(|| Box::new(|f, i| jmap::JmapType::new(f, i))),
+                    validate_conf_fn: Box::new(jmap::JmapType::validate_config),
                 },
             );
         }

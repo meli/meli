@@ -95,29 +95,32 @@ impl Request {
     }
 }
 
-pub fn get_mailboxes(conn: &JmapConnection) -> Result<HashMap<MailboxHash, JmapMailbox>> {
-    let seq = get_request_no!(conn.request_no);
-    let res = conn
-        .client
-        .lock()
-        .unwrap()
-        .post(&conn.session.api_url)
-        .basic_auth(
-            &conn.server_conf.server_username,
-            Some(&conn.server_conf.server_password),
-        )
-        .json(&json!({
-            "using": ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"],
-            "methodCalls": [["Mailbox/get", {
-            "accountId": conn.mail_account_id()
-            },
-             format!("#m{}",seq).as_str()]],
-        }))
-        .send();
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct JsonResponse<'a> {
+    #[serde(borrow)]
+    method_responses: Vec<MethodResponse<'a>>,
+}
 
-    let res_text = res?.text()?;
+pub async fn get_mailboxes(conn: &JmapConnection) -> Result<HashMap<MailboxHash, JmapMailbox>> {
+    let seq = get_request_no!(conn.request_no);
+    let mut res = conn
+        .client
+        .post_async(
+            &conn.session.api_url,
+            serde_json::to_string(&json!({
+                "using": ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"],
+                "methodCalls": [["Mailbox/get", {
+                "accountId": conn.mail_account_id()
+                },
+                 format!("#m{}",seq).as_str()]],
+            }))?,
+        )
+        .await?;
+
+    let res_text = res.text_async().await?;
     let mut v: MethodResponse = serde_json::from_str(&res_text).unwrap();
-    *conn.online_status.lock().unwrap() = (std::time::Instant::now(), Ok(()));
+    *conn.online_status.lock().await = (std::time::Instant::now(), Ok(()));
     let m = GetResponse::<MailboxObject>::try_from(v.method_responses.remove(0))?;
     let GetResponse::<MailboxObject> {
         list, account_id, ..
@@ -164,14 +167,7 @@ pub fn get_mailboxes(conn: &JmapConnection) -> Result<HashMap<MailboxHash, JmapM
         .collect())
 }
 
-#[derive(Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct JsonResponse<'a> {
-    #[serde(borrow)]
-    method_responses: Vec<MethodResponse<'a>>,
-}
-
-pub fn get_message_list(conn: &JmapConnection, mailbox: &JmapMailbox) -> Result<Vec<String>> {
+pub async fn get_message_list(conn: &JmapConnection, mailbox: &JmapMailbox) -> Result<Vec<String>> {
     let email_call: EmailQuery = EmailQuery::new(
         Query::new()
             .account_id(conn.mail_account_id().to_string())
@@ -187,27 +183,20 @@ pub fn get_message_list(conn: &JmapConnection, mailbox: &JmapMailbox) -> Result<
     let mut req = Request::new(conn.request_no.clone());
     req.add_call(&email_call);
 
-    let res = conn
+    let mut res = conn
         .client
-        .lock()
-        .unwrap()
-        .post(&conn.session.api_url)
-        .basic_auth(
-            &conn.server_conf.server_username,
-            Some(&conn.server_conf.server_password),
-        )
-        .json(&req)
-        .send();
+        .post_async(&conn.session.api_url, serde_json::to_string(&req)?)
+        .await?;
 
-    let res_text = res?.text()?;
+    let res_text = res.text_async().await?;
     let mut v: MethodResponse = serde_json::from_str(&res_text).unwrap();
-    *conn.online_status.lock().unwrap() = (std::time::Instant::now(), Ok(()));
+    *conn.online_status.lock().await = (std::time::Instant::now(), Ok(()));
     let m = QueryResponse::<EmailObject>::try_from(v.method_responses.remove(0))?;
     let QueryResponse::<EmailObject> { ids, .. } = m;
     Ok(ids)
 }
 
-pub fn get_message(conn: &JmapConnection, ids: &[String]) -> Result<Vec<Envelope>> {
+pub async fn get_message(conn: &JmapConnection, ids: &[String]) -> Result<Vec<Envelope>> {
     let email_call: EmailGet = EmailGet::new(
         Get::new()
             .ids(Some(JmapArgument::value(ids.to_vec())))
@@ -216,19 +205,12 @@ pub fn get_message(conn: &JmapConnection, ids: &[String]) -> Result<Vec<Envelope
 
     let mut req = Request::new(conn.request_no.clone());
     req.add_call(&email_call);
-    let res = conn
+    let mut res = conn
         .client
-        .lock()
-        .unwrap()
-        .post(&conn.session.api_url)
-        .basic_auth(
-            &conn.server_conf.server_username,
-            Some(&conn.server_conf.server_password),
-        )
-        .json(&req)
-        .send();
+        .post_async(&conn.session.api_url, serde_json::to_string(&req)?)
+        .await?;
 
-    let res_text = res?.text()?;
+    let res_text = res.text_async().await?;
     let mut v: MethodResponse = serde_json::from_str(&res_text).unwrap();
     let e = GetResponse::<EmailObject>::try_from(v.method_responses.remove(0))?;
     let GetResponse::<EmailObject> { list, .. } = e;
@@ -238,18 +220,20 @@ pub fn get_message(conn: &JmapConnection, ids: &[String]) -> Result<Vec<Envelope
         .collect::<Vec<Envelope>>())
 }
 
-pub fn get(
+pub async fn fetch(
     conn: &JmapConnection,
     store: &Arc<RwLock<Store>>,
     tag_index: &Arc<RwLock<BTreeMap<u64, String>>>,
-    mailbox: &JmapMailbox,
+    mailboxes: &Arc<RwLock<HashMap<MailboxHash, JmapMailbox>>>,
+    mailbox_hash: MailboxHash,
 ) -> Result<Vec<Envelope>> {
+    let mailbox_id = mailboxes.read().unwrap()[&mailbox_hash].id.clone();
     let email_query_call: EmailQuery = EmailQuery::new(
         Query::new()
             .account_id(conn.mail_account_id().to_string())
             .filter(Some(Filter::Condition(
                 EmailFilterCondition::new()
-                    .in_mailbox(Some(mailbox.id.clone()))
+                    .in_mailbox(Some(mailbox_id))
                     .into(),
             )))
             .position(0),
@@ -270,19 +254,12 @@ pub fn get(
 
     req.add_call(&email_call);
 
-    let res = conn
+    let mut res = conn
         .client
-        .lock()
-        .unwrap()
-        .post(&conn.session.api_url)
-        .basic_auth(
-            &conn.server_conf.server_username,
-            Some(&conn.server_conf.server_password),
-        )
-        .json(&req)
-        .send();
+        .post_async(&conn.session.api_url, serde_json::to_string(&req)?)
+        .await?;
 
-    let res_text = res?.text()?;
+    let res_text = res.text_async().await?;
 
     let mut v: MethodResponse = serde_json::from_str(&res_text).unwrap();
     let e = GetResponse::<EmailObject>::try_from(v.method_responses.pop().unwrap())?;

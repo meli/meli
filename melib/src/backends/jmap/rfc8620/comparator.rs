@@ -32,7 +32,7 @@ pub struct Comparator<OBJ: Object> {
     //#[serde(flatten)]
     additional_properties: Vec<String>,
 
-    _ph: PhantomData<*const OBJ>,
+    _ph: PhantomData<fn() -> OBJ>,
 }
 
 impl<OBJ: Object> Comparator<OBJ> {

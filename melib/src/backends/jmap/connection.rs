@@ -20,13 +20,14 @@
  */
 
 use super::*;
+use isahc::config::Configurable;
 
 #[derive(Debug)]
 pub struct JmapConnection {
     pub session: JmapSession,
     pub request_no: Arc<Mutex<usize>>,
-    pub client: Arc<Mutex<Client>>,
-    pub online_status: Arc<Mutex<(Instant, Result<()>)>>,
+    pub client: Arc<HttpClient>,
+    pub online_status: Arc<FutureMutex<(Instant, Result<()>)>>,
     pub server_conf: JmapServerConf,
     pub account_id: Arc<Mutex<String>>,
     pub method_call_states: Arc<Mutex<HashMap<&'static str, String>>>,
@@ -35,75 +36,75 @@ pub struct JmapConnection {
 impl JmapConnection {
     pub fn new(
         server_conf: &JmapServerConf,
-        online_status: Arc<Mutex<(Instant, Result<()>)>>,
+        online_status: Arc<FutureMutex<(Instant, Result<()>)>>,
     ) -> Result<Self> {
-        use reqwest::header;
-        let mut headers = header::HeaderMap::new();
-        headers.insert(
-            header::ACCEPT,
-            header::HeaderValue::from_static("application/json"),
-        );
-        headers.insert(
-            header::CONTENT_TYPE,
-            header::HeaderValue::from_static("application/json"),
-        );
-        let client = reqwest::blocking::ClientBuilder::new()
-            .danger_accept_invalid_certs(server_conf.danger_accept_invalid_certs)
-            .default_headers(headers)
+        let client = HttpClient::builder()
+            .timeout(std::time::Duration::from_secs(10))
+            .authentication(isahc::auth::Authentication::basic())
+            .credentials(isahc::auth::Credentials::new(
+                &server_conf.server_username,
+                &server_conf.server_password,
+            ))
             .build()?;
-        let mut jmap_session_resource_url = if server_conf.server_hostname.starts_with("https://") {
-            server_conf.server_hostname.to_string()
-        } else {
-            format!("https://{}", &server_conf.server_hostname)
-        };
-        if server_conf.server_port != 443 {
+        let server_conf = server_conf.clone();
+        Ok(JmapConnection {
+            session: Default::default(),
+            request_no: Arc::new(Mutex::new(0)),
+            client: Arc::new(client),
+            online_status,
+            server_conf,
+            account_id: Arc::new(Mutex::new(String::new())),
+            method_call_states: Arc::new(Mutex::new(Default::default())),
+        })
+    }
+
+    pub async fn connect(&mut self) -> Result<()> {
+        if self.online_status.lock().await.1.is_ok() {
+            return Ok(());
+        }
+        let mut jmap_session_resource_url =
+            if self.server_conf.server_hostname.starts_with("https://") {
+                self.server_conf.server_hostname.to_string()
+            } else {
+                format!("https://{}", &self.server_conf.server_hostname)
+            };
+        if self.server_conf.server_port != 443 {
             jmap_session_resource_url.push(':');
-            jmap_session_resource_url.push_str(&server_conf.server_port.to_string());
+            jmap_session_resource_url.push_str(&self.server_conf.server_port.to_string());
         }
         jmap_session_resource_url.push_str("/.well-known/jmap");
 
-        let req = client
-            .get(&jmap_session_resource_url)
-            .basic_auth(
-                &server_conf.server_username,
-                Some(&server_conf.server_password),
-            )
-            .send()?;
-        let res_text = req.text()?;
+        let mut req = self.client.get_async(&jmap_session_resource_url).await?;
+        let res_text = req.text_async().await?;
 
-        let session: JmapSession = serde_json::from_str(&res_text).map_err(|_| {
-            let err = MeliError::new(format!("Could not connect to JMAP server endpoint for {}. Is your server hostname setting correct? (i.e. \"jmap.mailserver.org\") (Note: only session resource discovery via /.well-known/jmap is supported. DNS SRV records are not suppported.)\nReply from server: {}", &server_conf.server_hostname, &res_text));
-                *online_status.lock().unwrap() = (Instant::now(), Err(err.clone()));
-                err
-        })?;
+        let session: JmapSession = match serde_json::from_str(&res_text) {
+            Err(err) => {
+                let err = MeliError::new(format!("Could not connect to JMAP server endpoint for {}. Is your server hostname setting correct? (i.e. \"jmap.mailserver.org\") (Note: only session resource discovery via /.well-known/jmap is supported. DNS SRV records are not suppported.)\nReply from server: {}", &self.server_conf.server_hostname, &res_text)).set_source(Some(Arc::new(err)));
+                *self.online_status.lock().await = (Instant::now(), Err(err.clone()));
+                return Err(err);
+            }
+            Ok(s) => s,
+        };
         if !session
             .capabilities
             .contains_key("urn:ietf:params:jmap:core")
         {
-            let err = MeliError::new(format!("Server {} did not return JMAP Core capability (urn:ietf:params:jmap:core). Returned capabilities were: {}", &server_conf.server_hostname, session.capabilities.keys().map(String::as_str).collect::<Vec<&str>>().join(", ")));
-            *online_status.lock().unwrap() = (Instant::now(), Err(err.clone()));
+            let err = MeliError::new(format!("Server {} did not return JMAP Core capability (urn:ietf:params:jmap:core). Returned capabilities were: {}", &self.server_conf.server_hostname, session.capabilities.keys().map(String::as_str).collect::<Vec<&str>>().join(", ")));
+            *self.online_status.lock().await = (Instant::now(), Err(err.clone()));
             return Err(err);
         }
         if !session
             .capabilities
             .contains_key("urn:ietf:params:jmap:mail")
         {
-            let err = MeliError::new(format!("Server {} does not support JMAP Mail capability (urn:ietf:params:jmap:mail). Returned capabilities were: {}", &server_conf.server_hostname, session.capabilities.keys().map(String::as_str).collect::<Vec<&str>>().join(", ")));
-            *online_status.lock().unwrap() = (Instant::now(), Err(err.clone()));
+            let err = MeliError::new(format!("Server {} does not support JMAP Mail capability (urn:ietf:params:jmap:mail). Returned capabilities were: {}", &self.server_conf.server_hostname, session.capabilities.keys().map(String::as_str).collect::<Vec<&str>>().join(", ")));
+            *self.online_status.lock().await = (Instant::now(), Err(err.clone()));
             return Err(err);
         }
 
-        *online_status.lock().unwrap() = (Instant::now(), Ok(()));
-        let server_conf = server_conf.clone();
-        Ok(JmapConnection {
-            session,
-            request_no: Arc::new(Mutex::new(0)),
-            client: Arc::new(Mutex::new(client)),
-            online_status,
-            server_conf,
-            account_id: Arc::new(Mutex::new(String::new())),
-            method_call_states: Arc::new(Mutex::new(Default::default())),
-        })
+        *self.online_status.lock().await = (Instant::now(), Ok(()));
+        self.session = session;
+        Ok(())
     }
 
     pub fn mail_account_id(&self) -> &Id {

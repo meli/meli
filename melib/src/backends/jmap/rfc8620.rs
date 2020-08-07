@@ -39,7 +39,7 @@ pub trait Object {
     const NAME: &'static str;
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct JmapSession {
     pub capabilities: HashMap<String, CapabilitiesObject>,
@@ -112,7 +112,7 @@ where
     #[serde(skip_serializing_if = "Option::is_none")]
     pub properties: Option<Vec<String>>,
     #[serde(skip)]
-    _ph: PhantomData<*const OBJ>,
+    _ph: PhantomData<fn() -> OBJ>,
 }
 
 impl<OBJ: Object> Get<OBJ>
@@ -279,7 +279,7 @@ where
     #[serde(default = "bool_false")]
     calculate_total: bool,
     #[serde(skip)]
-    _ph: PhantomData<*const OBJ>,
+    _ph: PhantomData<fn() -> OBJ>,
 }
 
 impl<F: FilterTrait<OBJ>, OBJ: Object> Query<F, OBJ>
@@ -336,7 +336,7 @@ pub struct QueryResponse<OBJ: Object> {
     #[serde(default)]
     pub limit: u64,
     #[serde(skip)]
-    _ph: PhantomData<*const OBJ>,
+    _ph: PhantomData<fn() -> OBJ>,
 }
 
 impl<OBJ: Object + DeserializeOwned> std::convert::TryFrom<&RawValue> for QueryResponse<OBJ> {
@@ -354,7 +354,7 @@ impl<OBJ: Object> QueryResponse<OBJ> {
 
 pub struct ResultField<M: Method<OBJ>, OBJ: Object> {
     pub field: &'static str,
-    pub _ph: PhantomData<*const (OBJ, M)>,
+    pub _ph: PhantomData<fn() -> (OBJ, M)>,
 }
 
 // error[E0723]: trait bounds other than `Sized` on const fn parameters are unstable
@@ -407,7 +407,7 @@ where
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_changes: Option<u64>,
     #[serde(skip)]
-    _ph: PhantomData<*const OBJ>,
+    _ph: PhantomData<fn() -> OBJ>,
 }
 
 impl<OBJ: Object> Changes<OBJ>
@@ -463,7 +463,7 @@ pub struct ChangesResponse<OBJ: Object> {
     pub updated: Vec<Id>,
     pub destroyed: Vec<Id>,
     #[serde(skip)]
-    _ph: PhantomData<*const OBJ>,
+    _ph: PhantomData<fn() -> OBJ>,
 }
 
 impl<OBJ: Object + DeserializeOwned> std::convert::TryFrom<&RawValue> for ChangesResponse<OBJ> {

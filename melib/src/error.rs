@@ -240,10 +240,10 @@ impl From<std::num::ParseIntError> for MeliError {
 }
 
 #[cfg(feature = "jmap_backend")]
-impl From<reqwest::Error> for MeliError {
+impl From<isahc::Error> for MeliError {
     #[inline]
-    fn from(kind: reqwest::Error) -> MeliError {
-        MeliError::new(format!("{}", kind)).set_source(Some(Arc::new(kind)))
+    fn from(kind: isahc::Error) -> MeliError {
+        MeliError::new(kind.to_string()).set_source(Some(Arc::new(kind)))
     }
 }
 

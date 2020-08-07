@@ -41,7 +41,7 @@ pub struct FilterCondition<F: FilterTrait<OBJ>, OBJ: Object> {
     #[serde(flatten)]
     pub cond: F,
     #[serde(skip)]
-    pub _ph: PhantomData<*const OBJ>,
+    pub _ph: PhantomData<fn() -> OBJ>,
 }
 
 #[derive(Serialize, Debug, PartialEq)]
