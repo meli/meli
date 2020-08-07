@@ -1,13 +1,13 @@
-# Look into meli.conf(5) for all valid configuration options, their
-# descriptions and default values
-#
-# The syntax for including other configuration files is enclosed in `:
-#`include("account_one")`
-#`include("./account_two")`
-#`include("/home/absolute/path/to/shortcuts/config.toml")`
-#
-#
-# Setting up a Maildir account
+## Look into meli.conf(5) for all valid configuration options, their
+## descriptions and default values
+##
+## The syntax for including other configuration files is enclosed in `:
+##`include("account_one")`
+##`include("./account_two")`
+##`include("/home/absolute/path/to/shortcuts/config.toml")`
+##
+##
+## Setting up a Maildir account
 #[accounts.account-name]
 #root_mailbox = "/path/to/root/mailbox"
 #format = "Maildir"
@@ -15,21 +15,21 @@
 #identity="email@address.tld"
 #display_name = "Name"
 #subscribed_mailboxes = ["INBOX", "INBOX/Sent", "INBOX/Drafts", "INBOX/Junk"]
-
-# Set mailbox-specific settings
+#
+## Set mailbox-specific settings
 #  [accounts.account-name.mailboxes]
 #  "INBOX" = { rename="Inbox" }
 #  "drafts" = { rename="Drafts" }
 #  "foobar-devel" = { ignore = true } # don't show notifications for this mailbox
-
-# Setting up an mbox account
+#
+## Setting up an mbox account
 #[accounts.mbox]
 #root_mailbox = "/var/mail/username"
 #format = "mbox"
 #index_style = "Compact"
 #identity="username@hostname.local"
 #
-# Setting up an IMAP account
+## Setting up an IMAP account
 #[accounts."imap"]
 #root_mailbox = "INBOX"
 #format = "imap"
@@ -42,12 +42,12 @@
 #index_style = "Conversations"
 #identity = "username@server.tld"
 #display_name = "Name Name"
-## match every mailbox:
+### match every mailbox:
 #subscribed_mailboxes = ["*" ]
-## match specific mailboxes:
-#subscribed_mailboxes = ["INBOX", "INBOX/Sent", "INBOX/Drafts", "INBOX/Junk"]
-
-# Setting up an account for an already existing notmuch database
+### match specific mailboxes:
+##subscribed_mailboxes = ["INBOX", "INBOX/Sent", "INBOX/Drafts", "INBOX/Junk"]
+#
+## Setting up an account for an already existing notmuch database
 #[accounts.notmuch]
 #root_mailbox = "/path/to/folder" # where .notmuch/ directory is located
 #format = "notmuch"
@@ -59,32 +59,31 @@
 #  "INBOX" = {  query="tag:inbox", subscribe = true }
 #  "Drafts" = {  query="tag:draft", subscribe = true }
 #  "Sent" = {  query="from:username@server.tld from:username2@server.tld", subscribe = true }
-#
+##
 #[pager]
 #filter = "COLUMNS=72 /usr/local/bin/pygmentize -l email"
 #pager_context = 0 # default, optional
 #headers_sticky = true # default, optional
-
+#
 #[notifications]
-#enable = true # default, optional
 #script = "notify-send"
-#xbiff_file_path = PATH # for use with xbiff(1)
+#xbiff_file_path = "path" # for use with xbiff(1)
 #play_sound = true # default, optional
-#sound_file = PATH # optional
-
-##shortcuts
+#sound_file = "path" # optional
+#
+###shortcuts
 #[shortcuts.composing]
 #edit_mail = 'e'
 #
-# Thread view defaults:
+##Thread view defaults:
 #[shortcuts.compact-listing]
 #exit_thread = 'i'
 #
 #[shortcuts.contact-list]
 #create_contact = 'c'
 #edit_contact = 'e'
-
-# Mail listing defaults
+#
+##Mail listing defaults
 #[shortcuts.listing]
 #prev_page = "PageUp"
 #next_page = "PageDown"
@@ -94,19 +93,19 @@
 #next_account = 'h'
 #new_mail = 'm'
 #set_seen = 'n'
-
-# Pager defaults
-
+#
+##Pager defaults
+#
 #[shortcuts.pager]
 #scroll_up = 'k'
 #scroll_down = 'j'
 #page_up = "PageUp"
 #page_down = "PageDown"
-
+#
 #[composing]
-# required for sending e-mail
+##required for sending e-mail
 #send_mail = 'msmtp --read-recipients --read-envelope-from'
-#send_mail = { hostname = "smtp.mail.tld", port = 587, auth = { type = "auto", username = "user", password = { type = "command_eval", value = "gpg2 --no-tty -q -d ~/.passwords/user.gpg" } }, security = { type = "STARTTLS" } }
+##send_mail = { hostname = "smtp.mail.tld", port = 587, auth = { type = "auto", username = "user", password = { type = "command_eval", value = "gpg2 --no-tty -q -d ~/.passwords/user.gpg" } }, security = { type = "STARTTLS" } }
 #editor_command = 'vim +/^$' # optional, by default $EDITOR is used.
 #
 #
