@@ -352,7 +352,7 @@ impl MailBackend for NotmuchDb {
                 }
                 let database = Arc::new(database.unwrap());
                 let database_lck = database.inner.read().unwrap();
-                let mut mailboxes_lck = mailboxes.read().unwrap();
+                let mailboxes_lck = mailboxes.read().unwrap();
                 let mailbox = mailboxes_lck.get(&mailbox_hash).unwrap();
                 let mut unseen_count = 0;
                 let query: Query =
@@ -401,7 +401,13 @@ impl MailBackend for NotmuchDb {
                                 ret.push(env);
                             }
                             Err(err) => {
-                                debug!("could not parse message {:?}", err);
+                                debug!("could not parse message {:?} {}", err, {
+                                    let fs_path = unsafe {
+                                        call!(lib, notmuch_message_get_filename)(message)
+                                    };
+                                    let c_str = unsafe { CStr::from_ptr(fs_path) };
+                                    String::from_utf8_lossy(c_str.to_bytes())
+                                });
                             }
                         }
                     }
@@ -793,7 +799,7 @@ struct NotmuchOp {
     index: Arc<RwLock<HashMap<EnvelopeHash, CString>>>,
     tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
     database: Arc<DbConnection>,
-    bytes: Option<String>,
+    bytes: Option<Vec<u8>>,
     lib: Arc<libloading::Library>,
 }
 
@@ -811,10 +817,10 @@ impl BackendOp for NotmuchOp {
         let fs_path = unsafe { call!(self.lib, notmuch_message_get_filename)(message) };
         let c_str = unsafe { CStr::from_ptr(fs_path) };
         let mut f = std::fs::File::open(&OsStr::from_bytes(c_str.to_bytes()))?;
-        let mut response = String::new();
-        f.read_to_string(&mut response)?;
+        let mut response = Vec::new();
+        f.read_to_end(&mut response)?;
         self.bytes = Some(response);
-        let ret = Ok(self.bytes.as_ref().unwrap().as_bytes().to_vec());
+        let ret = Ok(self.bytes.as_ref().unwrap().to_vec());
         Ok(Box::pin(async move { ret }))
     }
 
@@ -1027,11 +1033,11 @@ fn notmuch_message_into_envelope(
     database: Arc<DbConnection>,
     message: *mut notmuch_message_t,
 ) -> Result<Envelope> {
-    let mut response = String::new();
+    let mut response = Vec::new();
     let fs_path = unsafe { call!(lib, notmuch_message_get_filename)(message) };
     let c_str = unsafe { CStr::from_ptr(fs_path) };
     let mut f = std::fs::File::open(&OsStr::from_bytes(c_str.to_bytes()))?;
-    f.read_to_string(&mut response)?;
+    f.read_to_end(&mut response)?;
     let msg_id = unsafe { call!(lib, notmuch_message_get_message_id)(message) };
     let env_hash = {
         let c_str = unsafe { CStr::from_ptr(msg_id) };
