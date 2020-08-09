@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use crate::backends::MailboxHash;
+use crate::backends::{BackendMailbox, MailboxHash};
 use crate::connections::{lookup_ipv4, Connection};
 use crate::email::parser::BytesExt;
 use crate::error::*;
@@ -61,7 +61,6 @@ pub struct NntpStream {
 pub enum MailboxSelection {
     None,
     Select(MailboxHash),
-    Examine(MailboxHash),
 }
 
 impl MailboxSelection {
@@ -371,6 +370,29 @@ impl NntpStream {
             Ok(())
         }
     }
+
+    pub async fn send_multiline_data_block(&mut self, data: &str) -> Result<()> {
+        if let Err(err) = try_await(async move {
+            for l in data.lines() {
+                if l.starts_with('.') {
+                    self.stream.write_all(b".").await?;
+                }
+                self.stream.write_all(l.as_bytes()).await?;
+                self.stream.write_all(b"\r\n").await?;
+            }
+            self.stream.write_all(b".\r\n").await?;
+            self.stream.flush().await?;
+            debug!("sent data block {} bytes", data.len());
+            Ok(())
+        })
+        .await
+        {
+            debug!("stream send_multiline_data_block err {:?}", err);
+            Err(err.set_err_kind(crate::error::ErrorKind::Network))
+        } else {
+            Ok(())
+        }
+    }
 }
 
 impl NntpConnection {
@@ -463,13 +485,51 @@ impl NntpConnection {
             self.uid_store.refresh_events.lock().unwrap().push(ev);
         }
     }
+
+    pub async fn select_group(
+        &mut self,
+        mailbox_hash: MailboxHash,
+        force: bool,
+        res: &mut String,
+    ) -> Result<()> {
+        if !force {
+            match self.stream.as_ref()?.current_mailbox {
+                MailboxSelection::Select(m) if m == mailbox_hash => return Ok(()),
+                _ => {}
+            }
+        }
+        let path = self.uid_store.mailboxes.lock().await[&mailbox_hash]
+            .name()
+            .to_string();
+        self.send_command(format!("GROUP {}", path).as_bytes())
+            .await?;
+        self.read_response(res, false, command_to_replycodes("GROUP"))
+            .await
+            .chain_err_summary(|| {
+                format!(
+                    "{} Could not select newsgroup {}: expected GROUP response but got: {}",
+                    &self.uid_store.account_name, path, res
+                )
+            })?;
+        self.stream.as_mut()?.current_mailbox = MailboxSelection::Select(mailbox_hash);
+        Ok(())
+    }
+
+    pub async fn send_multiline_data_block(&mut self, message: &str) -> Result<()> {
+        self.stream
+            .as_mut()?
+            .send_multiline_data_block(message)
+            .await
+    }
 }
 
-fn command_to_replycodes(c: &str) -> &'static [&'static str] {
+pub fn command_to_replycodes(c: &str) -> &'static [&'static str] {
     if c.starts_with("OVER") {
         &["224 "]
     } else if c.starts_with("LIST") {
         &["215 "]
+    } else if c.starts_with("POST") {
+        &["340 "]
     } else if c.starts_with("STARTTLS") {
         &["382 "]
     } else if c.starts_with("GROUP") {
