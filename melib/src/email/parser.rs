@@ -28,7 +28,7 @@ use nom::{
     error::ErrorKind,
     multi::{many0, many1, separated_list, separated_nonempty_list},
     number::complete::le_u8,
-    sequence::{delimited, preceded, separated_pair, terminated},
+    sequence::{delimited, pair, preceded, separated_pair, terminated},
 };
 use std::borrow::Cow;
 
@@ -222,11 +222,14 @@ impl<'a, P: for<'r> FnMut(&'r u8) -> bool> BytesIterExt for std::slice::Split<'a
 
 //fn parser(input: I) -> IResult<I, O, E>;
 pub fn mail(input: &[u8]) -> Result<(Vec<(&[u8], &[u8])>, &[u8])> {
-    let (rest, result) = separated_pair(
-        headers::headers,
-        alt((tag(b"\n"), tag(b"\r\n"))),
-        take_while(|_| true),
-    )(input)
+    let (rest, result) = alt((
+        separated_pair(
+            headers::headers,
+            alt((tag(b"\n"), tag(b"\r\n"))),
+            take_while(|_| true),
+        ),
+        pair(headers::headers, generic::eof),
+    ))(input)
     .chain_err_summary(|| "Could not parse mail")?;
 
     if !rest.is_empty() {
@@ -376,6 +379,14 @@ pub mod generic {
                     None
                 }
             }
+        }
+    }
+
+    pub fn eof(input: &[u8]) -> IResult<&[u8], &[u8]> {
+        if input.is_empty() {
+            Ok((input, input))
+        } else {
+            Err(nom::Err::Error((input, "expected EOF").into()))
         }
     }
 }
@@ -645,11 +656,14 @@ pub mod attachments {
     use crate::email::address::*;
     use crate::email::attachment_types::{ContentDisposition, ContentDispositionKind};
     pub fn attachment(input: &[u8]) -> IResult<&[u8], (std::vec::Vec<(&[u8], &[u8])>, &[u8])> {
-        separated_pair(
-            many0(headers::header),
-            alt((tag(b"\n"), tag(b"\r\n"))),
-            take_while(|_| true),
-        )(input)
+        alt((
+            separated_pair(
+                many0(headers::header),
+                alt((tag(b"\n"), tag(b"\r\n"))),
+                take_while(|_| true),
+            ),
+            pair(headers::headers, generic::eof),
+        ))(input)
     }
 
     pub fn multipart_parts<'a>(
@@ -703,10 +717,17 @@ pub mod attachments {
                         (input, "multipart_parts(): malformed boundary").into(),
                     ));
                 }
-                ret.push(StrBuilder {
-                    offset,
-                    length: end - 2,
-                });
+                if input[..end - 2].ends_with(b"\r\n") {
+                    ret.push(StrBuilder {
+                        offset,
+                        length: end - 4,
+                    });
+                } else {
+                    ret.push(StrBuilder {
+                        offset,
+                        length: end - 3,
+                    });
+                }
                 offset += end + boundary.len();
                 input = &input[end + boundary.len()..];
                 if input.len() < 2 || input[0] != b'\n' || &input[0..2] == b"--" {
@@ -769,7 +790,11 @@ pub mod attachments {
                     if &input[end - 2..end] != b"--" {
                         return Err(nom::Err::Error((input, "parts_f(): found EOF").into()));
                     }
-                    ret.push(&input[0..end - 2]);
+                    if input[..end - 2].ends_with(b"\r\n") {
+                        ret.push(&input[..end - 4]);
+                    } else {
+                        ret.push(&input[..end - 3]);
+                    }
                     input = &input[end + boundary.len()..];
                     if input.len() < 2
                         || (input[0] != b'\n' && &input[0..2] != b"\r\n")
