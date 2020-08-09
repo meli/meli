@@ -752,3 +752,20 @@ fn test_jmap_query() {
     );
     assert_eq!(*request_no.lock().unwrap(), 1);
 }
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailSet {
+    #[serde(flatten)]
+    pub set_call: Set<EmailObject>,
+}
+
+impl Method<EmailObject> for EmailSet {
+    const NAME: &'static str = "Email/set";
+}
+
+impl EmailSet {
+    pub fn new(set_call: Set<EmailObject>) -> Self {
+        EmailSet { set_call }
+    }
+}

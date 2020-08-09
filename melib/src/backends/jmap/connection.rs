@@ -31,6 +31,8 @@ pub struct JmapConnection {
     pub server_conf: JmapServerConf,
     pub account_id: Arc<Mutex<String>>,
     pub method_call_states: Arc<Mutex<HashMap<&'static str, String>>>,
+    pub refresh_events: Arc<Mutex<Vec<RefreshEvent>>>,
+    pub sender: Arc<Mutex<Option<RefreshEventConsumer>>>,
 }
 
 impl JmapConnection {
@@ -55,6 +57,8 @@ impl JmapConnection {
             server_conf,
             account_id: Arc::new(Mutex::new(String::new())),
             method_call_states: Arc::new(Mutex::new(Default::default())),
+            refresh_events: Arc::new(Mutex::new(Default::default())),
+            sender: Arc::new(Mutex::new(Default::default())),
         })
     }
 
@@ -109,5 +113,16 @@ impl JmapConnection {
 
     pub fn mail_account_id(&self) -> &Id {
         &self.session.primary_accounts["urn:ietf:params:jmap:mail"]
+    }
+
+    pub fn add_refresh_event(&self, event: RefreshEvent) {
+        if let Some(ref sender) = self.sender.lock().unwrap().as_ref() {
+            for event in self.refresh_events.lock().unwrap().drain(..) {
+                sender.send(event);
+            }
+            sender.send(event);
+        } else {
+            self.refresh_events.lock().unwrap().push(event);
+        }
     }
 }

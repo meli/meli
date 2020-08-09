@@ -357,6 +357,15 @@ pub struct ResultField<M: Method<OBJ>, OBJ: Object> {
     pub _ph: PhantomData<fn() -> (OBJ, M)>,
 }
 
+impl<M: Method<OBJ>, OBJ: Object> ResultField<M, OBJ> {
+    pub fn new(field: &'static str) -> Self {
+        ResultField {
+            field,
+            _ph: PhantomData,
+        }
+    }
+}
+
 // error[E0723]: trait bounds other than `Sized` on const fn parameters are unstable
 //    --> melib/src/backends/jmap/rfc8620.rs:626:6
 //     |
@@ -483,6 +492,270 @@ impl<OBJ: Object> ChangesResponse<OBJ> {
     _impl!(get_mut  created_mut, created: Vec<String>);
     _impl!(get_mut  updated_mut, updated: Vec<String>);
     _impl!(get_mut  destroyed_mut, destroyed: Vec<String>);
+}
+
+///#`set`
+///
+///Modifying the state of Foo objects on the server is done via the
+///"Foo/set" method.  This encompasses creating, updating, and
+///destroying Foo records.  This allows the server to sort out ordering
+///and dependencies that may exist if doing multiple operations at once
+///(for example, to ensure there is always a minimum number of a certain
+///record type).
+#[derive(Deserialize, Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct Set<OBJ: Object>
+where
+    OBJ: std::fmt::Debug + Serialize,
+{
+    #[serde(skip_serializing_if = "String::is_empty")]
+    ///o  accountId: "Id"
+    ///
+    ///   The id of the account to use.
+    pub account_id: String,
+    ///o  ifInState: "String|null"
+    ///
+    ///   This is a state string as returned by the "Foo/get" method
+    ///   (representing the state of all objects of this type in the
+    ///   account).  If supplied, the string must match the current state;
+    ///   otherwise, the method will be aborted and a "stateMismatch" error
+    ///   returned.  If null, any changes will be applied to the current
+    ///   state.
+    pub if_in_state: Option<String>,
+    ///o  create: "Id[Foo]|null"
+    ///
+    ///   A map of a *creation id* (a temporary id set by the client) to Foo
+    ///   objects, or null if no objects are to be created.
+    ///
+    ///   The Foo object type definition may define default values for
+    ///   properties.  Any such property may be omitted by the client.
+    ///
+    ///   The client MUST omit any properties that may only be set by the
+    ///   server (for example, the "id" property on most object types).
+    ///
+    pub create: Option<HashMap<Id, OBJ>>,
+    ///o  update: "Id[PatchObject]|null"
+    ///
+    ///   A map of an id to a Patch object to apply to the current Foo
+    ///   object with that id, or null if no objects are to be updated.
+    ///
+    ///   A *PatchObject* is of type "String[*]" and represents an unordered
+    ///   set of patches.  The keys are a path in JSON Pointer format
+    ///   [RFC6901], with an implicit leading "/" (i.e., prefix each key
+    ///   with "/" before applying the JSON Pointer evaluation algorithm).
+    ///
+    ///   All paths MUST also conform to the following restrictions; if
+    ///   there is any violation, the update MUST be rejected with an
+    ///   "invalidPatch" error:
+    ///   *  The pointer MUST NOT reference inside an array (i.e., you MUST
+    ///      NOT insert/delete from an array; the array MUST be replaced in
+    ///      its entirety instead).
+    ///
+    ///   *  All parts prior to the last (i.e., the value after the final
+    ///      slash) MUST already exist on the object being patched.
+    ///
+    ///   *  There MUST NOT be two patches in the PatchObject where the
+    ///      pointer of one is the prefix of the pointer of the other, e.g.,
+    ///      "alerts/1/offset" and "alerts".
+    ///
+    ///   The value associated with each pointer determines how to apply
+    ///   that patch:
+    ///
+    ///   *  If null, set to the default value if specified for this
+    ///      property; otherwise, remove the property from the patched
+    ///      object.  If the key is not present in the parent, this a no-op.
+    ///
+    ///   *  Anything else: The value to set for this property (this may be
+    ///      a replacement or addition to the object being patched).
+    ///
+    ///   Any server-set properties MAY be included in the patch if their
+    ///   value is identical to the current server value (before applying
+    ///   the patches to the object).  Otherwise, the update MUST be
+    ///   rejected with an "invalidProperties" SetError.
+    ///
+    ///   This patch definition is designed such that an entire Foo object
+    ///   is also a valid PatchObject.  The client may choose to optimise
+    ///   network usage by just sending the diff or may send the whole
+    ///   object; the server processes it the same either way.
+    pub update: Option<HashMap<Id, Value>>,
+    ///o  destroy: "Id[]|null"
+    ///
+    ///   A list of ids for Foo objects to permanently delete, or null if no
+    ///   objects are to be destroyed.
+    pub destroy: Option<Vec<Id>>,
+}
+
+impl<OBJ: Object> Set<OBJ>
+where
+    OBJ: std::fmt::Debug + Serialize,
+{
+    pub fn new() -> Self {
+        Self {
+            account_id: String::new(),
+            if_in_state: None,
+            create: None,
+            update: None,
+            destroy: None,
+        }
+    }
+    _impl!(account_id: String);
+    _impl!(
+        ///o  ifInState: "String|null"
+        ///
+        ///   This is a state string as returned by the "Foo/get" method
+        ///   (representing the state of all objects of this type in the
+        ///   account).  If supplied, the string must match the current state;
+        ///   otherwise, the method will be aborted and a "stateMismatch" error
+        ///   returned.  If null, any changes will be applied to the current
+        ///   state.
+        if_in_state: Option<String>
+    );
+    _impl!(update: Option<HashMap<Id, Value>>);
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct SetResponse<OBJ: Object> {
+    ///o  accountId: "Id"
+    ///
+    ///   The id of the account used for the call.
+    pub account_id: String,
+    ///o  oldState: "String|null"
+    ///
+    ///   The state string that would have been returned by "Foo/get" before
+    ///   making the requested changes, or null if the server doesn't know
+    ///   what the previous state string was.
+    pub old_state: String,
+    ///o  newState: "String"
+    ///
+    ///   The state string that will now be returned by "Foo/get".
+    pub new_state: String,
+    ///o  created: "Id[Foo]|null"
+    ///
+    ///   A map of the creation id to an object containing any properties of
+    ///   the created Foo object that were not sent by the client.  This
+    ///   includes all server-set properties (such as the "id" in most
+    ///   object types) and any properties that were omitted by the client
+    ///   and thus set to a default by the server.
+    ///
+    ///   This argument is null if no Foo objects were successfully created.
+    pub created: Option<HashMap<Id, OBJ>>,
+    ///o  updated: "Id[Foo|null]|null"
+    ///
+    ///   The keys in this map are the ids of all Foos that were
+    ///   successfully updated.
+    ///
+    ///   The value for each id is a Foo object containing any property that
+    ///   changed in a way *not* explicitly requested by the PatchObject
+    ///   sent to the server, or null if none.  This lets the client know of
+    ///   any changes to server-set or computed properties.
+    ///
+    ///   This argument is null if no Foo objects were successfully updated.
+    pub updated: Option<HashMap<Id, Option<OBJ>>>,
+    ///o  destroyed: "Id[]|null"
+    ///
+    ///   A list of Foo ids for records that were successfully destroyed, or
+    ///   null if none.
+    pub destroyed: Option<Vec<Id>>,
+    ///o  notCreated: "Id[SetError]|null"
+    ///
+    ///   A map of the creation id to a SetError object for each record that
+    ///   failed to be created, or null if all successful.
+    pub not_created: Option<Vec<SetError>>,
+    ///o  notUpdated: "Id[SetError]|null"
+    ///
+    ///   A map of the Foo id to a SetError object for each record that
+    ///   failed to be updated, or null if all successful.
+    pub not_updated: Option<Vec<SetError>>,
+    ///o  notDestroyed: "Id[SetError]|null"
+    ///
+    ///   A map of the Foo id to a SetError object for each record that
+    ///   failed to be destroyed, or null if all successful.//
+    pub not_destroyed: Option<Vec<SetError>>,
+}
+
+impl<OBJ: Object + DeserializeOwned> std::convert::TryFrom<&RawValue> for SetResponse<OBJ> {
+    type Error = crate::error::MeliError;
+    fn try_from(t: &RawValue) -> Result<SetResponse<OBJ>, crate::error::MeliError> {
+        let res: (String, SetResponse<OBJ>, String) = serde_json::from_str(t.get())?;
+        assert_eq!(&res.0, &format!("{}/set", OBJ::NAME));
+        Ok(res.1)
+    }
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+#[serde(tag = "type", content = "description")]
+pub enum SetError {
+    ///(create; update; destroy).  The create/update/destroy would violate an ACL or other permissions policy.
+    Forbidden(Option<String>),
+    ///(create; update).  The create would exceed a server- defined limit on the number or total size of objects of this type.
+    OverQuota(Option<String>),
+
+    ///(create; update).  The create/update would result in an object that exceeds a server-defined limit for the maximum size of a single object of this type.
+    TooLarge(Option<String>),
+
+    ///(create).  Too many objects of this type have been created recently, and a server-defined rate limit has been reached.  It may work if tried again later.
+    RateLimit(Option<String>),
+
+    ///(update; destroy).  The id given to update/destroy cannot be found.
+    NotFound(Option<String>),
+
+    ///(update).  The PatchObject given to update the record was not a valid patch (see the patch description).
+    InvalidPatch(Option<String>),
+
+    ///(update).  The client requested that an object be both updated and destroyed in the same /set request, and the server has decided to therefore ignore the update.
+    WillDestroy(Option<String>),
+    ///(create; update).  The record given is invalid in some way.
+    InvalidProperties {
+        description: Option<String>,
+        properties: Vec<String>,
+    },
+    ///(create; destroy).  This is a singleton type, so you cannot create another one or destroy the existing one.
+    Singleton(Option<String>),
+    RequestTooLarge(Option<String>),
+    StateMismatch(Option<String>),
+}
+
+impl core::fmt::Display for SetError {
+    fn fmt(&self, fmt: &mut core::fmt::Formatter) -> core::fmt::Result {
+        use SetError::*;
+        match self {
+            Forbidden(Some(description)) => write!(fmt, "Forbidden: {}", description),
+            Forbidden(None) => write!(fmt, "Forbidden"),
+            OverQuota(Some(description)) => write!(fmt, "OverQuota: {}", description),
+            OverQuota(None) => write!(fmt, "OverQuota"),
+            TooLarge(Some(description)) => write!(fmt, "TooLarge: {}", description),
+            TooLarge(None) => write!(fmt, "TooLarge"),
+            RateLimit(Some(description)) => write!(fmt, "RateLimit: {}", description),
+            RateLimit(None) => write!(fmt, "RateLimit"),
+            NotFound(Some(description)) => write!(fmt, "NotFound: {}", description),
+            NotFound(None) => write!(fmt, "NotFound"),
+            InvalidPatch(Some(description)) => write!(fmt, "InvalidPatch: {}", description),
+            InvalidPatch(None) => write!(fmt, "InvalidPatch"),
+            WillDestroy(Some(description)) => write!(fmt, "WillDestroy: {}", description),
+            WillDestroy(None) => write!(fmt, "WillDestroy"),
+            InvalidProperties {
+                description: Some(description),
+                properties,
+            } => write!(
+                fmt,
+                "InvalidProperties: {}, {}",
+                description,
+                properties.join(",")
+            ),
+            InvalidProperties {
+                description: None,
+                properties,
+            } => write!(fmt, "InvalidProperties: {}", properties.join(",")),
+            Singleton(Some(description)) => write!(fmt, "Singleton: {}", description),
+            Singleton(None) => write!(fmt, "Singleton"),
+            RequestTooLarge(Some(description)) => write!(fmt, "RequestTooLarge: {}", description),
+            RequestTooLarge(None) => write!(fmt, "RequestTooLarge"),
+            StateMismatch(Some(description)) => write!(fmt, "StateMismatch: {}", description),
+            StateMismatch(None) => write!(fmt, "StateMismatch"),
+        }
+    }
 }
 
 pub fn download_request_format(

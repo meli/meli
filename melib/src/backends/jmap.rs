@@ -27,6 +27,7 @@ use crate::error::{MeliError, Result};
 use futures::lock::Mutex as FutureMutex;
 use isahc::prelude::HttpClient;
 use isahc::ResponseExt;
+use serde_json::Value;
 use std::collections::{BTreeMap, HashMap};
 use std::convert::TryFrom;
 use std::str::FromStr;
@@ -183,6 +184,7 @@ pub struct Store {
 #[derive(Debug)]
 pub struct JmapType {
     account_name: String,
+    account_hash: AccountHash,
     online: Arc<FutureMutex<(Instant, Result<()>)>>,
     is_subscribed: Arc<IsSubscribedFn>,
     server_conf: JmapServerConf,
@@ -240,8 +242,12 @@ impl MailBackend for JmapType {
         }))
     }
 
-    fn watch_async(&self, _sender: RefreshEventConsumer) -> ResultFuture<()> {
-        Err(MeliError::from("JMAP watch for updates is unimplemented"))
+    fn watch_async(&self, sender: RefreshEventConsumer) -> ResultFuture<()> {
+        let conn = self.connection.clone();
+        Ok(Box::pin(async move {
+            *conn.lock().await.sender.lock().unwrap() = Some(sender);
+            Err(MeliError::from("JMAP watch for updates is unimplemented"))
+        }))
     }
 
     fn mailboxes_async(&self) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
@@ -364,6 +370,164 @@ impl MailBackend for JmapType {
     fn mailboxes(&self) -> Result<HashMap<MailboxHash, Mailbox>> {
         Err(MeliError::new("Unimplemented."))
     }
+
+    fn rename_mailbox(
+        &mut self,
+        _mailbox_hash: MailboxHash,
+        _new_path: String,
+    ) -> ResultFuture<Mailbox> {
+        Err(MeliError::new("Unimplemented."))
+    }
+
+    fn create_mailbox(
+        &mut self,
+        _path: String,
+    ) -> ResultFuture<(MailboxHash, HashMap<MailboxHash, Mailbox>)> {
+        Err(MeliError::new("Unimplemented."))
+    }
+
+    fn copy_messages(
+        &mut self,
+        _env_hashes: EnvelopeHashBatch,
+        _source_mailbox_hash: MailboxHash,
+        _destination_mailbox_hash: MailboxHash,
+        _move_: bool,
+        _destination_flags: Option<Flag>,
+    ) -> ResultFuture<()> {
+        Err(MeliError::new("Unimplemented."))
+    }
+
+    fn set_flags(
+        &mut self,
+        env_hashes: EnvelopeHashBatch,
+        mailbox_hash: MailboxHash,
+        flags: SmallVec<[(std::result::Result<Flag, String>, bool); 8]>,
+    ) -> ResultFuture<()> {
+        let mailboxes = self.mailboxes.clone();
+        let store = self.store.clone();
+        let account_hash = self.account_hash;
+        let tag_index = self.tag_index.clone();
+        let connection = self.connection.clone();
+        Ok(Box::pin(async move {
+            let mailbox_id = mailboxes.read().unwrap()[&mailbox_hash].id.clone();
+            let mut update_map: HashMap<String, Value> = HashMap::default();
+            let mut ids: Vec<Id> = Vec::with_capacity(env_hashes.rest.len() + 1);
+            let mut id_map: HashMap<Id, EnvelopeHash> = HashMap::default();
+            let mut update_keywords: HashMap<String, Value> = HashMap::default();
+            for (flag, value) in flags.iter() {
+                match flag {
+                    Ok(f) => {
+                        update_keywords.insert(
+                            format!(
+                                "keywords/{}",
+                                match *f {
+                                    Flag::DRAFT => "$draft",
+                                    Flag::FLAGGED => "$flagged",
+                                    Flag::SEEN => "$seen",
+                                    Flag::REPLIED => "$answered",
+                                    Flag::TRASHED => "$junk",
+                                    Flag::PASSED => "$passed",
+                                    _ => continue, //FIXME
+                                }
+                            ),
+                            if *value {
+                                serde_json::json!(true)
+                            } else {
+                                serde_json::json!(null)
+                            },
+                        );
+                    }
+                    Err(t) => {
+                        update_keywords.insert(
+                            format!("keywords/{}", t),
+                            if *value {
+                                serde_json::json!(true)
+                            } else {
+                                serde_json::json!(null)
+                            },
+                        );
+                    }
+                }
+            }
+            {
+                let store_lck = store.read().unwrap();
+                for hash in env_hashes.iter() {
+                    if let Some(id) = store_lck.id_store.get(&hash) {
+                        ids.push(id.clone());
+                        id_map.insert(id.clone(), hash);
+                        update_map.insert(id.clone(), serde_json::json!(update_keywords.clone()));
+                    }
+                }
+            }
+            let conn = connection.lock().await;
+
+            let email_set_call: EmailSet = EmailSet::new(
+                Set::<EmailObject>::new()
+                    .account_id(conn.mail_account_id().to_string())
+                    .update(Some(update_map)),
+            );
+
+            let mut req = Request::new(conn.request_no.clone());
+            let prev_seq = req.add_call(&email_set_call);
+            let email_call: EmailGet = EmailGet::new(
+                Get::new()
+                    .ids(Some(JmapArgument::Value(ids)))
+                    .account_id(conn.mail_account_id().to_string())
+                    .properties(Some(vec!["keywords".to_string()])),
+            );
+
+            req.add_call(&email_call);
+            //debug!(serde_json::to_string(&req)?);
+            let mut res = conn
+                .client
+                .post_async(&conn.session.api_url, serde_json::to_string(&req)?)
+                .await?;
+
+            let res_text = res.text_async().await?;
+            /*
+             *{"methodResponses":[["Email/set",{"notUpdated":null,"notDestroyed":null,"oldState":"86","newState":"87","accountId":"u148940c7","updated":{"M045926eed54b11423918f392":{"id":"M045926eed54b11423918f392"}},"created":null,"destroyed":null,"notCreated":null},"m3"]],"sessionState":"cyrus-0;p-5;vfs-0"}
+             */
+            //debug!("res_text = {}", &res_text);
+            let mut v: MethodResponse = serde_json::from_str(&res_text).unwrap();
+            *conn.online_status.lock().await = (std::time::Instant::now(), Ok(()));
+            let m = SetResponse::<EmailObject>::try_from(v.method_responses.remove(0))?;
+            if let Some(ids) = m.not_updated {
+                return Err(MeliError::new(
+                    ids.into_iter()
+                        .map(|err| err.to_string())
+                        .collect::<Vec<String>>()
+                        .join(","),
+                ));
+            }
+
+            let mut tag_index_lck = tag_index.write().unwrap();
+            for (flag, value) in flags.iter() {
+                match flag {
+                    Ok(f) => {}
+                    Err(t) => {
+                        if *value {
+                            tag_index_lck.insert(tag_hash!(t), t.clone());
+                        }
+                    }
+                }
+            }
+            let e = GetResponse::<EmailObject>::try_from(v.method_responses.pop().unwrap())?;
+            let GetResponse::<EmailObject> { list, state, .. } = e;
+            //debug!(&list);
+            for envobj in list {
+                let env_hash = id_map[&envobj.id];
+                conn.add_refresh_event(RefreshEvent {
+                    account_hash,
+                    mailbox_hash,
+                    kind: RefreshEventKind::NewFlags(
+                        env_hash,
+                        protocol::keywords_to_flags(envobj.keywords().keys().cloned().collect()),
+                    ),
+                });
+            }
+            Ok(())
+        }))
+    }
 }
 
 impl JmapType {
@@ -377,6 +541,14 @@ impl JmapType {
         )));
         let server_conf = JmapServerConf::new(s)?;
 
+        let account_hash = {
+            use std::collections::hash_map::DefaultHasher;
+            use std::hash::Hasher;
+            let mut hasher = DefaultHasher::new();
+            hasher.write(s.name.as_bytes());
+            hasher.finish()
+        };
+
         Ok(Box::new(JmapType {
             connection: Arc::new(FutureMutex::new(JmapConnection::new(
                 &server_conf,
@@ -386,6 +558,7 @@ impl JmapType {
             tag_index: Arc::new(RwLock::new(Default::default())),
             mailboxes: Arc::new(RwLock::new(HashMap::default())),
             account_name: s.name.clone(),
+            account_hash,
             online,
             is_subscribed: Arc::new(IsSubscribedFn(is_subscribed)),
             server_conf,

@@ -338,3 +338,27 @@ pub async fn fetch(
     }
     Ok(ret)
 }
+
+pub fn keywords_to_flags(keywords: Vec<String>) -> (Flag, Vec<String>) {
+    let mut f = Flag::default();
+    let mut tags = vec![];
+    for k in keywords {
+        match k.as_str() {
+            "$draft" => {
+                f |= Flag::DRAFT;
+            }
+            "$seen" => {
+                f |= Flag::SEEN;
+            }
+            "$flagged" => {
+                f |= Flag::FLAGGED;
+            }
+            "$answered" => {
+                f |= Flag::REPLIED;
+            }
+            "$junk" | "$notjunk" => { /* ignore */ }
+            _ => tags.push(k),
+        }
+    }
+    (f, tags)
+}
