@@ -336,3 +336,52 @@ impl From<&[u8]> for ContentTransferEncoding {
         }
     }
 }
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ContentDisposition {
+    pub kind: ContentDispositionKind,
+    pub filename: Option<String>,
+    pub creation_date: Option<String>,
+    pub modification_date: Option<String>,
+    pub read_date: Option<String>,
+    pub size: Option<String>,
+    pub parameter: Vec<String>,
+}
+
+#[derive(Clone, Debug, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ContentDispositionKind {
+    Inline,
+    Attachment,
+}
+
+impl ContentDispositionKind {
+    pub fn is_inline(&self) -> bool {
+        *self == ContentDispositionKind::Inline
+    }
+
+    pub fn is_attachment(&self) -> bool {
+        *self == ContentDispositionKind::Attachment
+    }
+}
+
+impl Default for ContentDispositionKind {
+    fn default() -> Self {
+        ContentDispositionKind::Inline
+    }
+}
+
+impl Display for ContentDispositionKind {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        match *self {
+            ContentDispositionKind::Inline => write!(f, "inline"),
+            ContentDispositionKind::Attachment => write!(f, "attachment"),
+        }
+    }
+}
+impl From<&[u8]> for ContentDisposition {
+    fn from(val: &[u8]) -> ContentDisposition {
+        crate::email::parser::attachments::content_disposition(val)
+            .map(|(_, v)| v)
+            .unwrap_or_default()
+    }
+}

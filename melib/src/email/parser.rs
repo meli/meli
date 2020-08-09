@@ -643,6 +643,7 @@ pub mod headers {
 pub mod attachments {
     use super::*;
     use crate::email::address::*;
+    use crate::email::attachment_types::{ContentDisposition, ContentDispositionKind};
     pub fn attachment(input: &[u8]) -> IResult<&[u8], (std::vec::Vec<(&[u8], &[u8])>, &[u8])> {
         separated_pair(
             many0(headers::header),
@@ -810,7 +811,7 @@ pub mod attachments {
 
     /* Caution: values should be passed through phrase() */
     pub fn content_type_parameter(input: &[u8]) -> IResult<&[u8], (&[u8], &[u8])> {
-        let (input, _) = tag(";")(input)?;
+        let (input, _) = tag(";")(input.ltrim())?;
         let (input, name) = terminated(take_until("="), tag("="))(input.ltrim())?;
         let (input, value) = alt((
             delimited(tag("\""), take_until("\""), tag("\"")),
@@ -821,7 +822,7 @@ pub mod attachments {
     }
 
     pub fn content_type(input: &[u8]) -> IResult<&[u8], (&[u8], &[u8], Vec<(&[u8], &[u8])>)> {
-        let (input, _type) = take_until("/")(input)?;
+        let (input, _type) = take_until("/")(input.ltrim())?;
         let (input, _) = tag("/")(input)?;
         let (input, _subtype) = is_not(";")(input)?;
         let (input, parameters) = many0(content_type_parameter)(input)?;
@@ -837,6 +838,56 @@ pub mod attachments {
                } )
                ));
         */
+    }
+
+    /* Caution: values should be passed through phrase() */
+    pub fn content_disposition_parameter(input: &[u8]) -> IResult<&[u8], (&[u8], &[u8])> {
+        let (input, _) = tag(";")(input.ltrim())?;
+        let (input, name) = terminated(take_until("="), tag("="))(input.ltrim())?;
+        let (input, value) = alt((
+            delimited(tag("\""), take_until("\""), tag("\"")),
+            is_not(";"),
+        ))(input.ltrim())?;
+
+        Ok((input, (name, value)))
+    }
+
+    pub fn content_disposition(input: &[u8]) -> IResult<&[u8], ContentDisposition> {
+        let (input, kind) = alt((take_until(";"), take_while(|_| true)))(input.trim())?;
+        let mut ret = ContentDisposition {
+            kind: if kind.trim().eq_ignore_ascii_case(b"attachment") {
+                ContentDispositionKind::Attachment
+            } else {
+                ContentDispositionKind::Inline
+            },
+            ..ContentDisposition::default()
+        };
+        if input.is_empty() {
+            return Ok((input, ret));
+        }
+        let (input, parameters) = many0(content_disposition_parameter)(input.ltrim())?;
+        for (k, v) in parameters {
+            if k.eq_ignore_ascii_case(b"filename") {
+                ret.filename =
+                    Some(String::from_utf8_lossy(&super::encodings::phrase(v, false)?.1).into());
+            } else if k.eq_ignore_ascii_case(b"size") {
+                ret.size =
+                    Some(String::from_utf8_lossy(&super::encodings::phrase(v, false)?.1).into());
+            } else if k.eq_ignore_ascii_case(b"creation-date") {
+                ret.creation_date =
+                    Some(String::from_utf8_lossy(&super::encodings::phrase(v, false)?.1).into());
+            } else if k.eq_ignore_ascii_case(b"modification-date") {
+                ret.modification_date =
+                    Some(String::from_utf8_lossy(&super::encodings::phrase(v, false)?.1).into());
+            } else if k.eq_ignore_ascii_case(b"read-date") {
+                ret.read_date =
+                    Some(String::from_utf8_lossy(&super::encodings::phrase(v, false)?.1).into());
+            } else {
+                ret.parameter
+                    .push(String::from_utf8_lossy(&super::encodings::phrase(v, false)?.1).into());
+            }
+        }
+        Ok((input, ret))
     }
 }
 

@@ -32,6 +32,7 @@ pub use crate::email::attachment_types::*;
 pub struct AttachmentBuilder {
     pub content_type: ContentType,
     pub content_transfer_encoding: ContentTransferEncoding,
+    pub content_disposition: ContentDisposition,
 
     pub raw: Vec<u8>,
     pub body: StrBuilder,
@@ -50,6 +51,7 @@ impl AttachmentBuilder {
                 return AttachmentBuilder {
                     content_type: Default::default(),
                     content_transfer_encoding: ContentTransferEncoding::_7Bit,
+                    content_disposition: ContentDisposition::default(),
                     raw: content.to_vec(),
                     body: StrBuilder {
                         length: content.len(),
@@ -74,6 +76,8 @@ impl AttachmentBuilder {
                 builder.set_content_type_from_bytes(value);
             } else if name.eq_ignore_ascii_case(b"content-transfer-encoding") {
                 builder.set_content_transfer_encoding(ContentTransferEncoding::from(value));
+            } else if name.eq_ignore_ascii_case(b"content-disposition") {
+                builder.set_content_disposition(ContentDisposition::from(value));
             }
         }
         builder
@@ -114,6 +118,15 @@ impl AttachmentBuilder {
     pub fn set_content_transfer_encoding(&mut self, val: ContentTransferEncoding) -> &mut Self {
         self.content_transfer_encoding = val;
         self
+    }
+
+    pub fn set_content_disposition(&mut self, val: ContentDisposition) -> &mut Self {
+        self.content_disposition = val;
+        self
+    }
+
+    pub fn content_disposition(&self) -> &ContentDisposition {
+        &self.content_disposition
     }
 
     pub fn content_transfer_encoding(&self) -> &ContentTransferEncoding {
@@ -218,6 +231,7 @@ impl AttachmentBuilder {
         Attachment {
             content_type: self.content_type,
             content_transfer_encoding: self.content_transfer_encoding,
+            content_disposition: self.content_disposition,
             raw: self.raw,
             body: self.body,
         }
@@ -257,6 +271,8 @@ impl AttachmentBuilder {
                             builder.set_content_transfer_encoding(ContentTransferEncoding::from(
                                 value,
                             ));
+                        } else if name.eq_ignore_ascii_case(b"content-disposition") {
+                            builder.set_content_disposition(ContentDisposition::from(value));
                         }
                     }
                     vec.push(builder.build());
@@ -280,12 +296,14 @@ impl From<Attachment> for AttachmentBuilder {
     fn from(val: Attachment) -> Self {
         let Attachment {
             content_type,
+            content_disposition,
             content_transfer_encoding,
             raw,
             body,
         } = val;
         AttachmentBuilder {
             content_type,
+            content_disposition,
             content_transfer_encoding,
             raw,
             body,
@@ -298,12 +316,14 @@ impl From<AttachmentBuilder> for Attachment {
         let AttachmentBuilder {
             content_type,
             content_transfer_encoding,
+            content_disposition,
             raw,
             body,
         } = val;
         Attachment {
             content_type,
             content_transfer_encoding,
+            content_disposition,
             raw,
             body,
         }
@@ -315,6 +335,7 @@ impl From<AttachmentBuilder> for Attachment {
 pub struct Attachment {
     pub content_type: ContentType,
     pub content_transfer_encoding: ContentTransferEncoding,
+    pub content_disposition: ContentDisposition,
 
     pub raw: Vec<u8>,
     pub body: StrBuilder,
@@ -395,6 +416,7 @@ impl Attachment {
     ) -> Self {
         Attachment {
             content_type,
+            content_disposition: ContentDisposition::default(),
             content_transfer_encoding,
             body: StrBuilder {
                 length: raw.len(),
@@ -478,18 +500,22 @@ impl Attachment {
             } => match kind {
                 MultipartType::Alternative => {
                     for a in parts {
-                        if let ContentType::Text {
-                            kind: Text::Plain, ..
-                        } = a.content_type
-                        {
-                            a.get_text_recursive(text);
-                            break;
+                        if a.content_disposition.kind.is_inline() {
+                            if let ContentType::Text {
+                                kind: Text::Plain, ..
+                            } = a.content_type
+                            {
+                                a.get_text_recursive(text);
+                                break;
+                            }
                         }
                     }
                 }
                 _ => {
                     for a in parts {
-                        a.get_text_recursive(text)
+                        if a.content_disposition.kind.is_inline() {
+                            a.get_text_recursive(text);
+                        }
                     }
                 }
             },
@@ -499,7 +525,7 @@ impl Attachment {
     pub fn text(&self) -> String {
         let mut text = Vec::with_capacity(self.body.length);
         self.get_text_recursive(&mut text);
-        String::from_utf8_lossy(text.as_slice().trim()).into()
+        String::from_utf8_lossy(text.as_slice()).into()
     }
 
     pub fn mime_type(&self) -> String {
@@ -674,6 +700,25 @@ impl Attachment {
 
         ret
     }
+
+    pub fn filename(&self) -> Option<String> {
+        if self.content_disposition.kind.is_attachment() {
+            self.content_disposition.filename.clone()
+        } else {
+            None
+        }
+        .or_else(|| match &self.content_type {
+            ContentType::Text { parameters, .. } => parameters
+                .iter()
+                .find(|(h, _)| {
+                    h.eq_ignore_ascii_case(b"name") | h.eq_ignore_ascii_case(b"filename")
+                })
+                .map(|(_, v)| String::from_utf8_lossy(v).to_string()),
+            ContentType::Other { name, .. } | ContentType::OctetStream { name, .. } => name.clone(),
+            _ => None,
+        })
+        .map(|n| n.replace(|c| std::path::is_separator(c) || c.is_ascii_control(), "_"))
+    }
 }
 
 pub fn interpret_format_flowed(_t: &str) -> String {
@@ -729,7 +774,9 @@ fn decode_rec_helper<'a>(a: &'a Attachment, filter: &mut Option<Filter<'a>>) -> 
             _ => {
                 let mut vec = Vec::new();
                 for a in parts {
-                    vec.extend(decode_rec_helper(a, filter));
+                    if a.content_disposition.kind.is_inline() {
+                        vec.extend(decode_rec_helper(a, filter));
+                    }
                 }
                 vec
             }
