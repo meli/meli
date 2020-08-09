@@ -180,6 +180,7 @@ impl MailBackend for NntpType {
             supports_search: false,
             extensions: Some(extensions),
             supports_tags: false,
+            supports_submission: false,
         }
     }
 

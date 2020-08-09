@@ -202,6 +202,7 @@ impl MailBackend for JmapType {
             supports_search: true,
             extensions: None,
             supports_tags: true,
+            supports_submission: false,
         };
         CAPABILITIES
     }

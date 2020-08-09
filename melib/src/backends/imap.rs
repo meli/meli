@@ -254,6 +254,7 @@ impl MailBackend for ImapType {
             supports_search: true,
             extensions: Some(extensions),
             supports_tags: true,
+            supports_submission: false,
         }
     }
 

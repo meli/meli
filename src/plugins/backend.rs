@@ -72,6 +72,7 @@ impl MailBackend for PluginBackend {
             supports_search: false,
             extensions: None,
             supports_tags: false,
+            supports_submission: false,
         };
         CAPABILITIES
     }

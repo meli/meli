@@ -298,6 +298,7 @@ pub struct MailBackendCapabilities {
     pub extensions: Option<Vec<(String, MailBackendExtensionStatus)>>,
     pub supports_search: bool,
     pub supports_tags: bool,
+    pub supports_submission: bool,
 }
 
 #[derive(Debug, Copy, Clone)]
