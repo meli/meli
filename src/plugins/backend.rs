@@ -46,7 +46,7 @@ pub struct PluginBackend {
     plugin: Plugin,
     child: std::process::Child,
     channel: Arc<Mutex<RpcChannel>>,
-    tag_index: Option<Arc<RwLock<BTreeMap<u64, String>>>>,
+    collection: melib::Collection,
     is_online: Arc<Mutex<(std::time::Instant, Result<()>)>>,
 }
 
@@ -200,7 +200,6 @@ impl MailBackend for PluginBackend {
         Ok(Box::new(PluginOp {
             hash,
             channel: self.channel.clone(),
-            tag_index: self.tag_index.clone(),
             bytes: None,
         }))
     }
@@ -219,8 +218,8 @@ impl MailBackend for PluginBackend {
     ) -> ResultFuture<(MailboxHash, HashMap<MailboxHash, Mailbox>)> {
         Err(MeliError::new("Unimplemented."))
     }
-    fn tags(&self) -> Option<Arc<RwLock<BTreeMap<u64, String>>>> {
-        self.tag_index.clone()
+    fn collection(&self) -> melib::Collection {
+        self.collection.clone()
     }
     fn as_any(&self) -> &dyn ::std::any::Any {
         self
@@ -257,7 +256,7 @@ impl PluginBackend {
             child,
             plugin,
             channel: Arc::new(Mutex::new(channel)),
-            tag_index: None,
+            collection: Default::default(),
             is_online: Arc::new(Mutex::new((now, Err(MeliError::new("Unitialized"))))),
         }))
     }
@@ -285,7 +284,6 @@ impl PluginBackend {
 struct PluginOp {
     hash: EnvelopeHash,
     channel: Arc<Mutex<RpcChannel>>,
-    tag_index: Option<Arc<RwLock<BTreeMap<u64, String>>>>,
     bytes: Option<String>,
 }
 

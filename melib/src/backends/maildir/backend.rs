@@ -25,6 +25,7 @@ use crate::conf::AccountSettings;
 use crate::email::{Envelope, EnvelopeHash, Flag};
 use crate::error::{ErrorKind, MeliError, Result};
 use crate::shellexpand::ShellExpandTrait;
+use crate::Collection;
 use futures::prelude::Stream;
 
 extern crate notify;
@@ -109,6 +110,7 @@ pub struct MaildirType {
     mailbox_index: Arc<Mutex<HashMap<EnvelopeHash, MailboxHash>>>,
     hash_indexes: HashIndexes,
     event_consumer: BackendEventConsumer,
+    collection: Collection,
     path: PathBuf,
 }
 
@@ -1003,6 +1005,10 @@ impl MailBackend for MaildirType {
         }))
     }
 
+    fn collection(&self) -> Collection {
+        self.collection.clone()
+    }
+
     fn create_mailbox(
         &mut self,
         new_path: String,
@@ -1236,6 +1242,7 @@ impl MaildirType {
             hash_indexes: Arc::new(Mutex::new(hash_indexes)),
             mailbox_index: Default::default(),
             event_consumer,
+            collection: Default::default(),
             path: root_path,
         }))
     }

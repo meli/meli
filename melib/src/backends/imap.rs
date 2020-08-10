@@ -42,20 +42,21 @@ use crate::backends::{
     *,
 };
 
+use crate::collection::Collection;
 use crate::conf::AccountSettings;
 use crate::connections::timeout;
 use crate::email::{parser::BytesExt, *};
 use crate::error::{MeliError, Result, ResultIntoMeliError};
 use futures::lock::Mutex as FutureMutex;
 use futures::stream::Stream;
-use std::collections::{hash_map::DefaultHasher, BTreeMap};
+use std::collections::hash_map::DefaultHasher;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::convert::TryFrom;
 use std::convert::TryInto;
 use std::hash::Hasher;
 use std::pin::Pin;
 use std::str::FromStr;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
 pub type ImapNum = usize;
@@ -142,7 +143,7 @@ pub struct UIDStore {
     msn_index: Arc<Mutex<HashMap<MailboxHash, Vec<UID>>>>,
 
     byte_cache: Arc<Mutex<HashMap<UID, EnvelopeCache>>>,
-    tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
+    collection: Collection,
 
     /* Offline caching */
     uidvalidity: Arc<Mutex<HashMap<MailboxHash, UID>>>,
@@ -178,7 +179,7 @@ impl UIDStore {
             msn_index: Default::default(),
             byte_cache: Default::default(),
             mailboxes: Arc::new(FutureMutex::new(Default::default())),
-            tag_index: Arc::new(RwLock::new(Default::default())),
+            collection: Default::default(),
             is_online: Arc::new(Mutex::new((
                 SystemTime::now(),
                 Err(MeliError::new("Account is uninitialised.")),
@@ -710,7 +711,7 @@ impl MailBackend for ImapType {
                 /* Set flags/tags to true */
                 let mut set_seen = false;
                 let command = {
-                    let mut tag_lck = uid_store.tag_index.write().unwrap();
+                    let mut tag_lck = uid_store.collection.tag_index.write().unwrap();
                     let mut cmd = format!("UID STORE {}", uids[0]);
                     for uid in uids.iter().skip(1) {
                         cmd = format!("{},{}", cmd, uid);
@@ -859,16 +860,16 @@ impl MailBackend for ImapType {
         }))
     }
 
-    fn tags(&self) -> Option<Arc<RwLock<BTreeMap<u64, String>>>> {
-        Some(self.uid_store.tag_index.clone())
-    }
-
     fn as_any(&self) -> &dyn Any {
         self
     }
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
+    }
+
+    fn collection(&self) -> Collection {
+        self.uid_store.collection.clone()
     }
 
     fn create_mailbox(
@@ -1773,7 +1774,7 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
                             }
                             env.set_references(value);
                         }
-                        let mut tag_lck = uid_store.tag_index.write().unwrap();
+                        let mut tag_lck = uid_store.collection.tag_index.write().unwrap();
                         if let Some((flags, keywords)) = flags {
                             env.set_flags(*flags);
                             if !env.is_seen() {

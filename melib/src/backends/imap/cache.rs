@@ -239,7 +239,7 @@ mod sqlite3_m {
                     .entry(mailbox_hash)
                     .and_modify(|entry| *entry = uidvalidity)
                     .or_insert(uidvalidity);
-                let mut tag_lck = self.uid_store.tag_index.write().unwrap();
+                let mut tag_lck = self.uid_store.collection.tag_index.write().unwrap();
                 for f in to_str!(&flags).split('\0') {
                     let hash = tag_hash!(f);
                     //debug!("hash {} flag {}", hash, &f);

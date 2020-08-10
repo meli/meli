@@ -25,7 +25,7 @@ use smallvec::SmallVec;
 use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 pub struct EnvelopeRef<'g> {
     guard: RwLockReadGuard<'g, HashMap<EnvelopeHash, Envelope>>,
@@ -64,8 +64,9 @@ pub struct Collection {
     pub envelopes: Arc<RwLock<HashMap<EnvelopeHash, Envelope>>>,
     pub message_id_index: Arc<RwLock<HashMap<Vec<u8>, EnvelopeHash>>>,
     pub threads: Arc<RwLock<HashMap<MailboxHash, Threads>>>,
-    sent_mailbox: Arc<RwLock<Option<MailboxHash>>>,
+    pub sent_mailbox: Arc<RwLock<Option<MailboxHash>>>,
     pub mailboxes: Arc<RwLock<HashMap<MailboxHash, HashSet<EnvelopeHash>>>>,
+    pub tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
 }
 
 impl Default for Collection {
@@ -115,6 +116,7 @@ impl Collection {
 
         Collection {
             envelopes: Arc::new(RwLock::new(Default::default())),
+            tag_index: Arc::new(RwLock::new(BTreeMap::default())),
             message_id_index,
             threads,
             mailboxes,

@@ -24,6 +24,7 @@
  */
 
 use crate::backends::*;
+use crate::collection::Collection;
 use crate::conf::AccountSettings;
 use crate::email::parser::BytesExt;
 use crate::email::*;
@@ -708,6 +709,7 @@ impl<'a> Iterator for MessageIterator<'a> {
 pub struct MboxType {
     account_name: String,
     path: PathBuf,
+    collection: Collection,
     mailbox_index: Arc<Mutex<HashMap<EnvelopeHash, MailboxHash>>>,
     mailboxes: Arc<Mutex<HashMap<MailboxHash, MboxMailbox>>>,
     prefer_mbox_type: Option<MboxReader>,
@@ -1057,6 +1059,10 @@ impl MailBackend for MboxType {
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
+
+    fn collection(&self) -> Collection {
+        self.collection.clone()
+    }
 }
 
 macro_rules! get_conf_val {
@@ -1120,6 +1126,7 @@ impl MboxType {
                     )))
                 }
             },
+            collection: Collection::default(),
             mailbox_index: Default::default(),
             mailboxes: Default::default(),
         };

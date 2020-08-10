@@ -23,12 +23,13 @@ use crate::backends::*;
 use crate::conf::AccountSettings;
 use crate::email::*;
 use crate::error::{MeliError, Result};
+use crate::Collection;
 use futures::lock::Mutex as FutureMutex;
 use isahc::config::RedirectPolicy;
 use isahc::prelude::HttpClient;
 use isahc::ResponseExt;
 use serde_json::Value;
-use std::collections::{hash_map::DefaultHasher, BTreeMap, HashMap, HashSet};
+use std::collections::{hash_map::DefaultHasher, HashMap, HashSet};
 use std::convert::TryFrom;
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
@@ -183,7 +184,7 @@ pub struct Store {
     pub id_store: Arc<Mutex<HashMap<EnvelopeHash, Id<EmailObject>>>>,
     pub reverse_id_store: Arc<Mutex<HashMap<Id<EmailObject>, EnvelopeHash>>>,
     pub blob_id_store: Arc<Mutex<HashMap<EnvelopeHash, Id<BlobObject>>>>,
-    pub tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
+    pub collection: Collection,
     pub mailboxes: Arc<RwLock<HashMap<MailboxHash, JmapMailbox>>>,
     pub mailboxes_index: Arc<RwLock<HashMap<MailboxHash, HashSet<EnvelopeHash>>>>,
     pub mailbox_state: Arc<Mutex<State<MailboxObject>>>,
@@ -194,7 +195,7 @@ pub struct Store {
 
 impl Store {
     pub fn add_envelope(&self, obj: EmailObject) -> Envelope {
-        let mut tag_lck = self.tag_index.write().unwrap();
+        let mut tag_lck = self.collection.tag_index.write().unwrap();
         let tags = obj
             .keywords()
             .keys()
@@ -483,16 +484,16 @@ impl MailBackend for JmapType {
         }))
     }
 
-    fn tags(&self) -> Option<Arc<RwLock<BTreeMap<u64, String>>>> {
-        Some(self.store.tag_index.clone())
-    }
-
     fn as_any(&self) -> &dyn Any {
         self
     }
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
+    }
+
+    fn collection(&self) -> Collection {
+        self.store.collection.clone()
     }
 
     fn search(
@@ -753,7 +754,7 @@ impl MailBackend for JmapType {
             }
 
             {
-                let mut tag_index_lck = store.tag_index.write().unwrap();
+                let mut tag_index_lck = store.collection.tag_index.write().unwrap();
                 for (flag, value) in flags.iter() {
                     match flag {
                         Ok(_) => {}
@@ -841,12 +842,12 @@ impl JmapType {
             online_status,
             event_consumer,
             is_subscribed: Arc::new(IsSubscribedFn(is_subscribed)),
+            collection: Collection::default(),
 
             byte_cache: Default::default(),
             id_store: Default::default(),
             reverse_id_store: Default::default(),
             blob_id_store: Default::default(),
-            tag_index: Default::default(),
             mailboxes: Default::default(),
             mailboxes_index: Default::default(),
             mailbox_state: Default::default(),

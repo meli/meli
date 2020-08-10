@@ -58,7 +58,7 @@ use self::maildir::MaildirType;
 use self::mbox::MboxType;
 use super::email::{Envelope, EnvelopeHash, Flag};
 use std::any::Any;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::fmt;
 use std::fmt::Debug;
 use std::ops::Deref;
@@ -348,9 +348,7 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
         mailbox_hash: MailboxHash,
     ) -> ResultFuture<()>;
 
-    fn tags(&self) -> Option<Arc<RwLock<BTreeMap<u64, String>>>> {
-        None
-    }
+    fn collection(&self) -> crate::Collection;
     fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
 

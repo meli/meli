@@ -388,7 +388,7 @@ pub async fn examine_updates(
                 }
                 env.set_references(value);
             }
-            let mut tag_lck = uid_store.tag_index.write().unwrap();
+            let mut tag_lck = uid_store.collection.tag_index.write().unwrap();
             if let Some((flags, keywords)) = flags {
                 env.set_flags(*flags);
                 if !env.is_seen() {

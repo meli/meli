@@ -44,7 +44,6 @@ pub use iterators::*;
 use crate::text_processing::grapheme_clusters::*;
 use uuid::Uuid;
 
-use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -131,7 +130,7 @@ macro_rules! make {
                 e.parent = Some($p);
             });
             let old_group = std::mem::replace($threads.groups.entry(old_group_hash).or_default(), ThreadGroup::Node {
-                parent: RefCell::new(parent_group_hash),
+                parent: Arc::new(RwLock::new(parent_group_hash)),
             });
             $threads.thread_nodes.entry($c).and_modify(|e| {
                 e.group = parent_group_hash;
@@ -292,7 +291,7 @@ pub struct Thread {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum ThreadGroup {
     Root(Thread),
-    Node { parent: RefCell<ThreadHash> },
+    Node { parent: Arc<RwLock<ThreadHash>> },
 }
 
 impl Default for ThreadGroup {
@@ -411,16 +410,16 @@ impl ThreadNode {
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Threads {
     pub thread_nodes: HashMap<ThreadNodeHash, ThreadNode>,
-    root_set: RefCell<Vec<ThreadNodeHash>>,
-    tree_index: RefCell<Vec<ThreadNodeHash>>,
+    root_set: Arc<RwLock<Vec<ThreadNodeHash>>>,
+    tree_index: Arc<RwLock<Vec<ThreadNodeHash>>>,
     pub groups: HashMap<ThreadHash, ThreadGroup>,
 
     message_ids: HashMap<Vec<u8>, ThreadNodeHash>,
     pub message_ids_set: HashSet<Vec<u8>>,
     pub missing_message_ids: HashSet<Vec<u8>>,
     pub hash_set: HashSet<EnvelopeHash>,
-    sort: RefCell<(SortField, SortOrder)>,
-    subsort: RefCell<(SortField, SortOrder)>,
+    sort: Arc<RwLock<(SortField, SortOrder)>>,
+    subsort: Arc<RwLock<(SortField, SortOrder)>>,
 }
 
 impl PartialEq for ThreadNode {
@@ -454,13 +453,13 @@ impl Threads {
     pub fn find_group(&self, h: ThreadHash) -> ThreadHash {
         let p = match self.groups[&h] {
             ThreadGroup::Root(_) => return h,
-            ThreadGroup::Node { ref parent } => *parent.borrow(),
+            ThreadGroup::Node { ref parent } => *parent.read().unwrap(),
         };
 
         let parent_group = self.find_group(p);
         match self.groups[&h] {
             ThreadGroup::Node { ref parent } => {
-                *parent.borrow_mut() = parent_group;
+                *parent.write().unwrap() = parent_group;
             }
             _ => unreachable!(),
         }
@@ -491,8 +490,8 @@ impl Threads {
             message_ids_set,
             missing_message_ids,
             hash_set,
-            sort: RefCell::new((SortField::Date, SortOrder::Desc)),
-            subsort: RefCell::new((SortField::Subject, SortOrder::Desc)),
+            sort: Arc::new(RwLock::new((SortField::Date, SortOrder::Desc))),
+            subsort: Arc::new(RwLock::new((SortField::Subject, SortOrder::Desc))),
 
             ..Default::default()
         }
@@ -573,7 +572,7 @@ impl Threads {
         };
 
         if self.thread_nodes[&t_id].parent.is_none() {
-            let mut tree_index = self.tree_index.borrow_mut();
+            let mut tree_index = self.tree_index.write().unwrap();
             if let Some(i) = tree_index.iter().position(|t| *t == t_id) {
                 tree_index.remove(i);
             }
@@ -845,7 +844,7 @@ impl Threads {
 
         /*
         save_graph(
-            &self.tree_index.borrow(),
+            &self.tree_index.read().unwrap(),
             &self.thread_nodes,
             &self
                 .message_ids
@@ -871,7 +870,7 @@ impl Threads {
             ref thread_nodes,
             ..
         } = self;
-        let tree = &mut tree_index.borrow_mut();
+        let tree = &mut tree_index.write().unwrap();
         for t in tree.iter_mut() {
             thread_nodes[t].children.sort_by(|a, b| match subsort {
                 (SortField::Date, SortOrder::Desc) => {
@@ -1090,7 +1089,7 @@ impl Threads {
         });
     }
     fn inner_sort_by(&self, sort: (SortField, SortOrder), envelopes: &Envelopes) {
-        let tree = &mut self.tree_index.borrow_mut();
+        let tree = &mut self.tree_index.write().unwrap();
         let envelopes = envelopes.read().unwrap();
         tree.sort_by(|a, b| match sort {
             (SortField::Date, SortOrder::Desc) => {
@@ -1172,13 +1171,13 @@ impl Threads {
         subsort: (SortField, SortOrder),
         envelopes: &Envelopes,
     ) {
-        if *self.sort.borrow() != sort {
+        if *self.sort.read().unwrap() != sort {
             self.inner_sort_by(sort, envelopes);
-            *self.sort.borrow_mut() = sort;
+            *self.sort.write().unwrap() = sort;
         }
-        if *self.subsort.borrow() != subsort {
+        if *self.subsort.read().unwrap() != subsort {
             self.inner_subsort_by(subsort, envelopes);
-            *self.subsort.borrow_mut() = subsort;
+            *self.subsort.write().unwrap() = subsort;
         }
     }
 
@@ -1196,11 +1195,11 @@ impl Threads {
     }
 
     pub fn root_len(&self) -> usize {
-        self.tree_index.borrow().len()
+        self.tree_index.read().unwrap().len()
     }
 
     pub fn root_set(&self, idx: usize) -> ThreadNodeHash {
-        self.tree_index.borrow()[idx]
+        self.tree_index.read().unwrap()[idx]
     }
 
     pub fn roots(&self) -> SmallVec<[ThreadHash; 1024]> {

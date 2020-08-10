@@ -19,11 +19,11 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use crate::backends::*;
 use crate::conf::AccountSettings;
 use crate::email::{Envelope, EnvelopeHash, Flag};
 use crate::error::{MeliError, Result};
 use crate::shellexpand::ShellExpandTrait;
+use crate::{backends::*, Collection};
 use smallvec::SmallVec;
 use std::collections::{
     hash_map::{DefaultHasher, HashMap},
@@ -220,7 +220,7 @@ pub struct NotmuchDb {
     mailboxes: Arc<RwLock<HashMap<MailboxHash, NotmuchMailbox>>>,
     index: Arc<RwLock<HashMap<EnvelopeHash, CString>>>,
     mailbox_index: Arc<RwLock<HashMap<EnvelopeHash, SmallVec<[MailboxHash; 16]>>>>,
-    tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
+    collection: Collection,
     path: PathBuf,
     account_name: Arc<String>,
     account_hash: AccountHash,
@@ -358,7 +358,7 @@ impl NotmuchDb {
             path,
             index: Arc::new(RwLock::new(Default::default())),
             mailbox_index: Arc::new(RwLock::new(Default::default())),
-            tag_index: Arc::new(RwLock::new(Default::default())),
+            collection: Collection::default(),
 
             mailboxes: Arc::new(RwLock::new(mailboxes)),
             save_messages_to: None,
@@ -510,7 +510,7 @@ impl MailBackend for NotmuchDb {
         )?);
         let index = self.index.clone();
         let mailbox_index = self.mailbox_index.clone();
-        let tag_index = self.tag_index.clone();
+        let tag_index = self.collection.tag_index.clone();
         let mailboxes = self.mailboxes.clone();
         let v: Vec<CString>;
         {
@@ -561,7 +561,7 @@ impl MailBackend for NotmuchDb {
         let mailboxes = self.mailboxes.clone();
         let index = self.index.clone();
         let mailbox_index = self.mailbox_index.clone();
-        let tag_index = self.tag_index.clone();
+        let tag_index = self.collection.tag_index.clone();
         let event_consumer = self.event_consumer.clone();
         Ok(Box::pin(async move {
             let new_revision_uuid = database.get_revision_uuid();
@@ -586,13 +586,13 @@ impl MailBackend for NotmuchDb {
         use notify::{watcher, RecursiveMode, Watcher};
 
         let account_hash = self.account_hash;
+        let collection = self.collection.clone();
         let lib = self.lib.clone();
         let path = self.path.clone();
         let revision_uuid = self.revision_uuid.clone();
         let mailboxes = self.mailboxes.clone();
         let index = self.index.clone();
         let mailbox_index = self.mailbox_index.clone();
-        let tag_index = self.tag_index.clone();
         let event_consumer = self.event_consumer.clone();
 
         let (tx, rx) = std::sync::mpsc::channel();
@@ -616,7 +616,7 @@ impl MailBackend for NotmuchDb {
                             mailboxes.clone(),
                             index.clone(),
                             mailbox_index.clone(),
-                            tag_index.clone(),
+                            collection.tag_index.clone(),
                             account_hash.clone(),
                             event_consumer.clone(),
                             new_revision_uuid,
@@ -651,7 +651,7 @@ impl MailBackend for NotmuchDb {
             hash,
             index: self.index.clone(),
             bytes: None,
-            tag_index: self.tag_index.clone(),
+            collection: self.collection.clone(),
         }))
     }
 
@@ -693,7 +693,7 @@ impl MailBackend for NotmuchDb {
             self.lib.clone(),
             true,
         )?;
-        let tag_index = self.tag_index.clone();
+        let collection = self.collection.clone();
         let index = self.index.clone();
 
         Ok(Box::pin(async move {
@@ -781,7 +781,11 @@ impl MailBackend for NotmuchDb {
             for (f, v) in flags.iter() {
                 if let (Err(tag), true) = (f, v) {
                     let hash = tag_hash!(tag);
-                    tag_index.write().unwrap().insert(hash, tag.to_string());
+                    collection
+                        .tag_index
+                        .write()
+                        .unwrap()
+                        .insert(hash, tag.to_string());
                 }
             }
 
@@ -834,8 +838,8 @@ impl MailBackend for NotmuchDb {
         }))
     }
 
-    fn tags(&self) -> Option<Arc<RwLock<BTreeMap<u64, String>>>> {
-        Some(self.tag_index.clone())
+    fn collection(&self) -> Collection {
+        self.collection.clone()
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -851,7 +855,7 @@ impl MailBackend for NotmuchDb {
 struct NotmuchOp {
     hash: EnvelopeHash,
     index: Arc<RwLock<HashMap<EnvelopeHash, CString>>>,
-    tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
+    collection: Collection,
     database: Arc<DbConnection>,
     bytes: Option<Vec<u8>>,
     lib: Arc<libloading::Library>,

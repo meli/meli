@@ -732,9 +732,9 @@ impl PlainListing {
     fn make_entry_string(&self, e: EnvelopeRef, context: &Context) -> EntryStrings {
         let mut tags = String::new();
         let mut colors = SmallVec::new();
-        let backend_lck = context.accounts[&self.cursor_pos.0].backend.read().unwrap();
-        if let Some(t) = backend_lck.tags() {
-            let tags_lck = t.read().unwrap();
+        let account = &context.accounts[&self.cursor_pos.0];
+        if account.backend_capabilities.supports_tags {
+            let tags_lck = account.collection.tag_index.read().unwrap();
             for t in e.labels().iter() {
                 if mailbox_settings!(
                     context[self.cursor_pos.0][&self.cursor_pos.1]

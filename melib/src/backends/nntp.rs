@@ -32,18 +32,18 @@ pub use operations::*;
 mod connection;
 pub use connection::*;
 
-use crate::backends::*;
 use crate::conf::AccountSettings;
 use crate::email::*;
 use crate::error::{MeliError, Result, ResultIntoMeliError};
+use crate::{backends::*, Collection};
 use futures::lock::Mutex as FutureMutex;
 use futures::stream::Stream;
-use std::collections::{hash_map::DefaultHasher, BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{hash_map::DefaultHasher, BTreeSet, HashMap, HashSet};
 use std::future::Future;
 use std::hash::Hasher;
 use std::pin::Pin;
 use std::str::FromStr;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 pub type UID = usize;
 
@@ -77,6 +77,7 @@ pub struct UIDStore {
     hash_index: Arc<Mutex<HashMap<EnvelopeHash, (UID, MailboxHash)>>>,
     uid_index: Arc<Mutex<HashMap<(MailboxHash, UID), EnvelopeHash>>>,
 
+    collection: Collection,
     mailboxes: Arc<FutureMutex<HashMap<MailboxHash, NntpMailbox>>>,
     is_online: Arc<Mutex<(Instant, Result<()>)>>,
     event_consumer: BackendEventConsumer,
@@ -97,6 +98,7 @@ impl UIDStore {
             hash_index: Default::default(),
             uid_index: Default::default(),
             mailboxes: Arc::new(FutureMutex::new(Default::default())),
+            collection: Collection::new(),
             is_online: Arc::new(Mutex::new((
                 Instant::now(),
                 Err(MeliError::new("Account is uninitialised.")),
@@ -294,16 +296,16 @@ impl MailBackend for NntpType {
         Err(MeliError::new("NNTP doesn't support deletion."))
     }
 
-    fn tags(&self) -> Option<Arc<RwLock<BTreeMap<u64, String>>>> {
-        None
-    }
-
     fn as_any(&self) -> &dyn Any {
         self
     }
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
+    }
+
+    fn collection(&self) -> Collection {
+        self.uid_store.collection.clone()
     }
 
     fn create_mailbox(

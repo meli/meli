@@ -517,7 +517,7 @@ impl Account {
             tree: Default::default(),
             address_book,
             sent_mailbox: Default::default(),
-            collection: Default::default(),
+            collection: backend.collection(),
             settings,
             sender,
             job_executor,
