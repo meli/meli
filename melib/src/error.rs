@@ -214,7 +214,7 @@ impl<T> From<std::sync::PoisonError<T>> for MeliError {
     }
 }
 
-#[cfg(feature = "imap_backend")]
+#[cfg(feature = "tls")]
 impl<T: Sync + Send + 'static + core::fmt::Debug> From<native_tls::HandshakeError<T>>
     for MeliError
 {
@@ -224,7 +224,7 @@ impl<T: Sync + Send + 'static + core::fmt::Debug> From<native_tls::HandshakeErro
     }
 }
 
-#[cfg(feature = "imap_backend")]
+#[cfg(feature = "tls")]
 impl From<native_tls::Error> for MeliError {
     #[inline]
     fn from(kind: native_tls::Error) -> MeliError {

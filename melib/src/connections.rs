@@ -25,7 +25,7 @@ use flate2::{read::DeflateDecoder, write::DeflateEncoder, Compression};
 pub enum Connection {
     Tcp(std::net::TcpStream),
     Fd(std::os::unix::io::RawFd),
-    #[cfg(feature = "imap_backend")]
+    #[cfg(feature = "tls")]
     Tls(native_tls::TlsStream<Self>),
     #[cfg(feature = "deflate_compression")]
     Deflate {
@@ -50,7 +50,7 @@ impl Connection {
     pub fn set_nonblocking(&self, nonblocking: bool) -> std::io::Result<()> {
         match self {
             Tcp(ref t) => t.set_nonblocking(nonblocking),
-            #[cfg(feature = "imap_backend")]
+            #[cfg(feature = "tls")]
             Tls(ref t) => t.get_ref().set_nonblocking(nonblocking),
             Fd(fd) => {
                 //FIXME TODO Review
@@ -75,7 +75,7 @@ impl Connection {
     pub fn set_read_timeout(&self, dur: Option<std::time::Duration>) -> std::io::Result<()> {
         match self {
             Tcp(ref t) => t.set_read_timeout(dur),
-            #[cfg(feature = "imap_backend")]
+            #[cfg(feature = "tls")]
             Tls(ref t) => t.get_ref().set_read_timeout(dur),
             Fd(_) => Ok(()),
             #[cfg(feature = "deflate_compression")]
@@ -86,7 +86,7 @@ impl Connection {
     pub fn set_write_timeout(&self, dur: Option<std::time::Duration>) -> std::io::Result<()> {
         match self {
             Tcp(ref t) => t.set_write_timeout(dur),
-            #[cfg(feature = "imap_backend")]
+            #[cfg(feature = "tls")]
             Tls(ref t) => t.get_ref().set_write_timeout(dur),
             Fd(_) => Ok(()),
             #[cfg(feature = "deflate_compression")]
@@ -107,7 +107,7 @@ impl std::io::Read for Connection {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         match self {
             Tcp(ref mut t) => t.read(buf),
-            #[cfg(feature = "imap_backend")]
+            #[cfg(feature = "tls")]
             Tls(ref mut t) => t.read(buf),
             Fd(f) => {
                 use std::os::unix::io::{FromRawFd, IntoRawFd};
@@ -126,7 +126,7 @@ impl std::io::Write for Connection {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         match self {
             Tcp(ref mut t) => t.write(buf),
-            #[cfg(feature = "imap_backend")]
+            #[cfg(feature = "tls")]
             Tls(ref mut t) => t.write(buf),
             Fd(f) => {
                 use std::os::unix::io::{FromRawFd, IntoRawFd};
@@ -143,7 +143,7 @@ impl std::io::Write for Connection {
     fn flush(&mut self) -> std::io::Result<()> {
         match self {
             Tcp(ref mut t) => t.flush(),
-            #[cfg(feature = "imap_backend")]
+            #[cfg(feature = "tls")]
             Tls(ref mut t) => t.flush(),
             Fd(f) => {
                 use std::os::unix::io::{FromRawFd, IntoRawFd};
@@ -162,7 +162,7 @@ impl std::os::unix::io::AsRawFd for Connection {
     fn as_raw_fd(&self) -> std::os::unix::io::RawFd {
         match self {
             Tcp(ref t) => t.as_raw_fd(),
-            #[cfg(feature = "imap_backend")]
+            #[cfg(feature = "tls")]
             Tls(ref t) => t.get_ref().as_raw_fd(),
             Fd(f) => *f,
             #[cfg(feature = "deflate_compression")]
