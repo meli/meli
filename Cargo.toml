@@ -36,7 +36,7 @@ melib = { path = "melib", version = "0.6.1" }
 serde = "1.0.71"
 serde_derive = "1.0.71"
 serde_json = "1.0"
-toml = "0.5.3"
+toml = { version = "0.5.6", features = ["preserve_order", ] }
 linkify = "0.4.0"
 xdg-utils = "0.3.0"
 notify = "4.0.1" # >:c
