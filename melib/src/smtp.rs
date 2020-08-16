@@ -68,7 +68,7 @@
  */
 
 use crate::connections::{lookup_ipv4, Connection};
-use crate::email::{parser::BytesExt, Envelope};
+use crate::email::{parser::BytesExt, Address, Envelope};
 use crate::error::{MeliError, Result, ResultIntoMeliError};
 use futures::io::{AsyncReadExt, AsyncWriteExt};
 use native_tls::TlsConnector;
@@ -515,7 +515,7 @@ impl SmtpConnection {
     }
 
     /// Sends mail
-    pub async fn mail_transaction(&mut self, mail: &str) -> Result<()> {
+    pub async fn mail_transaction(&mut self, mail: &str, tos: Option<&[Address]>) -> Result<()> {
         let mut res = String::with_capacity(8 * 1024);
         let mut pipelining_queue: SmallVec<[ExpectedReplyCode; 16]> = SmallVec::new();
         let mut pipelining_results: SmallVec<[Result<ReplyCode>; 16]> = SmallVec::new();
@@ -524,7 +524,8 @@ impl SmtpConnection {
         let envelope_from = self.server_conf.envelope_from.clone();
         let envelope = Envelope::from_bytes(mail.as_bytes(), None)
             .chain_err_summary(|| "SMTP submission was aborted")?;
-        if envelope.to().is_empty() {
+        let tos = tos.unwrap_or_else(|| envelope.to());
+        if tos.is_empty() {
             return Err(MeliError::new("SMTP submission was aborted because there was no e-mail address found in the To: header field. Consider adding recipients."));
         }
         let mut current_command: SmallVec<[&[u8]; 16]> = SmallVec::new();
@@ -559,7 +560,8 @@ impl SmtpConnection {
         //return a reply indicating whether the failure is permanent (i.e., will occur again if
         //the client tries to send the same address again) or temporary (i.e., the address might
         //be accepted if the client tries again later).
-        for addr in envelope.to() {
+        for addr in tos {
+            current_command.clear();
             current_command.push(b"RCPT TO:<");
             current_command.push(addr.address_spec_raw().trim());
             if let Some(dsn_notify) = dsn_notify.as_ref() {

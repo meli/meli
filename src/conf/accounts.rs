@@ -1376,7 +1376,7 @@ impl Account {
                 let (chan, handle, job_id) = self.job_executor.spawn_specialized(async move {
                     let mut smtp_connection =
                         melib::smtp::SmtpConnection::new_connection(conf).await?;
-                    smtp_connection.mail_transaction(&message).await
+                    smtp_connection.mail_transaction(&message, None).await
                 });
                 self.sender
                     .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
