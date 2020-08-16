@@ -42,6 +42,7 @@ use crate::backends::{
     *,
 };
 use crate::conf::AccountSettings;
+use crate::connections::timeout;
 use crate::email::*;
 use crate::error::{MeliError, Result, ResultIntoMeliError};
 use futures::lock::Mutex as FutureMutex;
@@ -53,7 +54,7 @@ use std::hash::Hasher;
 use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex, RwLock};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 pub type UID = usize;
 
 pub static SUPPORTED_CAPABILITIES: &[&str] = &[
@@ -296,14 +297,12 @@ impl MailBackend for ImapType {
         *self.uid_store.sender.write().unwrap() = Some(sender);
         let uid_store = self.uid_store.clone();
         Ok(Box::pin(async move {
-            let inbox = uid_store
-                .mailboxes
-                .lock()
-                .await
+            let inbox = timeout(Duration::from_secs(3), uid_store.mailboxes.lock())
+                .await?
                 .get(&mailbox_hash)
                 .map(std::clone::Clone::clone)
                 .unwrap();
-            let mut conn = main_conn.lock().await;
+            let mut conn = timeout(Duration::from_secs(3), main_conn.lock()).await?;
             watch::examine_updates(inbox, &mut conn, &uid_store).await?;
             Ok(())
         }))
@@ -1693,16 +1692,4 @@ async fn fetch_hlpr(
         ))
     };
     Ok(payload)
-}
-
-use futures::future::{self, Either};
-
-async fn timeout<O>(dur: std::time::Duration, f: impl Future<Output = O>) -> Result<O> {
-    futures::pin_mut!(f);
-    match future::select(f, smol::Timer::after(dur)).await {
-        Either::Left((out, _)) => Ok(out),
-        Either::Right(_) => {
-            Err(MeliError::new("Timed out.").set_kind(crate::error::ErrorKind::Network))
-        }
-    }
 }

@@ -186,3 +186,16 @@ pub fn lookup_ipv4(host: &str, port: u16) -> crate::Result<std::net::SocketAddr>
             .set_kind(crate::error::ErrorKind::Network),
     )
 }
+
+use futures::future::{self, Either, Future};
+
+pub async fn timeout<O>(dur: std::time::Duration, f: impl Future<Output = O>) -> crate::Result<O> {
+    futures::pin_mut!(f);
+    match future::select(f, smol::Timer::after(dur)).await {
+        Either::Left((out, _)) => Ok(out),
+        Either::Right(_) => {
+            Err(crate::error::MeliError::new("Timed out.")
+                .set_kind(crate::error::ErrorKind::Network))
+        }
+    }
+}
