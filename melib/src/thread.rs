@@ -580,7 +580,7 @@ impl Threads {
         }
     }
 
-    pub fn amend(&mut self, envelopes: &mut Envelopes) {
+    pub fn amend(&mut self, envelopes: &Envelopes) {
         let envelopes_lck = envelopes.read().unwrap();
         let new_hash_set = HashSet::from_iter(envelopes_lck.keys().cloned());
 
@@ -642,13 +642,13 @@ impl Threads {
         }
     }
 
-    pub fn insert(&mut self, envelopes: &mut Envelopes, env_hash: EnvelopeHash) {
+    pub fn insert(&mut self, envelopes: &Envelopes, env_hash: EnvelopeHash) {
         self.insert_internal(envelopes, env_hash, false);
     }
 
     fn insert_internal(
         &mut self,
-        envelopes: &mut Envelopes,
+        envelopes: &Envelopes,
         env_hash: EnvelopeHash,
         other_mailbox: bool,
     ) -> bool {
@@ -839,7 +839,7 @@ impl Threads {
     }
 
     /* Insert or update */
-    pub fn insert_reply(&mut self, envelopes: &mut Envelopes, env_hash: EnvelopeHash) -> bool {
+    pub fn insert_reply(&mut self, envelopes: &Envelopes, env_hash: EnvelopeHash) -> bool {
         self.insert_internal(envelopes, env_hash, true)
     }
 

@@ -126,7 +126,7 @@ impl Collection {
         self.envelopes.read().unwrap().is_empty()
     }
 
-    pub fn remove(&mut self, envelope_hash: EnvelopeHash, mailbox_hash: MailboxHash) {
+    pub fn remove(&self, envelope_hash: EnvelopeHash, mailbox_hash: MailboxHash) {
         debug!("DEBUG: Removing {}", envelope_hash);
         self.envelopes.write().unwrap().remove(&envelope_hash);
         self.mailboxes
@@ -150,7 +150,7 @@ impl Collection {
     }
 
     pub fn rename(
-        &mut self,
+        &self,
         old_hash: EnvelopeHash,
         new_hash: EnvelopeHash,
         mailbox_hash: MailboxHash,
@@ -184,7 +184,7 @@ impl Collection {
         threads_lck
             .entry(mailbox_hash)
             .or_default()
-            .insert(&mut self.envelopes, new_hash);
+            .insert(&self.envelopes, new_hash);
         for (h, t) in threads_lck.iter_mut() {
             if *h == mailbox_hash {
                 continue;
@@ -199,17 +199,17 @@ impl Collection {
     /// Merge new mailbox to collection and update threads.
     /// Returns a list of already existing mailboxs whose threads were updated
     pub fn merge(
-        &mut self,
+        &self,
         mut new_envelopes: HashMap<EnvelopeHash, Envelope>,
         mailbox_hash: MailboxHash,
         sent_mailbox: Option<MailboxHash>,
     ) -> Option<SmallVec<[MailboxHash; 8]>> {
         *self.sent_mailbox.write().unwrap() = sent_mailbox;
 
-        let &mut Collection {
-            ref mut threads,
-            ref mut envelopes,
-            ref mut mailboxes,
+        let Collection {
+            ref threads,
+            ref envelopes,
+            ref mailboxes,
             ref sent_mailbox,
             ..
         } = self;
@@ -321,7 +321,7 @@ impl Collection {
     }
 
     pub fn update(
-        &mut self,
+        &self,
         old_hash: EnvelopeHash,
         mut envelope: Envelope,
         mailbox_hash: MailboxHash,
@@ -365,7 +365,7 @@ impl Collection {
         threads_lck
             .entry(mailbox_hash)
             .or_default()
-            .insert(&mut self.envelopes, new_hash);
+            .insert(&self.envelopes, new_hash);
         for (h, t) in threads_lck.iter_mut() {
             if *h == mailbox_hash {
                 continue;
@@ -376,7 +376,7 @@ impl Collection {
         }
     }
 
-    pub fn update_flags(&mut self, env_hash: EnvelopeHash, mailbox_hash: MailboxHash) {
+    pub fn update_flags(&self, env_hash: EnvelopeHash, mailbox_hash: MailboxHash) {
         let mut threads_lck = self.threads.write().unwrap();
         if self
             .sent_mailbox
@@ -404,7 +404,7 @@ impl Collection {
         threads_lck
             .entry(mailbox_hash)
             .or_default()
-            .insert(&mut self.envelopes, env_hash);
+            .insert(&self.envelopes, env_hash);
         for (h, t) in threads_lck.iter_mut() {
             if *h == mailbox_hash {
                 continue;
@@ -415,7 +415,7 @@ impl Collection {
         }
     }
 
-    pub fn insert(&mut self, envelope: Envelope, mailbox_hash: MailboxHash) -> bool {
+    pub fn insert(&self, envelope: Envelope, mailbox_hash: MailboxHash) -> bool {
         let hash = envelope.hash();
         self.mailboxes
             .write()
@@ -430,7 +430,7 @@ impl Collection {
             .unwrap()
             .entry(mailbox_hash)
             .or_default()
-            .insert(&mut self.envelopes, hash);
+            .insert(&self.envelopes, hash);
         if self
             .sent_mailbox
             .read()
@@ -443,10 +443,10 @@ impl Collection {
         false
     }
 
-    pub fn insert_reply(&mut self, env_hash: EnvelopeHash) {
+    pub fn insert_reply(&self, env_hash: EnvelopeHash) {
         debug_assert!(self.envelopes.read().unwrap().contains_key(&env_hash));
         for (_, t) in self.threads.write().unwrap().iter_mut() {
-            t.insert_reply(&mut self.envelopes, env_hash);
+            t.insert_reply(&self.envelopes, env_hash);
         }
     }
 
@@ -455,7 +455,7 @@ impl Collection {
         EnvelopeRef { guard, env_hash }
     }
 
-    pub fn get_env_mut(&'_ mut self, env_hash: EnvelopeHash) -> EnvelopeRefMut<'_> {
+    pub fn get_env_mut(&'_ self, env_hash: EnvelopeHash) -> EnvelopeRefMut<'_> {
         let guard = self.envelopes.write().unwrap();
         EnvelopeRefMut { guard, env_hash }
     }
@@ -477,7 +477,7 @@ impl Collection {
         self.envelopes.read().unwrap().contains_key(env_hash)
     }
 
-    pub fn new_mailbox(&mut self, mailbox_hash: MailboxHash) {
+    pub fn new_mailbox(&self, mailbox_hash: MailboxHash) {
         let mut mailboxes_lck = self.mailboxes.write().unwrap();
         if !mailboxes_lck.contains_key(&mailbox_hash) {
             mailboxes_lck.insert(mailbox_hash, Default::default());
