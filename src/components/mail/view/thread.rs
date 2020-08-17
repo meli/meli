@@ -42,7 +42,7 @@ pub struct ThreadView {
     expanded_pos: usize,
     new_expanded_pos: usize,
     reversed: bool,
-    coordinates: (usize, MailboxHash, usize),
+    coordinates: (AccountHash, MailboxHash, usize),
     thread_group: ThreadHash,
     mailview: MailView,
     show_mailview: bool,
@@ -66,7 +66,7 @@ impl ThreadView {
      * context: current context
      */
     pub fn new(
-        coordinates: (usize, MailboxHash, usize),
+        coordinates: (AccountHash, MailboxHash, usize),
         thread_group: ThreadHash,
         expanded_hash: Option<ThreadNodeHash>,
         context: &Context,
@@ -160,7 +160,7 @@ impl ThreadView {
     }
 
     fn initiate(&mut self, expanded_hash: Option<ThreadNodeHash>, context: &Context) {
-        let account = &context.accounts[self.coordinates.0];
+        let account = &context.accounts[&self.coordinates.0];
         let threads = account.collection.get_threads(self.coordinates.1);
 
         if !threads.groups.contains_key(&self.thread_group) {
@@ -197,7 +197,7 @@ impl ThreadView {
         let mut highlight_reply_subjects: Vec<Option<usize>> =
             Vec::with_capacity(self.entries.len());
         for e in &mut self.entries {
-            let envelope: EnvelopeRef = context.accounts[self.coordinates.0]
+            let envelope: EnvelopeRef = context.accounts[&self.coordinates.0]
                 .collection
                 .get_env(e.msg_hash);
             let thread_node = &threads.thread_nodes()[&e.index.1];
@@ -274,7 +274,7 @@ impl ThreadView {
                     None,
                 );
                 {
-                    let envelope: EnvelopeRef = context.accounts[self.coordinates.0]
+                    let envelope: EnvelopeRef = context.accounts[&self.coordinates.0]
                         .collection
                         .get_env(e.msg_hash);
                     if envelope.has_attachments() {
@@ -357,7 +357,7 @@ impl ThreadView {
                     None,
                 );
                 {
-                    let envelope: EnvelopeRef = context.accounts[self.coordinates.0]
+                    let envelope: EnvelopeRef = context.accounts[&self.coordinates.0]
                         .collection
                         .get_env(e.msg_hash);
                     if envelope.has_attachments() {
@@ -647,7 +647,7 @@ impl ThreadView {
         /* First draw the thread subject on the first row */
         let y = if self.dirty {
             clear_area(grid, area, crate::conf::value(context, "theme_default"));
-            let account = &context.accounts[self.coordinates.0];
+            let account = &context.accounts[&self.coordinates.0];
             let threads = account.collection.get_threads(self.coordinates.1);
             let thread_root = threads
                 .thread_group_iter(self.thread_group)
@@ -748,7 +748,7 @@ impl ThreadView {
         /* First draw the thread subject on the first row */
         let y = {
             clear_area(grid, area, crate::conf::value(context, "theme_default"));
-            let account = &context.accounts[self.coordinates.0];
+            let account = &context.accounts[&self.coordinates.0];
             let threads = account.collection.get_threads(self.coordinates.1);
             let thread_root = threads
                 .thread_group_iter(self.thread_group)
@@ -1103,7 +1103,7 @@ impl Component for ThreadView {
                 self.set_dirty(true);
             }
             UIEvent::EnvelopeRename(ref old_hash, ref new_hash) => {
-                let account = &context.accounts[self.coordinates.0];
+                let account = &context.accounts[&self.coordinates.0];
                 for e in self.entries.iter_mut() {
                     if e.msg_hash == *old_hash {
                         e.msg_hash = *new_hash;
@@ -1118,7 +1118,7 @@ impl Component for ThreadView {
                     .process_event(&mut UIEvent::EnvelopeRename(*old_hash, *new_hash), context);
             }
             UIEvent::EnvelopeUpdate(ref env_hash) => {
-                let account = &context.accounts[self.coordinates.0];
+                let account = &context.accounts[&self.coordinates.0];
                 for e in self.entries.iter_mut() {
                     if e.msg_hash == *env_hash {
                         let seen: bool = account.collection.get_env(*env_hash).is_seen();

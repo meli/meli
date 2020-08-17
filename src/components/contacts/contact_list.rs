@@ -20,8 +20,9 @@
  */
 use super::*;
 use crate::melib::text_processing::TextProcessing;
-
+use melib::backends::AccountHash;
 use melib::CardId;
+
 use std::cmp;
 
 #[derive(Debug, PartialEq)]
@@ -33,6 +34,7 @@ enum ViewMode {
 #[derive(Debug)]
 struct AccountMenuEntry {
     name: String,
+    hash: AccountHash,
     // Index in the config account vector.
     index: usize,
 }
@@ -74,8 +76,9 @@ impl ContactList {
             .accounts
             .iter()
             .enumerate()
-            .map(|(i, a)| AccountMenuEntry {
+            .map(|(i, (h, a))| AccountMenuEntry {
                 name: a.name().to_string(),
+                hash: *h,
                 index: i,
             })
             .collect();
@@ -633,15 +636,15 @@ impl Component for ContactList {
                         && self.length > 0 =>
                 {
                     let account = &context.accounts[self.account_pos];
+                    let account_hash = account.hash();
                     let book = &account.address_book;
                     let card = &book[&self.id_positions[self.cursor_pos]];
                     let mut draft: Draft = Draft::default();
                     *draft.headers_mut().get_mut("To").unwrap() =
                         format!("{} <{}>", &card.name(), &card.email());
-                    context.replies.push_back(UIEvent::Action(Tab(NewDraft(
-                        self.account_pos,
-                        Some(draft),
-                    ))));
+                    context
+                        .replies
+                        .push_back(UIEvent::Action(Tab(NewDraft(account_hash, Some(draft)))));
 
                     return true;
                 }

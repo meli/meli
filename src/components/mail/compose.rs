@@ -67,7 +67,7 @@ impl std::ops::DerefMut for EmbedStatus {
 pub struct Composer {
     reply_context: Option<(MailboxHash, EnvelopeHash)>,
     reply_bytes_request: Option<(JobId, JobChannel<Vec<u8>>)>,
-    account_cursor: usize,
+    account_hash: AccountHash,
 
     cursor: Cursor,
 
@@ -93,7 +93,7 @@ impl Default for Composer {
         Composer {
             reply_context: None,
             reply_bytes_request: None,
-            account_cursor: 0,
+            account_hash: 0,
 
             cursor: Cursor::Headers,
 
@@ -146,14 +146,14 @@ impl fmt::Display for Composer {
 
 impl Composer {
     const DESCRIPTION: &'static str = "composing";
-    pub fn new(account_cursor: usize, context: &Context) -> Self {
+    pub fn new(account_hash: AccountHash, context: &Context) -> Self {
         let mut ret = Composer {
-            account_cursor,
+            account_hash,
             id: ComponentId::new_v4(),
             ..Default::default()
         };
         for (h, v) in
-            mailbox_acc_settings!(context[account_cursor].composing.default_header_values).iter()
+            mailbox_acc_settings!(context[account_hash].composing.default_header_values).iter()
         {
             if v.is_empty() {
                 continue;
@@ -176,23 +176,23 @@ impl Composer {
         ret
     }
 
-    pub fn edit(account_pos: usize, h: EnvelopeHash, context: &Context) -> Result<Self> {
+    pub fn edit(new_account_hash: AccountHash, h: EnvelopeHash, context: &Context) -> Result<Self> {
         let mut ret = Composer::default();
-        let op = context.accounts[account_pos].operation(h)?;
-        let envelope: EnvelopeRef = context.accounts[account_pos].collection.get_env(h);
+        let op = context.accounts[&new_account_hash].operation(h)?;
+        let envelope: EnvelopeRef = context.accounts[&new_account_hash].collection.get_env(h);
 
         ret.draft = Draft::edit(&envelope, op)?;
 
-        ret.account_cursor = account_pos;
+        ret.account_hash = new_account_hash;
         Ok(ret)
     }
 
     pub fn with_context(
-        coordinates: (usize, MailboxHash),
+        coordinates: (AccountHash, MailboxHash),
         msg: EnvelopeHash,
         context: &mut Context,
     ) -> Self {
-        let account = &context.accounts[coordinates.0];
+        let account = &context.accounts[&coordinates.0];
         let mut ret = Composer::default();
         ret.pager
             .set_colors(crate::conf::value(context, "theme_default"));
@@ -245,7 +245,7 @@ impl Composer {
         );
 
         drop(parent_message);
-        match context.accounts[coordinates.0]
+        match context.accounts[&coordinates.0]
             .operation(msg)
             .and_then(|mut op| op.as_bytes())
         {
@@ -257,10 +257,10 @@ impl Composer {
                 ));
             }
             Ok(fut) => {
-                let (mut rcvr, handle, job_id) = context.accounts[coordinates.0]
+                let (mut rcvr, handle, job_id) = context.accounts[&coordinates.0]
                     .job_executor
                     .spawn_specialized(fut);
-                context.accounts[coordinates.0]
+                context.accounts[&coordinates.0]
                     .active_jobs
                     .insert(job_id, JobRequest::AsBytes(handle));
                 if let Ok(Some(parent_bytes)) = try_recv_timeout!(&mut rcvr) {
@@ -274,8 +274,9 @@ impl Composer {
                         }
                         Ok(parent_bytes) => {
                             let env_hash = msg;
-                            let parent_message =
-                                context.accounts[coordinates.0].collection.get_env(env_hash);
+                            let parent_message = context.accounts[&coordinates.0]
+                                .collection
+                                .get_env(env_hash);
                             let mut new_draft = Draft::new_reply(&parent_message, &parent_bytes);
                             new_draft
                                 .headers_mut()
@@ -291,7 +292,7 @@ impl Composer {
                 }
             }
         }
-        ret.account_cursor = coordinates.0;
+        ret.account_hash = coordinates.0;
         ret.reply_context = Some((coordinates.1, msg));
         ret
     }
@@ -317,14 +318,14 @@ impl Composer {
         self.form.hide_buttons();
         self.form.set_cursor(old_cursor);
         let headers = self.draft.headers();
-        let account_cursor = self.account_cursor;
+        let account_hash = self.account_hash;
         for &k in &["Date", "From", "To", "Cc", "Bcc", "Subject"] {
             if k == "To" || k == "Cc" || k == "Bcc" {
                 self.form.push_cl((
                     k.into(),
                     headers[k].to_string(),
                     Box::new(move |c, term| {
-                        let book: &AddressBook = &c.accounts[account_cursor].address_book;
+                        let book: &AddressBook = &c.accounts[&account_hash].address_book;
                         let results: Vec<String> = book.search(term);
                         results
                             .into_iter()
@@ -346,7 +347,7 @@ impl Composer {
             write_string_to_grid(
                 &format!(
                     "☑ sign with {}",
-                    mailbox_acc_settings!(context[self.account_cursor].pgp.key)
+                    mailbox_acc_settings!(context[self.account_hash].pgp.key)
                         .as_ref()
                         .map(|s| s.as_str())
                         .unwrap_or("default key")
@@ -438,14 +439,14 @@ impl Component for Composer {
         if !self.initialized {
             if self.sign_mail.is_unset() {
                 self.sign_mail = ToggleFlag::InternalVal(*mailbox_acc_settings!(
-                    context[self.account_cursor].pgp.auto_sign
+                    context[self.account_hash].pgp.auto_sign
                 ));
             }
             if !self.draft.headers().contains_key("From") || self.draft.headers()["From"].is_empty()
             {
                 self.draft.headers_mut().insert(
                     "From".into(),
-                    crate::components::mail::get_display_name(context, self.account_cursor),
+                    crate::components::mail::get_display_name(context, self.account_hash),
                 );
             }
             self.pager.update_from_str(self.draft.body(), Some(77));
@@ -644,7 +645,7 @@ impl Component for Composer {
                 match bytes {
                     Ok(parent_bytes) => {
                         let env_hash = self.reply_context.unwrap().1;
-                        let parent_message = context.accounts[self.account_cursor]
+                        let parent_message = context.accounts[&self.account_hash]
                             .collection
                             .get_env(env_hash);
                         let mut new_draft = Draft::new_reply(&parent_message, &parent_bytes);
@@ -681,7 +682,7 @@ impl Component for Composer {
                     match send_draft(
                         self.sign_mail,
                         context,
-                        self.account_cursor,
+                        self.account_hash,
                         self.draft.clone(),
                         SpecialUsageMailbox::Sent,
                         Flag::SEEN,
@@ -726,7 +727,7 @@ impl Component for Composer {
                                 context,
                                 SpecialUsageMailbox::Drafts,
                                 Flag::SEEN | Flag::DRAFT,
-                                self.account_cursor,
+                                self.account_hash,
                             );
                             self.mode = ViewMode::Edit;
                         }
@@ -774,7 +775,7 @@ impl Component for Composer {
                                 context,
                                 SpecialUsageMailbox::Drafts,
                                 Flag::SEEN | Flag::DRAFT,
-                                self.account_cursor,
+                                self.account_hash,
                             );
                             context.replies.push_back(UIEvent::Action(Tab(Kill(*u))));
                             return true;
@@ -808,7 +809,7 @@ impl Component for Composer {
                             if let ViewMode::WaitingForSendResult(_, handle, job_id, chan) =
                                 std::mem::replace(&mut self.mode, ViewMode::Edit)
                             {
-                                context.accounts[self.account_cursor].active_jobs.insert(
+                                context.accounts[&self.account_hash].active_jobs.insert(
                                     job_id,
                                     JobRequest::SendMessageBackground(handle, chan),
                                 );
@@ -863,10 +864,9 @@ impl Component for Composer {
             /*
             /* Switch e-mail From: field to the `left` configured account. */
             UIEvent::Input(Key::Left) if self.cursor == Cursor::From => {
-            self.account_cursor = self.account_cursor.saturating_sub(1);
             self.draft.headers_mut().insert(
             "From".into(),
-            get_display_name(context, self.account_cursor),
+            get_display_name(context, self.account_hash),
             );
             self.dirty = true;
             return true;
@@ -1039,7 +1039,7 @@ impl Component for Composer {
             {
                 /* Edit draft in $EDITOR */
                 let editor = if let Some(editor_command) =
-                    mailbox_acc_settings!(context[self.account_cursor].composing.editor_command)
+                    mailbox_acc_settings!(context[self.account_hash].composing.editor_command)
                         .as_ref()
                 {
                     editor_command.to_string()
@@ -1065,7 +1065,7 @@ impl Component for Composer {
                     true,
                 );
 
-                if *mailbox_acc_settings!(context[self.account_cursor].composing.embed) {
+                if *mailbox_acc_settings!(context[self.account_hash].composing.embed) {
                     self.embed = Some(EmbedStatus::Running(
                         crate::terminal::embed::create_pty(
                             width!(self.embed_area),
@@ -1249,7 +1249,7 @@ impl Component for Composer {
                             context,
                             SpecialUsageMailbox::Drafts,
                             Flag::SEEN | Flag::DRAFT,
-                            self.account_cursor,
+                            self.account_hash,
                         );
                         return true;
                     }
@@ -1319,7 +1319,7 @@ impl Component for Composer {
         };
 
         let our_map: ShortcutMap =
-            mailbox_acc_settings!(context[self.account_cursor].shortcuts.composing).key_values();
+            mailbox_acc_settings!(context[self.account_hash].shortcuts.composing).key_values();
         map.insert(Composer::DESCRIPTION, our_map);
 
         map
@@ -1366,13 +1366,13 @@ impl Component for Composer {
 pub fn send_draft(
     sign_mail: ToggleFlag,
     context: &mut Context,
-    account_cursor: usize,
+    account_hash: AccountHash,
     mut draft: Draft,
     mailbox_type: SpecialUsageMailbox,
     flags: Flag,
     complete_in_background: bool,
 ) -> Result<Option<(JobId, JoinHandle, JobChannel<()>)>> {
-    let format_flowed = *mailbox_acc_settings!(context[account_cursor].composing.format_flowed);
+    let format_flowed = *mailbox_acc_settings!(context[account_hash].composing.format_flowed);
     if sign_mail.is_true() {
         let mut content_type = ContentType::default();
         if format_flowed {
@@ -1407,10 +1407,10 @@ pub fn send_draft(
         }
         let output = crate::components::mail::pgp::sign(
             body.into(),
-            mailbox_acc_settings!(context[account_cursor].pgp.gpg_binary)
+            mailbox_acc_settings!(context[account_hash].pgp.gpg_binary)
                 .as_ref()
                 .map(|s| s.as_str()),
-            mailbox_acc_settings!(context[account_cursor].pgp.key)
+            mailbox_acc_settings!(context[account_hash].pgp.key)
                 .as_ref()
                 .map(|s| s.as_str()),
         );
@@ -1420,7 +1420,7 @@ pub fn send_draft(
                 log(
                     format!(
                         "Could not sign draft in account `{}`: {}.",
-                        context.accounts[account_cursor].name(),
+                        context.accounts[&account_hash].name(),
                         err.to_string()
                     ),
                     ERROR,
@@ -1428,7 +1428,7 @@ pub fn send_draft(
                 context.replies.push_back(UIEvent::Notification(
                     Some(format!(
                         "Could not sign draft in account `{}`.",
-                        context.accounts[account_cursor].name()
+                        context.accounts[&account_hash].name()
                     )),
                     err.to_string(),
                     Some(NotificationType::ERROR),
@@ -1459,16 +1459,10 @@ pub fn send_draft(
         }
     }
     let bytes = draft.finalise().unwrap();
-    let send_mail = mailbox_acc_settings!(context[account_cursor].composing.send_mail).clone();
+    let send_mail = mailbox_acc_settings!(context[account_hash].composing.send_mail).clone();
     let ret =
-        context.accounts[account_cursor].send(bytes.clone(), send_mail, complete_in_background);
-    save_draft(
-        bytes.as_bytes(),
-        context,
-        mailbox_type,
-        flags,
-        account_cursor,
-    );
+        context.accounts[&account_hash].send(bytes.clone(), send_mail, complete_in_background);
+    save_draft(bytes.as_bytes(), context, mailbox_type, flags, account_hash);
     ret
 }
 
@@ -1477,9 +1471,9 @@ pub fn save_draft(
     context: &mut Context,
     mailbox_type: SpecialUsageMailbox,
     flags: Flag,
-    account_cursor: usize,
+    account_hash: AccountHash,
 ) {
-    match context.accounts[account_cursor].save_special(bytes, mailbox_type, flags) {
+    match context.accounts[&account_hash].save_special(bytes, mailbox_type, flags) {
         Err(MeliError {
             summary, details, ..
         }) => {
@@ -1494,7 +1488,7 @@ pub fn save_draft(
                 Some("Message saved".into()),
                 format!(
                     "Message saved in `{}`",
-                    &context.accounts[account_cursor].mailbox_entries[&mailbox_hash].name
+                    &context.accounts[&account_hash].mailbox_entries[&mailbox_hash].name
                 ),
                 Some(NotificationType::INFO),
             ));

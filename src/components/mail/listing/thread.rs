@@ -105,8 +105,8 @@ macro_rules! row_attr {
 #[derive(Debug)]
 pub struct ThreadListing {
     /// (x, y, z): x is accounts, y is mailboxes, z is index inside a mailbox.
-    cursor_pos: (usize, MailboxHash, usize),
-    new_cursor_pos: (usize, MailboxHash, usize),
+    cursor_pos: (AccountHash, MailboxHash, usize),
+    new_cursor_pos: (AccountHash, MailboxHash, usize),
     length: usize,
     sort: (SortField, SortOrder),
     subsort: (SortField, SortOrder),
@@ -179,7 +179,7 @@ impl MailListingTrait for ThreadListing {
 
         // Get mailbox as a reference.
         //
-        match context.accounts[self.cursor_pos.0].load(self.cursor_pos.1) {
+        match context.accounts[&self.cursor_pos.0].load(self.cursor_pos.1) {
             Ok(_) => {}
             Err(_) => {
                 let default_cell = {
@@ -190,7 +190,7 @@ impl MailListingTrait for ThreadListing {
                     ret
                 };
                 let message: String =
-                    context.accounts[self.cursor_pos.0][&self.cursor_pos.1].status();
+                    context.accounts[&self.cursor_pos.0][&self.cursor_pos.1].status();
                 self.data_columns.columns[0] =
                     CellBuffer::new_with_context(message.len(), 1, default_cell, context);
                 self.length = 0;
@@ -206,14 +206,14 @@ impl MailListingTrait for ThreadListing {
                 return;
             }
         }
-        let threads = context.accounts[self.cursor_pos.0]
+        let threads = context.accounts[&self.cursor_pos.0]
             .collection
             .get_threads(self.cursor_pos.1);
         let mut roots = threads.roots();
         threads.group_inner_sort_by(
             &mut roots,
             self.sort,
-            &context.accounts[self.cursor_pos.0].collection.envelopes,
+            &context.accounts[&self.cursor_pos.0].collection.envelopes,
         );
 
         self.redraw_threads_list(
@@ -227,7 +227,7 @@ impl MailListingTrait for ThreadListing {
         context: &Context,
         items: Box<dyn Iterator<Item = ThreadHash>>,
     ) {
-        let account = &context.accounts[self.cursor_pos.0];
+        let account = &context.accounts[&self.cursor_pos.0];
         let threads = account.collection.get_threads(self.cursor_pos.1);
         self.length = 0;
         self.order.clear();
@@ -414,10 +414,10 @@ impl MailListingTrait for ThreadListing {
 }
 
 impl ListingTrait for ThreadListing {
-    fn coordinates(&self) -> (usize, MailboxHash) {
+    fn coordinates(&self) -> (AccountHash, MailboxHash) {
         (self.new_cursor_pos.0, self.new_cursor_pos.1)
     }
-    fn set_coordinates(&mut self, coordinates: (usize, MailboxHash)) {
+    fn set_coordinates(&mut self, coordinates: (AccountHash, MailboxHash)) {
         self.new_cursor_pos = (coordinates.0, coordinates.1, 0);
         self.unfocused = false;
         self.view = None;
@@ -714,7 +714,7 @@ impl ListingTrait for ThreadListing {
         }
 
         let env_hash = self.get_env_under_cursor(idx, context);
-        let envelope: EnvelopeRef = context.accounts[self.cursor_pos.0]
+        let envelope: EnvelopeRef = context.accounts[&self.cursor_pos.0]
             .collection
             .get_env(env_hash);
 
@@ -748,9 +748,9 @@ impl fmt::Display for ThreadListing {
 }
 
 impl ThreadListing {
-    pub fn new(coordinates: (usize, MailboxHash)) -> Self {
+    pub fn new(coordinates: (AccountHash, MailboxHash)) -> Self {
         ThreadListing {
-            cursor_pos: (0, 1, 0),
+            cursor_pos: (coordinates.0, 0, 0),
             new_cursor_pos: (coordinates.0, coordinates.1, 0),
             length: 0,
             sort: (Default::default(), Default::default()),
@@ -779,7 +779,7 @@ impl ThreadListing {
         }
 
         let env_hash = self.get_env_under_cursor(idx, context);
-        let envelope: EnvelopeRef = context.accounts[self.cursor_pos.0]
+        let envelope: EnvelopeRef = context.accounts[&self.cursor_pos.0]
             .collection
             .get_env(env_hash);
 
@@ -850,7 +850,7 @@ impl ThreadListing {
     fn make_entry_string(&self, e: &Envelope, context: &Context) -> EntryStrings {
         let mut tags = String::new();
         let mut colors: SmallVec<[_; 8]> = SmallVec::new();
-        let backend_lck = context.accounts[self.cursor_pos.0].backend.read().unwrap();
+        let backend_lck = context.accounts[&self.cursor_pos.0].backend.read().unwrap();
         if let Some(t) = backend_lck.tags() {
             let tags_lck = t.read().unwrap();
             for t in e.labels().iter() {
@@ -913,12 +913,12 @@ impl ThreadListing {
             self.rows.iter().skip(start).take(end - start + 1)
         {
             let idx = *idx;
-            if !context.accounts[self.cursor_pos.0].contains_key(*env_hash) {
+            if !context.accounts[&self.cursor_pos.0].contains_key(*env_hash) {
                 //debug!("key = {}", root_env_hash);
                 //debug!(
                 //    "name = {} {}",
                 //    account[&self.cursor_pos.1].name(),
-                //    context.accounts[self.cursor_pos.0].name()
+                //    context.accounts[&self.cursor_pos.0].name()
                 //);
                 //debug!("{:#?}", context.accounts);
 
@@ -1109,7 +1109,7 @@ impl Component for ThreadListing {
                 if self.length == 0 {
                     false
                 } else {
-                    let account = &context.accounts[self.cursor_pos.0];
+                    let account = &context.accounts[&self.cursor_pos.0];
                     let envelope: EnvelopeRef = account
                         .collection
                         .get_env(self.get_env_under_cursor(idx, context));
@@ -1169,11 +1169,9 @@ impl Component for ThreadListing {
                 self.view = Some(MailView::new(coordinates, None, None, context));
             }
 
-            self.view.as_mut().unwrap().draw(
-                grid,
-                (set_y(upper_left, mid + 1), bottom_right),
-                context,
-            );
+            if let Some(v) = self.view.as_mut() {
+                v.draw(grid, (set_y(upper_left, mid + 1), bottom_right), context);
+            }
 
             self.dirty = false;
         }
@@ -1207,7 +1205,7 @@ impl Component for ThreadListing {
                 self.set_dirty(true);
             }
             UIEvent::EnvelopeRename(ref old_hash, ref new_hash) => {
-                let account = &context.accounts[self.cursor_pos.0];
+                let account = &context.accounts[&self.cursor_pos.0];
                 if !account.collection.contains_key(&new_hash) {
                     return false;
                 }
@@ -1219,9 +1217,14 @@ impl Component for ThreadListing {
 
                 self.dirty = true;
 
-                self.view.as_mut().map(|c| {
-                    c.process_event(&mut UIEvent::EnvelopeRename(*old_hash, *new_hash), context)
-                });
+                if self.unfocused {
+                    if let Some(v) = self.view.as_mut() {
+                        v.process_event(
+                            &mut UIEvent::EnvelopeRename(*old_hash, *new_hash),
+                            context,
+                        );
+                    }
+                }
             }
             UIEvent::EnvelopeRemove(ref env_hash, _) => {
                 if self.order.contains_key(env_hash) {
@@ -1230,7 +1233,7 @@ impl Component for ThreadListing {
                 }
             }
             UIEvent::EnvelopeUpdate(ref env_hash) => {
-                let account = &context.accounts[self.cursor_pos.0];
+                let account = &context.accounts[&self.cursor_pos.0];
                 if !account.collection.contains_key(env_hash) {
                     return false;
                 }
@@ -1240,9 +1243,11 @@ impl Component for ThreadListing {
 
                 self.dirty = true;
 
-                self.view
-                    .as_mut()
-                    .map(|c| c.process_event(&mut UIEvent::EnvelopeUpdate(*env_hash), context));
+                if self.unfocused {
+                    if let Some(v) = self.view.as_mut() {
+                        v.process_event(&mut UIEvent::EnvelopeUpdate(*env_hash), context);
+                    }
+                }
             }
             UIEvent::ChangeMode(UIMode::Normal) => {
                 self.dirty = true;

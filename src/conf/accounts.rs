@@ -25,6 +25,7 @@
 
 use super::{AccountConf, FileMailboxConf};
 use crate::jobs::{JobChannel, JobExecutor, JobId, JoinHandle};
+use indexmap::IndexMap;
 use melib::async_workers::{Async, AsyncBuilder, AsyncStatus, WorkContext};
 use melib::backends::*;
 use melib::email::*;
@@ -141,12 +142,11 @@ impl MailboxEntry {
 
 #[derive(Debug)]
 pub struct Account {
-    pub index: usize,
     name: String,
     hash: AccountHash,
     pub is_online: Result<()>,
     pub last_online_request: std::time::Instant,
-    pub(crate) mailbox_entries: HashMap<MailboxHash, MailboxEntry>,
+    pub(crate) mailbox_entries: IndexMap<MailboxHash, MailboxEntry>,
     pub(crate) mailboxes_order: Vec<MailboxHash>,
     tree: Vec<MailboxNode>,
     sent_mailbox: Option<MailboxHash>,
@@ -351,7 +351,6 @@ pub struct MailboxNode {
 
 impl Account {
     pub fn new(
-        index: usize,
         hash: AccountHash,
         name: String,
         mut settings: AccountConf,
@@ -410,7 +409,6 @@ impl Account {
             }
         }
         let mut ret = Account {
-            index,
             hash,
             name,
             is_online: if !backend.capabilities().is_remote {
@@ -451,8 +449,8 @@ impl Account {
             self.backend.read().unwrap().mailboxes()?
         };
         self.backend_capabilities = self.backend.read().unwrap().capabilities();
-        let mut mailbox_entries: HashMap<MailboxHash, MailboxEntry> =
-            HashMap::with_capacity_and_hasher(ref_mailboxes.len(), Default::default());
+        let mut mailbox_entries: IndexMap<MailboxHash, MailboxEntry> =
+            IndexMap::with_capacity_and_hasher(ref_mailboxes.len(), Default::default());
         let mut mailboxes_order: Vec<MailboxHash> = Vec::with_capacity(ref_mailboxes.len());
 
         let mut sent_mailbox = None;
@@ -818,7 +816,7 @@ impl Account {
                         .ignore
                         .is_true()
                     {
-                        return Some(UIEvent::MailboxUpdate((self.index, mailbox_hash)));
+                        return Some(UIEvent::MailboxUpdate((self.hash, mailbox_hash)));
                     }
 
                     let thread = {
@@ -833,10 +831,10 @@ impl Account {
                         .thread_ref(thread)
                         .snoozed()
                     {
-                        return Some(UIEvent::MailboxUpdate((self.index, mailbox_hash)));
+                        return Some(UIEvent::MailboxUpdate((self.hash, mailbox_hash)));
                     }
                     if is_seen || is_draft {
-                        return Some(UIEvent::MailboxUpdate((self.index, mailbox_hash)));
+                        return Some(UIEvent::MailboxUpdate((self.hash, mailbox_hash)));
                     }
 
                     return Some(Notification(
@@ -1201,7 +1199,7 @@ impl Account {
                             });
                         self.sender
                             .send(ThreadEvent::UIEvent(UIEvent::MailboxUpdate((
-                                self.index,
+                                self.hash,
                                 mailbox_hash,
                             ))))
                             .unwrap();
@@ -1441,7 +1439,7 @@ impl Account {
                 )?;
                 self.sender
                     .send(ThreadEvent::UIEvent(UIEvent::MailboxCreate((
-                        self.index,
+                        self.hash,
                         mailbox_hash,
                     ))))
                     .unwrap();
@@ -1515,7 +1513,7 @@ impl Account {
                 )?;
                 self.sender
                     .send(ThreadEvent::UIEvent(UIEvent::MailboxDelete((
-                        self.index,
+                        self.hash,
                         mailbox_hash,
                     ))))
                     .unwrap();
@@ -1664,7 +1662,7 @@ impl Account {
                 }
                 self.sender
                     .send(ThreadEvent::UIEvent(UIEvent::AccountStatusChange(
-                        self.index,
+                        self.hash,
                     )))
                     .unwrap();
             }
@@ -1769,7 +1767,7 @@ impl Account {
                             });
                         self.sender
                             .send(ThreadEvent::UIEvent(UIEvent::MailboxUpdate((
-                                self.index,
+                                self.hash,
                                 mailbox_hash,
                             ))))
                             .unwrap();
@@ -1802,7 +1800,7 @@ impl Account {
                             });
                         self.sender
                             .send(ThreadEvent::UIEvent(UIEvent::MailboxUpdate((
-                                self.index,
+                                self.hash,
                                 mailbox_hash,
                             ))))
                             .unwrap();
@@ -1819,15 +1817,13 @@ impl Account {
                     {
                         for f in updated_mailboxes {
                             self.sender
-                                .send(ThreadEvent::UIEvent(UIEvent::MailboxUpdate((
-                                    self.index, f,
-                                ))))
+                                .send(ThreadEvent::UIEvent(UIEvent::MailboxUpdate((self.hash, f))))
                                 .unwrap();
                         }
                     }
                     self.sender
                         .send(ThreadEvent::UIEvent(UIEvent::MailboxUpdate((
-                            self.index,
+                            self.hash,
                             mailbox_hash,
                         ))))
                         .unwrap();
@@ -1837,7 +1833,7 @@ impl Account {
                     if let Some(is_online) = is_online {
                         self.sender
                             .send(ThreadEvent::UIEvent(UIEvent::AccountStatusChange(
-                                self.index,
+                                self.hash,
                             )))
                             .unwrap();
                         if is_online.is_ok() {
@@ -1893,7 +1889,7 @@ impl Account {
                             self.is_online = Ok(());
                             self.sender
                                 .send(ThreadEvent::UIEvent(UIEvent::AccountStatusChange(
-                                    self.index,
+                                    self.hash,
                                 )))
                                 .unwrap();
                         }
@@ -2156,7 +2152,7 @@ impl IndexMut<&MailboxHash> for Account {
 
 fn build_mailboxes_order(
     tree: &mut Vec<MailboxNode>,
-    mailbox_entries: &HashMap<MailboxHash, MailboxEntry>,
+    mailbox_entries: &IndexMap<MailboxHash, MailboxEntry>,
     mailboxes_order: &mut Vec<MailboxHash>,
 ) {
     tree.clear();
@@ -2165,7 +2161,7 @@ fn build_mailboxes_order(
         if f.ref_mailbox.parent().is_none() {
             fn rec(
                 h: MailboxHash,
-                mailbox_entries: &HashMap<MailboxHash, MailboxEntry>,
+                mailbox_entries: &IndexMap<MailboxHash, MailboxEntry>,
                 depth: usize,
             ) -> MailboxNode {
                 let mut node = MailboxNode {

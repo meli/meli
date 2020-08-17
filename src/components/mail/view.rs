@@ -90,7 +90,7 @@ impl ViewMode {
 /// menus
 #[derive(Debug, Default)]
 pub struct MailView {
-    coordinates: (usize, MailboxHash, EnvelopeHash),
+    coordinates: (AccountHash, MailboxHash, EnvelopeHash),
     pager: Pager,
     subview: Option<Box<dyn Component>>,
     dirty: bool,
@@ -152,7 +152,7 @@ impl fmt::Display for MailView {
 impl MailView {
     const DESCRIPTION: &'static str = "view mail";
     pub fn new(
-        coordinates: (usize, MailboxHash, EnvelopeHash),
+        coordinates: (AccountHash, MailboxHash, EnvelopeHash),
         pager: Option<Pager>,
         subview: Option<Box<dyn Component>>,
         context: &mut Context,
@@ -185,7 +185,7 @@ impl MailView {
 
     fn init_futures(&mut self, context: &mut Context) {
         debug!("init_futures");
-        let account = &mut context.accounts[self.coordinates.0];
+        let account = &mut context.accounts[&self.coordinates.0];
         if debug!(account.contains_key(self.coordinates.2)) {
             {
                 match account
@@ -372,7 +372,7 @@ impl MailView {
 
     pub fn update(
         &mut self,
-        new_coordinates: (usize, MailboxHash, EnvelopeHash),
+        new_coordinates: (AccountHash, MailboxHash, EnvelopeHash),
         context: &mut Context,
     ) {
         self.coordinates = new_coordinates;
@@ -553,7 +553,7 @@ impl Component for MailView {
         let bottom_right = bottom_right!(area);
 
         let y: usize = {
-            let account = &context.accounts[self.coordinates.0];
+            let account = &context.accounts[&self.coordinates.0];
             if !account.contains_key(self.coordinates.2) {
                 /* The envelope has been renamed or removed, so wait for the appropriate event to
                  * arrive */
@@ -966,7 +966,7 @@ impl Component for MailView {
                 if *id == s.id() =>
             {
                 if let Some(results) = results.downcast_ref::<Vec<Card>>() {
-                    let account = &mut context.accounts[self.coordinates.0];
+                    let account = &mut context.accounts[&self.coordinates.0];
                     {
                         for card in results.iter() {
                             account.address_book.add_card(card.clone());
@@ -1074,7 +1074,7 @@ impl Component for MailView {
                         key == shortcuts[MailView::DESCRIPTION]["add_addresses_to_contacts"]
                     ) =>
             {
-                let account = &context.accounts[self.coordinates.0];
+                let account = &context.accounts[&self.coordinates.0];
                 let envelope: EnvelopeRef = account.collection.get_env(self.coordinates.2);
 
                 let mut entries = Vec::new();
@@ -1285,7 +1285,7 @@ impl Component for MailView {
                 self.coordinates.2 = new_hash;
             }
             UIEvent::Action(View(ViewAction::SaveAttachment(a_i, ref path))) => {
-                let account = &context.accounts[self.coordinates.0];
+                let account = &context.accounts[&self.coordinates.0];
                 if !account.contains_key(self.coordinates.2) {
                     /* The envelope has been renamed or removed, so wait for the appropriate event to
                      * arrive */
@@ -1445,7 +1445,7 @@ impl Component for MailView {
                 }
             }
             UIEvent::Action(MailingListAction(ref e)) => {
-                let account = &context.accounts[self.coordinates.0];
+                let account = &context.accounts[&self.coordinates.0];
                 if !account.contains_key(self.coordinates.2) {
                     /* The envelope has been renamed or removed, so wait for the appropriate event to
                      * arrive */

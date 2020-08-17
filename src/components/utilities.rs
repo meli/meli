@@ -1666,8 +1666,8 @@ impl Component for Tabbed {
                 self.dirty = true;
                 return true;
             }
-            UIEvent::Action(Tab(NewDraft(account_idx, ref draft))) => {
-                let mut composer = Composer::new(*account_idx, context);
+            UIEvent::Action(Tab(NewDraft(account_hash, ref draft))) => {
+                let mut composer = Composer::new(*account_hash, context);
                 if let Some(draft) = draft {
                     composer.set_draft(draft.clone());
                 }
@@ -1692,8 +1692,8 @@ impl Component for Tabbed {
                 self.help_curr_views = children_maps;
                 return true;
             }
-            UIEvent::Action(Tab(Edit(account_pos, msg))) => {
-                let composer = match Composer::edit(*account_pos, *msg, context) {
+            UIEvent::Action(Tab(Edit(account_hash, msg))) => {
+                let composer = match Composer::edit(*account_hash, *msg, context) {
                     Ok(c) => c,
                     Err(e) => {
                         context.replies.push_back(UIEvent::Notification(
@@ -1704,7 +1704,7 @@ impl Component for Tabbed {
                         log(
                             format!(
                                 "Failed to open envelope {}: {}",
-                                context.accounts[*account_pos]
+                                context.accounts[&*account_hash]
                                     .collection
                                     .get_env(*msg)
                                     .message_id_display(),

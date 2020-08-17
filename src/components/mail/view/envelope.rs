@@ -53,7 +53,7 @@ pub struct EnvelopeView {
     mode: ViewMode,
     wrapper: EnvelopeWrapper,
 
-    account_pos: usize,
+    account_hash: AccountHash,
     cmd_buf: String,
     id: ComponentId,
 }
@@ -70,7 +70,7 @@ impl EnvelopeView {
         wrapper: EnvelopeWrapper,
         pager: Option<Pager>,
         subview: Option<Box<dyn Component>>,
-        account_pos: usize,
+        account_hash: AccountHash,
     ) -> Self {
         EnvelopeView {
             pager,
@@ -78,7 +78,7 @@ impl EnvelopeView {
             dirty: true,
             mode: ViewMode::Normal,
             wrapper,
-            account_pos,
+            account_hash,
             cmd_buf: String::with_capacity(4),
             id: ComponentId::new_v4(),
         }

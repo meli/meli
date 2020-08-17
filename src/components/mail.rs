@@ -22,8 +22,7 @@
 /*! Entities that handle Mail specific functions.
  */
 use super::*;
-use melib::backends::Mailbox;
-use melib::backends::MailboxHash;
+use melib::backends::{AccountHash, Mailbox, MailboxHash};
 use melib::thread::ThreadNodeHash;
 
 pub mod listing;
@@ -38,8 +37,8 @@ pub mod pgp;
 mod status;
 pub use self::status::*;
 
-fn get_display_name(context: &Context, idx: usize) -> String {
-    let settings = context.accounts[idx].settings.account();
+fn get_display_name(context: &Context, account_hash: AccountHash) -> String {
+    let settings = context.accounts[&account_hash].settings.account();
     if let Some(d) = settings.display_name.as_ref() {
         format!("{} <{}>", d, settings.identity)
     } else {

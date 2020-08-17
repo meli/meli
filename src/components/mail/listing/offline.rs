@@ -24,7 +24,7 @@ use crate::components::utilities::PageMovement;
 
 #[derive(Debug)]
 pub struct OfflineListing {
-    cursor_pos: (usize, MailboxHash),
+    cursor_pos: (AccountHash, MailboxHash),
     _row_updates: SmallVec<[ThreadHash; 8]>,
     _selection: HashMap<ThreadHash, bool>,
     dirty: bool,
@@ -60,11 +60,11 @@ impl MailListingTrait for OfflineListing {
 }
 
 impl ListingTrait for OfflineListing {
-    fn coordinates(&self) -> (usize, MailboxHash) {
+    fn coordinates(&self) -> (AccountHash, MailboxHash) {
         self.cursor_pos
     }
 
-    fn set_coordinates(&mut self, coordinates: (usize, MailboxHash)) {
+    fn set_coordinates(&mut self, coordinates: (AccountHash, MailboxHash)) {
         self.cursor_pos = coordinates;
     }
 
@@ -89,7 +89,7 @@ impl fmt::Display for OfflineListing {
 }
 
 impl OfflineListing {
-    pub fn new(cursor_pos: (usize, MailboxHash)) -> Self {
+    pub fn new(cursor_pos: (AccountHash, MailboxHash)) -> Self {
         OfflineListing {
             cursor_pos,
             _row_updates: SmallVec::new(),
@@ -137,7 +137,7 @@ impl Component for OfflineListing {
                 area,
                 None,
             );
-            let mut jobs: SmallVec<[_; 64]> = context.accounts[self.cursor_pos.0]
+            let mut jobs: SmallVec<[_; 64]> = context.accounts[&self.cursor_pos.0]
                 .active_jobs
                 .iter()
                 .collect();
@@ -163,7 +163,9 @@ impl Component for OfflineListing {
     }
     fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {
         match event {
-            UIEvent::AccountStatusChange(idx) if *idx == self.cursor_pos.0 => self.dirty = true,
+            UIEvent::AccountStatusChange(account_hash) if *account_hash == self.cursor_pos.0 => {
+                self.dirty = true
+            }
             _ => {}
         }
         false

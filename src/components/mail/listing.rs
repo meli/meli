@@ -134,7 +134,7 @@ column_str!(struct TagString(String, SmallVec<[Option<Color>; 8]>));
 #[derive(Debug)]
 struct AccountMenuEntry {
     name: String,
-    // Index in the config account vector.
+    hash: AccountHash,
     index: usize,
     entries: SmallVec<[(usize, MailboxHash); 16]>,
 }
@@ -146,8 +146,8 @@ pub trait MailListingTrait: ListingTrait {
         thread_hashes: SmallVec<[ThreadHash; 8]>,
         a: &ListingAction,
     ) {
-        let account_pos = self.coordinates().0;
-        let account = &mut context.accounts[account_pos];
+        let account_hash = self.coordinates().0;
+        let account = &mut context.accounts[&account_hash];
         let mut envs_to_set: SmallVec<[EnvelopeHash; 8]> = SmallVec::new();
         let mailbox_hash = self.coordinates().1;
         {
@@ -361,8 +361,8 @@ pub trait MailListingTrait: ListingTrait {
 }
 
 pub trait ListingTrait: Component {
-    fn coordinates(&self) -> (usize, MailboxHash);
-    fn set_coordinates(&mut self, _: (usize, MailboxHash));
+    fn coordinates(&self) -> (AccountHash, MailboxHash);
+    fn set_coordinates(&mut self, _: (AccountHash, MailboxHash));
     fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context);
     fn highlight_line(&mut self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context);
     fn filter(
@@ -482,10 +482,6 @@ impl fmt::Display for Listing {
 
 impl Component for Listing {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        for i in 0..context.accounts.len() {
-            let _ = context.is_online(i);
-        }
-
         if !self.is_dirty() {
             return;
         }
@@ -524,12 +520,13 @@ impl Component for Listing {
                 .push_back(((mid, get_y(upper_left)), (mid, get_y(bottom_right))));
         }
 
+        let account_hash = self.accounts[self.cursor_pos.0].hash;
         if right_component_width == total_cols {
-            if context.is_online(self.cursor_pos.0).is_err() {
+            if context.is_online(account_hash).is_err() {
                 match self.component {
                     ListingComponent::Offline(_) => {}
                     _ => {
-                        self.component = Offline(OfflineListing::new((self.cursor_pos.0, 0)));
+                        self.component = Offline(OfflineListing::new((account_hash, 0)));
                     }
                 }
             }
@@ -539,11 +536,11 @@ impl Component for Listing {
             self.draw_menu(grid, area, context);
         } else {
             self.draw_menu(grid, (upper_left, (mid, get_y(bottom_right))), context);
-            if context.is_online(self.cursor_pos.0).is_err() {
+            if context.is_online(account_hash).is_err() {
                 match self.component {
                     ListingComponent::Offline(_) => {}
                     _ => {
-                        self.component = Offline(OfflineListing::new((self.cursor_pos.0, 0)));
+                        self.component = Offline(OfflineListing::new((account_hash, 0)));
                     }
                 }
             }
@@ -571,15 +568,19 @@ impl Component for Listing {
                     );
                 }
             }
-            UIEvent::AccountStatusChange(account_index) => {
-                if self.cursor_pos.0 == *account_index {
+            UIEvent::AccountStatusChange(account_hash) => {
+                let account_index = context
+                    .accounts
+                    .get_index_of(account_hash)
+                    .expect("Invalid account_hash in UIEventMailbox{Delete,Create}");
+                if self.cursor_pos.0 == account_index {
                     self.change_account(context);
                 } else {
-                    self.accounts[*account_index].entries = context.accounts[*account_index]
+                    self.accounts[account_index].entries = context.accounts[&*account_hash]
                         .list_mailboxes()
                         .into_iter()
                         .filter(|mailbox_node| {
-                            context.accounts[*account_index][&mailbox_node.hash]
+                            context.accounts[&*account_hash][&mailbox_node.hash]
                                 .ref_mailbox
                                 .is_subscribed()
                         })
@@ -589,25 +590,29 @@ impl Component for Listing {
                 }
                 return true;
             }
-            UIEvent::MailboxDelete((account_index, _mailbox_hash))
-            | UIEvent::MailboxCreate((account_index, _mailbox_hash)) => {
-                self.accounts[*account_index].entries = context.accounts[*account_index]
+            UIEvent::MailboxDelete((account_hash, _mailbox_hash))
+            | UIEvent::MailboxCreate((account_hash, _mailbox_hash)) => {
+                let account_index = context
+                    .accounts
+                    .get_index_of(account_hash)
+                    .expect("Invalid account_hash in UIEventMailbox{Delete,Create}");
+                self.accounts[account_index].entries = context.accounts[&*account_hash]
                     .list_mailboxes()
                     .into_iter()
                     .filter(|mailbox_node| {
-                        context.accounts[*account_index][&mailbox_node.hash]
+                        context.accounts[&*account_hash][&mailbox_node.hash]
                             .ref_mailbox
                             .is_subscribed()
                     })
                     .map(|f| (f.depth, f.hash))
                     .collect::<_>();
-                if self.cursor_pos.0 == *account_index {
+                if self.cursor_pos.0 == account_index {
                     self.cursor_pos.1 = std::cmp::min(
                         self.accounts[self.cursor_pos.0].entries.len() - 1,
                         self.cursor_pos.1,
                     );
                     self.component.set_coordinates((
-                        self.cursor_pos.0,
+                        self.accounts[self.cursor_pos.0].hash,
                         self.accounts[self.cursor_pos.0].entries[self.cursor_pos.1].1,
                     ));
                     self.component.refresh_mailbox(context, true);
@@ -759,9 +764,10 @@ impl Component for Listing {
                         if let Some((_, mailbox_hash)) =
                             self.accounts[self.cursor_pos.0].entries.get(*idx)
                         {
+                            let account_hash = self.accounts[self.cursor_pos.0].hash;
                             self.cursor_pos.1 = *idx;
                             self.component
-                                .set_coordinates((self.cursor_pos.0, *mailbox_hash));
+                                .set_coordinates((account_hash, *mailbox_hash));
                             self.set_dirty(true);
                         } else {
                             return true;
@@ -1092,9 +1098,10 @@ impl Component for Listing {
             UIEvent::Input(ref k)
                 if shortcut!(k == shortcuts[Listing::DESCRIPTION]["new_mail"]) =>
             {
+                let account_hash = context.accounts[self.cursor_pos.0].hash();
                 context
                     .replies
-                    .push_back(UIEvent::Action(Tab(NewDraft(self.cursor_pos.0, None))));
+                    .push_back(UIEvent::Action(Tab(NewDraft(account_hash, None))));
                 return true;
             }
             UIEvent::StartupCheck(_) => {
@@ -1190,17 +1197,6 @@ impl Component for Listing {
     }
 }
 
-impl From<(IndexStyle, (usize, MailboxHash))> for ListingComponent {
-    fn from((index_style, coordinates): (IndexStyle, (usize, MailboxHash))) -> Self {
-        match index_style {
-            IndexStyle::Plain => Plain(PlainListing::new(coordinates)),
-            IndexStyle::Threaded => Threaded(ThreadListing::new(coordinates)),
-            IndexStyle::Compact => Compact(CompactListing::new(coordinates)),
-            IndexStyle::Conversations => Conversations(ConversationsListing::new(coordinates)),
-        }
-    }
-}
-
 impl Listing {
     pub const DESCRIPTION: &'static str = "listing";
     pub fn new(context: &mut Context) -> Self {
@@ -1208,7 +1204,7 @@ impl Listing {
             .accounts
             .iter()
             .enumerate()
-            .map(|(i, a)| {
+            .map(|(i, (h, a))| {
                 let entries: SmallVec<[(usize, MailboxHash); 16]> = a
                     .list_mailboxes()
                     .into_iter()
@@ -1218,13 +1214,14 @@ impl Listing {
 
                 AccountMenuEntry {
                     name: a.name().to_string(),
+                    hash: *h,
                     index: i,
                     entries,
                 }
             })
             .collect();
         let mut ret = Listing {
-            component: Offline(OfflineListing::new((0, 0))),
+            component: Offline(OfflineListing::new((account_entries[0].hash, 0))),
             accounts: account_entries,
             visible: true,
             dirty: true,
@@ -1477,6 +1474,7 @@ impl Listing {
     }
 
     fn change_account(&mut self, context: &mut Context) {
+        let account_hash = context.accounts[self.cursor_pos.0].hash();
         self.accounts[self.cursor_pos.0].entries = context.accounts[self.cursor_pos.0]
             .list_mailboxes()
             .into_iter()
@@ -1493,15 +1491,15 @@ impl Listing {
             .get(self.cursor_pos.1)
         {
             self.component
-                .set_coordinates((self.cursor_pos.0, *mailbox_hash));
+                .set_coordinates((account_hash, *mailbox_hash));
             /* Check if per-mailbox configuration overrides general configuration */
 
             let index_style =
-                mailbox_settings!(context[self.cursor_pos.0][mailbox_hash].listing.index_style);
+                mailbox_settings!(context[account_hash][mailbox_hash].listing.index_style);
             self.component.set_style(*index_style);
         } else {
             /* Set to dummy */
-            self.component = Offline(OfflineListing::new((self.cursor_pos.0, 0)));
+            self.component = Offline(OfflineListing::new((account_hash, 0)));
         }
         self.set_dirty(true);
         context

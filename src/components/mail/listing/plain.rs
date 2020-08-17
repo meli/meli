@@ -47,8 +47,8 @@ macro_rules! address_list {
 #[derive(Debug)]
 pub struct PlainListing {
     /// (x, y, z): x is accounts, y is mailboxes, z is index inside a mailbox.
-    cursor_pos: (usize, MailboxHash, usize),
-    new_cursor_pos: (usize, MailboxHash, usize),
+    cursor_pos: (AccountHash, MailboxHash, usize),
+    new_cursor_pos: (AccountHash, MailboxHash, usize),
     length: usize,
     sort: (SortField, SortOrder),
     subsort: (SortField, SortOrder),
@@ -148,7 +148,7 @@ impl MailListingTrait for PlainListing {
 
         // Get mailbox as a reference.
         //
-        match context.accounts[self.cursor_pos.0].load(self.cursor_pos.1) {
+        match context.accounts[&self.cursor_pos.0].load(self.cursor_pos.1) {
             Ok(()) => {}
             Err(_) => {
                 let default_cell = {
@@ -159,7 +159,7 @@ impl MailListingTrait for PlainListing {
                     ret
                 };
                 let message: String =
-                    context.accounts[self.cursor_pos.0][&self.cursor_pos.1].status();
+                    context.accounts[&self.cursor_pos.0][&self.cursor_pos.1].status();
                 self.data_columns.columns[0] =
                     CellBuffer::new_with_context(message.len(), 1, default_cell, context);
                 self.length = 0;
@@ -175,18 +175,18 @@ impl MailListingTrait for PlainListing {
                 return;
             }
         }
-        self.local_collection = context.accounts[self.cursor_pos.0]
+        self.local_collection = context.accounts[&self.cursor_pos.0]
             .collection
             .get_mailbox(self.cursor_pos.1)
             .iter()
             .cloned()
             .collect();
-        let env_lck = context.accounts[self.cursor_pos.0]
+        let env_lck = context.accounts[&self.cursor_pos.0]
             .collection
             .envelopes
             .read()
             .unwrap();
-        self.thread_node_hashes = context.accounts[self.cursor_pos.0]
+        self.thread_node_hashes = context.accounts[&self.cursor_pos.0]
             .collection
             .get_mailbox(self.cursor_pos.1)
             .iter()
@@ -240,7 +240,7 @@ impl MailListingTrait for PlainListing {
         context: &Context,
         items: Box<dyn Iterator<Item = ThreadHash>>,
     ) {
-        let account = &context.accounts[self.cursor_pos.0];
+        let account = &context.accounts[&self.cursor_pos.0];
         let threads = account.collection.get_threads(self.cursor_pos.1);
         let roots = items
             .filter_map(|r| threads.groups[&r].root().map(|r| r.root))
@@ -262,11 +262,11 @@ impl MailListingTrait for PlainListing {
 }
 
 impl ListingTrait for PlainListing {
-    fn coordinates(&self) -> (usize, MailboxHash) {
+    fn coordinates(&self) -> (AccountHash, MailboxHash) {
         (self.new_cursor_pos.0, self.new_cursor_pos.1)
     }
 
-    fn set_coordinates(&mut self, coordinates: (usize, MailboxHash)) {
+    fn set_coordinates(&mut self, coordinates: (AccountHash, MailboxHash)) {
         self.new_cursor_pos = (coordinates.0, coordinates.1, 0);
         self.unfocused = false;
         self.view = MailView::default();
@@ -282,7 +282,7 @@ impl ListingTrait for PlainListing {
         }
         let i = self.get_env_under_cursor(idx, context);
 
-        let account = &context.accounts[self.cursor_pos.0];
+        let account = &context.accounts[&self.cursor_pos.0];
         let envelope: EnvelopeRef = account.collection.get_env(i);
 
         let fg_color = if !envelope.is_seen() {
@@ -616,7 +616,7 @@ impl ListingTrait for PlainListing {
             *v = false;
         }
 
-        let account = &context.accounts[self.cursor_pos.0];
+        let account = &context.accounts[&self.cursor_pos.0];
         match results {
             Ok(results) => {
                 for env_hash in results {
@@ -699,7 +699,7 @@ impl fmt::Display for PlainListing {
 
 impl PlainListing {
     const DESCRIPTION: &'static str = "plain listing";
-    pub fn new(coordinates: (usize, MailboxHash)) -> Self {
+    pub fn new(coordinates: (AccountHash, MailboxHash)) -> Self {
         PlainListing {
             cursor_pos: (0, 1, 0),
             new_cursor_pos: (coordinates.0, coordinates.1, 0),
@@ -734,7 +734,7 @@ impl PlainListing {
     fn make_entry_string(&self, e: EnvelopeRef, context: &Context) -> EntryStrings {
         let mut tags = String::new();
         let mut colors = SmallVec::new();
-        let backend_lck = context.accounts[self.cursor_pos.0].backend.read().unwrap();
+        let backend_lck = context.accounts[&self.cursor_pos.0].backend.read().unwrap();
         if let Some(t) = backend_lck.tags() {
             let tags_lck = t.read().unwrap();
             for t in e.labels().iter() {
@@ -773,7 +773,7 @@ impl PlainListing {
     }
 
     fn redraw_list(&mut self, context: &Context, iter: Box<dyn Iterator<Item = EnvelopeHash>>) {
-        let account = &context.accounts[self.cursor_pos.0];
+        let account = &context.accounts[&self.cursor_pos.0];
         let mailbox = &account[&self.cursor_pos.1];
 
         self.order.clear();
@@ -783,18 +783,18 @@ impl PlainListing {
         let mut min_width = (0, 0, 0, 0, 0);
 
         for i in iter {
-            if !context.accounts[self.cursor_pos.0].contains_key(i) {
+            if !context.accounts[&self.cursor_pos.0].contains_key(i) {
                 debug!("key = {}", i);
                 debug!(
                     "name = {} {}",
                     mailbox.name(),
-                    context.accounts[self.cursor_pos.0].name()
+                    context.accounts[&self.cursor_pos.0].name()
                 );
                 debug!("{:#?}", context.accounts);
 
                 panic!();
             }
-            let envelope: EnvelopeRef = context.accounts[self.cursor_pos.0].collection.get_env(i);
+            let envelope: EnvelopeRef = context.accounts[&self.cursor_pos.0].collection.get_env(i);
             use melib::search::QueryTrait;
             if let Some(filter_query) = mailbox_settings!(
                 context[self.cursor_pos.0][&self.cursor_pos.1]
@@ -858,19 +858,19 @@ impl PlainListing {
 
         let columns = &mut self.data_columns.columns;
         for ((idx, i), strings) in iter.enumerate().zip(rows) {
-            if !context.accounts[self.cursor_pos.0].contains_key(i) {
+            if !context.accounts[&self.cursor_pos.0].contains_key(i) {
                 //debug!("key = {}", i);
                 //debug!(
                 //    "name = {} {}",
                 //    mailbox.name(),
-                //    context.accounts[self.cursor_pos.0].name()
+                //    context.accounts[&self.cursor_pos.0].name()
                 //);
                 //debug!("{:#?}", context.accounts);
 
                 panic!();
             }
 
-            let envelope: EnvelopeRef = context.accounts[self.cursor_pos.0].collection.get_env(i);
+            let envelope: EnvelopeRef = context.accounts[&self.cursor_pos.0].collection.get_env(i);
             let row_attr = if !envelope.is_seen() {
                 if idx % 2 == 0 {
                     self.color_cache.even_unseen
@@ -971,7 +971,7 @@ impl PlainListing {
             for c in columns[4].row_iter(x..min_width.4, idx) {
                 columns[4][c].set_bg(row_attr.bg).set_attrs(row_attr.attrs);
             }
-            if context.accounts[self.cursor_pos.0]
+            if context.accounts[&self.cursor_pos.0]
                 .collection
                 .get_env(i)
                 .has_attachments()
@@ -1019,7 +1019,7 @@ impl PlainListing {
     }
 
     fn perform_action(&mut self, context: &mut Context, env_hash: EnvelopeHash, a: &ListingAction) {
-        let account = &mut context.accounts[self.cursor_pos.0];
+        let account = &mut context.accounts[&self.cursor_pos.0];
         match {
             match a {
                 ListingAction::SetSeen => account.backend.write().unwrap().set_flags(
@@ -1232,7 +1232,7 @@ impl Component for PlainListing {
                 self.set_dirty(true);
             }
             UIEvent::EnvelopeRename(ref old_hash, ref new_hash) => {
-                let account = &context.accounts[self.cursor_pos.0];
+                let account = &context.accounts[&self.cursor_pos.0];
                 if !account.collection.contains_key(new_hash)
                     || !account
                         .collection
@@ -1257,11 +1257,13 @@ impl Component for PlainListing {
 
                 self.dirty = true;
 
-                self.view
-                    .process_event(&mut UIEvent::EnvelopeRename(*old_hash, *new_hash), context);
+                if self.unfocused {
+                    self.view
+                        .process_event(&mut UIEvent::EnvelopeRename(*old_hash, *new_hash), context);
+                }
             }
             UIEvent::EnvelopeUpdate(ref env_hash) => {
-                let account = &context.accounts[self.cursor_pos.0];
+                let account = &context.accounts[&self.cursor_pos.0];
                 if !account.collection.contains_key(env_hash)
                     || !account
                         .collection
@@ -1274,8 +1276,10 @@ impl Component for PlainListing {
                 self.row_updates.push(*env_hash);
                 self.dirty = true;
 
-                self.view
-                    .process_event(&mut UIEvent::EnvelopeUpdate(*env_hash), context);
+                if self.unfocused {
+                    self.view
+                        .process_event(&mut UIEvent::EnvelopeUpdate(*env_hash), context);
+                }
             }
             UIEvent::ChangeMode(UIMode::Normal) => {
                 self.dirty = true;
@@ -1300,16 +1304,16 @@ impl Component for PlainListing {
                 return true;
             }
             UIEvent::Action(Action::Listing(Search(ref filter_term))) if !self.unfocused => {
-                match context.accounts[self.cursor_pos.0].search(
+                match context.accounts[&self.cursor_pos.0].search(
                     filter_term,
                     self.sort,
                     self.cursor_pos.1,
                 ) {
                     Ok(job) => {
-                        let (chan, handle, job_id) = context.accounts[self.cursor_pos.0]
+                        let (chan, handle, job_id) = context.accounts[&self.cursor_pos.0]
                             .job_executor
                             .spawn_specialized(job);
-                        context.accounts[self.cursor_pos.0]
+                        context.accounts[&self.cursor_pos.0]
                             .insert_job(job_id, crate::conf::accounts::JobRequest::Search(handle));
                         self.search_job = Some((filter_term.to_string(), chan, job_id));
                     }

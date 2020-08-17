@@ -124,8 +124,8 @@ macro_rules! row_attr {
 #[derive(Debug)]
 pub struct CompactListing {
     /// (x, y, z): x is accounts, y is mailboxes, z is index inside a mailbox.
-    cursor_pos: (usize, MailboxHash, usize),
-    new_cursor_pos: (usize, MailboxHash, usize),
+    cursor_pos: (AccountHash, MailboxHash, usize),
+    new_cursor_pos: (AccountHash, MailboxHash, usize),
     length: usize,
     sort: (SortField, SortOrder),
     subsort: (SortField, SortOrder),
@@ -231,7 +231,7 @@ impl MailListingTrait for CompactListing {
 
         // Get mailbox as a reference.
         //
-        match context.accounts[self.cursor_pos.0].load(self.cursor_pos.1) {
+        match context.accounts[&self.cursor_pos.0].load(self.cursor_pos.1) {
             Ok(()) => {}
             Err(_) => {
                 let default_cell = {
@@ -242,7 +242,7 @@ impl MailListingTrait for CompactListing {
                     ret
                 };
                 let message: String =
-                    context.accounts[self.cursor_pos.0][&self.cursor_pos.1].status();
+                    context.accounts[&self.cursor_pos.0][&self.cursor_pos.1].status();
                 self.data_columns.columns[0] =
                     CellBuffer::new_with_context(message.len(), 1, default_cell, context);
                 self.length = 0;
@@ -259,14 +259,14 @@ impl MailListingTrait for CompactListing {
             }
         }
 
-        let threads = context.accounts[self.cursor_pos.0]
+        let threads = context.accounts[&self.cursor_pos.0]
             .collection
             .get_threads(self.cursor_pos.1);
         let mut roots = threads.roots();
         threads.group_inner_sort_by(
             &mut roots,
             self.sort,
-            &context.accounts[self.cursor_pos.0].collection.envelopes,
+            &context.accounts[&self.cursor_pos.0].collection.envelopes,
         );
 
         self.redraw_threads_list(
@@ -288,7 +288,7 @@ impl MailListingTrait for CompactListing {
         context: &Context,
         items: Box<dyn Iterator<Item = ThreadHash>>,
     ) {
-        let account = &context.accounts[self.cursor_pos.0];
+        let account = &context.accounts[&self.cursor_pos.0];
 
         let threads = account.collection.get_threads(self.cursor_pos.1);
         self.order.clear();
@@ -328,18 +328,18 @@ impl MailListingTrait for CompactListing {
             } else {
                 continue 'items_for_loop;
             };
-            if !context.accounts[self.cursor_pos.0].contains_key(root_env_hash) {
+            if !context.accounts[&self.cursor_pos.0].contains_key(root_env_hash) {
                 debug!("key = {}", root_env_hash);
                 debug!(
                     "name = {} {}",
                     account[&self.cursor_pos.1].name(),
-                    context.accounts[self.cursor_pos.0].name()
+                    context.accounts[&self.cursor_pos.0].name()
                 );
                 debug!("{:#?}", context.accounts);
 
                 panic!();
             }
-            let root_envelope: EnvelopeRef = context.accounts[self.cursor_pos.0]
+            let root_envelope: EnvelopeRef = context.accounts[&self.cursor_pos.0]
                 .collection
                 .get_env(root_env_hash);
             use melib::search::QueryTrait;
@@ -455,11 +455,11 @@ impl MailListingTrait for CompactListing {
 }
 
 impl ListingTrait for CompactListing {
-    fn coordinates(&self) -> (usize, MailboxHash) {
+    fn coordinates(&self) -> (AccountHash, MailboxHash) {
         (self.new_cursor_pos.0, self.new_cursor_pos.1)
     }
 
-    fn set_coordinates(&mut self, coordinates: (usize, MailboxHash)) {
+    fn set_coordinates(&mut self, coordinates: (AccountHash, MailboxHash)) {
         self.new_cursor_pos = (coordinates.0, coordinates.1, 0);
         self.unfocused = false;
         self.view = ThreadView::default();
@@ -475,7 +475,7 @@ impl ListingTrait for CompactListing {
         }
         let thread_hash = self.get_thread_under_cursor(idx);
 
-        let account = &context.accounts[self.cursor_pos.0];
+        let account = &context.accounts[&self.cursor_pos.0];
         let threads = account.collection.get_threads(self.cursor_pos.1);
         let thread = threads.thread_ref(thread_hash);
 
@@ -698,7 +698,7 @@ impl ListingTrait for CompactListing {
             }
         }
 
-        let account = &context.accounts[self.cursor_pos.0];
+        let account = &context.accounts[&self.cursor_pos.0];
         let threads = account.collection.get_threads(self.cursor_pos.1);
         for r in 0..cmp::min(self.length - top_idx, rows) {
             let thread_hash = self.get_thread_under_cursor(r + top_idx);
@@ -778,7 +778,7 @@ impl ListingTrait for CompactListing {
         self.filter_term = filter_term;
         self.row_updates.clear();
 
-        let account = &context.accounts[self.cursor_pos.0];
+        let account = &context.accounts[&self.cursor_pos.0];
         match results {
             Ok(results) => {
                 let threads = account.collection.get_threads(self.cursor_pos.1);
@@ -805,7 +805,7 @@ impl ListingTrait for CompactListing {
                     threads.group_inner_sort_by(
                         &mut self.filtered_selection,
                         self.sort,
-                        &context.accounts[self.cursor_pos.0].collection.envelopes,
+                        &context.accounts[&self.cursor_pos.0].collection.envelopes,
                     );
                     self.new_cursor_pos.2 =
                         std::cmp::min(self.filtered_selection.len() - 1, self.cursor_pos.2);
@@ -873,9 +873,9 @@ impl fmt::Display for CompactListing {
 
 impl CompactListing {
     pub const DESCRIPTION: &'static str = "compact listing";
-    pub fn new(coordinates: (usize, MailboxHash)) -> Self {
+    pub fn new(coordinates: (AccountHash, MailboxHash)) -> Self {
         CompactListing {
-            cursor_pos: (0, 1, 0),
+            cursor_pos: (coordinates.0, 1, 0),
             new_cursor_pos: (coordinates.0, coordinates.1, 0),
             length: 0,
             sort: (Default::default(), Default::default()),
@@ -911,7 +911,7 @@ impl CompactListing {
         let thread = threads.thread_ref(hash);
         let mut tags = String::new();
         let mut colors: SmallVec<[_; 8]> = SmallVec::new();
-        let backend_lck = context.accounts[self.cursor_pos.0].backend.read().unwrap();
+        let backend_lck = context.accounts[&self.cursor_pos.0].backend.read().unwrap();
         if let Some(t) = backend_lck.tags() {
             let tags_lck = t.read().unwrap();
             for t in e.labels().iter() {
@@ -984,7 +984,7 @@ impl CompactListing {
     }
 
     fn update_line(&mut self, context: &Context, thread_hash: ThreadHash) {
-        let account = &context.accounts[self.cursor_pos.0];
+        let account = &context.accounts[&self.cursor_pos.0];
         let threads = account.collection.get_threads(self.cursor_pos.1);
         let thread = threads.thread_ref(thread_hash);
         let thread_node_hash = threads.thread_group_iter(thread_hash).next().unwrap().1;
@@ -1144,7 +1144,7 @@ impl CompactListing {
             self.data_columns.columns[3].size().0,
             self.data_columns.columns[4].size().0,
         );
-        let account = &context.accounts[self.cursor_pos.0];
+        let account = &context.accounts[&self.cursor_pos.0];
 
         let threads = account.collection.get_threads(self.cursor_pos.1);
 
@@ -1152,12 +1152,12 @@ impl CompactListing {
             self.rows.iter().skip(start).take(end - start + 1)
         {
             let idx = *idx;
-            if !context.accounts[self.cursor_pos.0].contains_key(*root_env_hash) {
+            if !context.accounts[&self.cursor_pos.0].contains_key(*root_env_hash) {
                 //debug!("key = {}", root_env_hash);
                 //debug!(
                 //    "name = {} {}",
                 //    account[&self.cursor_pos.1].name(),
-                //    context.accounts[self.cursor_pos.0].name()
+                //    context.accounts[&self.cursor_pos.0].name()
                 //);
                 //debug!("{:#?}", context.accounts);
 
@@ -1316,7 +1316,7 @@ impl CompactListing {
         results: Result<SmallVec<[EnvelopeHash; 512]>>,
         context: &mut Context,
     ) {
-        let account = &context.accounts[self.cursor_pos.0];
+        let account = &context.accounts[&self.cursor_pos.0];
         match results {
             Ok(results) => {
                 let threads = account.collection.get_threads(self.cursor_pos.1);
@@ -1500,7 +1500,7 @@ impl Component for CompactListing {
                         }
                         Action::ToggleThreadSnooze if !self.unfocused => {
                             let thread = self.get_thread_under_cursor(self.cursor_pos.2);
-                            let account = &mut context.accounts[self.cursor_pos.0];
+                            let account = &mut context.accounts[&self.cursor_pos.0];
                             account
                                 .collection
                                 .threads
@@ -1534,7 +1534,7 @@ impl Component for CompactListing {
                 self.set_dirty(true);
             }
             UIEvent::EnvelopeRename(ref old_hash, ref new_hash) => {
-                let account = &context.accounts[self.cursor_pos.0];
+                let account = &context.accounts[&self.cursor_pos.0];
                 let threads = account.collection.get_threads(self.cursor_pos.1);
                 if !account.collection.contains_key(&new_hash) {
                     return false;
@@ -1552,8 +1552,10 @@ impl Component for CompactListing {
 
                 self.dirty = true;
 
-                self.view
-                    .process_event(&mut UIEvent::EnvelopeRename(*old_hash, *new_hash), context);
+                if self.unfocused {
+                    self.view
+                        .process_event(&mut UIEvent::EnvelopeRename(*old_hash, *new_hash), context);
+                }
             }
             UIEvent::EnvelopeRemove(ref _env_hash, ref thread_hash) => {
                 if self.order.contains_key(thread_hash) {
@@ -1562,7 +1564,7 @@ impl Component for CompactListing {
                 }
             }
             UIEvent::EnvelopeUpdate(ref env_hash) => {
-                let account = &context.accounts[self.cursor_pos.0];
+                let account = &context.accounts[&self.cursor_pos.0];
                 let threads = account.collection.get_threads(self.cursor_pos.1);
                 if !account.collection.contains_key(&env_hash) {
                     return false;
@@ -1580,8 +1582,10 @@ impl Component for CompactListing {
 
                 self.dirty = true;
 
-                self.view
-                    .process_event(&mut UIEvent::EnvelopeUpdate(*env_hash), context);
+                if self.unfocused {
+                    self.view
+                        .process_event(&mut UIEvent::EnvelopeUpdate(*env_hash), context);
+                }
             }
             UIEvent::ChangeMode(UIMode::Normal) => {
                 self.dirty = true;
@@ -1606,16 +1610,16 @@ impl Component for CompactListing {
                 return true;
             }
             UIEvent::Action(Action::Listing(Search(ref filter_term))) if !self.unfocused => {
-                match context.accounts[self.cursor_pos.0].search(
+                match context.accounts[&self.cursor_pos.0].search(
                     filter_term,
                     self.sort,
                     self.cursor_pos.1,
                 ) {
                     Ok(job) => {
-                        let (chan, handle, job_id) = context.accounts[self.cursor_pos.0]
+                        let (chan, handle, job_id) = context.accounts[&self.cursor_pos.0]
                             .job_executor
                             .spawn_specialized(job);
-                        context.accounts[self.cursor_pos.0]
+                        context.accounts[&self.cursor_pos.0]
                             .active_jobs
                             .insert(job_id, crate::conf::accounts::JobRequest::Search(handle));
                         self.search_job = Some((filter_term.to_string(), chan, job_id));
@@ -1631,19 +1635,19 @@ impl Component for CompactListing {
                 self.set_dirty(true);
             }
             UIEvent::Action(Action::Listing(Select(ref search_term))) if !self.unfocused => {
-                match context.accounts[self.cursor_pos.0].search(
+                match context.accounts[&self.cursor_pos.0].search(
                     search_term,
                     self.sort,
                     self.cursor_pos.1,
                 ) {
                     Ok(job) => {
-                        let (mut chan, handle, job_id) = context.accounts[self.cursor_pos.0]
+                        let (mut chan, handle, job_id) = context.accounts[&self.cursor_pos.0]
                             .job_executor
                             .spawn_specialized(job);
                         if let Ok(Some(search_result)) = try_recv_timeout!(&mut chan) {
                             self.select(search_term, search_result, context);
                         } else {
-                            context.accounts[self.cursor_pos.0]
+                            context.accounts[&self.cursor_pos.0]
                                 .active_jobs
                                 .insert(job_id, crate::conf::accounts::JobRequest::Search(handle));
                             self.select_job = Some((search_term.to_string(), chan, job_id));

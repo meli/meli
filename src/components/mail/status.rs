@@ -271,7 +271,7 @@ impl StatusPanel {
             Some(2),
         );
 
-        for (i, a) in context.accounts.iter().enumerate() {
+        for (i, (_h, a)) in context.accounts.iter().enumerate() {
             for x in 2..(120 - 1) {
                 set_and_join_box(&mut self.content, (x, 12 + i * 10), BoxBoundary::Horizontal);
             }

@@ -114,10 +114,10 @@ pub enum UIEvent {
     Notification(Option<String>, String, Option<NotificationType>),
     Action(Action),
     StatusEvent(StatusEvent),
-    MailboxUpdate((usize, MailboxHash)), // (account_idx, mailbox_idx)
-    MailboxDelete((usize, MailboxHash)),
-    MailboxCreate((usize, MailboxHash)),
-    AccountStatusChange(usize),
+    MailboxUpdate((AccountHash, MailboxHash)), // (account_idx, mailbox_idx)
+    MailboxDelete((AccountHash, MailboxHash)),
+    MailboxCreate((AccountHash, MailboxHash)),
+    AccountStatusChange(AccountHash),
     ComponentKill(Uuid),
     WorkerProgress(AccountHash, MailboxHash),
     StartupCheck(MailboxHash),

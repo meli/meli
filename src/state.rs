@@ -34,8 +34,8 @@ use melib::backends::{AccountHash, MailboxHash, NotifyFn};
 
 use crate::jobs::JobExecutor;
 use crossbeam::channel::{unbounded, Receiver, Sender};
+use indexmap::IndexMap;
 use smallvec::SmallVec;
-use std::collections::HashMap;
 use std::env;
 use std::io::Write;
 use std::os::unix::io::RawFd;
@@ -101,8 +101,7 @@ impl InputHandler {
 
 /// A context container for loaded settings, accounts, UI changes, etc.
 pub struct Context {
-    pub accounts: Vec<Account>,
-    pub account_hashes: HashMap<AccountHash, usize>,
+    pub accounts: IndexMap<AccountHash, Account>,
     pub settings: Settings,
 
     pub runtime_settings: Settings,
@@ -135,7 +134,7 @@ impl Context {
         self.input_thread.restore();
     }
 
-    pub fn is_online(&mut self, account_pos: usize) -> Result<()> {
+    pub fn is_online_idx(&mut self, account_pos: usize) -> Result<()> {
         let Context {
             ref mut accounts,
             ref mut replies,
@@ -155,13 +154,18 @@ impl Context {
                 }
                 accounts[account_pos].watch();
 
-                replies.push_back(UIEvent::AccountStatusChange(account_pos));
+                replies.push_back(UIEvent::AccountStatusChange(accounts[account_pos].hash()));
             }
         }
         if ret.is_ok() != was_online {
-            replies.push_back(UIEvent::AccountStatusChange(account_pos));
+            replies.push_back(UIEvent::AccountStatusChange(accounts[account_pos].hash()));
         }
         ret
+    }
+
+    pub fn is_online(&mut self, account_hash: AccountHash) -> Result<()> {
+        let idx = self.accounts.get_index_of(&account_hash).unwrap();
+        self.is_online_idx(idx)
     }
 
     pub fn work_controller(&self) -> &WorkController {
@@ -257,20 +261,13 @@ impl State {
         let cols = termsize.0 as usize;
         let rows = termsize.1 as usize;
 
-        let mut account_hashes = HashMap::with_capacity_and_hasher(1, Default::default());
         let work_controller = WorkController::new(sender.clone());
         let job_executor = Arc::new(JobExecutor::new(sender.clone()));
-        let accounts: Vec<Account> = {
-            let mut file_accs = settings
+        let accounts = {
+            settings
                 .accounts
                 .iter()
-                .collect::<Vec<(&String, &AccountConf)>>();
-            file_accs.sort_by(|a, b| a.0.cmp(&b.0));
-
-            file_accs
-                .into_iter()
-                .enumerate()
-                .map(|(index, (n, a_s))| {
+                .map(|(n, a_s)| {
                     let sender = sender.clone();
                     let account_hash = {
                         use std::collections::hash_map::DefaultHasher;
@@ -279,9 +276,7 @@ impl State {
                         hasher.write(n.as_bytes());
                         hasher.finish()
                     };
-                    account_hashes.insert(account_hash, index);
                     Account::new(
-                        index,
                         account_hash,
                         n.to_string(),
                         a_s.clone(),
@@ -301,6 +296,7 @@ impl State {
                 })
                 .collect::<Result<Vec<Account>>>()?
         };
+        let accounts = accounts.into_iter().map(|acc| (acc.hash(), acc)).collect();
 
         let timer = {
             let sender = sender.clone();
@@ -343,7 +339,6 @@ impl State {
 
             context: Context {
                 accounts,
-                account_hashes,
                 settings: settings.clone(),
                 runtime_settings: settings,
                 dirty_areas: VecDeque::with_capacity(5),
@@ -378,7 +373,7 @@ impl State {
             if !s.context.accounts[i].backend_capabilities.is_remote {
                 s.context.accounts[i].watch();
             }
-            if s.context.is_online(i).is_ok() && s.context.accounts[i].is_empty() {
+            if s.context.is_online_idx(i).is_ok() && s.context.accounts[i].is_empty() {
                 //return Err(MeliError::new(format!(
                 //    "Account {} has no mailboxes configured.",
                 //    s.context.accounts[i].name()
@@ -397,29 +392,30 @@ impl State {
     pub fn refresh_event(&mut self, event: RefreshEvent) {
         let account_hash = event.account_hash();
         let mailbox_hash = event.mailbox_hash();
-        if let Some(&idxa) = self.context.account_hashes.get(&account_hash) {
-            if self.context.accounts[idxa]
-                .mailbox_entries
-                .contains_key(&mailbox_hash)
+        if self.context.accounts[&account_hash]
+            .mailbox_entries
+            .contains_key(&mailbox_hash)
+        {
+            if self.context.accounts[&account_hash]
+                .load(mailbox_hash)
+                .is_err()
             {
-                if self.context.accounts[idxa].load(mailbox_hash).is_err() {
-                    self.context.replies.push_back(UIEvent::from(event));
-                    return;
-                }
-                let Context {
-                    ref mut accounts, ..
-                } = &mut self.context;
+                self.context.replies.push_back(UIEvent::from(event));
+                return;
+            }
+            let Context {
+                ref mut accounts, ..
+            } = &mut self.context;
 
-                if let Some(notification) = accounts[idxa].reload(event, mailbox_hash) {
-                    if let UIEvent::Notification(_, _, _) = notification {
-                        self.rcv_event(UIEvent::MailboxUpdate((idxa, mailbox_hash)));
-                    }
-                    self.rcv_event(notification);
+            if let Some(notification) = accounts[&account_hash].reload(event, mailbox_hash) {
+                if let UIEvent::Notification(_, _, _) = notification {
+                    self.rcv_event(UIEvent::MailboxUpdate((account_hash, mailbox_hash)));
                 }
-            } else {
-                if let melib::backends::RefreshEventKind::Failure(err) = event.kind() {
-                    debug!(err);
-                }
+                self.rcv_event(notification);
+            }
+        } else {
+            if let melib::backends::RefreshEventKind::Failure(err) = event.kind() {
+                debug!(err);
             }
         }
     }
@@ -838,7 +834,7 @@ impl State {
                 if let Some(account) = self
                     .context
                     .accounts
-                    .iter_mut()
+                    .values_mut()
                     .find(|a| a.name() == account_name)
                 {
                     match account.mailbox_operation(op) {
@@ -868,7 +864,7 @@ impl State {
                     .context
                     .accounts
                     .iter()
-                    .position(|acc| acc.name() == account_name)
+                    .position(|(_, acc)| acc.name() == account_name)
                 {
                     a
                 } else {
@@ -937,7 +933,7 @@ impl State {
                     .context
                     .accounts
                     .iter()
-                    .position(|a| a.name() == account_name)
+                    .position(|(_h, a)| a.name() == account_name)
                 {
                     self.context.replies.push_back(UIEvent::StatusEvent(
                         StatusEvent::UpdateStatus(format!(
@@ -1033,9 +1029,7 @@ impl State {
                 return;
             }
             UIEvent::WorkerProgress(account_hash, mailbox_hash) => {
-                if let Some(&account_idx) = self.context.account_hashes.get(&account_hash) {
-                    let _ = self.context.accounts[account_idx].load(mailbox_hash);
-                }
+                let _ = self.context.accounts[&account_hash].load(mailbox_hash);
                 return;
             }
             UIEvent::ChangeMode(m) => {
@@ -1169,7 +1163,7 @@ impl State {
     pub fn check_accounts(&mut self) {
         let mut ctr = 0;
         for i in 0..self.context.accounts.len() {
-            if self.context.is_online(i).is_ok() {
+            if self.context.is_online_idx(i).is_ok() {
                 ctr += 1;
             }
         }

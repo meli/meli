@@ -62,6 +62,7 @@ use melib::error::*;
 
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
+use indexmap::IndexMap;
 use std::collections::HashMap;
 use std::env;
 use std::fs::OpenOptions;
@@ -78,8 +79,8 @@ macro_rules! split_command {
 
 #[macro_export]
 macro_rules! mailbox_acc_settings {
-    ($context:ident[$account_idx:expr].$setting:ident.$field:ident) => {{
-        $context.accounts[$account_idx]
+    ($context:ident[$account_hash:expr].$setting:ident.$field:ident) => {{
+        $context.accounts[&$account_hash]
             .settings
             .conf_override
             .$setting
@@ -90,14 +91,14 @@ macro_rules! mailbox_acc_settings {
 }
 #[macro_export]
 macro_rules! mailbox_settings {
-    ($context:ident[$account_idx:expr][$mailbox_path:expr].$setting:ident.$field:ident) => {{
-        $context.accounts[$account_idx][$mailbox_path]
+    ($context:ident[$account_hash:expr][$mailbox_path:expr].$setting:ident.$field:ident) => {{
+        $context.accounts[&$account_hash][$mailbox_path]
             .conf
             .conf_override
             .$setting
             .$field
             .as_ref()
-            .or($context.accounts[$account_idx]
+            .or($context.accounts[&$account_hash]
                 .settings
                 .conf_override
                 .$setting
@@ -163,7 +164,7 @@ pub struct FileAccount {
     #[serde(default)]
     subscribed_mailboxes: Vec<String>,
     #[serde(default)]
-    mailboxes: HashMap<String, FileMailboxConf>,
+    mailboxes: IndexMap<String, FileMailboxConf>,
     #[serde(default)]
     search_backend: SearchBackend,
     #[serde(default = "false_val")]
@@ -174,11 +175,11 @@ pub struct FileAccount {
     pub conf_override: MailUIConf,
     #[serde(flatten)]
     #[serde(deserialize_with = "extra_settings")]
-    pub extra: HashMap<String, String>, /* use custom deserializer to convert any given value (eg bool, number, etc) to string */
+    pub extra: IndexMap<String, String>, /* use custom deserializer to convert any given value (eg bool, number, etc) to string */
 }
 
 impl FileAccount {
-    pub fn mailboxes(&self) -> &HashMap<String, FileMailboxConf> {
+    pub fn mailboxes(&self) -> &IndexMap<String, FileMailboxConf> {
         &self.mailboxes
     }
 
@@ -194,7 +195,7 @@ impl FileAccount {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FileSettings {
-    pub accounts: HashMap<String, FileAccount>,
+    pub accounts: IndexMap<String, FileAccount>,
     #[serde(default)]
     pub pager: PagerSettings,
     #[serde(default)]
@@ -211,7 +212,7 @@ pub struct FileSettings {
     #[serde(default)]
     pub terminal: TerminalSettings,
     #[serde(default)]
-    pub plugins: HashMap<String, Plugin>,
+    pub plugins: IndexMap<String, Plugin>,
     #[serde(default)]
     pub log: LogSettings,
 }
@@ -221,7 +222,7 @@ pub struct AccountConf {
     pub account: AccountSettings,
     pub conf: FileAccount,
     pub conf_override: MailUIConf,
-    pub mailbox_confs: HashMap<String, FileMailboxConf>,
+    pub mailbox_confs: IndexMap<String, FileMailboxConf>,
 }
 
 impl AccountConf {
@@ -261,7 +262,7 @@ impl From<FileAccount> for AccountConf {
             subscribed_mailboxes: x.subscribed_mailboxes.clone(),
             mailboxes,
             manual_refresh: x.manual_refresh,
-            extra: x.extra.clone(),
+            extra: x.extra.clone().into_iter().collect(),
         };
 
         let mailbox_confs = x.mailboxes.clone();
@@ -422,7 +423,7 @@ impl FileSettings {
                     .into_iter()
                     .map(|(k, v)| (k, v.mailbox_conf))
                     .collect(),
-                extra,
+                extra: extra.into_iter().collect(),
             };
             backends.validate_config(&lowercase_format, &s)?;
         }
@@ -433,7 +434,7 @@ impl FileSettings {
 
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct Settings {
-    pub accounts: HashMap<String, AccountConf>,
+    pub accounts: IndexMap<String, AccountConf>,
     pub pager: PagerSettings,
     pub listing: ListingSettings,
     pub notifications: NotificationsSettings,
@@ -442,14 +443,14 @@ pub struct Settings {
     pub composing: ComposingSettings,
     pub pgp: PGPSettings,
     pub terminal: TerminalSettings,
-    pub plugins: HashMap<String, Plugin>,
+    pub plugins: IndexMap<String, Plugin>,
     pub log: LogSettings,
 }
 
 impl Settings {
     pub fn new() -> Result<Settings> {
         let fs = FileSettings::new()?;
-        let mut s: HashMap<String, AccountConf> = HashMap::new();
+        let mut s: IndexMap<String, AccountConf> = IndexMap::new();
 
         for (id, x) in fs.accounts {
             let mut ac = AccountConf::from(x);
@@ -490,7 +491,7 @@ impl Settings {
         }
 
         Ok(Settings {
-            accounts: HashMap::new(),
+            accounts: IndexMap::new(),
             pager: fs.pager,
             listing: fs.listing,
             notifications: fs.notifications,
@@ -583,10 +584,10 @@ mod deserializers {
         Ok(ret)
     }
 
-    use std::collections::HashMap;
+    use indexmap::IndexMap;
     pub(in crate::conf) fn extra_settings<'de, D>(
         deserializer: D,
-    ) -> std::result::Result<HashMap<String, String>, D::Error>
+    ) -> std::result::Result<IndexMap<String, String>, D::Error>
     where
         D: Deserializer<'de>,
     {
@@ -596,7 +597,7 @@ mod deserializers {
         #[derive(Deserialize)]
         struct Wrapper(#[serde(deserialize_with = "any_of")] String);
 
-        let v = <HashMap<String, Wrapper>>::deserialize(deserializer)?;
+        let v = <IndexMap<String, Wrapper>>::deserialize(deserializer)?;
         Ok(v.into_iter().map(|(k, Wrapper(v))| (k, v)).collect())
     }
 }
@@ -867,6 +868,10 @@ mod dotaddressable {
     impl<T: DotAddressable> DotAddressable for Vec<T> {}
     impl<K: DotAddressable + std::cmp::Eq + std::hash::Hash, V: DotAddressable> DotAddressable
         for HashMap<K, V>
+    {
+    }
+    impl<K: DotAddressable + std::cmp::Eq + std::hash::Hash, V: DotAddressable> DotAddressable
+        for IndexMap<K, V>
     {
     }
     impl<K: DotAddressable + std::cmp::Eq + std::hash::Hash> DotAddressable for HashSet<K> {}
