@@ -46,15 +46,13 @@ pub mod svg;
 use std::fmt;
 use std::fmt::{Debug, Display};
 
-use std::collections::HashMap;
+use indexmap::IndexMap;
 use uuid::Uuid;
-
-use super::{Key, StatusEvent, UIEvent};
 
 pub type ComponentId = Uuid;
 
-pub type ShortcutMap = HashMap<&'static str, Key>;
-pub type ShortcutMaps = HashMap<&'static str, ShortcutMap>;
+pub type ShortcutMap = IndexMap<&'static str, Key>;
+pub type ShortcutMaps = IndexMap<&'static str, ShortcutMap>;
 
 /// Types implementing this Trait can draw on the terminal and receive events.
 /// If a type wants to skip drawing if it has not changed anything, it can hold some flag in its

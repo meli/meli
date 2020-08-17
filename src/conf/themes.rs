@@ -30,11 +30,12 @@
 
 use crate::terminal::{Attr, Color};
 use crate::Context;
+use indexmap::IndexMap;
 use melib::{MeliError, Result};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use smallvec::SmallVec;
 use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 #[inline(always)]
 pub fn value(context: &Context, key: &'static str) -> ThemeAttribute {
@@ -486,16 +487,16 @@ impl<'de> Deserialize<'de> for ThemeValue<Color> {
 pub struct Themes {
     pub light: Theme,
     pub dark: Theme,
-    pub other_themes: HashMap<String, Theme>,
+    pub other_themes: IndexMap<String, Theme>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Theme {
-    color_aliases: HashMap<Cow<'static, str>, ThemeValue<Color>>,
-    attr_aliases: HashMap<Cow<'static, str>, ThemeValue<Attr>>,
+    color_aliases: IndexMap<Cow<'static, str>, ThemeValue<Color>>,
+    attr_aliases: IndexMap<Cow<'static, str>, ThemeValue<Attr>>,
     #[cfg(feature = "regexp")]
-    text_format_regexps: HashMap<Cow<'static, str>, SmallVec<[TextFormatterSetting; 32]>>,
-    pub keys: HashMap<Cow<'static, str>, ThemeAttributeInner>,
+    text_format_regexps: IndexMap<Cow<'static, str>, SmallVec<[TextFormatterSetting; 32]>>,
+    pub keys: IndexMap<Cow<'static, str>, ThemeAttributeInner>,
 }
 
 #[cfg(feature = "regexp")]
@@ -734,14 +735,14 @@ mod regexp {
 
 use std::ops::{Deref, DerefMut};
 impl Deref for Theme {
-    type Target = HashMap<Cow<'static, str>, ThemeAttributeInner>;
+    type Target = IndexMap<Cow<'static, str>, ThemeAttributeInner>;
     fn deref(&self) -> &Self::Target {
         &self.keys
     }
 }
 
 impl DerefMut for Theme {
-    fn deref_mut(&mut self) -> &mut HashMap<Cow<'static, str>, ThemeAttributeInner> {
+    fn deref_mut(&mut self) -> &mut IndexMap<Cow<'static, str>, ThemeAttributeInner> {
         &mut self.keys
     }
 }
@@ -766,19 +767,19 @@ impl<'de> Deserialize<'de> for Themes {
             #[serde(default)]
             dark: ThemeOptions,
             #[serde(flatten, default)]
-            other_themes: HashMap<String, ThemeOptions>,
+            other_themes: IndexMap<String, ThemeOptions>,
         }
         #[derive(Deserialize, Default)]
         struct ThemeOptions {
             #[serde(default)]
-            color_aliases: HashMap<Cow<'static, str>, ThemeValue<Color>>,
+            color_aliases: IndexMap<Cow<'static, str>, ThemeValue<Color>>,
             #[serde(default)]
-            attr_aliases: HashMap<Cow<'static, str>, ThemeValue<Attr>>,
+            attr_aliases: IndexMap<Cow<'static, str>, ThemeValue<Attr>>,
             #[cfg(feature = "regexp")]
             #[serde(default)]
-            text_format_regexps: HashMap<Cow<'static, str>, HashMap<String, RegexpOptions>>,
+            text_format_regexps: IndexMap<Cow<'static, str>, IndexMap<String, RegexpOptions>>,
             #[serde(flatten, default)]
-            keys: HashMap<Cow<'static, str>, ThemeAttributeInnerOptions>,
+            keys: IndexMap<Cow<'static, str>, ThemeAttributeInnerOptions>,
         }
         #[cfg(feature = "regexp")]
         #[derive(Deserialize, Default)]
@@ -1284,9 +1285,9 @@ impl Themes {
 
 impl Default for Themes {
     fn default() -> Themes {
-        let mut light = HashMap::default();
-        let mut dark = HashMap::default();
-        let other_themes = HashMap::default();
+        let mut light = IndexMap::default();
+        let mut dark = IndexMap::default();
+        let other_themes = IndexMap::default();
 
         macro_rules! add {
             ($key:literal, $($theme:ident={ $($name:ident : $val:expr),*$(,)? }),*$(,)?) => {
@@ -1684,9 +1685,9 @@ impl Serialize for Themes {
     where
         S: Serializer,
     {
-        let mut dark: HashMap<Cow<'static, str>, ThemeAttribute> = Default::default();
-        let mut light: HashMap<Cow<'static, str>, ThemeAttribute> = Default::default();
-        let mut other_themes: HashMap<String, _> = Default::default();
+        let mut dark: IndexMap<Cow<'static, str>, ThemeAttribute> = Default::default();
+        let mut light: IndexMap<Cow<'static, str>, ThemeAttribute> = Default::default();
+        let mut other_themes: IndexMap<String, _> = Default::default();
 
         for k in self.dark.keys() {
             dark.insert(
@@ -1711,7 +1712,7 @@ impl Serialize for Themes {
         }
 
         for (name, t) in self.other_themes.iter() {
-            let mut new_map: HashMap<Cow<'static, str>, ThemeAttribute> = Default::default();
+            let mut new_map: IndexMap<Cow<'static, str>, ThemeAttribute> = Default::default();
 
             for k in t.keys() {
                 new_map.insert(
@@ -1746,8 +1747,8 @@ fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
     fn is_cyclic_util<'a>(
         course: Course,
         k: &'a Cow<'static, str>,
-        visited: &mut HashMap<(&'a Cow<'static, str>, Course), bool>,
-        stack: &mut HashMap<(&'a Cow<'static, str>, Course), bool>,
+        visited: &mut IndexMap<(&'a Cow<'static, str>, Course), bool>,
+        stack: &mut IndexMap<(&'a Cow<'static, str>, Course), bool>,
         path: &mut SmallVec<[(&'a Cow<'static, str>, Course); 16]>,
         theme: &'a Theme,
     ) -> bool {
@@ -1954,7 +1955,7 @@ fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
                 .keys()
                 .map(|k| ((k, Course::AttrAlias), false)),
         )
-        .collect::<HashMap<(&Cow<'static, str>, Course), bool>>();
+        .collect::<IndexMap<(&Cow<'static, str>, Course), bool>>();
 
     let mut stack = visited.clone();
     for k in theme.keys() {

@@ -21,8 +21,8 @@
 
 use super::DotAddressable;
 use crate::terminal::Key;
+use indexmap::IndexMap;
 use melib::{MeliError, Result};
-use std::collections::HashMap;
 
 #[macro_export]
 macro_rules! shortcut {
@@ -121,7 +121,7 @@ macro_rules! shortcut_key_values {
                 }
             }
             /// Returns a hashmap of all shortcuts and their values
-            pub fn key_values(&self) -> HashMap<&'static str, Key> {
+            pub fn key_values(&self) -> IndexMap<&'static str, Key> {
                 [
                 $((stringify!($fname),(self.$fname).clone()),)*
                 ].iter().cloned().collect()

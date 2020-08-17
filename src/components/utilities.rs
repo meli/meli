@@ -610,7 +610,7 @@ impl Component for Pager {
         self.dirty = value;
     }
     fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
-        let config_map: HashMap<&'static str, Key> = context.settings.shortcuts.pager.key_values();
+        let config_map: IndexMap<&'static str, Key> = context.settings.shortcuts.pager.key_values();
         let mut ret: ShortcutMaps = Default::default();
         ret.insert(Pager::DESCRIPTION, config_map);
         ret
@@ -1438,9 +1438,7 @@ impl Component for Tabbed {
             let mut max_width =
                 "Press ? to close, use COMMAND \"search\" to find shortcuts".len() + 3;
 
-            let mut shortcuts = children_maps.iter().collect::<Vec<_>>();
-            shortcuts.sort_by_key(|(k, _)| *k);
-            for (desc, shortcuts) in shortcuts.iter() {
+            for (desc, shortcuts) in children_maps.iter() {
                 max_length += shortcuts.len() + 3;
                 max_width = std::cmp::max(
                     max_width,
@@ -1508,7 +1506,7 @@ impl Component for Tabbed {
                 );
             }
             let mut idx = 2;
-            for (desc, shortcuts) in shortcuts.iter() {
+            for (desc, shortcuts) in children_maps.iter() {
                 write_string_to_grid(
                     desc,
                     &mut self.help_content,
@@ -1519,8 +1517,6 @@ impl Component for Tabbed {
                     None,
                 );
                 idx += 2;
-                let mut shortcuts = shortcuts.iter().collect::<Vec<_>>();
-                shortcuts.sort_unstable_by_key(|(ref k, _)| *k);
                 for (k, v) in shortcuts {
                     debug!(&(k, v));
                     let (x, y) = write_string_to_grid(
