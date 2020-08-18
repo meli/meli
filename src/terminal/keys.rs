@@ -73,6 +73,7 @@ impl fmt::Display for Key {
         use crate::Key::*;
         match self {
             F(n) => write!(f, "F{}", n),
+            Char(' ') => write!(f, "Space"),
             Char('\t') => write!(f, "Tab"),
             Char('\n') => write!(f, "Enter"),
             Char(c) => write!(f, "{}", c),
