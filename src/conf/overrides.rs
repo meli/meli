@@ -221,6 +221,11 @@ pub struct ComposingSettingsOverride {
     #[serde(alias = "format-flowed")]
     #[serde(default)]
     pub format_flowed: Option<bool>,
+    #[doc = "Set User-Agent"]
+    #[doc = "Default: empty"]
+    #[serde(alias = "insert_user_agent")]
+    #[serde(default)]
+    pub insert_user_agent: Option<bool>,
     #[doc = " Set default header values for new drafts"]
     #[doc = " Default: empty"]
     #[serde(alias = "default-header-values")]
@@ -234,6 +239,7 @@ impl Default for ComposingSettingsOverride {
             editor_command: None,
             embed: None,
             format_flowed: None,
+            insert_user_agent: None,
             default_header_values: None,
         }
     }

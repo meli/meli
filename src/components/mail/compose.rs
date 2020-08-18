@@ -171,6 +171,12 @@ impl Composer {
                 ret.draft.set_header(h, v.into());
             }
         }
+        if *mailbox_acc_settings!(context[account_hash].composing.insert_user_agent) {
+            ret.draft.set_header(
+                "User-Agent".into(),
+                format!("meli {}", option_env!("CARGO_PKG_VERSION").unwrap_or("0.0")),
+            );
+        }
         ret.pager
             .set_colors(crate::conf::value(context, "theme_default"));
         ret

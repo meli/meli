@@ -60,10 +60,6 @@ impl Default for Draft {
             crate::datetime::timestamp_to_string(crate::datetime::now(), None),
         );
         headers.insert("Subject".into(), "".into());
-        headers.insert(
-            "User-Agent".into(),
-            format!("meli {}", option_env!("CARGO_PKG_VERSION").unwrap_or("0.0")),
-        );
         header_order.push("Date".into());
         header_order.push("From".into());
         header_order.push("To".into());
