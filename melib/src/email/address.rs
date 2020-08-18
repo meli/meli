@@ -20,6 +20,8 @@
  */
 
 use super::*;
+use std::convert::TryFrom;
+use std::hash::{Hash, Hasher};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GroupAddress {
@@ -116,6 +118,12 @@ impl Address {
             .map(str::to_string)
             .collect::<_>()
     }
+
+    pub fn list_try_from(val: &str) -> Result<Vec<Address>> {
+        Ok(parser::address::rfc2822address_list(val.as_bytes())?
+            .1
+            .to_vec())
+    }
 }
 
 impl Eq for Address {}
@@ -134,6 +142,22 @@ impl PartialEq for Address {
                         .iter()
                         .zip(o.mailbox_list.iter())
                         .fold(true, |b, (s, o)| b && (s == o))
+            }
+        }
+    }
+}
+
+impl Hash for Address {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            Address::Mailbox(s) => {
+                s.address_spec.display_bytes(&s.raw).hash(state);
+            }
+            Address::Group(s) => {
+                s.display_name.display_bytes(&s.raw).hash(state);
+                for sub in &s.mailbox_list {
+                    sub.hash(state);
+                }
             }
         }
     }
@@ -166,6 +190,13 @@ impl fmt::Display for Address {
 impl fmt::Debug for Address {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Display::fmt(self, f)
+    }
+}
+
+impl TryFrom<&str> for Address {
+    type Error = MeliError;
+    fn try_from(val: &str) -> Result<Address> {
+        Ok(parser::address::address(val.as_bytes())?.1)
     }
 }
 

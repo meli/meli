@@ -110,11 +110,21 @@ pub struct MailView {
 }
 
 #[derive(Debug)]
+pub enum PendingReplyAction {
+    Reply,
+    ReplyToAuthor,
+    ReplyToAll,
+}
+
+#[derive(Debug)]
 pub enum MailViewState {
-    Init,
+    Init {
+        pending_action: Option<PendingReplyAction>,
+    },
     LoadingBody {
         job_id: JobId,
         chan: oneshot::Receiver<Result<Vec<u8>>>,
+        pending_action: Option<PendingReplyAction>,
     },
     Loaded {
         body: Result<Vec<u8>>,
@@ -123,7 +133,9 @@ pub enum MailViewState {
 
 impl Default for MailViewState {
     fn default() -> Self {
-        MailViewState::Init
+        MailViewState::Init {
+            pending_action: None,
+        }
     }
 }
 
@@ -185,6 +197,7 @@ impl MailView {
 
     fn init_futures(&mut self, context: &mut Context) {
         debug!("init_futures");
+        let mut pending_action = None;
         let account = &mut context.accounts[&self.coordinates.0];
         if debug!(account.contains_key(self.coordinates.2)) {
             {
@@ -195,10 +208,22 @@ impl MailView {
                     Ok(fut) => {
                         let (mut chan, handle, job_id) =
                             account.job_executor.spawn_specialized(fut);
+                        pending_action = if let MailViewState::Init {
+                            ref mut pending_action,
+                        } = self.state
+                        {
+                            pending_action.take()
+                        } else {
+                            None
+                        };
                         if let Ok(Some(bytes_result)) = try_recv_timeout!(&mut chan) {
                             self.state = MailViewState::Loaded { body: bytes_result };
                         } else {
-                            self.state = MailViewState::LoadingBody { job_id, chan };
+                            self.state = MailViewState::LoadingBody {
+                                job_id,
+                                chan,
+                                pending_action: pending_action.take(),
+                            };
                             self.active_jobs.insert(job_id);
                             account.insert_job(job_id, JobRequest::AsBytes(handle));
                             context
@@ -238,6 +263,46 @@ impl MailView {
                 };
             }
         }
+        if let Some(p) = pending_action {
+            self.perform_action(p, context);
+        }
+    }
+
+    fn perform_action(&mut self, action: PendingReplyAction, context: &mut Context) {
+        let bytes = match self.state {
+            MailViewState::Init {
+                ref mut pending_action,
+                ..
+            }
+            | MailViewState::LoadingBody {
+                ref mut pending_action,
+                ..
+            } => {
+                if pending_action.is_none() {
+                    *pending_action = Some(action);
+                }
+                return;
+            }
+            MailViewState::Loaded { body: Ok(ref b) } => b,
+            MailViewState::Loaded { body: Err(_) } => {
+                return;
+            }
+        };
+        let composer = match action {
+            PendingReplyAction::Reply => {
+                Box::new(Composer::reply_to_select(self.coordinates, bytes, context))
+            }
+            PendingReplyAction::ReplyToAuthor => {
+                Box::new(Composer::reply_to_author(self.coordinates, bytes, context))
+            }
+            PendingReplyAction::ReplyToAll => {
+                Box::new(Composer::reply_to_all(self.coordinates, bytes, context))
+            }
+        };
+
+        context
+            .replies
+            .push_back(UIEvent::Action(Tab(New(Some(composer)))));
     }
 
     /// Returns the string to be displayed in the Viewer
@@ -1027,12 +1092,13 @@ impl Component for MailView {
                         MailViewState::LoadingBody {
                             job_id: ref id,
                             ref mut chan,
+                            pending_action: _,
                         } if job_id == id => {
                             let bytes_result = chan.try_recv().unwrap().unwrap();
                             debug!("bytes_result");
                             self.state = MailViewState::Loaded { body: bytes_result };
                         }
-                        MailViewState::Init => {
+                        MailViewState::Init { .. } => {
                             self.init_futures(context);
                         }
                         _ => {}
@@ -1053,10 +1119,19 @@ impl Component for MailView {
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[MailView::DESCRIPTION]["reply"]) =>
             {
-                context.replies.push_back(UIEvent::Action(Tab(Reply(
-                    (self.coordinates.0, self.coordinates.1),
-                    self.coordinates.2,
-                ))));
+                self.perform_action(PendingReplyAction::Reply, context);
+                return true;
+            }
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[MailView::DESCRIPTION]["reply_to_all"]) =>
+            {
+                self.perform_action(PendingReplyAction::ReplyToAll, context);
+                return true;
+            }
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[MailView::DESCRIPTION]["reply_to_author"]) =>
+            {
+                self.perform_action(PendingReplyAction::ReplyToAuthor, context);
                 return true;
             }
             UIEvent::Input(ref key)
@@ -1168,7 +1243,7 @@ impl Component for MailView {
                     MailViewState::Loaded { .. } => {
                         self.open_attachment(lidx, context, true);
                     }
-                    MailViewState::Init => {
+                    MailViewState::Init { .. } => {
                         self.init_futures(context);
                     }
                 }
@@ -1189,7 +1264,7 @@ impl Component for MailView {
                     MailViewState::Loaded { .. } => {
                         self.open_attachment(lidx, context, false);
                     }
-                    MailViewState::Init => {
+                    MailViewState::Init { .. } => {
                         self.init_futures(context);
                     }
                 }
@@ -1213,7 +1288,7 @@ impl Component for MailView {
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
                 match self.state {
-                    MailViewState::Init => {
+                    MailViewState::Init { .. } => {
                         self.init_futures(context);
                     }
                     MailViewState::LoadingBody { .. } => {}

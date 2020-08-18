@@ -132,6 +132,7 @@ pub use nom;
 
 #[macro_use]
 extern crate bitflags;
+pub extern crate indexmap;
 extern crate uuid;
 pub use smallvec;
 

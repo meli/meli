@@ -26,7 +26,9 @@ use melib::Draft;
 use crate::conf::accounts::JobRequest;
 use crate::jobs::{JobChannel, JobId, JoinHandle};
 use crate::terminal::embed::EmbedGrid;
+use indexmap::IndexSet;
 use nix::sys::wait::WaitStatus;
+use std::convert::TryInto;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use xdg_utils::query_mime_info;
@@ -66,7 +68,6 @@ impl std::ops::DerefMut for EmbedStatus {
 #[derive(Debug)]
 pub struct Composer {
     reply_context: Option<(MailboxHash, EnvelopeHash)>,
-    reply_bytes_request: Option<(JobId, JobChannel<Vec<u8>>)>,
     account_hash: AccountHash,
 
     cursor: Cursor,
@@ -92,7 +93,6 @@ impl Default for Composer {
         pager.set_reflow(text_processing::Reflow::FormatFlowed);
         Composer {
             reply_context: None,
-            reply_bytes_request: None,
             account_hash: 0,
 
             cursor: Cursor::Headers,
@@ -167,7 +167,6 @@ impl Composer {
                 let _k = k.clone();
                 ret.draft.headers_mut().insert(_k, v.into());
             } else {
-                /* set_header() also updates draft's header_order field */
                 ret.draft.set_header(h, v.into());
             }
         }
@@ -193,16 +192,148 @@ impl Composer {
         Ok(ret)
     }
 
-    pub fn with_context(
-        coordinates: (AccountHash, MailboxHash),
-        msg: EnvelopeHash,
+    pub fn reply_to(
+        coordinates: (AccountHash, MailboxHash, EnvelopeHash),
+        bytes: &[u8],
+        context: &mut Context,
+        reply_to_all: bool,
+    ) -> Self {
+        let mut ret = Composer::new(coordinates.0, context);
+        let account = &context.accounts[&coordinates.0];
+        let envelope = account.collection.get_env(coordinates.2);
+        let subject = envelope.subject();
+        ret.draft.headers_mut().insert(
+            "Subject".into(),
+            if !subject.starts_with("Re: ") {
+                format!("Re: {}", subject)
+            } else {
+                subject.into()
+            },
+        );
+        ret.draft.headers_mut().insert(
+            "References".into(),
+            format!(
+                "{} {}",
+                envelope
+                    .references()
+                    .iter()
+                    .fold(String::new(), |mut acc, x| {
+                        if !acc.is_empty() {
+                            acc.push(' ');
+                        }
+                        acc.push_str(&x.to_string());
+                        acc
+                    }),
+                envelope.message_id_display()
+            ),
+        );
+        ret.draft
+            .headers_mut()
+            .insert("In-Reply-To".into(), envelope.message_id_display().into());
+
+        // "Mail-Followup-To/(To+Cc+(Mail-Reply-To/Reply-To/From)) for follow-up,
+        // Mail-Reply-To/Reply-To/From for reply-to-author."
+        // source: https://cr.yp.to/proto/replyto.html
+        if reply_to_all {
+            let mut to = IndexSet::new();
+
+            if let Some(actions) = list_management::ListActions::detect(&envelope) {
+                if let Some(post) = actions.post {
+                    if let list_management::ListAction::Email(list_post_addr) = post[0] {
+                        if let Ok(list_address) =
+                            melib::email::parser::generic::mailto(list_post_addr)
+                                .map(|(_, m)| m.address)
+                        {
+                            to.insert(list_address);
+                        }
+                    }
+                }
+            }
+            if let Some(reply_to) = envelope
+                .other_headers()
+                .get("Mail-Followup-To")
+                .and_then(|v| v.as_str().try_into().ok())
+            {
+                to.insert(reply_to);
+            } else {
+                if let Some(reply_to) = envelope
+                    .other_headers()
+                    .get("Reply-To")
+                    .and_then(|v| v.as_str().try_into().ok())
+                {
+                    to.insert(reply_to);
+                } else {
+                    to.extend(envelope.from().iter().cloned());
+                }
+            }
+            to.extend(envelope.to().iter().cloned());
+            if let Some(ours) = TryInto::<Address>::try_into(
+                crate::components::mail::get_display_name(context, coordinates.0).as_str(),
+            )
+            .ok()
+            {
+                to.remove(&ours);
+            }
+            ret.draft.headers_mut().insert("To".into(), {
+                let mut ret: String =
+                    to.into_iter()
+                        .fold(String::new(), |mut s: String, n: Address| {
+                            s.extend(n.to_string().chars());
+                            s.push_str(", ");
+                            s
+                        });
+                ret.pop();
+                ret.pop();
+                ret
+            });
+            ret.draft
+                .headers_mut()
+                .insert("Cc".into(), envelope.field_cc_to_string());
+        } else {
+            if let Some(reply_to) = envelope.other_headers().get("Mail-Reply-To") {
+                ret.draft
+                    .headers_mut()
+                    .insert("To".into(), reply_to.to_string());
+            } else if let Some(reply_to) = envelope.other_headers().get("Reply-To") {
+                ret.draft
+                    .headers_mut()
+                    .insert("To".into(), reply_to.to_string());
+            } else {
+                ret.draft
+                    .headers_mut()
+                    .insert("To".into(), envelope.field_from_to_string());
+            }
+        }
+        let body = envelope.body_bytes(bytes);
+        ret.draft.body = {
+            let reply_body_bytes = decode_rec(&body, None);
+            let reply_body = String::from_utf8_lossy(&reply_body_bytes);
+            let mut ret = format!(
+                "On {} {} wrote:\n",
+                envelope.date_as_str(),
+                envelope.from()[0],
+            );
+            for l in reply_body.lines() {
+                ret.push('>');
+                ret.push_str(l);
+                ret.push('\n');
+            }
+            ret
+        };
+
+        ret.account_hash = coordinates.0;
+        ret.reply_context = Some((coordinates.1, coordinates.2));
+        ret
+    }
+
+    pub fn reply_to_select(
+        coordinates: (AccountHash, MailboxHash, EnvelopeHash),
+        bytes: &[u8],
         context: &mut Context,
     ) -> Self {
+        let mut ret = Composer::reply_to(coordinates, bytes, context, false);
         let account = &context.accounts[&coordinates.0];
-        let mut ret = Composer::default();
-        ret.pager
-            .set_colors(crate::conf::value(context, "theme_default"));
-        let parent_message = account.collection.get_env(msg);
+        let parent_message = account.collection.get_env(coordinates.2);
         /* If message is from a mailing list and we detect a List-Post header, ask user if they
          * want to reply to the mailing list or the submitter of the message */
         if let Some(actions) = list_management::ListActions::detect(&parent_message) {
@@ -240,67 +371,23 @@ impl Composer {
                 }
             }
         }
-        let subject = parent_message.subject();
-        ret.draft.headers_mut().insert(
-            "Subject".into(),
-            if !subject.starts_with("Re: ") {
-                format!("Re: {}", subject)
-            } else {
-                subject.into()
-            },
-        );
-
-        drop(parent_message);
-        match context.accounts[&coordinates.0]
-            .operation(msg)
-            .and_then(|mut op| op.as_bytes())
-        {
-            Err(err) => {
-                context.replies.push_back(UIEvent::Notification(
-                    None,
-                    err.to_string(),
-                    Some(NotificationType::ERROR),
-                ));
-            }
-            Ok(fut) => {
-                let (mut rcvr, handle, job_id) = context.accounts[&coordinates.0]
-                    .job_executor
-                    .spawn_specialized(fut);
-                context.accounts[&coordinates.0]
-                    .active_jobs
-                    .insert(job_id, JobRequest::AsBytes(handle));
-                if let Ok(Some(parent_bytes)) = try_recv_timeout!(&mut rcvr) {
-                    match parent_bytes {
-                        Err(err) => {
-                            context.replies.push_back(UIEvent::Notification(
-                                None,
-                                err.to_string(),
-                                Some(NotificationType::ERROR),
-                            ));
-                        }
-                        Ok(parent_bytes) => {
-                            let env_hash = msg;
-                            let parent_message = context.accounts[&coordinates.0]
-                                .collection
-                                .get_env(env_hash);
-                            let mut new_draft = Draft::new_reply(&parent_message, &parent_bytes);
-                            new_draft
-                                .headers_mut()
-                                .extend(ret.draft.headers_mut().drain());
-                            new_draft
-                                .attachments_mut()
-                                .extend(ret.draft.attachments_mut().drain(..));
-                            ret.set_draft(new_draft);
-                        }
-                    }
-                } else {
-                    ret.reply_bytes_request = Some((job_id, rcvr));
-                }
-            }
-        }
-        ret.account_hash = coordinates.0;
-        ret.reply_context = Some((coordinates.1, msg));
         ret
+    }
+
+    pub fn reply_to_author(
+        coordinates: (AccountHash, MailboxHash, EnvelopeHash),
+        bytes: &[u8],
+        context: &mut Context,
+    ) -> Self {
+        Composer::reply_to(coordinates, bytes, context, false)
+    }
+
+    pub fn reply_to_all(
+        coordinates: (AccountHash, MailboxHash, EnvelopeHash),
+        bytes: &[u8],
+        context: &mut Context,
+    ) -> Self {
+        Composer::reply_to(coordinates, bytes, context, true)
     }
 
     pub fn set_draft(&mut self, draft: Draft) {
@@ -633,48 +720,6 @@ impl Component for Composer {
     fn process_event(&mut self, mut event: &mut UIEvent, context: &mut Context) -> bool {
         let shortcuts = self.get_shortcuts(context);
         match (&mut self.mode, &mut event) {
-            (_, UIEvent::StatusEvent(StatusEvent::JobFinished(ref job_id)))
-                if self
-                    .reply_bytes_request
-                    .as_ref()
-                    .map(|(j, _)| j == job_id)
-                    .unwrap_or(false) =>
-            {
-                let bytes = self
-                    .reply_bytes_request
-                    .take()
-                    .unwrap()
-                    .1
-                    .try_recv()
-                    .unwrap()
-                    .unwrap();
-                match bytes {
-                    Ok(parent_bytes) => {
-                        let env_hash = self.reply_context.unwrap().1;
-                        let parent_message = context.accounts[&self.account_hash]
-                            .collection
-                            .get_env(env_hash);
-                        let mut new_draft = Draft::new_reply(&parent_message, &parent_bytes);
-                        new_draft
-                            .headers_mut()
-                            .extend(self.draft.headers_mut().drain());
-                        new_draft
-                            .attachments_mut()
-                            .extend(self.draft.attachments_mut().drain(..));
-                        self.set_draft(new_draft);
-                        self.set_dirty(true);
-                        self.initialized = false;
-                    }
-                    Err(err) => {
-                        context.replies.push_back(UIEvent::Notification(
-                            Some(format!("Failed to load parent envelope")),
-                            err.to_string(),
-                            Some(NotificationType::ERROR),
-                        ));
-                    }
-                }
-                return true;
-            }
             (ViewMode::Edit, _) => {
                 if self.pager.process_event(event, context) {
                     return true;

@@ -947,6 +947,7 @@ dependencies = [
  "encoding",
  "flate2",
  "futures",
+ "indexmap",
  "isahc",
  "libc",
  "libloading",

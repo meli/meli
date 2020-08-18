@@ -1675,19 +1675,6 @@ impl Component for Tabbed {
                 self.help_curr_views = children_maps;
                 return true;
             }
-            UIEvent::Action(Tab(Reply(coordinates, msg))) => {
-                self.add_component(Box::new(Composer::with_context(
-                    *coordinates,
-                    *msg,
-                    context,
-                )));
-                self.cursor_pos = self.children.len() - 1;
-                self.children[self.cursor_pos].set_dirty(true);
-                let mut children_maps = self.children[self.cursor_pos].get_shortcuts(context);
-                children_maps.extend(self.get_shortcuts(context));
-                self.help_curr_views = children_maps;
-                return true;
-            }
             UIEvent::Action(Tab(Edit(account_hash, msg))) => {
                 let composer = match Composer::edit(*account_hash, *msg, context) {
                     Ok(c) => c,

@@ -24,7 +24,7 @@ use crate::backends::BackendOp;
 use crate::email::attachments::AttachmentBuilder;
 use crate::shellexpand::ShellExpandTrait;
 use data_encoding::BASE64_MIME;
-use std::collections::HashMap;
+use indexmap::IndexMap;
 use std::ffi::OsStr;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -39,8 +39,7 @@ use super::parser;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Draft {
-    pub headers: HashMap<String, String>,
-    pub header_order: Vec<String>,
+    pub headers: IndexMap<String, String>,
     pub body: String,
 
     pub attachments: Vec<AttachmentBuilder>,
@@ -48,28 +47,19 @@ pub struct Draft {
 
 impl Default for Draft {
     fn default() -> Self {
-        let mut headers = HashMap::with_capacity_and_hasher(8, Default::default());
-        let mut header_order = Vec::with_capacity(8);
+        let mut headers = IndexMap::with_capacity_and_hasher(8, Default::default());
+        headers.insert(
+            "Date".into(),
+            crate::datetime::timestamp_to_string(crate::datetime::now(), None),
+        );
         headers.insert("From".into(), "".into());
         headers.insert("To".into(), "".into());
         headers.insert("Cc".into(), "".into());
         headers.insert("Bcc".into(), "".into());
 
-        headers.insert(
-            "Date".into(),
-            crate::datetime::timestamp_to_string(crate::datetime::now(), None),
-        );
         headers.insert("Subject".into(), "".into());
-        header_order.push("Date".into());
-        header_order.push("From".into());
-        header_order.push("To".into());
-        header_order.push("Cc".into());
-        header_order.push("Bcc".into());
-        header_order.push("Subject".into());
-        header_order.push("User-Agent".into());
         Draft {
             headers,
-            header_order,
             body: String::new(),
 
             attachments: Vec::new(),
@@ -88,35 +78,16 @@ impl str::FromStr for Draft {
         let mut ret = Draft::default();
 
         for (k, v) in headers {
-            if ignore_header(k) {
-                continue;
-            }
-            if ret
-                .headers
-                .insert(
-                    String::from_utf8(k.to_vec())?,
-                    String::from_utf8(v.to_vec())?,
-                )
-                .is_none()
-            {
-                ret.header_order.push(String::from_utf8(k.to_vec())?);
-            }
+            ret.headers.insert(
+                String::from_utf8(k.to_vec())?,
+                String::from_utf8(v.to_vec())?,
+            );
         }
         if ret.headers.contains_key("From") && !ret.headers.contains_key("Message-ID") {
             if let Ok((_, addr)) = super::parser::address::mailbox(ret.headers["From"].as_bytes()) {
                 if let Some(fqdn) = addr.get_fqdn() {
-                    if ret
-                        .headers
-                        .insert("Message-ID".into(), random::gen_message_id(&fqdn))
-                        .is_none()
-                    {
-                        let pos = ret
-                            .header_order
-                            .iter()
-                            .position(|h| h == "Subject")
-                            .unwrap();
-                        ret.header_order.insert(pos, "Message-ID".into());
-                    }
+                    ret.headers
+                        .insert("Message-ID".into(), random::gen_message_id(&fqdn));
                 }
             }
         }
@@ -136,12 +107,7 @@ impl Draft {
         {
             let bytes = futures::executor::block_on(op.as_bytes()?)?;
             for (k, v) in envelope.headers(&bytes).unwrap_or_else(|_| Vec::new()) {
-                if ignore_header(k.as_bytes()) {
-                    continue;
-                }
-                if ret.headers.insert(k.into(), v.into()).is_none() {
-                    ret.header_order.push(k.into());
-                }
+                ret.headers.insert(k.into(), v.into());
             }
         }
 
@@ -150,12 +116,12 @@ impl Draft {
         Ok(ret)
     }
 
-    pub fn set_header(&mut self, header: &str, value: String) {
-        if self.headers.insert(header.to_string(), value).is_none() {
-            self.header_order.push(header.to_string());
-        }
+    pub fn set_header(&mut self, header: &str, value: String) -> &mut Self {
+        self.headers.insert(header.to_string(), value);
+        self
     }
-    pub fn new_reply(envelope: &Envelope, bytes: &[u8]) -> Self {
+
+    pub fn new_reply(envelope: &Envelope, bytes: &[u8], reply_to_all: bool) -> Self {
         let mut ret = Draft::default();
         ret.headers_mut().insert(
             "References".into(),
@@ -174,15 +140,32 @@ impl Draft {
                 envelope.message_id_display()
             ),
         );
-        ret.header_order.push("References".into());
         ret.headers_mut()
             .insert("In-Reply-To".into(), envelope.message_id_display().into());
-        ret.header_order.push("In-Reply-To".into());
-        if let Some(reply_to) = envelope.other_headers().get("Reply-To") {
-            ret.headers_mut().insert("To".into(), reply_to.to_string());
+        // "Mail-Followup-To/(To+Cc+(Mail-Reply-To/Reply-To/From)) for follow-up,
+        // Mail-Reply-To/Reply-To/From for reply-to-author."
+        // source: https://cr.yp.to/proto/replyto.html
+        if reply_to_all {
+            if let Some(reply_to) = envelope.other_headers().get("Mail-Followup-To") {
+                ret.headers_mut().insert("To".into(), reply_to.to_string());
+            } else {
+                if let Some(reply_to) = envelope.other_headers().get("Reply-To") {
+                    ret.headers_mut().insert("To".into(), reply_to.to_string());
+                } else {
+                    ret.headers_mut()
+                        .insert("To".into(), envelope.field_from_to_string());
+                }
+                // FIXME: add To/Cc
+            }
         } else {
-            ret.headers_mut()
-                .insert("To".into(), envelope.field_from_to_string());
+            if let Some(reply_to) = envelope.other_headers().get("Mail-Reply-To") {
+                ret.headers_mut().insert("To".into(), reply_to.to_string());
+            } else if let Some(reply_to) = envelope.other_headers().get("Reply-To") {
+                ret.headers_mut().insert("To".into(), reply_to.to_string());
+            } else {
+                ret.headers_mut()
+                    .insert("To".into(), envelope.field_from_to_string());
+            }
         }
         ret.headers_mut()
             .insert("Cc".into(), envelope.field_cc_to_string());
@@ -208,11 +191,11 @@ impl Draft {
         ret
     }
 
-    pub fn headers_mut(&mut self) -> &mut HashMap<String, String> {
+    pub fn headers_mut(&mut self) -> &mut IndexMap<String, String> {
         &mut self.headers
     }
 
-    pub fn headers(&self) -> &HashMap<String, String> {
+    pub fn headers(&self) -> &IndexMap<String, String> {
         &self.headers
     }
 
@@ -228,15 +211,15 @@ impl Draft {
         &self.body
     }
 
-    pub fn set_body(&mut self, s: String) {
+    pub fn set_body(&mut self, s: String) -> &mut Self {
         self.body = s;
+        self
     }
 
     pub fn to_string(&self) -> Result<String> {
         let mut ret = String::new();
 
-        for k in &self.header_order {
-            let v = &self.headers[k];
+        for (k, v) in &self.headers {
             ret.extend(format!("{}: {}\n", k, v).chars());
         }
 
@@ -253,23 +236,12 @@ impl Draft {
             if let Ok((_, addr)) = super::parser::address::mailbox(self.headers["From"].as_bytes())
             {
                 if let Some(fqdn) = addr.get_fqdn() {
-                    if self
-                        .headers
-                        .insert("Message-ID".into(), random::gen_message_id(&fqdn))
-                        .is_none()
-                    {
-                        let pos = self
-                            .header_order
-                            .iter()
-                            .position(|h| h == "Subject")
-                            .unwrap();
-                        self.header_order.insert(pos, "Message-ID".into());
-                    }
+                    self.headers
+                        .insert("Message-ID".into(), random::gen_message_id(&fqdn));
                 }
             }
         }
-        for k in &self.header_order {
-            let v = &self.headers[k];
+        for (k, v) in &self.headers {
             if v.is_ascii() {
                 ret.extend(format!("{}: {}\n", k, v).chars());
             } else {
@@ -303,25 +275,6 @@ impl Draft {
         }
 
         Ok(ret)
-    }
-}
-
-fn ignore_header(header: &[u8]) -> bool {
-    match header {
-        b"From" => false,
-        b"To" => false,
-        b"Date" => false,
-        b"Message-ID" => false,
-        b"User-Agent" => false,
-        b"Subject" => false,
-        b"Reply-to" => false,
-        b"Cc" => false,
-        b"Bcc" => false,
-        b"In-Reply-To" => false,
-        b"References" => false,
-        b"MIME-Version" => true,
-        h if h.starts_with(b"X-") => false,
-        _ => true,
     }
 }
 
