@@ -51,6 +51,8 @@ pub struct LineBreakCandidateIter<'a> {
     pos: usize,
     /* Needed for rule LB30a */
     reg_ind_streak: u32,
+    /* Needed for break before and after opportunities */
+    break_now: bool,
 }
 
 impl<'a> LineBreakCandidateIter<'a> {
@@ -60,6 +62,7 @@ impl<'a> LineBreakCandidateIter<'a> {
             pos: 0,
             iter: UnicodeSegmentation::grapheme_indices(text, true).peekable(),
             reg_ind_streak: 0,
+            break_now: false,
         }
     }
 }
@@ -145,6 +148,7 @@ impl<'a> Iterator for LineBreakCandidateIter<'a> {
                 ref mut iter,
                 ref text,
                 ref mut reg_ind_streak,
+                ref mut break_now,
                 ref mut pos,
             } = self;
             let (idx, mut grapheme) = iter.next().unwrap();
@@ -214,6 +218,12 @@ impl<'a> Iterator for LineBreakCandidateIter<'a> {
                     SP | ZW => {
                         *pos += grapheme.len();
                         continue;
+                    }
+                    _ if *break_now => {
+                        *break_now = false;
+                        let ret = *pos;
+                        *pos += grapheme.len();
+                        return Some((ret, BreakAllowed));
                     }
                     _ => {}
                 }
@@ -336,10 +346,8 @@ impl<'a> Iterator for LineBreakCandidateIter<'a> {
                 }
                 B2 if get_class!(text[idx..].trim_start()) == B2 => {
                     *pos += grapheme.len();
-                    while Some(SP) == next_grapheme_class!(iter, grapheme) {
-                        *pos += grapheme.len();
-                    }
-                    continue;
+                    *break_now = true;
+                    return Some((*pos, BreakAllowed));
                 }
                 SP => {
                     /* LB18 Break after spaces.  SP ÷ */
