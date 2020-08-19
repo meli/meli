@@ -94,15 +94,19 @@ pub struct UIDStore {
 
     mailboxes: Arc<FutureMutex<HashMap<MailboxHash, NntpMailbox>>>,
     is_online: Arc<Mutex<(Instant, Result<()>)>>,
-    refresh_events: Arc<Mutex<Vec<RefreshEvent>>>,
-    sender: Arc<RwLock<Option<RefreshEventConsumer>>>,
+    event_consumer: BackendEventConsumer,
 }
 
-impl Default for UIDStore {
-    fn default() -> Self {
+impl UIDStore {
+    fn new(
+        account_hash: AccountHash,
+        account_name: Arc<String>,
+        event_consumer: BackendEventConsumer,
+    ) -> Self {
         UIDStore {
-            account_hash: 0,
-            account_name: Arc::new(String::new()),
+            account_hash,
+            account_name,
+            event_consumer,
             offline_cache: false,
             capabilities: Default::default(),
             hash_index: Default::default(),
@@ -112,8 +116,6 @@ impl Default for UIDStore {
                 Instant::now(),
                 Err(MeliError::new("Account is uninitialised.")),
             ))),
-            refresh_events: Default::default(),
-            sender: Arc::new(RwLock::new(None)),
         }
     }
 }
@@ -209,11 +211,7 @@ impl MailBackend for NntpType {
         }))
     }
 
-    fn refresh_async(
-        &mut self,
-        _mailbox_hash: MailboxHash,
-        _sender: RefreshEventConsumer,
-    ) -> ResultFuture<()> {
+    fn refresh_async(&mut self, _mailbox_hash: MailboxHash) -> ResultFuture<()> {
         Err(MeliError::new("Unimplemented."))
     }
 
@@ -254,23 +252,15 @@ impl MailBackend for NntpType {
         Err(MeliError::new("Unimplemented."))
     }
 
-    fn refresh(
-        &mut self,
-        _mailbox_hash: MailboxHash,
-        _sender: RefreshEventConsumer,
-    ) -> Result<Async<()>> {
+    fn refresh(&mut self, _mailbox_hash: MailboxHash) -> Result<Async<()>> {
         Err(MeliError::new("Unimplemented."))
     }
 
-    fn watch(
-        &self,
-        _sender: RefreshEventConsumer,
-        _work_context: WorkContext,
-    ) -> Result<std::thread::ThreadId> {
+    fn watch(&self, _work_context: WorkContext) -> Result<std::thread::ThreadId> {
         Err(MeliError::new("Unimplemented."))
     }
 
-    fn watch_async(&self, _sender: RefreshEventConsumer) -> ResultFuture<()> {
+    fn watch_async(&self) -> ResultFuture<()> {
         Err(MeliError::new("Unimplemented."))
     }
 
@@ -388,6 +378,7 @@ impl NntpType {
     pub fn new(
         s: &AccountSettings,
         is_subscribed: Box<dyn Fn(&str) -> bool + Send + Sync>,
+        event_consumer: BackendEventConsumer,
     ) -> Result<Box<dyn MailBackend>> {
         let server_hostname = get_conf_val!(s["server_hostname"])?;
         /*let server_username = get_conf_val!(s["server_username"], "")?;
@@ -469,11 +460,9 @@ impl NntpType {
             )));
         }
         let uid_store: Arc<UIDStore> = Arc::new(UIDStore {
-            account_hash,
-            account_name,
             offline_cache: false, //get_conf_val!(s["X_header_caching"], false)?,
             mailboxes: Arc::new(FutureMutex::new(mailboxes)),
-            ..UIDStore::default()
+            ..UIDStore::new(account_hash, account_name, event_consumer)
         });
         let connection = NntpConnection::new_connection(&server_conf, uid_store.clone());
 

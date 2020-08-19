@@ -30,14 +30,16 @@ pub struct JmapConnection {
     pub online_status: Arc<FutureMutex<(Instant, Result<()>)>>,
     pub server_conf: JmapServerConf,
     pub account_id: Arc<Mutex<String>>,
+    pub account_hash: AccountHash,
     pub method_call_states: Arc<Mutex<HashMap<&'static str, String>>>,
-    pub refresh_events: Arc<Mutex<Vec<RefreshEvent>>>,
-    pub sender: Arc<Mutex<Option<RefreshEventConsumer>>>,
+    pub event_consumer: BackendEventConsumer,
 }
 
 impl JmapConnection {
     pub fn new(
         server_conf: &JmapServerConf,
+        account_hash: AccountHash,
+        event_consumer: BackendEventConsumer,
         online_status: Arc<FutureMutex<(Instant, Result<()>)>>,
     ) -> Result<Self> {
         let client = HttpClient::builder()
@@ -56,9 +58,9 @@ impl JmapConnection {
             online_status,
             server_conf,
             account_id: Arc::new(Mutex::new(String::new())),
+            account_hash,
+            event_consumer,
             method_call_states: Arc::new(Mutex::new(Default::default())),
-            refresh_events: Arc::new(Mutex::new(Default::default())),
-            sender: Arc::new(Mutex::new(Default::default())),
         })
     }
 
@@ -116,13 +118,6 @@ impl JmapConnection {
     }
 
     pub fn add_refresh_event(&self, event: RefreshEvent) {
-        if let Some(ref sender) = self.sender.lock().unwrap().as_ref() {
-            for event in self.refresh_events.lock().unwrap().drain(..) {
-                sender.send(event);
-            }
-            sender.send(event);
-        } else {
-            self.refresh_events.lock().unwrap().push(event);
-        }
+        (self.event_consumer)(self.account_hash, BackendEvent::Refresh(event));
     }
 }

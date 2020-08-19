@@ -191,18 +191,10 @@ impl MailBackend for PluginBackend {
         Ok(w.build(handle))
     }
 
-    fn refresh(
-        &mut self,
-        _mailbox_hash: MailboxHash,
-        _sender: RefreshEventConsumer,
-    ) -> Result<Async<()>> {
+    fn refresh(&mut self, _mailbox_hash: MailboxHash) -> Result<Async<()>> {
         Err(MeliError::new("Unimplemented."))
     }
-    fn watch(
-        &self,
-        _sender: RefreshEventConsumer,
-        _work_context: WorkContext,
-    ) -> Result<std::thread::ThreadId> {
+    fn watch(&self, _work_context: WorkContext) -> Result<std::thread::ThreadId> {
         Err(MeliError::new("Unimplemented."))
     }
 
@@ -249,6 +241,7 @@ impl PluginBackend {
         plugin: Plugin,
         _s: &AccountSettings,
         _is_subscribed: Box<dyn Fn(&str) -> bool>,
+        _ev: melib::backends::BackendEventConsumer,
     ) -> Result<Box<dyn MailBackend>> {
         if plugin.kind != PluginKind::Backend {
             return Err(MeliError::new(format!(
@@ -284,10 +277,10 @@ impl PluginBackend {
                 create_fn: Box::new(move || {
                     let plugin = plugin.clone();
                     let listener = listener.try_clone().unwrap();
-                    Box::new(move |f, i| {
+                    Box::new(move |f, i, ev| {
                         let plugin = plugin.clone();
                         let listener = listener.try_clone().unwrap();
-                        PluginBackend::new(listener, plugin, f, i)
+                        PluginBackend::new(listener, plugin, f, i, ev)
                     })
                 }),
                 validate_conf_fn: Box::new(|_| Ok(())),

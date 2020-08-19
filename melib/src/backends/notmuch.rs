@@ -107,6 +107,7 @@ pub struct NotmuchDb {
     tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
     path: PathBuf,
     account_name: String,
+    event_consumer: BackendEventConsumer,
     save_messages_to: Option<PathBuf>,
 }
 
@@ -187,6 +188,7 @@ impl NotmuchDb {
     pub fn new(
         s: &AccountSettings,
         _is_subscribed: Box<dyn Fn(&str) -> bool>,
+        event_consumer: BackendEventConsumer,
     ) -> Result<Box<dyn MailBackend>> {
         let lib = Arc::new(libloading::Library::new("libnotmuch.so.5")?);
         let path = Path::new(s.root_mailbox.as_str()).expand();
@@ -239,6 +241,7 @@ impl NotmuchDb {
             mailboxes: Arc::new(RwLock::new(mailboxes)),
             save_messages_to: None,
             account_name: s.name().to_string(),
+            event_consumer,
         }))
     }
 
@@ -424,14 +427,11 @@ impl MailBackend for NotmuchDb {
         Ok(w.build(handle))
     }
 
-    fn watch(
-        &self,
-        sender: RefreshEventConsumer,
-        _work_context: WorkContext,
-    ) -> Result<std::thread::ThreadId> {
+    fn watch(&self, _work_context: WorkContext) -> Result<std::thread::ThreadId> {
         extern crate notify;
         use crate::backends::RefreshEventKind::*;
         use notify::{watcher, RecursiveMode, Watcher};
+        let sender = self.event_consumer.clone();
         let (tx, rx) = std::sync::mpsc::channel();
         let mut watcher = watcher(tx, std::time::Duration::from_secs(2)).unwrap();
         watcher.watch(&self.path, RecursiveMode::Recursive).unwrap();
@@ -463,7 +463,7 @@ impl MailBackend for NotmuchDb {
             .name(format!("watching {}", self.account_name))
             .spawn(move || {
                 let _watcher = watcher;
-                let c = move |sender: &RefreshEventConsumer| -> std::result::Result<(), MeliError> {
+                let c = move |sender: &BackendEventConsumer| -> std::result::Result<(), MeliError> {
                     loop {
                         let _ = rx.recv().map_err(|err| err.to_string())?;
                         {
@@ -512,11 +512,14 @@ impl MailBackend for NotmuchDb {
                                             }
                                         }
                                         for &mailbox_hash in mailbox_hashes {
-                                            sender.send(RefreshEvent {
+                                            (sender)(
                                                 account_hash,
-                                                mailbox_hash,
-                                                kind: NewFlags(env_hash, tags.clone()),
-                                            });
+                                                BackendEvent::Refresh(RefreshEvent {
+                                                    account_hash,
+                                                    mailbox_hash,
+                                                    kind: NewFlags(env_hash, tags.clone()),
+                                                }),
+                                            );
                                         }
                                     } else {
                                         match notmuch_message_into_envelope(
@@ -548,11 +551,14 @@ impl MailBackend for NotmuchDb {
                                                         if !env.is_seen() {
                                                             *unseen_lck += 1;
                                                         }
-                                                        sender.send(RefreshEvent {
+                                                        (sender)(
                                                             account_hash,
-                                                            mailbox_hash,
-                                                            kind: Create(Box::new(env.clone())),
-                                                        });
+                                                            BackendEvent::Refresh(RefreshEvent {
+                                                                account_hash,
+                                                                mailbox_hash,
+                                                                kind: Create(Box::new(env.clone())),
+                                                            }),
+                                                        );
                                                     }
                                                 }
                                             }
@@ -587,11 +593,14 @@ impl MailBackend for NotmuchDb {
                                                     let m = &mailboxes_lck[&mailbox_hash];
                                                     let mut total_lck = m.total.lock().unwrap();
                                                     *total_lck = total_lck.saturating_sub(1);
-                                                    sender.send(RefreshEvent {
+                                                    (sender)(
                                                         account_hash,
-                                                        mailbox_hash,
-                                                        kind: Remove(env_hash),
-                                                    });
+                                                        BackendEvent::Refresh(RefreshEvent {
+                                                            account_hash,
+                                                            mailbox_hash,
+                                                            kind: Remove(env_hash),
+                                                        }),
+                                                    );
                                                 }
                                             }
                                         }
@@ -606,11 +615,14 @@ impl MailBackend for NotmuchDb {
                 };
 
                 if let Err(err) = c(&sender) {
-                    sender.send(RefreshEvent {
+                    (sender)(
                         account_hash,
-                        mailbox_hash: 0,
-                        kind: Failure(err),
-                    });
+                        BackendEvent::Refresh(RefreshEvent {
+                            account_hash,
+                            mailbox_hash: 0,
+                            kind: Failure(err),
+                        }),
+                    );
                 }
             })?;
         Ok(handle.thread().id())

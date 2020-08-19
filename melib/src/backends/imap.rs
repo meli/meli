@@ -49,7 +49,6 @@ use futures::lock::Mutex as FutureMutex;
 use futures::stream::Stream;
 use std::collections::{hash_map::DefaultHasher, BTreeMap};
 use std::collections::{BTreeSet, HashMap, HashSet};
-use std::future::Future;
 use std::hash::Hasher;
 use std::pin::Pin;
 use std::str::FromStr;
@@ -153,16 +152,19 @@ pub struct UIDStore {
 
     mailboxes: Arc<FutureMutex<HashMap<MailboxHash, ImapMailbox>>>,
     is_online: Arc<Mutex<(Instant, Result<()>)>>,
-    refresh_events: Arc<Mutex<Vec<RefreshEvent>>>,
-    sender: Arc<RwLock<Option<RefreshEventConsumer>>>,
+    event_consumer: BackendEventConsumer,
 }
 
-impl Default for UIDStore {
-    fn default() -> Self {
+impl UIDStore {
+    fn new(
+        account_hash: AccountHash,
+        account_name: Arc<String>,
+        event_consumer: BackendEventConsumer,
+    ) -> Self {
         UIDStore {
-            account_hash: 0,
+            account_hash,
             cache_headers: false,
-            account_name: Arc::new(String::new()),
+            account_name,
             capabilities: Default::default(),
             uidvalidity: Default::default(),
             hash_index: Default::default(),
@@ -175,8 +177,7 @@ impl Default for UIDStore {
                 Instant::now(),
                 Err(MeliError::new("Account is uninitialised.")),
             ))),
-            refresh_events: Default::default(),
-            sender: Arc::new(RwLock::new(None)),
+            event_consumer,
         }
     }
 }
@@ -288,13 +289,8 @@ impl MailBackend for ImapType {
         }))
     }
 
-    fn refresh_async(
-        &mut self,
-        mailbox_hash: MailboxHash,
-        sender: RefreshEventConsumer,
-    ) -> ResultFuture<()> {
+    fn refresh_async(&mut self, mailbox_hash: MailboxHash) -> ResultFuture<()> {
         let main_conn = self.connection.clone();
-        *self.uid_store.sender.write().unwrap() = Some(sender);
         let uid_store = self.uid_store.clone();
         Ok(Box::pin(async move {
             let inbox = timeout(Duration::from_secs(3), uid_store.mailboxes.lock())
@@ -383,27 +379,18 @@ impl MailBackend for ImapType {
         Err(MeliError::new("Unimplemented."))
     }
 
-    fn refresh(
-        &mut self,
-        _mailbox_hash: MailboxHash,
-        _sender: RefreshEventConsumer,
-    ) -> Result<Async<()>> {
+    fn refresh(&mut self, _mailbox_hash: MailboxHash) -> Result<Async<()>> {
         Err(MeliError::new("Unimplemented."))
     }
 
-    fn watch(
-        &self,
-        _sender: RefreshEventConsumer,
-        _work_context: WorkContext,
-    ) -> Result<std::thread::ThreadId> {
+    fn watch(&self, _work_context: WorkContext) -> Result<std::thread::ThreadId> {
         Err(MeliError::new("Unimplemented."))
     }
 
-    fn watch_async(&self, sender: RefreshEventConsumer) -> ResultFuture<()> {
+    fn watch_async(&self) -> ResultFuture<()> {
         debug!("watch_async called");
         let conn = ImapConnection::new_connection(&self.server_conf, self.uid_store.clone());
         let main_conn = self.connection.clone();
-        *self.uid_store.sender.write().unwrap() = Some(sender);
         let uid_store = self.uid_store.clone();
         let has_idle: bool = match self.server_conf.protocol {
             ImapProtocol::IMAP {
@@ -1132,6 +1119,7 @@ impl ImapType {
     pub fn new(
         s: &AccountSettings,
         is_subscribed: Box<dyn Fn(&str) -> bool + Send + Sync>,
+        event_consumer: BackendEventConsumer,
     ) -> Result<Box<dyn MailBackend>> {
         let server_hostname = get_conf_val!(s["server_hostname"])?;
         let server_username = get_conf_val!(s["server_username"])?;
@@ -1184,10 +1172,8 @@ impl ImapType {
         };
         let account_name = Arc::new(s.name().to_string());
         let uid_store: Arc<UIDStore> = Arc::new(UIDStore {
-            account_hash,
             cache_headers: get_conf_val!(s["X_header_caching"], false)?,
-            account_name,
-            ..UIDStore::default()
+            ..UIDStore::new(account_hash, account_name, event_consumer)
         });
         let connection = ImapConnection::new_connection(&server_conf, uid_store.clone());
 

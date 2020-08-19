@@ -161,7 +161,6 @@ pub struct Account {
     pub active_job_instants: BTreeMap<std::time::Instant, JobId>,
     sender: Sender<ThreadEvent>,
     event_queue: VecDeque<(MailboxHash, RefreshEvent)>,
-    notify_fn: Arc<NotifyFn>,
     pub backend_capabilities: MailBackendCapabilities,
 }
 
@@ -358,7 +357,7 @@ impl Account {
         work_context: WorkContext,
         job_executor: Arc<JobExecutor>,
         sender: Sender<ThreadEvent>,
-        notify_fn: NotifyFn,
+        event_consumer: BackendEventConsumer,
     ) -> Result<Self> {
         let s = settings.clone();
         let backend = map.get(settings.account().format())(
@@ -372,8 +371,8 @@ impl Account {
                         .iter()
                         .any(|m| path.matches_glob(m))
             }),
+            event_consumer,
         )?;
-        let notify_fn = Arc::new(notify_fn);
 
         let data_dir = xdg::BaseDirectories::with_profile("meli", &name).unwrap();
         let mut address_book = AddressBook::with_account(&settings.account());
@@ -425,7 +424,6 @@ impl Account {
             collection: Default::default(),
             work_context,
             settings,
-            notify_fn,
             sender,
             job_executor,
             active_jobs,
@@ -592,18 +590,14 @@ impl Account {
                                 .insert(std::time::Instant::now(), job_id);
                         }
                     } else {
-                        entry.worker = match Account::new_worker(
-                            &f,
-                            &mut self.backend,
-                            &self.work_context,
-                            self.notify_fn.clone(),
-                        ) {
-                            Ok(v) => v,
-                            Err(err) => {
-                                entry.status = MailboxStatus::Failed(err);
-                                None
-                            }
-                        };
+                        entry.worker =
+                            match Account::new_worker(&f, &mut self.backend, &self.work_context) {
+                                Ok(v) => v,
+                                Err(err) => {
+                                    entry.status = MailboxStatus::Failed(err);
+                                    None
+                                }
+                            };
                     }
                 }
             });
@@ -622,12 +616,9 @@ impl Account {
         mailbox: &Mailbox,
         backend: &Arc<RwLock<Box<dyn MailBackend>>>,
         work_context: &WorkContext,
-        notify_fn: Arc<NotifyFn>,
     ) -> Result<Worker> {
         let mailbox_hash = mailbox.hash();
         let mut mailbox_handle = backend.write().unwrap().fetch(mailbox_hash)?;
-        let mut builder = AsyncBuilder::new();
-        let our_tx = builder.tx();
         let priority = match mailbox.special_usage() {
             SpecialUsageMailbox::Inbox => 0,
             SpecialUsageMailbox::Sent => 1,
@@ -644,51 +635,7 @@ impl Account {
             }
         };
 
-        /* This polling closure needs to be 'static', that is to spawn its own thread instead of
-         * being assigned to a worker thread. Otherwise the polling closures could fill up the
-         * workers causing no actual parsing to be done. If we could yield from within the worker
-         * threads' closures this could be avoided, but it requires green threads.
-         */
-        let name = format!("Parsing {}", mailbox.path());
-        builder.set_priority(priority).set_is_static(true);
-        let mut w = builder.build(Box::new(move |work_context| {
-            let work = mailbox_handle.work().unwrap();
-            work_context.new_work.send(work).unwrap();
-            let thread_id = std::thread::current().id();
-            work_context.set_name.send((thread_id, name)).unwrap();
-            work_context
-                .set_status
-                .send((thread_id, "Waiting for subworkers..".to_string()))
-                .unwrap();
-
-            loop {
-                match debug!(mailbox_handle.poll_block()) {
-                    Ok(s @ AsyncStatus::Payload(_)) => {
-                        our_tx.send(s).unwrap();
-                        debug!("notifying for {}", mailbox_hash);
-                        notify_fn.notify(mailbox_hash);
-                    }
-                    Ok(s @ AsyncStatus::Finished) => {
-                        our_tx.send(s).unwrap();
-                        notify_fn.notify(mailbox_hash);
-                        debug!("exiting");
-                        work_context.finished.send(thread_id).unwrap();
-                        return;
-                    }
-                    Ok(s) => {
-                        our_tx.send(s).unwrap();
-                    }
-                    Err(_) => {
-                        debug!("poll error");
-                        return;
-                    }
-                }
-            }
-        }));
-        if let Some(w) = w.work() {
-            work_context.new_work.send(w).unwrap();
-        }
-        Ok(Some(w))
+        todo!()
     }
     pub fn reload(&mut self, event: RefreshEvent, mailbox_hash: MailboxHash) -> Option<UIEvent> {
         if !self.mailbox_entries[&mailbox_hash].status.is_available() {
@@ -879,7 +826,6 @@ impl Account {
                         &self.mailbox_entries[&mailbox_hash].ref_mailbox,
                         &mut self.backend,
                         &self.work_context,
-                        self.notify_fn.clone(),
                     ) {
                         Ok(v) => v,
                         Err(err) => {
@@ -945,12 +891,8 @@ impl Account {
                 .unwrap();
             return Ok(());
         }
-        let sender_ = self.sender.clone();
-        let r = RefreshEventConsumer::new(Box::new(move |r| {
-            sender_.send(ThreadEvent::from(r)).unwrap();
-        }));
         if self.backend_capabilities.is_async {
-            if let Ok(refresh_job) = self.backend.write().unwrap().refresh_async(mailbox_hash, r) {
+            if let Ok(refresh_job) = self.backend.write().unwrap().refresh_async(mailbox_hash) {
                 let (rcvr, handle, job_id) = self.job_executor.spawn_specialized(refresh_job);
                 self.sender
                     .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
@@ -963,7 +905,7 @@ impl Account {
                     .insert(std::time::Instant::now(), job_id);
             }
         } else {
-            let mut h = self.backend.write().unwrap().refresh(mailbox_hash, r)?;
+            let mut h = self.backend.write().unwrap().refresh(mailbox_hash)?;
             self.work_context.new_work.send(h.work().unwrap()).unwrap();
         }
         Ok(())
@@ -973,13 +915,9 @@ impl Account {
             return;
         }
 
-        let sender_ = self.sender.clone();
-        let r = RefreshEventConsumer::new(Box::new(move |r| {
-            sender_.send(ThreadEvent::from(r)).unwrap();
-        }));
         if self.backend_capabilities.is_async {
             if !self.active_jobs.values().any(|j| j.is_watch()) {
-                match self.backend.read().unwrap().watch_async(r) {
+                match self.backend.read().unwrap().watch_async() {
                     Ok(fut) => {
                         let (handle, job_id) = self.job_executor.spawn(fut);
                         self.active_jobs.insert(job_id, JobRequest::Watch(handle));
@@ -998,7 +936,7 @@ impl Account {
                 .backend
                 .read()
                 .unwrap()
-                .watch(r, self.work_context.clone())
+                .watch(self.work_context.clone())
             {
                 Ok(id) => {
                     self.sender
@@ -1115,7 +1053,6 @@ impl Account {
                                     &self.mailbox_entries[&mailbox_hash].ref_mailbox,
                                     &mut self.backend,
                                     &self.work_context,
-                                    self.notify_fn.clone(),
                                 ) {
                                     Ok(v) => v,
                                     Err(err) => {
@@ -1470,7 +1407,6 @@ impl Account {
                     &mailboxes[&mailbox_hash],
                     &mut self.backend,
                     &self.work_context,
-                    self.notify_fn.clone(),
                 ) {
                     Ok(v) => (MailboxStatus::Parsing(0, 0), v),
                     Err(err) => (MailboxStatus::Failed(err), None),

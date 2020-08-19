@@ -85,7 +85,12 @@ pub trait ManageSieve {
     fn renamescript(&mut self) -> Result<()>;
 }
 
-pub fn new_managesieve_connection(s: &AccountSettings) -> Result<ImapConnection> {
+pub fn new_managesieve_connection(
+    account_hash: crate::backends::AccountHash,
+    account_name: String,
+    s: &AccountSettings,
+    event_consumer: crate::backends::BackendEventConsumer,
+) -> Result<ImapConnection> {
     let server_hostname = get_conf_val!(s["server_hostname"])?;
     let server_username = get_conf_val!(s["server_username"])?;
     let server_password = get_conf_val!(s["server_password"])?;
@@ -106,7 +111,7 @@ pub fn new_managesieve_connection(s: &AccountSettings) -> Result<ImapConnection>
             Instant::now(),
             Err(MeliError::new("Account is uninitialised.")),
         ))),
-        ..Default::default()
+        ..UIDStore::new(account_hash, Arc::new(account_name), event_consumer)
     });
     Ok(ImapConnection::new_connection(&server_conf, uid_store))
 }

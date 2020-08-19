@@ -139,7 +139,9 @@ pub use smallvec;
 pub use futures;
 pub use smol;
 
-pub use crate::backends::{Backends, RefreshEvent, RefreshEventConsumer, SpecialUsageMailbox};
+pub use crate::backends::{
+    BackendEvent, BackendEventConsumer, Backends, RefreshEvent, SpecialUsageMailbox,
+};
 pub use crate::collection::*;
 pub use crate::conf::*;
 pub use crate::email::{Envelope, EnvelopeHash, Flag};

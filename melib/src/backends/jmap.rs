@@ -243,10 +243,8 @@ impl MailBackend for JmapType {
         }))
     }
 
-    fn watch_async(&self, sender: RefreshEventConsumer) -> ResultFuture<()> {
-        let conn = self.connection.clone();
+    fn watch_async(&self) -> ResultFuture<()> {
         Ok(Box::pin(async move {
-            *conn.lock().await.sender.lock().unwrap() = Some(sender);
             Err(MeliError::from("JMAP watch for updates is unimplemented"))
         }))
     }
@@ -360,11 +358,7 @@ impl MailBackend for JmapType {
         Err(MeliError::new("Unimplemented."))
     }
 
-    fn watch(
-        &self,
-        _sender: RefreshEventConsumer,
-        _work_context: WorkContext,
-    ) -> Result<std::thread::ThreadId> {
+    fn watch(&self, _work_context: WorkContext) -> Result<std::thread::ThreadId> {
         Err(MeliError::new("Unimplemented."))
     }
 
@@ -535,6 +529,7 @@ impl JmapType {
     pub fn new(
         s: &AccountSettings,
         is_subscribed: Box<dyn Fn(&str) -> bool + Send + Sync>,
+        event_consumer: BackendEventConsumer,
     ) -> Result<Box<dyn MailBackend>> {
         let online = Arc::new(FutureMutex::new((
             std::time::Instant::now(),
@@ -553,6 +548,8 @@ impl JmapType {
         Ok(Box::new(JmapType {
             connection: Arc::new(FutureMutex::new(JmapConnection::new(
                 &server_conf,
+                account_hash,
+                event_consumer,
                 online.clone(),
             )?)),
             store: Arc::new(RwLock::new(Store::default())),

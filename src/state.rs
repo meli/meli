@@ -30,7 +30,7 @@ Input is received in the main loop from threads which listen on the stdin for us
 
 use super::*;
 use crate::plugins::PluginManager;
-use melib::backends::{AccountHash, MailboxHash, NotifyFn};
+use melib::backends::{AccountHash, BackendEventConsumer};
 
 use crate::jobs::JobExecutor;
 use crossbeam::channel::{unbounded, Receiver, Sender};
@@ -284,14 +284,16 @@ impl State {
                         work_controller.get_context(),
                         job_executor.clone(),
                         sender.clone(),
-                        NotifyFn::new(Box::new(move |f: MailboxHash| {
-                            sender
-                                .send(ThreadEvent::UIEvent(UIEvent::WorkerProgress(
-                                    account_hash,
-                                    f,
-                                )))
-                                .unwrap();
-                        })),
+                        BackendEventConsumer::new(Arc::new(
+                            move |account_hash: AccountHash, ev: BackendEvent| {
+                                sender
+                                    .send(ThreadEvent::UIEvent(UIEvent::BackendEvent(
+                                        account_hash,
+                                        ev,
+                                    )))
+                                    .unwrap();
+                            },
+                        )),
                     )
                 })
                 .collect::<Result<Vec<Account>>>()?
@@ -1028,8 +1030,31 @@ impl State {
                 self.child = Some(child);
                 return;
             }
-            UIEvent::WorkerProgress(account_hash, mailbox_hash) => {
-                let _ = self.context.accounts[&account_hash].load(mailbox_hash);
+            UIEvent::BackendEvent(
+                account_hash,
+                BackendEvent::Notice {
+                    ref description,
+                    ref content,
+                    level,
+                },
+            ) => {
+                log(
+                    format!(
+                        "{}: {}{}{}",
+                        self.context.accounts[&account_hash].name(),
+                        description.as_ref().map(|s| s.as_str()).unwrap_or(""),
+                        if description.is_some() { ": " } else { "" },
+                        content.as_str()
+                    ),
+                    level,
+                );
+                self.rcv_event(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
+                    content.to_string(),
+                )));
+                return;
+            }
+            UIEvent::BackendEvent(_, BackendEvent::Refresh(refresh_event)) => {
+                self.refresh_event(refresh_event);
                 return;
             }
             UIEvent::ChangeMode(m) => {

@@ -684,13 +684,14 @@ impl<'a> Iterator for MessageIterator<'a> {
 }
 
 /// Mbox backend
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct MboxType {
     account_name: String,
     path: PathBuf,
     mailbox_index: Arc<Mutex<HashMap<EnvelopeHash, MailboxHash>>>,
     mailboxes: Arc<Mutex<HashMap<MailboxHash, MboxMailbox>>>,
     prefer_mbox_type: Option<MboxReader>,
+    event_consumer: BackendEventConsumer,
 }
 
 impl MailBackend for MboxType {
@@ -795,11 +796,8 @@ impl MailBackend for MboxType {
         Ok(w.build(handle))
     }
 
-    fn watch(
-        &self,
-        sender: RefreshEventConsumer,
-        work_context: WorkContext,
-    ) -> Result<std::thread::ThreadId> {
+    fn watch(&self, work_context: WorkContext) -> Result<std::thread::ThreadId> {
+        let sender = self.event_consumer.clone();
         let (tx, rx) = channel();
         let mut watcher = watcher(tx, std::time::Duration::from_secs(10))
             .map_err(|e| e.to_string())
@@ -873,19 +871,25 @@ impl MailBackend for MboxType {
                                         let mut mailbox_index_lck = mailbox_index.lock().unwrap();
                                         for env in envelopes {
                                             mailbox_index_lck.insert(env.hash(), mailbox_hash);
-                                            sender.send(RefreshEvent {
+                                            (sender)(
                                                 account_hash,
-                                                mailbox_hash,
-                                                kind: RefreshEventKind::Create(Box::new(env)),
-                                            });
+                                                BackendEvent::Refresh(RefreshEvent {
+                                                    account_hash,
+                                                    mailbox_hash,
+                                                    kind: RefreshEventKind::Create(Box::new(env)),
+                                                }),
+                                            );
                                         }
                                     }
                                 } else {
-                                    sender.send(RefreshEvent {
+                                    (sender)(
                                         account_hash,
-                                        mailbox_hash,
-                                        kind: RefreshEventKind::Rescan,
-                                    });
+                                        BackendEvent::Refresh(RefreshEvent {
+                                            account_hash,
+                                            mailbox_hash,
+                                            kind: RefreshEventKind::Rescan,
+                                        }),
+                                    );
                                 }
                                 mailbox_lock
                                     .entry(mailbox_hash)
@@ -901,14 +905,19 @@ impl MailBackend for MboxType {
                                     .any(|f| f.fs_path == pathbuf)
                                 {
                                     let mailbox_hash = get_path_hash!(&pathbuf);
-                                    sender.send(RefreshEvent {
+                                    (sender)(
                                         account_hash,
-                                        mailbox_hash,
-                                        kind: RefreshEventKind::Failure(MeliError::new(format!(
-                                            "mbox mailbox {} was removed.",
-                                            pathbuf.display()
-                                        ))),
-                                    });
+                                        BackendEvent::Refresh(RefreshEvent {
+                                            account_hash,
+                                            mailbox_hash,
+                                            kind: RefreshEventKind::Failure(MeliError::new(
+                                                format!(
+                                                    "mbox mailbox {} was removed.",
+                                                    pathbuf.display()
+                                                ),
+                                            )),
+                                        }),
+                                    );
                                     return;
                                 }
                             }
@@ -920,26 +929,34 @@ impl MailBackend for MboxType {
                                     .any(|f| &f.fs_path == &src)
                                 {
                                     let mailbox_hash = get_path_hash!(&src);
-                                    sender.send(RefreshEvent {
+                                    (sender)(
                                         account_hash,
-                                        mailbox_hash,
-                                        kind: RefreshEventKind::Failure(MeliError::new(format!(
-                                            "mbox mailbox {} was renamed to {}.",
-                                            src.display(),
-                                            dest.display()
-                                        ))),
-                                    });
+                                        BackendEvent::Refresh(RefreshEvent {
+                                            account_hash,
+                                            mailbox_hash,
+                                            kind: RefreshEventKind::Failure(MeliError::new(
+                                                format!(
+                                                    "mbox mailbox {} was renamed to {}.",
+                                                    src.display(),
+                                                    dest.display()
+                                                ),
+                                            )),
+                                        }),
+                                    );
                                     return;
                                 }
                             }
                             /* Trigger rescan of mailboxes */
                             DebouncedEvent::Rescan => {
                                 for &mailbox_hash in mailboxes.lock().unwrap().keys() {
-                                    sender.send(RefreshEvent {
+                                    (sender)(
                                         account_hash,
-                                        mailbox_hash,
-                                        kind: RefreshEventKind::Rescan,
-                                    });
+                                        BackendEvent::Refresh(RefreshEvent {
+                                            account_hash,
+                                            mailbox_hash,
+                                            kind: RefreshEventKind::Rescan,
+                                        }),
+                                    );
                                 }
                                 return;
                             }
@@ -1023,6 +1040,7 @@ impl MboxType {
     pub fn new(
         s: &AccountSettings,
         _is_subscribed: Box<dyn Fn(&str) -> bool>,
+        event_consumer: BackendEventConsumer,
     ) -> Result<Box<dyn MailBackend>> {
         let path = Path::new(s.root_mailbox.as_str()).expand();
         if !path.exists() {
@@ -1035,6 +1053,7 @@ impl MboxType {
         let prefer_mbox_type: String = get_conf_val!(s["prefer_mbox_type"], "auto".to_string())?;
         let ret = MboxType {
             account_name: s.name().to_string(),
+            event_consumer,
             path,
             prefer_mbox_type: match prefer_mbox_type.as_str() {
                 "auto" => None,
@@ -1050,7 +1069,8 @@ impl MboxType {
                     )))
                 }
             },
-            ..Default::default()
+            mailbox_index: Default::default(),
+            mailboxes: Default::default(),
         };
         let name: String = ret
             .path

@@ -111,6 +111,7 @@ pub struct MaildirType {
     mailboxes: HashMap<MailboxHash, MaildirMailbox>,
     mailbox_index: Arc<Mutex<HashMap<EnvelopeHash, MailboxHash>>>,
     hash_indexes: HashIndexes,
+    event_consumer: BackendEventConsumer,
     path: PathBuf,
 }
 
@@ -229,7 +230,6 @@ impl MailBackend for MaildirType {
     fn refresh(
         &mut self,
         mailbox_hash: MailboxHash,
-        sender: RefreshEventConsumer,
     ) -> Result<Async<()>> {
         let w = AsyncBuilder::new();
         let cache_dir = xdg::BaseDirectories::with_profile("meli", &self.name).unwrap();
@@ -238,6 +238,7 @@ impl MailBackend for MaildirType {
             hasher.write(self.name.as_bytes());
             hasher.finish()
         };
+        let sender = self.event_consumer.clone();
 
         let handle = {
             let mailbox: &MaildirMailbox = &self.mailboxes[&mailbox_hash];
@@ -252,7 +253,7 @@ impl MailBackend for MaildirType {
                     .set_name
                     .send((std::thread::current().id(), name.clone()))
                     .unwrap();
-                let thunk = move |sender: &RefreshEventConsumer| {
+                let thunk = move |sender: &BackendEventConsumer| {
                     debug!("refreshing");
                     let mut path = path.clone();
                     path.push("new");
@@ -312,11 +313,11 @@ impl MailBackend for MaildirType {
                                 let writer = io::BufWriter::new(f);
                                 bincode::serialize_into(writer, &e).unwrap();
                             }
-                            sender.send(RefreshEvent {
+                            (sender)(account_hash, BackendEvent::Refresh(RefreshEvent {
                                 account_hash,
                                 mailbox_hash,
                                 kind: Create(Box::new(e)),
-                            });
+                            }));
                         } else {
                             debug!(
                                 "DEBUG: hash {}, path: {} couldn't be parsed",
@@ -326,21 +327,21 @@ impl MailBackend for MaildirType {
                             continue;
                         }
                     }
-                    for ev in current_hashes.into_iter().map(|h| RefreshEvent {
+                    for ev in current_hashes.into_iter().map(|h| BackendEvent::Refresh(RefreshEvent {
                         account_hash,
                         mailbox_hash,
                         kind: Remove(h),
-                    }) {
-                        sender.send(ev);
+                    })) {
+                        (sender)(account_hash, ev);
                     }
                     Ok(())
                 };
                 if let Err(err) = thunk(&sender) {
-                    sender.send(RefreshEvent {
+                    (sender)(account_hash, BackendEvent::Refresh(RefreshEvent {
                         account_hash,
                         mailbox_hash,
                         kind: Failure(err),
-                    });
+                    }));
                 }
             })
         };
@@ -348,9 +349,9 @@ impl MailBackend for MaildirType {
     }
     fn watch(
         &self,
-        sender: RefreshEventConsumer,
         work_context: WorkContext,
     ) -> Result<std::thread::ThreadId> {
+        let sender = self.event_consumer.clone();
         let (tx, rx) = channel();
         let mut watcher = watcher(tx, Duration::from_secs(2)).unwrap();
         let account_hash = {
@@ -425,15 +426,15 @@ impl MailBackend for MaildirType {
                                         env.subject(),
                                         pathbuf.display()
                                     );
-                                        if !env.is_seen() {
-                                            *mailbox_counts[&mailbox_hash].0.lock().unwrap() += 1;
-                                        }
-                                            *mailbox_counts[&mailbox_hash].1.lock().unwrap() += 1;
-                                    sender.send(RefreshEvent {
+                                    if !env.is_seen() {
+                                        *mailbox_counts[&mailbox_hash].0.lock().unwrap() += 1;
+                                    }
+                                    *mailbox_counts[&mailbox_hash].1.lock().unwrap() += 1;
+                                    (sender)(account_hash, BackendEvent::Refresh(RefreshEvent {
                                         account_hash,
                                         mailbox_hash,
                                         kind: Create(Box::new(env)),
-                                    });
+                                    }));
                                 }
                             }
                             /* Update */
@@ -469,11 +470,11 @@ impl MailBackend for MaildirType {
                                             file_name,
                                         ) {
                                             mailbox_index.lock().unwrap().insert(env.hash(),mailbox_hash);
-                                            sender.send(RefreshEvent {
+                                            (sender)(account_hash, BackendEvent::Refresh(RefreshEvent {
                                                 account_hash,
                                                 mailbox_hash,
                                                 kind: Create(Box::new(env)),
-                                            });
+                                            }));
                                         }
                                         return;
                                     }
@@ -496,11 +497,11 @@ impl MailBackend for MaildirType {
 
                                         /* Send Write notice */
 
-                                        sender.send(RefreshEvent {
+                                        (sender)(account_hash, BackendEvent::Refresh(RefreshEvent {
                                             account_hash,
                                             mailbox_hash,
                                             kind: Update(old_hash, Box::new(env)),
-                                        });
+                                        }));
                                     }
                                 }
                             }
@@ -546,11 +547,11 @@ impl MailBackend for MaildirType {
                                     e.removed = true;
                                 });
 
-                                sender.send(RefreshEvent {
+                                (sender)(account_hash, BackendEvent::Refresh(RefreshEvent {
                                     account_hash,
                                     mailbox_hash,
                                     kind: Remove(hash),
-                                });
+                                }));
                             }
                             /* Envelope hasn't changed */
                             DebouncedEvent::Rename(src, dest) => {
@@ -577,11 +578,11 @@ impl MailBackend for MaildirType {
                                         debug!(&e.modified);
                                         e.modified = Some(PathMod::Hash(new_hash));
                                     });
-                                    sender.send(RefreshEvent {
+                                    (sender)(account_hash, BackendEvent::Refresh(RefreshEvent {
                                         account_hash,
                                         mailbox_hash: get_path_hash!(dest),
                                         kind: Rename(old_hash, new_hash),
-                                    });
+                                    }));
                                     if !was_seen && is_seen {
                                         let mut lck = mailbox_counts[&mailbox_hash].0.lock().unwrap();
                                         *lck = lck.saturating_sub(1);
@@ -589,11 +590,11 @@ impl MailBackend for MaildirType {
                                         *mailbox_counts[&mailbox_hash].0.lock().unwrap() += 1;
                                     }
                                     if old_flags != new_flags {
-                                        sender.send(RefreshEvent {
+                                        (sender)(account_hash, BackendEvent::Refresh(RefreshEvent {
                                             account_hash,
                                             mailbox_hash: get_path_hash!(dest),
                                             kind: NewFlags(new_hash, (new_flags, vec![])),
-                                        });
+                                        }));
                                     }
                                     mailbox_index.lock().unwrap().insert(new_hash,get_path_hash!(dest) );
                                     index_lock.insert(new_hash, dest.into());
@@ -642,11 +643,11 @@ impl MailBackend for MaildirType {
                                             *mailbox_counts[&mailbox_hash].0.lock().unwrap() += 1;
                                         }
                                         *mailbox_counts[&mailbox_hash].1.lock().unwrap() += 1;
-                                        sender.send(RefreshEvent {
+                                        (sender)(account_hash, BackendEvent::Refresh(RefreshEvent {
                                             account_hash,
                                             mailbox_hash,
                                             kind: Create(Box::new(env)),
-                                        });
+                                        }));
                                         continue;
                                     } else {
                                         debug!("not valid email");
@@ -655,36 +656,36 @@ impl MailBackend for MaildirType {
                                     if was_seen && !is_seen {
                                         *mailbox_counts[&mailbox_hash].0.lock().unwrap() += 1;
                                     }
-                                    sender.send(RefreshEvent {
+                                    (sender)(account_hash, BackendEvent::Refresh(RefreshEvent {
                                         account_hash,
                                         mailbox_hash: get_path_hash!(dest),
                                         kind: Rename(old_hash, new_hash),
-                                    });
+                                    }));
                                     debug!("contains_new_key");
                                     if old_flags != new_flags {
-                                        sender.send(RefreshEvent {
+                                        (sender)(account_hash, BackendEvent::Refresh(RefreshEvent {
                                             account_hash,
                                             mailbox_hash: get_path_hash!(dest),
                                             kind: NewFlags(new_hash, (new_flags, vec![])),
-                                        });
+                                        }));
                                     }
                                 }
 
                                 /* Maybe a re-read should be triggered here just to be safe.
-                                sender.send(RefreshEvent {
+                                   (sender)(account_hash, BackendEvent::Refresh(RefreshEvent {
                                     account_hash,
                                     mailbox_hash: get_path_hash!(dest),
                                     kind: Rescan,
-                                });
+                                }));
                                 */
                             }
                             /* Trigger rescan of mailbox */
                             DebouncedEvent::Rescan => {
-                                sender.send(RefreshEvent {
+                                (sender)(account_hash, BackendEvent::Refresh(RefreshEvent {
                                     account_hash,
                                     mailbox_hash: root_mailbox_hash,
                                     kind: Rescan,
-                                });
+                                }));
                             }
                             _ => {}
                         },
@@ -871,6 +872,7 @@ impl MaildirType {
     pub fn new(
         settings: &AccountSettings,
         is_subscribed: Box<dyn Fn(&str) -> bool>,
+        event_consumer: BackendEventConsumer,
     ) -> Result<Box<dyn MailBackend>> {
         let mut mailboxes: HashMap<MailboxHash, MaildirMailbox> = Default::default();
         fn recurse_mailboxes<P: AsRef<Path>>(
@@ -1012,6 +1014,7 @@ impl MaildirType {
             mailboxes,
             hash_indexes: Arc::new(Mutex::new(hash_indexes)),
             mailbox_index: Default::default(),
+            event_consumer,
             path: root_path,
         }))
     }

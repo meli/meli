@@ -40,7 +40,7 @@ use super::jobs::JobId;
 use super::terminal::*;
 use crate::components::{Component, ComponentId};
 
-use melib::backends::{AccountHash, MailboxHash};
+use melib::backends::{AccountHash, BackendEvent, MailboxHash};
 use melib::{EnvelopeHash, RefreshEvent, ThreadHash};
 use nix::unistd::Pid;
 use std::fmt;
@@ -119,7 +119,7 @@ pub enum UIEvent {
     MailboxCreate((AccountHash, MailboxHash)),
     AccountStatusChange(AccountHash),
     ComponentKill(Uuid),
-    WorkerProgress(AccountHash, MailboxHash),
+    BackendEvent(AccountHash, BackendEvent),
     StartupCheck(MailboxHash),
     RefreshEvent(Box<RefreshEvent>),
     EnvelopeUpdate(EnvelopeHash),

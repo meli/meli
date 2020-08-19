@@ -476,14 +476,10 @@ impl NntpConnection {
     }
 
     pub fn add_refresh_event(&mut self, ev: crate::backends::RefreshEvent) {
-        if let Some(ref sender) = self.uid_store.sender.read().unwrap().as_ref() {
-            sender.send(ev);
-            for ev in self.uid_store.refresh_events.lock().unwrap().drain(..) {
-                sender.send(ev);
-            }
-        } else {
-            self.uid_store.refresh_events.lock().unwrap().push(ev);
-        }
+        (self.uid_store.event_consumer)(
+            self.uid_store.account_hash,
+            crate::backends::BackendEvent::Refresh(ev),
+        );
     }
 
     pub async fn select_group(

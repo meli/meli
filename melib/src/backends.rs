@@ -86,6 +86,7 @@ pub type BackendCreator = Box<
     dyn Fn(
         &AccountSettings,
         Box<dyn Fn(&str) -> bool + Send + Sync>,
+        BackendEventConsumer,
     ) -> Result<Box<dyn MailBackend>>,
 >;
 
@@ -122,7 +123,7 @@ impl Backends {
             b.register(
                 "maildir".to_string(),
                 Backend {
-                    create_fn: Box::new(|| Box::new(|f, i| MaildirType::new(f, i))),
+                    create_fn: Box::new(|| Box::new(|f, i, ev| MaildirType::new(f, i, ev))),
                     validate_conf_fn: Box::new(MaildirType::validate_config),
                 },
             );
@@ -132,7 +133,7 @@ impl Backends {
             b.register(
                 "mbox".to_string(),
                 Backend {
-                    create_fn: Box::new(|| Box::new(|f, i| MboxType::new(f, i))),
+                    create_fn: Box::new(|| Box::new(|f, i, ev| MboxType::new(f, i, ev))),
                     validate_conf_fn: Box::new(MboxType::validate_config),
                 },
             );
@@ -142,14 +143,14 @@ impl Backends {
             b.register(
                 "imap".to_string(),
                 Backend {
-                    create_fn: Box::new(|| Box::new(|f, i| imap::ImapType::new(f, i))),
+                    create_fn: Box::new(|| Box::new(|f, i, ev| imap::ImapType::new(f, i, ev))),
                     validate_conf_fn: Box::new(imap::ImapType::validate_config),
                 },
             );
             b.register(
                 "nntp".to_string(),
                 Backend {
-                    create_fn: Box::new(|| Box::new(|f, i| nntp::NntpType::new(f, i))),
+                    create_fn: Box::new(|| Box::new(|f, i, ev| nntp::NntpType::new(f, i, ev))),
                     validate_conf_fn: Box::new(nntp::NntpType::validate_config),
                 },
             );
@@ -160,7 +161,7 @@ impl Backends {
                 b.register(
                     "notmuch".to_string(),
                     Backend {
-                        create_fn: Box::new(|| Box::new(|f, i| NotmuchDb::new(f, i))),
+                        create_fn: Box::new(|| Box::new(|f, i, ev| NotmuchDb::new(f, i, ev))),
                         validate_conf_fn: Box::new(NotmuchDb::validate_config),
                     },
                 );
@@ -171,7 +172,7 @@ impl Backends {
             b.register(
                 "jmap".to_string(),
                 Backend {
-                    create_fn: Box::new(|| Box::new(|f, i| jmap::JmapType::new(f, i))),
+                    create_fn: Box::new(|| Box::new(|f, i, ev| jmap::JmapType::new(f, i, ev))),
                     validate_conf_fn: Box::new(jmap::JmapType::validate_config),
                 },
             );
@@ -216,6 +217,17 @@ impl Backends {
 }
 
 #[derive(Debug, Clone)]
+pub enum BackendEvent {
+    Notice {
+        description: Option<String>,
+        content: String,
+        level: crate::LoggingLevel,
+    },
+    Refresh(RefreshEvent),
+    //Job(Box<Future<Output = Result<()>> + Send + 'static>)
+}
+
+#[derive(Debug, Clone)]
 pub enum RefreshEventKind {
     Update(EnvelopeHash, Box<Envelope>),
     /// Rename(old_hash, new_hash)
@@ -249,45 +261,25 @@ impl RefreshEvent {
     }
 }
 
-/// A `RefreshEventConsumer` is a boxed closure that must be used to consume a `RefreshEvent` and
-/// send it to a UI provided channel. We need this level of abstraction to provide an interface for
-/// all users of mailbox refresh events.
-pub struct RefreshEventConsumer(Box<dyn Fn(RefreshEvent) -> () + Send + Sync>);
-impl RefreshEventConsumer {
-    pub fn new(b: Box<dyn Fn(RefreshEvent) -> () + Send + Sync>) -> Self {
-        RefreshEventConsumer(b)
-    }
-    pub fn send(&self, r: RefreshEvent) {
-        self.0(r);
+#[derive(Clone)]
+pub struct BackendEventConsumer(Arc<dyn Fn(AccountHash, BackendEvent) -> () + Send + Sync>);
+impl BackendEventConsumer {
+    pub fn new(b: Arc<dyn Fn(AccountHash, BackendEvent) -> () + Send + Sync>) -> Self {
+        BackendEventConsumer(b)
     }
 }
 
-impl fmt::Debug for RefreshEventConsumer {
+impl fmt::Debug for BackendEventConsumer {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "RefreshEventConsumer")
+        write!(f, "BackendEventConsumer")
     }
 }
 
-pub struct NotifyFn(Box<dyn Fn(MailboxHash) -> () + Send + Sync>);
+impl Deref for BackendEventConsumer {
+    type Target = dyn Fn(AccountHash, BackendEvent) -> () + Send + Sync;
 
-impl fmt::Debug for NotifyFn {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "NotifyFn Box")
-    }
-}
-
-impl From<Box<dyn Fn(MailboxHash) -> () + Send + Sync>> for NotifyFn {
-    fn from(kind: Box<dyn Fn(MailboxHash) -> () + Send + Sync>) -> Self {
-        NotifyFn(kind)
-    }
-}
-
-impl NotifyFn {
-    pub fn new(b: Box<dyn Fn(MailboxHash) -> () + Send + Sync>) -> Self {
-        NotifyFn(b)
-    }
-    pub fn notify(&self, f: MailboxHash) {
-        self.0(f);
+    fn deref(&self) -> &Self::Target {
+        &(*self.0)
     }
 }
 
@@ -325,26 +317,14 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
     ) -> Result<Pin<Box<dyn Stream<Item = Result<Vec<Envelope>>> + Send + 'static>>> {
         Err(MeliError::new("Unimplemented."))
     }
-    fn refresh(
-        &mut self,
-        _mailbox_hash: MailboxHash,
-        _sender: RefreshEventConsumer,
-    ) -> Result<Async<()>> {
+    fn refresh(&mut self, _mailbox_hash: MailboxHash) -> Result<Async<()>> {
         Err(MeliError::new("Unimplemented."))
     }
-    fn refresh_async(
-        &mut self,
-        _mailbox_hash: MailboxHash,
-        _sender: RefreshEventConsumer,
-    ) -> ResultFuture<()> {
+    fn refresh_async(&mut self, _mailbox_hash: MailboxHash) -> ResultFuture<()> {
         Err(MeliError::new("Unimplemented."))
     }
-    fn watch(
-        &self,
-        sender: RefreshEventConsumer,
-        work_context: WorkContext,
-    ) -> Result<std::thread::ThreadId>;
-    fn watch_async(&self, _sender: RefreshEventConsumer) -> ResultFuture<()> {
+    fn watch(&self, work_context: WorkContext) -> Result<std::thread::ThreadId>;
+    fn watch_async(&self) -> ResultFuture<()> {
         Err(MeliError::new("Unimplemented."))
     }
     fn mailboxes(&self) -> Result<HashMap<MailboxHash, Mailbox>>;
