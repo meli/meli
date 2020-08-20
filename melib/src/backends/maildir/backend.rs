@@ -812,10 +812,6 @@ impl MailBackend for MaildirType {
         }))
     }
 
-    fn as_any(&self) -> &dyn ::std::any::Any {
-        self
-    }
-
     fn create_mailbox(
         &mut self,
         new_path: String,
@@ -891,6 +887,14 @@ impl MailBackend for MaildirType {
         _val: crate::backends::MailboxPermissions,
     ) -> ResultFuture<()> {
         Err(MeliError::new("Unimplemented."))
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 }
 

@@ -233,7 +233,7 @@ impl State {
         let input_thread = unbounded();
         let input_thread_pipe = nix::unistd::pipe()
             .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send + Sync + 'static>)?;
-        let mut backends = Backends::new();
+        let backends = Backends::new();
         let settings = if let Some(settings) = settings {
             settings
         } else {

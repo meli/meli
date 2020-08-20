@@ -242,10 +242,12 @@ impl MailBackend for JmapType {
         }))
     }
 
+    fn refresh(&mut self, _mailbox_hash: MailboxHash) -> ResultFuture<()> {
+        Err(MeliError::new("Unimplemented."))
+    }
+
     fn watch(&self) -> ResultFuture<()> {
-        Ok(Box::pin(async move {
-            Err(MeliError::from("JMAP watch for updates is unimplemented"))
-        }))
+        Err(MeliError::from("JMAP watch for updates is unimplemented"))
     }
 
     fn mailboxes(&self) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
@@ -288,12 +290,16 @@ impl MailBackend for JmapType {
         Err(MeliError::new("Unimplemented."))
     }
 
-    fn as_any(&self) -> &dyn ::std::any::Any {
+    fn tags(&self) -> Option<Arc<RwLock<BTreeMap<u64, String>>>> {
+        Some(self.tag_index.clone())
+    }
+
+    fn as_any(&self) -> &dyn Any {
         self
     }
 
-    fn tags(&self) -> Option<Arc<RwLock<BTreeMap<u64, String>>>> {
-        Some(self.tag_index.clone())
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 
     fn search(

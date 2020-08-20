@@ -462,6 +462,13 @@ impl MailBackend for NotmuchDb {
         }))
     }
 
+    fn refresh(&mut self, _mailbox_hash: MailboxHash) -> ResultFuture<()> {
+        Err(MeliError::new("Unimplemented."))
+    }
+
+    fn watch(&self) -> ResultFuture<()> {
+        Err(MeliError::new("Unimplemented."))
+    }
     /*
         fn watch(&self) -> ResultFuture<()> {
             extern crate notify;
@@ -835,12 +842,16 @@ impl MailBackend for NotmuchDb {
         Ok(Box::pin(async { Ok(()) }))
     }
 
-    fn as_any(&self) -> &dyn ::std::any::Any {
+    fn tags(&self) -> Option<Arc<RwLock<BTreeMap<u64, String>>>> {
+        Some(self.tag_index.clone())
+    }
+
+    fn as_any(&self) -> &dyn Any {
         self
     }
 
-    fn tags(&self) -> Option<Arc<RwLock<BTreeMap<u64, String>>>> {
-        Some(self.tag_index.clone())
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 }
 

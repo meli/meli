@@ -709,20 +709,20 @@ impl MailBackend for ImapType {
         }))
     }
 
-    fn as_any(&self) -> &dyn ::std::any::Any {
-        self
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn ::std::any::Any {
-        self
-    }
-
     fn tags(&self) -> Option<Arc<RwLock<BTreeMap<u64, String>>>> {
         if *self.can_create_flags.lock().unwrap() {
             Some(self.uid_store.tag_index.clone())
         } else {
             None
         }
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 
     fn create_mailbox(

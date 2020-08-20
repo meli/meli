@@ -304,24 +304,17 @@ pub type ResultFuture<T> = Result<Pin<Box<dyn Future<Output = Result<T>> + Send 
 pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
     fn capabilities(&self) -> MailBackendCapabilities;
     fn is_online(&self) -> ResultFuture<()> {
-        Err(MeliError::new("Unimplemented."))
+        Ok(Box::pin(async { Ok(()) }))
     }
-    //fn fetch(&mut self, mailbox_hash: MailboxHash) -> Result<Async<Result<Vec<Envelope>>>>;
+
     fn fetch(
         &mut self,
-        _mailbox_hash: MailboxHash,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<Vec<Envelope>>> + Send + 'static>>> {
-        Err(MeliError::new("Unimplemented."))
-    }
-    fn refresh(&mut self, _mailbox_hash: MailboxHash) -> ResultFuture<()> {
-        Err(MeliError::new("Unimplemented."))
-    }
-    fn watch(&self) -> ResultFuture<()> {
-        Err(MeliError::new("Unimplemented."))
-    }
-    fn mailboxes(&self) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
-        Err(MeliError::new("Unimplemented."))
-    }
+        mailbox_hash: MailboxHash,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<Vec<Envelope>>> + Send + 'static>>>;
+
+    fn refresh(&mut self, mailbox_hash: MailboxHash) -> ResultFuture<()>;
+    fn watch(&self) -> ResultFuture<()>;
+    fn mailboxes(&self) -> ResultFuture<HashMap<MailboxHash, Mailbox>>;
     fn operation(&self, hash: EnvelopeHash) -> Result<Box<dyn BackendOp>>;
 
     fn save(
@@ -362,10 +355,7 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
         None
     }
     fn as_any(&self) -> &dyn Any;
-
-    fn as_any_mut(&mut self) -> &mut dyn Any {
-        unimplemented!()
-    }
+    fn as_any_mut(&mut self) -> &mut dyn Any;
 
     fn create_mailbox(
         &mut self,
@@ -553,65 +543,6 @@ pub trait BackendMailbox: Debug {
     fn count(&self) -> Result<(usize, usize)>;
 }
 
-#[derive(Debug)]
-struct DummyMailbox {
-    v: Vec<MailboxHash>,
-}
-
-impl BackendMailbox for DummyMailbox {
-    fn hash(&self) -> MailboxHash {
-        0
-    }
-
-    fn name(&self) -> &str {
-        ""
-    }
-
-    fn path(&self) -> &str {
-        ""
-    }
-
-    fn change_name(&mut self, _s: &str) {}
-
-    fn clone(&self) -> Mailbox {
-        mailbox_default()
-    }
-
-    fn special_usage(&self) -> SpecialUsageMailbox {
-        SpecialUsageMailbox::Normal
-    }
-
-    fn children(&self) -> &[MailboxHash] {
-        &self.v
-    }
-
-    fn parent(&self) -> Option<MailboxHash> {
-        None
-    }
-
-    fn permissions(&self) -> MailboxPermissions {
-        MailboxPermissions::default()
-    }
-    fn is_subscribed(&self) -> bool {
-        true
-    }
-    fn set_is_subscribed(&mut self, _new_val: bool) -> Result<()> {
-        Ok(())
-    }
-    fn set_special_usage(&mut self, _new_val: SpecialUsageMailbox) -> Result<()> {
-        Ok(())
-    }
-    fn count(&self) -> Result<(usize, usize)> {
-        Ok((0, 0))
-    }
-}
-
-pub fn mailbox_default() -> Mailbox {
-    Box::new(DummyMailbox {
-        v: Vec::with_capacity(0),
-    })
-}
-
 pub type AccountHash = u64;
 pub type MailboxHash = u64;
 pub type Mailbox = Box<dyn BackendMailbox + Send + Sync>;
@@ -619,12 +550,6 @@ pub type Mailbox = Box<dyn BackendMailbox + Send + Sync>;
 impl Clone for Mailbox {
     fn clone(&self) -> Self {
         BackendMailbox::clone(self.deref())
-    }
-}
-
-impl Default for Mailbox {
-    fn default() -> Self {
-        mailbox_default()
     }
 }
 
