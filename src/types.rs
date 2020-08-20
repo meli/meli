@@ -44,7 +44,6 @@ use melib::backends::{AccountHash, BackendEvent, MailboxHash};
 use melib::{EnvelopeHash, RefreshEvent, ThreadHash};
 use nix::unistd::Pid;
 use std::fmt;
-use std::thread;
 use uuid::Uuid;
 
 #[derive(Debug)]
@@ -62,7 +61,6 @@ pub enum StatusEvent {
 /// to the main process.
 #[derive(Debug)]
 pub enum ThreadEvent {
-    NewThread(thread::ThreadId, String),
     /// User input.
     Input((Key, Vec<u8>)),
     /// User input and input as raw bytes.

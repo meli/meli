@@ -32,7 +32,6 @@ pub use operations::*;
 mod connection;
 pub use connection::*;
 
-use crate::async_workers::{Async, WorkContext};
 use crate::backends::*;
 use crate::conf::AccountSettings;
 use crate::email::*;
@@ -185,7 +184,7 @@ impl MailBackend for NntpType {
         }
     }
 
-    fn fetch_async(
+    fn fetch(
         &mut self,
         mailbox_hash: MailboxHash,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<Vec<Envelope>>> + Send + 'static>>> {
@@ -211,11 +210,11 @@ impl MailBackend for NntpType {
         }))
     }
 
-    fn refresh_async(&mut self, _mailbox_hash: MailboxHash) -> ResultFuture<()> {
+    fn refresh(&mut self, _mailbox_hash: MailboxHash) -> ResultFuture<()> {
         Err(MeliError::new("Unimplemented."))
     }
 
-    fn mailboxes_async(&self) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
+    fn mailboxes(&self) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
         let uid_store = self.uid_store.clone();
         let connection = self.connection.clone();
         Ok(Box::pin(async move {
@@ -229,12 +228,12 @@ impl MailBackend for NntpType {
         }))
     }
 
-    fn is_online_async(&self) -> ResultFuture<()> {
+    fn is_online(&self) -> ResultFuture<()> {
         let connection = self.connection.clone();
         Ok(Box::pin(async move {
             match timeout(std::time::Duration::from_secs(3), connection.lock()).await {
                 Ok(mut conn) => {
-                    debug!("is_online_async");
+                    debug!("is_online");
                     match debug!(timeout(std::time::Duration::from_secs(3), conn.connect()).await) {
                         Ok(Ok(())) => Ok(()),
                         Err(err) | Ok(Err(err)) => {
@@ -248,23 +247,7 @@ impl MailBackend for NntpType {
         }))
     }
 
-    fn fetch(&mut self, _mailbox_hash: MailboxHash) -> Result<Async<Result<Vec<Envelope>>>> {
-        Err(MeliError::new("Unimplemented."))
-    }
-
-    fn refresh(&mut self, _mailbox_hash: MailboxHash) -> Result<Async<()>> {
-        Err(MeliError::new("Unimplemented."))
-    }
-
-    fn watch(&self, _work_context: WorkContext) -> Result<std::thread::ThreadId> {
-        Err(MeliError::new("Unimplemented."))
-    }
-
-    fn watch_async(&self) -> ResultFuture<()> {
-        Err(MeliError::new("Unimplemented."))
-    }
-
-    fn mailboxes(&self) -> Result<HashMap<MailboxHash, Mailbox>> {
+    fn watch(&self) -> ResultFuture<()> {
         Err(MeliError::new("Unimplemented."))
     }
 

@@ -191,17 +191,10 @@ impl MailBackend for PluginBackend {
         Ok(w.build(handle))
     }
 
-    fn refresh(&mut self, _mailbox_hash: MailboxHash) -> Result<Async<()>> {
-        Err(MeliError::new("Unimplemented."))
-    }
-    fn watch(&self, _work_context: WorkContext) -> Result<std::thread::ThreadId> {
-        Err(MeliError::new("Unimplemented."))
-    }
-
-    fn mailboxes(&self) -> Result<HashMap<MailboxHash, Mailbox>> {
+    fn mailboxes(&self) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
         let mut ret: HashMap<MailboxHash, Mailbox> = Default::default();
         ret.insert(0, Mailbox::default());
-        Ok(ret)
+        Ok(Box::pin(async { Ok(ret) }))
     }
 
     fn operation(&self, hash: EnvelopeHash) -> Result<Box<dyn BackendOp>> {

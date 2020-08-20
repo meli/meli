@@ -49,7 +49,6 @@ pub mod mbox;
 pub use self::imap::ImapType;
 #[cfg(feature = "imap_backend")]
 pub use self::nntp::NntpType;
-use crate::async_workers::*;
 use crate::conf::AccountSettings;
 use crate::error::{MeliError, Result};
 
@@ -304,31 +303,23 @@ pub type ResultFuture<T> = Result<Pin<Box<dyn Future<Output = Result<T>> + Send 
 
 pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
     fn capabilities(&self) -> MailBackendCapabilities;
-    fn is_online(&self) -> Result<()> {
+    fn is_online(&self) -> ResultFuture<()> {
         Err(MeliError::new("Unimplemented."))
     }
-    fn is_online_async(&self) -> ResultFuture<()> {
-        Err(MeliError::new("Unimplemented."))
-    }
-    fn fetch(&mut self, mailbox_hash: MailboxHash) -> Result<Async<Result<Vec<Envelope>>>>;
-    fn fetch_async(
+    //fn fetch(&mut self, mailbox_hash: MailboxHash) -> Result<Async<Result<Vec<Envelope>>>>;
+    fn fetch(
         &mut self,
         _mailbox_hash: MailboxHash,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<Vec<Envelope>>> + Send + 'static>>> {
         Err(MeliError::new("Unimplemented."))
     }
-    fn refresh(&mut self, _mailbox_hash: MailboxHash) -> Result<Async<()>> {
+    fn refresh(&mut self, _mailbox_hash: MailboxHash) -> ResultFuture<()> {
         Err(MeliError::new("Unimplemented."))
     }
-    fn refresh_async(&mut self, _mailbox_hash: MailboxHash) -> ResultFuture<()> {
+    fn watch(&self) -> ResultFuture<()> {
         Err(MeliError::new("Unimplemented."))
     }
-    fn watch(&self, work_context: WorkContext) -> Result<std::thread::ThreadId>;
-    fn watch_async(&self) -> ResultFuture<()> {
-        Err(MeliError::new("Unimplemented."))
-    }
-    fn mailboxes(&self) -> Result<HashMap<MailboxHash, Mailbox>>;
-    fn mailboxes_async(&self) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
+    fn mailboxes(&self) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
         Err(MeliError::new("Unimplemented."))
     }
     fn operation(&self, hash: EnvelopeHash) -> Result<Box<dyn BackendOp>>;

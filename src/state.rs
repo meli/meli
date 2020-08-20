@@ -113,7 +113,6 @@ pub struct Context {
     sender: Sender<ThreadEvent>,
     receiver: Receiver<ThreadEvent>,
     input_thread: InputHandler,
-    work_controller: WorkController,
     job_executor: Arc<JobExecutor>,
     pub children: Vec<std::process::Child>,
     pub plugin_manager: PluginManager,
@@ -166,10 +165,6 @@ impl Context {
     pub fn is_online(&mut self, account_hash: AccountHash) -> Result<()> {
         let idx = self.accounts.get_index_of(&account_hash).unwrap();
         self.is_online_idx(idx)
-    }
-
-    pub fn work_controller(&self) -> &WorkController {
-        &self.work_controller
     }
 }
 
@@ -246,6 +241,7 @@ impl State {
         };
         let mut plugin_manager = PluginManager::new();
         for (_, p) in settings.plugins.clone() {
+            /*
             if crate::plugins::PluginKind::Backend == p.kind() {
                 debug!("registering {:?}", &p);
                 crate::plugins::backend::PluginBackend::register(
@@ -254,6 +250,7 @@ impl State {
                     &mut backends,
                 );
             }
+            */
             plugin_manager.register(p)?;
         }
 
@@ -261,7 +258,6 @@ impl State {
         let cols = termsize.0 as usize;
         let rows = termsize.1 as usize;
 
-        let work_controller = WorkController::new(sender.clone());
         let job_executor = Arc::new(JobExecutor::new(sender.clone()));
         let accounts = {
             settings
@@ -281,7 +277,6 @@ impl State {
                         n.to_string(),
                         a_s.clone(),
                         &backends,
-                        work_controller.get_context(),
                         job_executor.clone(),
                         sender.clone(),
                         BackendEventConsumer::new(Arc::new(
@@ -346,7 +341,6 @@ impl State {
                 dirty_areas: VecDeque::with_capacity(5),
                 replies: VecDeque::with_capacity(5),
                 temp_files: Vec::new(),
-                work_controller,
                 job_executor,
                 children: vec![],
                 plugin_manager,
@@ -420,15 +414,6 @@ impl State {
                 debug!(err);
             }
         }
-    }
-
-    pub fn new_thread(&mut self, id: thread::ThreadId, name: String) {
-        self.context
-            .work_controller
-            .static_threads
-            .lock()
-            .unwrap()
-            .insert(id, name.into());
     }
 
     /// Switch back to the terminal's main screen (The command line the user sees before opening

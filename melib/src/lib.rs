@@ -31,7 +31,6 @@
 //!   values (see module `thread`)
 //!
 //! Other exports are
-//! - Thread management (see module `async_workers`)
 //! - Basic mail account configuration to use with `backends` (see module `conf`)
 //! - Parser combinators (see module `parsec`)
 //! - A `ShellExpandTrait` to expand paths like a shell.
@@ -105,7 +104,6 @@ pub use self::logging::LoggingLevel::*;
 pub use self::logging::*;
 
 pub mod addressbook;
-pub mod async_workers;
 pub mod backends;
 mod collection;
 pub mod conf;

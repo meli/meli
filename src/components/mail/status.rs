@@ -50,7 +50,7 @@ impl Component for StatusPanel {
         self.draw_accounts(context);
         let (width, height) = self.content.size();
         {
-            let (_, y) = write_string_to_grid(
+            let (_, _) = write_string_to_grid(
                 "Worker threads",
                 &mut self.content,
                 self.theme_default.fg,
@@ -59,6 +59,7 @@ impl Component for StatusPanel {
                 ((1, 1), (width - 1, height - 1)),
                 Some(1),
             );
+            /*
             let mut y = y + 1;
             let work_controller = context.work_controller().threads.lock().unwrap();
             let mut workers: Vec<&Worker> = work_controller.values().collect::<Vec<&Worker>>();
@@ -130,6 +131,7 @@ impl Component for StatusPanel {
 
                 y = y_off + 1;
             }
+            */
         }
         let (cols, rows) = (width!(area), height!(area));
         self.cursor = (

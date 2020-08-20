@@ -75,9 +75,6 @@ use crate::components::*;
 pub mod conf;
 use crate::conf::*;
 
-pub mod workers;
-use crate::workers::*;
-
 #[cfg(feature = "sqlite3")]
 pub mod sqlite3;
 
@@ -467,9 +464,6 @@ fn run_app(opt: Opt) -> Result<()> {
                         ThreadEvent::Pulse => {
                             state.check_accounts();
                             state.redraw();
-                        },
-                        ThreadEvent::NewThread(id, name) => {
-                            state.new_thread(id, name);
                         },
                         ThreadEvent::JobFinished(id) => {
                             debug!("Job finished {}", id);

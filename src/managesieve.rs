@@ -63,9 +63,6 @@ use crate::components::*;
 pub mod conf;
 use crate::conf::*;
 
-pub mod workers;
-use crate::workers::*;
-
 #[cfg(feature = "sqlite3")]
 pub mod sqlite3;
 

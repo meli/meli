@@ -157,8 +157,6 @@ impl JobExecutor {
         F: Future<Output = Result<()>> + Send + 'static,
     {
         let job_id = JobId::new();
-        let _job_id = job_id;
-        let __job_id = job_id;
         let finished_sender = self.sender.clone();
         let injector = self.global_queue.clone();
         // Create a task and schedule it for execution.
@@ -166,11 +164,11 @@ impl JobExecutor {
             async move {
                 let r = future.await;
                 finished_sender
-                    .send(ThreadEvent::JobFinished(__job_id))
+                    .send(ThreadEvent::JobFinished(job_id))
                     .unwrap();
                 r
             },
-            move |task| injector.push(MeliTask { task, id: _job_id }),
+            move |task| injector.push(MeliTask { task, id: job_id }),
             (),
         );
         task.schedule();
@@ -191,8 +189,6 @@ impl JobExecutor {
         let (sender, receiver) = oneshot::channel();
         let finished_sender = self.sender.clone();
         let job_id = JobId::new();
-        let _job_id = job_id;
-        let __job_id = job_id;
         let injector = self.global_queue.clone();
         // Create a task and schedule it for execution.
         let (task, handle) = async_task::spawn(
@@ -200,11 +196,11 @@ impl JobExecutor {
                 let res = future.await;
                 let _ = sender.send(res);
                 finished_sender
-                    .send(ThreadEvent::JobFinished(__job_id))
+                    .send(ThreadEvent::JobFinished(job_id))
                     .unwrap();
                 Ok(())
             },
-            move |task| injector.push(MeliTask { task, id: _job_id }),
+            move |task| injector.push(MeliTask { task, id: job_id }),
             (),
         );
         task.schedule();

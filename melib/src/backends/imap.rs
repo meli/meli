@@ -36,11 +36,11 @@ mod cache;
 pub mod managesieve;
 mod untagged;
 
-use crate::async_workers::{Async, WorkContext};
 use crate::backends::{
     RefreshEventKind::{self, *},
     *,
 };
+
 use crate::conf::AccountSettings;
 use crate::connections::timeout;
 use crate::email::*;
@@ -260,7 +260,7 @@ impl MailBackend for ImapType {
         }
     }
 
-    fn fetch_async(
+    fn fetch(
         &mut self,
         mailbox_hash: MailboxHash,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<Vec<Envelope>>> + Send + 'static>>> {
@@ -289,7 +289,7 @@ impl MailBackend for ImapType {
         }))
     }
 
-    fn refresh_async(&mut self, mailbox_hash: MailboxHash) -> ResultFuture<()> {
+    fn refresh(&mut self, mailbox_hash: MailboxHash) -> ResultFuture<()> {
         let main_conn = self.connection.clone();
         let uid_store = self.uid_store.clone();
         Ok(Box::pin(async move {
@@ -304,7 +304,7 @@ impl MailBackend for ImapType {
         }))
     }
 
-    fn mailboxes_async(&self) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
+    fn mailboxes(&self) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
         let uid_store = self.uid_store.clone();
         let connection = self.connection.clone();
         Ok(Box::pin(async move {
@@ -356,12 +356,12 @@ impl MailBackend for ImapType {
         }))
     }
 
-    fn is_online_async(&self) -> ResultFuture<()> {
+    fn is_online(&self) -> ResultFuture<()> {
         let connection = self.connection.clone();
         Ok(Box::pin(async move {
             match timeout(std::time::Duration::from_secs(3), connection.lock()).await {
                 Ok(mut conn) => {
-                    debug!("is_online_async");
+                    debug!("is_online");
                     match debug!(timeout(std::time::Duration::from_secs(3), conn.connect()).await) {
                         Ok(Ok(())) => Ok(()),
                         Err(err) | Ok(Err(err)) => {
@@ -375,20 +375,7 @@ impl MailBackend for ImapType {
         }))
     }
 
-    fn fetch(&mut self, _mailbox_hash: MailboxHash) -> Result<Async<Result<Vec<Envelope>>>> {
-        Err(MeliError::new("Unimplemented."))
-    }
-
-    fn refresh(&mut self, _mailbox_hash: MailboxHash) -> Result<Async<()>> {
-        Err(MeliError::new("Unimplemented."))
-    }
-
-    fn watch(&self, _work_context: WorkContext) -> Result<std::thread::ThreadId> {
-        Err(MeliError::new("Unimplemented."))
-    }
-
-    fn watch_async(&self) -> ResultFuture<()> {
-        debug!("watch_async called");
+    fn watch(&self) -> ResultFuture<()> {
         let conn = ImapConnection::new_connection(&self.server_conf, self.uid_store.clone());
         let main_conn = self.connection.clone();
         let uid_store = self.uid_store.clone();
@@ -417,13 +404,9 @@ impl MailBackend for ImapType {
             } else {
                 poll_with_examine(kit).await?;
             }
-            debug!("watch_async future returning");
+            debug!("watch future returning");
             Ok(())
         }))
-    }
-
-    fn mailboxes(&self) -> Result<HashMap<MailboxHash, Mailbox>> {
-        Err(MeliError::new("Unimplemented."))
     }
 
     fn operation(&self, hash: EnvelopeHash) -> Result<Box<dyn BackendOp>> {
@@ -748,7 +731,7 @@ impl MailBackend for ImapType {
     ) -> ResultFuture<(MailboxHash, HashMap<MailboxHash, Mailbox>)> {
         let uid_store = self.uid_store.clone();
         let connection = self.connection.clone();
-        let new_mailbox_fut = self.mailboxes_async();
+        let new_mailbox_fut = self.mailboxes();
         Ok(Box::pin(async move {
             /* Must transform path to something the IMAP server will accept
              *
@@ -819,7 +802,7 @@ impl MailBackend for ImapType {
     ) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
         let uid_store = self.uid_store.clone();
         let connection = self.connection.clone();
-        let new_mailbox_fut = self.mailboxes_async();
+        let new_mailbox_fut = self.mailboxes();
         Ok(Box::pin(async move {
             let imap_path: String;
             let no_select: bool;
@@ -923,7 +906,7 @@ impl MailBackend for ImapType {
     ) -> ResultFuture<Mailbox> {
         let uid_store = self.uid_store.clone();
         let connection = self.connection.clone();
-        let new_mailbox_fut = self.mailboxes_async();
+        let new_mailbox_fut = self.mailboxes();
         Ok(Box::pin(async move {
             let command: String;
             let mut response = String::with_capacity(8 * 1024);

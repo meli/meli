@@ -19,7 +19,6 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use crate::async_workers::{Async, WorkContext};
 use crate::backends::*;
 use crate::conf::AccountSettings;
 use crate::email::*;
@@ -207,7 +206,7 @@ impl MailBackend for JmapType {
         CAPABILITIES
     }
 
-    fn is_online_async(&self) -> ResultFuture<()> {
+    fn is_online(&self) -> ResultFuture<()> {
         let online = self.online.clone();
         Ok(Box::pin(async move {
             //match timeout(std::time::Duration::from_secs(3), connection.lock()).await {
@@ -221,7 +220,7 @@ impl MailBackend for JmapType {
         }))
     }
 
-    fn fetch_async(
+    fn fetch(
         &mut self,
         mailbox_hash: MailboxHash,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<Vec<Envelope>>> + Send + 'static>>> {
@@ -243,13 +242,13 @@ impl MailBackend for JmapType {
         }))
     }
 
-    fn watch_async(&self) -> ResultFuture<()> {
+    fn watch(&self) -> ResultFuture<()> {
         Ok(Box::pin(async move {
             Err(MeliError::from("JMAP watch for updates is unimplemented"))
         }))
     }
 
-    fn mailboxes_async(&self) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
+    fn mailboxes(&self) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
         let mailboxes = self.mailboxes.clone();
         let connection = self.connection.clone();
         Ok(Box::pin(async move {
@@ -352,18 +351,6 @@ impl MailBackend for JmapType {
                 .collect();
             Ok(ret)
         }))
-    }
-
-    fn fetch(&mut self, _mailbox_hash: MailboxHash) -> Result<Async<Result<Vec<Envelope>>>> {
-        Err(MeliError::new("Unimplemented."))
-    }
-
-    fn watch(&self, _work_context: WorkContext) -> Result<std::thread::ThreadId> {
-        Err(MeliError::new("Unimplemented."))
-    }
-
-    fn mailboxes(&self) -> Result<HashMap<MailboxHash, Mailbox>> {
-        Err(MeliError::new("Unimplemented."))
     }
 
     fn rename_mailbox(

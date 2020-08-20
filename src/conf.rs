@@ -350,18 +350,7 @@ impl FileSettings {
                 e.to_string()
             ))
         })?;
-        let mut backends = melib::backends::Backends::new();
-        let plugin_manager = crate::plugins::PluginManager::new();
-        for (_, p) in s.plugins.clone() {
-            if crate::plugins::PluginKind::Backend == p.kind() {
-                crate::plugins::backend::PluginBackend::register(
-                    plugin_manager.listener(),
-                    p.clone(),
-                    &mut backends,
-                );
-            }
-        }
-
+        let backends = melib::backends::Backends::new();
         let Themes {
             light: default_light,
             dark: default_dark,
