@@ -49,6 +49,7 @@ use futures::lock::Mutex as FutureMutex;
 use futures::stream::Stream;
 use std::collections::{hash_map::DefaultHasher, BTreeMap};
 use std::collections::{BTreeSet, HashMap, HashSet};
+use std::convert::TryFrom;
 use std::hash::Hasher;
 use std::pin::Pin;
 use std::str::FromStr;
@@ -788,7 +789,7 @@ impl MailBackend for ImapType {
                     .read_response(&mut response, RequiredResponses::empty())
                     .await?;
             }
-            let ret: Result<()> = ImapResponse::from(&response).into();
+            let ret: Result<()> = ImapResponse::try_from(response.as_str())?.into();
             ret?;
             let new_hash = get_path_hash!(path.as_str());
             uid_store.mailboxes.lock().await.clear();
@@ -845,7 +846,7 @@ impl MailBackend for ImapType {
                     .read_response(&mut response, RequiredResponses::empty())
                     .await?;
             }
-            let ret: Result<()> = ImapResponse::from(&response).into();
+            let ret: Result<()> = ImapResponse::try_from(response.as_str())?.into();
             ret?;
             uid_store.mailboxes.lock().await.clear();
             new_mailbox_fut?.await.map_err(|err| format!("Mailbox delete was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", response, err).into())
@@ -884,7 +885,7 @@ impl MailBackend for ImapType {
                     .await?;
             }
 
-            let ret: Result<()> = ImapResponse::from(&response).into();
+            let ret: Result<()> = ImapResponse::try_from(response.as_str())?.into();
             if ret.is_ok() {
                 uid_store
                     .mailboxes
@@ -936,7 +937,7 @@ impl MailBackend for ImapType {
                     .await?;
             }
             let new_hash = get_path_hash!(new_path.as_str());
-            let ret: Result<()> = ImapResponse::from(&response).into();
+            let ret: Result<()> = ImapResponse::try_from(response.as_str())?.into();
             ret?;
             uid_store.mailboxes.lock().await.clear();
             new_mailbox_fut?.await.map_err(|err| format!("Mailbox rename was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", response, err))?;

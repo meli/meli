@@ -29,6 +29,7 @@ use futures::io::{AsyncReadExt, AsyncWriteExt};
 use native_tls::TlsConnector;
 pub use smol::Async as AsyncWrapper;
 use std::collections::HashSet;
+use std::convert::TryFrom;
 use std::future::Future;
 use std::iter::FromIterator;
 use std::pin::Pin;
@@ -534,7 +535,7 @@ impl ImapConnection {
                         self.send_command(b"COMPRESS DEFLATE").await?;
                         self.read_response(&mut ret, RequiredResponses::empty())
                             .await?;
-                        match ImapResponse::from(&ret) {
+                        match ImapResponse::try_from(ret.as_str())? {
                             ImapResponse::No(code)
                             | ImapResponse::Bad(code)
                             | ImapResponse::Preauth(code)
@@ -578,7 +579,7 @@ impl ImapConnection {
 
             match self.server_conf.protocol {
                 ImapProtocol::IMAP { .. } => {
-                    let r: ImapResponse = ImapResponse::from(&response);
+                    let r: ImapResponse = ImapResponse::try_from(response.as_str())?;
                     match r {
                         ImapResponse::Bye(ref response_code) => {
                             self.stream = Err(MeliError::new(format!(
@@ -586,31 +587,33 @@ impl ImapConnection {
                                 response_code
                             )));
                             ret.push_str(&response);
+                            return r.into();
                         }
                         ImapResponse::No(ref response_code) => {
                             //FIXME return error
                             debug!("Received NO response: {:?} {:?}", response_code, response);
                             ret.push_str(&response);
+                            return r.into();
                         }
                         ImapResponse::Bad(ref response_code) => {
                             //FIXME return error
                             debug!("Received BAD response: {:?} {:?}", response_code, response);
                             ret.push_str(&response);
+                            return r.into();
                         }
-                        _ => {
-                            /*debug!(
-                                "check every line for required_responses: {:#?}",
-                                &required_responses
-                            );*/
-                            for l in response.split_rn() {
-                                /*debug!("check line: {}", &l);*/
-                                if required_responses.check(l) || !self.process_untagged(l).await? {
-                                    ret.push_str(l);
-                                }
-                            }
+                        _ => {}
+                    }
+                    /*debug!(
+                        "check every line for required_responses: {:#?}",
+                        &required_responses
+                    );*/
+                    for l in response.split_rn() {
+                        /*debug!("check line: {}", &l);*/
+                        if required_responses.check(l) || !self.process_untagged(l).await? {
+                            ret.push_str(l);
                         }
                     }
-                    r.into()
+                    Ok(())
                 }
                 ImapProtocol::ManageSieve => {
                     ret.push_str(&response);

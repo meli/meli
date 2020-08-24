@@ -32,6 +32,7 @@ use nom::{
     multi::{fold_many1, length_data, many0, separated_list, separated_nonempty_list},
     sequence::{delimited, preceded},
 };
+use std::convert::TryFrom;
 use std::str::FromStr;
 
 bitflags! {
@@ -252,17 +253,29 @@ pub enum ImapResponse {
     Bye(ResponseCode),
 }
 
-impl<T: AsRef<str>> From<T> for ImapResponse {
-    fn from(val: T) -> ImapResponse {
-        let val: &str = val.as_ref().split_rn().last().unwrap_or(val.as_ref());
+impl TryFrom<&'_ str> for ImapResponse {
+    type Error = MeliError;
+    fn try_from(val: &'_ str) -> Result<ImapResponse> {
+        let val: &str = val.split_rn().last().unwrap_or(val.as_ref());
         debug!(&val);
-        let mut val = val[val.as_bytes().find(b" ").unwrap() + 1..].trim();
+        let mut val = val[val.as_bytes().find(b" ").ok_or_else(|| {
+            MeliError::new(format!(
+                "Expected tagged IMAP response (OK,NO,BAD, etc) but found {:?}",
+                val
+            ))
+        })? + 1..]
+            .trim();
         // M12 NO [CANNOT] Invalid mailbox name: Name must not have \'/\' characters (0.000 + 0.098 + 0.097 secs).\r\n
         if val.ends_with(" secs).") {
-            val = &val[..val.as_bytes().rfind(b"(").unwrap()];
+            val = &val[..val.as_bytes().rfind(b"(").ok_or_else(|| {
+                MeliError::new(format!(
+                    "Expected tagged IMAP response (OK,NO,BAD, etc) but found {:?}",
+                    val
+                ))
+            })?];
         }
 
-        if val.starts_with("OK") {
+        Ok(if val.starts_with("OK") {
             Self::Ok(ResponseCode::from(&val["OK ".len()..]))
         } else if val.starts_with("NO") {
             Self::No(ResponseCode::from(&val["NO ".len()..]))
@@ -273,8 +286,11 @@ impl<T: AsRef<str>> From<T> for ImapResponse {
         } else if val.starts_with("BYE") {
             Self::Bye(ResponseCode::from(&val["BYE ".len()..]))
         } else {
-            panic!("Unknown IMAP response: `{}`", val);
-        }
+            return Err(MeliError::new(format!(
+                "Expected tagged IMAP response (OK,NO,BAD, etc) but found {:?}",
+                val
+            )));
+        })
     }
 }
 
@@ -295,7 +311,7 @@ impl Into<Result<()>> for ImapResponse {
 
 #[test]
 fn test_imap_response() {
-    assert_eq!(ImapResponse::from("M12 NO [CANNOT] Invalid mailbox name: Name must not have \'/\' characters (0.000 + 0.098 + 0.097 secs).\r\n"), ImapResponse::No(ResponseCode::Alert("Invalid mailbox name: Name must not have '/' characters".to_string())));
+    assert_eq!(ImapResponse::try_from("M12 NO [CANNOT] Invalid mailbox name: Name must not have \'/\' characters (0.000 + 0.098 + 0.097 secs).\r\n").unwrap(), ImapResponse::No(ResponseCode::Alert("Invalid mailbox name: Name must not have '/' characters".to_string())));
 }
 
 impl<'a> std::iter::DoubleEndedIterator for ImapLineIterator<'a> {
