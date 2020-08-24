@@ -589,6 +589,14 @@ impl ImapConnection {
                             ret.push_str(&response);
                             return r.into();
                         }
+                        ImapResponse::No(ref response_code)
+                            if required_responses.intersects(RequiredResponses::NO_REQUIRED) =>
+                        {
+                            debug!(
+                                "Received expected NO response: {:?} {:?}",
+                                response_code, response
+                            );
+                        }
                         ImapResponse::No(ref response_code) => {
                             //FIXME return error
                             debug!("Received NO response: {:?} {:?}", response_code, response);
@@ -731,31 +739,45 @@ impl ImapConnection {
 
     pub async fn unselect(&mut self) -> Result<()> {
         match self.stream.as_mut()?.current_mailbox.take() {
-            MailboxSelection::Examine(mailbox_hash) |
-            MailboxSelection::Select(mailbox_hash) =>{
-            let mut response = String::with_capacity(8 * 1024);
-            if self
-                .uid_store
-                .capabilities
-                .lock()
-                .unwrap()
-                .iter()
-                .any(|cap| cap.eq_ignore_ascii_case(b"UNSELECT"))
-            {
-                self.send_command(b"UNSELECT").await?;
-                self.read_response(&mut response, RequiredResponses::empty())
-                    .await?;
-            } else {
-                /* `RFC3691 - UNSELECT Command` states: "[..] IMAP4 provides this
-                 * functionality (via a SELECT command with a nonexistent mailbox name or
-                 * reselecting the same mailbox with EXAMINE command)[..]
-                 */
-                
-                self.select_mailbox(mailbox_hash, &mut response, true).await?;
-                self.examine_mailbox(mailbox_hash, &mut response, true).await?;
-            }
-        },
-        MailboxSelection::None => {},
+            MailboxSelection::Examine(_) |
+                MailboxSelection::Select(_) => {
+                    let mut response = String::with_capacity(8 * 1024);
+                    if self
+                        .uid_store
+                            .capabilities
+                            .lock()
+                            .unwrap()
+                            .iter()
+                            .any(|cap| cap.eq_ignore_ascii_case(b"UNSELECT"))
+                    {
+                        self.send_command(b"UNSELECT").await?;
+                        self.read_response(&mut response, RequiredResponses::empty())
+                            .await?;
+                        } else {
+                            /* `RFC3691 - UNSELECT Command` states: "[..] IMAP4 provides this
+                             * functionality (via a SELECT command with a nonexistent mailbox name or
+                             * reselecting the same mailbox with EXAMINE command)[..]
+                             */
+                            let mut nonexistent = "blurdybloop".to_string();
+                            {
+                                let mailboxes = self.uid_store.mailboxes.lock().await;
+                                while mailboxes.values().any(|m| m.imap_path() == &nonexistent) {
+                                    nonexistent.push('p');
+                                }
+                            }
+                            self.send_command(
+                                format!(
+                                    "SELECT \"{}\"",
+                                    nonexistent
+                                )
+                                .as_bytes(),
+                            )
+                                .await?;
+                            self.read_response(&mut response, RequiredResponses::NO_REQUIRED)
+                                .await?;
+                        }
+                }
+            MailboxSelection::None => {},
         }
         Ok(())
     }
