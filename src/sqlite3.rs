@@ -33,6 +33,7 @@ use melib::{
     sqlite3::{
         self as melib_sqlite3,
         rusqlite::{self, params},
+        DatabaseDescription,
     },
     thread::{SortField, SortOrder},
     MeliError, Result, ERROR,
@@ -43,8 +44,9 @@ use std::convert::TryInto;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
-const DB_NAME: &str = "index.db";
-const INIT_SCRIPT: &str = "CREATE TABLE IF NOT EXISTS envelopes (
+const DB: DatabaseDescription = DatabaseDescription {
+name: "index.db",
+init_script:Some( "CREATE TABLE IF NOT EXISTS envelopes (
                     id               INTEGER PRIMARY KEY,
                     account_id       INTEGER REFERENCES accounts ON UPDATE CASCADE,
                     hash             BLOB NOT NULL UNIQUE,
@@ -106,10 +108,12 @@ END;
 CREATE TRIGGER IF NOT EXISTS envelopes_au AFTER UPDATE ON envelopes BEGIN
   INSERT INTO fts(fts, rowid, subject, body_text) VALUES('delete', old.id, old.subject, old.body_text);
   INSERT INTO fts(rowid, subject, body_text) VALUES (new.id, new.subject, new.body_text);
-END; ";
+END; "),
+version: 1,
+};
 
 pub fn db_path() -> Result<PathBuf> {
-    melib_sqlite3::db_path(DB_NAME)
+    melib_sqlite3::db_path(DB.name)
 }
 
 //#[inline(always)]
@@ -141,7 +145,7 @@ pub fn insert(
     backend: &Arc<RwLock<Box<dyn MailBackend>>>,
     acc_name: &str,
 ) -> Result<()> {
-    let db_path = melib_sqlite3::db_path(DB_NAME)?;
+    let db_path = db_path()?;
     if !db_path.exists() {
         return Err(MeliError::new(
             "Database hasn't been initialised. Run `reindex` command",
@@ -231,7 +235,7 @@ pub fn insert(
 }
 
 pub fn remove(env_hash: EnvelopeHash) -> Result<()> {
-    let db_path = melib_sqlite3::db_path(DB_NAME)?;
+    let db_path = db_path()?;
     if !db_path.exists() {
         return Err(MeliError::new(
             "Database hasn't been initialised. Run `reindex` command",
@@ -271,7 +275,7 @@ pub fn index(context: &mut crate::state::Context, account_index: usize) -> Resul
         account.collection.envelopes.clone(),
         account.backend.clone(),
     );
-    let conn = melib_sqlite3::open_or_create_db(DB_NAME, Some(INIT_SCRIPT))?;
+    let conn = melib_sqlite3::open_or_create_db(&DB, None)?;
     let env_hashes = acc_mutex
         .read()
         .unwrap()
@@ -340,7 +344,7 @@ pub fn search(
     query: &Query,
     (sort_field, sort_order): (SortField, SortOrder),
 ) -> ResultFuture<SmallVec<[EnvelopeHash; 512]>> {
-    let db_path = melib_sqlite3::db_path(DB_NAME)?;
+    let db_path = db_path()?;
     if !db_path.exists() {
         return Err(MeliError::new(
             "Database hasn't been initialised. Run `reindex` command",

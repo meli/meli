@@ -23,6 +23,13 @@ use crate::{error::*, logging::log};
 pub use rusqlite::{self, params, Connection};
 use std::path::PathBuf;
 
+#[derive(Copy, Clone, Debug)]
+pub struct DatabaseDescription {
+    pub name: &'static str,
+    pub init_script: Option<&'static str>,
+    pub version: u32,
+}
+
 pub fn db_path(name: &str) -> Result<PathBuf> {
     let data_dir =
         xdg::BaseDirectories::with_prefix("meli").map_err(|e| MeliError::new(e.to_string()))?;
@@ -38,12 +45,23 @@ pub fn open_db(db_path: PathBuf) -> Result<Connection> {
     Connection::open(&db_path).map_err(|e| MeliError::new(e.to_string()))
 }
 
-pub fn open_or_create_db(name: &str, init_script: Option<&str>) -> Result<Connection> {
-    let db_path = db_path(name)?;
+pub fn open_or_create_db(
+    description: &DatabaseDescription,
+    identifier: Option<&str>,
+) -> Result<Connection> {
+    let db_path = if let Some(id) = identifier {
+        db_path(&format!("{}_{}", id, description.name))
+    } else {
+        db_path(description.name)
+    }?;
     let mut set_mode = false;
     if !db_path.exists() {
         log(
-            format!("Creating {} database in {}", name, db_path.display()),
+            format!(
+                "Creating {} database in {}",
+                description.name,
+                db_path.display()
+            ),
             crate::INFO,
         );
         set_mode = true;
@@ -58,8 +76,18 @@ pub fn open_or_create_db(name: &str, init_script: Option<&str>) -> Result<Connec
         permissions.set_mode(0o600); // Read/write for owner only.
         file.set_permissions(permissions)?;
     }
+    let version: i32 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    if version != 0_i32 && version as u32 != description.version {
+        return Err(MeliError::new(format!(
+            "Database version mismatch, is {} but expected {}",
+            version, description.version
+        )));
+    }
 
-    if let Some(s) = init_script {
+    if version == 0 {
+        conn.pragma_update(None, "user_version", &description.version)?;
+    }
+    if let Some(s) = description.init_script {
         conn.execute_batch(s)
             .map_err(|e| MeliError::new(e.to_string()))?;
     }
