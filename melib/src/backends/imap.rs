@@ -242,7 +242,8 @@ impl MailBackend for ImapType {
                         }
                     }
                     "COMPRESS=DEFLATE" => {
-                        if cfg!(feature = "deflate_compression") {
+                        #[cfg(feature = "deflate_compression")]
+                        {
                             if deflate {
                                 *status = MailBackendExtensionStatus::Enabled { comment: None };
                             } else {
@@ -250,7 +251,9 @@ impl MailBackend for ImapType {
                                     comment: Some("Disabled by user configuration"),
                                 };
                             }
-                        } else {
+                        }
+                        #[cfg(not(feature = "deflate_compression"))]
+                        {
                             *status = MailBackendExtensionStatus::Unsupported {
                                 comment: Some("melib not compiled with DEFLATE."),
                             };

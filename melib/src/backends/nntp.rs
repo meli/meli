@@ -151,7 +151,8 @@ impl MailBackend for NntpType {
             for (name, status) in extensions.iter_mut() {
                 match name.as_str() {
                     "COMPRESS DEFLATE" => {
-                        if cfg!(feature = "deflate_compression") {
+                        #[cfg(feature = "deflate_compression")]
+                        {
                             if deflate {
                                 *status = MailBackendExtensionStatus::Enabled { comment: None };
                             } else {
@@ -159,7 +160,9 @@ impl MailBackend for NntpType {
                                     comment: Some("Disabled by user configuration"),
                                 };
                             }
-                        } else {
+                        }
+                        #[cfg(not(feature = "deflate_compression"))]
+                        {
                             *status = MailBackendExtensionStatus::Unsupported {
                                 comment: Some("melib not compiled with DEFLATE."),
                             };
