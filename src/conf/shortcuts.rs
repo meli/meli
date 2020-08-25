@@ -211,6 +211,7 @@ shortcut_key_values! { "pager",
 
 shortcut_key_values! { "general",
     pub struct GeneralShortcuts {
+        toggle_help |> "Toggle help and shortcuts view." |> Key::Char('?'),
         enter_command_mode |> "Enter COMMAND mode." |> Key::Char(' '),
         go_to_tab |> "Go to the nth tab" |> Key::Alt('n'),
         next_tab |> "Next tab." |> Key::Char('T'),

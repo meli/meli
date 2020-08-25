@@ -1653,7 +1653,7 @@ impl Component for Tabbed {
                 self.set_dirty(true);
                 return true;
             }
-            UIEvent::Input(Key::Char('?')) => {
+            UIEvent::Input(ref key) if shortcut!(key == shortcuts["general"]["toggle_help"]) => {
                 if self.show_shortcuts {
                     /* children below the shortcut overlay must be redrawn */
                     self.set_dirty(true);
