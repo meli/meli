@@ -199,7 +199,10 @@ pub enum JobRequest {
     AsBytes(JoinHandle),
     SetMailboxPermissions(MailboxHash, JoinHandle, oneshot::Receiver<Result<()>>),
     SetMailboxSubscription(MailboxHash, JoinHandle, oneshot::Receiver<Result<()>>),
-    Watch(JoinHandle),
+    Watch {
+        channel: oneshot::Receiver<Result<()>>,
+        handle: JoinHandle,
+    },
 }
 
 impl Drop for JobRequest {
@@ -225,7 +228,7 @@ impl Drop for JobRequest {
             JobRequest::SetMailboxSubscription(_, h, _) => {
                 h.0.cancel();
             }
-            JobRequest::Watch(h) => h.0.cancel(),
+            JobRequest::Watch { handle, .. } => handle.0.cancel(),
             JobRequest::SendMessage => {}
             JobRequest::SendMessageBackground(h, _) => {
                 h.0.cancel();
@@ -257,7 +260,7 @@ impl core::fmt::Debug for JobRequest {
             JobRequest::SetMailboxSubscription(_, _, _) => {
                 write!(f, "JobRequest::SetMailboxSubscription")
             }
-            JobRequest::Watch(_) => write!(f, "JobRequest::Watch"),
+            JobRequest::Watch { .. } => write!(f, "JobRequest::Watch"),
             JobRequest::SendMessage => write!(f, "JobRequest::SendMessage"),
             JobRequest::SendMessageBackground(_, _) => {
                 write!(f, "JobRequest::SendMessageBackground")
@@ -269,7 +272,7 @@ impl core::fmt::Debug for JobRequest {
 impl JobRequest {
     fn is_watch(&self) -> bool {
         match self {
-            JobRequest::Watch(_) => true,
+            JobRequest::Watch { .. } => true,
             _ => false,
         }
     }
@@ -843,12 +846,13 @@ impl Account {
         if !self.active_jobs.values().any(|j| j.is_watch()) {
             match self.backend.read().unwrap().watch() {
                 Ok(fut) => {
-                    let (_channel, handle, job_id) = if self.backend_capabilities.is_async {
+                    let (channel, handle, job_id) = if self.backend_capabilities.is_async {
                         self.job_executor.spawn_specialized(fut)
                     } else {
                         self.job_executor.spawn_blocking(fut)
                     };
-                    self.active_jobs.insert(job_id, JobRequest::Watch(handle));
+                    self.active_jobs
+                        .insert(job_id, JobRequest::Watch { channel, handle });
                 }
                 Err(e) => {
                     self.sender
@@ -1769,8 +1773,23 @@ impl Account {
                         None => {}
                     }
                 }
-                JobRequest::Watch(_) => {
+                JobRequest::Watch {
+                    ref mut channel,
+                    handle: _,
+                } => {
                     debug!("JobRequest::Watch finished??? ");
+                    let r = channel.try_recv().unwrap();
+                    debug!("JobRequest::Watch {:?}", r);
+                    if let Some(Err(err)) = r {
+                        //TODO: relaunch watch job with ratelimit for failure
+                        self.sender
+                            .send(ThreadEvent::UIEvent(UIEvent::Notification(
+                                Some(format!("{}: watch thread failed", &self.name)),
+                                err.to_string(),
+                                Some(crate::types::NotificationType::ERROR),
+                            )))
+                            .expect("Could not send event on main channel");
+                    }
                 }
                 JobRequest::Generic {
                     ref name,
