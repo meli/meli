@@ -25,6 +25,7 @@ use core::future::Future;
 use core::pin::Pin;
 use futures::stream::{FuturesUnordered, StreamExt};
 use futures::task::{Context, Poll};
+use memmap::{Mmap, Protection};
 use std::io::{self};
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
@@ -32,7 +33,11 @@ use std::result;
 use std::sync::{Arc, Mutex};
 
 pub struct MaildirStream {
-    payloads: Pin<Box<FuturesUnordered<Pin<Box<dyn Future<Output = Result<Vec<Envelope>>> + Send + 'static>>>>>,
+    payloads: Pin<
+        Box<
+            FuturesUnordered<Pin<Box<dyn Future<Output = Result<Vec<Envelope>>> + Send + 'static>>>,
+        >,
+    >,
 }
 
 impl MaildirStream {
@@ -135,44 +140,46 @@ impl MaildirStream {
                         continue;
                     }
                 };
-                let hash = get_file_hash(file);
+                let env_hash = get_file_hash(file);
                 {
                     let mut map = map.lock().unwrap();
                     let map = map.entry(mailbox_hash).or_default();
-                    (*map).insert(hash, PathBuf::from(file).into());
+                    (*map).insert(env_hash, PathBuf::from(file).into());
                 }
-                let op = Box::new(MaildirOp::new(hash, map.clone(), mailbox_hash));
-                if let Ok(e) = Envelope::from_token(op, hash) {
-                    mailbox_index.lock().unwrap().insert(e.hash(), mailbox_hash);
-                    if let Ok(cached) = cache_dir.place_cache_file(file_name) {
-                        /* place result in cache directory */
-                        let f = match fs::File::create(cached) {
-                            Ok(f) => f,
-                            Err(e) => {
-                                panic!("{}", e);
-                            }
-                        };
-                        let metadata = f.metadata().unwrap();
-                        let mut permissions = metadata.permissions();
+                match Envelope::from_bytes(
+                    unsafe { &Mmap::open_path(&file, Protection::Read)?.as_slice() },
+                    None,
+                ) {
+                    Ok(mut env) => {
+                        env.set_hash(env_hash);
+                        mailbox_index.lock().unwrap().insert(env_hash, mailbox_hash);
+                        if let Ok(cached) = cache_dir.place_cache_file(file_name) {
+                            /* place result in cache directory */
+                            let f = fs::File::create(cached)?;
+                            let metadata = f.metadata()?;
+                            let mut permissions = metadata.permissions();
 
-                        permissions.set_mode(0o600); // Read/write for owner only.
-                        f.set_permissions(permissions).unwrap();
+                            permissions.set_mode(0o600); // Read/write for owner only.
+                            f.set_permissions(permissions)?;
 
-                        let writer = io::BufWriter::new(f);
-                        bincode::serialize_into(writer, &e).unwrap();
+                            let writer = io::BufWriter::new(f);
+                            bincode::serialize_into(writer, &env)?;
+                        }
+                        if !env.is_seen() {
+                            *unseen.lock().unwrap() += 1;
+                        }
+                        *total.lock().unwrap() += 1;
+                        local_r.push(env);
                     }
-                    if !e.is_seen() {
-                        *unseen.lock().unwrap() += 1;
+                    Err(err) => {
+                        debug!(
+                            "DEBUG: hash {}, path: {} couldn't be parsed, {}",
+                            env_hash,
+                            file.as_path().display(),
+                            err,
+                        );
+                        continue;
                     }
-                    *total.lock().unwrap() += 1;
-                    local_r.push(e);
-                } else {
-                    debug!(
-                        "DEBUG: hash {}, path: {} couldn't be parsed",
-                        hash,
-                        file.as_path().display()
-                    );
-                    continue;
                 }
             }
         }

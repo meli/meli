@@ -41,7 +41,6 @@ mod headers;
 pub mod signatures;
 pub use headers::*;
 
-use crate::backends::BackendOp;
 use crate::datetime::UnixTimestamp;
 use crate::error::{MeliError, Result};
 use crate::thread::ThreadNodeHash;
@@ -215,14 +214,6 @@ impl Envelope {
             return Ok(e);
         }
         Err(MeliError::new("Couldn't parse mail."))
-    }
-
-    pub fn from_token(mut operation: Box<dyn BackendOp>, hash: EnvelopeHash) -> Result<Envelope> {
-        let mut e = Envelope::new(hash);
-        e.flags = futures::executor::block_on(operation.fetch_flags()?)?;
-        let bytes = futures::executor::block_on(operation.as_bytes()?)?;
-        e.populate_headers(&bytes)?;
-        Ok(e)
     }
 
     pub fn hash(&self) -> EnvelopeHash {
@@ -485,13 +476,6 @@ impl Envelope {
                     acc
                 })
             })
-    }
-
-    /// Requests bytes from backend and thus can fail
-    pub fn body(&self, mut operation: Box<dyn BackendOp>) -> Result<Attachment> {
-        debug!("searching body for {:?}", self.message_id_display());
-        let bytes = futures::executor::block_on(operation.as_bytes()?)?;
-        Ok(self.body_bytes(&bytes))
     }
 
     pub fn subject(&self) -> Cow<str> {

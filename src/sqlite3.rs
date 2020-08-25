@@ -140,10 +140,10 @@ pub fn db_path() -> Result<PathBuf> {
 //}
 //
 //
-pub fn insert(
-    envelope: &Envelope,
-    backend: &Arc<RwLock<Box<dyn MailBackend>>>,
-    acc_name: &str,
+pub async fn insert(
+    envelope: Envelope,
+    backend: Arc<RwLock<Box<dyn MailBackend>>>,
+    acc_name: String,
 ) -> Result<()> {
     let db_path = db_path()?;
     if !db_path.exists() {
@@ -153,11 +153,14 @@ pub fn insert(
     }
 
     let conn = melib_sqlite3::open_db(db_path)?;
-    let backend_lck = backend.read().unwrap();
-    let body = match backend_lck
-        .operation(envelope.hash())
-        .and_then(|op| envelope.body(op))
-    {
+
+    let op = backend
+        .read()
+        .unwrap()
+        .operation(envelope.hash())?
+        .as_bytes()?;
+
+    let body = match op.await.map(|bytes| envelope.body_bytes(&bytes)) {
         Ok(body) => body.text(),
         Err(err) => {
             debug!(
@@ -314,25 +317,21 @@ pub fn index(context: &mut crate::state::Context, account_index: usize) -> Resul
         );
         for chunk in env_hashes.chunks(200) {
             ctr += chunk.len();
-            let envelopes_lck = acc_mutex.read().unwrap();
-            let backend_lck = backend_mutex.read().unwrap();
             for env_hash in chunk {
+                let mut op = backend_mutex.read().unwrap().operation(*env_hash)?;
+                let bytes = op
+                    .as_bytes()?
+                    .await
+                    .chain_err_summary(|| format!("Failed to open envelope {}", env_hash))?;
+                let envelopes_lck = acc_mutex.read().unwrap();
                 if let Some(e) = envelopes_lck.get(&env_hash) {
-                    let body = backend_lck
-                        .operation(e.hash())
-                        .and_then(|op| e.body(op))
-                        .chain_err_summary(|| {
-                            format!("Failed to open envelope {}", e.message_id_display(),)
-                        })?
-                        .text()
-                        .replace('\0', "");
+                    let body = e.body_bytes(&bytes).text().replace('\0', "");
                     conn.execute("INSERT OR REPLACE INTO envelopes (account_id, hash, date, _from, _to, cc, bcc, subject, message_id, in_reply_to, _references, flags, has_attachments, body_text, timestamp)
               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
               params![account_id, e.hash().to_be_bytes().to_vec(), e.date_as_str(), e.field_from_to_string(), e.field_to_to_string(), e.field_cc_to_string(), e.field_bcc_to_string(), e.subject().into_owned().trim_end_matches('\u{0}'), e.message_id_display().to_string(), e.in_reply_to_display().map(|f| f.to_string()).unwrap_or(String::new()), e.field_references_to_string(), i64::from(e.flags().bits()), if e.has_attachments() { 1 } else { 0 }, body, e.date().to_be_bytes().to_vec()],
                         ).chain_err_summary(|| format!( "Failed to insert envelope {}", e.message_id_display()))?;
                 }
             }
-            drop(envelopes_lck);
             let sleep_dur = std::time::Duration::from_millis(20);
             std::thread::sleep(sleep_dur);
         }

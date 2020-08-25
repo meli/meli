@@ -27,6 +27,7 @@ use crate::error::{MeliError, Result};
 use crate::shellexpand::ShellExpandTrait;
 use futures::prelude::Stream;
 
+use memmap::{Mmap, Protection};
 extern crate notify;
 use self::notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
 use std::time::Duration;
@@ -277,33 +278,34 @@ impl MailBackend for MaildirType {
                         }
                         (*map).insert(hash, PathBuf::from(&file).into());
                     }
-                    let op = Box::new(MaildirOp::new(hash, map.clone(), mailbox_hash));
-                    if let Ok(e) = Envelope::from_token(op, hash) {
-                        mailbox_index.lock().unwrap().insert(e.hash(), mailbox_hash);
+                    if let Ok(mut env) = Envelope::from_bytes(
+                        unsafe { &Mmap::open_path(&file, Protection::Read)?.as_slice() },
+                        None,
+                    ) {
+                        env.set_hash(hash);
+                        mailbox_index
+                            .lock()
+                            .unwrap()
+                            .insert(env.hash(), mailbox_hash);
                         let file_name = file.strip_prefix(&root_path).unwrap().to_path_buf();
                         if let Ok(cached) = cache_dir.place_cache_file(file_name) {
                             /* place result in cache directory */
-                            let f = match fs::File::create(cached) {
-                                Ok(f) => f,
-                                Err(e) => {
-                                    panic!("{}", e);
-                                }
-                            };
-                            let metadata = f.metadata().unwrap();
+                            let f = fs::File::create(cached)?;
+                            let metadata = f.metadata()?;
                             let mut permissions = metadata.permissions();
 
                             permissions.set_mode(0o600); // Read/write for owner only.
-                            f.set_permissions(permissions).unwrap();
+                            f.set_permissions(permissions)?;
 
                             let writer = io::BufWriter::new(f);
-                            bincode::serialize_into(writer, &e).unwrap();
+                            bincode::serialize_into(writer, &env)?;
                         }
                         (sender)(
                             account_hash,
                             BackendEvent::Refresh(RefreshEvent {
                                 account_hash,
                                 mailbox_hash,
-                                kind: Create(Box::new(e)),
+                                kind: Create(Box::new(env)),
                             }),
                         );
                     } else {
@@ -402,7 +404,7 @@ impl MailBackend for MaildirType {
                                 .strip_prefix(&root_path)
                                 .unwrap()
                                 .to_path_buf();
-                            if let Some(env) = add_path_to_index(
+                            if let Ok(env) = add_path_to_index(
                                 &hash_indexes,
                                 mailbox_hash,
                                 pathbuf.as_path(),
@@ -457,7 +459,7 @@ impl MailBackend for MaildirType {
                                     drop(hash_indexes_lock);
                                     /* Did we just miss a Create event? In any case, create
                                      * envelope. */
-                                    if let Some(env) = add_path_to_index(
+                                    if let Ok(env) = add_path_to_index(
                                         &hash_indexes,
                                         mailbox_hash,
                                         pathbuf.as_path(),
@@ -483,12 +485,13 @@ impl MailBackend for MaildirType {
                             let new_hash: EnvelopeHash = get_file_hash(pathbuf.as_path());
                             if index_lock.get_mut(&new_hash).is_none() {
                                 debug!("write notice");
-                                let op = Box::new(MaildirOp::new(
-                                    new_hash,
-                                    hash_indexes.clone(),
-                                    mailbox_hash,
-                                ));
-                                if let Ok(env) = Envelope::from_token(op, new_hash) {
+                                if let Ok(mut env) = Envelope::from_bytes(
+                                    unsafe {
+                                        &Mmap::open_path(&pathbuf, Protection::Read)?.as_slice()
+                                    },
+                                    None,
+                                ) {
+                                    env.set_hash(new_hash);
                                     debug!("{}\t{:?}", new_hash, &pathbuf);
                                     debug!(
                                         "hash {}, path: {:?} couldn't be parsed",
@@ -636,7 +639,7 @@ impl MailBackend for MaildirType {
                                     .to_path_buf();
                                 debug!("filename = {:?}", file_name);
                                 drop(hash_indexes_lock);
-                                if let Some(env) = add_path_to_index(
+                                if let Ok(env) = add_path_to_index(
                                     &hash_indexes,
                                     mailbox_hash,
                                     dest.as_path(),
@@ -1048,193 +1051,6 @@ impl MaildirType {
         }))
     }
 
-    /*
-    pub fn multicore(
-        &mut self,
-        cores: usize,
-        mailbox_hash: MailboxHash,
-    ) -> Async<Result<Vec<Envelope>>> {
-        let mut w = AsyncBuilder::new();
-        let cache_dir = xdg::BaseDirectories::with_profile("meli", &self.name).unwrap();
-
-        let handle = {
-            let tx = w.tx();
-            let mailbox: &MaildirMailbox = &self.mailboxes[&mailbox_hash];
-            let unseen = mailbox.unseen.clone();
-            let total = mailbox.total.clone();
-            let tx_final = w.tx();
-            let mut path: PathBuf = mailbox.fs_path().into();
-            let name = format!("parsing {:?}", mailbox.name());
-            let root_path = self.path.to_path_buf();
-            let map = self.hash_indexes.clone();
-            let mailbox_index = self.mailbox_index.clone();
-
-            let closure = move |work_context: crate::async_workers::WorkContext| {
-                work_context
-                    .set_name
-                    .send((std::thread::current().id(), name.clone()))
-                    .unwrap();
-                let mut thunk = move || {
-                    path.push("new");
-                    for d in path.read_dir()? {
-                        if let Ok(p) = d {
-                            move_to_cur(p.path()).ok().take();
-                        }
-                    }
-                    path.pop();
-
-                    path.push("cur");
-                    let iter = path.read_dir()?;
-                    let count = path.read_dir()?.count();
-                    let mut files: Vec<PathBuf> = Vec::with_capacity(count);
-                    let mut ret = Vec::with_capacity(count);
-                    for e in iter {
-                        let e = e.and_then(|x| {
-                            let path = x.path();
-                            Ok(path)
-                        })?;
-                        files.push(e);
-                    }
-                    if !files.is_empty() {
-                        crossbeam::scope(|scope| {
-                            let mut threads = Vec::with_capacity(cores);
-                            let chunk_size = if count / cores > 0 {
-                                count / cores
-                            } else {
-                                count
-                            };
-                            for chunk in files.chunks(chunk_size) {
-                                let unseen = unseen.clone();
-                                let total = total.clone();
-                                let cache_dir = cache_dir.clone();
-                                let tx = tx.clone();
-                                let map = map.clone();
-                                let mailbox_index = mailbox_index.clone();
-                                let root_path = root_path.clone();
-                                let s = scope.builder().name(name.clone()).spawn(move |_| {
-                                    let len = chunk.len();
-                                    let size = if len <= 100 { 100 } else { (len / 100) * 100 };
-                                    let mut local_r: Vec<Envelope> =
-                                        Vec::with_capacity(chunk.len());
-                                    for c in chunk.chunks(size) {
-                                        //thread::yield_now();
-                                        let map = map.clone();
-                                        let mailbox_index = mailbox_index.clone();
-                                        let len = c.len();
-                                        for file in c {
-                                            /* Check if we have a cache file with this email's
-                                             * filename */
-                                            let file_name = PathBuf::from(file)
-                                                .strip_prefix(&root_path)
-                                                .unwrap()
-                                                .to_path_buf();
-                                            if let Some(cached) =
-                                                cache_dir.find_cache_file(&file_name)
-                                            {
-                                                /* Cached struct exists, try to load it */
-                                                let reader = io::BufReader::new(
-                                                    fs::File::open(&cached).unwrap(),
-                                                );
-                                                let result: result::Result<Envelope, _> =
-                                                    bincode::deserialize_from(reader);
-                                                if let Ok(env) = result {
-                                                    let mut map = map.lock().unwrap();
-                                                    let map = map.entry(mailbox_hash).or_default();
-                                                    let hash = env.hash();
-                                                    map.insert(hash, file.clone().into());
-                                                    mailbox_index
-                                                        .lock()
-                                                        .unwrap()
-                                                        .insert(hash, mailbox_hash);
-                                                    if !env.is_seen() {
-                                                        *unseen.lock().unwrap() += 1;
-                                                    }
-                                                    *total.lock().unwrap() += 1;
-                                                    local_r.push(env);
-                                                    continue;
-                                                }
-                                            };
-                                            let hash = get_file_hash(file);
-                                            {
-                                                let mut map = map.lock().unwrap();
-                                                let map = map.entry(mailbox_hash).or_default();
-                                                (*map).insert(hash, PathBuf::from(file).into());
-                                            }
-                                            let op = Box::new(MaildirOp::new(
-                                                hash,
-                                                map.clone(),
-                                                mailbox_hash,
-                                            ));
-                                            if let Ok(e) = Envelope::from_token(op, hash) {
-                                                mailbox_index
-                                                    .lock()
-                                                    .unwrap()
-                                                    .insert(e.hash(), mailbox_hash);
-                                                if let Ok(cached) =
-                                                    cache_dir.place_cache_file(file_name)
-                                                {
-                                                    /* place result in cache directory */
-                                                    let f = match fs::File::create(cached) {
-                                                        Ok(f) => f,
-                                                        Err(e) => {
-                                                            panic!("{}", e);
-                                                        }
-                                                    };
-                                                    let metadata = f.metadata().unwrap();
-                                                    let mut permissions = metadata.permissions();
-
-                                                    permissions.set_mode(0o600); // Read/write for owner only.
-                                                    f.set_permissions(permissions).unwrap();
-
-                                                    let writer = io::BufWriter::new(f);
-                                                    bincode::serialize_into(writer, &e).unwrap();
-                                                }
-                                                if !e.is_seen() {
-                                                    *unseen.lock().unwrap() += 1;
-                                                }
-                                                *total.lock().unwrap() += 1;
-                                                local_r.push(e);
-                                            } else {
-                                                debug!(
-                                                    "DEBUG: hash {}, path: {} couldn't be parsed",
-                                                    hash,
-                                                    file.as_path().display()
-                                                );
-                                                continue;
-                                            }
-                                        }
-                                        tx.send(AsyncStatus::ProgressReport(len)).unwrap();
-                                    }
-                                    local_r
-                                });
-                                threads.push(s.unwrap());
-                            }
-                            for t in threads {
-                                let mut result = t.join().unwrap();
-                                ret.append(&mut result);
-                                work_context
-                                    .set_status
-                                    .send((
-                                        std::thread::current().id(),
-                                        format!("parsing.. {}/{}", ret.len(), files.len()),
-                                    ))
-                                    .unwrap();
-                            }
-                        })
-                        .unwrap();
-                    }
-                    Ok(ret)
-                };
-                let result = thunk();
-                tx_final.send(AsyncStatus::Payload(result)).unwrap();
-                tx_final.send(AsyncStatus::Finished).unwrap();
-            };
-            Box::new(closure)
-        };
-        w.build(handle)
-    }
-        */
-
     pub fn save_to_mailbox(mut path: PathBuf, bytes: Vec<u8>, flags: Option<Flag>) -> Result<()> {
         for d in &["cur", "new", "tmp"] {
             path.push(d);
@@ -1330,49 +1146,42 @@ fn add_path_to_index(
     path: &Path,
     cache_dir: &xdg::BaseDirectories,
     file_name: PathBuf,
-) -> Option<Envelope> {
-    let env: Envelope;
+) -> Result<Envelope> {
     debug!("add_path_to_index path {:?} filename{:?}", path, file_name);
-    let hash = get_file_hash(path);
+    let env_hash = get_file_hash(path);
     {
         let mut map = hash_index.lock().unwrap();
         let map = map.entry(mailbox_hash).or_default();
-        map.insert(hash, path.to_path_buf().into());
+        map.insert(env_hash, path.to_path_buf().into());
         debug!(
             "inserted {} in {} map, len={}",
-            hash,
+            env_hash,
             mailbox_hash,
             map.len()
         );
     }
-    let op = Box::new(MaildirOp::new(hash, hash_index.clone(), mailbox_hash));
-    if let Ok(e) = Envelope::from_token(op, hash) {
-        debug!("add_path_to_index gen {}\t{}", hash, file_name.display());
-        if let Ok(cached) = cache_dir.place_cache_file(file_name) {
-            debug!("putting in cache");
-            /* place result in cache directory */
-            let f = match fs::File::create(cached) {
-                Ok(f) => f,
-                Err(e) => {
-                    panic!("{}", e);
-                }
-            };
-            let metadata = f.metadata().unwrap();
-            let mut permissions = metadata.permissions();
+    //Mmap::open_path(self.path(), Protection::Read)?
+    let mut env = Envelope::from_bytes(
+        unsafe { &Mmap::open_path(path, Protection::Read)?.as_slice() },
+        None,
+    )?;
+    env.set_hash(env_hash);
+    debug!(
+        "add_path_to_index gen {}\t{}",
+        env_hash,
+        file_name.display()
+    );
+    if let Ok(cached) = cache_dir.place_cache_file(file_name) {
+        debug!("putting in cache");
+        /* place result in cache directory */
+        let f = fs::File::create(cached)?;
+        let metadata = f.metadata()?;
+        let mut permissions = metadata.permissions();
 
-            permissions.set_mode(0o600); // Read/write for owner only.
-            f.set_permissions(permissions).unwrap();
-            let writer = io::BufWriter::new(f);
-            bincode::serialize_into(writer, &e).unwrap();
-        }
-        env = e;
-    } else {
-        debug!(
-            "DEBUG: hash {}, path: {} couldn't be parsed in `add_path_to_index`",
-            hash,
-            path.display()
-        );
-        return None;
+        permissions.set_mode(0o600); // Read/write for owner only.
+        f.set_permissions(permissions)?;
+        let writer = io::BufWriter::new(f);
+        bincode::serialize_into(writer, &env)?;
     }
-    Some(env)
+    Ok(env)
 }

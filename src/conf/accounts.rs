@@ -606,47 +606,98 @@ impl Account {
                 RefreshEventKind::Update(old_hash, envelope) => {
                     #[cfg(feature = "sqlite3")]
                     {
-                        if let Err(err) = crate::sqlite3::remove(old_hash).and_then(|_| {
-                            crate::sqlite3::insert(&envelope, &self.backend, &self.name)
+                        match crate::sqlite3::remove(old_hash).map(|_| {
+                            crate::sqlite3::insert(
+                                (*envelope).clone(),
+                                self.backend.clone(),
+                                self.name.clone(),
+                            )
                         }) {
-                            melib::log(
-                                format!(
-                                    "Failed to update envelope {} in cache: {}",
-                                    envelope.message_id_display(),
-                                    err.to_string()
-                                ),
-                                melib::ERROR,
-                            );
+                            Err(err) => {
+                                melib::log(
+                                    format!(
+                                        "Failed to update envelope {} in cache: {}",
+                                        envelope.message_id_display(),
+                                        err.to_string()
+                                    ),
+                                    melib::ERROR,
+                                );
+                            }
+                            Ok(job) => {
+                                let (channel, handle, job_id) =
+                                    self.job_executor.spawn_blocking(job);
+                                self.insert_job(
+                                    job_id,
+                                    JobRequest::Generic {
+                                        name: format!(
+                                            "Update envelope {} in sqlite3 cache",
+                                            envelope.message_id_display()
+                                        )
+                                        .into(),
+                                        handle,
+                                        channel,
+                                        on_finish: None,
+                                    },
+                                );
+                            }
                         }
                     }
                     self.collection.update(old_hash, *envelope, mailbox_hash);
                     return Some(EnvelopeUpdate(old_hash));
                 }
                 RefreshEventKind::NewFlags(env_hash, (flags, tags)) => {
-                    let mut envelopes = self.collection.envelopes.write().unwrap();
-                    envelopes.entry(env_hash).and_modify(|entry| {
-                        entry.labels_mut().clear();
-                        entry
-                            .labels_mut()
-                            .extend(tags.into_iter().map(|h| tag_hash!(h)));
-                        entry.set_flags(flags);
-                    });
+                    self.collection
+                        .envelopes
+                        .write()
+                        .unwrap()
+                        .entry(env_hash)
+                        .and_modify(|entry| {
+                            entry.labels_mut().clear();
+                            entry
+                                .labels_mut()
+                                .extend(tags.into_iter().map(|h| tag_hash!(h)));
+                            entry.set_flags(flags);
+                        });
                     #[cfg(feature = "sqlite3")]
                     {
-                        if let Err(err) = crate::sqlite3::remove(env_hash).and_then(|_| {
-                            crate::sqlite3::insert(&envelopes[&env_hash], &self.backend, &self.name)
+                        match crate::sqlite3::remove(env_hash).map(|_| {
+                            crate::sqlite3::insert(
+                                self.collection.envelopes.read().unwrap()[&env_hash].clone(),
+                                self.backend.clone(),
+                                self.name.clone(),
+                            )
                         }) {
-                            melib::log(
-                                format!(
-                                    "Failed to update envelope {} in cache: {}",
-                                    envelopes[&env_hash].message_id_display(),
-                                    err.to_string()
-                                ),
-                                melib::ERROR,
-                            );
+                            Ok(job) => {
+                                let (channel, handle, job_id) =
+                                    self.job_executor.spawn_blocking(job);
+                                self.insert_job(
+                                    job_id,
+                                    JobRequest::Generic {
+                                        name: format!(
+                                            "Update envelope {} in sqlite3 cache",
+                                            self.collection.envelopes.read().unwrap()[&env_hash]
+                                                .message_id_display()
+                                        )
+                                        .into(),
+                                        handle,
+                                        channel,
+                                        on_finish: None,
+                                    },
+                                );
+                            }
+                            Err(err) => {
+                                melib::log(
+                                    format!(
+                                        "Failed to update envelope {} in cache: {}",
+                                        self.collection.envelopes.read().unwrap()[&env_hash]
+                                            .message_id_display(),
+                                        err.to_string()
+                                    ),
+                                    melib::ERROR,
+                                );
+                            }
                         }
                     }
-                    drop(envelopes);
                     self.collection.update_flags(env_hash, mailbox_hash);
                     return Some(EnvelopeUpdate(env_hash));
                 }
@@ -657,19 +708,42 @@ impl Account {
                     }
                     #[cfg(feature = "sqlite3")]
                     {
-                        let envelopes = self.collection.envelopes.read();
-                        let envelopes = envelopes.unwrap();
-                        if let Err(err) = crate::sqlite3::remove(old_hash).and_then(|_| {
-                            crate::sqlite3::insert(&envelopes[&new_hash], &self.backend, &self.name)
+                        match crate::sqlite3::remove(old_hash).map(|_| {
+                            crate::sqlite3::insert(
+                                self.collection.envelopes.read().unwrap()[&new_hash].clone(),
+                                self.backend.clone(),
+                                self.name.clone(),
+                            )
                         }) {
-                            melib::log(
-                                format!(
-                                    "Failed to update envelope {} in cache: {}",
-                                    &envelopes[&new_hash].message_id_display(),
-                                    err.to_string()
-                                ),
-                                melib::ERROR,
-                            );
+                            Err(err) => {
+                                melib::log(
+                                    format!(
+                                        "Failed to update envelope {} in cache: {}",
+                                        &self.collection.envelopes.read().unwrap()[&new_hash]
+                                            .message_id_display(),
+                                        err.to_string()
+                                    ),
+                                    melib::ERROR,
+                                );
+                            }
+                            Ok(job) => {
+                                let (channel, handle, job_id) =
+                                    self.job_executor.spawn_blocking(job);
+                                self.insert_job(
+                                    job_id,
+                                    JobRequest::Generic {
+                                        name: format!(
+                                            "Update envelope {} in sqlite3 cache",
+                                            self.collection.envelopes.read().unwrap()[&new_hash]
+                                                .message_id_display()
+                                        )
+                                        .into(),
+                                        handle,
+                                        channel,
+                                        on_finish: None,
+                                    },
+                                );
+                            }
                         }
                     }
                     return Some(EnvelopeRename(old_hash, new_hash));
@@ -694,18 +768,25 @@ impl Account {
                     };
                     #[cfg(feature = "sqlite3")]
                     {
-                        if let Err(err) =
-                            crate::sqlite3::insert(&envelope, &self.backend, &self.name)
-                        {
-                            melib::log(
-                                format!(
-                                    "Failed to insert envelope {} in cache: {}",
-                                    envelope.message_id_display(),
-                                    err.to_string()
-                                ),
-                                melib::ERROR,
-                            );
-                        }
+                        let (channel, handle, job_id) =
+                            self.job_executor.spawn_blocking(crate::sqlite3::insert(
+                                (*envelope).clone(),
+                                self.backend.clone(),
+                                self.name.clone(),
+                            ));
+                        self.insert_job(
+                            job_id,
+                            JobRequest::Generic {
+                                name: format!(
+                                    "Update envelope {} in sqlite3 cache",
+                                    envelope.message_id_display()
+                                )
+                                .into(),
+                                handle,
+                                channel,
+                                on_finish: None,
+                            },
+                        );
                     }
 
                     if self.collection.insert(*envelope, mailbox_hash) {

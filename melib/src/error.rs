@@ -269,6 +269,13 @@ impl From<std::ffi::NulError> for MeliError {
     }
 }
 
+impl From<Box<bincode::ErrorKind>> for MeliError {
+    #[inline]
+    fn from(kind: Box<bincode::ErrorKind>) -> MeliError {
+        MeliError::new(format!("{}", kind)).set_source(Some(Arc::new(kind)))
+    }
+}
+
 impl From<nix::Error> for MeliError {
     #[inline]
     fn from(kind: nix::Error) -> MeliError {
