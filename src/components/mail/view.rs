@@ -1563,8 +1563,8 @@ impl Component for MailView {
                                     list_management::ListAction::Email(email) => {
                                         if let Ok(mailto) = Mailto::try_from(*email) {
                                             let mut draft: Draft = mailto.into();
-                                            draft.headers_mut().insert(
-                                                "From".into(),
+                                            draft.set_header(
+                                                "From",
                                                 crate::components::mail::get_display_name(
                                                     context,
                                                     self.coordinates.0,

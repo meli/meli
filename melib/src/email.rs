@@ -22,7 +22,7 @@
 /*!
  * Email parsing, handling, sending etc.
  */
-use std::collections::HashMap;
+use std::convert::TryInto;
 mod compose;
 pub use self::compose::*;
 
@@ -37,7 +37,9 @@ mod address;
 pub mod parser;
 use crate::parser::BytesExt;
 pub use address::*;
+mod headers;
 pub mod signatures;
+pub use headers::*;
 
 use crate::backends::BackendOp;
 use crate::datetime::UnixTimestamp;
@@ -139,7 +141,7 @@ pub struct Envelope {
     message_id: MessageID,
     in_reply_to: Option<MessageID>,
     pub references: Option<References>,
-    other_headers: HashMap<String, String>,
+    other_headers: HeaderMap,
 
     timestamp: UnixTimestamp,
     thread: ThreadNodeHash,
@@ -153,15 +155,16 @@ pub struct Envelope {
 
 impl fmt::Debug for Envelope {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Envelope {{\n\tsubject: {}\n\tdate: {},\n\tfrom:{:#?},\n\tto {:#?},\n\tmessage_id: {},\n\tin_reply_to: {:?}\n\treferences: {:#?},\n\thash: {}\n}}",
-               self.subject(),
-               self.date,
-               self.from,
-               self.to,
-               self.message_id_display(),
-               self.in_reply_to_display(),
-               self.references,
-               self.hash)
+        f.debug_struct("Envelope")
+            .field("Subject", &self.subject())
+            .field("Date", &self.date)
+            .field("From", &self.from)
+            .field("To", &self.to)
+            .field("Message-ID", &self.message_id_display())
+            .field("In-Reply-To", &self.in_reply_to_display())
+            .field("References", &self.references)
+            .field("Hash", &self.hash)
+            .finish()
     }
 }
 
@@ -183,17 +186,7 @@ impl Envelope {
             message_id: MessageID::default(),
             in_reply_to: None,
             references: None,
-            other_headers: [
-                ("From".to_string(), String::new()),
-                ("To".to_string(), String::new()),
-                ("Subject".to_string(), String::new()),
-                ("Date".to_string(), String::new()),
-                ("Cc".to_string(), String::new()),
-                ("Bcc".to_string(), String::new()),
-            ]
-            .iter()
-            .cloned()
-            .collect(),
+            other_headers: Default::default(),
 
             timestamp: 0,
 
@@ -253,49 +246,40 @@ impl Envelope {
         let mut in_reply_to = None;
 
         for (name, value) in headers {
-            self.other_headers.insert(
-                String::from_utf8(name.to_vec())
-                    .unwrap_or_else(|err| String::from_utf8_lossy(&err.into_bytes()).into()),
-                parser::encodings::phrase(value, false)
-                    .map(|(_, value)| {
-                        String::from_utf8(value)
-                            .unwrap_or_else(|err| String::from_utf8_lossy(&err.into_bytes()).into())
-                    })
-                    .unwrap_or_else(|_| String::from_utf8_lossy(value).into()),
-            );
-            if name.eq_ignore_ascii_case(b"to") {
+            let name: HeaderName = name.try_into()?;
+            if name == "to" {
                 let parse_result = parser::address::rfc2822address_list(value);
                 if parse_result.is_ok() {
                     let value = parse_result.unwrap().1;
                     self.set_to(value);
                 };
-            } else if name.eq_ignore_ascii_case(b"cc") {
+            } else if name == "cc" {
                 let parse_result = parser::address::rfc2822address_list(value);
                 if parse_result.is_ok() {
                     let value = parse_result.unwrap().1;
                     self.set_cc(value);
                 };
-            } else if name.eq_ignore_ascii_case(b"bcc") {
+            } else if name == "bcc" {
                 let parse_result = parser::address::rfc2822address_list(value);
                 if parse_result.is_ok() {
                     let value = parse_result.unwrap().1;
                     self.set_bcc(value.to_vec());
                 };
-            } else if name.eq_ignore_ascii_case(b"from") {
+            } else if name == "from" {
                 let parse_result = parser::address::rfc2822address_list(value);
                 if parse_result.is_ok() {
                     let value = parse_result.unwrap().1;
                     self.set_from(value);
                 }
-            } else if name.eq_ignore_ascii_case(b"subject") {
+            } else if name == "subject" {
                 let parse_result = parser::encodings::phrase(value.trim(), false);
                 if parse_result.is_ok() {
                     let value = parse_result.unwrap().1;
                     self.set_subject(value);
                 };
-            } else if name.eq_ignore_ascii_case(b"message-id") {
+            } else if name == "message-id" {
                 self.set_message_id(value);
-            } else if name.eq_ignore_ascii_case(b"references") {
+            } else if name == "references" {
                 {
                     let parse_result = parser::address::references(value);
                     if parse_result.is_ok() {
@@ -305,10 +289,10 @@ impl Envelope {
                     }
                 }
                 self.set_references(value);
-            } else if name.eq_ignore_ascii_case(b"in-reply-to") {
+            } else if name == "in-reply-to" {
                 self.set_in_reply_to(value);
                 in_reply_to = Some(value);
-            } else if name.eq_ignore_ascii_case(b"date") {
+            } else if name == "date" {
                 let parse_result = parser::encodings::phrase(value, false);
                 if parse_result.is_ok() {
                     let value = parse_result.unwrap().1;
@@ -316,7 +300,7 @@ impl Envelope {
                 } else {
                     self.set_date(value);
                 }
-            } else if name.eq_ignore_ascii_case(b"content-type") {
+            } else if name == "content-type" {
                 match parser::attachments::content_type(value) {
                     Ok((_, (ct, cst, ref params)))
                         if ct.eq_ignore_ascii_case(b"multipart")
@@ -341,6 +325,15 @@ impl Envelope {
                     _ => {}
                 }
             }
+            self.other_headers.insert(
+                name,
+                parser::encodings::phrase(value, false)
+                    .map(|(_, value)| {
+                        String::from_utf8(value)
+                            .unwrap_or_else(|err| String::from_utf8_lossy(&err.into_bytes()).into())
+                    })
+                    .unwrap_or_else(|_| String::from_utf8_lossy(value).into()),
+            );
         }
         /*
          * https://tools.ietf.org/html/rfc5322#section-3.6.4
@@ -644,11 +637,11 @@ impl Envelope {
         }
     }
 
-    pub fn other_headers(&self) -> &HashMap<String, String> {
+    pub fn other_headers(&self) -> &HeaderMap {
         &self.other_headers
     }
 
-    pub fn other_headers_mut(&mut self) -> &mut HashMap<String, String> {
+    pub fn other_headers_mut(&mut self) -> &mut HeaderMap {
         &mut self.other_headers
     }
 

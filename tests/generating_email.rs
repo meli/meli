@@ -15,24 +15,8 @@ fn build_draft() {
             _ => {}
         }
     }
-    if new_draft.headers().contains_key("User-Agent") {
-        new_draft.headers_mut().remove("User-Agent");
-        let pos = new_draft
-            .header_order
-            .iter()
-            .position(|k| k == "User-Agent")
-            .unwrap();
-        new_draft.header_order.remove(pos);
-    }
-    {
-        new_draft.headers_mut().remove("Date");
-        let pos = new_draft
-            .header_order
-            .iter()
-            .position(|k| k == "Date")
-            .unwrap();
-        new_draft.header_order.remove(pos);
-    }
+    new_draft.headers_mut().remove("User-Agent");
+    new_draft.headers_mut().remove("Date");
 
     new_draft.attachments_mut().push(attachment);
     new_draft.set_body("hello world.".to_string());

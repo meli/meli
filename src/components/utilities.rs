@@ -1675,7 +1675,8 @@ impl Component for Tabbed {
                 self.help_curr_views = children_maps;
                 return true;
             }
-            UIEvent::Action(Tab(Edit(account_hash, msg))) => {
+            UIEvent::Action(Tab(Edit(_, _))) => {
+                /* FIXME
                 let composer = match Composer::edit(*account_hash, *msg, context) {
                     Ok(c) => c,
                     Err(e) => {
@@ -1704,6 +1705,7 @@ impl Component for Tabbed {
                 let mut children_maps = self.children[self.cursor_pos].get_shortcuts(context);
                 children_maps.extend(self.get_shortcuts(context));
                 self.help_curr_views = children_maps;
+                */
                 return true;
             }
             UIEvent::Action(Tab(New(ref mut e))) if e.is_some() => {

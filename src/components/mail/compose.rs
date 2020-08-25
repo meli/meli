@@ -137,7 +137,7 @@ impl fmt::Display for Composer {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // TODO display subject/info
         if self.reply_context.is_some() {
-            write!(f, "reply: {:8}", self.draft.headers()["Subject"])
+            write!(f, "reply: {:8}", &self.draft.headers()["Subject"])
         } else {
             write!(f, "composing")
         }
@@ -158,21 +158,11 @@ impl Composer {
             if v.is_empty() {
                 continue;
             }
-            if let Some(k) = ret
-                .draft
-                .headers()
-                .keys()
-                .find(|k| k.eq_ignore_ascii_case(h))
-            {
-                let _k = k.clone();
-                ret.draft.headers_mut().insert(_k, v.into());
-            } else {
-                ret.draft.set_header(h, v.into());
-            }
+            ret.draft.set_header(h, v.into());
         }
         if *mailbox_acc_settings!(context[account_hash].composing.insert_user_agent) {
             ret.draft.set_header(
-                "User-Agent".into(),
+                "User-Agent",
                 format!("meli {}", option_env!("CARGO_PKG_VERSION").unwrap_or("0.0")),
             );
         }
@@ -181,14 +171,18 @@ impl Composer {
         ret
     }
 
-    pub fn edit(new_account_hash: AccountHash, h: EnvelopeHash, context: &Context) -> Result<Self> {
+    pub fn edit(
+        account_hash: AccountHash,
+        env_hash: EnvelopeHash,
+        bytes: &[u8],
+        context: &Context,
+    ) -> Result<Self> {
         let mut ret = Composer::default();
-        let op = context.accounts[&new_account_hash].operation(h)?;
-        let envelope: EnvelopeRef = context.accounts[&new_account_hash].collection.get_env(h);
+        let envelope: EnvelopeRef = context.accounts[&account_hash].collection.get_env(env_hash);
 
-        ret.draft = Draft::edit(&envelope, op)?;
+        ret.draft = Draft::edit(&envelope, bytes)?;
 
-        ret.account_hash = new_account_hash;
+        ret.account_hash = account_hash;
         Ok(ret)
     }
 
@@ -202,16 +196,16 @@ impl Composer {
         let account = &context.accounts[&coordinates.0];
         let envelope = account.collection.get_env(coordinates.2);
         let subject = envelope.subject();
-        ret.draft.headers_mut().insert(
-            "Subject".into(),
+        ret.draft.set_header(
+            "Subject",
             if !subject.starts_with("Re: ") {
                 format!("Re: {}", subject)
             } else {
                 subject.into()
             },
         );
-        ret.draft.headers_mut().insert(
-            "References".into(),
+        ret.draft.set_header(
+            "References",
             format!(
                 "{} {}",
                 envelope
@@ -228,8 +222,7 @@ impl Composer {
             ),
         );
         ret.draft
-            .headers_mut()
-            .insert("In-Reply-To".into(), envelope.message_id_display().into());
+            .set_header("In-Reply-To", envelope.message_id_display().into());
 
         // "Mail-Followup-To/(To+Cc+(Mail-Reply-To/Reply-To/From)) for follow-up,
         // Mail-Reply-To/Reply-To/From for reply-to-author."
@@ -274,7 +267,7 @@ impl Composer {
             {
                 to.remove(&ours);
             }
-            ret.draft.headers_mut().insert("To".into(), {
+            ret.draft.set_header("To", {
                 let mut ret: String =
                     to.into_iter()
                         .fold(String::new(), |mut s: String, n: Address| {
@@ -286,22 +279,14 @@ impl Composer {
                 ret.pop();
                 ret
             });
-            ret.draft
-                .headers_mut()
-                .insert("Cc".into(), envelope.field_cc_to_string());
+            ret.draft.set_header("Cc", envelope.field_cc_to_string());
         } else {
             if let Some(reply_to) = envelope.other_headers().get("Mail-Reply-To") {
-                ret.draft
-                    .headers_mut()
-                    .insert("To".into(), reply_to.to_string());
+                ret.draft.set_header("To", reply_to.to_string());
             } else if let Some(reply_to) = envelope.other_headers().get("Reply-To") {
-                ret.draft
-                    .headers_mut()
-                    .insert("To".into(), reply_to.to_string());
+                ret.draft.set_header("To", reply_to.to_string());
             } else {
-                ret.draft
-                    .headers_mut()
-                    .insert("To".into(), envelope.field_from_to_string());
+                ret.draft.set_header("To", envelope.field_from_to_string());
             }
         }
         let body = envelope.body_bytes(bytes);
@@ -399,7 +384,7 @@ impl Composer {
         let header_values = self.form.values_mut();
         let draft_header_map = self.draft.headers_mut();
         for (k, v) in draft_header_map.iter_mut() {
-            if let Some(ref vn) = header_values.get(k) {
+            if let Some(ref vn) = header_values.get(k.as_str()) {
                 *v = vn.as_str().to_string();
             }
         }
@@ -537,8 +522,8 @@ impl Component for Composer {
             }
             if !self.draft.headers().contains_key("From") || self.draft.headers()["From"].is_empty()
             {
-                self.draft.headers_mut().insert(
-                    "From".into(),
+                self.draft.set_header(
+                    "From",
                     crate::components::mail::get_display_name(context, self.account_hash),
                 );
             }
@@ -798,8 +783,7 @@ impl Component for Composer {
             ) if selector.id() == *id => {
                 if let Some(to_val) = result.downcast_mut::<String>() {
                     self.draft
-                        .headers_mut()
-                        .insert("To".to_string(), std::mem::replace(to_val, String::new()));
+                        .set_header("To", std::mem::replace(to_val, String::new()));
                     self.update_form();
                 }
                 self.mode = ViewMode::Edit;
