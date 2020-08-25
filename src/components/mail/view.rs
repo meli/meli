@@ -156,7 +156,6 @@ impl Clone for MailView {
 
 impl fmt::Display for MailView {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // TODO display subject/info
         write!(f, "{}", MailView::DESCRIPTION)
     }
 }

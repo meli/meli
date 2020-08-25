@@ -35,7 +35,6 @@ pub struct XDGNotifications {
 
 impl fmt::Display for XDGNotifications {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // TODO display subject/info
         write!(f, "")
     }
 }
@@ -154,7 +153,6 @@ pub struct NotificationFilter {}
 
 impl fmt::Display for NotificationFilter {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // TODO display subject/info
         write!(f, "")
     }
 }

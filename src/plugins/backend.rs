@@ -29,7 +29,6 @@ use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
 
-// TODO replace with melib::Envelope after simplifying melib::Envelope's
 // fields/interface/deserializing
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct SimpleEnvelope {

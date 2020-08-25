@@ -666,7 +666,6 @@ impl ListingTrait for ThreadListing {
             );
         }
 
-        /* TODO: highlight selected entries */
         self.highlight_line(
             grid,
             (
@@ -1135,7 +1134,6 @@ impl Component for ThreadListing {
                 return;
             }
             {
-                /* TODO: Move the box drawing business in separate functions */
                 if get_x(upper_left) > 0 && grid[(get_x(upper_left) - 1, mid)].ch() == VERT_BOUNDARY
                 {
                     grid[(get_x(upper_left) - 1, mid)].set_ch(LIGHT_VERTICAL_AND_RIGHT);

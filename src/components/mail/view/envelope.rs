@@ -60,7 +60,6 @@ pub struct EnvelopeView {
 
 impl fmt::Display for EnvelopeView {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // TODO display subject/info
         write!(f, "view mail")
     }
 }

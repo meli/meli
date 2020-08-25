@@ -115,7 +115,6 @@ impl HtmlView {
 
 impl fmt::Display for HtmlView {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // TODO display subject/info
         write!(f, "view")
     }
 }
@@ -130,8 +129,6 @@ impl Component for HtmlView {
         }
 
         if let UIEvent::Input(Key::Char('v')) = event {
-            // TODO: Optional filter that removes outgoing resource requests (images and
-            // scripts)
             let binary = query_default_app("text/html");
             if let Ok(binary) = binary {
                 let p = create_temp_file(&self.bytes, None, None, true);

@@ -77,7 +77,6 @@ pub struct Pager {
 
 impl fmt::Display for Pager {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // TODO display info
         write!(f, "{}", Pager::DESCRIPTION)
     }
 }
@@ -646,7 +645,6 @@ pub struct StatusBar {
 
 impl fmt::Display for StatusBar {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // TODO display info
         write!(f, "status bar")
     }
 }
@@ -1343,7 +1341,6 @@ impl Tabbed {
 
 impl fmt::Display for Tabbed {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // TODO display info
         write!(f, "tabs")
     }
 }

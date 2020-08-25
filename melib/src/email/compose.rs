@@ -90,7 +90,6 @@ impl str::FromStr for Draft {
 impl Draft {
     pub fn edit(envelope: &Envelope, bytes: &[u8]) -> Result<Self> {
         let mut ret = Draft::default();
-        //TODO: Inform user if error
         for (k, v) in envelope.headers(&bytes).unwrap_or_else(|_| Vec::new()) {
             ret.headers.insert(k.try_into()?, v.into());
         }

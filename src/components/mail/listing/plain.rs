@@ -571,7 +571,6 @@ impl ListingTrait for PlainListing {
             );
         }
 
-        /* TODO: highlight selected entries */
         self.highlight_line(
             grid,
             (

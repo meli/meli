@@ -235,7 +235,6 @@ impl Component for Field {
                 }
             }
             UIEvent::InsertInput(Key::Ctrl('w')) => {
-                // FIXME: Use Unicode word-breaking algorithm.
                 /* Cut previous word */
                 if let Text(ref mut s, _) = self {
                     while s.as_str()[..s.cursor_pos()]

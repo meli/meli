@@ -105,13 +105,6 @@ impl EnvelopeWrapper {
         })
     }
 
-    pub fn update(&mut self, new_buffer: Vec<u8>) {
-        // TODO: Propagate error.
-        if let Ok(e) = EnvelopeWrapper::new(new_buffer) {
-            *self = e;
-        }
-    }
-
     pub fn envelope(&self) -> &Envelope {
         &self.envelope
     }

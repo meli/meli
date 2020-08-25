@@ -452,7 +452,6 @@ impl MailBackend for MaildirType {
                                 if let Some((k, v)) =
                                     index_lock.iter_mut().find(|(_, v)| *v.buf == pathbuf)
                                 {
-                                    //TODO FIXME This doesn't make sense?
                                     *v = pathbuf.clone().into();
                                     *k
                                 } else {

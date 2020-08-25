@@ -938,7 +938,6 @@ impl ThreadView {
 
 impl fmt::Display for ThreadView {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // TODO display subject/info
         write!(f, "view thread")
     }
 }

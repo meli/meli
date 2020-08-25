@@ -740,7 +740,6 @@ impl ListingTrait for CompactListing {
             );
         }
 
-        /* TODO: highlight selected entries */
         self.highlight_line(
             grid,
             (

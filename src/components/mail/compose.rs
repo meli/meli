@@ -135,9 +135,12 @@ impl ViewMode {
 
 impl fmt::Display for Composer {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // TODO display subject/info
         if self.reply_context.is_some() {
-            write!(f, "reply: {:8}", &self.draft.headers()["Subject"])
+            write!(
+                f,
+                "reply: {}",
+                (&self.draft.headers()["Subject"]).trim_at_boundary(8)
+            )
         } else {
             write!(f, "composing")
         }

@@ -33,7 +33,6 @@ pub struct HSplit {
 
 impl fmt::Display for HSplit {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // TODO display subject/info
         Display::fmt(&self.top, f)
     }
 }

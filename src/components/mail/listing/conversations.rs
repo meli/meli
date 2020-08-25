@@ -679,7 +679,6 @@ impl ListingTrait for ConversationsListing {
             ((0, 3 * top_idx), pos_dec(self.content.size(), (1, 1))),
         );
 
-        /* TODO: highlight selected entries */
         self.highlight_line(
             grid,
             (

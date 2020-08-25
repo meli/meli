@@ -27,7 +27,6 @@
  * Markus Kuhn -- 2001-09-08 -- public domain
  */
 
-// TODO: Spacing widths
 // Update to Unicode 12
 
 #[macro_export]

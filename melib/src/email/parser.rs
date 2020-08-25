@@ -1133,22 +1133,11 @@ pub mod encodings {
     }
 
     pub fn ascii_token(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
-        // TODO take_until used to be take_until1, check if this works
         let (input, word) = alt((
             terminated(take_until(" =?"), peek(preceded(tag(b" "), encoded_word))),
             take_while(|_| true),
         ))(input)?;
         Ok((input, word.to_vec()))
-        /*
-        do_parse!(
-            word: alt_complete!(
-                terminated!(
-                    take_until1!(" =?"),
-                    peek!(preceded!(tag!(b" "), call!(encoded_word)))
-                ) | take_while!(call!(|_| true))
-            ) >> ({ word.into() })
-        )
-            */
     }
 
     pub fn phrase(
