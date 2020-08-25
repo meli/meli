@@ -211,7 +211,7 @@ impl std::fmt::Display for ResponseCode {
 impl ResponseCode {
     fn from(val: &str) -> ResponseCode {
         use ResponseCode::*;
-        if !val.starts_with("[") {
+        if !val.starts_with('[') {
             let msg = val.trim();
             return Alert(msg.to_string());
         }
@@ -669,7 +669,7 @@ pub fn fetch_responses(mut input: &str) -> ImapParseResult<Vec<FetchResponse<'_>
                 if let Some(el_alert) = el_alert {
                     match &mut alert {
                         Some(Alert(ref mut alert)) => {
-                            alert.extend(el_alert.0.chars());
+                            alert.push_str(&el_alert.0);
                         }
                         a @ None => *a = Some(el_alert),
                     }
@@ -1123,13 +1123,13 @@ pub fn flags(input: &str) -> IResult<&str, (Flag, Vec<String>)> {
     let mut keywords = Vec::new();
 
     let mut input = input;
-    while !input.starts_with(")") && !input.is_empty() {
-        if input.starts_with("\\") {
+    while !input.starts_with(')') && !input.is_empty() {
+        if input.starts_with('\\') {
             input = &input[1..];
         }
         let mut match_end = 0;
         while match_end < input.len() {
-            if input[match_end..].starts_with(" ") || input[match_end..].starts_with(")") {
+            if input[match_end..].starts_with(' ') || input[match_end..].starts_with(')') {
                 break;
             }
             match_end += 1;

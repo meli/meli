@@ -78,7 +78,7 @@ impl BackendOp for ImapOp {
                 debug!(
                     "fetch response is {} bytes and {} lines",
                     response.len(),
-                    response.lines().collect::<Vec<&str>>().len()
+                    response.lines().count()
                 );
                 let FetchResponse {
                     uid: _uid,
@@ -129,7 +129,7 @@ impl BackendOp for ImapOp {
                 debug!(
                     "fetch response is {} bytes and {} lines",
                     response.len(),
-                    response.lines().collect::<Vec<&str>>().len()
+                    response.lines().count()
                 );
                 let v = protocol_parser::uid_fetch_flags_responses(response.as_bytes())
                     .map(|(_, v)| v)

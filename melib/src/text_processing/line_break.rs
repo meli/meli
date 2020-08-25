@@ -776,7 +776,7 @@ mod alg {
         minima: &mut Vec<usize>,
         breaks: &mut Vec<usize>,
         width: usize,
-        offsets: &Vec<usize>,
+        offsets: &[usize],
     ) {
         let mut stack = Vec::new();
         let mut i = 0;
@@ -846,7 +846,7 @@ mod alg {
                 prev = b.0;
             }
             if &text[prev..] != "\n" {
-                words.push(text[prev..].trim_end_matches("\n"));
+                words.push(text[prev..].trim_end_matches('\n'));
             }
         }
         let count = words.len();

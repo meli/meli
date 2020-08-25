@@ -98,7 +98,7 @@ impl<'s> Iterator for WordBreakIter<'s> {
         }
         self.input = self.input.trim_start_matches(|c| c == ' ');
         if self.input.starts_with('\n') {
-            let ret = &self.input[0..0];
+            let ret = "";
             self.input = &self.input[1..];
             return Some(ret);
         }
@@ -129,7 +129,7 @@ impl<'s> Iterator for WordBreakIter<'s> {
         } else {
             /* graphemes.len() < width */
             let ret = self.input;
-            self.input = &self.input[0..0];
+            self.input = "";
             Some(ret)
         }
     }

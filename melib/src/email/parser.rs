@@ -417,7 +417,7 @@ pub mod headers {
             ));
         }
         let mut ptr = 0;
-        let mut name: &[u8] = &input[0..0];
+        let mut name: &[u8] = &[];
         let mut has_colon = false;
         /* field-name  =  1*<any CHAR, excluding CTLs, SPACE, and ":"> */
         for (i, x) in input.iter().enumerate() {
@@ -573,7 +573,7 @@ pub mod headers {
             ));
         }
         let mut ptr = 0;
-        let mut name: &[u8] = &input[0..0];
+        let mut name: &[u8] = &[];
         /* field-name  =  1*<any CHAR, excluding CTLs, SPACE, and ":"> */
         for (i, x) in input.iter().enumerate() {
             if *x == b':' {
@@ -635,7 +635,7 @@ pub mod headers {
     pub fn headers_raw(input: &[u8]) -> IResult<&[u8], &[u8]> {
         if input.is_empty() {
             return Err(nom::Err::Error(
-                (input, format!("headers_raw(): input is empty",)).into(),
+                (input, "headers_raw(): input is empty").into(),
             ));
         }
         for i in 0..input.len() {
@@ -1507,7 +1507,7 @@ pub mod address {
     {
         move |i: I| {
             let mut res = SmallVec::new();
-            let mut i = i.clone();
+            let mut i = i;
 
             // Parse the first element
             match f(i.clone()) {

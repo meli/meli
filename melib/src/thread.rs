@@ -686,7 +686,7 @@ impl Threads {
                     None
                 },
             )
-            .unwrap_or_else(|| ThreadNodeHash::new());
+            .unwrap_or_else(ThreadNodeHash::new);
         {
             let mut node = self.thread_nodes.entry(new_id).or_default();
             node.message = Some(env_hash);

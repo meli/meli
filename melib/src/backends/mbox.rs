@@ -307,7 +307,7 @@ impl MboxReader {
         match self {
             Self::MboxO => {
                 let next_offset: Option<(usize, usize)> = find_From__line!(input)
-                    .and_then(|end| input.find(b"\n").and_then(|start| Some((start + 1, end))));
+                    .and_then(|end| input.find(b"\n").map(|start| (start + 1, end)));
 
                 if let Some((start, len)) = next_offset {
                     match Envelope::from_bytes(&input[start..len], None) {
@@ -363,33 +363,33 @@ impl MboxReader {
                         Ok(mut env) => {
                             let mut flags = Flag::empty();
                             if env.other_headers().contains_key("Status") {
-                                if env.other_headers()["Status"].contains("F") {
+                                if env.other_headers()["Status"].contains('F') {
                                     flags.set(Flag::FLAGGED, true);
                                 }
-                                if env.other_headers()["Status"].contains("A") {
+                                if env.other_headers()["Status"].contains('A') {
                                     flags.set(Flag::REPLIED, true);
                                 }
-                                if env.other_headers()["Status"].contains("R") {
+                                if env.other_headers()["Status"].contains('R') {
                                     flags.set(Flag::SEEN, true);
                                 }
-                                if env.other_headers()["Status"].contains("D") {
+                                if env.other_headers()["Status"].contains('D') {
                                     flags.set(Flag::TRASHED, true);
                                 }
                             }
                             if env.other_headers().contains_key("X-Status") {
-                                if env.other_headers()["X-Status"].contains("F") {
+                                if env.other_headers()["X-Status"].contains('F') {
                                     flags.set(Flag::FLAGGED, true);
                                 }
-                                if env.other_headers()["X-Status"].contains("A") {
+                                if env.other_headers()["X-Status"].contains('A') {
                                     flags.set(Flag::REPLIED, true);
                                 }
-                                if env.other_headers()["X-Status"].contains("R") {
+                                if env.other_headers()["X-Status"].contains('R') {
                                     flags.set(Flag::SEEN, true);
                                 }
-                                if env.other_headers()["X-Status"].contains("D") {
+                                if env.other_headers()["X-Status"].contains('D') {
                                     flags.set(Flag::TRASHED, true);
                                 }
-                                if env.other_headers()["X-Status"].contains("T") {
+                                if env.other_headers()["X-Status"].contains('T') {
                                     flags.set(Flag::DRAFT, true);
                                 }
                             }
@@ -405,7 +405,7 @@ impl MboxReader {
             }
             Self::MboxRd => {
                 let next_offset: Option<(usize, usize)> = find_From__line!(input)
-                    .and_then(|end| input.find(b"\n").and_then(|start| Some((start + 1, end))));
+                    .and_then(|end| input.find(b"\n").map(|start| (start + 1, end)));
 
                 if let Some((start, len)) = next_offset {
                     match Envelope::from_bytes(&input[start..len], None) {
@@ -535,33 +535,33 @@ impl MboxReader {
                     Ok(mut env) => {
                         let mut flags = Flag::empty();
                         if env.other_headers().contains_key("Status") {
-                            if env.other_headers()["Status"].contains("F") {
+                            if env.other_headers()["Status"].contains('F') {
                                 flags.set(Flag::FLAGGED, true);
                             }
-                            if env.other_headers()["Status"].contains("A") {
+                            if env.other_headers()["Status"].contains('A') {
                                 flags.set(Flag::REPLIED, true);
                             }
-                            if env.other_headers()["Status"].contains("R") {
+                            if env.other_headers()["Status"].contains('R') {
                                 flags.set(Flag::SEEN, true);
                             }
-                            if env.other_headers()["Status"].contains("D") {
+                            if env.other_headers()["Status"].contains('D') {
                                 flags.set(Flag::TRASHED, true);
                             }
                         }
                         if env.other_headers().contains_key("X-Status") {
-                            if env.other_headers()["X-Status"].contains("F") {
+                            if env.other_headers()["X-Status"].contains('F') {
                                 flags.set(Flag::FLAGGED, true);
                             }
-                            if env.other_headers()["X-Status"].contains("A") {
+                            if env.other_headers()["X-Status"].contains('A') {
                                 flags.set(Flag::REPLIED, true);
                             }
-                            if env.other_headers()["X-Status"].contains("R") {
+                            if env.other_headers()["X-Status"].contains('R') {
                                 flags.set(Flag::SEEN, true);
                             }
-                            if env.other_headers()["X-Status"].contains("D") {
+                            if env.other_headers()["X-Status"].contains('D') {
                                 flags.set(Flag::TRASHED, true);
                             }
-                            if env.other_headers()["X-Status"].contains("T") {
+                            if env.other_headers()["X-Status"].contains('T') {
                                 flags.set(Flag::DRAFT, true);
                             }
                         }
@@ -761,7 +761,7 @@ impl MailBackend for MboxType {
                 }
                 if done {
                     if payload.is_empty() {
-                        return Ok(None);
+                        Ok(None)
                     } else {
                         let mut mailbox_lock = self.mailboxes.lock().unwrap();
                         let contents = std::mem::replace(&mut self.contents, vec![]);
@@ -927,12 +927,7 @@ impl MailBackend for MboxType {
                             }
                         }
                         DebouncedEvent::Rename(src, dest) => {
-                            if mailboxes
-                                .lock()
-                                .unwrap()
-                                .values()
-                                .any(|f| &f.fs_path == &src)
-                            {
+                            if mailboxes.lock().unwrap().values().any(|f| f.fs_path == src) {
                                 let mailbox_hash = get_path_hash!(&src);
                                 (sender)(
                                     account_hash,

@@ -825,7 +825,7 @@ impl ImapConnection {
                             let mut nonexistent = "blurdybloop".to_string();
                             {
                                 let mailboxes = self.uid_store.mailboxes.lock().await;
-                                while mailboxes.values().any(|m| m.imap_path() == &nonexistent) {
+                                while mailboxes.values().any(|m| m.imap_path() == nonexistent) {
                                     nonexistent.push('p');
                                 }
                             }
@@ -905,7 +905,7 @@ impl ImapBlockingConnection {
     }
 
     pub fn err(&self) -> Option<&str> {
-        self.err.as_ref().map(String::as_str)
+        self.err.as_deref()
     }
 
     pub fn as_stream<'a>(&'a mut self) -> impl Future<Output = Option<Vec<u8>>> + 'a {

@@ -261,9 +261,9 @@ impl RefreshEvent {
 }
 
 #[derive(Clone)]
-pub struct BackendEventConsumer(Arc<dyn Fn(AccountHash, BackendEvent) -> () + Send + Sync>);
+pub struct BackendEventConsumer(Arc<dyn Fn(AccountHash, BackendEvent) + Send + Sync>);
 impl BackendEventConsumer {
-    pub fn new(b: Arc<dyn Fn(AccountHash, BackendEvent) -> () + Send + Sync>) -> Self {
+    pub fn new(b: Arc<dyn Fn(AccountHash, BackendEvent) + Send + Sync>) -> Self {
         BackendEventConsumer(b)
     }
 }
@@ -275,7 +275,7 @@ impl fmt::Debug for BackendEventConsumer {
 }
 
 impl Deref for BackendEventConsumer {
-    type Target = dyn Fn(AccountHash, BackendEvent) -> () + Send + Sync;
+    type Target = dyn Fn(AccountHash, BackendEvent) + Send + Sync;
 
     fn deref(&self) -> &Self::Target {
         &(*self.0)

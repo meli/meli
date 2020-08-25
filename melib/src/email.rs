@@ -249,32 +249,27 @@ impl Envelope {
             let name: HeaderName = name.try_into()?;
             if name == "to" {
                 let parse_result = parser::address::rfc2822address_list(value);
-                if parse_result.is_ok() {
-                    let value = parse_result.unwrap().1;
+                if let Ok((_, value)) = parse_result {
                     self.set_to(value);
                 };
             } else if name == "cc" {
                 let parse_result = parser::address::rfc2822address_list(value);
-                if parse_result.is_ok() {
-                    let value = parse_result.unwrap().1;
+                if let Ok((_, value)) = parse_result {
                     self.set_cc(value);
                 };
             } else if name == "bcc" {
                 let parse_result = parser::address::rfc2822address_list(value);
-                if parse_result.is_ok() {
-                    let value = parse_result.unwrap().1;
+                if let Ok((_, value)) = parse_result {
                     self.set_bcc(value.to_vec());
                 };
             } else if name == "from" {
                 let parse_result = parser::address::rfc2822address_list(value);
-                if parse_result.is_ok() {
-                    let value = parse_result.unwrap().1;
+                if let Ok((_, value)) = parse_result {
                     self.set_from(value);
                 }
             } else if name == "subject" {
                 let parse_result = parser::encodings::phrase(value.trim(), false);
-                if parse_result.is_ok() {
-                    let value = parse_result.unwrap().1;
+                if let Ok((_, value)) = parse_result {
                     self.set_subject(value);
                 };
             } else if name == "message-id" {
@@ -282,8 +277,8 @@ impl Envelope {
             } else if name == "references" {
                 {
                     let parse_result = parser::address::references(value);
-                    if parse_result.is_ok() {
-                        for v in parse_result.unwrap().1 {
+                    if let Ok((_, value)) = parse_result {
+                        for v in value {
                             self.push_references(v);
                         }
                     }
@@ -294,8 +289,7 @@ impl Envelope {
                 in_reply_to = Some(value);
             } else if name == "date" {
                 let parse_result = parser::encodings::phrase(value, false);
-                if parse_result.is_ok() {
-                    let value = parse_result.unwrap().1;
+                if let Ok((_, value)) = parse_result {
                     self.set_date(value.as_slice());
                 } else {
                     self.set_date(value);
@@ -510,7 +504,7 @@ impl Envelope {
     pub fn in_reply_to(&self) -> Option<&MessageID> {
         self.in_reply_to
             .as_ref()
-            .or(self.references.as_ref().and_then(|r| r.refs.last()))
+            .or_else(|| self.references.as_ref().and_then(|r| r.refs.last()))
     }
 
     pub fn in_reply_to_display(&self) -> Option<Cow<str>> {
@@ -563,7 +557,7 @@ impl Envelope {
         while new_val
             .chars()
             .last()
-            .map(|c| char::is_control(c))
+            .map(char::is_control)
             .unwrap_or(false)
         {
             new_val.pop();

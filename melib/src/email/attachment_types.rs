@@ -209,7 +209,7 @@ impl ContentType {
         }
     }
 
-    pub fn make_boundary(parts: &Vec<AttachmentBuilder>) -> String {
+    pub fn make_boundary(parts: &[AttachmentBuilder]) -> String {
         use crate::email::compose::random::gen_boundary;
         let mut boundary = "bzz_bzz__bzz__".to_string();
         let mut random_boundary = gen_boundary();
@@ -236,7 +236,7 @@ impl ContentType {
             }
         }
 
-        boundary.extend(random_boundary.chars());
+        boundary.push_str(&random_boundary);
         /* rfc134
          * "The only mandatory parameter for the multipart Content-Type is the boundary parameter,
          * which consists of 1 to 70 characters from a set of characters known to be very robust
@@ -253,7 +253,7 @@ impl ContentType {
         }
     }
 
-    pub fn parts(&self) -> Option<&Vec<Attachment>> {
+    pub fn parts(&self) -> Option<&[Attachment]> {
         if let ContentType::Multipart { ref parts, .. } = self {
             Some(parts)
         } else {

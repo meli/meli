@@ -104,7 +104,7 @@ impl Default for MailboxConf {
 
 impl MailboxConf {
     pub fn alias(&self) -> Option<&str> {
-        self.alias.as_ref().map(String::as_str)
+        self.alias.as_deref()
     }
 }
 

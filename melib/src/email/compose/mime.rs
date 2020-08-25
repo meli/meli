@@ -41,7 +41,7 @@ pub fn encode_header(value: &str) -> String {
                      *
                      * Whitespaces inside encoded tokens must be greedily taken,
                      * instead of splitting each non-ascii word into separate encoded tokens. */
-                    if !g.split_whitespace().next().is_none() {
+                    if g.split_whitespace().next().is_some() {
                         ret.push_str(&format!(
                             "=?UTF-8?B?{}?=",
                             BASE64_MIME

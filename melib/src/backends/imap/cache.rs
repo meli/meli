@@ -191,7 +191,6 @@ mod sqlite3_m {
                         row.get(2)?,
                     ))
                 })?
-                .into_iter()
                 .collect::<std::result::Result<_, _>>()?;
             let mut max_uid = 0;
             let mut env_lck = self.uid_store.envelopes.lock().unwrap();

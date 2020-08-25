@@ -158,11 +158,11 @@ impl fmt::Display for MeliError {
         if let Some(summary) = self.summary.as_ref() {
             writeln!(f, "Summary: {}", summary)?;
         }
-        let ret = write!(f, "{}", self.details)?;
+        write!(f, "{}", self.details)?;
         if let Some(source) = self.source.as_ref() {
             write!(f, "\nCaused by: {}", source)?;
         }
-        Ok(ret)
+        Ok(())
     }
 }
 

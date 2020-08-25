@@ -58,7 +58,8 @@ use super::*;
 
     'file_loop: for (filename, ident) in filenames {
         println!("cargo:rerun-if-changed={}", filename);
-        let mut file = File::open(&filename).expect(&format!("Unable to open file `{}`", filename));
+        let mut file = File::open(&filename)
+            .unwrap_or_else(|err| panic!("Unable to open file `{}` {}", filename, err));
 
         let mut src = String::new();
         file.read_to_string(&mut src).expect("Unable to read file");
@@ -148,7 +149,7 @@ use super::*;
                         }
                     }
                 };
-                output_string.extend(literal_struct.to_string().chars());
+                output_string.push_str(&literal_struct.to_string());
                 output_string.push_str("\n\n");
             }
         }

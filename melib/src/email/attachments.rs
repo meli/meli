@@ -200,7 +200,7 @@ impl AttachmentBuilder {
                         if n.eq_ignore_ascii_case(b"name") {
                             if let Ok(v) = crate::email::parser::encodings::phrase(v.trim(), false)
                                 .as_ref()
-                                .and_then(|(_, r)| Ok(String::from_utf8_lossy(r).to_string()))
+                                .map(|(_, r)| String::from_utf8_lossy(r).to_string())
                             {
                                 name = Some(v);
                             } else {
@@ -529,7 +529,7 @@ impl Attachment {
     }
 
     pub fn mime_type(&self) -> String {
-        format!("{}", self.content_type).to_string()
+        self.content_type.to_string()
     }
     pub fn attachments(&self) -> Vec<Attachment> {
         let mut ret = Vec::new();
@@ -599,37 +599,35 @@ impl Attachment {
     pub fn into_raw(&self) -> String {
         let mut ret = String::with_capacity(2 * self.raw.len());
         fn into_raw_helper(a: &Attachment, ret: &mut String) {
-            ret.extend(
-                format!(
-                    "Content-Transfer-Encoding: {}\n",
-                    a.content_transfer_encoding
-                )
-                .chars(),
-            );
+            ret.push_str(&format!(
+                "Content-Transfer-Encoding: {}\n",
+                a.content_transfer_encoding
+            ));
             match &a.content_type {
                 ContentType::Text {
                     kind: _,
                     parameters,
                     charset,
                 } => {
-                    ret.extend(
-                        format!("Content-Type: {}; charset={}", a.content_type, charset).chars(),
-                    );
+                    ret.push_str(&format!(
+                        "Content-Type: {}; charset={}",
+                        a.content_type, charset
+                    ));
                     for (n, v) in parameters {
                         ret.push_str("; ");
-                        ret.extend(String::from_utf8_lossy(n).chars());
+                        ret.push_str(&String::from_utf8_lossy(n));
                         ret.push_str("=");
                         if v.contains(&b' ') {
                             ret.push_str("\"");
                         }
-                        ret.extend(String::from_utf8_lossy(v).chars());
+                        ret.push_str(&String::from_utf8_lossy(v));
                         if v.contains(&b' ') {
                             ret.push_str("\"");
                         }
                     }
 
                     ret.push_str("\n\n");
-                    ret.extend(String::from_utf8_lossy(a.body()).chars());
+                    ret.push_str(&String::from_utf8_lossy(a.body()));
                 }
                 ContentType::Multipart {
                     boundary,
@@ -637,42 +635,41 @@ impl Attachment {
                     parts,
                 } => {
                     let boundary = String::from_utf8_lossy(boundary);
-                    ret.extend(format!("Content-Type: {}; boundary={}", kind, boundary).chars());
+                    ret.push_str(&format!("Content-Type: {}; boundary={}", kind, boundary));
                     if *kind == MultipartType::Signed {
-                        ret.extend(
-                            "; micalg=pgp-sha512; protocol=\"application/pgp-signature\"".chars(),
-                        );
+                        ret.push_str("; micalg=pgp-sha512; protocol=\"application/pgp-signature\"");
                     }
                     ret.push('\n');
 
                     let boundary_start = format!("\n--{}\n", boundary);
                     for p in parts {
-                        ret.extend(boundary_start.chars());
+                        ret.push_str(&boundary_start);
                         into_raw_helper(p, ret);
                     }
-                    ret.extend(format!("--{}--\n\n", boundary).chars());
+                    ret.push_str(&format!("--{}--\n\n", boundary));
                 }
                 ContentType::MessageRfc822 => {
-                    ret.extend(format!("Content-Type: {}\n\n", a.content_type).chars());
-                    ret.extend(String::from_utf8_lossy(a.body()).chars());
+                    ret.push_str(&format!("Content-Type: {}\n\n", a.content_type));
+                    ret.push_str(&String::from_utf8_lossy(a.body()));
                 }
                 ContentType::PGPSignature => {
-                    ret.extend(format!("Content-Type: {}\n\n", a.content_type).chars());
-                    ret.extend(String::from_utf8_lossy(a.body()).chars());
+                    ret.push_str(&format!("Content-Type: {}\n\n", a.content_type));
+                    ret.push_str(&String::from_utf8_lossy(a.body()));
                 }
                 ContentType::OctetStream { ref name } => {
                     if let Some(name) = name {
-                        ret.extend(
-                            format!("Content-Type: {}; name={}\n\n", a.content_type, name).chars(),
-                        );
+                        ret.push_str(&format!(
+                            "Content-Type: {}; name={}\n\n",
+                            a.content_type, name
+                        ));
                     } else {
-                        ret.extend(format!("Content-Type: {}\n\n", a.content_type).chars());
+                        ret.push_str(&format!("Content-Type: {}\n\n", a.content_type));
                     }
                     ret.push_str(&BASE64_MIME.encode(a.body()).trim());
                 }
                 _ => {
-                    ret.extend(format!("Content-Type: {}\n\n", a.content_type).chars());
-                    ret.extend(String::from_utf8_lossy(a.body()).chars());
+                    ret.push_str(&format!("Content-Type: {}\n\n", a.content_type));
+                    ret.push_str(&String::from_utf8_lossy(a.body()));
                 }
             }
         }
@@ -737,11 +734,9 @@ fn decode_rec_helper<'a>(a: &'a Attachment, filter: &mut Option<Filter<'a>>) -> 
     match a.content_type {
         ContentType::Other { .. } => Vec::new(),
         ContentType::Text { .. } => decode_helper(a, filter),
-        ContentType::OctetStream { ref name } => name
-            .clone()
-            .unwrap_or_else(|| a.mime_type())
-            .to_string()
-            .into_bytes(),
+        ContentType::OctetStream { ref name } => {
+            name.clone().unwrap_or_else(|| a.mime_type()).into_bytes()
+        }
         ContentType::PGPSignature => Vec::new(),
         ContentType::MessageRfc822 => {
             let temp = decode_rfc822(a.body());

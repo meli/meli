@@ -109,7 +109,7 @@ pub mod query_parser {
             whitespace_wrap(match_literal("subject:")),
             whitespace_wrap(literal()),
         )
-        .map(|term| Query::Subject(term))
+        .map(Query::Subject)
     }
 
     fn from<'a>() -> impl Parser<'a, Query> {
@@ -117,7 +117,7 @@ pub mod query_parser {
             whitespace_wrap(match_literal("from:")),
             whitespace_wrap(literal()),
         )
-        .map(|term| Query::From(term))
+        .map(Query::From)
     }
 
     fn to<'a>() -> impl Parser<'a, Query> {
@@ -125,7 +125,7 @@ pub mod query_parser {
             whitespace_wrap(match_literal("to:")),
             whitespace_wrap(literal()),
         )
-        .map(|term| Query::To(term))
+        .map(Query::To)
     }
 
     fn cc<'a>() -> impl Parser<'a, Query> {
@@ -133,7 +133,7 @@ pub mod query_parser {
             whitespace_wrap(match_literal("cc:")),
             whitespace_wrap(literal()),
         )
-        .map(|term| Query::Cc(term))
+        .map(Query::Cc)
     }
 
     fn bcc<'a>() -> impl Parser<'a, Query> {
@@ -141,7 +141,7 @@ pub mod query_parser {
             whitespace_wrap(match_literal("bcc:")),
             whitespace_wrap(literal()),
         )
-        .map(|term| Query::Bcc(term))
+        .map(Query::Bcc)
     }
 
     fn or<'a>() -> impl Parser<'a, Query> {
@@ -212,14 +212,14 @@ pub mod query_parser {
             })
             .and_then(|(rest, flags_list)| {
                 if let Ok(r) = flags_list
-                    .split(",")
+                    .split(',')
                     .map(|t| {
                         either(quoted_string(), string())
                             .parse_complete(t)
                             .map(|(_, r)| r)
                     })
                     .collect::<std::result::Result<Vec<String>, &str>>()
-                    .map(|v| Flags(v))
+                    .map(Flags)
                 {
                     Ok((rest, r))
                 } else {
@@ -245,13 +245,13 @@ pub mod query_parser {
         move |input| {
             let (rest, query_a): (&'a str, Query) = if let Ok(q) = parentheses_query()
                 .parse(input)
-                .or(from().parse(input))
-                .or(to().parse(input))
-                .or(cc().parse(input))
-                .or(bcc().parse(input))
-                .or(subject().parse(input))
-                .or(flags().parse(input))
-                .or(has_attachment().parse(input))
+                .or_else(|_| from().parse(input))
+                .or_else(|_| to().parse(input))
+                .or_else(|_| cc().parse(input))
+                .or_else(|_| bcc().parse(input))
+                .or_else(|_| subject().parse(input))
+                .or_else(|_| flags().parse(input))
+                .or_else(|_| has_attachment().parse(input))
             {
                 Ok(q)
             } else if let Ok((rest, query_a)) = not().parse(input) {
@@ -399,11 +399,10 @@ impl<'de> Deserialize<'de> for Query {
         D: Deserializer<'de>,
     {
         let s = <String>::deserialize(deserializer)?;
-        let _q = query().parse(&s);
-        if let Some(q) = _q.ok() {
-            Ok(q.1)
-        } else {
-            Err(de::Error::custom("invalid query value"))
-        }
+        let ret = query()
+            .parse(&s)
+            .map(|(_, q)| q)
+            .map_err(|err| de::Error::custom(format!("invalid query value: {}", err)));
+        ret
     }
 }
