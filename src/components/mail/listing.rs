@@ -286,6 +286,7 @@ pub trait MailListingTrait: ListingTrait {
                                 name: "message copying".into(),
                                 handle,
                                 channel,
+                                on_finish: None,
                             },
                         );
                     }
@@ -323,6 +324,7 @@ pub trait MailListingTrait: ListingTrait {
                                 name: "message moving".into(),
                                 handle,
                                 channel,
+                                on_finish: None,
                             },
                         );
                     }
@@ -1099,9 +1101,10 @@ impl Component for Listing {
                 if shortcut!(k == shortcuts[Listing::DESCRIPTION]["new_mail"]) =>
             {
                 let account_hash = context.accounts[self.cursor_pos.0].hash();
+                let composer = Composer::new(account_hash, context);
                 context
                     .replies
-                    .push_back(UIEvent::Action(Tab(NewDraft(account_hash, None))));
+                    .push_back(UIEvent::Action(Tab(New(Some(Box::new(composer))))));
                 return true;
             }
             UIEvent::StartupCheck(_) => {

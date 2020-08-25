@@ -126,8 +126,17 @@ pub enum UIEvent {
     Contacts(ContactEvent),
     Compose(ComposeEvent),
     FinishedUIDialog(ComponentId, UIMessage),
+    Callback(CallbackFn),
     GlobalUIDialog(Box<dyn Component>),
     Timer(u8),
+}
+
+pub struct CallbackFn(pub Box<dyn FnOnce(&mut crate::Context) -> () + Send + 'static>);
+
+impl core::fmt::Debug for CallbackFn {
+    fn fmt(&self, fmt: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(fmt, "CallbackFn")
+    }
 }
 
 impl From<RefreshEvent> for UIEvent {

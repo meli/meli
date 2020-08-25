@@ -24,9 +24,7 @@
  */
 
 use crate::components::Component;
-use melib::backends::AccountHash;
 pub use melib::thread::{SortField, SortOrder};
-use melib::{Draft, EnvelopeHash};
 
 extern crate uuid;
 use uuid::Uuid;
@@ -58,11 +56,9 @@ pub enum ListingAction {
 
 #[derive(Debug)]
 pub enum TabAction {
-    New(Option<Box<dyn Component>>),
-    NewDraft(AccountHash, Option<Draft>),
     Close,
-    Edit(AccountHash, EnvelopeHash), // account_position, envelope hash
     Kill(Uuid),
+    New(Option<Box<dyn Component>>),
 }
 
 #[derive(Debug)]

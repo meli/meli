@@ -176,6 +176,7 @@ pub enum JobRequest {
         name: Cow<'static, str>,
         handle: JoinHandle,
         channel: JobChannel<()>,
+        on_finish: Option<crate::types::CallbackFn>,
     },
     IsOnline(JoinHandle, oneshot::Receiver<Result<()>>),
     Refresh(MailboxHash, JoinHandle, oneshot::Receiver<Result<()>>),
@@ -1796,6 +1797,7 @@ impl Account {
                     ref name,
                     ref mut channel,
                     handle: _,
+                    ref mut on_finish,
                 } => {
                     let r = channel.try_recv().unwrap();
                     match r {
@@ -1818,6 +1820,13 @@ impl Account {
                                 .expect("Could not send event on main channel");
                         }
                         None => {}
+                    }
+                    if on_finish.is_some() {
+                        self.sender
+                            .send(ThreadEvent::UIEvent(UIEvent::Callback(
+                                on_finish.take().unwrap(),
+                            )))
+                            .unwrap();
                     }
                     self.sender
                         .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(

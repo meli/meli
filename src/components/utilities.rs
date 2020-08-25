@@ -1662,52 +1662,6 @@ impl Component for Tabbed {
                 self.dirty = true;
                 return true;
             }
-            UIEvent::Action(Tab(NewDraft(account_hash, ref draft))) => {
-                let mut composer = Composer::new(*account_hash, context);
-                if let Some(draft) = draft {
-                    composer.set_draft(draft.clone());
-                }
-                self.add_component(Box::new(composer));
-                self.cursor_pos = self.children.len() - 1;
-                self.children[self.cursor_pos].set_dirty(true);
-                let mut children_maps = self.children[self.cursor_pos].get_shortcuts(context);
-                children_maps.extend(self.get_shortcuts(context));
-                self.help_curr_views = children_maps;
-                return true;
-            }
-            UIEvent::Action(Tab(Edit(_, _))) => {
-                /* FIXME
-                let composer = match Composer::edit(*account_hash, *msg, context) {
-                    Ok(c) => c,
-                    Err(e) => {
-                        context.replies.push_back(UIEvent::Notification(
-                            Some("Failed to open e-mail".to_string()),
-                            e.to_string(),
-                            Some(NotificationType::ERROR),
-                        ));
-                        log(
-                            format!(
-                                "Failed to open envelope {}: {}",
-                                context.accounts[&*account_hash]
-                                    .collection
-                                    .get_env(*msg)
-                                    .message_id_display(),
-                                e.to_string()
-                            ),
-                            ERROR,
-                        );
-                        return true;
-                    }
-                };
-                self.add_component(Box::new(composer));
-                self.cursor_pos = self.children.len() - 1;
-                self.children[self.cursor_pos].set_dirty(true);
-                let mut children_maps = self.children[self.cursor_pos].get_shortcuts(context);
-                children_maps.extend(self.get_shortcuts(context));
-                self.help_curr_views = children_maps;
-                */
-                return true;
-            }
             UIEvent::Action(Tab(New(ref mut e))) if e.is_some() => {
                 self.add_component(e.take().unwrap());
                 self.cursor_pos = self.children.len() - 1;

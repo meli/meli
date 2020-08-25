@@ -888,6 +888,7 @@ impl State {
                                 name: "Message index rebuild".into(),
                                 handle,
                                 channel,
+                                on_finish: None,
                             },
                         );
                         self.context.replies.push_back(UIEvent::Notification(
@@ -1088,6 +1089,10 @@ impl State {
                     self.overlay.remove(pos);
                     return;
                 }
+            }
+            UIEvent::Callback(callback_fn) => {
+                (callback_fn.0)(&mut self.context);
+                return;
             }
             UIEvent::GlobalUIDialog(dialog) => {
                 self.overlay.push(dialog);

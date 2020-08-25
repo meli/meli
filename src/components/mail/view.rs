@@ -1137,10 +1137,66 @@ impl Component for MailView {
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[MailView::DESCRIPTION]["edit"]) =>
             {
-                context.replies.push_back(UIEvent::Action(Tab(Edit(
-                    self.coordinates.0,
-                    self.coordinates.2,
-                ))));
+                let account_hash = self.coordinates.0;
+                let env_hash = self.coordinates.2;
+                let (sender, mut receiver) = crate::jobs::oneshot::channel();
+                let operation = context.accounts[&account_hash].operation(env_hash);
+                let bytes_job = async move {
+                    let _ = sender.send(operation?.as_bytes()?.await);
+                    Ok(())
+                };
+                let (channel, handle, job_id) = if context.accounts[&account_hash]
+                    .backend_capabilities
+                    .is_async
+                {
+                    context.accounts[&account_hash]
+                        .job_executor
+                        .spawn_specialized(bytes_job)
+                } else {
+                    context.accounts[&account_hash]
+                        .job_executor
+                        .spawn_blocking(bytes_job)
+                };
+                context.accounts[&account_hash].insert_job(
+                    job_id,
+                    crate::conf::accounts::JobRequest::Generic {
+                        name: "fetch envelope".into(),
+                        handle,
+                        channel,
+                        on_finish: Some(CallbackFn(Box::new(move |context: &mut Context| {
+                            let result = receiver.try_recv().unwrap().unwrap();
+                            match result.and_then(|bytes| {
+                                Composer::edit(account_hash, env_hash, &bytes, context)
+                            }) {
+                                Ok(composer) => {
+                                    context.replies.push_back(UIEvent::Action(Tab(New(Some(
+                                        Box::new(composer),
+                                    )))));
+                                }
+                                Err(err) => {
+                                    let err_string = format!(
+                                        "Failed to open envelope {}: {}",
+                                        context.accounts[&account_hash]
+                                            .collection
+                                            .envelopes
+                                            .read()
+                                            .unwrap()
+                                            .get(&env_hash)
+                                            .map(|env| env.message_id_display())
+                                            .unwrap_or_else(|| "Not found".into()),
+                                        err.to_string()
+                                    );
+                                    log(&err_string, ERROR);
+                                    context.replies.push_back(UIEvent::Notification(
+                                        Some("Failed to open e-mail".to_string()),
+                                        err_string,
+                                        Some(NotificationType::ERROR),
+                                    ));
+                                }
+                            }
+                        }))),
+                    },
+                );
                 return true;
             }
             UIEvent::Input(ref key)
@@ -1538,10 +1594,11 @@ impl Component for MailView {
                             {
                                 if let Ok(mailto) = Mailto::try_from(list_post_addr) {
                                     let draft: Draft = mailto.into();
-                                    context.replies.push_back(UIEvent::Action(Tab(NewDraft(
-                                        self.coordinates.0,
-                                        Some(draft),
-                                    ))));
+                                    let mut composer = Composer::new(self.coordinates.0, context);
+                                    composer.set_draft(draft);
+                                    context.replies.push_back(UIEvent::Action(Tab(New(Some(
+                                        Box::new(composer),
+                                    )))));
                                     failure = false;
                                 }
                             }
