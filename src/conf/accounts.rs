@@ -186,14 +186,16 @@ pub enum JobRequest {
     SendMessageBackground(JoinHandle, JobChannel<()>),
     CopyTo(MailboxHash, JoinHandle, oneshot::Receiver<Result<Vec<u8>>>),
     DeleteMessages(EnvelopeHashBatch, JoinHandle, oneshot::Receiver<Result<()>>),
-    CreateMailbox(
-        JoinHandle,
-        oneshot::Receiver<Result<(MailboxHash, HashMap<MailboxHash, Mailbox>)>>,
-    ),
-    DeleteMailbox(
-        JoinHandle,
-        oneshot::Receiver<Result<HashMap<MailboxHash, Mailbox>>>,
-    ),
+    CreateMailbox {
+        path: String,
+        handle: JoinHandle,
+        channel: JobChannel<(MailboxHash, HashMap<MailboxHash, Mailbox>)>,
+    },
+    DeleteMailbox {
+        mailbox_hash: MailboxHash,
+        handle: JoinHandle,
+        channel: JobChannel<HashMap<MailboxHash, Mailbox>>,
+    },
     //RenameMailbox,
     Search(JoinHandle),
     AsBytes(JoinHandle),
@@ -217,8 +219,8 @@ impl Drop for JobRequest {
             JobRequest::SaveMessage(_, h, _) => h.0.cancel(),
             JobRequest::CopyTo(_, h, _) => h.0.cancel(),
             JobRequest::DeleteMessages(_, h, _) => h.0.cancel(),
-            JobRequest::CreateMailbox(h, _) => h.0.cancel(),
-            JobRequest::DeleteMailbox(h, _) => h.0.cancel(),
+            JobRequest::CreateMailbox { handle, .. } => handle.0.cancel(),
+            JobRequest::DeleteMailbox { handle, .. } => handle.0.cancel(),
             //JobRequest::RenameMailbox,
             JobRequest::Search(h) => h.0.cancel(),
             JobRequest::AsBytes(h) => h.0.cancel(),
@@ -249,8 +251,10 @@ impl core::fmt::Debug for JobRequest {
             JobRequest::SaveMessage(_, _, _) => write!(f, "JobRequest::SaveMessage"),
             JobRequest::CopyTo(_, _, _) => write!(f, "JobRequest::CopyTo"),
             JobRequest::DeleteMessages(_, _, _) => write!(f, "JobRequest::DeleteMessages"),
-            JobRequest::CreateMailbox(_, _) => write!(f, "JobRequest::CreateMailbox"),
-            JobRequest::DeleteMailbox(_, _) => write!(f, "JobRequest::DeleteMailbox"),
+            JobRequest::CreateMailbox { .. } => write!(f, "JobRequest::CreateMailbox"),
+            JobRequest::DeleteMailbox { mailbox_hash, .. } => {
+                write!(f, "JobRequest::DeleteMailbox({})", mailbox_hash)
+            }
             //JobRequest::RenameMailbox,
             JobRequest::Search(_) => write!(f, "JobRequest::Search"),
             JobRequest::AsBytes(_) => write!(f, "JobRequest::AsBytes"),
@@ -1138,129 +1142,54 @@ impl Account {
     pub fn mailbox_operation(
         &mut self,
         op: crate::command::actions::MailboxOperation,
-    ) -> Result<String> {
+    ) -> Result<()> {
         use crate::command::actions::MailboxOperation;
         if self.settings.account.read_only() {
             return Err(MeliError::new("Account is read-only."));
         }
         match op {
             MailboxOperation::Create(path) => {
-                let (mailbox_hash, mut mailboxes) = futures::executor::block_on(
-                    self.backend
-                        .write()
-                        .unwrap()
-                        .create_mailbox(path.to_string())?,
-                )?;
-                self.sender
-                    .send(ThreadEvent::UIEvent(UIEvent::MailboxCreate((
-                        self.hash,
-                        mailbox_hash,
-                    ))))
-                    .unwrap();
-                let mut new = FileMailboxConf::default();
-                new.mailbox_conf.subscribe = super::ToggleFlag::InternalVal(true);
-                new.mailbox_conf.usage = if mailboxes[&mailbox_hash].special_usage()
-                    != SpecialUsageMailbox::Normal
-                {
-                    Some(mailboxes[&mailbox_hash].special_usage())
+                let job = self
+                    .backend
+                    .write()
+                    .unwrap()
+                    .create_mailbox(path.to_string())?;
+                let (channel, handle, job_id) = if self.backend_capabilities.is_async {
+                    self.job_executor.spawn_specialized(job)
                 } else {
-                    let tmp = SpecialUsageMailbox::detect_usage(mailboxes[&mailbox_hash].name());
-                    if tmp != Some(SpecialUsageMailbox::Normal) && tmp != None {
-                        mailboxes.entry(mailbox_hash).and_modify(|entry| {
-                            let _ = entry.set_special_usage(tmp.unwrap());
-                        });
-                    }
-                    tmp
+                    self.job_executor.spawn_blocking(job)
                 };
-                /* if new mailbox has parent, we need to update its children field */
-                if let Some(parent_hash) = mailboxes[&mailbox_hash].parent() {
-                    self.mailbox_entries
-                        .entry(parent_hash)
-                        .and_modify(|parent| {
-                            parent.ref_mailbox = mailboxes.remove(&parent_hash).unwrap();
-                        });
-                }
-                let status = MailboxStatus::Parsing(0, 0);
-
-                self.mailbox_entries.insert(
-                    mailbox_hash,
-                    MailboxEntry {
-                        name: mailboxes[&mailbox_hash].path().to_string(),
-                        status,
-                        conf: new,
-                        ref_mailbox: mailboxes.remove(&mailbox_hash).unwrap(),
+                self.insert_job(
+                    job_id,
+                    JobRequest::CreateMailbox {
+                        path,
+                        handle,
+                        channel,
                     },
                 );
-                self.collection
-                    .threads
-                    .write()
-                    .unwrap()
-                    .insert(mailbox_hash, Threads::default());
-                self.collection
-                    .mailboxes
-                    .write()
-                    .unwrap()
-                    .insert(mailbox_hash, Default::default());
-                build_mailboxes_order(
-                    &mut self.tree,
-                    &self.mailbox_entries,
-                    &mut self.mailboxes_order,
-                );
-                Ok(format!("`{}` successfully created.", &path))
+                Ok(())
             }
             MailboxOperation::Delete(path) => {
                 if self.mailbox_entries.len() == 1 {
                     return Err(MeliError::new("Cannot delete only mailbox."));
                 }
-                let mailbox_hash = self.mailbox_by_path(&path)?;
-                let mut mailboxes = futures::executor::block_on(
-                    self.backend.write().unwrap().delete_mailbox(mailbox_hash)?,
-                )?;
-                self.sender
-                    .send(ThreadEvent::UIEvent(UIEvent::MailboxDelete((
-                        self.hash,
-                        mailbox_hash,
-                    ))))
-                    .unwrap();
-                if let Some(pos) = self.mailboxes_order.iter().position(|&h| h == mailbox_hash) {
-                    self.mailboxes_order.remove(pos);
-                }
-                if let Some(pos) = self.tree.iter().position(|n| n.hash == mailbox_hash) {
-                    self.tree.remove(pos);
-                }
-                if self.sent_mailbox == Some(mailbox_hash) {
-                    self.sent_mailbox = None;
-                }
-                self.collection
-                    .threads
-                    .write()
-                    .unwrap()
-                    .remove(&mailbox_hash);
-                let deleted_mailbox = self.mailbox_entries.remove(&mailbox_hash).unwrap();
-                /* if deleted mailbox had parent, we need to update its children field */
-                if let Some(parent_hash) = deleted_mailbox.ref_mailbox.parent() {
-                    self.mailbox_entries
-                        .entry(parent_hash)
-                        .and_modify(|parent| {
-                            parent.ref_mailbox = mailboxes.remove(&parent_hash).unwrap();
-                        });
-                }
-                self.collection
-                    .mailboxes
-                    .write()
-                    .unwrap()
-                    .remove(&mailbox_hash);
-                build_mailboxes_order(
-                    &mut self.tree,
-                    &self.mailbox_entries,
-                    &mut self.mailboxes_order,
-                );
-                // FIXME remove from settings as well
 
-                Ok(format!(
-                    "'`{}` has been deleted.",
-                    &deleted_mailbox.ref_mailbox.path()
-                ))
+                let mailbox_hash = self.mailbox_by_path(&path)?;
+                let job = self.backend.write().unwrap().delete_mailbox(mailbox_hash)?;
+                let (channel, handle, job_id) = if self.backend_capabilities.is_async {
+                    self.job_executor.spawn_specialized(job)
+                } else {
+                    self.job_executor.spawn_blocking(job)
+                };
+                self.insert_job(
+                    job_id,
+                    JobRequest::DeleteMailbox {
+                        mailbox_hash,
+                        handle,
+                        channel,
+                    },
+                );
+                Ok(())
             }
             MailboxOperation::Subscribe(path) => {
                 let mailbox_hash = self.mailbox_by_path(&path)?;
@@ -1273,7 +1202,14 @@ impl Account {
                     let _ = m.ref_mailbox.set_is_subscribed(true);
                 });
 
-                Ok(format!("'`{}` has been subscribed.", &path))
+                self.sender
+                    .send(ThreadEvent::UIEvent(UIEvent::Notification(
+                        None,
+                        format!("'`{}` has been subscribed.", &path),
+                        Some(crate::types::NotificationType::INFO),
+                    )))
+                    .expect("Could not send event on main channel");
+                Ok(())
             }
             MailboxOperation::Unsubscribe(path) => {
                 let mailbox_hash = self.mailbox_by_path(&path)?;
@@ -1286,7 +1222,14 @@ impl Account {
                     let _ = m.ref_mailbox.set_is_subscribed(false);
                 });
 
-                Ok(format!("'`{}` has been unsubscribed.", &path))
+                self.sender
+                    .send(ThreadEvent::UIEvent(UIEvent::Notification(
+                        None,
+                        format!("'`{}` has been unsubscribed.", &path),
+                        Some(crate::types::NotificationType::INFO),
+                    )))
+                    .expect("Could not send event on main channel");
+                Ok(())
             }
             MailboxOperation::Rename(_, _) => Err(MeliError::new("Not implemented.")),
             MailboxOperation::SetPermissions(_) => Err(MeliError::new("Not implemented.")),
@@ -1662,27 +1605,96 @@ impl Account {
                             .expect("Could not send event on main channel");
                     }
                 }
-                JobRequest::CreateMailbox(_, ref mut chan) => {
-                    let r = chan.try_recv().unwrap();
+                JobRequest::CreateMailbox {
+                    ref path,
+                    ref mut channel,
+                    ..
+                } => {
+                    let r = channel.try_recv().unwrap();
                     if let Some(r) = r {
-                        self.sender
-                            .send(match r {
-                                Err(err) => ThreadEvent::UIEvent(UIEvent::Notification(
-                                    Some(format!("{}: could not create mailbox", &self.name)),
-                                    err.to_string(),
-                                    Some(crate::types::NotificationType::ERROR),
-                                )),
-                                Ok(_) => ThreadEvent::UIEvent(UIEvent::Notification(
-                                    Some(format!("Mailbox successfully created.")),
-                                    String::new(),
-                                    Some(crate::types::NotificationType::INFO),
-                                )),
-                            })
-                            .expect("Could not send event on main channel");
+                        match r {
+                            Err(err) => {
+                                self.sender
+                                    .send(ThreadEvent::UIEvent(UIEvent::Notification(
+                                        Some(format!(
+                                            "{}: could not create mailbox {}",
+                                            &self.name, path
+                                        )),
+                                        err.to_string(),
+                                        Some(crate::types::NotificationType::ERROR),
+                                    )))
+                                    .expect("Could not send event on main channel");
+                            }
+                            Ok((mailbox_hash, mut mailboxes)) => {
+                                self.sender
+                                    .send(ThreadEvent::UIEvent(UIEvent::MailboxCreate((
+                                        self.hash,
+                                        mailbox_hash,
+                                    ))))
+                                    .unwrap();
+                                let mut new = FileMailboxConf::default();
+                                new.mailbox_conf.subscribe = super::ToggleFlag::InternalVal(true);
+                                new.mailbox_conf.usage = if mailboxes[&mailbox_hash].special_usage()
+                                    != SpecialUsageMailbox::Normal
+                                {
+                                    Some(mailboxes[&mailbox_hash].special_usage())
+                                } else {
+                                    let tmp = SpecialUsageMailbox::detect_usage(
+                                        mailboxes[&mailbox_hash].name(),
+                                    );
+                                    if tmp != Some(SpecialUsageMailbox::Normal) && tmp != None {
+                                        mailboxes.entry(mailbox_hash).and_modify(|entry| {
+                                            let _ = entry.set_special_usage(tmp.unwrap());
+                                        });
+                                    }
+                                    tmp
+                                };
+                                /* if new mailbox has parent, we need to update its children field */
+                                if let Some(parent_hash) = mailboxes[&mailbox_hash].parent() {
+                                    self.mailbox_entries
+                                        .entry(parent_hash)
+                                        .and_modify(|parent| {
+                                            parent.ref_mailbox =
+                                                mailboxes.remove(&parent_hash).unwrap();
+                                        });
+                                }
+                                let status = MailboxStatus::Parsing(0, 0);
+
+                                self.mailbox_entries.insert(
+                                    mailbox_hash,
+                                    MailboxEntry {
+                                        name: mailboxes[&mailbox_hash].path().to_string(),
+                                        status,
+                                        conf: new,
+                                        ref_mailbox: mailboxes.remove(&mailbox_hash).unwrap(),
+                                    },
+                                );
+                                self.collection
+                                    .threads
+                                    .write()
+                                    .unwrap()
+                                    .insert(mailbox_hash, Threads::default());
+                                self.collection
+                                    .mailboxes
+                                    .write()
+                                    .unwrap()
+                                    .insert(mailbox_hash, Default::default());
+                                build_mailboxes_order(
+                                    &mut self.tree,
+                                    &self.mailbox_entries,
+                                    &mut self.mailboxes_order,
+                                );
+                                //Ok(format!("`{}` successfully created.", &path))
+                            }
+                        }
                     }
                 }
-                JobRequest::DeleteMailbox(_, ref mut chan) => {
-                    let r = chan.try_recv().unwrap();
+                JobRequest::DeleteMailbox {
+                    mailbox_hash,
+                    ref mut channel,
+                    ..
+                } => {
+                    let r = channel.try_recv().unwrap();
                     match r {
                         Some(Err(err)) => {
                             self.sender
@@ -1693,7 +1705,53 @@ impl Account {
                                 )))
                                 .expect("Could not send event on main channel");
                         }
-                        Some(Ok(_)) => {
+                        Some(Ok(mut mailboxes)) => {
+                            self.sender
+                                .send(ThreadEvent::UIEvent(UIEvent::MailboxDelete((
+                                    self.hash,
+                                    mailbox_hash,
+                                ))))
+                                .unwrap();
+                            if let Some(pos) =
+                                self.mailboxes_order.iter().position(|&h| h == mailbox_hash)
+                            {
+                                self.mailboxes_order.remove(pos);
+                            }
+                            if let Some(pos) = self.tree.iter().position(|n| n.hash == mailbox_hash)
+                            {
+                                self.tree.remove(pos);
+                            }
+                            if self.sent_mailbox == Some(mailbox_hash) {
+                                self.sent_mailbox = None;
+                            }
+                            self.collection
+                                .threads
+                                .write()
+                                .unwrap()
+                                .remove(&mailbox_hash);
+                            let deleted_mailbox =
+                                self.mailbox_entries.remove(&mailbox_hash).unwrap();
+                            /* if deleted mailbox had parent, we need to update its children field */
+                            if let Some(parent_hash) = deleted_mailbox.ref_mailbox.parent() {
+                                self.mailbox_entries
+                                    .entry(parent_hash)
+                                    .and_modify(|parent| {
+                                        parent.ref_mailbox =
+                                            mailboxes.remove(&parent_hash).unwrap();
+                                    });
+                            }
+                            self.collection
+                                .mailboxes
+                                .write()
+                                .unwrap()
+                                .remove(&mailbox_hash);
+                            build_mailboxes_order(
+                                &mut self.tree,
+                                &self.mailbox_entries,
+                                &mut self.mailboxes_order,
+                            );
+                            // FIXME remove from settings as well
+
                             self.sender
                                 .send(ThreadEvent::UIEvent(UIEvent::Notification(
                                     Some(format!("{}: mailbox deleted successfully", &self.name)),

@@ -824,17 +824,10 @@ impl State {
                     .values_mut()
                     .find(|a| a.name() == account_name)
                 {
-                    match account.mailbox_operation(op) {
-                        Err(err) => {
-                            self.context.replies.push_back(UIEvent::StatusEvent(
-                                StatusEvent::DisplayMessage(err.to_string()),
-                            ));
-                        }
-                        Ok(msg) => {
-                            self.context.replies.push_back(UIEvent::StatusEvent(
-                                StatusEvent::DisplayMessage(format!("`{}`: {}", account_name, msg)),
-                            ));
-                        }
+                    if let Err(err) = account.mailbox_operation(op) {
+                        self.context.replies.push_back(UIEvent::StatusEvent(
+                            StatusEvent::DisplayMessage(err.to_string()),
+                        ));
                     }
                 } else {
                     self.context.replies.push_back(UIEvent::StatusEvent(
