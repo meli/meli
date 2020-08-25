@@ -20,8 +20,6 @@
  */
 use super::*;
 use crate::backends::SpecialUsageMailbox;
-use crate::email::parser::BytesExt;
-use crate::email::parser::BytesIterExt;
 use std::sync::Arc;
 
 /// Arguments for IMAP watching functions
@@ -29,25 +27,6 @@ pub struct ImapWatchKit {
     pub conn: ImapConnection,
     pub main_conn: Arc<FutureMutex<ImapConnection>>,
     pub uid_store: Arc<UIDStore>,
-}
-
-macro_rules! exit_on_error {
-    ($conn:expr, $mailbox_hash:ident, $($result:expr)+) => {
-        $(if let Err(e) = $result {
-            *$conn.uid_store.is_online.lock().unwrap() = (
-            Instant::now(),
-            Err(e.clone()),
-        );
-            debug!("failure: {}", e.to_string());
-            let account_hash = $conn.uid_store.account_hash;
-            $conn.add_refresh_event(RefreshEvent {
-                account_hash,
-                mailbox_hash: $mailbox_hash,
-                kind: RefreshEventKind::Failure(e.clone()),
-            });
-            Err(e)
-        } else { Ok(()) }?;)+
-    };
 }
 
 pub async fn poll_with_examine(kit: ImapWatchKit) -> Result<()> {
@@ -61,13 +40,13 @@ pub async fn poll_with_examine(kit: ImapWatchKit) -> Result<()> {
     let mut response = String::with_capacity(8 * 1024);
     loop {
         let mailboxes: HashMap<MailboxHash, ImapMailbox> = {
-            let mailboxes_lck = uid_store.mailboxes.lock().await;
+            let mailboxes_lck = timeout(Duration::from_secs(3), uid_store.mailboxes.lock()).await?;
             mailboxes_lck.clone()
         };
         for (_, mailbox) in mailboxes {
             examine_updates(mailbox, &mut conn, &uid_store).await?;
         }
-        let mut main_conn = main_conn.lock().await;
+        let mut main_conn = timeout(Duration::from_secs(3), main_conn.lock()).await?;
         main_conn.send_command(b"NOOP").await?;
         main_conn
             .read_response(&mut response, RequiredResponses::empty())
@@ -95,37 +74,24 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
     {
         Some(mailbox) => mailbox,
         None => {
-            let err = MeliError::new("INBOX mailbox not found in local mailbox index. meli may have not parsed the IMAP mailboxes correctly");
-            debug!("failure: {}", err.to_string());
-            conn.add_refresh_event(RefreshEvent {
-                account_hash: uid_store.account_hash,
-                mailbox_hash: 0,
-                kind: RefreshEventKind::Failure(err.clone()),
-            });
-            return Err(err);
+            return Err(MeliError::new("INBOX mailbox not found in local mailbox index. meli may have not parsed the IMAP mailboxes correctly"));
         }
     };
     let mailbox_hash = mailbox.hash();
-    let uidvalidity;
     let mut response = String::with_capacity(8 * 1024);
-    exit_on_error!(
-        conn,
-        mailbox_hash,
-        conn.send_command(format!("SELECT \"{}\"", mailbox.imap_path()).as_bytes())
-            .await
-        conn.read_response(&mut response, RequiredResponses::SELECT_REQUIRED)
-            .await
-    );
+    conn.send_command(format!("SELECT \"{}\"", mailbox.imap_path()).as_bytes())
+        .await?;
+    conn.read_response(&mut response, RequiredResponses::SELECT_REQUIRED)
+        .await?;
     debug!("select response {}", &response);
     {
         let mut prev_exists = mailbox.exists.lock().unwrap();
         match protocol_parser::select_response(&response) {
             Ok(ok) => {
                 {
-                    uidvalidity = ok.uidvalidity;
-                    let mut uidvalidities = uid_store.uidvalidity.lock().unwrap();
+                    let uidvalidities = uid_store.uidvalidity.lock().unwrap();
 
-                    if let Some(v) = uidvalidities.get_mut(&mailbox_hash) {
+                    if let Some(v) = uidvalidities.get(&mailbox_hash) {
                         if *v != ok.uidvalidity {
                             conn.add_refresh_event(RefreshEvent {
                                 account_hash: uid_store.account_hash,
@@ -138,7 +104,6 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
                             uid_store.hash_index.lock().unwrap().clear();
                             uid_store.byte_cache.lock().unwrap().clear();
                             */
-                            *v = ok.uidvalidity;
                         }
                     } else {
                         conn.add_refresh_event(RefreshEvent {
@@ -146,15 +111,11 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
                             mailbox_hash,
                             kind: RefreshEventKind::Rescan,
                         });
-                        conn.add_refresh_event(RefreshEvent {
-                            account_hash: uid_store.account_hash,
-                            mailbox_hash,
-                            kind: RefreshEventKind::Failure(MeliError::new(format!(
-                                "Unknown mailbox: {} {}",
-                                mailbox.path(),
-                                mailbox_hash
-                            ))),
-                        });
+                        return Err(MeliError::new(format!(
+                            "Unknown mailbox: {} {}",
+                            mailbox.path(),
+                            mailbox_hash
+                        )));
                     }
                 }
                 debug!(&ok);
@@ -165,7 +126,7 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
             }
         };
     }
-    exit_on_error!(conn, mailbox_hash, conn.send_command(b"IDLE").await);
+    conn.send_command(b"IDLE").await?;
     let mut blockn = ImapBlockingConnection::from(conn);
     let mut beat = std::time::Instant::now();
     let mut watch = std::time::Instant::now();
@@ -176,358 +137,50 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
     while let Some(line) = blockn.as_stream().await {
         let now = std::time::Instant::now();
         if now.duration_since(beat) >= _26_MINS {
-            let mut main_conn_lck = main_conn.lock().await;
-            exit_on_error!(
-                blockn.conn,
-                mailbox_hash,
-                blockn.conn.send_raw(b"DONE").await
-                blockn.conn.read_response(&mut response, RequiredResponses::empty()).await
-                blockn.conn.send_command(b"IDLE").await
-                main_conn_lck.send_command(b"NOOP").await
-                main_conn_lck.read_response(&mut response, RequiredResponses::empty()).await
-            );
+            let mut main_conn_lck = timeout(Duration::from_secs(3), main_conn.lock()).await?;
+            blockn.conn.send_raw(b"DONE").await?;
+            blockn
+                .conn
+                .read_response(&mut response, RequiredResponses::empty())
+                .await?;
+            blockn.conn.send_command(b"IDLE").await?;
+            main_conn_lck.send_command(b"NOOP").await?;
+            main_conn_lck
+                .read_response(&mut response, RequiredResponses::empty())
+                .await?;
             beat = now;
         }
         if now.duration_since(watch) >= _5_MINS {
             /* Time to poll all inboxes */
-            let mut conn = main_conn.lock().await;
+            let mut conn = timeout(Duration::from_secs(3), main_conn.lock()).await?;
             let mailboxes: HashMap<MailboxHash, ImapMailbox> = {
-                let mailboxes_lck = uid_store.mailboxes.lock().await;
+                let mailboxes_lck =
+                    timeout(Duration::from_secs(3), uid_store.mailboxes.lock()).await?;
                 mailboxes_lck.clone()
             };
             for (_, mailbox) in mailboxes {
-                exit_on_error!(
-                    conn,
-                    mailbox_hash,
-                    examine_updates(mailbox, &mut conn, &uid_store).await
-                );
+                examine_updates(mailbox, &mut conn, &uid_store).await?;
             }
             watch = now;
         }
-        *uid_store.is_online.lock().unwrap() = (Instant::now(), Ok(()));
-        match protocol_parser::untagged_responses(line.as_slice())
-            .map(|(_, v)| v)
-            .map_err(MeliError::from)
         {
-            Ok(Some(Recent(_r))) => {
-                let mut conn = main_conn.lock().await;
-                /* UID SEARCH RECENT */
-                exit_on_error!(
-                    conn,
-                    mailbox_hash,
-                    conn.examine_mailbox(mailbox_hash, &mut response, false).await
-                    conn.send_command(b"UID SEARCH RECENT").await
-                    conn.read_response(&mut response, RequiredResponses::SEARCH).await
-                );
-                match protocol_parser::search_results_raw(response.as_bytes())
-                    .map(|(_, v)| v)
-                    .map_err(MeliError::from)
-                {
-                    Ok(&[]) => {
-                        debug!("UID SEARCH RECENT returned no results");
-                    }
-                    Ok(v) => {
-                        exit_on_error!(
-                            conn,
-                            mailbox_hash,
-                            conn.send_command(
-                                &[&b"UID FETCH"[..], &v.trim().split(|b| b == &b' ').join(b','), &b"(FLAGS RFC822)"[..]]
-                                .join(&b' '),
-                                ).await
-                            conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED).await
-                        );
-                        debug!(&response);
-                        match protocol_parser::uid_fetch_responses(&response) {
-                            Ok((_, v, _)) => {
-                                for UidFetchResponse {
-                                    uid, flags, body, ..
-                                } in v
-                                {
-                                    if !uid_store
-                                        .uid_index
-                                        .lock()
-                                        .unwrap()
-                                        .contains_key(&(mailbox_hash, uid))
-                                    {
-                                        if let Ok(mut env) = Envelope::from_bytes(
-                                            /* unwrap() is safe since we ask for RFC822 in the
-                                             * above FETCH, thus uid_fetch_responses() if
-                                             * returns a successful parse, it will include the
-                                             * RFC822 response */
-                                            body.unwrap(),
-                                            flags.as_ref().map(|&(f, _)| f),
-                                        ) {
-                                            uid_store
-                                                .hash_index
-                                                .lock()
-                                                .unwrap()
-                                                .insert(env.hash(), (uid, mailbox_hash));
-                                            uid_store
-                                                .uid_index
-                                                .lock()
-                                                .unwrap()
-                                                .insert((mailbox_hash, uid), env.hash());
-                                            debug!(
-                                                "Create event {} {} {}",
-                                                env.hash(),
-                                                env.subject(),
-                                                mailbox.path(),
-                                            );
-                                            if let Some((_, keywords)) = flags {
-                                                let mut tag_lck =
-                                                    uid_store.tag_index.write().unwrap();
-                                                for f in keywords {
-                                                    let hash = tag_hash!(f);
-                                                    if !tag_lck.contains_key(&hash) {
-                                                        tag_lck.insert(hash, f);
-                                                    }
-                                                    env.labels_mut().push(hash);
-                                                }
-                                            }
-                                            if !env.is_seen() {
-                                                mailbox
-                                                    .unseen
-                                                    .lock()
-                                                    .unwrap()
-                                                    .insert_new(env.hash());
-                                            }
-                                            if uid_store.cache_headers {
-                                                cache::save_envelopes(
-                                                    uid_store.account_hash,
-                                                    mailbox_hash,
-                                                    uidvalidity,
-                                                    &[(uid, &env)],
-                                                )?;
-                                            }
-                                            mailbox.exists.lock().unwrap().insert_new(env.hash());
-
-                                            conn.add_refresh_event(RefreshEvent {
-                                                account_hash: uid_store.account_hash,
-                                                mailbox_hash,
-                                                kind: Create(Box::new(env)),
-                                            });
-                                        }
-                                    }
-                                }
-                            }
-                            Err(e) => {
-                                debug!(e);
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        debug!(
-                            "UID SEARCH RECENT err: {}\nresp: {}",
-                            e.to_string(),
-                            &response
-                        );
-                    }
-                }
-            }
-            Ok(Some(Expunge(n))) => {
-                // The EXPUNGE response reports that the specified message sequence
-                // number has been permanently removed from the mailbox. The message
-                // sequence number for each successive message in the mailbox is
-                // immediately decremented by 1, and this decrement is reflected in
-                // message sequence numbers in subsequent responses (including other
-                // untagged EXPUNGE responses).
-                let mut conn = main_conn.lock().await;
-                let deleted_uid = uid_store
-                    .msn_index
-                    .lock()
-                    .unwrap()
-                    .entry(mailbox_hash)
-                    .or_default()
-                    .remove(n);
-                debug!("expunge {}, UID = {}", n, deleted_uid);
-                let deleted_hash: EnvelopeHash = uid_store
-                    .uid_index
-                    .lock()
-                    .unwrap()
-                    .remove(&(mailbox_hash, deleted_uid))
-                    .unwrap();
-                uid_store.hash_index.lock().unwrap().remove(&deleted_hash);
-                conn.add_refresh_event(RefreshEvent {
-                    account_hash: uid_store.account_hash,
-                    mailbox_hash,
-                    kind: Remove(deleted_hash),
-                });
-            }
-            Ok(Some(Exists(n))) => {
-                let mut conn = main_conn.lock().await;
-                /* UID FETCH ALL UID, cross-ref, then FETCH difference headers
-                 * */
-                debug!("exists {}", n);
-                if n > mailbox.exists.lock().unwrap().len() {
-                    exit_on_error!(
-                        conn,
-                        mailbox_hash,
-                        conn.examine_mailbox(mailbox_hash, &mut response, false).await
-                        conn.send_command(
-                            &[
-                            b"FETCH",
-                            format!("{}:{}", mailbox.exists.lock().unwrap().len() + 1, n).as_bytes(),
-                            b"(UID FLAGS RFC822)",
-                            ]
-                            .join(&b' '),
-                        ).await
-                        conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED).await
-                    );
-                    match protocol_parser::uid_fetch_responses(&response) {
-                        Ok((_, v, _)) => {
-                            'fetch_responses_b: for UidFetchResponse {
-                                uid, flags, body, ..
-                            } in v
-                            {
-                                if uid_store
-                                    .uid_index
-                                    .lock()
-                                    .unwrap()
-                                    .contains_key(&(mailbox_hash, uid))
-                                {
-                                    continue 'fetch_responses_b;
-                                }
-                                if let Ok(mut env) = Envelope::from_bytes(
-                                    body.unwrap(),
-                                    flags.as_ref().map(|&(f, _)| f),
-                                ) {
-                                    uid_store
-                                        .hash_index
-                                        .lock()
-                                        .unwrap()
-                                        .insert(env.hash(), (uid, mailbox_hash));
-                                    uid_store
-                                        .uid_index
-                                        .lock()
-                                        .unwrap()
-                                        .insert((mailbox_hash, uid), env.hash());
-                                    if let Some((_, keywords)) = flags {
-                                        let mut tag_lck = uid_store.tag_index.write().unwrap();
-                                        for f in keywords {
-                                            let hash = tag_hash!(f);
-                                            if !tag_lck.contains_key(&hash) {
-                                                tag_lck.insert(hash, f);
-                                            }
-                                            env.labels_mut().push(hash);
-                                        }
-                                    }
-                                    debug!(
-                                        "Create event {} {} {}",
-                                        env.hash(),
-                                        env.subject(),
-                                        mailbox.path(),
-                                    );
-                                    if !env.is_seen() {
-                                        mailbox.unseen.lock().unwrap().insert_new(env.hash());
-                                    }
-                                    if uid_store.cache_headers {
-                                        cache::save_envelopes(
-                                            uid_store.account_hash,
-                                            mailbox_hash,
-                                            uidvalidity,
-                                            &[(uid, &env)],
-                                        )?;
-                                    }
-                                    mailbox.exists.lock().unwrap().insert_new(env.hash());
-
-                                    conn.add_refresh_event(RefreshEvent {
-                                        account_hash: uid_store.account_hash,
-                                        mailbox_hash,
-                                        kind: Create(Box::new(env)),
-                                    });
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            debug!(e);
-                        }
-                    }
-                }
-            }
-            Ok(Some(UIDFetch(uid, flags))) => {
-                let res = uid_store
-                    .uid_index
-                    .lock()
-                    .unwrap()
-                    .get(&(mailbox_hash, uid))
-                    .map(|h| *h);
-                if let Some(env_hash) = res {
-                    if !flags.0.intersects(crate::email::Flag::SEEN) {
-                        mailbox.unseen.lock().unwrap().insert_new(env_hash);
-                    } else {
-                        mailbox.unseen.lock().unwrap().remove(env_hash);
-                    }
-                    let mut conn = main_conn.lock().await;
-                    conn.add_refresh_event(RefreshEvent {
-                        account_hash: uid_store.account_hash,
-                        mailbox_hash,
-                        kind: NewFlags(env_hash, flags),
-                    });
-                }
-            }
-            Ok(Some(Fetch(msg_seq, flags))) => {
-                /* a * {msg_seq} FETCH (FLAGS ({flags})) was received, so find out UID from msg_seq
-                 * and send update
-                 */
-                let mut conn = main_conn.lock().await;
-                debug!("fetch {} {:?}", msg_seq, flags);
-                exit_on_error!(
-                    conn,
-                    mailbox_hash,
-                    conn.examine_mailbox(mailbox_hash, &mut response, false).await
-                    conn.send_command(
-                        &[
-                        b"UID SEARCH",
-                        format!("{}", msg_seq).as_bytes(),
-                        ]
-                        .join(&b' '),
-                    ).await
-                    conn.read_response(&mut response, RequiredResponses::SEARCH).await
-                );
-                match search_results(response.split_rn().next().unwrap_or("").as_bytes())
-                    .map(|(_, v)| v)
-                {
-                    Ok(mut v) => {
-                        if let Some(uid) = v.pop() {
-                            if let Some(env_hash) = uid_store
-                                .uid_index
-                                .lock()
-                                .unwrap()
-                                .get(&(mailbox_hash, uid))
-                            {
-                                if !flags.0.intersects(crate::email::Flag::SEEN) {
-                                    mailbox.unseen.lock().unwrap().insert_new(*env_hash);
-                                } else {
-                                    mailbox.unseen.lock().unwrap().remove(*env_hash);
-                                }
-                                conn.add_refresh_event(RefreshEvent {
-                                    account_hash: uid_store.account_hash,
-                                    mailbox_hash,
-                                    kind: NewFlags(*env_hash, flags),
-                                });
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        debug!(&response);
-                        debug!(e);
-                    }
-                }
-            }
-            Ok(Some(Bye { .. })) => break,
-            Ok(None) | Err(_) => {}
+            let mut conn = timeout(Duration::from_secs(3), main_conn.lock()).await?;
+            conn.process_untagged(to_str!(&line)).await?;
         }
+        *uid_store.is_online.lock().unwrap() = (Instant::now(), Ok(()));
     }
     debug!("IDLE connection dropped");
     let err: &str = blockn.err().unwrap_or("Unknown reason.");
-    main_conn.lock().await.add_refresh_event(RefreshEvent {
-        account_hash: uid_store.account_hash,
-        mailbox_hash,
-        kind: RefreshEventKind::Failure(MeliError::new(format!(
-            "IDLE connection dropped: {}",
-            &err
-        ))),
-    });
+    timeout(Duration::from_secs(3), main_conn.lock())
+        .await?
+        .add_refresh_event(RefreshEvent {
+            account_hash: uid_store.account_hash,
+            mailbox_hash,
+            kind: RefreshEventKind::Failure(MeliError::new(format!(
+                "IDLE connection dropped: {}",
+                &err
+            ))),
+        });
     Err(MeliError::new(format!("IDLE connection dropped: {}", err)))
 }
 
@@ -538,260 +191,170 @@ pub async fn examine_updates(
 ) -> Result<()> {
     let mailbox_hash = mailbox.hash();
     debug!("examining mailbox {} {}", mailbox_hash, mailbox.path());
-    let mut response = String::with_capacity(8 * 1024);
-    exit_on_error!(
-        conn,
-        mailbox_hash,
+    if let Some(new_envelopes) = conn.resync(mailbox_hash).await? {
+        for env in new_envelopes {
+            conn.add_refresh_event(RefreshEvent {
+                mailbox_hash,
+                account_hash: uid_store.account_hash,
+                kind: RefreshEventKind::Create(Box::new(env)),
+            });
+        }
+    } else {
+        let mut response = String::with_capacity(8 * 1024);
         conn.examine_mailbox(mailbox_hash, &mut response, true)
-            .await
-    );
-    *uid_store.is_online.lock().unwrap() = (Instant::now(), Ok(()));
-    let uidvalidity;
-    match protocol_parser::select_response(&response) {
-        Ok(ok) => {
-            uidvalidity = ok.uidvalidity;
-            debug!(&ok);
-            {
-                let mut uidvalidities = uid_store.uidvalidity.lock().unwrap();
+            .await?;
+        *uid_store.is_online.lock().unwrap() = (Instant::now(), Ok(()));
+        let select_response = protocol_parser::select_response(&response)
+            .chain_err_summary(|| "could not select mailbox")?;
+        debug!(&select_response);
+        {
+            let uidvalidities = uid_store.uidvalidity.lock().unwrap();
 
-                if let Some(v) = uidvalidities.get_mut(&mailbox_hash) {
-                    if *v != ok.uidvalidity {
-                        conn.add_refresh_event(RefreshEvent {
-                            account_hash: uid_store.account_hash,
-                            mailbox_hash,
-                            kind: RefreshEventKind::Rescan,
-                        });
-                        /*
-                        uid_store.uid_index.lock().unwrap().clear();
-                        uid_store.hash_index.lock().unwrap().clear();
-                        uid_store.byte_cache.lock().unwrap().clear();
-                        */
-                        *v = ok.uidvalidity;
-                    }
-                } else {
+            if let Some(v) = uidvalidities.get(&mailbox_hash) {
+                if *v != select_response.uidvalidity {
+                    let cache_handle = cache::CacheHandle::get(uid_store.clone())?;
+                    cache_handle.clear(
+                        mailbox_hash,
+                        select_response.uidvalidity,
+                        select_response.highestmodseq.and_then(|i| i.ok()),
+                    )?;
                     conn.add_refresh_event(RefreshEvent {
                         account_hash: uid_store.account_hash,
                         mailbox_hash,
                         kind: RefreshEventKind::Rescan,
                     });
-                    conn.add_refresh_event(RefreshEvent {
-                        account_hash: uid_store.account_hash,
-                        mailbox_hash,
-                        kind: RefreshEventKind::Failure(MeliError::new(format!(
-                            "Unknown mailbox: {} {}",
-                            mailbox.path(),
-                            mailbox_hash
-                        ))),
-                    });
+                    /*
+                    uid_store.uid_index.lock().unwrap().clear();
+                    uid_store.hash_index.lock().unwrap().clear();
+                    uid_store.byte_cache.lock().unwrap().clear();
+                    */
+                    return Ok(());
                 }
-            }
-            let n = ok.exists;
-            if ok.recent > 0 {
-                {
-                    /* UID SEARCH RECENT */
-                    exit_on_error!(
-                        conn,
-                        mailbox_hash,
-                        conn.send_command(b"UID SEARCH RECENT").await
-                        conn.read_response(&mut response, RequiredResponses::SEARCH).await
-                    );
-                    match protocol_parser::search_results_raw(response.as_bytes())
-                        .map(|(_, v)| v)
-                        .map_err(MeliError::from)
-                    {
-                        Ok(&[]) => {
-                            debug!("UID SEARCH RECENT returned no results");
-                        }
-                        Ok(v) => {
-                            exit_on_error!(
-                                conn,
-                                mailbox_hash,
-                                conn.send_command(
-                                &[&b"UID FETCH"[..], &v.trim().split(|b| b == &b' ').join(b','), &b"(FLAGS RFC822)"[..]]
-                                    .join(&b' '),
-                                    ).await
-                                conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED).await
-                            );
-                            debug!(&response);
-                            match protocol_parser::uid_fetch_responses(&response) {
-                                Ok((_, v, _)) => {
-                                    'fetch_responses_c: for UidFetchResponse {
-                                        uid,
-                                        flags,
-                                        body,
-                                        ..
-                                    } in v
-                                    {
-                                        if uid_store
-                                            .uid_index
-                                            .lock()
-                                            .unwrap()
-                                            .contains_key(&(mailbox_hash, uid))
-                                        {
-                                            continue 'fetch_responses_c;
-                                        }
-                                        if let Ok(mut env) = Envelope::from_bytes(
-                                            body.unwrap(),
-                                            flags.as_ref().map(|&(f, _)| f),
-                                        ) {
-                                            uid_store
-                                                .hash_index
-                                                .lock()
-                                                .unwrap()
-                                                .insert(env.hash(), (uid, mailbox_hash));
-                                            uid_store
-                                                .uid_index
-                                                .lock()
-                                                .unwrap()
-                                                .insert((mailbox_hash, uid), env.hash());
-                                            debug!(
-                                                "Create event {} {} {}",
-                                                env.hash(),
-                                                env.subject(),
-                                                mailbox.path(),
-                                            );
-                                            if let Some((_, keywords)) = flags {
-                                                let mut tag_lck =
-                                                    uid_store.tag_index.write().unwrap();
-                                                for f in keywords {
-                                                    let hash = tag_hash!(f);
-                                                    if !tag_lck.contains_key(&hash) {
-                                                        tag_lck.insert(hash, f);
-                                                    }
-                                                    env.labels_mut().push(hash);
-                                                }
-                                            }
-                                            if !env.is_seen() {
-                                                mailbox
-                                                    .unseen
-                                                    .lock()
-                                                    .unwrap()
-                                                    .insert_new(env.hash());
-                                            }
-                                            if uid_store.cache_headers {
-                                                cache::save_envelopes(
-                                                    uid_store.account_hash,
-                                                    mailbox_hash,
-                                                    uidvalidity,
-                                                    &[(uid, &env)],
-                                                )?;
-                                            }
-                                            let mut prev_exists = mailbox.exists.lock().unwrap();
-                                            prev_exists.insert_new(env.hash());
-
-                                            conn.add_refresh_event(RefreshEvent {
-                                                account_hash: uid_store.account_hash,
-                                                mailbox_hash,
-                                                kind: Create(Box::new(env)),
-                                            });
-                                        }
-                                    }
-                                }
-                                Err(e) => {
-                                    debug!(e);
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            debug!(
-                                "UID SEARCH RECENT err: {}\nresp: {}",
-                                e.to_string(),
-                                &response
-                            );
-                        }
-                    }
-                }
-            } else if n > mailbox.exists.lock().unwrap().len() {
-                /* UID FETCH ALL UID, cross-ref, then FETCH difference headers
-                 * */
-                debug!("exists {}", n);
-                exit_on_error!(
-                    conn,
+            } else {
+                conn.add_refresh_event(RefreshEvent {
+                    account_hash: uid_store.account_hash,
                     mailbox_hash,
-                    conn.send_command(
-                        &[
-                        b"FETCH",
-                        format!("{}:{}", mailbox.exists.lock().unwrap().len() + 1, n).as_bytes(),
-                        b"(UID FLAGS RFC822)",
-                        ]
-                        .join(&b' '),
-                        ).await
-                    conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED).await
-                );
-                match protocol_parser::uid_fetch_responses(&response) {
-                    Ok((_, v, _)) => {
-                        'fetch_responses_a: for UidFetchResponse {
-                            uid, flags, body, ..
-                        } in v
-                        {
-                            if uid_store
-                                .uid_index
-                                .lock()
-                                .unwrap()
-                                .contains_key(&(mailbox_hash, uid))
-                            {
-                                continue 'fetch_responses_a;
-                            }
-                            if let Ok(mut env) =
-                                Envelope::from_bytes(body.unwrap(), flags.as_ref().map(|&(f, _)| f))
-                            {
-                                uid_store
-                                    .hash_index
-                                    .lock()
-                                    .unwrap()
-                                    .insert(env.hash(), (uid, mailbox_hash));
-                                uid_store
-                                    .uid_index
-                                    .lock()
-                                    .unwrap()
-                                    .insert((mailbox_hash, uid), env.hash());
-                                if let Some((_, keywords)) = flags {
-                                    let mut tag_lck = uid_store.tag_index.write().unwrap();
-                                    for f in keywords {
-                                        let hash = tag_hash!(f);
-                                        if !tag_lck.contains_key(&hash) {
-                                            tag_lck.insert(hash, f);
-                                        }
-                                        env.labels_mut().push(hash);
-                                    }
-                                }
-                                debug!(
-                                    "Create event {} {} {}",
-                                    env.hash(),
-                                    env.subject(),
-                                    mailbox.path(),
-                                );
-                                if !env.is_seen() {
-                                    mailbox.unseen.lock().unwrap().insert_new(env.hash());
-                                }
-                                if uid_store.cache_headers {
-                                    cache::save_envelopes(
-                                        uid_store.account_hash,
-                                        mailbox_hash,
-                                        uidvalidity,
-                                        &[(uid, &env)],
-                                    )?;
-                                }
-                                mailbox.exists.lock().unwrap().insert_new(env.hash());
-
-                                conn.add_refresh_event(RefreshEvent {
-                                    account_hash: uid_store.account_hash,
-                                    mailbox_hash,
-                                    kind: Create(Box::new(env)),
-                                });
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        debug!(e);
-                    }
-                }
+                    kind: RefreshEventKind::Rescan,
+                });
+                return Err(MeliError::new(format!(
+                    "Unknown mailbox: {} {}",
+                    mailbox.path(),
+                    mailbox_hash
+                )));
             }
         }
-        Err(e) => {
-            debug!("{:?}", e);
-            return Err(e).chain_err_summary(|| "could not select mailbox");
+        let mut cache_handle = cache::CacheHandle::get(uid_store.clone())?;
+        if debug!(select_response.recent > 0) {
+            /* UID SEARCH RECENT */
+            conn.send_command(b"UID SEARCH RECENT").await?;
+            conn.read_response(&mut response, RequiredResponses::SEARCH)
+                .await?;
+            let v = protocol_parser::search_results(response.as_bytes()).map(|(_, v)| v)?;
+            if v.is_empty() {
+                debug!("search response was empty: {}", response);
+                return Ok(());
+            }
+            let mut cmd = "UID FETCH ".to_string();
+            if v.len() == 1 {
+                cmd.push_str(&v[0].to_string());
+            } else {
+                cmd.push_str(&v[0].to_string());
+                for n in v.into_iter().skip(1) {
+                    cmd.push(',');
+                    cmd.push_str(&n.to_string());
+                }
+            }
+            cmd.push_str(" (UID FLAGS RFC822)");
+            conn.send_command(cmd.as_bytes()).await?;
+            conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)
+                .await?;
+        } else if debug!(select_response.exists > mailbox.exists.lock().unwrap().len()) {
+            conn.send_command(
+                format!(
+                    "FETCH {}:* (UID FLAGS RFC822)",
+                    mailbox.exists.lock().unwrap().len()
+                )
+                .as_bytes(),
+            )
+            .await?;
+            conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)
+                .await?;
+        } else {
+            return Ok(());
         }
-    };
+        debug!(&response);
+        let (_, mut v, _) = protocol_parser::fetch_responses(&response)?;
+        for FetchResponse {
+            ref uid,
+            ref mut flags,
+            ref mut body,
+            ref mut envelope,
+            ..
+        } in v.iter_mut()
+        {
+            let uid = uid.unwrap();
+            *envelope = Envelope::from_bytes(body.take().unwrap(), flags.as_ref().map(|&(f, _)| f))
+                .map(|mut env| {
+                    env.set_hash(generate_envelope_hash(&mailbox.imap_path(), &uid));
+                    if let Some((_, keywords)) = flags.take() {
+                        let mut tag_lck = uid_store.tag_index.write().unwrap();
+                        for f in keywords {
+                            let hash = tag_hash!(f);
+                            if !tag_lck.contains_key(&hash) {
+                                tag_lck.insert(hash, f);
+                            }
+                            env.labels_mut().push(hash);
+                        }
+                    }
+                    env
+                })
+                .map_err(|err| {
+                    debug!("uid {} envelope parse error {}", uid, &err);
+                    err
+                })
+                .ok();
+        }
+        if uid_store.keep_offline_cache {
+            cache_handle.insert_envelopes(mailbox_hash, &v)?;
+        }
+        'fetch_responses_c: for FetchResponse { uid, envelope, .. } in v {
+            let uid = uid.unwrap();
+            if uid_store
+                .uid_index
+                .lock()
+                .unwrap()
+                .contains_key(&(mailbox_hash, uid))
+            {
+                continue 'fetch_responses_c;
+            }
+            if let Some(env) = envelope {
+                uid_store
+                    .hash_index
+                    .lock()
+                    .unwrap()
+                    .insert(env.hash(), (uid, mailbox_hash));
+                uid_store
+                    .uid_index
+                    .lock()
+                    .unwrap()
+                    .insert((mailbox_hash, uid), env.hash());
+                debug!(
+                    "Create event {} {} {}",
+                    env.hash(),
+                    env.subject(),
+                    mailbox.path(),
+                );
+                if !env.is_seen() {
+                    mailbox.unseen.lock().unwrap().insert_new(env.hash());
+                }
+                mailbox.exists.lock().unwrap().insert_new(env.hash());
+                conn.add_refresh_event(RefreshEvent {
+                    account_hash: uid_store.account_hash,
+                    mailbox_hash,
+                    kind: Create(Box::new(env)),
+                });
+            }
+        }
+    }
     Ok(())
 }

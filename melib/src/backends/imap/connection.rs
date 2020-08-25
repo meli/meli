@@ -19,8 +19,8 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::protocol_parser::{ImapLineSplit, ImapResponse, RequiredResponses};
-use crate::backends::MailboxHash;
+use super::protocol_parser::{ImapLineSplit, ImapResponse, RequiredResponses, SelectResponse};
+use crate::backends::{MailboxHash, RefreshEvent};
 use crate::connections::{lookup_ipv4, timeout, Connection};
 use crate::email::parser::BytesExt;
 use crate::error::*;
@@ -40,6 +40,16 @@ use super::protocol_parser;
 use super::{Capabilities, ImapServerConf, UIDStore};
 
 #[derive(Debug, Clone, Copy)]
+pub enum SyncPolicy {
+    None,
+    ///rfc4549 `Synch Ops for Disconnected IMAP4 Clients` https://tools.ietf.org/html/rfc4549
+    Basic,
+    ///rfc7162 `IMAP Extensions: Quick Flag Changes Resynchronization (CONDSTORE) and Quick Mailbox Resynchronization (QRESYNC)`
+    Condstore,
+    CondstoreQresync,
+}
+
+#[derive(Debug, Clone, Copy)]
 pub enum ImapProtocol {
     IMAP { extension_use: ImapExtensionUse },
     ManageSieve,
@@ -47,6 +57,7 @@ pub enum ImapProtocol {
 
 #[derive(Debug, Clone, Copy)]
 pub struct ImapExtensionUse {
+    pub condstore: bool,
     pub idle: bool,
     #[cfg(feature = "deflate_compression")]
     pub deflate: bool,
@@ -55,6 +66,7 @@ pub struct ImapExtensionUse {
 impl Default for ImapExtensionUse {
     fn default() -> Self {
         Self {
+            condstore: true,
             idle: true,
             #[cfg(feature = "deflate_compression")]
             deflate: true,
@@ -91,6 +103,7 @@ async fn try_await(cl: impl Future<Output = Result<()>> + Send) -> Result<()> {
 pub struct ImapConnection {
     pub stream: Result<ImapStream>,
     pub server_conf: ImapServerConf,
+    pub sync_policy: SyncPolicy,
     pub uid_store: Arc<UIDStore>,
 }
 
@@ -495,6 +508,11 @@ impl ImapConnection {
         ImapConnection {
             stream: Err(MeliError::new("Offline".to_string())),
             server_conf: server_conf.clone(),
+            sync_policy: if uid_store.keep_offline_cache {
+                SyncPolicy::Basic
+            } else {
+                SyncPolicy::None
+            },
             uid_store,
         }
     }
@@ -523,12 +541,34 @@ impl ImapConnection {
                 ImapProtocol::IMAP {
                     extension_use:
                         ImapExtensionUse {
+                            condstore,
                             #[cfg(feature = "deflate_compression")]
                             deflate,
                             idle: _idle,
                         },
-                } =>
-                {
+                } => {
+                    if capabilities.contains(&b"CONDSTORE"[..]) && condstore {
+                        match self.sync_policy {
+                            SyncPolicy::None => { /* do nothing, sync is disabled */ }
+                            _ => {
+                                /* Upgrade to Condstore */
+                                let mut ret = String::new();
+                                if capabilities.contains(&b"ENABLE"[..]) {
+                                    self.send_command(b"ENABLE CONDSTORE").await?;
+                                    self.read_response(&mut ret, RequiredResponses::empty())
+                                        .await?;
+                                } else {
+                                    self.send_command(
+                                b"STATUS INBOX (UIDNEXT UIDVALIDITY UNSEEN MESSAGES HIGHESTMODSEQ)",
+                            )
+                            .await?;
+                                    self.read_response(&mut ret, RequiredResponses::empty())
+                                        .await?;
+                                }
+                                self.sync_policy = SyncPolicy::Condstore;
+                            }
+                        }
+                    }
                     #[cfg(feature = "deflate_compression")]
                     if capabilities.contains(&b"COMPRESS=DEFLATE"[..]) && deflate {
                         let mut ret = String::new();
@@ -600,12 +640,28 @@ impl ImapConnection {
                         ImapResponse::No(ref response_code) => {
                             //FIXME return error
                             debug!("Received NO response: {:?} {:?}", response_code, response);
+                            (self.uid_store.event_consumer)(
+                                self.uid_store.account_hash,
+                                crate::backends::BackendEvent::Notice {
+                                    description: None,
+                                    content: response_code.to_string(),
+                                    level: crate::logging::LoggingLevel::ERROR,
+                                },
+                            );
                             ret.push_str(&response);
                             return r.into();
                         }
                         ImapResponse::Bad(ref response_code) => {
                             //FIXME return error
                             debug!("Received BAD response: {:?} {:?}", response_code, response);
+                            (self.uid_store.event_consumer)(
+                                self.uid_store.account_hash,
+                                crate::backends::BackendEvent::Notice {
+                                    description: None,
+                                    content: response_code.to_string(),
+                                    level: crate::logging::LoggingLevel::ERROR,
+                                },
+                            );
                             ret.push_str(&response);
                             return r.into();
                         }
@@ -691,24 +747,31 @@ impl ImapConnection {
         mailbox_hash: MailboxHash,
         ret: &mut String,
         force: bool,
-    ) -> Result<()> {
+    ) -> Result<Option<SelectResponse>> {
         if !force && self.stream.as_ref()?.current_mailbox == MailboxSelection::Select(mailbox_hash)
         {
-            return Ok(());
+            return Ok(None);
         }
-        self.send_command(
-            format!(
-                "SELECT \"{}\"",
-                self.uid_store.mailboxes.lock().await[&mailbox_hash].imap_path()
-            )
-            .as_bytes(),
-        )
-        .await?;
+        let (imap_path, permissions) = {
+            let m = &self.uid_store.mailboxes.lock().await[&mailbox_hash];
+            (m.imap_path().to_string(), m.permissions.clone())
+        };
+        self.send_command(format!("SELECT \"{}\"", imap_path).as_bytes())
+            .await?;
         self.read_response(ret, RequiredResponses::SELECT_REQUIRED)
             .await?;
         debug!("select response {}", ret);
+        let select_response = protocol_parser::select_response(&ret)?;
+        {
+            let mut permissions = permissions.lock().unwrap();
+            permissions.create_messages = !select_response.read_only;
+            permissions.remove_messages = !select_response.read_only;
+            permissions.set_flags = !select_response.read_only;
+            permissions.rename_messages = !select_response.read_only;
+            permissions.delete_messages = !select_response.read_only;
+        }
         self.stream.as_mut()?.current_mailbox = MailboxSelection::Select(mailbox_hash);
-        Ok(())
+        Ok(Some(select_response))
     }
 
     pub async fn examine_mailbox(
@@ -716,11 +779,11 @@ impl ImapConnection {
         mailbox_hash: MailboxHash,
         ret: &mut String,
         force: bool,
-    ) -> Result<()> {
+    ) -> Result<Option<SelectResponse>> {
         if !force
             && self.stream.as_ref()?.current_mailbox == MailboxSelection::Examine(mailbox_hash)
         {
-            return Ok(());
+            return Ok(None);
         }
         self.send_command(
             format!(
@@ -733,8 +796,9 @@ impl ImapConnection {
         self.read_response(ret, RequiredResponses::EXAMINE_REQUIRED)
             .await?;
         debug!("examine response {}", ret);
+        let select_response = protocol_parser::select_response(&ret)?;
         self.stream.as_mut()?.current_mailbox = MailboxSelection::Examine(mailbox_hash);
-        Ok(())
+        Ok(Some(select_response))
     }
 
     pub async fn unselect(&mut self) -> Result<()> {
@@ -782,7 +846,7 @@ impl ImapConnection {
         Ok(())
     }
 
-    pub fn add_refresh_event(&mut self, ev: crate::backends::RefreshEvent) {
+    pub fn add_refresh_event(&mut self, ev: RefreshEvent) {
         (self.uid_store.event_consumer)(
             self.uid_store.account_hash,
             crate::backends::BackendEvent::Refresh(ev),

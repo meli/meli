@@ -80,12 +80,13 @@ impl BackendOp for ImapOp {
                     response.len(),
                     response.lines().collect::<Vec<&str>>().len()
                 );
-                let UidFetchResponse {
+                let FetchResponse {
                     uid: _uid,
                     flags: _flags,
                     body,
                     ..
-                } = protocol_parser::uid_fetch_response(&response)?.1;
+                } = protocol_parser::fetch_response(&response)?.1;
+                let _uid = _uid.unwrap();
                 assert_eq!(_uid, uid);
                 assert!(body.is_some());
                 let mut bytes_cache = uid_store.byte_cache.lock()?;

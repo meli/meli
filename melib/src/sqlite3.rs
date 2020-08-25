@@ -19,7 +19,8 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use crate::{error::*, logging::log};
+use crate::{error::*, logging::log, Envelope};
+use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput};
 pub use rusqlite::{self, params, Connection};
 use std::path::PathBuf;
 
@@ -93,4 +94,21 @@ pub fn open_or_create_db(
     }
 
     Ok(conn)
+}
+
+impl ToSql for Envelope {
+    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput> {
+        let v: Vec<u8> = bincode::serialize(self).map_err(|e| {
+            rusqlite::Error::ToSqlConversionFailure(Box::new(MeliError::new(e.to_string())))
+        })?;
+        Ok(ToSqlOutput::from(v))
+    }
+}
+
+impl FromSql for Envelope {
+    fn column_result(value: rusqlite::types::ValueRef) -> FromSqlResult<Self> {
+        let b: Vec<u8> = FromSql::column_result(value)?;
+        Ok(bincode::deserialize(&b)
+            .map_err(|e| FromSqlError::Other(Box::new(MeliError::new(e.to_string()))))?)
+    }
 }
