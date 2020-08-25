@@ -30,6 +30,7 @@ use nom::{
     number::complete::le_u8,
     sequence::{delimited, pair, preceded, separated_pair, terminated},
 };
+use smallvec::SmallVec;
 use std::borrow::Cow;
 
 #[derive(Debug, Eq, PartialEq)]
@@ -1116,7 +1117,7 @@ pub mod encodings {
         //eat_separator!());
     }
 
-    pub fn encoded_word_list(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
+    pub fn encoded_word_list(input: &[u8]) -> IResult<&[u8], SmallVec<[u8; 64]>> {
         let (input, list) = separated_nonempty_list(space, encoded_word)(input)?;
         let list_len = list.iter().fold(0, |mut acc, x| {
             acc += x.len();
@@ -1125,19 +1126,19 @@ pub mod encodings {
         Ok((
             input,
             list.iter()
-                .fold(Vec::with_capacity(list_len), |mut acc, x| {
-                    acc.append(&mut x.clone());
+                .fold(SmallVec::with_capacity(list_len), |mut acc, x| {
+                    acc.extend(x.into_iter().cloned());
                     acc
                 }),
         ))
     }
 
-    pub fn ascii_token(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
+    pub fn ascii_token(input: &[u8]) -> IResult<&[u8], SmallVec<[u8; 64]>> {
         let (input, word) = alt((
             terminated(take_until(" =?"), peek(preceded(tag(b" "), encoded_word))),
             take_while(|_| true),
         ))(input)?;
-        Ok((input, word.to_vec()))
+        Ok((input, SmallVec::from(word)))
     }
 
     pub fn phrase(
