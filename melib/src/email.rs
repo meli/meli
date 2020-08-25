@@ -527,6 +527,7 @@ impl Envelope {
         String::from_utf8_lossy(self.message_id.raw())
     }
     pub fn set_date(&mut self, new_val: &[u8]) {
+        let new_val = new_val.trim();
         self.date = String::from_utf8_lossy(new_val).into_owned();
     }
     pub fn set_bcc(&mut self, new_val: Vec<Address>) {
@@ -542,6 +543,7 @@ impl Envelope {
         self.to = new_val;
     }
     pub fn set_in_reply_to(&mut self, new_val: &[u8]) {
+        let new_val = new_val.trim();
         let slice = match parser::address::message_id(new_val) {
             Ok(v) => v.1,
             Err(_) => {
@@ -566,6 +568,7 @@ impl Envelope {
         self.subject = Some(new_val);
     }
     pub fn set_message_id(&mut self, new_val: &[u8]) {
+        let new_val = new_val.trim();
         match parser::address::message_id(new_val) {
             Ok((_, slice)) => {
                 self.message_id = MessageID::new(new_val, slice);
@@ -576,6 +579,7 @@ impl Envelope {
         }
     }
     pub fn push_references(&mut self, new_val: &[u8]) {
+        let new_val = new_val.trim();
         let slice = match parser::address::message_id(new_val) {
             Ok(v) => v.1,
             Err(e) => {
@@ -609,6 +613,7 @@ impl Envelope {
         }
     }
     pub fn set_references(&mut self, new_val: &[u8]) {
+        let new_val = new_val.trim();
         match self.references {
             Some(ref mut s) => {
                 s.raw = new_val.into();
