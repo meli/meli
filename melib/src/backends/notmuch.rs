@@ -37,39 +37,11 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
 
-pub mod bindings;
-use bindings::*;
-
-#[derive(Debug, Clone)]
-struct DbConnection {
-    lib: Arc<libloading::Library>,
-    inner: Arc<RwLock<*mut notmuch_database_t>>,
-    database_ph: std::marker::PhantomData<&'static mut notmuch_database_t>,
-}
-
-unsafe impl Send for DbConnection {}
-unsafe impl Sync for DbConnection {}
-
 macro_rules! call {
     ($lib:expr, $func:ty) => {{
         let func: libloading::Symbol<$func> = $lib.get(stringify!($func).as_bytes()).unwrap();
         func
     }};
-}
-
-#[derive(Debug)]
-pub struct NotmuchError(String);
-
-impl std::fmt::Display for NotmuchError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        std::fmt::Display::fmt(&self.0, f)
-    }
-}
-
-impl Error for NotmuchError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        None
-    }
 }
 
 macro_rules! try_call {
@@ -84,6 +56,39 @@ macro_rules! try_call {
             ))
         }
     }};
+}
+
+pub mod bindings;
+use bindings::*;
+mod message;
+pub use message::*;
+mod tags;
+pub use tags::*;
+mod thread;
+pub use thread::*;
+
+#[derive(Debug, Clone)]
+pub struct DbConnection {
+    pub lib: Arc<libloading::Library>,
+    pub inner: Arc<RwLock<*mut notmuch_database_t>>,
+    pub database_ph: std::marker::PhantomData<&'static mut notmuch_database_t>,
+}
+
+unsafe impl Send for DbConnection {}
+unsafe impl Sync for DbConnection {}
+#[derive(Debug)]
+pub struct NotmuchError(String);
+
+impl std::fmt::Display for NotmuchError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        std::fmt::Display::fmt(&self.0, f)
+    }
+}
+
+impl Error for NotmuchError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        None
+    }
 }
 
 impl Drop for DbConnection {
@@ -271,14 +276,7 @@ impl NotmuchDb {
         let mut ret = SmallVec::new();
         let iter = query.search()?;
         for message in iter {
-            let msg_id = unsafe { call!(self.lib, notmuch_message_get_message_id)(message) };
-            let c_str = unsafe { CStr::from_ptr(msg_id) };
-            let env_hash = {
-                let mut hasher = DefaultHasher::default();
-                c_str.hash(&mut hasher);
-                hasher.finish()
-            };
-            ret.push(env_hash);
+            ret.push(message.env_hash());
         }
 
         Ok(ret)
@@ -359,24 +357,14 @@ impl MailBackend for NotmuchDb {
                 let mut done: bool = false;
                 for _ in 0..chunk_size {
                     if let Some(message_id) = self.iter.next() {
-                        let mut message: *mut notmuch_message_t = std::ptr::null_mut();
-                        unsafe {
-                            call!(self.lib, notmuch_database_find_message)(
-                                *self.database.inner.read().unwrap(),
-                                message_id.as_ptr(),
-                                &mut message as *mut _,
-                            )
-                        };
-                        if message.is_null() {
+                        let message = if let Ok(v) =
+                            Message::find_message(self.lib.clone(), &self.database, &message_id)
+                        {
+                            v
+                        } else {
                             continue;
-                        }
-                        match notmuch_message_into_envelope(
-                            self.lib.clone(),
-                            self.index.clone(),
-                            self.tag_index.clone(),
-                            self.database.clone(),
-                            message,
-                        ) {
+                        };
+                        match message.into_envelope(self.index.clone(), self.tag_index.clone()) {
                             Ok(env) => {
                                 mailbox_index_lck
                                     .entry(env.hash())
@@ -388,13 +376,7 @@ impl MailBackend for NotmuchDb {
                                 ret.push(env);
                             }
                             Err(err) => {
-                                debug!("could not parse message {:?} {}", err, {
-                                    let fs_path = unsafe {
-                                        call!(self.lib, notmuch_message_get_filename)(message)
-                                    };
-                                    let c_str = unsafe { CStr::from_ptr(fs_path) };
-                                    String::from_utf8_lossy(c_str.to_bytes())
-                                });
+                                debug!("could not parse message {:?}", err);
                             }
                         }
                     } else {
@@ -438,10 +420,14 @@ impl MailBackend for NotmuchDb {
                 *total_lck = query.count()? as usize;
                 *unseen_lck = 0;
             }
+            let mut index_lck = index.write().unwrap();
             v = query
                 .search()?
                 .into_iter()
-                .map(|m| notmuch_message_insert(&lib, &index, m))
+                .map(|m| {
+                    index_lck.insert(m.env_hash(), m.msg_id_cstr().into());
+                    m.msg_id_cstr().into()
+                })
                 .collect();
         }
 
@@ -723,22 +709,16 @@ impl MailBackend for NotmuchDb {
         let tag_index = self.tag_index.clone();
         let mut index_lck = self.index.write().unwrap();
         for env_hash in env_hashes.iter() {
-            let mut message: *mut notmuch_message_t = std::ptr::null_mut();
-            unsafe {
-                call!(self.lib, notmuch_database_find_message)(
-                    *database.inner.read().unwrap(),
-                    index_lck[&env_hash].as_ptr(),
-                    &mut message as *mut _,
-                )
-            };
-            if message.is_null() {
-                return Err(MeliError::new(format!(
-                    "Error, message with path {:?} not found in notmuch database.",
-                    index_lck[&env_hash]
-                )));
-            }
+            let message =
+                match Message::find_message(self.lib.clone(), &database, &index_lck[&env_hash]) {
+                    Ok(v) => v,
+                    Err(err) => {
+                        debug!("not found {}", err);
+                        continue;
+                    }
+                };
 
-            let tags = TagIterator::new(self.lib.clone(), message).collect::<Vec<&CStr>>();
+            let tags = TagIterator::new(message.clone()).collect::<Vec<&CStr>>();
             //flags.set(f, value);
 
             macro_rules! cstr {
@@ -755,16 +735,7 @@ impl MailBackend for NotmuchDb {
                     if tags.contains(l) {
                         continue;
                     }
-                    if let Err(err) = unsafe {
-                        try_call!(
-                            self.lib,
-                            call!(self.lib, notmuch_message_add_tag)(message, l.as_ptr())
-                        )
-                    } {
-                        return Err(
-                            MeliError::new("Could not set tag.").set_source(Some(Arc::new(err)))
-                        );
-                    }
+                    message.add_tag(l)?;
                 }};
             }
             macro_rules! remove_tag {
@@ -776,16 +747,7 @@ impl MailBackend for NotmuchDb {
                     if !tags.contains(l) {
                         continue;
                     }
-                    if let Err(err) = unsafe {
-                        try_call!(
-                            self.lib,
-                            call!(self.lib, notmuch_message_remove_tag)(message, l.as_ptr())
-                        )
-                    } {
-                        return Err(
-                            MeliError::new("Could not set tag.").set_source(Some(Arc::new(err)))
-                        );
-                    }
+                    message.remove_tag(l)?;
                 }};
             }
 
@@ -817,19 +779,11 @@ impl MailBackend for NotmuchDb {
             }
 
             /* Update message filesystem path. */
-            if let Err(err) = unsafe {
-                try_call!(
-                    self.lib,
-                    call!(self.lib, notmuch_message_tags_to_maildir_flags)(message)
-                )
-            } {
-                return Err(MeliError::new("Could not set flags.").set_source(Some(Arc::new(err))));
-            }
+            message.tags_to_maildir_flags()?;
 
-            let msg_id = unsafe { call!(self.lib, notmuch_message_get_message_id)(message) };
-            let c_str = unsafe { CStr::from_ptr(msg_id) };
+            let msg_id = message.msg_id_cstr();
             if let Some(p) = index_lck.get_mut(&env_hash) {
-                *p = c_str.into();
+                *p = msg_id.into();
             }
         }
         for (f, v) in flags.iter() {
@@ -867,18 +821,10 @@ struct NotmuchOp {
 
 impl BackendOp for NotmuchOp {
     fn as_bytes(&mut self) -> ResultFuture<Vec<u8>> {
-        let mut message: *mut notmuch_message_t = std::ptr::null_mut();
         let index_lck = self.index.write().unwrap();
-        unsafe {
-            call!(self.lib, notmuch_database_find_message)(
-                *self.database.inner.read().unwrap(),
-                index_lck[&self.hash].as_ptr(),
-                &mut message as *mut _,
-            )
-        };
-        let fs_path = unsafe { call!(self.lib, notmuch_message_get_filename)(message) };
-        let c_str = unsafe { CStr::from_ptr(fs_path) };
-        let mut f = std::fs::File::open(&OsStr::from_bytes(c_str.to_bytes()))?;
+        let message =
+            Message::find_message(self.lib.clone(), &self.database, &index_lck[&self.hash])?;
+        let mut f = std::fs::File::open(message.get_filename())?;
         let mut response = Vec::new();
         f.read_to_end(&mut response)?;
         self.bytes = Some(response);
@@ -887,141 +833,11 @@ impl BackendOp for NotmuchOp {
     }
 
     fn fetch_flags(&self) -> ResultFuture<Flag> {
-        let mut message: *mut notmuch_message_t = std::ptr::null_mut();
         let index_lck = self.index.write().unwrap();
-        unsafe {
-            call!(self.lib, notmuch_database_find_message)(
-                *self.database.inner.read().unwrap(),
-                index_lck[&self.hash].as_ptr(),
-                &mut message as *mut _,
-            )
-        };
-        let (flags, _tags) = TagIterator::new(self.lib.clone(), message).collect_flags_and_tags();
+        let message =
+            Message::find_message(self.lib.clone(), &self.database, &index_lck[&self.hash])?;
+        let (flags, _tags) = TagIterator::new(message).collect_flags_and_tags();
         Ok(Box::pin(async move { Ok(flags) }))
-    }
-}
-
-pub struct MessageIterator<'query> {
-    lib: Arc<libloading::Library>,
-    messages: *mut notmuch_messages_t,
-    _ph: std::marker::PhantomData<*const Query<'query>>,
-}
-
-impl Iterator for MessageIterator<'_> {
-    type Item = *mut notmuch_message_t;
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.messages.is_null() {
-            None
-        } else if unsafe { call!(self.lib, notmuch_messages_valid)(self.messages) } == 1 {
-            let ret = Some(unsafe { call!(self.lib, notmuch_messages_get)(self.messages) });
-            unsafe {
-                call!(self.lib, notmuch_messages_move_to_next)(self.messages);
-            }
-            ret
-        } else {
-            self.messages = std::ptr::null_mut();
-            None
-        }
-    }
-}
-
-pub struct TagIterator {
-    lib: Arc<libloading::Library>,
-    tags: *mut notmuch_tags_t,
-    message: *mut notmuch_message_t,
-}
-
-impl TagIterator {
-    fn new(lib: Arc<libloading::Library>, message: *mut notmuch_message_t) -> Self {
-        TagIterator {
-            tags: unsafe { call!(lib, notmuch_message_get_tags)(message) },
-            lib,
-            message,
-        }
-    }
-
-    fn collect_flags_and_tags(self) -> (Flag, Vec<String>) {
-        fn flags(path: &CStr) -> Flag {
-            let mut flag = Flag::default();
-            let mut ptr = path.to_bytes().len().saturating_sub(1);
-            let mut is_valid = true;
-            while !path.to_bytes()[..ptr + 1].ends_with(b":2,") {
-                match path.to_bytes()[ptr] {
-                    b'D' => flag |= Flag::DRAFT,
-                    b'F' => flag |= Flag::FLAGGED,
-                    b'P' => flag |= Flag::PASSED,
-                    b'R' => flag |= Flag::REPLIED,
-                    b'S' => flag |= Flag::SEEN,
-                    b'T' => flag |= Flag::TRASHED,
-                    _ => {
-                        is_valid = false;
-                        break;
-                    }
-                }
-                if ptr == 0 {
-                    is_valid = false;
-                    break;
-                }
-                ptr -= 1;
-            }
-
-            if !is_valid {
-                return Flag::default();
-            }
-
-            flag
-        }
-        let fs_path = unsafe { call!(self.lib, notmuch_message_get_filename)(self.message) };
-        let c_str = unsafe { CStr::from_ptr(fs_path) };
-
-        let tags = self.collect::<Vec<&CStr>>();
-        let mut flag = Flag::default();
-        let mut vec = vec![];
-        for t in tags {
-            match t.to_bytes() {
-                b"draft" => {
-                    flag.set(Flag::DRAFT, true);
-                }
-                b"flagged" => {
-                    flag.set(Flag::FLAGGED, true);
-                }
-                b"passed" => {
-                    flag.set(Flag::PASSED, true);
-                }
-                b"replied" => {
-                    flag.set(Flag::REPLIED, true);
-                }
-                b"unread" => {
-                    flag.set(Flag::SEEN, false);
-                }
-                b"trashed" => {
-                    flag.set(Flag::TRASHED, true);
-                }
-                _other => {
-                    vec.push(t.to_string_lossy().into_owned());
-                }
-            }
-        }
-
-        (flag | flags(c_str), vec)
-    }
-}
-
-impl Iterator for TagIterator {
-    type Item = &'static CStr;
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.tags.is_null() {
-            None
-        } else if unsafe { call!(self.lib, notmuch_tags_valid)(self.tags) } == 1 {
-            let ret = Some(unsafe { CStr::from_ptr(call!(self.lib, notmuch_tags_get)(self.tags)) });
-            unsafe {
-                call!(self.lib, notmuch_tags_move_to_next)(self.tags);
-            }
-            ret
-        } else {
-            self.tags = std::ptr::null_mut();
-            None
-        }
     }
 }
 
@@ -1078,6 +894,7 @@ impl<'s> Query<'s> {
             messages,
             lib: self.lib.clone(),
             _ph: std::marker::PhantomData,
+            is_from_thread: false,
         })
     }
 }
@@ -1088,74 +905,4 @@ impl Drop for Query<'_> {
             call!(self.lib, notmuch_query_destroy)(self.ptr);
         }
     }
-}
-
-fn notmuch_message_insert(
-    lib: &libloading::Library,
-    index: &RwLock<HashMap<EnvelopeHash, CString>>,
-    message: *mut notmuch_message_t,
-) -> CString {
-    let msg_id = unsafe { call!(lib, notmuch_message_get_message_id)(message) };
-    let env_hash = {
-        let c_str = unsafe { CStr::from_ptr(msg_id) };
-        let mut hasher = DefaultHasher::default();
-        c_str.hash(&mut hasher);
-        hasher.finish()
-    };
-    let c_str = unsafe { CStr::from_ptr(msg_id) };
-    index.write().unwrap().insert(env_hash, c_str.into());
-    c_str.into()
-}
-
-fn notmuch_message_into_envelope(
-    lib: Arc<libloading::Library>,
-    index: Arc<RwLock<HashMap<EnvelopeHash, CString>>>,
-    tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
-    database: Arc<DbConnection>,
-    message: *mut notmuch_message_t,
-) -> Result<Envelope> {
-    let mut response = Vec::new();
-    let fs_path = unsafe { call!(lib, notmuch_message_get_filename)(message) };
-    let c_str = unsafe { CStr::from_ptr(fs_path) };
-    let mut f = std::fs::File::open(&OsStr::from_bytes(c_str.to_bytes()))?;
-    f.read_to_end(&mut response)?;
-    let msg_id = unsafe { call!(lib, notmuch_message_get_message_id)(message) };
-    let env_hash = {
-        let c_str = unsafe { CStr::from_ptr(msg_id) };
-        let mut hasher = DefaultHasher::default();
-        c_str.hash(&mut hasher);
-        hasher.finish()
-    };
-    {
-        let c_str = unsafe { CStr::from_ptr(msg_id) };
-        index.write().unwrap().insert(env_hash, c_str.into());
-    }
-    let op = Box::new(NotmuchOp {
-        database,
-        lib: lib.clone(),
-        hash: env_hash,
-        index: index.clone(),
-        bytes: Some(response),
-        tag_index: tag_index.clone(),
-    });
-    Envelope::from_token(op, env_hash)
-        .map(|mut env| {
-            let mut tag_lock = tag_index.write().unwrap();
-            let (flags, tags) = TagIterator::new(lib.clone(), message).collect_flags_and_tags();
-            for tag in tags {
-                let mut hasher = DefaultHasher::new();
-                hasher.write(tag.as_bytes());
-                let num = hasher.finish();
-                if !tag_lock.contains_key(&num) {
-                    tag_lock.insert(num, tag);
-                }
-                env.labels_mut().push(num);
-            }
-            env.set_flags(flags);
-            env
-        })
-        .chain_err_summary(|| {
-            index.write().unwrap().remove(&env_hash);
-            format!("could not parse path {:?}", c_str)
-        })
 }

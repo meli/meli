@@ -75,10 +75,17 @@ macro_rules! uuid_hash_type {
             }
         }
 
+        impl From<&[u8]> for $n {
+            fn from(val: &[u8]) -> Self {
+                $n(Uuid::new_v5(&Uuid::NAMESPACE_URL, val))
+            }
+        }
+
         impl $n {
-            fn new() -> Self {
+            pub fn new() -> Self {
                 $n(Uuid::new_v4())
             }
+
             pub fn null() -> Self {
                 $n(Uuid::nil())
             }
@@ -329,16 +336,13 @@ impl Thread {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ThreadNode {
-    message: Option<EnvelopeHash>,
-    parent: Option<ThreadNodeHash>,
-    children: Vec<ThreadNodeHash>,
-    date: UnixTimestamp,
-    show_subject: bool,
-    pruned: bool,
-    is_root: bool,
+    pub message: Option<EnvelopeHash>,
+    pub parent: Option<ThreadNodeHash>,
+    pub children: Vec<ThreadNodeHash>,
+    pub date: UnixTimestamp,
+    pub show_subject: bool,
     pub group: ThreadHash,
-
-    unseen: bool,
+    pub unseen: bool,
 }
 
 impl Default for ThreadNode {
@@ -349,10 +353,7 @@ impl Default for ThreadNode {
             children: Vec::new(),
             date: UnixTimestamp::default(),
             show_subject: true,
-            pruned: false,
-            is_root: false,
             group: ThreadHash::new(),
-
             unseen: false,
         }
     }
@@ -360,10 +361,9 @@ impl Default for ThreadNode {
 
 impl ThreadNode {
     fn new() -> Self {
-        ThreadNode {
-            ..Default::default()
-        }
+        ThreadNode::default()
     }
+
     pub fn show_subject(&self) -> bool {
         self.show_subject
     }
