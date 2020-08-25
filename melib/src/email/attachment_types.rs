@@ -51,23 +51,56 @@ impl Default for Charset {
 
 impl<'a> From<&'a [u8]> for Charset {
     fn from(b: &'a [u8]) -> Self {
-        // TODO: Case insensitivity
         match b.trim() {
-            b"us-ascii" | b"ascii" | b"US-ASCII" => Charset::Ascii,
-            b"utf-8" | b"UTF-8" => Charset::UTF8,
-            b"utf-16" | b"UTF-16" => Charset::UTF16,
-            b"iso-8859-1" | b"ISO-8859-1" => Charset::ISO8859_1,
-            b"iso-8859-2" | b"ISO-8859-2" => Charset::ISO8859_2,
-            b"iso-8859-7" | b"ISO-8859-7" | b"iso8859-7" => Charset::ISO8859_7,
-            b"iso-8859-15" | b"ISO-8859-15" => Charset::ISO8859_15,
-            b"windows-1250" | b"Windows-1250" => Charset::Windows1250,
-            b"windows-1251" | b"Windows-1251" => Charset::Windows1251,
-            b"windows-1252" | b"Windows-1252" => Charset::Windows1252,
-            b"windows-1253" | b"Windows-1253" => Charset::Windows1253,
-            b"GBK" | b"gbk" => Charset::GBK,
-            b"gb2312" | b"GB2312" => Charset::GB2312,
-            b"BIG5" | b"big5" => Charset::BIG5,
-            b"ISO-2022-JP" | b"iso-2022-JP" => Charset::ISO2022JP,
+            b if b.eq_ignore_ascii_case(b"us-ascii") || b.eq_ignore_ascii_case(b"ascii") => {
+                Charset::Ascii
+            }
+            b if b.eq_ignore_ascii_case(b"utf-8") || b.eq_ignore_ascii_case(b"utf8") => {
+                Charset::UTF8
+            }
+            b if b.eq_ignore_ascii_case(b"utf-16") || b.eq_ignore_ascii_case(b"utf16") => {
+                Charset::UTF16
+            }
+            b if b.eq_ignore_ascii_case(b"iso-8859-1") || b.eq_ignore_ascii_case(b"iso8859-1") => {
+                Charset::ISO8859_1
+            }
+            b if b.eq_ignore_ascii_case(b"iso-8859-2") || b.eq_ignore_ascii_case(b"iso8859-2") => {
+                Charset::ISO8859_2
+            }
+            b if b.eq_ignore_ascii_case(b"iso-8859-7") || b.eq_ignore_ascii_case(b"iso8859-7") => {
+                Charset::ISO8859_7
+            }
+            b if b.eq_ignore_ascii_case(b"iso-8859-15")
+                || b.eq_ignore_ascii_case(b"iso8859-15") =>
+            {
+                Charset::ISO8859_15
+            }
+            b if b.eq_ignore_ascii_case(b"windows-1250")
+                || b.eq_ignore_ascii_case(b"windows1250") =>
+            {
+                Charset::Windows1250
+            }
+            b if b.eq_ignore_ascii_case(b"windows-1251")
+                || b.eq_ignore_ascii_case(b"windows1251") =>
+            {
+                Charset::Windows1251
+            }
+            b if b.eq_ignore_ascii_case(b"windows-1252")
+                || b.eq_ignore_ascii_case(b"windows1252") =>
+            {
+                Charset::Windows1252
+            }
+            b if b.eq_ignore_ascii_case(b"windows-1253")
+                || b.eq_ignore_ascii_case(b"windows1253") =>
+            {
+                Charset::Windows1253
+            }
+            b if b.eq_ignore_ascii_case(b"gbk") => Charset::GBK,
+            b if b.eq_ignore_ascii_case(b"gb2312") || b.eq_ignore_ascii_case(b"gb-2312") => {
+                Charset::GB2312
+            }
+            b if b.eq_ignore_ascii_case(b"big5") => Charset::BIG5,
+            b if b.eq_ignore_ascii_case(b"iso-2022-jp") => Charset::ISO2022JP,
             _ => {
                 debug!("unknown tag is {:?}", str::from_utf8(b));
                 Charset::Ascii
