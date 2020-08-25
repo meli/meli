@@ -20,23 +20,20 @@
  */
 
 use super::*;
-use std::collections::HashMap;
-use std::fmt;
 
 #[derive(Debug)]
 pub struct StatusPanel {
     cursor: (usize, usize),
     account_cursor: usize,
     status: Option<AccountStatus>,
-    date_cache: HashMap<UnixTimestamp, String>,
     content: CellBuffer,
     dirty: bool,
     theme_default: ThemeAttribute,
     id: ComponentId,
 }
 
-impl fmt::Display for StatusPanel {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl core::fmt::Display for StatusPanel {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(f, "status")
     }
 }
@@ -49,90 +46,6 @@ impl Component for StatusPanel {
         }
         self.draw_accounts(context);
         let (width, height) = self.content.size();
-        {
-            let (_, _) = write_string_to_grid(
-                "Worker threads",
-                &mut self.content,
-                self.theme_default.fg,
-                self.theme_default.bg,
-                Attr::BOLD,
-                ((1, 1), (width - 1, height - 1)),
-                Some(1),
-            );
-            /*
-            let mut y = y + 1;
-            let work_controller = context.work_controller().threads.lock().unwrap();
-            let mut workers: Vec<&Worker> = work_controller.values().collect::<Vec<&Worker>>();
-            let mut max_name = 0;
-            workers.sort_by_key(|w| {
-                max_name = std::cmp::max(max_name, w.name.len());
-                w.name.as_str()
-            });
-            for worker in workers {
-                let (x, y_off) = write_string_to_grid(
-                    &format!(
-                        "- {:<max_name$} {} [{}]",
-                        worker.name.as_str(),
-                        worker.status.as_str(),
-                        self.timestamp_fmt(worker.heartbeat),
-                        max_name = max_name
-                    ),
-                    &mut self.content,
-                    self.theme_default.fg,
-                    self.theme_default.bg,
-                    self.theme_default.attrs,
-                    ((1, y), (width - 1, height - 1)),
-                    Some(1),
-                );
-                for x in x..(width - 1) {
-                    self.content[(x, y)].set_ch(' ');
-                }
-
-                y = y_off + 1;
-            }
-            write_string_to_grid(
-                "Static threads",
-                &mut self.content,
-                self.theme_default.fg,
-                self.theme_default.bg,
-                Attr::BOLD,
-                ((1, y + 1), (width - 1, height - 1)),
-                Some(1),
-            );
-            y += 2;
-
-            let work_controller = context.work_controller().static_threads.lock().unwrap();
-            let mut workers: Vec<&Worker> = work_controller.values().collect::<Vec<&Worker>>();
-            max_name = 0;
-            workers.retain(|w| w.name != "WorkController-thread");
-            workers.sort_by_key(|w| {
-                max_name = std::cmp::max(max_name, w.name.len());
-                w.name.as_str()
-            });
-            for worker in workers {
-                let (x, y_off) = write_string_to_grid(
-                    &format!(
-                        "- {:<max_name$} {} [{}]",
-                        worker.name.as_str(),
-                        worker.status.as_str(),
-                        self.timestamp_fmt(worker.heartbeat),
-                        max_name = max_name
-                    ),
-                    &mut self.content,
-                    self.theme_default.fg,
-                    self.theme_default.bg,
-                    self.theme_default.attrs,
-                    ((1, y), (width - 1, height - 1)),
-                    Some(1),
-                );
-                for x in x..(width - 1) {
-                    self.content[(x, y)].set_ch(' ');
-                }
-
-                y = y_off + 1;
-            }
-            */
-        }
         let (cols, rows) = (width!(area), height!(area));
         self.cursor = (
             std::cmp::min(width.saturating_sub(cols), self.cursor.0),
@@ -247,7 +160,6 @@ impl StatusPanel {
             account_cursor: 0,
             content,
             status: None,
-            date_cache: Default::default(),
             dirty: true,
             theme_default,
             id: ComponentId::new_v4(),
@@ -396,15 +308,6 @@ impl StatusPanel {
                 );
             }
         }
-    }
-    fn timestamp_fmt(&mut self, t: UnixTimestamp) -> &str {
-        if !self.date_cache.contains_key(&t) {
-            self.date_cache.insert(
-                t,
-                melib::datetime::timestamp_to_string(t, Some("%Y-%m-%d %T")),
-            );
-        }
-        &self.date_cache[&t]
     }
 }
 

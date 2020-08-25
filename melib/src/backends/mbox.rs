@@ -968,7 +968,6 @@ impl MailBackend for MboxType {
                     Err(e) => debug!("watch error: {:?}", e),
                 }
             }
-            Ok(())
         }))
     }
 

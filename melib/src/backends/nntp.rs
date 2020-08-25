@@ -589,7 +589,7 @@ impl FetchState {
                 f.unseen.lock().unwrap().set_not_yet_seen(total);
             };
         }
-        let (high, low, total) = high_low_total.unwrap();
+        let (high, low, _) = high_low_total.unwrap();
         if high <= low {
             return Ok(None);
         }

@@ -718,7 +718,6 @@ impl MailBackend for MaildirType {
                     Err(e) => debug!("watch error: {:?}", e),
                 }
             }
-            Ok(())
         }))
     }
 

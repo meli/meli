@@ -1154,7 +1154,7 @@ impl State {
             }
             Some(ForkType::Finished) => {
                 /* Fork has already finished */
-                std::mem::replace(&mut self.child, None);
+                self.child = None;
                 return None;
             }
             _ => {

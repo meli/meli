@@ -586,27 +586,6 @@ impl Account {
         Ok(())
     }
 
-    fn new_worker(mailbox: &Mailbox, backend: &Arc<RwLock<Box<dyn MailBackend>>>) -> Result<()> {
-        let mailbox_hash = mailbox.hash();
-        let mailbox_handle = backend.write().unwrap().fetch(mailbox_hash)?;
-        let priority = match mailbox.special_usage() {
-            SpecialUsageMailbox::Inbox => 0,
-            SpecialUsageMailbox::Sent => 1,
-            SpecialUsageMailbox::Drafts | SpecialUsageMailbox::Trash => 2,
-            _ => {
-                3 * mailbox
-                    .path()
-                    .split(if mailbox.path().contains('/') {
-                        '/'
-                    } else {
-                        '.'
-                    })
-                    .count() as u64
-            }
-        };
-
-        todo!()
-    }
     pub fn reload(&mut self, event: RefreshEvent, mailbox_hash: MailboxHash) -> Option<UIEvent> {
         if !self.mailbox_entries[&mailbox_hash].status.is_available() {
             self.event_queue.push_back((mailbox_hash, event));
