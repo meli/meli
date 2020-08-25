@@ -31,12 +31,9 @@ pub struct Message<'m> {
 }
 
 impl<'m> Message<'m> {
-    pub fn find_message(
-        lib: Arc<libloading::Library>,
-        db: &'m DbConnection,
-        msg_id: &CStr,
-    ) -> Result<Message<'m>> {
+    pub fn find_message(db: &'m DbConnection, msg_id: &CStr) -> Result<Message<'m>> {
         let mut message: *mut notmuch_message_t = std::ptr::null_mut();
+        let lib = db.lib.clone();
         unsafe {
             call!(lib, notmuch_database_find_message)(
                 *db.inner.read().unwrap(),
@@ -102,7 +99,7 @@ impl<'m> Message<'m> {
             .unwrap()
             .insert(env_hash, self.msg_id_cstr().into());
         let mut tag_lock = tag_index.write().unwrap();
-        let (flags, tags) = TagIterator::new(self).collect_flags_and_tags();
+        let (flags, tags) = TagIterator::new(&self).collect_flags_and_tags();
         for tag in tags {
             let mut hasher = DefaultHasher::new();
             hasher.write(tag.as_bytes());
@@ -171,6 +168,10 @@ impl<'m> Message<'m> {
             return Err(MeliError::new("Could not set tag.").set_source(Some(Arc::new(err))));
         }
         Ok(())
+    }
+
+    pub fn tags(&'m self) -> TagIterator<'m> {
+        TagIterator::new(self)
     }
 
     pub fn tags_to_maildir_flags(&self) -> Result<()> {

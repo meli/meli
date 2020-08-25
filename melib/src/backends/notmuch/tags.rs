@@ -23,7 +23,7 @@ use super::*;
 
 pub struct TagIterator<'m> {
     pub tags: *mut notmuch_tags_t,
-    pub message: Message<'m>,
+    pub message: &'m Message<'m>,
 }
 
 impl Drop for TagIterator<'_> {
@@ -33,7 +33,7 @@ impl Drop for TagIterator<'_> {
 }
 
 impl<'m> TagIterator<'m> {
-    pub fn new(message: Message<'m>) -> TagIterator<'m> {
+    pub fn new(message: &'m Message<'m>) -> TagIterator<'m> {
         TagIterator {
             tags: unsafe { call!(message.lib, notmuch_message_get_tags)(message.message) },
             message,

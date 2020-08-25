@@ -67,11 +67,123 @@ pub use tags::*;
 mod thread;
 pub use thread::*;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct DbConnection {
     pub lib: Arc<libloading::Library>,
     pub inner: Arc<RwLock<*mut notmuch_database_t>>,
+    pub revision_uuid: Arc<RwLock<u64>>,
     pub database_ph: std::marker::PhantomData<&'static mut notmuch_database_t>,
+}
+
+impl DbConnection {
+    pub fn get_revision_uuid(&self) -> u64 {
+        unsafe {
+            call!(self.lib, notmuch_database_get_revision)(
+                *self.inner.read().unwrap(),
+                std::ptr::null_mut(),
+            )
+        }
+    }
+
+    fn refresh(
+        &mut self,
+        mailboxes: Arc<RwLock<HashMap<MailboxHash, NotmuchMailbox>>>,
+        index: Arc<RwLock<HashMap<EnvelopeHash, CString>>>,
+        mailbox_index: Arc<RwLock<HashMap<EnvelopeHash, SmallVec<[MailboxHash; 16]>>>>,
+        tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
+        account_hash: AccountHash,
+        event_consumer: BackendEventConsumer,
+        new_revision_uuid: u64,
+    ) -> Result<()> {
+        use RefreshEventKind::*;
+        let query_str = format!(
+            "lastmod:{}..{}",
+            *self.revision_uuid.read().unwrap(),
+            new_revision_uuid
+        );
+        let query: Query = Query::new(self.lib.clone(), &self, &query_str)?;
+        let iter = query.search()?;
+        let mailbox_index_lck = mailbox_index.write().unwrap();
+        let mailboxes_lck = mailboxes.read().unwrap();
+        for message in iter {
+            let env_hash = message.env_hash();
+            if let Some(mailbox_hashes) = mailbox_index_lck.get(&env_hash) {
+                let tags: (Flag, Vec<String>) = message.tags().collect_flags_and_tags();
+                let mut tag_lock = tag_index.write().unwrap();
+                for tag in tags.1.iter() {
+                    let mut hasher = DefaultHasher::new();
+                    hasher.write(tag.as_bytes());
+                    let num = hasher.finish();
+                    if !tag_lock.contains_key(&num) {
+                        tag_lock.insert(num, tag.clone());
+                    }
+                }
+                for &mailbox_hash in mailbox_hashes {
+                    (event_consumer)(
+                        account_hash,
+                        BackendEvent::Refresh(RefreshEvent {
+                            account_hash,
+                            mailbox_hash,
+                            kind: NewFlags(env_hash, tags.clone()),
+                        }),
+                    );
+                }
+            } else {
+                let message_id = message.msg_id_cstr().to_string_lossy().to_string();
+                match message.into_envelope(index.clone(), tag_index.clone()) {
+                    Ok(env) => {
+                        for (&mailbox_hash, m) in mailboxes_lck.iter() {
+                            let query_str = format!("{} id:{}", m.query_str.as_str(), &message_id);
+                            let query: Query = Query::new(self.lib.clone(), self, &query_str)?;
+                            if query.count().unwrap_or(0) > 0 {
+                                let mut total_lck = m.total.lock().unwrap();
+                                let mut unseen_lck = m.unseen.lock().unwrap();
+                                *total_lck += 1;
+                                if !env.is_seen() {
+                                    *unseen_lck += 1;
+                                }
+                                (event_consumer)(
+                                    account_hash,
+                                    BackendEvent::Refresh(RefreshEvent {
+                                        account_hash,
+                                        mailbox_hash,
+                                        kind: Create(Box::new(env.clone())),
+                                    }),
+                                );
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        debug!("could not parse message {:?}", err);
+                    }
+                }
+            }
+        }
+        drop(query);
+        index.write().unwrap().retain(|&env_hash, msg_id| {
+            if Message::find_message(&self, &msg_id).is_err() {
+                if let Some(mailbox_hashes) = mailbox_index_lck.get(&env_hash) {
+                    for &mailbox_hash in mailbox_hashes {
+                        let m = &mailboxes_lck[&mailbox_hash];
+                        let mut total_lck = m.total.lock().unwrap();
+                        *total_lck = total_lck.saturating_sub(1);
+                        (event_consumer)(
+                            account_hash,
+                            BackendEvent::Refresh(RefreshEvent {
+                                account_hash,
+                                mailbox_hash,
+                                kind: Remove(env_hash),
+                            }),
+                        );
+                    }
+                }
+                false
+            } else {
+                true
+            }
+        });
+        Ok(())
+    }
 }
 
 unsafe impl Send for DbConnection {}
@@ -95,8 +207,14 @@ impl Drop for DbConnection {
     fn drop(&mut self) {
         let inner = self.inner.write().unwrap();
         unsafe {
-            call!(self.lib, notmuch_database_close)(*inner);
-            call!(self.lib, notmuch_database_destroy)(*inner);
+            if let Err(err) = try_call!(self.lib, call!(self.lib, notmuch_database_close)(*inner)) {
+                debug!(err);
+                return;
+            }
+            if let Err(err) = try_call!(self.lib, call!(self.lib, notmuch_database_destroy)(*inner))
+            {
+                debug!(err);
+            }
         }
     }
 }
@@ -110,7 +228,7 @@ pub struct NotmuchDb {
     mailbox_index: Arc<RwLock<HashMap<EnvelopeHash, SmallVec<[MailboxHash; 16]>>>>,
     tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
     path: PathBuf,
-    account_name: String,
+    account_name: Arc<String>,
     event_consumer: BackendEventConsumer,
     save_messages_to: Option<PathBuf>,
 }
@@ -244,7 +362,7 @@ impl NotmuchDb {
 
             mailboxes: Arc::new(RwLock::new(mailboxes)),
             save_messages_to: None,
-            account_name: s.name().to_string(),
+            account_name: Arc::new(s.name().to_string()),
             event_consumer,
         }))
     }
@@ -270,9 +388,13 @@ impl NotmuchDb {
     }
 
     pub fn search(&self, query_s: &str) -> Result<SmallVec<[EnvelopeHash; 512]>> {
-        let database = Self::new_connection(self.path.as_path(), self.lib.clone(), false)?;
-        let database_lck = database.inner.read().unwrap();
-        let query: Query = Query::new(self.lib.clone(), &database_lck, query_s)?;
+        let database = Self::new_connection(
+            self.path.as_path(),
+            self.revision_uuid.clone(),
+            self.lib.clone(),
+            false,
+        )?;
+        let query: Query = Query::new(self.lib.clone(), &database, query_s)?;
         let mut ret = SmallVec::new();
         let iter = query.search()?;
         for message in iter {
@@ -284,6 +406,7 @@ impl NotmuchDb {
 
     fn new_connection(
         path: &Path,
+        revision_uuid: Arc<RwLock<u64>>,
         lib: Arc<libloading::Library>,
         write: bool,
     ) -> Result<DbConnection> {
@@ -309,11 +432,17 @@ impl NotmuchDb {
             )));
         }
         assert!(!database.is_null());
-        Ok(DbConnection {
+        let ret = DbConnection {
             lib,
+            revision_uuid,
             inner: Arc::new(RwLock::new(database)),
             database_ph: std::marker::PhantomData,
-        })
+        };
+        if *ret.revision_uuid.read().unwrap() == 0 {
+            let new = ret.get_revision_uuid();
+            *ret.revision_uuid.write().unwrap() = new;
+        }
+        Ok(ret)
     }
 }
 
@@ -345,7 +474,6 @@ impl MailBackend for NotmuchDb {
             mailbox_index: Arc<RwLock<HashMap<EnvelopeHash, SmallVec<[MailboxHash; 16]>>>>,
             mailboxes: Arc<RwLock<HashMap<u64, NotmuchMailbox>>>,
             tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
-            lib: Arc<libloading::Library>,
             iter: std::vec::IntoIter<CString>,
         }
         impl FetchState {
@@ -357,13 +485,12 @@ impl MailBackend for NotmuchDb {
                 let mut done: bool = false;
                 for _ in 0..chunk_size {
                     if let Some(message_id) = self.iter.next() {
-                        let message = if let Ok(v) =
-                            Message::find_message(self.lib.clone(), &self.database, &message_id)
-                        {
-                            v
-                        } else {
-                            continue;
-                        };
+                        let message =
+                            if let Ok(v) = Message::find_message(&self.database, &message_id) {
+                                v
+                            } else {
+                                continue;
+                            };
                         match message.into_envelope(self.index.clone(), self.tag_index.clone()) {
                             Ok(env) => {
                                 mailbox_index_lck
@@ -399,6 +526,7 @@ impl MailBackend for NotmuchDb {
         }
         let database = Arc::new(NotmuchDb::new_connection(
             self.path.as_path(),
+            self.revision_uuid.clone(),
             self.lib.clone(),
             false,
         )?);
@@ -406,14 +534,11 @@ impl MailBackend for NotmuchDb {
         let mailbox_index = self.mailbox_index.clone();
         let tag_index = self.tag_index.clone();
         let mailboxes = self.mailboxes.clone();
-        let lib = self.lib.clone();
         let v: Vec<CString>;
         {
-            let database_lck = database.inner.read().unwrap();
             let mailboxes_lck = mailboxes.read().unwrap();
             let mailbox = mailboxes_lck.get(&mailbox_hash).unwrap();
-            let query: Query =
-                Query::new(self.lib.clone(), &database_lck, mailbox.query_str.as_str())?;
+            let query: Query = Query::new(self.lib.clone(), &database, mailbox.query_str.as_str())?;
             {
                 let mut total_lck = mailbox.total.lock().unwrap();
                 let mut unseen_lck = mailbox.unseen.lock().unwrap();
@@ -435,7 +560,6 @@ impl MailBackend for NotmuchDb {
             mailbox_hash,
             mailboxes,
             database,
-            lib,
             index,
             mailbox_index,
             tag_index,
@@ -449,214 +573,90 @@ impl MailBackend for NotmuchDb {
     }
 
     fn refresh(&mut self, _mailbox_hash: MailboxHash) -> ResultFuture<()> {
-        Err(MeliError::new("Unimplemented."))
+        let account_hash = {
+            let mut hasher = DefaultHasher::new();
+            hasher.write(self.account_name.as_bytes());
+            hasher.finish()
+        };
+        let mut database = NotmuchDb::new_connection(
+            self.path.as_path(),
+            self.revision_uuid.clone(),
+            self.lib.clone(),
+            false,
+        )?;
+        let mailboxes = self.mailboxes.clone();
+        let index = self.index.clone();
+        let mailbox_index = self.mailbox_index.clone();
+        let tag_index = self.tag_index.clone();
+        let event_consumer = self.event_consumer.clone();
+        Ok(Box::pin(async move {
+            let new_revision_uuid = database.get_revision_uuid();
+            if new_revision_uuid > *database.revision_uuid.read().unwrap() {
+                database.refresh(
+                    mailboxes,
+                    index,
+                    mailbox_index,
+                    tag_index,
+                    account_hash,
+                    event_consumer,
+                    new_revision_uuid,
+                )?;
+                *database.revision_uuid.write().unwrap() = new_revision_uuid;
+            }
+            Ok(())
+        }))
     }
 
     fn watch(&self) -> ResultFuture<()> {
-        Err(MeliError::new("Unimplemented."))
-    }
-    /*
-        fn watch(&self) -> ResultFuture<()> {
-            extern crate notify;
-            use crate::backends::RefreshEventKind::*;
-            use notify::{watcher, RecursiveMode, Watcher};
-            let sender = self.event_consumer.clone();
-            let (tx, rx) = std::sync::mpsc::channel();
-            let mut watcher = watcher(tx, std::time::Duration::from_secs(2)).unwrap();
-            watcher.watch(&self.path, RecursiveMode::Recursive).unwrap();
-            let path = self.path.clone();
-            let lib = self.lib.clone();
-            let tag_index = self.tag_index.clone();
-            let index = self.index.clone();
-            let account_hash = {
-                let mut hasher = DefaultHasher::new();
-                hasher.write(self.account_name.as_bytes());
-                hasher.finish()
-            };
-            let mailbox_index = self.mailbox_index.clone();
-            let mailboxes = self.mailboxes.clone();
-            {
-                let database = NotmuchDb::new_connection(path.as_path(), lib.clone(), false)?;
-                let mut revision_uuid_lck = self.revision_uuid.write().unwrap();
+        extern crate notify;
+        use notify::{watcher, RecursiveMode, Watcher};
 
-                *revision_uuid_lck = unsafe {
-                    call!(lib, notmuch_database_get_revision)(
-                        *database.inner.read().unwrap(),
-                        std::ptr::null_mut(),
-                    )
-                };
-            }
-            let revision_uuid = self.revision_uuid.clone();
+        let account_hash = {
+            let mut hasher = DefaultHasher::new();
+            hasher.write(self.account_name.as_bytes());
+            hasher.finish()
+        };
+        let lib = self.lib.clone();
+        let path = self.path.clone();
+        let revision_uuid = self.revision_uuid.clone();
+        let mailboxes = self.mailboxes.clone();
+        let index = self.index.clone();
+        let mailbox_index = self.mailbox_index.clone();
+        let tag_index = self.tag_index.clone();
+        let event_consumer = self.event_consumer.clone();
 
-            let handle = std::thread::Builder::new()
-                .name(format!("watching {}", self.account_name))
-                .spawn(move || {
-                    let _watcher = watcher;
-                    let c = move |sender: &BackendEventConsumer| -> std::result::Result<(), MeliError> {
-                        loop {
-                            let _ = rx.recv().map_err(|err| err.to_string())?;
-                            {
-                                let database =
-                                    NotmuchDb::new_connection(path.as_path(), lib.clone(), false)?;
-                                let database_lck = database.inner.read().unwrap();
-                                let mut revision_uuid_lck = revision_uuid.write().unwrap();
-
-                                let new_revision = unsafe {
-                                    call!(lib, notmuch_database_get_revision)(
-                                        *database_lck,
-                                        std::ptr::null_mut(),
-                                    )
-                                };
-                                if new_revision > *revision_uuid_lck {
-                                    let query_str =
-                                        format!("lastmod:{}..{}", *revision_uuid_lck, new_revision);
-                                    let query: Query =
-                                        Query::new(lib.clone(), &database_lck, &query_str)?;
-                                    drop(database_lck);
-                                    let iter = query.search()?;
-                                    let mut tag_lock = tag_index.write().unwrap();
-                                    let mailbox_index_lck = mailbox_index.write().unwrap();
-                                    let mailboxes_lck = mailboxes.read().unwrap();
-                                    let database = Arc::new(database);
-                                    for message in iter {
-                                        let msg_id = unsafe {
-                                            call!(lib, notmuch_message_get_message_id)(message)
-                                        };
-                                        let c_str = unsafe { CStr::from_ptr(msg_id) };
-                                        let env_hash = {
-                                            let mut hasher = DefaultHasher::default();
-                                            c_str.hash(&mut hasher);
-                                            hasher.finish()
-                                        };
-                                        if let Some(mailbox_hashes) = mailbox_index_lck.get(&env_hash) {
-                                            let tags: (Flag, Vec<String>) =
-                                                TagIterator::new(lib.clone(), message)
-                                                    .collect_flags_and_tags();
-                                            for tag in tags.1.iter() {
-                                                let mut hasher = DefaultHasher::new();
-                                                hasher.write(tag.as_bytes());
-                                                let num = hasher.finish();
-                                                if !tag_lock.contains_key(&num) {
-                                                    tag_lock.insert(num, tag.clone());
-                                                }
-                                            }
-                                            for &mailbox_hash in mailbox_hashes {
-                                                (sender)(
-                                                    account_hash,
-                                                    BackendEvent::Refresh(RefreshEvent {
-                                                        account_hash,
-                                                        mailbox_hash,
-                                                        kind: NewFlags(env_hash, tags.clone()),
-                                                    }),
-                                                );
-                                            }
-                                        } else {
-                                            match notmuch_message_into_envelope(
-                                                lib.clone(),
-                                                index.clone(),
-                                                tag_index.clone(),
-                                                database.clone(),
-                                                message,
-                                            ) {
-                                                Ok(env) => {
-                                                    for (&mailbox_hash, m) in mailboxes_lck.iter() {
-                                                        let query_str = format!(
-                                                            "{} id:{}",
-                                                            m.query_str.as_str(),
-                                                            c_str.to_string_lossy()
-                                                        );
-                                                        let database_lck =
-                                                            database.inner.read().unwrap();
-                                                        let query: Query = Query::new(
-                                                            lib.clone(),
-                                                            &database_lck,
-                                                            &query_str,
-                                                        )?;
-                                                        if query.count().unwrap_or(0) > 0 {
-                                                            let mut total_lck = m.total.lock().unwrap();
-                                                            let mut unseen_lck =
-                                                                m.unseen.lock().unwrap();
-                                                            *total_lck += 1;
-                                                            if !env.is_seen() {
-                                                                *unseen_lck += 1;
-                                                            }
-                                                            (sender)(
-                                                                account_hash,
-                                                                BackendEvent::Refresh(RefreshEvent {
-                                                                    account_hash,
-                                                                    mailbox_hash,
-                                                                    kind: Create(Box::new(env.clone())),
-                                                                }),
-                                                            );
-                                                        }
-                                                    }
-                                                }
-                                                Err(err) => {
-                                                    debug!("could not parse message {:?}", err);
-                                                }
-                                            }
-                                        }
-                                    }
-                                    drop(query);
-                                    let database_lck = database.inner.read().unwrap();
-                                    index.write().unwrap().retain(|&env_hash, msg_id| {
-                                        let mut message: *mut notmuch_message_t = std::ptr::null_mut();
-                                        if let Err(err) = unsafe {
-                                            try_call!(
-                                                lib,
-                                                call!(lib, notmuch_database_find_message)(
-                                                    *database_lck,
-                                                    msg_id.as_ptr(),
-                                                    &mut message as *mut _,
-                                                )
-                                            )
-                                        } {
-                                            debug!(err);
-                                            false
-                                        } else {
-                                            if message.is_null() {
-                                                if let Some(mailbox_hashes) =
-                                                    mailbox_index_lck.get(&env_hash)
-                                                {
-                                                    for &mailbox_hash in mailbox_hashes {
-                                                        let m = &mailboxes_lck[&mailbox_hash];
-                                                        let mut total_lck = m.total.lock().unwrap();
-                                                        *total_lck = total_lck.saturating_sub(1);
-                                                        (sender)(
-                                                            account_hash,
-                                                            BackendEvent::Refresh(RefreshEvent {
-                                                                account_hash,
-                                                                mailbox_hash,
-                                                                kind: Remove(env_hash),
-                                                            }),
-                                                        );
-                                                    }
-                                                }
-                                            }
-                                            !message.is_null()
-                                        }
-                                    });
-
-                                    *revision_uuid_lck = new_revision;
-                                }
-                            }
-                        }
-                    };
-
-                    if let Err(err) = c(&sender) {
-                        (sender)(
-                            account_hash,
-                            BackendEvent::Refresh(RefreshEvent {
-                                account_hash,
-                                mailbox_hash: 0,
-                                kind: Failure(err),
-                            }),
-                        );
+        let (tx, rx) = std::sync::mpsc::channel();
+        let mut watcher = watcher(tx, std::time::Duration::from_secs(2)).unwrap();
+        watcher.watch(&self.path, RecursiveMode::Recursive).unwrap();
+        Ok(Box::pin(async move {
+            let _watcher = watcher;
+            let rx = rx;
+            loop {
+                let _ = rx.recv().map_err(|err| err.to_string())?;
+                {
+                    let mut database = NotmuchDb::new_connection(
+                        path.as_path(),
+                        revision_uuid.clone(),
+                        lib.clone(),
+                        false,
+                    )?;
+                    let new_revision_uuid = database.get_revision_uuid();
+                    if new_revision_uuid > *database.revision_uuid.read().unwrap() {
+                        database.refresh(
+                            mailboxes.clone(),
+                            index.clone(),
+                            mailbox_index.clone(),
+                            tag_index.clone(),
+                            account_hash.clone(),
+                            event_consumer.clone(),
+                            new_revision_uuid,
+                        )?;
+                        *revision_uuid.write().unwrap() = new_revision_uuid;
                     }
-                })?;
-            Ok(handle.thread().id())
-        }
-    */
+                }
+            }
+        }))
+    }
 
     fn mailboxes(&self) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
         let ret = Ok(self
@@ -673,6 +673,7 @@ impl MailBackend for NotmuchDb {
         Ok(Box::new(NotmuchOp {
             database: Arc::new(Self::new_connection(
                 self.path.as_path(),
+                self.revision_uuid.clone(),
                 self.lib.clone(),
                 true,
             )?),
@@ -690,6 +691,7 @@ impl MailBackend for NotmuchDb {
         _mailbox_hash: MailboxHash,
         flags: Option<Flag>,
     ) -> ResultFuture<()> {
+        // FIXME call notmuch_database_index_file ?
         let path = self
             .save_messages_to
             .as_ref()
@@ -705,12 +707,20 @@ impl MailBackend for NotmuchDb {
         _mailbox_hash: MailboxHash,
         flags: SmallVec<[(std::result::Result<Flag, String>, bool); 8]>,
     ) -> ResultFuture<()> {
-        let database = Self::new_connection(self.path.as_path(), self.lib.clone(), true)?;
+        let database = Self::new_connection(
+            self.path.as_path(),
+            self.revision_uuid.clone(),
+            self.lib.clone(),
+            true,
+        )?;
         let tag_index = self.tag_index.clone();
-        let mut index_lck = self.index.write().unwrap();
-        for env_hash in env_hashes.iter() {
-            let message =
-                match Message::find_message(self.lib.clone(), &database, &index_lck[&env_hash]) {
+        let index = self.index.clone();
+
+        Ok(Box::pin(async move {
+            let mut index_lck = index.write().unwrap();
+            for env_hash in env_hashes.iter() {
+                debug!(&env_hash);
+                let message = match Message::find_message(&database, &index_lck[&env_hash]) {
                     Ok(v) => v,
                     Err(err) => {
                         debug!("not found {}", err);
@@ -718,82 +728,85 @@ impl MailBackend for NotmuchDb {
                     }
                 };
 
-            let tags = TagIterator::new(message.clone()).collect::<Vec<&CStr>>();
-            //flags.set(f, value);
+                let tags = debug!(message.tags().collect::<Vec<&CStr>>());
+                //flags.set(f, value);
 
-            macro_rules! cstr {
-                ($l:literal) => {
-                    &CStr::from_bytes_with_nul_unchecked($l)
-                };
-            }
-            macro_rules! add_tag {
-                ($l:literal) => {{
-                    add_tag!(unsafe { cstr!($l) })
-                }};
-                ($l:expr) => {{
-                    let l = $l;
-                    if tags.contains(l) {
-                        continue;
-                    }
-                    message.add_tag(l)?;
-                }};
-            }
-            macro_rules! remove_tag {
-                ($l:literal) => {{
-                    remove_tag!(unsafe { cstr!($l) })
-                }};
-                ($l:expr) => {{
-                    let l = $l;
-                    if !tags.contains(l) {
-                        continue;
-                    }
-                    message.remove_tag(l)?;
-                }};
-            }
+                macro_rules! cstr {
+                    ($l:literal) => {
+                        &CStr::from_bytes_with_nul_unchecked($l)
+                    };
+                }
+                macro_rules! add_tag {
+                    ($l:literal) => {{
+                        add_tag!(unsafe { cstr!($l) })
+                    }};
+                    ($l:expr) => {{
+                        let l = $l;
+                        if tags.contains(l) {
+                            continue;
+                        }
+                        message.add_tag(l)?;
+                    }};
+                }
+                macro_rules! remove_tag {
+                    ($l:literal) => {{
+                        remove_tag!(unsafe { cstr!($l) })
+                    }};
+                    ($l:expr) => {{
+                        let l = $l;
+                        if !tags.contains(l) {
+                            continue;
+                        }
+                        message.remove_tag(l)?;
+                    }};
+                }
 
+                for (f, v) in flags.iter() {
+                    let value = *v;
+                    debug!(&f);
+                    debug!(&value);
+                    match f {
+                        Ok(Flag::DRAFT) if value => add_tag!(b"draft\0"),
+                        Ok(Flag::DRAFT) => remove_tag!(b"draft\0"),
+                        Ok(Flag::FLAGGED) if value => add_tag!(b"flagged\0"),
+                        Ok(Flag::FLAGGED) => remove_tag!(b"flagged\0"),
+                        Ok(Flag::PASSED) if value => add_tag!(b"passed\0"),
+                        Ok(Flag::PASSED) => remove_tag!(b"passed\0"),
+                        Ok(Flag::REPLIED) if value => add_tag!(b"replied\0"),
+                        Ok(Flag::REPLIED) => remove_tag!(b"replied\0"),
+                        Ok(Flag::SEEN) if value => remove_tag!(b"unread\0"),
+                        Ok(Flag::SEEN) => add_tag!(b"unread\0"),
+                        Ok(Flag::TRASHED) if value => add_tag!(b"trashed\0"),
+                        Ok(Flag::TRASHED) => remove_tag!(b"trashed\0"),
+                        Ok(_) => debug!("flags is {:?} value = {}", f, value),
+                        Err(tag) if value => {
+                            let c_tag = CString::new(tag.as_str()).unwrap();
+                            add_tag!(&c_tag.as_ref());
+                        }
+                        Err(tag) => {
+                            let c_tag = CString::new(tag.as_str()).unwrap();
+                            add_tag!(&c_tag.as_ref());
+                        }
+                    }
+                }
+
+                /* Update message filesystem path. */
+                message.tags_to_maildir_flags()?;
+
+                let msg_id = message.msg_id_cstr();
+                if let Some(p) = index_lck.get_mut(&env_hash) {
+                    *p = msg_id.into();
+                }
+            }
             for (f, v) in flags.iter() {
-                let value = *v;
-                match f {
-                    Ok(Flag::DRAFT) if value => add_tag!(b"draft\0"),
-                    Ok(Flag::DRAFT) => remove_tag!(b"draft\0"),
-                    Ok(Flag::FLAGGED) if value => add_tag!(b"flagged\0"),
-                    Ok(Flag::FLAGGED) => remove_tag!(b"flagged\0"),
-                    Ok(Flag::PASSED) if value => add_tag!(b"passed\0"),
-                    Ok(Flag::PASSED) => remove_tag!(b"passed\0"),
-                    Ok(Flag::REPLIED) if value => add_tag!(b"replied\0"),
-                    Ok(Flag::REPLIED) => remove_tag!(b"replied\0"),
-                    Ok(Flag::SEEN) if value => remove_tag!(b"unread\0"),
-                    Ok(Flag::SEEN) => add_tag!(b"unread\0"),
-                    Ok(Flag::TRASHED) if value => add_tag!(b"trashed\0"),
-                    Ok(Flag::TRASHED) => remove_tag!(b"trashed\0"),
-                    Ok(_) => debug!("flags is {:?} value = {}", f, value),
-                    Err(tag) if value => {
-                        let c_tag = CString::new(tag.as_str()).unwrap();
-                        add_tag!(&c_tag.as_ref());
-                    }
-                    Err(tag) => {
-                        let c_tag = CString::new(tag.as_str()).unwrap();
-                        add_tag!(&c_tag.as_ref());
-                    }
+                if let (Err(tag), true) = (f, v) {
+                    let hash = tag_hash!(tag);
+                    tag_index.write().unwrap().insert(hash, tag.to_string());
                 }
             }
 
-            /* Update message filesystem path. */
-            message.tags_to_maildir_flags()?;
-
-            let msg_id = message.msg_id_cstr();
-            if let Some(p) = index_lck.get_mut(&env_hash) {
-                *p = msg_id.into();
-            }
-        }
-        for (f, v) in flags.iter() {
-            if let (Err(tag), true) = (f, v) {
-                let hash = tag_hash!(tag);
-                tag_index.write().unwrap().insert(hash, tag.to_string());
-            }
-        }
-
-        Ok(Box::pin(async { Ok(()) }))
+            Ok(())
+        }))
     }
 
     fn tags(&self) -> Option<Arc<RwLock<BTreeMap<u64, String>>>> {
@@ -822,8 +835,7 @@ struct NotmuchOp {
 impl BackendOp for NotmuchOp {
     fn as_bytes(&mut self) -> ResultFuture<Vec<u8>> {
         let index_lck = self.index.write().unwrap();
-        let message =
-            Message::find_message(self.lib.clone(), &self.database, &index_lck[&self.hash])?;
+        let message = Message::find_message(&self.database, &index_lck[&self.hash])?;
         let mut f = std::fs::File::open(message.get_filename())?;
         let mut response = Vec::new();
         f.read_to_end(&mut response)?;
@@ -834,9 +846,8 @@ impl BackendOp for NotmuchOp {
 
     fn fetch_flags(&self) -> ResultFuture<Flag> {
         let index_lck = self.index.write().unwrap();
-        let message =
-            Message::find_message(self.lib.clone(), &self.database, &index_lck[&self.hash])?;
-        let (flags, _tags) = TagIterator::new(message).collect_flags_and_tags();
+        let message = Message::find_message(&self.database, &index_lck[&self.hash])?;
+        let (flags, _tags) = message.tags().collect_flags_and_tags();
         Ok(Box::pin(async move { Ok(flags) }))
     }
 }
@@ -850,12 +861,13 @@ pub struct Query<'s> {
 impl<'s> Query<'s> {
     fn new(
         lib: Arc<libloading::Library>,
-        database: &*mut notmuch_database_t,
+        database: &DbConnection,
         query_str: &'s str,
     ) -> Result<Self> {
         let query_cstr = std::ffi::CString::new(query_str)?;
-        let query: *mut notmuch_query_t =
-            unsafe { call!(lib, notmuch_query_create)(*database, query_cstr.as_ptr()) };
+        let query: *mut notmuch_query_t = unsafe {
+            call!(lib, notmuch_query_create)(*database.inner.read().unwrap(), query_cstr.as_ptr())
+        };
         if query.is_null() {
             return Err(MeliError::new("Could not create query. Out of memory?"));
         }
