@@ -466,6 +466,10 @@ impl MailBackend for ImapType {
         let uid_store = self.uid_store.clone();
         let connection = self.connection.clone();
         Ok(Box::pin(async move {
+            let mut response = String::with_capacity(8 * 1024);
+            let mut conn = connection.lock().await;
+            conn.select_mailbox(mailbox_hash, &mut response, true)
+                .await?;
             let path = {
                 let mailboxes = uid_store.mailboxes.lock().await;
 
@@ -481,8 +485,6 @@ impl MailBackend for ImapType {
 
                 mailbox.imap_path().to_string()
             };
-            let mut response = String::with_capacity(8 * 1024);
-            let mut conn = connection.lock().await;
             let flags = flags.unwrap_or_else(Flag::empty);
             let has_literal_plus: bool = uid_store
                 .capabilities
@@ -556,7 +558,7 @@ impl MailBackend for ImapType {
                     .ok_or_else(|| MeliError::new("Destination mailbox not found"))?;
                 if !mailbox.permissions.lock().unwrap().create_messages {
                     return Err(MeliError::new(format!(
-                        "You are not allowed to delete messages from mailbox {}",
+                        "You are not allowed to create messages in mailbox {}",
                         mailbox.path()
                     )));
                 }
@@ -804,6 +806,7 @@ impl MailBackend for ImapType {
             let mut response = String::with_capacity(8 * 1024);
             {
                 let mut conn_lck = connection.lock().await;
+                conn_lck.unselect().await?;
 
                 conn_lck
                     .send_command(format!("CREATE \"{}\"", path,).as_bytes())
@@ -835,11 +838,9 @@ impl MailBackend for ImapType {
         let new_mailbox_fut = self.mailboxes();
         Ok(Box::pin(async move {
             let imap_path: String;
-            let no_select: bool;
             let is_subscribed: bool;
             {
                 let mailboxes = uid_store.mailboxes.lock().await;
-                no_select = mailboxes[&mailbox_hash].no_select;
                 is_subscribed = mailboxes[&mailbox_hash].is_subscribed();
                 imap_path = mailboxes[&mailbox_hash].imap_path().to_string();
                 let permissions = mailboxes[&mailbox_hash].permissions();
@@ -850,15 +851,9 @@ impl MailBackend for ImapType {
             let mut response = String::with_capacity(8 * 1024);
             {
                 let mut conn_lck = connection.lock().await;
-                let current_mailbox = conn_lck.stream.as_ref()?.current_mailbox;
-                if !no_select
-                    && (current_mailbox == MailboxSelection::Examine(mailbox_hash)
-                        || current_mailbox == MailboxSelection::Select(mailbox_hash))
-                {
-                    /* make sure mailbox is not selected before it gets deleted, otherwise
-                     * connection gets dropped by server */
-                    conn_lck.unselect().await?;
-                }
+                /* make sure mailbox is not selected before it gets deleted, otherwise
+                 * connection gets dropped by server */
+                conn_lck.unselect().await?;
                 if is_subscribed {
                     conn_lck
                         .send_command(format!("UNSUBSCRIBE \"{}\"", &imap_path).as_bytes())

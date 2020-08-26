@@ -33,11 +33,10 @@ pub async fn poll_with_examine(kit: ImapWatchKit) -> Result<()> {
     debug!("poll with examine");
     let ImapWatchKit {
         mut conn,
-        main_conn,
+        main_conn: _,
         uid_store,
     } = kit;
     conn.connect().await?;
-    let mut response = String::with_capacity(8 * 1024);
     loop {
         let mailboxes: HashMap<MailboxHash, ImapMailbox> = {
             let mailboxes_lck = timeout(Duration::from_secs(3), uid_store.mailboxes.lock()).await?;
@@ -46,11 +45,6 @@ pub async fn poll_with_examine(kit: ImapWatchKit) -> Result<()> {
         for (_, mailbox) in mailboxes {
             examine_updates(mailbox, &mut conn, &uid_store).await?;
         }
-        let mut main_conn = timeout(Duration::from_secs(3), main_conn.lock()).await?;
-        main_conn.send_command(b"NOOP").await?;
-        main_conn
-            .read_response(&mut response, RequiredResponses::empty())
-            .await?;
     }
 }
 
@@ -79,52 +73,36 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
     };
     let mailbox_hash = mailbox.hash();
     let mut response = String::with_capacity(8 * 1024);
-    conn.send_command(format!("SELECT \"{}\"", mailbox.imap_path()).as_bytes())
-        .await?;
-    conn.read_response(&mut response, RequiredResponses::SELECT_REQUIRED)
-        .await?;
+    let select_response = conn
+        .select_mailbox(mailbox_hash, &mut response, true)
+        .await?
+        .unwrap();
     debug!("select response {}", &response);
     {
-        let mut prev_exists = mailbox.exists.lock().unwrap();
-        match protocol_parser::select_response(&response) {
-            Ok(ok) => {
-                {
-                    let uidvalidities = uid_store.uidvalidity.lock().unwrap();
+        let mut uidvalidities = uid_store.uidvalidity.lock().unwrap();
 
-                    if let Some(v) = uidvalidities.get(&mailbox_hash) {
-                        if *v != ok.uidvalidity {
-                            conn.add_refresh_event(RefreshEvent {
-                                account_hash: uid_store.account_hash,
-                                mailbox_hash,
-                                kind: RefreshEventKind::Rescan,
-                            });
-                            prev_exists.clear();
-                            /*
-                            uid_store.uid_index.lock().unwrap().clear();
-                            uid_store.hash_index.lock().unwrap().clear();
-                            uid_store.byte_cache.lock().unwrap().clear();
-                            */
-                        }
-                    } else {
-                        conn.add_refresh_event(RefreshEvent {
-                            account_hash: uid_store.account_hash,
-                            mailbox_hash,
-                            kind: RefreshEventKind::Rescan,
-                        });
-                        return Err(MeliError::new(format!(
-                            "Unknown mailbox: {} {}",
-                            mailbox.path(),
-                            mailbox_hash
-                        )));
-                    }
-                }
-                debug!(&ok);
+        if let Some(v) = uidvalidities.get(&mailbox_hash) {
+            if *v != select_response.uidvalidity {
+                let cache_handle = cache::CacheHandle::get(uid_store.clone())?;
+                cache_handle.clear(
+                    mailbox_hash,
+                    select_response.uidvalidity,
+                    select_response.highestmodseq.and_then(|i| i.ok()),
+                )?;
+                conn.add_refresh_event(RefreshEvent {
+                    account_hash: uid_store.account_hash,
+                    mailbox_hash,
+                    kind: RefreshEventKind::Rescan,
+                });
+                /*
+                uid_store.uid_index.lock().unwrap().clear();
+                uid_store.hash_index.lock().unwrap().clear();
+                uid_store.byte_cache.lock().unwrap().clear();
+                */
             }
-            Err(e) => {
-                debug!("{:?}", e);
-                return Err(e).chain_err_summary(|| "could not select mailbox");
-            }
-        };
+        } else {
+            uidvalidities.insert(mailbox_hash, select_response.uidvalidity);
+        }
     }
     conn.send_command(b"IDLE").await?;
     let mut blockn = ImapBlockingConnection::from(conn);
@@ -134,7 +112,7 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
     const _26_MINS: std::time::Duration = std::time::Duration::from_secs(26 * 60);
     /* duration interval to check other mailboxes for changes */
     const _5_MINS: std::time::Duration = std::time::Duration::from_secs(5 * 60);
-    while let Some(line) = blockn.as_stream().await {
+    while let Some(line) = timeout(Duration::from_secs(35 * 60), blockn.as_stream()).await? {
         let now = std::time::Instant::now();
         if now.duration_since(beat) >= _26_MINS {
             let mut main_conn_lck = timeout(Duration::from_secs(3), main_conn.lock()).await?;
@@ -158,13 +136,18 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
                     timeout(Duration::from_secs(3), uid_store.mailboxes.lock()).await?;
                 mailboxes_lck.clone()
             };
-            for (_, mailbox) in mailboxes {
+            for (h, mailbox) in mailboxes {
+                if mailbox_hash == h {
+                    continue;
+                }
                 examine_updates(mailbox, &mut conn, &uid_store).await?;
             }
             watch = now;
         }
         {
-            let mut conn = timeout(Duration::from_secs(3), main_conn.lock()).await?;
+            let mut conn = timeout(Duration::from_secs(10), main_conn.lock()).await?;
+            conn.examine_mailbox(mailbox_hash, &mut response, false)
+                .await?;
             conn.process_untagged(to_str!(&line)).await?;
         }
         *uid_store.is_online.lock().unwrap() = (Instant::now(), Ok(()));
@@ -201,14 +184,14 @@ pub async fn examine_updates(
         }
     } else {
         let mut response = String::with_capacity(8 * 1024);
-        conn.examine_mailbox(mailbox_hash, &mut response, true)
-            .await?;
+        let select_response = conn
+            .examine_mailbox(mailbox_hash, &mut response, true)
+            .await?
+            .unwrap();
         *uid_store.is_online.lock().unwrap() = (Instant::now(), Ok(()));
-        let select_response = protocol_parser::select_response(&response)
-            .chain_err_summary(|| "could not select mailbox")?;
         debug!(&select_response);
         {
-            let uidvalidities = uid_store.uidvalidity.lock().unwrap();
+            let mut uidvalidities = uid_store.uidvalidity.lock().unwrap();
 
             if let Some(v) = uidvalidities.get(&mailbox_hash) {
                 if *v != select_response.uidvalidity {
@@ -231,16 +214,7 @@ pub async fn examine_updates(
                     return Ok(());
                 }
             } else {
-                conn.add_refresh_event(RefreshEvent {
-                    account_hash: uid_store.account_hash,
-                    mailbox_hash,
-                    kind: RefreshEventKind::Rescan,
-                });
-                return Err(MeliError::new(format!(
-                    "Unknown mailbox: {} {}",
-                    mailbox.path(),
-                    mailbox_hash
-                )));
+                uidvalidities.insert(mailbox_hash, select_response.uidvalidity);
             }
         }
         let mut cache_handle = cache::CacheHandle::get(uid_store.clone())?;
