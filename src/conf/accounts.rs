@@ -1974,14 +1974,18 @@ impl Account {
                     let r = channel.try_recv().unwrap();
                     debug!("JobRequest::Watch {:?}", r);
                     if let Some(Err(err)) = r {
-                        //TODO: relaunch watch job with ratelimit for failure
-                        self.sender
-                            .send(ThreadEvent::UIEvent(UIEvent::Notification(
-                                Some(format!("{}: watch thread failed", &self.name)),
-                                err.to_string(),
-                                Some(crate::types::NotificationType::ERROR),
-                            )))
-                            .expect("Could not send event on main channel");
+                        if err.kind.is_timeout() {
+                            self.watch();
+                        } else {
+                            //TODO: relaunch watch job with ratelimit for failure
+                            self.sender
+                                .send(ThreadEvent::UIEvent(UIEvent::Notification(
+                                    Some(format!("{}: watch thread failed", &self.name)),
+                                    err.to_string(),
+                                    Some(crate::types::NotificationType::ERROR),
+                                )))
+                                .expect("Could not send event on main channel");
+                        }
                     }
                 }
                 JobRequest::Generic {

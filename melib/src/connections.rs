@@ -195,7 +195,7 @@ pub async fn timeout<O>(dur: std::time::Duration, f: impl Future<Output = O>) ->
         Either::Left((out, _)) => Ok(out),
         Either::Right(_) => {
             Err(crate::error::MeliError::new("Timed out.")
-                .set_kind(crate::error::ErrorKind::Network))
+                .set_kind(crate::error::ErrorKind::Timeout))
         }
     }
 }

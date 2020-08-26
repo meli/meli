@@ -39,12 +39,20 @@ pub enum ErrorKind {
     None,
     Authentication,
     Network,
+    Timeout,
 }
 
 impl ErrorKind {
     pub fn is_network(&self) -> bool {
         match self {
             ErrorKind::Network => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_timeout(&self) -> bool {
+        match self {
+            ErrorKind::Timeout => true,
             _ => false,
         }
     }
