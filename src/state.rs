@@ -386,8 +386,8 @@ impl State {
      * and startup a thread to remind us to poll it every now and then till it's finished.
      */
     pub fn refresh_event(&mut self, event: RefreshEvent) {
-        let account_hash = event.account_hash();
-        let mailbox_hash = event.mailbox_hash();
+        let account_hash = event.account_hash;
+        let mailbox_hash = event.mailbox_hash;
         if self.context.accounts[&account_hash]
             .mailbox_entries
             .contains_key(&mailbox_hash)
@@ -410,7 +410,7 @@ impl State {
                 self.rcv_event(notification);
             }
         } else {
-            if let melib::backends::RefreshEventKind::Failure(err) = event.kind() {
+            if let melib::backends::RefreshEventKind::Failure(err) = event.kind {
                 debug!(err);
             }
         }

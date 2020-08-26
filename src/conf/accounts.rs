@@ -599,11 +599,20 @@ impl Account {
             return None;
         }
 
-        let kind = event.kind();
         {
             //let mailbox: &mut Mailbox = self.mailboxes[idx].as_mut().unwrap().as_mut().unwrap();
-            match kind {
+            match event.kind {
                 RefreshEventKind::Update(old_hash, envelope) => {
+                    if !self.collection.contains_key(&old_hash) {
+                        return self.reload(
+                            RefreshEvent {
+                                account_hash: event.account_hash,
+                                mailbox_hash: event.mailbox_hash,
+                                kind: RefreshEventKind::Create(envelope),
+                            },
+                            mailbox_hash,
+                        );
+                    }
                     #[cfg(feature = "sqlite3")]
                     {
                         match crate::sqlite3::remove(old_hash).map(|_| {
@@ -646,6 +655,9 @@ impl Account {
                     return Some(EnvelopeUpdate(old_hash));
                 }
                 RefreshEventKind::NewFlags(env_hash, (flags, tags)) => {
+                    if !self.collection.contains_key(&env_hash) {
+                        return None;
+                    }
                     self.collection
                         .envelopes
                         .write()
@@ -833,6 +845,9 @@ impl Account {
                     ));
                 }
                 RefreshEventKind::Remove(env_hash) => {
+                    if !self.collection.contains_key(&env_hash) {
+                        return None;
+                    }
                     let thread_hash = {
                         let thread_hash = self.collection.get_env(env_hash).thread();
                         self.collection.get_threads(mailbox_hash).find_group(

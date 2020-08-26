@@ -240,24 +240,9 @@ pub enum RefreshEventKind {
 
 #[derive(Debug, Clone)]
 pub struct RefreshEvent {
-    mailbox_hash: MailboxHash,
-    account_hash: AccountHash,
-    kind: RefreshEventKind,
-}
-
-impl RefreshEvent {
-    pub fn mailbox_hash(&self) -> MailboxHash {
-        self.mailbox_hash
-    }
-
-    pub fn account_hash(&self) -> AccountHash {
-        self.account_hash
-    }
-
-    pub fn kind(self) -> RefreshEventKind {
-        /* consumes self! */
-        self.kind
-    }
+    pub mailbox_hash: MailboxHash,
+    pub account_hash: AccountHash,
+    pub kind: RefreshEventKind,
 }
 
 #[derive(Clone)]
