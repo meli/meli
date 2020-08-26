@@ -182,7 +182,12 @@ pub enum JobRequest {
     IsOnline(JoinHandle, oneshot::Receiver<Result<()>>),
     Refresh(MailboxHash, JoinHandle, oneshot::Receiver<Result<()>>),
     SetFlags(EnvelopeHashBatch, JoinHandle, oneshot::Receiver<Result<()>>),
-    SaveMessage(MailboxHash, JoinHandle, oneshot::Receiver<Result<()>>),
+    SaveMessage {
+        bytes: Vec<u8>,
+        mailbox_hash: MailboxHash,
+        handle: JoinHandle,
+        channel: oneshot::Receiver<Result<()>>,
+    },
     SendMessage,
     SendMessageBackground(JoinHandle, JobChannel<()>),
     CopyTo(MailboxHash, JoinHandle, oneshot::Receiver<Result<Vec<u8>>>),
@@ -217,7 +222,7 @@ impl Drop for JobRequest {
             JobRequest::IsOnline(h, _) => h.0.cancel(),
             JobRequest::Refresh(_, h, _) => h.0.cancel(),
             JobRequest::SetFlags(_, h, _) => h.0.cancel(),
-            JobRequest::SaveMessage(_, h, _) => h.0.cancel(),
+            JobRequest::SaveMessage { handle, .. } => handle.0.cancel(),
             JobRequest::CopyTo(_, h, _) => h.0.cancel(),
             JobRequest::DeleteMessages(_, h, _) => h.0.cancel(),
             JobRequest::CreateMailbox { handle, .. } => handle.0.cancel(),
@@ -249,7 +254,7 @@ impl core::fmt::Debug for JobRequest {
             JobRequest::IsOnline(_, _) => write!(f, "JobRequest::IsOnline"),
             JobRequest::Refresh(_, _, _) => write!(f, "JobRequest::Refresh"),
             JobRequest::SetFlags(_, _, _) => write!(f, "JobRequest::SetFlags"),
-            JobRequest::SaveMessage(_, _, _) => write!(f, "JobRequest::SaveMessage"),
+            JobRequest::SaveMessage { .. } => write!(f, "JobRequest::SaveMessage"),
             JobRequest::CopyTo(_, _, _) => write!(f, "JobRequest::CopyTo"),
             JobRequest::DeleteMessages(_, _, _) => write!(f, "JobRequest::DeleteMessages"),
             JobRequest::CreateMailbox { .. } => write!(f, "JobRequest::CreateMailbox"),
@@ -1124,14 +1129,21 @@ impl Account {
             .write()
             .unwrap()
             .save(bytes.to_vec(), mailbox_hash, flags)?;
-        let (rcvr, handle, job_id) = self.job_executor.spawn_specialized(job);
+        let (channel, handle, job_id) = self.job_executor.spawn_specialized(job);
         self.sender
             .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
                 StatusEvent::NewJob(job_id),
             )))
             .unwrap();
-        self.active_jobs
-            .insert(job_id, JobRequest::SaveMessage(mailbox_hash, handle, rcvr));
+        self.active_jobs.insert(
+            job_id,
+            JobRequest::SaveMessage {
+                bytes: bytes.to_vec(),
+                mailbox_hash,
+                handle,
+                channel,
+            },
+        );
         self.active_job_instants
             .insert(std::time::Instant::now(), job_id);
         Ok(())
@@ -1647,14 +1659,31 @@ impl Account {
                             .expect("Could not send event on main channel");
                     }
                 }
-                JobRequest::SaveMessage(_, _, ref mut chan) => {
-                    let r = chan.try_recv().unwrap();
+                JobRequest::SaveMessage {
+                    ref mut channel,
+                    ref bytes,
+                    ..
+                } => {
+                    let r = channel.try_recv().unwrap();
                     if let Some(Err(err)) = r {
+                        melib::log(format!("Could not save message: {}", err), melib::ERROR);
+                        let file = crate::types::create_temp_file(bytes, None, None, false);
+                        debug!("message saved in {}", file.path.display());
+                        melib::log(
+                            format!(
+                                "Message was stored in {} so that you can restore it manually.",
+                                file.path.display()
+                            ),
+                            melib::INFO,
+                        );
                         self.sender
                             .send(ThreadEvent::UIEvent(UIEvent::Notification(
                                 Some(format!("{}: could not save message", &self.name)),
-                                err.to_string(),
-                                Some(crate::types::NotificationType::ERROR),
+                                format!(
+                                    "Message was stored in {} so that you can restore it manually.",
+                                    file.path.display()
+                                ),
+                                Some(crate::types::NotificationType::INFO),
                             )))
                             .expect("Could not send event on main channel");
                     }
