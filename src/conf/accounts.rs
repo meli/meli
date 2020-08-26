@@ -1455,6 +1455,11 @@ impl Account {
             match self.active_jobs.remove(job_id).unwrap() {
                 JobRequest::Mailboxes(_, ref mut chan) => {
                     if let Some(mailboxes) = chan.try_recv().unwrap() {
+                        self.sender
+                            .send(ThreadEvent::UIEvent(UIEvent::AccountStatusChange(
+                                self.hash,
+                            )))
+                            .unwrap();
                         if let Err(err) = mailboxes.and_then(|mailboxes| self.init(mailboxes)) {
                             if err.kind.is_authentication() {
                                 self.sender
