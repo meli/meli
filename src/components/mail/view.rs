@@ -1194,6 +1194,7 @@ impl Component for MailView {
                                 }
                             }
                         }))),
+                        logging_level: melib::LoggingLevel::DEBUG,
                     },
                 );
                 return true;

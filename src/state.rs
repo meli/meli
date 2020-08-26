@@ -882,6 +882,7 @@ impl State {
                                 handle,
                                 channel,
                                 on_finish: None,
+                                logging_level: melib::LoggingLevel::INFO,
                             },
                         );
                         self.context.replies.push_back(UIEvent::Notification(

@@ -287,6 +287,7 @@ pub trait MailListingTrait: ListingTrait {
                                 handle,
                                 channel,
                                 on_finish: None,
+                                logging_level: melib::LoggingLevel::DEBUG,
                             },
                         );
                     }
@@ -325,6 +326,7 @@ pub trait MailListingTrait: ListingTrait {
                                 handle,
                                 channel,
                                 on_finish: None,
+                                logging_level: melib::LoggingLevel::DEBUG,
                             },
                         );
                     }

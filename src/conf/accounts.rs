@@ -174,6 +174,7 @@ pub enum JobRequest {
     ),
     Generic {
         name: Cow<'static, str>,
+        logging_level: melib::LoggingLevel,
         handle: JoinHandle,
         channel: JobChannel<()>,
         on_finish: Option<crate::types::CallbackFn>,
@@ -645,6 +646,7 @@ impl Account {
                                         .into(),
                                         handle,
                                         channel,
+                                        logging_level: melib::LoggingLevel::TRACE,
                                         on_finish: None,
                                     },
                                 );
@@ -693,6 +695,7 @@ impl Account {
                                         .into(),
                                         handle,
                                         channel,
+                                        logging_level: melib::LoggingLevel::TRACE,
                                         on_finish: None,
                                     },
                                 );
@@ -752,6 +755,7 @@ impl Account {
                                         .into(),
                                         handle,
                                         channel,
+                                        logging_level: melib::LoggingLevel::TRACE,
                                         on_finish: None,
                                     },
                                 );
@@ -796,6 +800,7 @@ impl Account {
                                 .into(),
                                 handle,
                                 channel,
+                                logging_level: melib::LoggingLevel::TRACE,
                                 on_finish: None,
                             },
                         );
@@ -1950,6 +1955,7 @@ impl Account {
                     ref mut channel,
                     handle: _,
                     ref mut on_finish,
+                    logging_level,
                 } => {
                     let r = channel.try_recv().unwrap();
                     match r {
@@ -1962,16 +1968,18 @@ impl Account {
                                 )))
                                 .expect("Could not send event on main channel");
                         }
-                        Some(Ok(_)) => {
-                            self.sender
-                                .send(ThreadEvent::UIEvent(UIEvent::Notification(
-                                    Some(format!("{}: {} succeeded", &self.name, name,)),
-                                    String::new(),
-                                    Some(crate::types::NotificationType::INFO),
-                                )))
-                                .expect("Could not send event on main channel");
+                        Some(Ok(())) if on_finish.is_none() => {
+                            if logging_level <= melib::LoggingLevel::INFO {
+                                self.sender
+                                    .send(ThreadEvent::UIEvent(UIEvent::Notification(
+                                        Some(format!("{}: {} succeeded", &self.name, name,)),
+                                        String::new(),
+                                        Some(crate::types::NotificationType::INFO),
+                                    )))
+                                    .expect("Could not send event on main channel");
+                            }
                         }
-                        None => {}
+                        Some(Ok(())) | None => {}
                     }
                     if on_finish.is_some() {
                         self.sender
