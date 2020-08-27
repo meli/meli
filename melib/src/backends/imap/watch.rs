@@ -148,7 +148,9 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
             let mut conn = timeout(Duration::from_secs(10), main_conn.lock()).await?;
             conn.examine_mailbox(mailbox_hash, &mut response, false)
                 .await?;
-            conn.process_untagged(to_str!(&line)).await?;
+            for l in to_str!(&line).split_rn() {
+                conn.process_untagged(l).await?;
+            }
         }
         *uid_store.is_online.lock().unwrap() = (Instant::now(), Ok(()));
     }
