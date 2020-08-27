@@ -609,8 +609,17 @@ mod regexp {
                 }
                 let next_byte_offset = next_byte_offset.unwrap();
 
-                while next_byte_offset.start() < self.char_indices.next().unwrap().0 {
+                let mut next_char_index = self.char_indices.next();
+                if next_char_index.is_none() {
+                    return None;
+                }
+
+                while next_byte_offset.start() < next_char_index.unwrap().0 {
                     self.char_offset += 1;
+                    next_char_index = self.char_indices.next();
+                    if next_char_index.is_none() {
+                        return None;
+                    }
                 }
                 let start = self.char_offset;
 
