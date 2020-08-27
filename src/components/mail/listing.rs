@@ -287,7 +287,7 @@ pub trait MailListingTrait: ListingTrait {
                                 handle,
                                 channel,
                                 on_finish: None,
-                                logging_level: melib::LoggingLevel::DEBUG,
+                                logging_level: melib::LoggingLevel::INFO,
                             },
                         );
                     }
@@ -326,7 +326,7 @@ pub trait MailListingTrait: ListingTrait {
                                 handle,
                                 channel,
                                 on_finish: None,
-                                logging_level: melib::LoggingLevel::DEBUG,
+                                logging_level: melib::LoggingLevel::INFO,
                             },
                         );
                     }
@@ -750,6 +750,10 @@ impl Component for Listing {
                     Action::Listing(a @ ListingAction::SetSeen)
                     | Action::Listing(a @ ListingAction::SetUnseen)
                     | Action::Listing(a @ ListingAction::Delete)
+                    | Action::Listing(a @ ListingAction::CopyTo(_))
+                    | Action::Listing(a @ ListingAction::MoveTo(_))
+                    | Action::Listing(a @ ListingAction::CopyToOtherAccount(_, _))
+                    | Action::Listing(a @ ListingAction::MoveToOtherAccount(_, _))
                     | Action::Listing(a @ ListingAction::Tag(_)) => {
                         let focused = self.component.get_focused_items(context);
                         self.component.perform_action(context, focused, a);

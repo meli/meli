@@ -1793,7 +1793,7 @@ impl Account {
                                                 mailboxes.remove(&parent_hash).unwrap();
                                         });
                                 }
-                                let status = MailboxStatus::Parsing(0, 0);
+                                let status = MailboxStatus::default();
 
                                 self.mailbox_entries.insert(
                                     mailbox_hash,
