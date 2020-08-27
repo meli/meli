@@ -763,6 +763,34 @@ impl ImapConnection {
         debug!("select response {}", ret);
         let select_response = protocol_parser::select_response(&ret)?;
         {
+            if self.uid_store.keep_offline_cache {
+                #[cfg(not(feature = "sqlite3"))]
+                let mut cache_handle = super::cache::DefaultCache::get(self.uid_store.clone())?;
+                #[cfg(feature = "sqlite3")]
+                let mut cache_handle = super::cache::Sqlite3Cache::get(self.uid_store.clone())?;
+                if let Err(err) = cache_handle.mailbox_state(mailbox_hash).and_then(|r| {
+                    if r.is_none() {
+                        cache_handle.clear(mailbox_hash, &select_response)
+                    } else {
+                        Ok(())
+                    }
+                }) {
+                    (self.uid_store.event_consumer)(
+                        self.uid_store.account_hash,
+                        crate::backends::BackendEvent::from(err),
+                    );
+                }
+            }
+            self.uid_store
+                .mailboxes
+                .lock()
+                .await
+                .entry(mailbox_hash)
+                .and_modify(|entry| {
+                    *entry.select.write().unwrap() = Some(select_response.clone());
+                });
+        }
+        {
             let mut permissions = permissions.lock().unwrap();
             permissions.create_messages = !select_response.read_only;
             permissions.remove_messages = !select_response.read_only;

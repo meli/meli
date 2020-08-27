@@ -29,7 +29,10 @@ impl ImapConnection {
             return Ok(None);
         }
 
-        let cache_handle = CacheHandle::get(self.uid_store.clone())?;
+        #[cfg(not(feature = "sqlite3"))]
+        let mut cache_handle = DefaultCache::get(self.uid_store.clone())?;
+        #[cfg(feature = "sqlite3")]
+        let mut cache_handle = Sqlite3Cache::get(self.uid_store.clone())?;
         if cache_handle.mailbox_state(mailbox_hash)?.is_none() {
             return Ok(None);
         }
@@ -52,29 +55,23 @@ impl ImapConnection {
         mailbox_hash: MailboxHash,
     ) -> Option<Result<Vec<EnvelopeHash>>> {
         debug!("load_cache {}", mailbox_hash);
-        let cache_handle = match CacheHandle::get(self.uid_store.clone()) {
+        #[cfg(not(feature = "sqlite3"))]
+        let mut cache_handle = match DefaultCache::get(self.uid_store.clone()) {
             Ok(v) => v,
             Err(err) => return Some(Err(err)),
         };
-        let (uidvalidity, highestmodseq) = match debug!(cache_handle.mailbox_state(mailbox_hash)) {
+        #[cfg(feature = "sqlite3")]
+        let mut cache_handle = match Sqlite3Cache::get(self.uid_store.clone()) {
+            Ok(v) => v,
             Err(err) => return Some(Err(err)),
-            Ok(Some(v)) => v,
+        };
+        match debug!(cache_handle.mailbox_state(mailbox_hash)) {
+            Err(err) => return Some(Err(err)),
+            Ok(Some(())) => {}
             Ok(None) => {
                 return None;
             }
         };
-        self.uid_store
-            .uidvalidity
-            .lock()
-            .unwrap()
-            .entry(mailbox_hash)
-            .or_insert(uidvalidity);
-        self.uid_store
-            .highestmodseqs
-            .lock()
-            .unwrap()
-            .entry(mailbox_hash)
-            .or_insert(highestmodseq.ok_or(()));
         match debug!(cache_handle.envelopes(mailbox_hash)) {
             Ok(Some(envs)) => Some(Ok(envs)),
             Ok(None) => None,
@@ -84,7 +81,7 @@ impl ImapConnection {
 
     pub async fn build_cache(
         &mut self,
-        cache_handle: &mut CacheHandle,
+        cache_handle: &mut Box<dyn ImapCache>,
         mailbox_hash: MailboxHash,
     ) -> Result<()> {
         debug!("build_cache {}", mailbox_hash);
@@ -111,11 +108,7 @@ impl ImapConnection {
                 .unwrap()
                 .insert(mailbox_hash, v);
         }
-        cache_handle.clear(
-            mailbox_hash,
-            select_response.uidvalidity,
-            select_response.highestmodseq.and_then(|i| i.ok()),
-        )?;
+        cache_handle.clear(mailbox_hash, &select_response)?;
         self.send_command(b"UID FETCH 1:* (UID FLAGS ENVELOPE BODYSTRUCTURE)")
             .await?;
         self.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)
@@ -128,18 +121,11 @@ impl ImapConnection {
     //rfc4549_Synchronization_Operations_for_Disconnected_IMAP4_Clients
     pub async fn resync_basic(
         &mut self,
-        mut cache_handle: CacheHandle,
+        mut cache_handle: Box<dyn ImapCache>,
         mailbox_hash: MailboxHash,
     ) -> Result<Option<Vec<Envelope>>> {
         let mut payload = vec![];
         debug!("resync_basic");
-        debug!(self
-            .uid_store
-            .uidvalidity
-            .lock()
-            .unwrap()
-            .get(&mailbox_hash));
-        debug!(self.uid_store.max_uids.lock().unwrap().get(&mailbox_hash));
         let mut response = String::with_capacity(8 * 1024);
         let cached_uidvalidity = self
             .uid_store
@@ -182,11 +168,7 @@ impl ImapConnection {
         );
         // 1. check UIDVALIDITY. If fail, discard cache and rebuild
         if select_response.uidvalidity != current_uidvalidity {
-            cache_handle.clear(
-                mailbox_hash,
-                select_response.uidvalidity,
-                select_response.highestmodseq.and_then(|i| i.ok()),
-            )?;
+            cache_handle.clear(mailbox_hash, &select_response)?;
             return Ok(None);
         }
 
@@ -234,7 +216,6 @@ impl ImapConnection {
             }
         }
         {
-            let mut cache_handle = cache::CacheHandle::get(self.uid_store.clone())?;
             debug!(cache_handle
                 .insert_envelopes(mailbox_hash, &v)
                 .chain_err_summary(|| {
@@ -363,18 +344,11 @@ impl ImapConnection {
     //Section 6.1
     pub async fn resync_condstore(
         &mut self,
-        mut cache_handle: CacheHandle,
+        mut cache_handle: Box<dyn ImapCache>,
         mailbox_hash: MailboxHash,
     ) -> Result<Option<Vec<Envelope>>> {
         let mut payload = vec![];
         debug!("resync_condstore");
-        debug!(self
-            .uid_store
-            .uidvalidity
-            .lock()
-            .unwrap()
-            .get(&mailbox_hash));
-        debug!(self.uid_store.max_uids.lock().unwrap().get(&mailbox_hash));
         let mut response = String::with_capacity(8 * 1024);
         let cached_uidvalidity = self
             .uid_store
@@ -397,6 +371,9 @@ impl ImapConnection {
             .unwrap()
             .get(&mailbox_hash)
             .cloned();
+        debug!(&cached_uidvalidity);
+        debug!(&cached_max_uid);
+        debug!(&cached_highestmodseq);
         if cached_uidvalidity.is_none()
             || cached_max_uid.is_none()
             || cached_highestmodseq.is_none()
@@ -444,11 +421,7 @@ impl ImapConnection {
             //     mailbox (note that this doesn't affect actions performed on
             //     client-generated fake UIDs; see Section 5); and
             //   * skip steps 1b and 2-II;
-            cache_handle.clear(
-                mailbox_hash,
-                select_response.uidvalidity,
-                select_response.highestmodseq.and_then(|i| i.ok()),
-            )?;
+            cache_handle.clear(mailbox_hash, &select_response)?;
             return Ok(None);
         }
         if select_response.highestmodseq.is_none()
@@ -525,7 +498,6 @@ impl ImapConnection {
                 }
             }
             {
-                let mut cache_handle = cache::CacheHandle::get(self.uid_store.clone())?;
                 debug!(cache_handle
                     .insert_envelopes(mailbox_hash, &v)
                     .chain_err_summary(|| {
@@ -668,7 +640,7 @@ impl ImapConnection {
     //rfc7162_Quick Flag Changes Resynchronization (CONDSTORE)_and Quick Mailbox Resynchronization (QRESYNC)
     pub async fn resync_condstoreqresync(
         &mut self,
-        _cache_handle: CacheHandle,
+        _cache_handle: Box<dyn ImapCache>,
         _mailbox_hash: MailboxHash,
     ) -> Result<Option<Vec<Envelope>>> {
         Ok(None)
@@ -705,6 +677,13 @@ impl ImapConnection {
                     .entry(mailbox_hash)
                     .or_insert(select_response.uidvalidity);
                 *v = select_response.uidvalidity;
+            }
+            {
+                if let Some(highestmodseq) = select_response.highestmodseq {
+                    let mut highestmodseqs = self.uid_store.highestmodseqs.lock().unwrap();
+                    let v = highestmodseqs.entry(mailbox_hash).or_insert(highestmodseq);
+                    *v = highestmodseq;
+                }
             }
             let mut permissions = permissions.lock().unwrap();
             permissions.create_messages = !select_response.read_only;

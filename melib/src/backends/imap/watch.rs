@@ -83,12 +83,13 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
 
         if let Some(v) = uidvalidities.get(&mailbox_hash) {
             if *v != select_response.uidvalidity {
-                let cache_handle = cache::CacheHandle::get(uid_store.clone())?;
-                cache_handle.clear(
-                    mailbox_hash,
-                    select_response.uidvalidity,
-                    select_response.highestmodseq.and_then(|i| i.ok()),
-                )?;
+                if uid_store.keep_offline_cache {
+                    #[cfg(not(feature = "sqlite3"))]
+                    let mut cache_handle = super::cache::DefaultCache::get(uid_store.clone())?;
+                    #[cfg(feature = "sqlite3")]
+                    let mut cache_handle = super::cache::Sqlite3Cache::get(uid_store.clone())?;
+                    cache_handle.clear(mailbox_hash, &select_response)?;
+                }
                 conn.add_refresh_event(RefreshEvent {
                     account_hash: uid_store.account_hash,
                     mailbox_hash,
@@ -149,6 +150,7 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
             conn.examine_mailbox(mailbox_hash, &mut response, false)
                 .await?;
             for l in to_str!(&line).split_rn() {
+                debug!("process_untagged {:?}", &l);
                 conn.process_untagged(l).await?;
             }
         }
@@ -185,6 +187,10 @@ pub async fn examine_updates(
             });
         }
     } else {
+        #[cfg(not(feature = "sqlite3"))]
+        let mut cache_handle = super::cache::DefaultCache::get(uid_store.clone())?;
+        #[cfg(feature = "sqlite3")]
+        let mut cache_handle = super::cache::Sqlite3Cache::get(uid_store.clone())?;
         let mut response = String::with_capacity(8 * 1024);
         let select_response = conn
             .examine_mailbox(mailbox_hash, &mut response, true)
@@ -197,12 +203,9 @@ pub async fn examine_updates(
 
             if let Some(v) = uidvalidities.get(&mailbox_hash) {
                 if *v != select_response.uidvalidity {
-                    let cache_handle = cache::CacheHandle::get(uid_store.clone())?;
-                    cache_handle.clear(
-                        mailbox_hash,
-                        select_response.uidvalidity,
-                        select_response.highestmodseq.and_then(|i| i.ok()),
-                    )?;
+                    if uid_store.keep_offline_cache {
+                        cache_handle.clear(mailbox_hash, &select_response)?;
+                    }
                     conn.add_refresh_event(RefreshEvent {
                         account_hash: uid_store.account_hash,
                         mailbox_hash,
@@ -219,7 +222,6 @@ pub async fn examine_updates(
                 uidvalidities.insert(mailbox_hash, select_response.uidvalidity);
             }
         }
-        let mut cache_handle = cache::CacheHandle::get(uid_store.clone())?;
         if debug!(select_response.recent > 0) {
             /* UID SEARCH RECENT */
             conn.send_command(b"UID SEARCH RECENT").await?;

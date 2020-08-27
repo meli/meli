@@ -814,9 +814,9 @@ dependencies = [
 
 [[package]]
 name = "libsqlite3-sys"
-version = "0.16.0"
+version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e5b95e89c330291768dc840238db7f9e204fd208511ab6319b56193a7f2ae25"
+checksum = "e3a245984b1b06c291f46e27ebda9f369a94a1ab8461d0e845e23f9ced01f5db"
 dependencies = [
  "pkg-config",
  "vcpkg",
@@ -1476,9 +1476,9 @@ dependencies = [
 
 [[package]]
 name = "rusqlite"
-version = "0.20.0"
+version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2a194373ef527035645a1bc21b10dc2125f73497e6e155771233eb187aedd051"
+checksum = "4c78c3275d9d6eb684d2db4b2388546b32fdae0586c20a82f3905d21ea78b9ef"
 dependencies = [
  "bitflags",
  "fallible-iterator",
@@ -1486,7 +1486,7 @@ dependencies = [
  "libsqlite3-sys",
  "lru-cache",
  "memchr",
- "time",
+ "smallvec",
 ]
 
 [[package]]
@@ -1796,13 +1796,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "testing"
-version = "0.4.1"
-dependencies = [
- "melib",
-]
-
-[[package]]
 name = "textwrap"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1838,6 +1831,13 @@ checksum = "ffc92d160b1eef40665be3a05630d003936a3bc7da7421277846c2613e92c71a"
 dependencies = [
  "indexmap",
  "serde",
+]
+
+[[package]]
+name = "tools"
+version = "0.4.1"
+dependencies = [
+ "melib",
 ]
 
 [[package]]

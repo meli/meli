@@ -185,7 +185,7 @@ pub enum ResponseCode {
     /// Followed by a decimal number, indicates the unique identifier validity value.  Refer to section 2.3.1.1 for more information.
     Uidvalidity(UID),
     /// Followed by a decimal number, indicates the number of the first message without the \Seen flag set.
-    Unseen(usize),
+    Unseen(ImapNum),
 }
 
 impl std::fmt::Display for ResponseCode {
@@ -452,7 +452,7 @@ pub fn list_mailbox_result(input: &[u8]) -> IResult<&[u8], ImapMailbox> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct FetchResponse<'a> {
     pub uid: Option<UID>,
-    pub message_sequence_number: usize,
+    pub message_sequence_number: MessageSequenceNumber,
     pub modseq: Option<ModSequence>,
     pub flags: Option<(Flag, Vec<String>)>,
     pub body: Option<&'a [u8]>,
@@ -516,7 +516,7 @@ pub fn fetch_response(input: &str) -> ImapParseResult<FetchResponse<'_>> {
     while input.as_bytes()[i].is_ascii_digit() {
         let b: u8 = input.as_bytes()[i] - 0x30;
         ret.message_sequence_number *= 10;
-        ret.message_sequence_number += b as usize;
+        ret.message_sequence_number += b as MessageSequenceNumber;
         i += 1;
         bounds!();
     }
@@ -537,7 +537,7 @@ pub fn fetch_response(input: &str) -> ImapParseResult<FetchResponse<'_>> {
             {
                 i += input.len() - i - rest.len();
                 ret.uid =
-                    Some(usize::from_str(unsafe { std::str::from_utf8_unchecked(uid) }).unwrap());
+                    Some(UID::from_str(unsafe { std::str::from_utf8_unchecked(uid) }).unwrap());
             } else {
                 return debug!(Err(MeliError::new(format!(
                     "Unexpected input while parsing UID FETCH response. Got: `{:.40}`",
@@ -695,23 +695,21 @@ pub fn fetch_responses(mut input: &str) -> ImapParseResult<Vec<FetchResponse<'_>
             )));
         }
     }
-    Ok((input, ret, None))
+    Ok((input, ret, alert))
 }
 
-pub fn uid_fetch_flags_responses(
-    input: &[u8],
-) -> IResult<&[u8], Vec<(usize, (Flag, Vec<String>))>> {
+pub fn uid_fetch_flags_responses(input: &[u8]) -> IResult<&[u8], Vec<(UID, (Flag, Vec<String>))>> {
     many0(uid_fetch_flags_response)(input)
 }
 
-pub fn uid_fetch_flags_response(input: &[u8]) -> IResult<&[u8], (usize, (Flag, Vec<String>))> {
+pub fn uid_fetch_flags_response(input: &[u8]) -> IResult<&[u8], (UID, (Flag, Vec<String>))> {
     let (input, _) = tag("* ")(input)?;
     let (input, _msn) = take_while(is_digit)(input)?;
     let (input, _) = tag(" FETCH (")(input)?;
     let (input, uid_flags) = permutation((
         preceded(
             alt((tag("UID "), tag(" UID "))),
-            map_res(digit1, |s| usize::from_str(to_str!(s))),
+            map_res(digit1, |s| UID::from_str(to_str!(s))),
         ),
         preceded(
             alt((tag("FLAGS "), tag(" FLAGS "))),
@@ -815,7 +813,7 @@ pub enum UntaggedResponse<'s> {
     ///    The update from the EXPUNGE response MUST be recorded by the
     ///    client.
     /// ```
-    Expunge(usize),
+    Expunge(MessageSequenceNumber),
     /// ```text
     ///     7.3.1.  EXISTS Response
     ///
@@ -826,7 +824,7 @@ pub enum UntaggedResponse<'s> {
     ///     The update from the EXISTS response MUST be recorded by the
     ///     client.
     /// ```
-    Exists(usize),
+    Exists(ImapNum),
     /// ```text
     /// 7.3.2. RECENT Response
     /// The RECENT response reports the number of messages with the
@@ -834,7 +832,7 @@ pub enum UntaggedResponse<'s> {
     /// EXAMINE command, and if the size of the mailbox changes (e.g., new
     /// messages).
     /// ```
-    Recent(usize),
+    Recent(ImapNum),
     Fetch(FetchResponse<'s>),
     Bye {
         reason: &'s str,
@@ -844,10 +842,9 @@ pub enum UntaggedResponse<'s> {
 pub fn untagged_responses(input: &str) -> ImapParseResult<Option<UntaggedResponse<'_>>> {
     let orig_input = input;
     let (input, _) = tag::<_, &str, (&str, nom::error::ErrorKind)>("* ")(input)?;
-    let (input, num) =
-        map_res::<_, _, _, (&str, nom::error::ErrorKind), _, _, _>(digit1, |s| usize::from_str(s))(
-            input,
-        )?;
+    let (input, num) = map_res::<_, _, _, (&str, nom::error::ErrorKind), _, _, _>(digit1, |s| {
+        ImapNum::from_str(s)
+    })(input)?;
     let (input, _) = tag::<_, &str, (&str, nom::error::ErrorKind)>(" ")(input)?;
     let (input, _tag) = take_until::<_, &str, (&str, nom::error::ErrorKind)>("\r\n")(input)?;
     let (input, _) = tag::<_, &str, (&str, nom::error::ErrorKind)>("\r\n")(input)?;
@@ -912,20 +909,20 @@ fn test_untagged_responses() {
     );
 }
 
-pub fn search_results<'a>(input: &'a [u8]) -> IResult<&'a [u8], Vec<usize>> {
+pub fn search_results<'a>(input: &'a [u8]) -> IResult<&'a [u8], Vec<ImapNum>> {
     alt((
-        |input: &'a [u8]| -> IResult<&'a [u8], Vec<usize>> {
+        |input: &'a [u8]| -> IResult<&'a [u8], Vec<ImapNum>> {
             let (input, _) = tag("* SEARCH ")(input)?;
             let (input, list) = separated_nonempty_list(
                 tag(b" "),
                 map_res(is_not(" \r\n"), |s: &[u8]| {
-                    usize::from_str(unsafe { std::str::from_utf8_unchecked(s) })
+                    ImapNum::from_str(unsafe { std::str::from_utf8_unchecked(s) })
                 }),
             )(input)?;
             let (input, _) = tag("\r\n")(input)?;
             Ok((input, list))
         },
-        |input: &'a [u8]| -> IResult<&'a [u8], Vec<usize>> {
+        |input: &'a [u8]| -> IResult<&'a [u8], Vec<ImapNum>> {
             let (input, _) = tag("* SEARCH\r\n")(input)?;
             Ok((input, vec![]))
         },
@@ -966,12 +963,12 @@ fn test_imap_search() {
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct SelectResponse {
-    pub exists: usize,
-    pub recent: usize,
+    pub exists: ImapNum,
+    pub recent: ImapNum,
     pub flags: (Flag, Vec<String>),
-    pub unseen: usize,
-    pub uidvalidity: usize,
-    pub uidnext: usize,
+    pub unseen: MessageSequenceNumber,
+    pub uidvalidity: UIDVALIDITY,
+    pub uidnext: UID,
     pub permanentflags: (Flag, Vec<String>),
     /// if SELECT returns \* we can set arbritary flags permanently.
     pub can_create_flags: bool,
@@ -1006,18 +1003,20 @@ pub fn select_response(input: &str) -> Result<SelectResponse> {
         let mut ret = SelectResponse::default();
         for l in input.split_rn() {
             if l.starts_with("* ") && l.ends_with(" EXISTS\r\n") {
-                ret.exists = usize::from_str(&l["* ".len()..l.len() - " EXISTS\r\n".len()])?;
+                ret.exists = ImapNum::from_str(&l["* ".len()..l.len() - " EXISTS\r\n".len()])?;
             } else if l.starts_with("* ") && l.ends_with(" RECENT\r\n") {
-                ret.recent = usize::from_str(&l["* ".len()..l.len() - " RECENT\r\n".len()])?;
+                ret.recent = ImapNum::from_str(&l["* ".len()..l.len() - " RECENT\r\n".len()])?;
             } else if l.starts_with("* FLAGS (") {
                 ret.flags = flags(&l["* FLAGS (".len()..l.len() - ")".len()]).map(|(_, v)| v)?;
             } else if l.starts_with("* OK [UNSEEN ") {
-                ret.unseen = usize::from_str(&l["* OK [UNSEEN ".len()..l.find(']').unwrap()])?;
+                ret.unseen = MessageSequenceNumber::from_str(
+                    &l["* OK [UNSEEN ".len()..l.find(']').unwrap()],
+                )?;
             } else if l.starts_with("* OK [UIDVALIDITY ") {
                 ret.uidvalidity =
-                    usize::from_str(&l["* OK [UIDVALIDITY ".len()..l.find(']').unwrap()])?;
+                    UIDVALIDITY::from_str(&l["* OK [UIDVALIDITY ".len()..l.find(']').unwrap()])?;
             } else if l.starts_with("* OK [UIDNEXT ") {
-                ret.uidnext = usize::from_str(&l["* OK [UIDNEXT ".len()..l.find(']').unwrap()])?;
+                ret.uidnext = UID::from_str(&l["* OK [UIDNEXT ".len()..l.find(']').unwrap()])?;
             } else if l.starts_with("* OK [PERMANENTFLAGS (") {
                 ret.permanentflags =
                     flags(&l["* OK [PERMANENTFLAGS (".len()..l.find(')').unwrap()])
@@ -1392,9 +1391,9 @@ pub fn quoted_or_nil(input: &[u8]) -> IResult<&[u8], Option<Vec<u8>>> {
 
 pub fn uid_fetch_envelopes_response(
     input: &[u8],
-) -> IResult<&[u8], Vec<(usize, Option<(Flag, Vec<String>)>, Envelope)>> {
+) -> IResult<&[u8], Vec<(UID, Option<(Flag, Vec<String>)>, Envelope)>> {
     many0(
-        |input: &[u8]| -> IResult<&[u8], (usize, Option<(Flag, Vec<String>)>, Envelope)> {
+        |input: &[u8]| -> IResult<&[u8], (UID, Option<(Flag, Vec<String>)>, Envelope)> {
             let (input, _) = tag("* ")(input)?;
             let (input, _) = take_while(is_digit)(input)?;
             let (input, _) = tag(" FETCH (")(input)?;
@@ -1402,7 +1401,7 @@ pub fn uid_fetch_envelopes_response(
                 preceded(
                     alt((tag("UID "), tag(" UID "))),
                     map_res(digit1, |s| {
-                        usize::from_str(unsafe { std::str::from_utf8_unchecked(s) })
+                        UID::from_str(unsafe { std::str::from_utf8_unchecked(s) })
                     }),
                 ),
                 opt(preceded(
@@ -1432,11 +1431,11 @@ pub fn bodystructure_has_attachments(input: &[u8]) -> bool {
 #[derive(Debug, Default, Clone)]
 pub struct StatusResponse {
     pub mailbox: Option<MailboxHash>,
-    pub messages: Option<usize>,
-    pub recent: Option<usize>,
-    pub uidnext: Option<usize>,
-    pub uidvalidity: Option<usize>,
-    pub unseen: Option<usize>,
+    pub messages: Option<ImapNum>,
+    pub recent: Option<ImapNum>,
+    pub uidnext: Option<UID>,
+    pub uidvalidity: Option<UID>,
+    pub unseen: Option<ImapNum>,
 }
 
 // status = "STATUS" SP mailbox SP "(" status-att *(SP status-att) ")"
@@ -1451,31 +1450,31 @@ pub fn status_response(input: &[u8]) -> IResult<&[u8], StatusResponse> {
         opt(preceded(
             alt((tag("MESSAGES "), tag(" MESSAGES "))),
             map_res(digit1, |s| {
-                usize::from_str(unsafe { std::str::from_utf8_unchecked(s) })
+                ImapNum::from_str(unsafe { std::str::from_utf8_unchecked(s) })
             }),
         )),
         opt(preceded(
             alt((tag("RECENT "), tag(" RECENT "))),
             map_res(digit1, |s| {
-                usize::from_str(unsafe { std::str::from_utf8_unchecked(s) })
+                ImapNum::from_str(unsafe { std::str::from_utf8_unchecked(s) })
             }),
         )),
         opt(preceded(
             alt((tag("UIDNEXT "), tag(" UIDNEXT "))),
             map_res(digit1, |s| {
-                usize::from_str(unsafe { std::str::from_utf8_unchecked(s) })
+                UID::from_str(unsafe { std::str::from_utf8_unchecked(s) })
             }),
         )),
         opt(preceded(
             alt((tag("UIDVALIDITY "), tag(" UIDVALIDITY "))),
             map_res(digit1, |s| {
-                usize::from_str(unsafe { std::str::from_utf8_unchecked(s) })
+                UIDVALIDITY::from_str(unsafe { std::str::from_utf8_unchecked(s) })
             }),
         )),
         opt(preceded(
             alt((tag("UNSEEN "), tag(" UNSEEN "))),
             map_res(digit1, |s| {
-                usize::from_str(unsafe { std::str::from_utf8_unchecked(s) })
+                ImapNum::from_str(unsafe { std::str::from_utf8_unchecked(s) })
             }),
         )),
     ))(input)?;

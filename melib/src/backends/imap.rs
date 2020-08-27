@@ -51,12 +51,17 @@ use futures::stream::Stream;
 use std::collections::{hash_map::DefaultHasher, BTreeMap};
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::convert::TryFrom;
+use std::convert::TryInto;
 use std::hash::Hasher;
 use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
-pub type UID = usize;
+
+pub type ImapNum = usize;
+pub type UID = ImapNum;
+pub type UIDVALIDITY = UID;
+pub type MessageSequenceNumber = ImapNum;
 
 pub static SUPPORTED_CAPABILITIES: &[&str] = &[
     #[cfg(feature = "deflate_compression")]
@@ -202,7 +207,6 @@ pub struct ImapType {
     connection: Arc<FutureMutex<ImapConnection>>,
     server_conf: ImapServerConf,
     uid_store: Arc<UIDStore>,
-    can_create_flags: Arc<Mutex<bool>>,
 }
 
 impl MailBackend for ImapType {
@@ -299,7 +303,6 @@ impl MailBackend for ImapType {
             },
             connection: self.connection.clone(),
             mailbox_hash,
-            can_create_flags: self.can_create_flags.clone(),
             uid_store: self.uid_store.clone(),
         };
 
@@ -742,11 +745,7 @@ impl MailBackend for ImapType {
     }
 
     fn tags(&self) -> Option<Arc<RwLock<BTreeMap<u64, String>>>> {
-        if *self.can_create_flags.lock().unwrap() {
-            Some(self.uid_store.tag_index.clone())
-        } else {
-            None
-        }
+        Some(self.uid_store.tag_index.clone())
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -1111,7 +1110,7 @@ impl MailBackend for ImapType {
                         l["* SEARCH".len()..]
                             .trim()
                             .split_whitespace()
-                            .map(usize::from_str)
+                            .map(UID::from_str)
                             .filter_map(std::result::Result::ok)
                             .filter_map(|uid| uid_index.get(&(mailbox_hash, uid)))
                             .copied(),
@@ -1157,7 +1156,17 @@ impl ImapType {
         let use_starttls = use_tls && get_conf_val!(s["use_starttls"], !(server_port == 993))?;
         let danger_accept_invalid_certs: bool =
             get_conf_val!(s["danger_accept_invalid_certs"], false)?;
+        #[cfg(feature = "sqlite3")]
         let keep_offline_cache = get_conf_val!(s["offline_cache"], true)?;
+        #[cfg(not(feature = "sqlite3"))]
+        let keep_offline_cache = get_conf_val!(s["offline_cache"], false)?;
+        #[cfg(not(feature = "sqlite3"))]
+        if keep_offline_cache {
+            return Err(MeliError::new(format!(
+                "({}) keep_offline_cache is true but melib is not compiled with sqlite3",
+                s.name,
+            )));
+        }
         let server_conf = ImapServerConf {
             server_hostname: server_hostname.to_string(),
             server_username: server_username.to_string(),
@@ -1190,7 +1199,6 @@ impl ImapType {
         Ok(Box::new(ImapType {
             server_conf,
             is_subscribed: Arc::new(IsSubscribedFn(is_subscribed)),
-            can_create_flags: Arc::new(Mutex::new(false)),
             connection: Arc::new(FutureMutex::new(connection)),
             uid_store,
         }))
@@ -1199,14 +1207,18 @@ impl ImapType {
     pub fn shell(&mut self) {
         let mut conn = ImapConnection::new_connection(&self.server_conf, self.uid_store.clone());
 
-        futures::executor::block_on(timeout(Duration::from_secs(3), conn.connect())).unwrap();
+        futures::executor::block_on(timeout(Duration::from_secs(3), conn.connect()))
+            .unwrap()
+            .unwrap();
         let mut res = String::with_capacity(8 * 1024);
         futures::executor::block_on(timeout(Duration::from_secs(3), conn.send_command(b"NOOP")))
+            .unwrap()
             .unwrap();
         futures::executor::block_on(timeout(
             Duration::from_secs(3),
             conn.read_response(&mut res, RequiredResponses::empty()),
         ))
+        .unwrap()
         .unwrap();
 
         let mut input = String::new();
@@ -1220,11 +1232,13 @@ impl ImapType {
                         Duration::from_secs(3),
                         conn.send_command(input.as_bytes()),
                     ))
+                    .unwrap()
                     .unwrap();
                     futures::executor::block_on(timeout(
                         Duration::from_secs(3),
                         conn.read_lines(&mut res, String::new()),
                     ))
+                    .unwrap()
                     .unwrap();
                     if input.trim().eq_ignore_ascii_case("logout") {
                         break;
@@ -1368,7 +1382,18 @@ impl ImapType {
             )));
         }
         get_conf_val!(s["danger_accept_invalid_certs"], false)?;
+        #[cfg(feature = "sqlite3")]
         get_conf_val!(s["offline_cache"], true)?;
+        #[cfg(not(feature = "sqlite3"))]
+        {
+            let keep_offline_cache = get_conf_val!(s["offline_cache"], false)?;
+            if keep_offline_cache {
+                return Err(MeliError::new(format!(
+                    "({}) keep_offline_cache is true but melib is not compiled with sqlite3",
+                    s.name,
+                )));
+            }
+        }
         get_conf_val!(s["use_idle"], true)?;
         get_conf_val!(s["use_condstore"], true)?;
         #[cfg(feature = "deflate_compression")]
@@ -1399,7 +1424,7 @@ enum FetchStage {
     InitialFresh,
     InitialCache,
     ResyncCache,
-    FreshFetch { max_uid: usize },
+    FreshFetch { max_uid: UID },
     Finished,
 }
 
@@ -1408,7 +1433,6 @@ struct FetchState {
     stage: FetchStage,
     connection: Arc<FutureMutex<ImapConnection>>,
     mailbox_hash: MailboxHash,
-    can_create_flags: Arc<Mutex<bool>>,
     uid_store: Arc<UIDStore>,
 }
 
@@ -1423,7 +1447,6 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
                     .await
                     .init_mailbox(state.mailbox_hash)
                     .await?;
-                *state.can_create_flags.lock().unwrap() = select_response.can_create_flags;
                 if select_response.exists == 0 {
                     state.stage = FetchStage::Finished;
                     return Ok(Vec::new());
@@ -1481,7 +1504,6 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
                     ref mut stage,
                     ref connection,
                     mailbox_hash,
-                    can_create_flags: _,
                     ref uid_store,
                 } = state;
                 let mailbox_hash = *mailbox_hash;
@@ -1565,8 +1587,9 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
                             }
                         }
                     }
+                    #[cfg(feature = "sqlite3")]
                     if uid_store.keep_offline_cache {
-                        let mut cache_handle = cache::CacheHandle::get(uid_store.clone())?;
+                        let mut cache_handle = cache::Sqlite3Cache::get(uid_store.clone())?;
                         debug!(cache_handle
                             .insert_envelopes(mailbox_hash, &v)
                             .chain_err_summary(|| {
@@ -1601,7 +1624,7 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
                             .unwrap()
                             .entry(mailbox_hash)
                             .or_default()
-                            .insert(message_sequence_number - 1, uid);
+                            .insert((message_sequence_number - 1).try_into().unwrap(), uid);
                         uid_store
                             .hash_index
                             .lock()

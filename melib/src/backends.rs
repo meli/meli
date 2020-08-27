@@ -226,6 +226,16 @@ pub enum BackendEvent {
     //Job(Box<Future<Output = Result<()>> + Send + 'static>)
 }
 
+impl From<MeliError> for BackendEvent {
+    fn from(val: MeliError) -> BackendEvent {
+        BackendEvent::Notice {
+            description: val.summary.as_ref().map(|s| s.to_string()),
+            content: val.to_string(),
+            level: crate::LoggingLevel::ERROR,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum RefreshEventKind {
     Update(EnvelopeHash, Box<Envelope>),

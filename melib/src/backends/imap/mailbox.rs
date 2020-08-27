@@ -18,6 +18,8 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
+
+use super::protocol_parser::SelectResponse;
 use crate::backends::{
     BackendMailbox, Mailbox, MailboxHash, MailboxPermissions, SpecialUsageMailbox,
 };
@@ -95,14 +97,15 @@ fn test_lazy_count_set() {
 
 #[derive(Debug, Default, Clone)]
 pub struct ImapMailbox {
-    pub(super) hash: MailboxHash,
-    pub(super) imap_path: String,
-    pub(super) path: String,
-    pub(super) name: String,
-    pub(super) parent: Option<MailboxHash>,
-    pub(super) children: Vec<MailboxHash>,
+    pub hash: MailboxHash,
+    pub imap_path: String,
+    pub path: String,
+    pub name: String,
+    pub parent: Option<MailboxHash>,
+    pub children: Vec<MailboxHash>,
     pub separator: u8,
     pub usage: Arc<RwLock<SpecialUsageMailbox>>,
+    pub select: Arc<RwLock<Option<SelectResponse>>>,
     pub no_select: bool,
     pub is_subscribed: bool,
 

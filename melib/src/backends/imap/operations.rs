@@ -29,7 +29,7 @@ use std::sync::Arc;
 /// `BackendOp` implementor for Imap
 #[derive(Debug, Clone)]
 pub struct ImapOp {
-    uid: usize,
+    uid: UID,
     mailbox_hash: MailboxHash,
     connection: Arc<FutureMutex<ImapConnection>>,
     uid_store: Arc<UIDStore>,
@@ -37,7 +37,7 @@ pub struct ImapOp {
 
 impl ImapOp {
     pub fn new(
-        uid: usize,
+        uid: UID,
         mailbox_hash: MailboxHash,
         connection: Arc<FutureMutex<ImapConnection>>,
         uid_store: Arc<UIDStore>,
@@ -80,12 +80,20 @@ impl BackendOp for ImapOp {
                     response.len(),
                     response.lines().count()
                 );
+                let mut results = protocol_parser::fetch_responses(&response)?.1;
+                if results.len() != 1 {
+                    return Err(MeliError::new(format!(
+                        "Invalid/unexpected response: {:?}",
+                        response
+                    ))
+                    .set_summary(format!("message with UID {} was not found?", uid)));
+                }
                 let FetchResponse {
                     uid: _uid,
                     flags: _flags,
                     body,
                     ..
-                } = protocol_parser::fetch_response(&response)?.1;
+                } = results.pop().unwrap();
                 let _uid = _uid.unwrap();
                 assert_eq!(_uid, uid);
                 assert!(body.is_some());

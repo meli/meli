@@ -38,6 +38,7 @@ pub type Result<T> = result::Result<T, MeliError>;
 pub enum ErrorKind {
     None,
     Authentication,
+    Bug,
     Network,
     Timeout,
 }
@@ -169,6 +170,19 @@ impl fmt::Display for MeliError {
         write!(f, "{}", self.details)?;
         if let Some(source) = self.source.as_ref() {
             write!(f, "\nCaused by: {}", source)?;
+        }
+        if self.kind != ErrorKind::None {
+            write!(
+                f,
+                "\nKind: {}",
+                match self.kind {
+                    ErrorKind::None => "None",
+                    ErrorKind::Authentication => "Authentication",
+                    ErrorKind::Bug => "Bug, please report this!",
+                    ErrorKind::Network => "Network",
+                    ErrorKind::Timeout => "Timeout",
+                }
+            )?;
         }
         Ok(())
     }

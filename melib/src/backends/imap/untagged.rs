@@ -30,6 +30,7 @@ use crate::backends::{
 };
 use crate::email::Envelope;
 use crate::error::*;
+use std::convert::TryInto;
 use std::time::Instant;
 
 impl ImapConnection {
@@ -58,7 +59,10 @@ impl ImapConnection {
         let mailbox =
             std::clone::Clone::clone(&self.uid_store.mailboxes.lock().await[&mailbox_hash]);
 
-        let mut cache_handle = super::cache::CacheHandle::get(self.uid_store.clone())?;
+        #[cfg(not(feature = "sqlite3"))]
+        let mut cache_handle = super::cache::DefaultCache::get(self.uid_store.clone())?;
+        #[cfg(feature = "sqlite3")]
+        let mut cache_handle = super::cache::Sqlite3Cache::get(self.uid_store.clone())?;
         let mut response = String::with_capacity(8 * 1024);
         let untagged_response =
             match super::protocol_parser::untagged_responses(line).map(|(_, v, _)| v) {
@@ -79,7 +83,7 @@ impl ImapConnection {
                     .lock()
                     .unwrap()
                     .get(&mailbox_hash)
-                    .map(|i| i.len() < n)
+                    .map(|i| i.len() < n.try_into().unwrap())
                     .unwrap_or(true)
                 {
                     debug!(
@@ -96,7 +100,7 @@ impl ImapConnection {
                     .unwrap()
                     .entry(mailbox_hash)
                     .or_default()
-                    .remove(n);
+                    .remove(n.try_into().unwrap());
                 debug!("expunge {}, UID = {}", n, deleted_uid);
                 let deleted_hash: crate::email::EnvelopeHash = match self
                     .uid_store
@@ -121,7 +125,9 @@ impl ImapConnection {
                         kind: Remove(deleted_hash),
                     },
                 )];
-                cache_handle.update(mailbox_hash, &event)?;
+                if self.uid_store.keep_offline_cache {
+                    cache_handle.update(mailbox_hash, &event)?;
+                }
                 self.add_refresh_event(std::mem::replace(
                     &mut event[0].1,
                     RefreshEvent {
@@ -206,7 +212,9 @@ impl ImapConnection {
                                         kind: Create(Box::new(env)),
                                     },
                                 )];
-                                cache_handle.update(mailbox_hash, &event)?;
+                                if self.uid_store.keep_offline_cache {
+                                    cache_handle.update(mailbox_hash, &event)?;
+                                }
                                 self.add_refresh_event(std::mem::replace(
                                     &mut event[0].1,
                                     RefreshEvent {
@@ -308,7 +316,9 @@ impl ImapConnection {
                                                     kind: Create(Box::new(env)),
                                                 },
                                             )];
-                                            cache_handle.update(mailbox_hash, &event)?;
+                                            if self.uid_store.keep_offline_cache {
+                                                cache_handle.update(mailbox_hash, &event)?;
+                                            }
                                             self.add_refresh_event(std::mem::replace(
                                                 &mut event[0].1,
                                                 RefreshEvent {
@@ -425,7 +435,9 @@ impl ImapConnection {
                                 kind: NewFlags(env_hash, flags),
                             },
                         )];
-                        cache_handle.update(mailbox_hash, &event)?;
+                        if self.uid_store.keep_offline_cache {
+                            cache_handle.update(mailbox_hash, &event)?;
+                        }
                         self.add_refresh_event(std::mem::replace(
                             &mut event[0].1,
                             RefreshEvent {
