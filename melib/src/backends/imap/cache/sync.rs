@@ -686,7 +686,6 @@ impl ImapConnection {
             )
         };
 
-        self.create_uid_msn_cache(mailbox_hash, 1).await?;
         /* first SELECT the mailbox to get READ/WRITE permissions (because EXAMINE only
          * returns READ-ONLY for both cases) */
         let mut select_response = self

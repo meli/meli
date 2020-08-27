@@ -73,6 +73,22 @@ impl ImapConnection {
                     (std::time::Instant::now(), Err(reason.into()));
             }
             UntaggedResponse::Expunge(n) => {
+                if self
+                    .uid_store
+                    .msn_index
+                    .lock()
+                    .unwrap()
+                    .get(&mailbox_hash)
+                    .map(|i| i.len() < n)
+                    .unwrap_or(true)
+                {
+                    debug!(
+                        "Received expunge {} but mailbox msn index is {:?}",
+                        n,
+                        self.uid_store.msn_index.lock().unwrap().get(&mailbox_hash)
+                    );
+                    return Ok(true);
+                }
                 let deleted_uid = self
                     .uid_store
                     .msn_index

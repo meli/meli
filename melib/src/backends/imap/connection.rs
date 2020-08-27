@@ -771,6 +771,18 @@ impl ImapConnection {
             permissions.delete_messages = !select_response.read_only;
         }
         self.stream.as_mut()?.current_mailbox = MailboxSelection::Select(mailbox_hash);
+        if self
+            .uid_store
+            .msn_index
+            .lock()
+            .unwrap()
+            .get(&mailbox_hash)
+            .map(|i| i.is_empty())
+            .unwrap_or(true)
+        {
+            self.create_uid_msn_cache(mailbox_hash, 1, &select_response)
+                .await?;
+        }
         Ok(Some(select_response))
     }
 
@@ -798,6 +810,18 @@ impl ImapConnection {
         debug!("examine response {}", ret);
         let select_response = protocol_parser::select_response(&ret)?;
         self.stream.as_mut()?.current_mailbox = MailboxSelection::Examine(mailbox_hash);
+        if !self
+            .uid_store
+            .msn_index
+            .lock()
+            .unwrap()
+            .get(&mailbox_hash)
+            .map(|i| i.is_empty())
+            .unwrap_or(true)
+        {
+            self.create_uid_msn_cache(mailbox_hash, 1, &select_response)
+                .await?;
+        }
         Ok(Some(select_response))
     }
 
@@ -853,15 +877,14 @@ impl ImapConnection {
         );
     }
 
-    pub async fn create_uid_msn_cache(
+    async fn create_uid_msn_cache(
         &mut self,
         mailbox_hash: MailboxHash,
         low: usize,
+        _select_response: &SelectResponse,
     ) -> Result<()> {
         debug_assert!(low > 0);
         let mut response = String::new();
-        self.examine_mailbox(mailbox_hash, &mut response, false)
-            .await?;
         self.send_command(format!("UID SEARCH {}:*", low).as_bytes())
             .await?;
         self.read_response(&mut response, RequiredResponses::SEARCH)
