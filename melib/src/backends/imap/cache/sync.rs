@@ -128,7 +128,7 @@ impl ImapConnection {
     //rfc4549_Synchronization_Operations_for_Disconnected_IMAP4_Clients
     pub async fn resync_basic(
         &mut self,
-        cache_handle: CacheHandle,
+        mut cache_handle: CacheHandle,
         mailbox_hash: MailboxHash,
     ) -> Result<Option<Vec<Envelope>>> {
         let mut payload = vec![];
@@ -319,34 +319,41 @@ impl ImapConnection {
                         .labels_mut()
                         .extend(tags.iter().map(|t| tag_hash!(t)));
                 });
-                refresh_events.push(RefreshEvent {
-                    mailbox_hash,
-                    account_hash: self.uid_store.account_hash,
-                    kind: RefreshEventKind::NewFlags(env_hash, (flags, tags)),
-                });
+                refresh_events.push((
+                    uid,
+                    RefreshEvent {
+                        mailbox_hash,
+                        account_hash: self.uid_store.account_hash,
+                        kind: RefreshEventKind::NewFlags(env_hash, (flags, tags)),
+                    },
+                ));
             }
         }
-        for env_hash in valid_envs.difference(
-            &env_lck
-                .iter()
-                .filter_map(|(h, cenv)| {
-                    if cenv.mailbox_hash == mailbox_hash {
-                        Some(*h)
-                    } else {
-                        None
-                    }
-                })
-                .collect(),
-        ) {
+        for env_hash in env_lck
+            .iter()
+            .filter_map(|(h, cenv)| {
+                if cenv.mailbox_hash == mailbox_hash {
+                    Some(*h)
+                } else {
+                    None
+                }
+            })
+            .collect::<BTreeSet<EnvelopeHash>>()
+            .difference(&valid_envs)
+        {
+            refresh_events.push((
+                env_lck[env_hash].uid,
+                RefreshEvent {
+                    mailbox_hash,
+                    account_hash: self.uid_store.account_hash,
+                    kind: RefreshEventKind::Remove(*env_hash),
+                },
+            ));
             env_lck.remove(env_hash);
-            refresh_events.push(RefreshEvent {
-                mailbox_hash,
-                account_hash: self.uid_store.account_hash,
-                kind: RefreshEventKind::Remove(*env_hash),
-            });
         }
         drop(env_lck);
-        for ev in refresh_events {
+        cache_handle.update(mailbox_hash, &refresh_events)?;
+        for (_uid, ev) in refresh_events {
             self.add_refresh_event(ev);
         }
         Ok(Some(payload.into_iter().map(|(_, env)| env).collect()))
@@ -356,7 +363,7 @@ impl ImapConnection {
     //Section 6.1
     pub async fn resync_condstore(
         &mut self,
-        cache_handle: CacheHandle,
+        mut cache_handle: CacheHandle,
         mailbox_hash: MailboxHash,
     ) -> Result<Option<Vec<Envelope>>> {
         let mut payload = vec![];
@@ -598,11 +605,14 @@ impl ImapConnection {
                             .labels_mut()
                             .extend(tags.iter().map(|t| tag_hash!(t)));
                     });
-                    refresh_events.push(RefreshEvent {
-                        mailbox_hash,
-                        account_hash: self.uid_store.account_hash,
-                        kind: RefreshEventKind::NewFlags(env_hash, (flags, tags)),
-                    });
+                    refresh_events.push((
+                        uid,
+                        RefreshEvent {
+                            mailbox_hash,
+                            account_hash: self.uid_store.account_hash,
+                            kind: RefreshEventKind::NewFlags(env_hash, (flags, tags)),
+                        },
+                    ));
                 }
             }
             self.uid_store
@@ -622,9 +632,9 @@ impl ImapConnection {
         for uid in v {
             valid_envs.insert(generate_envelope_hash(&mailbox_path, &uid));
         }
-        let mut env_lck = self.uid_store.envelopes.lock().unwrap();
-        for env_hash in valid_envs.difference(
-            &env_lck
+        {
+            let mut env_lck = self.uid_store.envelopes.lock().unwrap();
+            for env_hash in env_lck
                 .iter()
                 .filter_map(|(h, cenv)| {
                     if cenv.mailbox_hash == mailbox_hash {
@@ -633,17 +643,23 @@ impl ImapConnection {
                         None
                     }
                 })
-                .collect(),
-        ) {
-            env_lck.remove(env_hash);
-            refresh_events.push(RefreshEvent {
-                mailbox_hash,
-                account_hash: self.uid_store.account_hash,
-                kind: RefreshEventKind::Remove(*env_hash),
-            });
+                .collect::<BTreeSet<EnvelopeHash>>()
+                .difference(&valid_envs)
+            {
+                refresh_events.push((
+                    env_lck[env_hash].uid,
+                    RefreshEvent {
+                        mailbox_hash,
+                        account_hash: self.uid_store.account_hash,
+                        kind: RefreshEventKind::Remove(*env_hash),
+                    },
+                ));
+                env_lck.remove(env_hash);
+            }
+            drop(env_lck);
         }
-        drop(env_lck);
-        for ev in refresh_events {
+        cache_handle.update(mailbox_hash, &refresh_events)?;
+        for (_uid, ev) in refresh_events {
             self.add_refresh_event(ev);
         }
         Ok(Some(payload.into_iter().map(|(_, env)| env).collect()))

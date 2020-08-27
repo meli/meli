@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::{ImapConnection, MailboxSelection};
+use super::{ImapConnection, MailboxSelection, UID};
 use crate::backends::imap::protocol_parser::{
     generate_envelope_hash, FetchResponse, ImapLineSplit, RequiredResponses, UntaggedResponse,
 };
@@ -58,6 +58,7 @@ impl ImapConnection {
         let mailbox =
             std::clone::Clone::clone(&self.uid_store.mailboxes.lock().await[&mailbox_hash]);
 
+        let mut cache_handle = super::cache::CacheHandle::get(self.uid_store.clone())?;
         let mut response = String::with_capacity(8 * 1024);
         let untagged_response =
             match super::protocol_parser::untagged_responses(line).map(|(_, v, _)| v) {
@@ -81,23 +82,38 @@ impl ImapConnection {
                     .or_default()
                     .remove(n);
                 debug!("expunge {}, UID = {}", n, deleted_uid);
-                let deleted_hash: crate::email::EnvelopeHash = self
+                let deleted_hash: crate::email::EnvelopeHash = match self
                     .uid_store
                     .uid_index
                     .lock()
                     .unwrap()
                     .remove(&(mailbox_hash, deleted_uid))
-                    .unwrap();
+                {
+                    Some(v) => v,
+                    None => return Ok(true),
+                };
                 self.uid_store
                     .hash_index
                     .lock()
                     .unwrap()
                     .remove(&deleted_hash);
-                self.add_refresh_event(RefreshEvent {
-                    account_hash: self.uid_store.account_hash,
-                    mailbox_hash,
-                    kind: Remove(deleted_hash),
-                });
+                let mut event: [(UID, RefreshEvent); 1] = [(
+                    deleted_uid,
+                    RefreshEvent {
+                        account_hash: self.uid_store.account_hash,
+                        mailbox_hash,
+                        kind: Remove(deleted_hash),
+                    },
+                )];
+                cache_handle.update(mailbox_hash, &event)?;
+                self.add_refresh_event(std::mem::replace(
+                    &mut event[0].1,
+                    RefreshEvent {
+                        account_hash: self.uid_store.account_hash,
+                        mailbox_hash,
+                        kind: Rescan,
+                    },
+                ));
             }
             UntaggedResponse::Exists(n) => {
                 /* UID FETCH ALL UID, cross-ref, then FETCH difference headers
@@ -166,11 +182,23 @@ impl ImapConnection {
                                     mailbox.unseen.lock().unwrap().insert_new(env.hash());
                                 }
                                 mailbox.exists.lock().unwrap().insert_new(env.hash());
-                                self.add_refresh_event(RefreshEvent {
-                                    account_hash: self.uid_store.account_hash,
-                                    mailbox_hash,
-                                    kind: Create(Box::new(env)),
-                                });
+                                let mut event: [(UID, RefreshEvent); 1] = [(
+                                    uid,
+                                    RefreshEvent {
+                                        account_hash: self.uid_store.account_hash,
+                                        mailbox_hash,
+                                        kind: Create(Box::new(env)),
+                                    },
+                                )];
+                                cache_handle.update(mailbox_hash, &event)?;
+                                self.add_refresh_event(std::mem::replace(
+                                    &mut event[0].1,
+                                    RefreshEvent {
+                                        account_hash: self.uid_store.account_hash,
+                                        mailbox_hash,
+                                        kind: Rescan,
+                                    },
+                                ));
                             }
                         }
                     }
@@ -256,11 +284,23 @@ impl ImapConnection {
                                             }
 
                                             mailbox.exists.lock().unwrap().insert_new(env.hash());
-                                            self.add_refresh_event(RefreshEvent {
-                                                account_hash: self.uid_store.account_hash,
-                                                mailbox_hash,
-                                                kind: Create(Box::new(env)),
-                                            });
+                                            let mut event: [(UID, RefreshEvent); 1] = [(
+                                                uid,
+                                                RefreshEvent {
+                                                    account_hash: self.uid_store.account_hash,
+                                                    mailbox_hash,
+                                                    kind: Create(Box::new(env)),
+                                                },
+                                            )];
+                                            cache_handle.update(mailbox_hash, &event)?;
+                                            self.add_refresh_event(std::mem::replace(
+                                                &mut event[0].1,
+                                                RefreshEvent {
+                                                    account_hash: self.uid_store.account_hash,
+                                                    mailbox_hash,
+                                                    kind: Rescan,
+                                                },
+                                            ));
                                         }
                                     }
                                 }
@@ -334,9 +374,13 @@ impl ImapConnection {
                         }
                     };
                     debug!("fetch uid {} {:?}", uid, flags);
-                    let lck = self.uid_store.uid_index.lock().unwrap();
-                    let env_hash = lck.get(&(mailbox_hash, uid)).copied();
-                    drop(lck);
+                    let env_hash = self
+                        .uid_store
+                        .uid_index
+                        .lock()
+                        .unwrap()
+                        .get(&(mailbox_hash, uid))
+                        .copied();
                     if let Some(env_hash) = env_hash {
                         if !flags.0.intersects(crate::email::Flag::SEEN) {
                             mailbox.unseen.lock().unwrap().insert_new(env_hash);
@@ -357,12 +401,23 @@ impl ImapConnection {
                                 .unwrap()
                                 .insert(env_hash, modseq);
                         }
-
-                        self.add_refresh_event(RefreshEvent {
-                            account_hash: self.uid_store.account_hash,
-                            mailbox_hash,
-                            kind: NewFlags(env_hash, flags),
-                        });
+                        let mut event: [(UID, RefreshEvent); 1] = [(
+                            uid,
+                            RefreshEvent {
+                                account_hash: self.uid_store.account_hash,
+                                mailbox_hash,
+                                kind: NewFlags(env_hash, flags),
+                            },
+                        )];
+                        cache_handle.update(mailbox_hash, &event)?;
+                        self.add_refresh_event(std::mem::replace(
+                            &mut event[0].1,
+                            RefreshEvent {
+                                account_hash: self.uid_store.account_hash,
+                                mailbox_hash,
+                                kind: Rescan,
+                            },
+                        ));
                     };
                 }
             }

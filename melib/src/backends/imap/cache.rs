@@ -50,6 +50,7 @@ impl core::fmt::Display for ModSequence {
 #[derive(Debug)]
 pub struct CachedEnvelope {
     pub inner: Envelope,
+    pub uid: UID,
     pub mailbox_hash: MailboxHash,
     pub modsequence: Option<ModSequence>,
 }
@@ -206,6 +207,7 @@ mod sqlite3_m {
                     env.hash(),
                     CachedEnvelope {
                         inner: env,
+                        uid,
                         mailbox_hash,
                         modsequence: modseq,
                     },
@@ -274,6 +276,104 @@ mod sqlite3_m {
                 "INSERT OR REPLACE INTO envelopes (uid, mailbox_hash, modsequence, envelope) VALUES (?1, ?2, ?3, ?4)",
                 sqlite3::params![*uid as i64, mailbox_hash as i64, modseq, &envelope],
             ).chain_err_summary(|| format!("Could not insert envelope {} {} in header_cache of account {}", envelope.message_id(), envelope.hash(), uid_store.account_name))?;
+                }
+            }
+            tx.commit()?;
+            Ok(())
+        }
+
+        pub fn update(
+            &mut self,
+            mailbox_hash: MailboxHash,
+            refresh_events: &[(UID, RefreshEvent)],
+        ) -> Result<()> {
+            debug!(
+                "update with refresh_events mailbox_hash {} len {}",
+                mailbox_hash,
+                refresh_events.len()
+            );
+            if self.mailbox_state(mailbox_hash)?.is_none() {
+                debug!(self.mailbox_state(mailbox_hash)?.is_none());
+                let uidvalidity = self
+                    .uid_store
+                    .uidvalidity
+                    .lock()
+                    .unwrap()
+                    .get(&mailbox_hash)
+                    .cloned();
+                let highestmodseq = self
+                    .uid_store
+                    .highestmodseqs
+                    .lock()
+                    .unwrap()
+                    .get(&mailbox_hash)
+                    .cloned();
+                debug!(&uidvalidity);
+                debug!(&highestmodseq);
+                if let Some(uidvalidity) = uidvalidity {
+                    debug!(self.clear(
+                        mailbox_hash,
+                        uidvalidity,
+                        highestmodseq.and_then(|v| v.ok()),
+                    ))?;
+                }
+            }
+            let Self {
+                ref mut connection,
+                ref uid_store,
+            } = self;
+            let tx = connection.transaction()?;
+            let mut hash_index_lck = uid_store.hash_index.lock().unwrap();
+            for (uid, event) in refresh_events {
+                match debug!(&event.kind) {
+                    RefreshEventKind::Remove(env_hash) => {
+                        hash_index_lck.remove(&env_hash);
+                        tx.execute(
+                            "DELETE FROM envelopes WHERE mailbox_hash = ?1 AND uid = ?2;",
+                            sqlite3::params![mailbox_hash as i64, *uid as i64],
+                        )
+                        .chain_err_summary(|| {
+                            format!(
+                                "Could not remove envelope {} uid {} from  mailbox {} account {}",
+                                env_hash, *uid, mailbox_hash, uid_store.account_name
+                            )
+                        })?;
+                    }
+                    RefreshEventKind::NewFlags(env_hash, (flags, tags)) => {
+                        let mut stmt = tx.prepare(
+                            "SELECT envelope FROM envelopes WHERE mailbox_hash = ?1 AND uid = ?2;",
+                        )?;
+
+                        let mut ret: Vec<Envelope> = stmt
+                            .query_map(sqlite3::params![mailbox_hash as i64, *uid as i64], |row| {
+                                Ok(row.get(0)?)
+                            })?
+                            .collect::<std::result::Result<_, _>>()?;
+                        if let Some(mut env) = ret.pop() {
+                            env.set_flags(*flags);
+                            env.labels_mut().clear();
+                            env.labels_mut().extend(tags.iter().map(|t| tag_hash!(t)));
+                            tx.execute(
+                    "UPDATE envelopes SET envelope = ?1 WHERE mailbox_hash = ?2 AND uid = ?3;",
+                    sqlite3::params![&env, mailbox_hash as i64, *uid as i64],
+                )
+                                .chain_err_summary(|| {
+                                    format!(
+                                        "Could not update envelope {} uid {} from  mailbox {} account {}",
+                                        env_hash, *uid, mailbox_hash, uid_store.account_name
+                                    )
+                                })?;
+                            uid_store
+                                .envelopes
+                                .lock()
+                                .unwrap()
+                                .entry(*env_hash)
+                                .and_modify(|entry| {
+                                    entry.inner = env;
+                                });
+                        }
+                    }
+                    _ => {}
                 }
             }
             tx.commit()?;
