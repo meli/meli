@@ -1216,9 +1216,6 @@ impl ImapType {
 
             match io::stdin().read_line(&mut input) {
                 Ok(_) => {
-                    if input.trim().eq_ignore_ascii_case("logout") {
-                        break;
-                    }
                     futures::executor::block_on(timeout(
                         Duration::from_secs(3),
                         conn.send_command(input.as_bytes()),
@@ -1229,6 +1226,9 @@ impl ImapType {
                         conn.read_lines(&mut res, String::new()),
                     ))
                     .unwrap();
+                    if input.trim().eq_ignore_ascii_case("logout") {
+                        break;
+                    }
                     /*
                     if input.trim() == "IDLE" {
                         let mut iter = ImapBlockingConnection::from(conn);
@@ -1238,9 +1238,9 @@ impl ImapType {
                         conn = iter.into_conn();
                     }
                     */
-                    debug!("out: {}", &res);
+                    println!("S: {}", &res);
                 }
-                Err(error) => debug!("error: {}", error),
+                Err(error) => println!("error: {}", error),
             }
         }
     }
