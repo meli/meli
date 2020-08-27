@@ -70,7 +70,7 @@ opt-level = "z"
 debug = false
 
 [workspace]
-members = ["melib", "testing", ]
+members = ["melib", "tools", ]
 
 [features]
 default = ["sqlite3", "notmuch", "regexp", "smtp"]

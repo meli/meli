@@ -8,7 +8,7 @@ use melib::{AccountSettings, BackendEventConsumer};
 ///
 /// # Example invocation:
 /// ```sh
-/// ./imap_conn server_hostname server_username server_password server_port");
+/// ./imapshell server_hostname server_username server_password server_port");
 /// ```
 ///
 /// `danger_accept_invalid_certs` is turned on by default, so no certificate validation is performed.
@@ -16,7 +16,7 @@ use melib::{AccountSettings, BackendEventConsumer};
 fn main() -> Result<()> {
     let mut args = std::env::args().skip(1).collect::<Vec<String>>();
     if args.len() != 4 {
-        eprintln!("Usage: imap_conn server_hostname server_username server_password server_port");
+        eprintln!("Usage: imapshell server_hostname server_username server_password server_port");
         std::process::exit(1);
     }
 

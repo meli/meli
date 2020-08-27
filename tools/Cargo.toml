@@ -1,5 +1,5 @@
 [package]
-name = "testing"
+name = "tools"
 version = "0.4.1"
 authors = ["Manos Pitsidianakis <el13635@mail.ntua.gr>"]
 workspace = ".."
@@ -14,8 +14,12 @@ name = "mboxparse"
 path = "src/mboxparse.rs"
 
 [[bin]]
-name = "imapconn"
-path = "src/imap_conn.rs"
+name = "imapshell"
+path = "src/imapshell.rs"
+
+[[bin]]
+name = "smtp_conn"
+path = "src/smtp_conn.rs"
 
 [dependencies]
 melib = { path = "../melib", version = "*", features = ["debug-tracing", "unicode_algorithms"] }
