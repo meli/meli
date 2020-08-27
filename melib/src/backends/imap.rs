@@ -1197,14 +1197,17 @@ impl ImapType {
     }
 
     pub fn shell(&mut self) {
-        unimplemented!()
-        /*
         let mut conn = ImapConnection::new_connection(&self.server_conf, self.uid_store.clone());
-        conn.connect().unwrap();
+
+        futures::executor::block_on(timeout(Duration::from_secs(3), conn.connect())).unwrap();
         let mut res = String::with_capacity(8 * 1024);
-        conn.send_command(b"NOOP").unwrap();
-        conn.read_response(&mut res, RequiredResponses::empty())
+        futures::executor::block_on(timeout(Duration::from_secs(3), conn.send_command(b"NOOP")))
             .unwrap();
+        futures::executor::block_on(timeout(
+            Duration::from_secs(3),
+            conn.read_response(&mut res, RequiredResponses::empty()),
+        ))
+        .unwrap();
 
         let mut input = String::new();
         loop {
@@ -1216,8 +1219,17 @@ impl ImapType {
                     if input.trim().eq_ignore_ascii_case("logout") {
                         break;
                     }
-                    conn.send_command(input.as_bytes()).unwrap();
-                    conn.read_lines(&mut res, String::new()).unwrap();
+                    futures::executor::block_on(timeout(
+                        Duration::from_secs(3),
+                        conn.send_command(input.as_bytes()),
+                    ))
+                    .unwrap();
+                    futures::executor::block_on(timeout(
+                        Duration::from_secs(3),
+                        conn.read_lines(&mut res, String::new()),
+                    ))
+                    .unwrap();
+                    /*
                     if input.trim() == "IDLE" {
                         let mut iter = ImapBlockingConnection::from(conn);
                         while let Some(line) = iter.next() {
@@ -1225,12 +1237,12 @@ impl ImapType {
                         }
                         conn = iter.into_conn();
                     }
+                    */
                     debug!("out: {}", &res);
                 }
                 Err(error) => debug!("error: {}", error),
             }
         }
-            */
     }
 
     pub async fn imap_mailboxes(

@@ -1,7 +1,7 @@
 extern crate melib;
 
 use melib::backends::ImapType;
-use melib::Result;
+use melib::{futures, smol, Result};
 use melib::{AccountSettings, BackendEventConsumer};
 
 /// Opens an interactive shell on an IMAP server. Suggested use is with rlwrap(1)
@@ -48,6 +48,7 @@ fn main() -> Result<()> {
         BackendEventConsumer::new(std::sync::Arc::new(|_, _| ())),
     )?;
 
+    std::thread::spawn(|| smol::run(futures::future::pending::<()>()));
     (imap.as_any_mut())
         .downcast_mut::<ImapType>()
         .unwrap()
