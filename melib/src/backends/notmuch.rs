@@ -387,23 +387,6 @@ impl NotmuchDb {
         Ok(())
     }
 
-    pub fn search(&self, query_s: &str) -> Result<SmallVec<[EnvelopeHash; 512]>> {
-        let database = Self::new_connection(
-            self.path.as_path(),
-            self.revision_uuid.clone(),
-            self.lib.clone(),
-            false,
-        )?;
-        let query: Query = Query::new(self.lib.clone(), &database, query_s)?;
-        let mut ret = SmallVec::new();
-        let iter = query.search()?;
-        for message in iter {
-            ret.push(message.env_hash());
-        }
-
-        Ok(ret)
-    }
-
     fn new_connection(
         path: &Path,
         revision_uuid: Arc<RwLock<u64>>,
@@ -809,6 +792,44 @@ impl MailBackend for NotmuchDb {
         }))
     }
 
+    fn search(
+        &self,
+        melib_query: crate::search::Query,
+        mailbox_hash: Option<MailboxHash>,
+    ) -> ResultFuture<SmallVec<[EnvelopeHash; 512]>> {
+        let database = NotmuchDb::new_connection(
+            self.path.as_path(),
+            self.revision_uuid.clone(),
+            self.lib.clone(),
+            false,
+        )?;
+        let lib = self.lib.clone();
+        let mailboxes = self.mailboxes.clone();
+        Ok(Box::pin(async move {
+            let mut ret = SmallVec::new();
+            let mut query_s = if let Some(mailbox_hash) = mailbox_hash {
+                if let Some(m) = mailboxes.read().unwrap().get(&mailbox_hash) {
+                    let mut s = m.query_str.clone();
+                    s.push(' ');
+                    s
+                } else {
+                    return Err(MeliError::new("Mailbox with hash {} not found!")
+                        .set_kind(crate::error::ErrorKind::Bug));
+                }
+            } else {
+                String::new()
+            };
+            melib_query.query_to_string(&mut query_s);
+            let query: Query = Query::new(lib.clone(), &database, &query_s)?;
+            let iter = query.search()?;
+            for message in iter {
+                ret.push(message.env_hash());
+            }
+
+            Ok(ret)
+        }))
+    }
+
     fn tags(&self) -> Option<Arc<RwLock<BTreeMap<u64, String>>>> {
         Some(self.tag_index.clone())
     }
@@ -915,6 +936,134 @@ impl Drop for Query<'_> {
     fn drop(&mut self) {
         unsafe {
             call!(self.lib, notmuch_query_destroy)(self.ptr);
+        }
+    }
+}
+
+pub trait MelibQueryToNotmuchQuery {
+    fn query_to_string(&self, ret: &mut String);
+}
+
+impl MelibQueryToNotmuchQuery for crate::search::Query {
+    fn query_to_string(&self, ret: &mut String) {
+        use crate::search::Query::*;
+        match self {
+            Before(timestamp) => {
+                ret.push_str("date:..@");
+                ret.push_str(&timestamp.to_string());
+            }
+            After(timestamp) => {
+                ret.push_str("date:@");
+                ret.push_str(&timestamp.to_string());
+                ret.push_str("..");
+            }
+            Between(a, b) => {
+                ret.push_str("date:@");
+                ret.push_str(&a.to_string());
+                ret.push_str("..@");
+                ret.push_str(&b.to_string());
+            }
+            On(timestamp) => {
+                ret.push_str("date:@");
+                ret.push_str(&timestamp.to_string());
+            }
+            /* * * * */
+            From(s) => {
+                ret.push_str("from:\"");
+                for c in s.chars() {
+                    if c == '"' {
+                        ret.push_str("\\\"");
+                    } else {
+                        ret.push(c);
+                    }
+                }
+                ret.push_str("\"");
+            }
+            To(s) | Cc(s) | Bcc(s) => {
+                ret.push_str("to:\"");
+                for c in s.chars() {
+                    if c == '"' {
+                        ret.push_str("\\\"");
+                    } else {
+                        ret.push(c);
+                    }
+                }
+                ret.push_str("\"");
+            }
+            InReplyTo(_s) | References(_s) | AllAddresses(_s) => {}
+            /* * * * */
+            Body(s) => {
+                ret.push_str("body:\"");
+                for c in s.chars() {
+                    if c == '"' {
+                        ret.push_str("\\\"");
+                    } else {
+                        ret.push(c);
+                    }
+                }
+                ret.push_str("\"");
+            }
+            Subject(s) => {
+                ret.push_str("subject:\"");
+                for c in s.chars() {
+                    if c == '"' {
+                        ret.push_str("\\\"");
+                    } else {
+                        ret.push(c);
+                    }
+                }
+                ret.push_str("\"");
+            }
+            AllText(s) => {
+                ret.push_str("\"");
+                for c in s.chars() {
+                    if c == '"' {
+                        ret.push_str("\\\"");
+                    } else {
+                        ret.push(c);
+                    }
+                }
+                ret.push_str("\"");
+            }
+            /* * * * */
+            Flags(v) => {
+                for f in v {
+                    ret.push_str("tag:\"");
+                    for c in f.chars() {
+                        if c == '"' {
+                            ret.push_str("\\\"");
+                        } else {
+                            ret.push(c);
+                        }
+                    }
+                    ret.push_str("\" ");
+                }
+                if !v.is_empty() {
+                    ret.pop();
+                }
+            }
+            HasAttachment => {
+                ret.push_str("tag:attachment");
+            }
+            And(q1, q2) => {
+                ret.push_str("(");
+                q1.query_to_string(ret);
+                ret.push_str(") AND (");
+                q2.query_to_string(ret);
+                ret.push_str(")");
+            }
+            Or(q1, q2) => {
+                ret.push_str("(");
+                q1.query_to_string(ret);
+                ret.push_str(") OR (");
+                q2.query_to_string(ret);
+                ret.push_str(")");
+            }
+            Not(q) => {
+                ret.push_str("(NOT (");
+                q.query_to_string(ret);
+                ret.push_str("))");
+            }
         }
     }
 }
