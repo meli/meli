@@ -25,7 +25,8 @@ use nom::{
     bytes::complete::{is_a, is_not, tag, take_until, take_while},
     character::is_hex_digit,
     combinator::peek,
-    error::ErrorKind,
+    combinator::{map, opt},
+    error::{context, ErrorKind},
     multi::{many0, many1, separated_list, separated_nonempty_list},
     number::complete::le_u8,
     sequence::{delimited, pair, preceded, separated_pair, terminated},
@@ -33,10 +34,36 @@ use nom::{
 use smallvec::SmallVec;
 use std::borrow::Cow;
 
-#[derive(Debug, Eq, PartialEq)]
+macro_rules! to_str {
+    ($l:expr) => {{
+        unsafe { std::str::from_utf8_unchecked($l) }
+    }};
+}
+#[derive(Eq, PartialEq)]
 pub struct ParsingError<I> {
     input: I,
     error: Cow<'static, str>,
+}
+
+impl core::fmt::Debug for ParsingError<&'_ [u8]> {
+    fn fmt(&self, fmt: &mut core::fmt::Formatter) -> core::fmt::Result {
+        fmt.debug_struct("ParsingError")
+            .field("input", &to_str!(&self.input))
+            .field("error", &self.error)
+            .finish()
+    }
+}
+
+struct DebugOkWrapper<'r, I, R: AsRef<[u8]>>(&'r IResult<I, R>);
+
+impl<R: AsRef<[u8]> + core::fmt::Debug> core::fmt::Debug for DebugOkWrapper<'_, &'_ [u8], R> {
+    fn fmt(&self, fmt: &mut core::fmt::Formatter) -> core::fmt::Result {
+        if let Ok((a, b)) = self.0 {
+            write!(fmt, "Ok({}, {})", &to_str!(a), &to_str!(b.as_ref()))
+        } else {
+            write!(fmt, "{:?}", self.0)
+        }
+    }
 }
 
 pub type IResult<I, O, E = ParsingError<I>> = std::result::Result<(I, O), nom::Err<E>>;
@@ -50,8 +77,8 @@ impl<'i> ParsingError<&'i str> {
     }
 }
 
-impl<'i> From<(&'i [u8], &'static str)> for ParsingError<&'i [u8]> {
-    fn from((input, error): (&'i [u8], &'static str)) -> Self {
+impl<I> From<(I, &'static str)> for ParsingError<I> {
+    fn from((input, error): (I, &'static str)) -> Self {
         Self {
             input,
             error: error.into(),
@@ -59,8 +86,8 @@ impl<'i> From<(&'i [u8], &'static str)> for ParsingError<&'i [u8]> {
     }
 }
 
-impl<'i> From<(&'i [u8], String)> for ParsingError<&'i [u8]> {
-    fn from((input, error): (&'i [u8], String)) -> Self {
+impl<I> From<(I, String)> for ParsingError<I> {
+    fn from((input, error): (I, String)) -> Self {
         Self {
             input,
             error: error.into(),
@@ -258,6 +285,170 @@ pub mod generic {
         crate::datetime::rfc822_to_timestamp(parsed_result.trim())
     }
 
+    ///`%x21-7E`
+    fn vchar(input: &[u8]) -> IResult<&[u8], u8> {
+        if input.is_empty() {
+            return Err(nom::Err::Error((input, "vchar(): empty input").into()));
+        }
+        if input[0] >= 0x21 && input[0] <= 0x7e {
+            Ok((&input[1..], input[0]))
+        } else {
+            Err(nom::Err::Error((input, "vchar(): out of range").into()))
+        }
+    }
+
+    ///`quoted-pair     =   ("\" (VCHAR / WSP)) / obs-qp`
+    fn quoted_pair(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
+        let (input, byte) = preceded(tag("\\"), alt((vchar, wsp)))(input)?;
+        Ok((input, vec![byte].into()))
+    }
+
+    ///```text
+    ///ctext           =   %d33-39 /          ; Printable US-ASCII
+    ///                     %d42-91 /          ;  characters not including
+    ///                     %d93-126 /         ;  "(", ")", or "\"
+    ///                     obs-ctext
+    ///```
+    fn ctext(input: &[u8]) -> IResult<&[u8], ()> {
+        if input.is_empty() {
+            return Err(nom::Err::Error((input, "ctext(): empty input").into()));
+        }
+        if (input[0] >= 33 && input[0] <= 39)
+            || (input[0] >= 42 && input[0] <= 91)
+            || (input[0] >= 93 && input[0] <= 126)
+        {
+            Ok((&input[1..], ()))
+        } else {
+            Err(nom::Err::Error((input, "ctext(): out of range").into()))
+        }
+    }
+
+    ///```text
+    ///ctext           =   %d33-39 /          ; Printable US-ASCII
+    ///                    %d42-91 /          ;  characters not including
+    ///                    %d93-126 /         ;  "(", ")", or "\"
+    ///                    obs-ctext
+    ///ccontent        =   ctext / quoted-pair / comment
+    ///comment         =   "(" *([FWS] ccontent) [FWS] ")"
+    ///```
+    pub fn comment(input: &[u8]) -> IResult<&[u8], ()> {
+        if !input.starts_with(b"(") {
+            return Err(nom::Err::Error(
+                (input, "comment(): not starting with '('").into(),
+            ));
+        }
+        let mut input = &input[1..];
+        let mut comment_level = 1;
+        while comment_level > 0 {
+            if input.is_empty() {
+                return Err(nom::Err::Error(
+                    (input, "comment(): unclosed comment").into(),
+                ));
+            }
+            input = context("comment()", opt(fws))(input)?.0;
+            while let Ok((_input, _)) =
+                context("comment()", alt((ctext, map(quoted_pair, |_| ()))))(input)
+            {
+                input = _input;
+            }
+
+            if input.starts_with(b")") {
+                comment_level -= 1;
+                input = &input[1..];
+            } else if input.starts_with(b"(") {
+                comment_level += 1;
+                input = &input[1..];
+            } else {
+                input = context("comment()", opt(fws))(input)?.0;
+            }
+        }
+        Ok((input, ()))
+    }
+
+    #[test]
+    fn test_parser_comment() {
+        let s = b"(recursive (comment) block)";
+        assert_eq!(comment(s), Ok((&b""[..], ())));
+    }
+
+    ///`FWS             =   ([*WSP CRLF] 1*WSP) /  obs-FWS`
+    pub fn fws(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
+        if let Ok((rest, ws)) = terminated(many0(wsp), crlf)(input) {
+            let mut v: Vec<u8> = ws.into_iter().fold(vec![], |mut acc, x| {
+                acc.push(x);
+                acc
+            });
+
+            let mut width = 0;
+            let mut input = rest;
+            while let Ok((input_, w)) = wsp(input) {
+                v.push(w);
+                width += 1;
+                input = input_;
+            }
+            if width == 0 {
+                Err(nom::Err::Error((input, "fws(): no WSP").into()))
+            } else {
+                Ok((input, Cow::Owned(v)))
+            }
+        } else {
+            let orig_input = input;
+            let mut input = input;
+            let mut width = 0;
+            while let Ok((input_, _)) = wsp(input) {
+                width += 1;
+                input = input_;
+            }
+            if width == 0 {
+                Err(nom::Err::Error((input, "fws(): no WSP").into()))
+            } else {
+                Ok((input, Cow::Borrowed(&orig_input[..width])))
+            }
+        }
+    }
+
+    ///`WSP            =  SP / HTAB ; white space`
+    pub fn wsp(input: &[u8]) -> IResult<&[u8], u8> {
+        if input.starts_with(b" ") || input.starts_with(b"\t") {
+            Ok((&input[1..], input[0]))
+        } else {
+            Err(nom::Err::Error((input, "wsp(): not whitespace").into()))
+        }
+    }
+
+    pub fn crlf(input: &[u8]) -> IResult<&[u8], ()> {
+        if input.starts_with(b"\n") {
+            Ok((&input[1..], ()))
+        } else if input.starts_with(b"\r\n") {
+            Ok((&input[2..], ()))
+        } else {
+            Err(nom::Err::Error((input, "crlf(): not whitespace").into()))
+        }
+    }
+
+    ///`CFWS            =   (1*([FWS] comment) [FWS]) / FWS`
+    pub fn cfws(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
+        alt((
+            |input| {
+                let (input, pr) = many1(terminated(opt(fws), comment))(input)?;
+                let (input, end) = opt(fws)(input)?;
+                let mut pr = pr.into_iter().filter_map(|s| s).fold(vec![], |mut acc, x| {
+                    acc.extend_from_slice(&x);
+                    acc
+                });
+                if pr.is_empty() {
+                    Ok((input, end.unwrap_or((&b""[..]).into())))
+                } else {
+                    if let Some(end) = end {
+                        pr.extend_from_slice(&end);
+                    }
+                    Ok((input, pr.into()))
+                }
+            },
+            fws,
+        ))(input)
+    }
+
     fn eat_comments(input: &[u8]) -> Vec<u8> {
         let mut in_comment = false;
         input
@@ -277,6 +468,32 @@ pub mod generic {
                 }
             })
     }
+
+    ///`unstructured    =   (*([FWS] VCHAR) *WSP) / obs-unstruct`
+    pub fn unstructured(input: &[u8]) -> Result<String> {
+        let (input, r): (_, Vec<(Option<Cow<'_, [u8]>>, u8)>) =
+            many0(pair(opt(fws), vchar))(input)?;
+        let (input, rest_wsp): (_, Vec<u8>) = many0(wsp)(input)?;
+        let mut ret_s = Vec::new();
+        for (opt_slice, b) in r {
+            if let Some(slice) = opt_slice {
+                ret_s.extend_from_slice(&slice);
+            }
+            ret_s.push(b);
+        }
+        ret_s.extend_from_slice(&rest_wsp);
+        let ret_s = String::from_utf8_lossy(&ret_s).into_owned();
+        if !input.is_empty() {
+            Err(MeliError::from(format!(
+                "unstructured(): unmatched input: {} while result is {}",
+                to_str!(input),
+                ret_s
+            )))
+        } else {
+            Ok(ret_s)
+        }
+    }
+
     use crate::email::address::Address;
     use crate::email::mailto::Mailto;
     pub fn mailto(mut input: &[u8]) -> IResult<&[u8], Mailto> {
@@ -389,6 +606,20 @@ pub mod generic {
         } else {
             Err(nom::Err::Error((input, "expected EOF").into()))
         }
+    }
+
+    #[test]
+    fn test_parser_cfws() {
+        let s = r#"This
+ is a test"#;
+        assert_eq!(&unstructured(s.as_bytes()).unwrap(), "This is a test",);
+
+        assert_eq!(&unstructured(s.as_bytes()).unwrap(), "This is a test",);
+        let s = "this is\n\ta folded name";
+        assert_eq!(
+            &unstructured(s.as_bytes()).unwrap(),
+            "this is a\tfolded name",
+        );
     }
 }
 
@@ -1222,6 +1453,7 @@ pub mod encodings {
 pub mod address {
     use super::*;
     use crate::email::address::*;
+    use crate::email::parser::generic::cfws;
     pub fn display_addr(input: &[u8]) -> IResult<&[u8], Address> {
         if input.is_empty() || input.len() < 3 {
             Err(nom::Err::Error((input, "display_addr(): EOF").into()))
@@ -1324,98 +1556,379 @@ pub mod address {
         }
     }
 
-    fn addr_spec(input: &[u8]) -> IResult<&[u8], Address> {
-        if input.is_empty() || input.len() < 3 {
-            Err(nom::Err::Error((input, "addr_spec(): found EOF").into()))
-        } else if !is_whitespace!(input[0]) {
-            let mut end = input[1..].len();
-            let mut flag = false;
-            for (i, b) in input[1..].iter().enumerate() {
-                if *b == b'@' {
-                    flag = true;
-                }
-                if is_whitespace!(*b) {
-                    end = i;
-                    break;
-                }
+    ///`angle-addr      =   [CFWS] "<" addr-spec ">" [CFWS] / obs-angle-addr`
+    fn angle_addr(input: &[u8]) -> IResult<&[u8], Address> {
+        let (input, _) = opt(cfws)(input)?;
+        let (input, _) = tag("<")(input)?;
+        let (input, addr_spec) = addr_spec(input)?;
+        let (input, _) = tag(">")(input)?;
+        let (input, _) = opt(cfws)(input)?;
+        Ok((input, addr_spec))
+    }
+    ///`atom            =   [CFWS] 1*atext [CFWS]`
+    fn atom(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
+        let (input, opt_space) = opt(cfws)(input)?;
+        let mut i = 0;
+        while i < input.len() {
+            //&& !input[i].is_ascii_whitespace() {
+            match input[i] {
+                b'(' | b')' | b'<' | b'>' | b'[' | b']' | b':' | b';' | b'@' | b'\\' | b','
+                | b'.' | b'\r' | b'\n' | b'"' => break,
+                _ => {}
             }
-            if flag {
-                Ok((
-                    &input[end..],
-                    Address::Mailbox(MailboxAddress {
-                        raw: input[0..=end].into(),
-                        display_name: StrBuilder {
-                            offset: 0,
-                            length: 0,
-                        },
-                        address_spec: StrBuilder {
-                            offset: 0,
-                            length: input[0..=end].len(),
-                        },
-                    }),
-                ))
-            } else {
-                Err(nom::Err::Error((input, "addr_spec(): expected '@'").into()))
-            }
-        } else {
-            Err(nom::Err::Error(
-                (input, "addr_spec(): unexpected whitespace").into(),
-            ))
+            i += 1;
         }
-    }
-
-    pub fn mailbox(input: &[u8]) -> IResult<&[u8], Address> {
-        alt((display_addr, addr_spec))(input)
-        //ws!(alt_complete!(display_addr | addr_spec))
-    }
-
-    pub fn mailbox_list(input: &[u8]) -> IResult<&[u8], Vec<Address>> {
-        many0(mailbox)(input)
-        // many0!(mailbox));
-    }
-
-    /*
-     * group of recipients eg. undisclosed-recipients;
-     */
-    fn group(input: &[u8]) -> IResult<&[u8], Address> {
-        let mut flag = false;
-        let mut dlength = 0;
-        for (i, b) in input.iter().enumerate() {
-            if *b == b';' {
-                flag = true;
-                dlength = i;
+        if i == 0 {
+            return Err(nom::Err::Error(
+                (input, "atom(): starts with whitespace or empty").into(),
+            ));
+        }
+        while i + 1 > 0 {
+            if input[i - 1] == b' ' || input[i - 1] == b'\t' {
+                i -= 1;
+            } else {
                 break;
             }
         }
-        if !flag {
+        let (rest, opt_space2) = opt(cfws)(&input[i..])?;
+        let ret = if opt_space.is_some() || opt_space2.is_some() {
+            let mut ret = Vec::with_capacity(i + 2);
+            if let Some(opt_space) = opt_space {
+                ret.extend_from_slice(&opt_space);
+            }
+            ret.extend_from_slice(&input[..i]);
+            if let Some(opt_space) = opt_space2 {
+                ret.extend_from_slice(&opt_space);
+            }
+            Cow::Owned(ret)
+        } else {
+            Cow::Borrowed(&input[..i])
+        };
+        Ok((rest, ret))
+    }
+
+    ///`quoted-string   =   [CFWS] DQUOTE *([FWS] qcontent) [FWS] DQUOTE [CFWS]`
+    fn quoted_string(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
+        let (input, opt_space) = opt(cfws)(input)?;
+        if !input.starts_with(b"\"") {
             return Err(nom::Err::Error(
-                (input, "group(): expected to find ';'").into(),
+                (input, "quoted_string(): doesn't start with DQUOTE").into(),
+            ));
+        }
+        let input = &input[1..];
+        let mut i = 0;
+        while i < input.len() && input[i] != b'"' {
+            if opt_space.is_some() || (input[i..].starts_with(b"\\") && i + 1 < input.len()) {
+                let mut ret = if let Some(opt_space) = opt_space {
+                    let mut r = Vec::with_capacity(2 * i);
+                    r.extend_from_slice(&opt_space);
+                    r
+                } else {
+                    Vec::with_capacity(2 * i)
+                };
+                ret.extend_from_slice(&input[..i]);
+                i += 1;
+                ret.push(input[i]);
+                i += 1;
+                while i < input.len() && input[i] != b'"' {
+                    if input[i..].starts_with(b"\\") && i + 1 < input.len() {
+                        i += 1;
+                    }
+                    ret.push(input[i]);
+                    i += 1;
+                }
+                if i < input.len() {
+                    // skip DQUOTE
+                    i += 1;
+                } else {
+                    return Err(nom::Err::Error(
+                        (input, "quoted_string(): unclosed DQUOTE").into(),
+                    ));
+                }
+
+                let (rest, opt_sp) = opt(cfws)(&input[i..])?;
+                if let Some(opt_sp) = opt_sp {
+                    ret.extend_from_slice(&opt_sp);
+                }
+                let ret = Cow::Owned(ret);
+                return Ok((rest, ret));
+            }
+            i += 1;
+        }
+        let ret = Cow::Borrowed(&input[..i]);
+        if i < input.len() {
+            // skip DQUOTE
+            i += 1;
+        } else {
+            return Err(nom::Err::Error(
+                (input, "quoted_string(): unclosed DQUOTE").into(),
             ));
         }
 
-        let (rest, vec) = mailbox_list(&input[dlength..])?;
-        let size: usize =
-            (rest.as_ptr() as usize).wrapping_sub((&input[0..] as &[u8]).as_ptr() as usize);
+        let (rest, opt_sp) = opt(cfws)(&input[i..])?;
+        if let Some(opt_sp) = opt_sp {
+            let mut ret = ret.to_vec();
+            ret.extend_from_slice(&opt_sp);
+            Ok((rest, Cow::Owned(ret)))
+        } else {
+            Ok((rest, ret))
+        }
+    }
+
+    ///`word            =   atom / quoted-string`
+    fn word(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
+        alt((quoted_string, atom))(input)
+    }
+
+    ///`phrase          =   1*word / obs-phrase`
+    fn phrase(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
+        let (rest, words) = many1(word)(input)?;
+        let len = words.iter().map(|v| v.len()).sum::<usize>();
+        let mut ret = words
+            .into_iter()
+            .fold(Vec::with_capacity(len), |mut acc, el| {
+                acc.extend_from_slice(&el);
+                acc
+            });
+        let right_wsp_padding = ret.len() - ret.rtrim().len();
+        for _ in 0..right_wsp_padding {
+            ret.pop();
+        }
+        Ok((rest, ret))
+    }
+
+    #[test]
+    fn test_phrase() {
+        let s = b"\"Jeffrey \\\"fejj\\\" Stedfast\""; // <fejj@helixcode.com>"
+        assert_eq!(to_str!(&phrase(s).unwrap().1), "Jeffrey \"fejj\" Stedfast");
+    }
+
+    ///`addr-spec       =   local-part "@" domain`
+    pub fn addr_spec(input: &[u8]) -> IResult<&[u8], Address> {
+        ///`atext           =   ALPHA / DIGIT /    ; Printable US-ASCII "!" / "#" /        ;  characters not including "$" / "%" /        ;  specials.  Used for atoms.  "&" / "'" / "*" / "+" / "-" / "/" / "=" / "?" / "^" / "_" / "`" / "{" / "|" / "}" / "~"`
+        fn atext(input: &[u8]) -> IResult<&[u8], u8> {
+            if input.is_empty() {
+                return Err(nom::Err::Error((input, "atext(): empty input").into()));
+            }
+            if input[0].is_ascii_alphanumeric()
+                || [
+                    b'!', b'#', b'$', b'%', b'&', b'\'', b'*', b'+', b'-', b'/', b'=', b'?', b'^',
+                    b'_', b'`', b'{', b'|', b'}', b'~',
+                ]
+                .contains(&input[0])
+            {
+                Ok((&input[1..], input[0]))
+            } else {
+                return Err(nom::Err::Error((input, "atext(): invalid byte").into()));
+            }
+        }
+        ///dot-atom-text   =   1*atext *("." 1*atext)
+        ///dot-atom        =   [CFWS] dot-atom-text [CFWS]
+        fn dot_atom(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
+            let (mut input, _) = opt(cfws)(input)?;
+            let mut ret = vec![];
+            let mut at_least_one = false;
+            while let Ok((_input, atext_r)) = atext(input) {
+                at_least_one = true;
+                ret.push(atext_r);
+                input = _input;
+            }
+            if !at_least_one {
+                return Err(nom::Err::Error(
+                    (input, "dot_atom(): starts with at least one atext").into(),
+                ));
+            }
+
+            loop {
+                if !input.starts_with(b".") {
+                    break;
+                }
+                ret.push(b'.');
+                input = &input[1..];
+                let mut at_least_one = false;
+                while let Ok((_input, atext_r)) = atext(input) {
+                    at_least_one = true;
+                    ret.push(atext_r);
+                    input = _input;
+                }
+                if !at_least_one {
+                    return Err(nom::Err::Error(
+                        (input, "dot_atom(): DOT followed with at least one atext").into(),
+                    ));
+                }
+            }
+            let (input, _) = opt(cfws)(input)?;
+            Ok((input, ret.into()))
+        }
+
+        ///`obs-domain      =   atom *("." atom)`
+        fn obs_domain(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
+            let (mut input, atom_) = context("obs_domain", atom)(input)?;
+            let mut ret: Vec<u8> = atom_.into();
+            loop {
+                if !input.starts_with(b".") {
+                    break;
+                }
+                ret.push(b'.');
+                input = &input[1..];
+                if let Ok((_input, atom_)) = context("obs_domain", atom)(input) {
+                    ret.extend_from_slice(&atom_);
+                    input = _input;
+                } else {
+                    return Err(nom::Err::Error(
+                        (input, "obs_domain(): expected <atom> after DOT").into(),
+                    ));
+                }
+            }
+            Ok((input, ret.into()))
+        }
+
+        ///`local-part      =   dot-atom / quoted-string / obs-local-part`
+        fn local_part(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
+            alt((dot_atom, quoted_string))(input)
+        }
+
+        ///`domain          =   dot-atom / domain-literal / obs-domain`
+        fn domain(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
+            alt((dot_atom, domain_literal, obs_domain))(input)
+        }
+
+        ///`domain-literal  =   [CFWS] "[" *([FWS] dtext) [FWS] "]" [CFWS]`
+        fn domain_literal(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
+            use crate::email::parser::generic::fws;
+            let (input, first_opt_space) = context("domain_literal()", opt(cfws))(input)?;
+            let (input, _) = context("domain_literal()", tag("["))(input)?;
+            let (input, dtexts) = many0(pair(opt(fws), dtext))(input)?;
+            let (input, end_fws): (_, Option<_>) = context("domain_literal()", opt(fws))(input)?;
+            let (input, _) = context("domain_literal()", tag("]"))(input)?;
+            let (input, _) = context("domain_literal()", opt(cfws))(input)?;
+            let mut ret_s = vec![b'['];
+            if let Some(first_opt_space) = first_opt_space {
+                ret_s.extend_from_slice(&first_opt_space);
+            }
+            for (fws_opt, dtext) in dtexts {
+                if let Some(fws_opt) = fws_opt {
+                    ret_s.extend_from_slice(&fws_opt);
+                }
+                ret_s.push(dtext);
+            }
+            if let Some(end_fws) = end_fws {
+                ret_s.extend_from_slice(&end_fws);
+            }
+            ret_s.push(b']');
+            Ok((input, ret_s.into()))
+        }
+
+        ///```text
+        ///dtext           =   %d33-90 /          ; Printable US-ASCII
+        ///                    %d94-126 /         ;  characters not including
+        ///                    obs-dtext          ;  "[", "]", or "\"
+        ///```
+        fn dtext(input: &[u8]) -> IResult<&[u8], u8> {
+            if input.is_empty() {
+                return Err(nom::Err::Error((input, "dtext(): empty input").into()));
+            }
+            if (input[0] >= 33 && input[0] <= 90) || (input[0] > 94 && input[0] < 126) {
+                Ok((&input[1..], input[0]))
+            } else {
+                Err(nom::Err::Error((input, "dtext(): out of range").into()))
+            }
+        }
+        let (input, local_part) = context("addr_spec()", local_part)(input)?;
+        let (input, _) = context("addr_spec()", tag("@"))(input)?;
+        let (input, domain) = context("addr_spec()", domain)(input)?;
+
         Ok((
-            rest,
-            Address::Group(GroupAddress {
-                raw: input[0..size].into(),
-                display_name: StrBuilder {
-                    offset: 0,
-                    length: dlength,
-                },
-                mailbox_list: vec,
-            }),
+            input,
+            Address::new(
+                None,
+                format!("{}@{}", to_str!(&local_part), to_str!(&domain)),
+            ),
         ))
     }
 
+    ///`display-name    =   phrase`
+    pub fn display_name(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
+        let (rest, ret) = phrase(input)?;
+        if let Ok((_, ret)) = crate::email::parser::encodings::phrase(&ret, true) {
+            Ok((rest, ret))
+        } else {
+            Ok((rest, ret))
+        }
+    }
+
+    ///`name-addr       =   [display-name] angle-addr`
+    pub fn name_addr(input: &[u8]) -> IResult<&[u8], Address> {
+        let (input, (display_name, angle_addr)) = alt((
+            pair(map(display_name, |s| Some(s)), angle_addr),
+            map(angle_addr, |r| (None, r)),
+        ))(input)?;
+        Ok((
+            input,
+            Address::new(
+                display_name.map(|v| to_str!(&v).to_string()),
+                angle_addr.get_email(),
+            ),
+        ))
+    }
+
+    ///`mailbox         =   name-addr / addr-spec`
+    pub fn mailbox(input: &[u8]) -> IResult<&[u8], Address> {
+        alt((addr_spec, name_addr))(input)
+    }
+
+    ///`group-list      =   mailbox-list / CFWS / obs-group-list`
+    pub fn group_list(input: &[u8]) -> IResult<&[u8], Vec<Address>> {
+        ///`mailbox-list    =   (mailbox *("," mailbox)) / obs-mbox-list`
+        fn mailbox_list(input: &[u8]) -> IResult<&[u8], Vec<Address>> {
+            let (mut input, first_m) = mailbox(input)?;
+            let mut ret = vec![first_m];
+            loop {
+                if !input.starts_with(b",") {
+                    break;
+                }
+                input = &input[1..];
+                let (input_, next_m) = mailbox(input)?;
+                ret.push(next_m);
+                input = input_;
+            }
+            Ok((input, ret))
+        }
+
+        if let Ok((input, mailboxes)) = mailbox_list(input) {
+            Ok((input, mailboxes))
+        } else {
+            let (input, _) = cfws(input)?;
+            Ok((input, vec![]))
+        }
+    }
+
+    ///`group           =   display-name ":" [group-list] ";" [CFWS]`
+    fn group(input: &[u8]) -> IResult<&[u8], Address> {
+        let (input, display_name) = context("group()", display_name)(input)?;
+        let (input, _) = context("group()", tag(":"))(input)?;
+        let (input, group_list): (_, Option<Vec<Address>>) =
+            context("group()", opt(group_list))(input)?;
+        let (input, _) = context("group()", tag(";"))(input)?;
+        let (input, _) = context("group()", opt(cfws))(input)?;
+        Ok((
+            input,
+            Address::new_group(
+                to_str!(&display_name).to_string(),
+                group_list.unwrap_or_default(),
+            ),
+        ))
+    }
+
+    ///```text
+    ///address         =   mailbox / group
+    ///```
     pub fn address(input: &[u8]) -> IResult<&[u8], Address> {
-        alt((mailbox, group))(input.ltrim())
-        // ws!(alt_complete!(mailbox | group))
+        alt((mailbox, group))(input)
     }
 
     pub fn rfc2822address_list(input: &[u8]) -> IResult<&[u8], SmallVec<[Address; 1]>> {
-        separated_list_smallvec(is_a(","), address)(input.ltrim())
+        separated_list_smallvec(is_a(", "), address)(input.ltrim())
         // ws!( separated_list!(is_a!(","), address))
     }
 
@@ -1658,71 +2171,266 @@ mod tests {
         //FIXME: add file
         return;
         /*
-        use std::io::Read;
-        let mut buffer: Vec<u8> = Vec::new();
-        let _ = std::fs::File::open("").unwrap().read_to_end(&mut buffer);
-        let boundary = b"b1_4382d284f0c601a737bb32aaeda53160";
-        let (_, body) = match mail(&buffer) {
-            Ok(v) => v,
-            Err(_) => panic!(),
-        };
-        let attachments = parts(body, boundary).unwrap().1;
-        assert_eq!(attachments.len(), 4);
-        let v: Vec<&str> = attachments
-            .iter()
-            .map(|v| std::str::from_utf8(v).unwrap())
-            .collect();
-        println!("attachments {:?}", v);
-        */
+                use std::io::Read;
+                let mut buffer: Vec<u8> = Vec::new();
+                let _ = std::fs::File::open("").unwrap().read_to_end(&mut buffer);
+                let boundary = b"b1_4382d284f0c601a737bb32aaeda53160";
+                let (_, body) = match mail(&buffer) {
+                    Ok(v) => v,
+                    Err(_) => panic!(),
+                };
+                let attachments = parts(body, boundary).unwrap().1;
+                assert_eq!(attachments.len(), 4);
+                let v: Vec<&str> = attachments
+                    .iter()
+                    .map(|v| std::str::from_utf8(v).unwrap())
+                    .collect();
+        //println!("attachments {:?}", v);
+                */
     }
     #[test]
     fn test_addresses() {
-        {
-            let s = b"=?iso-8859-7?B?0/Th/fHv8iDM4ev03ebv8g==?= <maltezos@central.ntua.gr>";
-            let r = mailbox(s).unwrap().1;
-            match r {
-                Address::Mailbox(ref m) => assert!(
-                    "Σταύρος Μαλτέζος"
-                        == std::str::from_utf8(&m.display_name.display_bytes(&m.raw)).unwrap()
-                        && std::str::from_utf8(&m.address_spec.display_bytes(&m.raw)).unwrap()
-                            == "maltezos@central.ntua.gr"
-                ),
-                _ => assert!(false),
-            }
+        macro_rules! assert_parse {
+            ($name:literal, $addr:literal, $raw:literal) => {{
+                let s = $raw.as_bytes();
+                let r = address(s).unwrap().1;
+                match r {
+                    Address::Mailbox(ref m) => {
+                        assert_eq!(to_str!(m.display_name.display_bytes(&m.raw)), $name);
+                        assert_eq!(to_str!(m.address_spec.display_bytes(&m.raw)), $addr);
+                    }
+                    _ => assert!(false),
+                }
+            }};
         }
-        {
-            let s = b"user@domain";
-            let r = mailbox(s).unwrap().1;
-            match r {
-                Address::Mailbox(ref m) => assert!(
-                    m.display_name.display_bytes(&m.raw) == b""
-                        && m.address_spec.display_bytes(&m.raw) == b"user@domain"
-                ),
-                _ => assert!(false),
-            }
-        }
-        {
-            let s = b"Name <user@domain>";
-            let r = display_addr(s).unwrap().1;
-            match r {
-                Address::Mailbox(ref m) => assert!(
-                    b"Name" == m.display_name.display_bytes(&m.raw)
-                        && b"user@domain" == m.address_spec.display_bytes(&m.raw)
-                ),
-                _ => {}
-            }
-        }
-        {
-            let s = b"user@domain";
-            let r = mailbox(s).unwrap().1;
-            match r {
-                Address::Mailbox(ref m) => assert!(
-                    b"" == m.display_name.display_bytes(&m.raw)
-                        && b"user@domain" == m.address_spec.display_bytes(&m.raw)
-                ),
-                _ => {}
-            }
-        }
+
+        assert_parse!(
+            "Σταύρος Μαλτέζος",
+            "maltezos@central.ntua.gr",
+            "=?iso-8859-7?B?0/Th/fHv8iDM4ev03ebv8g==?= <maltezos@central.ntua.gr>"
+        );
+        assert_parse!("", "user@domain", "user@domain");
+        assert_parse!("", "user@domain", "<user@domain>");
+        assert_parse!("", "user@domain", "  <user@domain>");
+        assert_parse!("Name", "user@domain", "Name <user@domain>");
+        assert_parse!(
+            "",
+            "julia@ficdep.minitrue",
+            "julia(outer party)@ficdep.minitrue"
+        );
+        assert_parse!(
+            "Winston Smith",
+            "winston.smith@recdep.minitrue",
+            "\"Winston Smith\" <winston.smith@recdep.minitrue> (Records Department)"
+        );
+        assert_parse!(
+            "John Q. Public",
+            "JQB@bar.com",
+            "\"John Q. Public\" <JQB@bar.com>"
+        );
+        assert_parse!(
+            "John Q. Public",
+            "JQB@bar.com",
+            "John \"Q.\" Public <JQB@bar.com>"
+        );
+        assert_parse!(
+            "John Q. Public",
+            "JQB@bar.com",
+            "\"John Q.\" Public <JQB@bar.com>"
+        );
+        assert_parse!(
+            "John Q. Public",
+            "JQB@bar.com",
+            "John \"Q. Public\" <JQB@bar.com>"
+        );
+        assert_parse!(
+            "Jeffrey Stedfast",
+            "fejj@helixcode.com",
+            "Jeffrey Stedfast <fejj@helixcode.com>"
+        );
+        assert_parse!(
+            "this is\ta folded name",
+            "folded@name.com",
+            "this is\n\ta folded name <folded@name.com>"
+        );
+        assert_parse!(
+            "Jeffrey fejj Stedfast",
+            "fejj@helixcode.com",
+            "Jeffrey fejj Stedfast <fejj@helixcode.com>"
+        );
+        assert_parse!(
+            "Jeffrey fejj Stedfast",
+            "fejj@helixcode.com",
+            "Jeffrey \"fejj\" Stedfast <fejj@helixcode.com>"
+        );
+        assert_parse!(
+            "Jeffrey \"fejj\" Stedfast",
+            "fejj@helixcode.com",
+            "\"Jeffrey \\\"fejj\\\" Stedfast\" <fejj@helixcode.com>"
+        );
+        assert_parse!(
+            "Stedfast, Jeffrey",
+            "fejj@helixcode.com",
+            "\"Stedfast, Jeffrey\" <fejj@helixcode.com>"
+        );
+        assert_parse!(
+            "",
+            "fejj@helixcode.com",
+            "fejj@helixcode.com (Jeffrey Stedfast)"
+        );
+        assert_parse!(
+            "Jeffrey Stedfast",
+            "fejj@helixcode.com",
+            "Jeffrey Stedfast <fejj(nonrecursive block)@helixcode.(and a comment here)com>"
+        );
+        assert_parse!(
+            "Jeffrey Stedfast",
+            "fejj@helixcode.com",
+            "Jeffrey Stedfast <fejj(recursive (comment) block)@helixcode.(and a comment here)com>"
+        );
+        assert_parse!(
+            "Joe Q. Public",
+            "john.q.public@example.com",
+            "\"Joe Q. Public\" <john.q.public@example.com>"
+        );
+        assert_parse!("Mary Smith", "mary@x.test", "Mary Smith <mary@x.test>");
+        assert_parse!("Mary Smith", "mary@x.test", "Mary Smith <mary@x.test>");
+        assert_parse!("", "jdoe@example.org", "jdoe@example.org");
+        assert_parse!("Who?", "one@y.test", "Who? <one@y.test>");
+        assert_parse!("", "boss@nil.test", "<boss@nil.test>");
+        assert_parse!(
+            "Giant; \"Big\" Box",
+            "sysservices@example.net",
+            r#""Giant; \"Big\" Box" <sysservices@example.net>"#
+        );
+        //assert_eq!(
+        //    make_address!("Jeffrey Stedfast", "fejj@helixcode.com"),
+        //    address(b"Jeffrey Stedfast <fejj@helixcode.com.>")
+        //        .unwrap()
+        //        .1
+        //);
+        assert_parse!(
+            "John <middle> Doe",
+            "jdoe@machine.example",
+            "\"John <middle> Doe\" <jdoe@machine.example>"
+        );
+        // RFC 2047 "Q"-encoded ISO-8859-1 address.
+        assert_parse!(
+            "Jörg Doe",
+            "joerg@example.com",
+            "=?iso-8859-1?q?J=F6rg_Doe?= <joerg@example.com>"
+        );
+
+        // RFC 2047 "Q"-encoded US-ASCII address. Dumb but legal.
+        assert_parse!(
+            "Jorg Doe",
+            "joerg@example.com",
+            "=?us-ascii?q?J=6Frg_Doe?= <joerg@example.com>"
+        );
+        // RFC 2047 "Q"-encoded UTF-8 address.
+        assert_parse!(
+            "Jörg Doe",
+            "joerg@example.com",
+            "=?utf-8?q?J=C3=B6rg_Doe?= <joerg@example.com>"
+        );
+        // RFC 2047 "Q"-encoded UTF-8 address with multiple encoded-words.
+        assert_parse!(
+            "JörgDoe",
+            "joerg@example.com",
+            "=?utf-8?q?J=C3=B6rg?=  =?utf-8?q?Doe?= <joerg@example.com>"
+        );
+        assert_parse!(
+            "André Pirard",
+            "PIRARD@vm1.ulg.ac.be",
+            "=?ISO-8859-1?Q?Andr=E9?= Pirard <PIRARD@vm1.ulg.ac.be>"
+        );
+        // Custom example of RFC 2047 "B"-encoded ISO-8859-1 address.
+        assert_parse!(
+            "Jörg",
+            "joerg@example.com",
+            "=?ISO-8859-1?B?SvZyZw==?= <joerg@example.com>"
+        );
+        // Custom example of RFC 2047 "B"-encoded UTF-8 address.
+        assert_parse!(
+            "Jörg",
+            "joerg@example.com",
+            "=?UTF-8?B?SsO2cmc=?= <joerg@example.com>"
+        );
+        // Custom example with "." in name. For issue 4938
+        //assert_parse!(
+        //    "Asem H.",
+        //    "noreply@example.com",
+        //    "Asem H. <noreply@example.com>"
+        //);
+        assert_parse!(
+            // RFC 6532 3.2.3, qtext /= UTF8-non-ascii
+            "Gø Pher",
+            "gopher@example.com",
+            "\"Gø Pher\" <gopher@example.com>"
+        );
+        // RFC 6532 3.2, atext /= UTF8-non-ascii
+        assert_parse!("µ", "micro@example.com", "µ <micro@example.com>");
+        // RFC 6532 3.2.2, local address parts allow UTF-8
+        //assert_parse!("Micro", "µ@example.com", "Micro <µ@example.com>");
+        // RFC 6532 3.2.4, domains parts allow UTF-8
+        //assert_parse!(
+        //    "Micro",
+        //    "micro@µ.example.com",
+        //    "Micro <micro@µ.example.com>"
+        //);
+        // Issue 14866
+        assert_parse!(
+            "",
+            "emptystring@example.com",
+            "\"\" <emptystring@example.com>"
+        );
+        // CFWS
+        assert_parse!(
+            "",
+            "cfws@example.com",
+            "<cfws@example.com> (CFWS (cfws))  (another comment)"
+        );
+        //"<cfws@example.com> ()  (another comment), <cfws2@example.com> (another)"
+        assert_parse!(
+            "Kristoffer Brånemyr",
+            "ztion@swipenet.se",
+            "=?iso-8859-1?q?Kristoffer_Br=E5nemyr?= <ztion@swipenet.se>"
+        );
+        assert_parse!(
+            "François Pons",
+            "fpons@mandrakesoft.com",
+            "=?iso-8859-1?q?Fran=E7ois?= Pons <fpons@mandrakesoft.com>"
+        );
+        assert_parse!(
+            "هل تتكلم اللغة الإنجليزية /العربية؟", "do.you.speak@arabic.com",
+            "=?utf-8?b?2YfZhCDYqtiq2YPZhNmFINin2YTZhNi62Kkg2KfZhNil2YbYrNmE2YrYstmK2Kk=?=\n =?utf-8?b?IC/Yp9mE2LnYsdio2YrYqdif?= <do.you.speak@arabic.com>"
+        );
+        assert_parse!(
+            "狂ったこの世で狂うなら気は確かだ。", "famous@quotes.ja",
+            "=?utf-8?b?54uC44Gj44Gf44GT44Gu5LiW44Gn54uC44GG44Gq44KJ5rCX44Gv56K644GL44Gg?=\n =?utf-8?b?44CC?= <famous@quotes.ja>"
+        );
+        assert_eq!(
+            Address::new_group(
+                "A Group".to_string(),
+                vec![
+                    make_address!("Ed Jones", "c@a.test"),
+                    make_address!("", "joe@where.test"),
+                    make_address!("John", "jdoe@one.test")
+                ]
+            ),
+            address(b"A Group:Ed Jones <c@a.test>,joe@where.test,John <jdoe@one.test>;")
+                .unwrap()
+                .1
+        );
+        assert_eq!(
+            Address::new_group("Undisclosed recipients".to_string(), vec![]),
+            address(b"Undisclosed recipients:;").unwrap().1
+        );
+        assert_parse!(
+            "狂ったこの世で狂うなら気は確かだ。",
+            "famous@quotes.ja",
+            "狂ったこの世で狂うなら気は確かだ。 <famous@quotes.ja>"
+        );
     }
 
     #[test]
