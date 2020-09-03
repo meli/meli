@@ -144,7 +144,7 @@ pub fn over_article(input: &str) -> IResult<&str, (UID, Envelope)> {
             if let Some(references) = references {
                 {
                     if let Ok((_, r)) =
-                        crate::email::parser::address::references(references.as_bytes())
+                        crate::email::parser::address::msg_id_list(references.as_bytes())
                     {
                         for v in r {
                             env.push_references(v);

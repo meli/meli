@@ -27,7 +27,7 @@ use nom::{
     combinator::peek,
     combinator::{map, opt},
     error::{context, ErrorKind},
-    multi::{many0, many1, separated_list, separated_nonempty_list},
+    multi::{many0, many1, separated_nonempty_list},
     number::complete::le_u8,
     sequence::{delimited, pair, preceded, separated_pair, terminated},
 };
@@ -618,8 +618,224 @@ pub mod generic {
         let s = "this is\n\ta folded name";
         assert_eq!(
             &unstructured(s.as_bytes()).unwrap(),
-            "this is a\tfolded name",
+            "this is\ta folded name",
         );
+    }
+
+    ///`atom            =   [CFWS] 1*atext [CFWS]`
+    pub fn atom(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
+        let (input, opt_space) = opt(cfws)(input)?;
+        let mut i = 0;
+        while i < input.len() {
+            //&& !input[i].is_ascii_whitespace() {
+            match input[i] {
+                b'(' | b')' | b'<' | b'>' | b'[' | b']' | b':' | b';' | b'@' | b'\\' | b','
+                | b'.' | b'\r' | b'\n' | b'"' => break,
+                _ => {}
+            }
+            i += 1;
+        }
+        if i == 0 {
+            return Err(nom::Err::Error(
+                (input, "atom(): starts with whitespace or empty").into(),
+            ));
+        }
+        while i + 1 > 0 {
+            if input[i - 1] == b' ' || input[i - 1] == b'\t' {
+                i -= 1;
+            } else {
+                break;
+            }
+        }
+        let (rest, opt_space2) = opt(cfws)(&input[i..])?;
+        let ret = if opt_space.is_some() || opt_space2.is_some() {
+            let mut ret = Vec::with_capacity(i + 2);
+            if let Some(opt_space) = opt_space {
+                ret.extend_from_slice(&opt_space);
+            }
+            ret.extend_from_slice(&input[..i]);
+            if let Some(opt_space) = opt_space2 {
+                ret.extend_from_slice(&opt_space);
+            }
+            Cow::Owned(ret)
+        } else {
+            Cow::Borrowed(&input[..i])
+        };
+        Ok((rest, ret))
+    }
+
+    ///`quoted-string   =   [CFWS] DQUOTE *([FWS] qcontent) [FWS] DQUOTE [CFWS]`
+    pub fn quoted_string(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
+        let (input, opt_space) = opt(cfws)(input)?;
+        if !input.starts_with(b"\"") {
+            return Err(nom::Err::Error(
+                (input, "quoted_string(): doesn't start with DQUOTE").into(),
+            ));
+        }
+        let input = &input[1..];
+        let mut i = 0;
+        while i < input.len() && input[i] != b'"' {
+            if opt_space.is_some() || (input[i..].starts_with(b"\\") && i + 1 < input.len()) {
+                let mut ret = if let Some(opt_space) = opt_space {
+                    let mut r = Vec::with_capacity(2 * i);
+                    r.extend_from_slice(&opt_space);
+                    r
+                } else {
+                    Vec::with_capacity(2 * i)
+                };
+                ret.extend_from_slice(&input[..i]);
+                i += 1;
+                ret.push(input[i]);
+                i += 1;
+                while i < input.len() && input[i] != b'"' {
+                    if input[i..].starts_with(b"\\") && i + 1 < input.len() {
+                        i += 1;
+                    }
+                    ret.push(input[i]);
+                    i += 1;
+                }
+                if i < input.len() {
+                    // skip DQUOTE
+                    i += 1;
+                } else {
+                    return Err(nom::Err::Error(
+                        (input, "quoted_string(): unclosed DQUOTE").into(),
+                    ));
+                }
+
+                let (rest, opt_sp) = opt(cfws)(&input[i..])?;
+                if let Some(opt_sp) = opt_sp {
+                    ret.extend_from_slice(&opt_sp);
+                }
+                let ret = Cow::Owned(ret);
+                return Ok((rest, ret));
+            }
+            i += 1;
+        }
+        let ret = Cow::Borrowed(&input[..i]);
+        if i < input.len() {
+            // skip DQUOTE
+            i += 1;
+        } else {
+            return Err(nom::Err::Error(
+                (input, "quoted_string(): unclosed DQUOTE").into(),
+            ));
+        }
+
+        let (rest, opt_sp) = opt(cfws)(&input[i..])?;
+        if let Some(opt_sp) = opt_sp {
+            let mut ret = ret.to_vec();
+            ret.extend_from_slice(&opt_sp);
+            Ok((rest, Cow::Owned(ret)))
+        } else {
+            Ok((rest, ret))
+        }
+    }
+
+    ///`word            =   atom / quoted-string`
+    pub fn word(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
+        alt((quoted_string, atom))(input)
+    }
+
+    ///`phrase          =   1*word / obs-phrase`
+    pub fn phrase2(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
+        let (rest, words) = many1(word)(input)?;
+        let len = words.iter().map(|v| v.len()).sum::<usize>();
+        let mut ret = words
+            .into_iter()
+            .fold(Vec::with_capacity(len), |mut acc, el| {
+                acc.extend_from_slice(&el);
+                acc
+            });
+        let right_wsp_padding = ret.len() - ret.rtrim().len();
+        for _ in 0..right_wsp_padding {
+            ret.pop();
+        }
+        Ok((rest, ret))
+    }
+
+    #[test]
+    fn test_phrase() {
+        let s = b"\"Jeffrey \\\"fejj\\\" Stedfast\""; // <fejj@helixcode.com>"
+        assert_eq!(to_str!(&phrase2(s).unwrap().1), "Jeffrey \"fejj\" Stedfast");
+    }
+
+    ///dot-atom-text   =   1*atext *("." 1*atext)
+    pub fn dot_atom_text(mut input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
+        let mut ret = vec![];
+        let mut at_least_one = false;
+        while let Ok((_input, atext_r)) = atext(input) {
+            at_least_one = true;
+            ret.push(atext_r);
+            input = _input;
+        }
+        if !at_least_one {
+            return Err(nom::Err::Error(
+                (input, "dot_atom(): starts with at least one atext").into(),
+            ));
+        }
+
+        loop {
+            if !input.starts_with(b".") {
+                break;
+            }
+            ret.push(b'.');
+            input = &input[1..];
+            let mut at_least_one = false;
+            while let Ok((_input, atext_r)) = atext(input) {
+                at_least_one = true;
+                ret.push(atext_r);
+                input = _input;
+            }
+            if !at_least_one {
+                return Err(nom::Err::Error(
+                    (input, "dot_atom(): DOT followed with at least one atext").into(),
+                ));
+            }
+        }
+        Ok((input, ret.into()))
+    }
+
+    ///`atext           =   ALPHA / DIGIT /    ; Printable US-ASCII "!" / "#" /        ;  characters not including "$" / "%" /        ;  specials.  Used for atoms.  "&" / "'" / "*" / "+" / "-" / "/" / "=" / "?" / "^" / "_" / "`" / "{" / "|" / "}" / "~"`
+    pub fn atext(input: &[u8]) -> IResult<&[u8], u8> {
+        if input.is_empty() {
+            return Err(nom::Err::Error((input, "atext(): empty input").into()));
+        }
+        if input[0].is_ascii_alphanumeric()
+            || [
+                b'!', b'#', b'$', b'%', b'&', b'\'', b'*', b'+', b'-', b'/', b'=', b'?', b'^',
+                b'_', b'`', b'{', b'|', b'}', b'~',
+            ]
+            .contains(&input[0])
+        {
+            Ok((&input[1..], input[0]))
+        } else {
+            return Err(nom::Err::Error((input, "atext(): invalid byte").into()));
+        }
+    }
+
+    ///dot-atom        =   [CFWS] dot-atom-text [CFWS]
+    pub fn dot_atom(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
+        let (input, _) = opt(cfws)(input)?;
+        let (input, ret) = dot_atom_text(input)?;
+        let (input, _) = opt(cfws)(input)?;
+        Ok((input, ret.into()))
+    }
+
+    ///```text
+    ///dtext           =   %d33-90 /          ; Printable US-ASCII
+    ///                    %d94-126 /         ;  characters not including
+    ///                    obs-dtext          ;  "[", "]", or "\"
+    ///```
+    pub fn dtext(input: &[u8]) -> IResult<&[u8], u8> {
+        if input.is_empty() {
+            return Err(nom::Err::Error((input, "dtext(): empty input").into()));
+        }
+        if (input[0] >= 33 && input[0] <= 90) || (input[0] > 94 && input[0] < 126) {
+            Ok((&input[1..], input[0]))
+        } else {
+            Err(nom::Err::Error((input, "dtext(): out of range").into()))
+        }
     }
 }
 
@@ -1453,7 +1669,9 @@ pub mod encodings {
 pub mod address {
     use super::*;
     use crate::email::address::*;
-    use crate::email::parser::generic::cfws;
+    use crate::email::parser::generic::{
+        atom, cfws, dot_atom, dot_atom_text, dtext, phrase2, quoted_string,
+    };
     pub fn display_addr(input: &[u8]) -> IResult<&[u8], Address> {
         if input.is_empty() || input.len() < 3 {
             Err(nom::Err::Error((input, "display_addr(): EOF").into()))
@@ -1565,202 +1783,9 @@ pub mod address {
         let (input, _) = opt(cfws)(input)?;
         Ok((input, addr_spec))
     }
-    ///`atom            =   [CFWS] 1*atext [CFWS]`
-    fn atom(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
-        let (input, opt_space) = opt(cfws)(input)?;
-        let mut i = 0;
-        while i < input.len() {
-            //&& !input[i].is_ascii_whitespace() {
-            match input[i] {
-                b'(' | b')' | b'<' | b'>' | b'[' | b']' | b':' | b';' | b'@' | b'\\' | b','
-                | b'.' | b'\r' | b'\n' | b'"' => break,
-                _ => {}
-            }
-            i += 1;
-        }
-        if i == 0 {
-            return Err(nom::Err::Error(
-                (input, "atom(): starts with whitespace or empty").into(),
-            ));
-        }
-        while i + 1 > 0 {
-            if input[i - 1] == b' ' || input[i - 1] == b'\t' {
-                i -= 1;
-            } else {
-                break;
-            }
-        }
-        let (rest, opt_space2) = opt(cfws)(&input[i..])?;
-        let ret = if opt_space.is_some() || opt_space2.is_some() {
-            let mut ret = Vec::with_capacity(i + 2);
-            if let Some(opt_space) = opt_space {
-                ret.extend_from_slice(&opt_space);
-            }
-            ret.extend_from_slice(&input[..i]);
-            if let Some(opt_space) = opt_space2 {
-                ret.extend_from_slice(&opt_space);
-            }
-            Cow::Owned(ret)
-        } else {
-            Cow::Borrowed(&input[..i])
-        };
-        Ok((rest, ret))
-    }
-
-    ///`quoted-string   =   [CFWS] DQUOTE *([FWS] qcontent) [FWS] DQUOTE [CFWS]`
-    fn quoted_string(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
-        let (input, opt_space) = opt(cfws)(input)?;
-        if !input.starts_with(b"\"") {
-            return Err(nom::Err::Error(
-                (input, "quoted_string(): doesn't start with DQUOTE").into(),
-            ));
-        }
-        let input = &input[1..];
-        let mut i = 0;
-        while i < input.len() && input[i] != b'"' {
-            if opt_space.is_some() || (input[i..].starts_with(b"\\") && i + 1 < input.len()) {
-                let mut ret = if let Some(opt_space) = opt_space {
-                    let mut r = Vec::with_capacity(2 * i);
-                    r.extend_from_slice(&opt_space);
-                    r
-                } else {
-                    Vec::with_capacity(2 * i)
-                };
-                ret.extend_from_slice(&input[..i]);
-                i += 1;
-                ret.push(input[i]);
-                i += 1;
-                while i < input.len() && input[i] != b'"' {
-                    if input[i..].starts_with(b"\\") && i + 1 < input.len() {
-                        i += 1;
-                    }
-                    ret.push(input[i]);
-                    i += 1;
-                }
-                if i < input.len() {
-                    // skip DQUOTE
-                    i += 1;
-                } else {
-                    return Err(nom::Err::Error(
-                        (input, "quoted_string(): unclosed DQUOTE").into(),
-                    ));
-                }
-
-                let (rest, opt_sp) = opt(cfws)(&input[i..])?;
-                if let Some(opt_sp) = opt_sp {
-                    ret.extend_from_slice(&opt_sp);
-                }
-                let ret = Cow::Owned(ret);
-                return Ok((rest, ret));
-            }
-            i += 1;
-        }
-        let ret = Cow::Borrowed(&input[..i]);
-        if i < input.len() {
-            // skip DQUOTE
-            i += 1;
-        } else {
-            return Err(nom::Err::Error(
-                (input, "quoted_string(): unclosed DQUOTE").into(),
-            ));
-        }
-
-        let (rest, opt_sp) = opt(cfws)(&input[i..])?;
-        if let Some(opt_sp) = opt_sp {
-            let mut ret = ret.to_vec();
-            ret.extend_from_slice(&opt_sp);
-            Ok((rest, Cow::Owned(ret)))
-        } else {
-            Ok((rest, ret))
-        }
-    }
-
-    ///`word            =   atom / quoted-string`
-    fn word(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
-        alt((quoted_string, atom))(input)
-    }
-
-    ///`phrase          =   1*word / obs-phrase`
-    fn phrase(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
-        let (rest, words) = many1(word)(input)?;
-        let len = words.iter().map(|v| v.len()).sum::<usize>();
-        let mut ret = words
-            .into_iter()
-            .fold(Vec::with_capacity(len), |mut acc, el| {
-                acc.extend_from_slice(&el);
-                acc
-            });
-        let right_wsp_padding = ret.len() - ret.rtrim().len();
-        for _ in 0..right_wsp_padding {
-            ret.pop();
-        }
-        Ok((rest, ret))
-    }
-
-    #[test]
-    fn test_phrase() {
-        let s = b"\"Jeffrey \\\"fejj\\\" Stedfast\""; // <fejj@helixcode.com>"
-        assert_eq!(to_str!(&phrase(s).unwrap().1), "Jeffrey \"fejj\" Stedfast");
-    }
 
     ///`addr-spec       =   local-part "@" domain`
     pub fn addr_spec(input: &[u8]) -> IResult<&[u8], Address> {
-        ///`atext           =   ALPHA / DIGIT /    ; Printable US-ASCII "!" / "#" /        ;  characters not including "$" / "%" /        ;  specials.  Used for atoms.  "&" / "'" / "*" / "+" / "-" / "/" / "=" / "?" / "^" / "_" / "`" / "{" / "|" / "}" / "~"`
-        fn atext(input: &[u8]) -> IResult<&[u8], u8> {
-            if input.is_empty() {
-                return Err(nom::Err::Error((input, "atext(): empty input").into()));
-            }
-            if input[0].is_ascii_alphanumeric()
-                || [
-                    b'!', b'#', b'$', b'%', b'&', b'\'', b'*', b'+', b'-', b'/', b'=', b'?', b'^',
-                    b'_', b'`', b'{', b'|', b'}', b'~',
-                ]
-                .contains(&input[0])
-            {
-                Ok((&input[1..], input[0]))
-            } else {
-                return Err(nom::Err::Error((input, "atext(): invalid byte").into()));
-            }
-        }
-        ///dot-atom-text   =   1*atext *("." 1*atext)
-        ///dot-atom        =   [CFWS] dot-atom-text [CFWS]
-        fn dot_atom(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
-            let (mut input, _) = opt(cfws)(input)?;
-            let mut ret = vec![];
-            let mut at_least_one = false;
-            while let Ok((_input, atext_r)) = atext(input) {
-                at_least_one = true;
-                ret.push(atext_r);
-                input = _input;
-            }
-            if !at_least_one {
-                return Err(nom::Err::Error(
-                    (input, "dot_atom(): starts with at least one atext").into(),
-                ));
-            }
-
-            loop {
-                if !input.starts_with(b".") {
-                    break;
-                }
-                ret.push(b'.');
-                input = &input[1..];
-                let mut at_least_one = false;
-                while let Ok((_input, atext_r)) = atext(input) {
-                    at_least_one = true;
-                    ret.push(atext_r);
-                    input = _input;
-                }
-                if !at_least_one {
-                    return Err(nom::Err::Error(
-                        (input, "dot_atom(): DOT followed with at least one atext").into(),
-                    ));
-                }
-            }
-            let (input, _) = opt(cfws)(input)?;
-            Ok((input, ret.into()))
-        }
-
         ///`obs-domain      =   atom *("." atom)`
         fn obs_domain(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
             let (mut input, atom_) = context("obs_domain", atom)(input)?;
@@ -1819,21 +1844,6 @@ pub mod address {
             Ok((input, ret_s.into()))
         }
 
-        ///```text
-        ///dtext           =   %d33-90 /          ; Printable US-ASCII
-        ///                    %d94-126 /         ;  characters not including
-        ///                    obs-dtext          ;  "[", "]", or "\"
-        ///```
-        fn dtext(input: &[u8]) -> IResult<&[u8], u8> {
-            if input.is_empty() {
-                return Err(nom::Err::Error((input, "dtext(): empty input").into()));
-            }
-            if (input[0] >= 33 && input[0] <= 90) || (input[0] > 94 && input[0] < 126) {
-                Ok((&input[1..], input[0]))
-            } else {
-                Err(nom::Err::Error((input, "dtext(): out of range").into()))
-            }
-        }
         let (input, local_part) = context("addr_spec()", local_part)(input)?;
         let (input, _) = context("addr_spec()", tag("@"))(input)?;
         let (input, domain) = context("addr_spec()", domain)(input)?;
@@ -1849,7 +1859,7 @@ pub mod address {
 
     ///`display-name    =   phrase`
     pub fn display_name(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
-        let (rest, ret) = phrase(input)?;
+        let (rest, ret) = phrase2(input)?;
         if let Ok((_, ret)) = crate::email::parser::encodings::phrase(&ret, true) {
             Ok((rest, ret))
         } else {
@@ -1965,36 +1975,44 @@ pub mod address {
         ))
     }
 
-    pub fn message_id(input: &[u8]) -> IResult<&[u8], &[u8]> {
-        delimited(tag("<"), take_until(">"), tag(">"))(input.ltrim())
-        //complete!(delimited!(ws!(tag!("<")), take_until1!(">"), tag!(">")))
-    }
-
-    fn message_id_peek(input: &[u8]) -> IResult<&[u8], &[u8]> {
-        let input_length = input.len();
-        if input.is_empty() {
-            Err(nom::Err::Error(
-                (input, "message_id_peek(): found EOF").into(),
-            ))
-        } else if input_length == 2 || input[0] != b'<' {
-            Err(nom::Err::Error(
-                (input, "message_id_peek(): expected '<'").into(),
-            ))
-        } else {
-            for (i, &x) in input.iter().take(input_length).enumerate().skip(1) {
-                if x == b'>' {
-                    return Ok((&input[i + 1..], &input[0..=i]));
-                }
-            }
-            Err(nom::Err::Error(
-                (input, "message_id_peek(): expected closing '>'").into(),
-            ))
+    ///`msg-id =   [CFWS] "<" id-left "@" id-right ">" [CFWS]`
+    pub fn msg_id(input: &[u8]) -> IResult<&[u8], MessageID> {
+        ///`no-fold-literal =   "[" *dtext "]"`
+        pub fn no_fold_literal(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
+            let orig_input = input;
+            let (input, _) = tag("[")(input)?;
+            let (input, ret) = many0(dtext)(input)?;
+            let (input, _) = tag("]")(input)?;
+            Ok((input, Cow::Borrowed(&orig_input[0..ret.len() + 1])))
         }
+
+        ///`id-left         =   dot-atom-text / obs-id-left`
+        pub fn id_left(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
+            dot_atom_text(input)
+        }
+        ///`id-right        =   dot-atom-text / no-fold-literal / obs-id-right`
+        pub fn id_right(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
+            alt((dot_atom_text, no_fold_literal))(input)
+        }
+        let (input, _) = opt(cfws)(input)?;
+        let orig_input = input;
+        let (input, _) = tag("<")(input)?;
+        let (input, id_left_) = id_left(input)?;
+        let (input, _) = tag("@")(input)?;
+        let (input, id_right_) = id_right(input)?;
+        let (input, _) = tag(">")(input)?;
+        let (input, _) = opt(cfws)(input)?;
+        Ok((
+            input,
+            MessageID::new(
+                &orig_input[..3 + id_left_.len() + id_right_.len()],
+                &orig_input[1..2 + id_left_.len() + id_right_.len()],
+            ),
+        ))
     }
 
-    pub fn references(input: &[u8]) -> IResult<&[u8], Vec<&[u8]>> {
-        separated_list(is_a(" \n\t\r"), message_id_peek)(input)
-        // separated_list!(complete!(is_a!(" \n\t\r")), message_id_peek));
+    pub fn msg_id_list(input: &[u8]) -> IResult<&[u8], Vec<MessageID>> {
+        many0(msg_id)(input)
     }
 
     use smallvec::SmallVec;
@@ -2462,5 +2480,29 @@ border=3D=220=22>
     </td>
    </tr>"#)
         );
+    }
+
+    #[test]
+    fn test_msg_id() {
+        let s = "Message-ID: <1234@local.machine.example>\r\n";
+        let (rest, (_header_name, value)) = headers::header(s.as_bytes()).unwrap();
+        assert!(rest.is_empty());
+        let a = msg_id(value).unwrap().1;
+        assert_eq!(a.val(), b"<1234@local.machine.example>");
+        let s = "Message-ID:              <testabcd.1234@silly.test>\r\n";
+        let (rest, (_header_name, value)) = headers::header(s.as_bytes()).unwrap();
+        assert!(rest.is_empty());
+        let b = msg_id(value).unwrap().1;
+        assert_eq!(b.val(), b"<testabcd.1234@silly.test>");
+        let s = "References: <1234@local.machine.example>\r\n";
+        let (rest, (_header_name, value)) = headers::header(s.as_bytes()).unwrap();
+        assert!(rest.is_empty());
+        assert_eq!(&msg_id_list(value).unwrap().1, &[a.clone()]);
+        let s = "References: <1234@local.machine.example> <3456@example.net>\r\n";
+        let (rest, (_header_name, value)) = headers::header(s.as_bytes()).unwrap();
+        assert!(rest.is_empty());
+        let s = b"<3456@example.net>";
+        let c = msg_id(s).unwrap().1;
+        assert_eq!(&msg_id_list(value).unwrap().1, &[a, c]);
     }
 }

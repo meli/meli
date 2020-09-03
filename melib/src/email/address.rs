@@ -318,15 +318,15 @@ impl StrBuild for MessageID {
 
 #[test]
 fn test_strbuilder() {
-    let m_id = b"<20170825132332.6734-1@el13635@mail.ntua.gr>";
-    let (_, slice) = parser::address::message_id(m_id).unwrap();
+    let m_id = b"<20170825132332.6734-1@mail.ntua.gr>";
+    let (_, val) = parser::address::msg_id(m_id).unwrap();
     assert_eq!(
-        MessageID::new(m_id, slice),
+        val,
         MessageID(
             m_id.to_vec(),
             StrBuilder {
                 offset: 1,
-                length: 43,
+                length: 35,
             }
         )
     );

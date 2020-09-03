@@ -227,8 +227,6 @@ impl Envelope {
                 return Err(MeliError::new(error_msg));
             }
         };
-        let mut in_reply_to = None;
-
         for (name, value) in headers {
             let name: HeaderName = name.try_into()?;
             if name == "to" {
@@ -260,7 +258,7 @@ impl Envelope {
                 self.set_message_id(value);
             } else if name == "references" {
                 {
-                    let parse_result = parser::address::references(value);
+                    let parse_result = parser::address::msg_id_list(value);
                     if let Ok((_, value)) = parse_result {
                         for v in value {
                             self.push_references(v);
@@ -270,7 +268,6 @@ impl Envelope {
                 self.set_references(value);
             } else if name == "in-reply-to" {
                 self.set_in_reply_to(value);
-                in_reply_to = Some(value);
             } else if name == "date" {
                 let parse_result = parser::encodings::phrase(value, false);
                 if let Ok((_, value)) = parse_result {
@@ -318,7 +315,7 @@ impl Envelope {
          *
          * if self.message_id.is_none()  ...
          */
-        if let Some(ref mut x) = in_reply_to {
+        if let Some(x) = self.in_reply_to.clone() {
             self.push_references(x);
         }
         if let Ok(d) = parser::generic::date(&self.date.as_bytes()) {
@@ -520,15 +517,16 @@ impl Envelope {
         self.to = new_val;
     }
     pub fn set_in_reply_to(&mut self, new_val: &[u8]) {
+        // FIXME msg_id_list
         let new_val = new_val.trim();
-        let slice = match parser::address::message_id(new_val) {
+        let val = match parser::address::msg_id(new_val) {
             Ok(v) => v.1,
             Err(_) => {
-                self.in_reply_to = None;
+                self.in_reply_to = Some(MessageID::new(new_val, new_val));
                 return;
             }
         };
-        self.in_reply_to = Some(MessageID::new(new_val, slice));
+        self.in_reply_to = Some(val);
     }
     pub fn set_subject(&mut self, new_val: Vec<u8>) {
         let mut new_val = String::from_utf8(new_val)
@@ -546,25 +544,16 @@ impl Envelope {
     }
     pub fn set_message_id(&mut self, new_val: &[u8]) {
         let new_val = new_val.trim();
-        match parser::address::message_id(new_val) {
-            Ok((_, slice)) => {
-                self.message_id = MessageID::new(new_val, slice);
+        match parser::address::msg_id(new_val) {
+            Ok((_, val)) => {
+                self.message_id = val;
             }
             Err(_) => {
                 self.message_id = MessageID::new(new_val, new_val);
             }
         }
     }
-    pub fn push_references(&mut self, new_val: &[u8]) {
-        let new_val = new_val.trim();
-        let slice = match parser::address::message_id(new_val) {
-            Ok(v) => v.1,
-            Err(e) => {
-                debug!(e);
-                return;
-            }
-        };
-        let new_ref = MessageID::new(new_val, slice);
+    pub fn push_references(&mut self, new_ref: MessageID) {
         match self.references {
             Some(ref mut s) => {
                 if s.refs.contains(&new_ref) {

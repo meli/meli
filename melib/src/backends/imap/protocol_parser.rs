@@ -1253,7 +1253,7 @@ pub fn envelope(input: &[u8]) -> IResult<&[u8], Envelope> {
             }
             if let Some(in_reply_to) = in_reply_to {
                 env.set_in_reply_to(&in_reply_to);
-                env.push_references(&in_reply_to);
+                env.push_references(env.in_reply_to().unwrap().clone());
             }
 
             if let Some(message_id) = message_id {

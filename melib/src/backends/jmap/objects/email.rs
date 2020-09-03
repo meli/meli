@@ -246,10 +246,10 @@ impl std::convert::From<EmailObject> for crate::Envelope {
         }
         if let Some(ref in_reply_to) = t.in_reply_to {
             env.set_in_reply_to(in_reply_to[0].as_bytes());
-            env.push_references(in_reply_to[0].as_bytes());
+            env.push_references(env.in_reply_to().unwrap().clone());
         }
         if let Some(v) = t.headers.get("References") {
-            let parse_result = crate::email::parser::address::references(v.as_bytes());
+            let parse_result = crate::email::parser::address::msg_id_list(v.as_bytes());
             if let Ok((_, v)) = parse_result {
                 for v in v {
                     env.push_references(v);
