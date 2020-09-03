@@ -292,7 +292,9 @@ impl<'a> Iterator for LineBreakCandidateIter<'a> {
 
             match class {
                 /* LB13 Do not break before ‘]’ or ‘!’ or ‘;’ or ‘/’, even after spaces. */
-                SP if [CL, CP, EX, IS, SY].contains(&get_class!(text[idx..].trim_start())) => {
+                SP if !text[idx..].trim_start().is_empty()
+                    && [CL, CP, EX, IS, SY].contains(&get_class!(text[idx..].trim_start())) =>
+                {
                     *pos += grapheme.len();
                     while ![CL, CP, EX, IS, SY]
                         .contains(&next_grapheme_class!(iter, grapheme).unwrap())
@@ -314,7 +316,7 @@ impl<'a> Iterator for LineBreakCandidateIter<'a> {
                     }
                     continue;
                 }
-                QU if get_class!(text[idx..].trim_start()) == OP => {
+                QU if get_class!(text[idx + grapheme.len()..].trim_start()) == OP => {
                     /* LB15 Do not break within ‘”[’, even with intervening spaces.
                      * QU SP* × OP */
                     *pos += grapheme.len();
@@ -332,9 +334,7 @@ impl<'a> Iterator for LineBreakCandidateIter<'a> {
                     }
                     continue;
                 }
-                LineBreakClass::CL | LineBreakClass::CP
-                    if get_class!(text[idx..].trim_start()) == NS =>
-                {
+                CL | CP if get_class!(text[idx + grapheme.len()..].trim_start()) == NS => {
                     /* LB16 Do not break between closing punctuation and a nonstarter (lb=NS), even with
                      * intervening spaces.
                      * (CL | CP) SP* × NS */
