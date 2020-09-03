@@ -20,6 +20,7 @@
  */
 
 use super::*;
+use std::collections::HashSet;
 use std::convert::TryFrom;
 use std::hash::{Hash, Hasher};
 
@@ -66,6 +67,54 @@ pub enum Address {
 }
 
 impl Address {
+    pub fn new(display_name: Option<String>, address: String) -> Self {
+        Address::Mailbox(if let Some(d) = display_name {
+            MailboxAddress {
+                raw: format!("{} <{}>", d, address).into_bytes(),
+                display_name: StrBuilder {
+                    offset: 0,
+                    length: d.len(),
+                },
+                address_spec: StrBuilder {
+                    offset: d.len() + 2,
+                    length: address.len(),
+                },
+            }
+        } else {
+            MailboxAddress {
+                raw: format!("{}", address).into_bytes(),
+                display_name: StrBuilder {
+                    offset: 0,
+                    length: 0,
+                },
+                address_spec: StrBuilder {
+                    offset: 0,
+                    length: address.len(),
+                },
+            }
+        })
+    }
+
+    pub fn new_group(display_name: String, mailbox_list: Vec<Address>) -> Self {
+        Address::Group(GroupAddress {
+            raw: format!(
+                "{}:{};",
+                display_name,
+                mailbox_list
+                    .iter()
+                    .map(|a| a.to_string())
+                    .collect::<Vec<String>>()
+                    .join(",")
+            )
+            .into_bytes(),
+            display_name: StrBuilder {
+                offset: 0,
+                length: display_name.len(),
+            },
+            mailbox_list,
+        })
+    }
+
     pub fn raw(&self) -> &[u8] {
         match self {
             Address::Mailbox(m) => m.raw.as_slice(),
@@ -138,10 +187,8 @@ impl PartialEq for Address {
             }
             (Address::Group(s), Address::Group(o)) => {
                 s.display_name.display_bytes(&s.raw) == o.display_name.display_bytes(&o.raw)
-                    && s.mailbox_list
-                        .iter()
-                        .zip(o.mailbox_list.iter())
-                        .fold(true, |b, (s, o)| b && (s == o))
+                    && s.mailbox_list.iter().collect::<HashSet<_>>()
+                        == o.mailbox_list.iter().collect::<HashSet<_>>()
             }
         }
     }
@@ -189,7 +236,22 @@ impl fmt::Display for Address {
 
 impl fmt::Debug for Address {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Display::fmt(self, f)
+        match self {
+            Address::Mailbox(m) => f
+                .debug_struct("Address::Mailbox")
+                .field("display_name", &m.display_name.display(&m.raw))
+                .field("address_spec", &m.address_spec.display(&m.raw))
+                .finish(),
+            Address::Group(g) => {
+                let attachment_strings: Vec<String> =
+                    g.mailbox_list.iter().map(|a| format!("{}", a)).collect();
+
+                f.debug_struct("Address::Group")
+                    .field("display_name", &g.display_name.display(&g.raw))
+                    .field("addresses", &attachment_strings.join(", "))
+                    .finish()
+            }
+        }
     }
 }
 
