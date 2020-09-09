@@ -1212,7 +1212,9 @@ impl Component for MailView {
                 for addr in envelope.from().iter().chain(envelope.to().iter()) {
                     let mut new_card: Card = Card::new();
                     new_card.set_email(addr.get_email());
-                    new_card.set_name(addr.get_display_name());
+                    if let Some(display_name) = addr.get_display_name() {
+                        new_card.set_name(display_name);
+                    }
                     entries.push((new_card, format!("{}", addr)));
                 }
                 drop(envelope);

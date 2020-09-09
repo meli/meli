@@ -87,8 +87,8 @@ impl PartialEq for MailboxAddress {
 /// ```rust
 /// let (rest_bytes, addr) = melib::email::parser::address::address("=?utf-8?q?J=C3=B6rg_Doe?= <joerg@example.com>".as_bytes()).unwrap();
 /// assert!(rest_bytes.is_empty());
-///  assert_eq!(addr.get_display_name(), "Jörg Doe");
-///  assert_eq!(addr.get_email(), "joerg@example.com");
+/// assert_eq!(addr.get_display_name(), Some("Jörg Doe".to_string()));
+/// assert_eq!(addr.get_email(), "joerg@example.com".to_string());
 /// ```
 #[derive(Clone, Serialize, Deserialize)]
 pub enum Address {
@@ -167,10 +167,15 @@ impl Address {
     ///                  │                                   │
     ///            address_spec                        address_spec
     ///```
-    pub fn get_display_name(&self) -> String {
-        match self {
+    pub fn get_display_name(&self) -> Option<String> {
+        let ret = match self {
             Address::Mailbox(m) => m.display_name.display(&m.raw),
             Address::Group(g) => g.display_name.display(&g.raw),
+        };
+        if ret.is_empty() {
+            None
+        } else {
+            Some(ret)
         }
     }
 
