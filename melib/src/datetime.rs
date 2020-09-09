@@ -19,10 +19,27 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+//! Functions for dealing with date strings and UNIX Epoch timestamps.
+//!
+//! # Examples
+//!
+//! ```rust
+//! # use melib::datetime::*;
+//! // Get current UNIX Epoch timestamp.
+//! let now: UnixTimestamp = now();
+//!
+//! // Parse date from string
+//! let date_val = "Wed, 8 Jan 2020 10:44:03 -0800";
+//! let timestamp = rfc822_to_timestamp(date_val).unwrap();
+//! assert_eq!(timestamp, 1578509043);
+//!
+//! // Convert timestamp back to string
+//! let s = timestamp_to_string(timestamp, Some("%Y-%m-%d"));
+//! assert_eq!(s, "2020-01-08");
+//! ```
+use crate::error::Result;
 use std::convert::TryInto;
 use std::ffi::{CStr, CString};
-
-use crate::error::Result;
 
 pub type UnixTimestamp = u64;
 

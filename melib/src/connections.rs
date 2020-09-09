@@ -18,6 +18,8 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
+
+//! Connections layers (TCP/fd/TLS/Deflate) to use with remote backends.
 #[cfg(feature = "deflate_compression")]
 use flate2::{read::DeflateDecoder, write::DeflateEncoder, Compression};
 

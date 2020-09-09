@@ -19,6 +19,8 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+//! Parser combinators.
+
 pub type Result<'a, Output> = std::result::Result<(&'a str, Output), &'a str>;
 
 pub trait Parser<'a, Output> {

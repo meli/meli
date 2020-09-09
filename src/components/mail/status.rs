@@ -481,7 +481,6 @@ impl Component for AccountStatus {
                     None,
                 );
 
-                use melib::backends::MailBackendExtensionStatus;
                 let (width, height) = self.content.size();
                 let (x, y) = match status {
                     MailBackendExtensionStatus::Unsupported { comment: _ } => write_string_to_grid(

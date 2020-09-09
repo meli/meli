@@ -20,7 +20,10 @@
  */
 
 use super::*;
-use crate::email::attachments::AttachmentBuilder;
+use crate::email::attachment_types::{
+    Charset, ContentTransferEncoding, ContentType, MultipartType,
+};
+use crate::email::attachments::{decode, decode_rec, AttachmentBuilder};
 use crate::shellexpand::ShellExpandTrait;
 use data_encoding::BASE64_MIME;
 use std::ffi::OsStr;

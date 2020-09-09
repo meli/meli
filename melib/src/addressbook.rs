@@ -97,10 +97,13 @@ impl AddressBook {
     }
 
     pub fn with_account(s: &crate::conf::AccountSettings) -> AddressBook {
-        let mut ret = AddressBook::new(s.name.clone());
-
+        #[cfg(not(feature = "vcard"))]
+        {
+            AddressBook::new(s.name.clone())
+        }
         #[cfg(feature = "vcard")]
         {
+            let mut ret = AddressBook::new(s.name.clone());
             if let Some(vcard_path) = s.vcard_folder() {
                 if let Ok(cards) = vcard::load_cards(&std::path::Path::new(vcard_path)) {
                     for c in cards {
@@ -108,9 +111,8 @@ impl AddressBook {
                     }
                 }
             }
+            ret
         }
-
-        ret
     }
 
     pub fn add_card(&mut self, card: Card) {

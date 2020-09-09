@@ -19,6 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+//! Email addresses. Parsing functions are in [melib::email::parser::address](../parser/address/index.html).
 use super::*;
 use std::collections::HashSet;
 use std::convert::TryFrom;
@@ -60,6 +61,35 @@ pub struct MailboxAddress {
     pub address_spec: StrBuilder,
 }
 
+impl Eq for MailboxAddress {}
+
+impl PartialEq for MailboxAddress {
+    fn eq(&self, other: &MailboxAddress) -> bool {
+        self.address_spec.display_bytes(&self.raw) == other.address_spec.display_bytes(&other.raw)
+    }
+}
+
+/// An email address.
+///
+/// Conforms to [RFC5322 - Internet Message Format](https://tools.ietf.org/html/rfc5322).
+///
+/// # Creating an `Address`
+/// You can directly create an address with `Address::new`,
+///
+/// ```rust
+/// # use melib::email::Address;
+/// let addr = Address::new(Some("Jörg Doe".to_string()), "joerg@example.com".to_string());
+/// assert_eq!(addr.to_string().as_str(), "Jörg Doe <joerg@example.com>");
+/// ```
+///
+/// or parse it from a raw value:
+///
+/// ```rust
+/// let (rest_bytes, addr) = melib::email::parser::address::address("=?utf-8?q?J=C3=B6rg_Doe?= <joerg@example.com>".as_bytes()).unwrap();
+/// assert!(rest_bytes.is_empty());
+///  assert_eq!(addr.get_display_name(), "Jörg Doe");
+///  assert_eq!(addr.get_email(), "joerg@example.com");
+/// ```
 #[derive(Clone, Serialize, Deserialize)]
 pub enum Address {
     Mailbox(MailboxAddress),
@@ -121,6 +151,22 @@ impl Address {
             Address::Group(g) => g.raw.as_slice(),
         }
     }
+
+    /// Get the display name of this address.
+    ///
+    /// If it's a group, it's the name of the group. Otherwise it's the `display_name` part of
+    /// the mailbox:
+    ///
+    ///
+    /// ```text
+    ///           raw                         raw
+    /// ┌──────────┴────────────┐   ┌──────────┴────────────────────┐
+    /// Name <address@domain.tld>   "Name Name2" <address@domain.tld>
+    /// └─┬┘  └──────────┬─────┘     └─────┬──┘   └──────────┬─────┘
+    /// display_name     │          display_name             │
+    ///                  │                                   │
+    ///            address_spec                        address_spec
+    ///```
     pub fn get_display_name(&self) -> String {
         match self {
             Address::Mailbox(m) => m.display_name.display(&m.raw),
@@ -128,6 +174,7 @@ impl Address {
         }
     }
 
+    /// Get the address spec part of this address. A group returns an empty `String`.
     pub fn get_email(&self) -> String {
         match self {
             Address::Mailbox(m) => m.address_spec.display(&m.raw),
@@ -176,15 +223,14 @@ impl Address {
 }
 
 impl Eq for Address {}
+
 impl PartialEq for Address {
     fn eq(&self, other: &Address) -> bool {
         match (self, other) {
             (Address::Mailbox(_), Address::Group(_)) | (Address::Group(_), Address::Mailbox(_)) => {
                 false
             }
-            (Address::Mailbox(s), Address::Mailbox(o)) => {
-                s.address_spec.display_bytes(&s.raw) == o.address_spec.display_bytes(&o.raw)
-            }
+            (Address::Mailbox(s), Address::Mailbox(o)) => s == o,
             (Address::Group(s), Address::Group(o)) => {
                 s.display_name.display_bytes(&s.raw) == o.display_name.display_bytes(&o.raw)
                     && s.mailbox_list.iter().collect::<HashSet<_>>()
@@ -210,8 +256,8 @@ impl Hash for Address {
     }
 }
 
-impl fmt::Display for Address {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl core::fmt::Display for Address {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         match self {
             Address::Mailbox(m) if m.display_name.length > 0 => write!(
                 f,
@@ -234,8 +280,8 @@ impl fmt::Display for Address {
     }
 }
 
-impl fmt::Debug for Address {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl core::fmt::Debug for Address {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         match self {
             Address::Mailbox(m) => f
                 .debug_struct("Address::Mailbox")
@@ -332,10 +378,12 @@ fn test_strbuilder() {
     );
 }
 
-impl fmt::Display for MessageID {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl core::fmt::Display for MessageID {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         if self.val().is_ascii() {
-            write!(f, "{}", unsafe { str::from_utf8_unchecked(self.val()) })
+            write!(f, "{}", unsafe {
+                std::str::from_utf8_unchecked(self.val())
+            })
         } else {
             write!(f, "{}", String::from_utf8_lossy(self.val()))
         }
@@ -347,8 +395,8 @@ impl PartialEq for MessageID {
         self.raw() == other.raw()
     }
 }
-impl fmt::Debug for MessageID {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl core::fmt::Debug for MessageID {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(f, "{}", String::from_utf8(self.raw().to_vec()).unwrap())
     }
 }
@@ -359,8 +407,8 @@ pub struct References {
     pub refs: Vec<MessageID>,
 }
 
-impl fmt::Debug for References {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl core::fmt::Debug for References {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(f, "{:#?}", self.refs)
     }
 }

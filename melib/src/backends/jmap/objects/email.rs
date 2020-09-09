@@ -21,6 +21,7 @@
 
 use super::*;
 use crate::backends::jmap::rfc8620::bool_false;
+use crate::email::address::{Address, MailboxAddress};
 use core::marker::PhantomData;
 use serde::de::{Deserialize, Deserializer};
 use serde_json::Value;

@@ -481,7 +481,7 @@ impl MailView {
                 }
             } else {
                 match u.content_type() {
-                    ContentType::MessageRfc822 => match EnvelopeWrapper::new(u.body().to_vec()) {
+                    ContentType::MessageRfc822 => match Mail::new(u.body().to_vec()) {
                         Ok(wrapper) => {
                             context
                                 .replies

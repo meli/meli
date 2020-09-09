@@ -309,7 +309,7 @@ fn run_app(opt: Opt) -> Result<()> {
     if let Some(SubCommand::View { path }) = opt.subcommand {
         let bytes = std::fs::read(&path)
             .chain_err_summary(|| format!("Could not read from `{}`", path.display()))?;
-        let wrapper = EnvelopeWrapper::new(bytes)
+        let wrapper = Mail::new(bytes)
             .chain_err_summary(|| format!("Could not parse `{}`", path.display()))?;
         state = State::new(
             Some(Settings::without_accounts().unwrap_or_default()),

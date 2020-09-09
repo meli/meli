@@ -9,7 +9,7 @@ fn build_draft() {
         .expect("Could not open test_image.gif.");
     if let Ok(mime_type) = query_mime_info("./tests/test_image.gif") {
         match attachment.content_type {
-            melib::email::ContentType::Other { ref mut tag, .. } => {
+            melib::email::attachment_types::ContentType::Other { ref mut tag, .. } => {
                 *tag = mime_type;
             }
             _ => {}

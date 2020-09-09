@@ -18,6 +18,8 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
+
+//! Basic mail account configuration to use with [`backends`](./backends/index.html)
 use crate::backends::SpecialUsageMailbox;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;

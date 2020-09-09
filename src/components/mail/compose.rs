@@ -20,6 +20,7 @@
  */
 
 use super::*;
+use melib::email::attachment_types::{ContentType, MultipartType};
 use melib::list_management;
 use melib::Draft;
 

@@ -1667,6 +1667,13 @@ pub mod encodings {
 }
 
 pub mod address {
+    //! Parsing of address values and address-related headers.
+    //!
+    //! Implemented RFCs:
+    //!
+    //! - [RFC5322 "Internet Message Format"](https://tools.ietf.org/html/rfc5322)
+    //! - [RFC6532 "Internationalized Email Headers"](https://tools.ietf.org/html/rfc6532)
+    //! - [RFC2047 "MIME Part Three: Message Header Extensions for Non-ASCII Text"](https://tools.ietf.org/html/rfc2047)
     use super::*;
     use crate::email::address::*;
     use crate::email::parser::generic::{
@@ -1775,7 +1782,7 @@ pub mod address {
     }
 
     ///`angle-addr      =   [CFWS] "<" addr-spec ">" [CFWS] / obs-angle-addr`
-    fn angle_addr(input: &[u8]) -> IResult<&[u8], Address> {
+    pub fn angle_addr(input: &[u8]) -> IResult<&[u8], Address> {
         let (input, _) = opt(cfws)(input)?;
         let (input, _) = tag("<")(input)?;
         let (input, addr_spec) = addr_spec(input)?;
@@ -1784,66 +1791,66 @@ pub mod address {
         Ok((input, addr_spec))
     }
 
+    ///`obs-domain      =   atom *("." atom)`
+    pub fn obs_domain(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
+        let (mut input, atom_) = context("obs_domain", atom)(input)?;
+        let mut ret: Vec<u8> = atom_.into();
+        loop {
+            if !input.starts_with(b".") {
+                break;
+            }
+            ret.push(b'.');
+            input = &input[1..];
+            if let Ok((_input, atom_)) = context("obs_domain", atom)(input) {
+                ret.extend_from_slice(&atom_);
+                input = _input;
+            } else {
+                return Err(nom::Err::Error(
+                    (input, "obs_domain(): expected <atom> after DOT").into(),
+                ));
+            }
+        }
+        Ok((input, ret.into()))
+    }
+
+    ///`local-part      =   dot-atom / quoted-string / obs-local-part`
+    pub fn local_part(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
+        alt((dot_atom, quoted_string))(input)
+    }
+
+    ///`domain          =   dot-atom / domain-literal / obs-domain`
+    pub fn domain(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
+        alt((dot_atom, domain_literal, obs_domain))(input)
+    }
+
+    ///`domain-literal  =   [CFWS] "[" *([FWS] dtext) [FWS] "]" [CFWS]`
+    pub fn domain_literal(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
+        use crate::email::parser::generic::fws;
+        let (input, first_opt_space) = context("domain_literal()", opt(cfws))(input)?;
+        let (input, _) = context("domain_literal()", tag("["))(input)?;
+        let (input, dtexts) = many0(pair(opt(fws), dtext))(input)?;
+        let (input, end_fws): (_, Option<_>) = context("domain_literal()", opt(fws))(input)?;
+        let (input, _) = context("domain_literal()", tag("]"))(input)?;
+        let (input, _) = context("domain_literal()", opt(cfws))(input)?;
+        let mut ret_s = vec![b'['];
+        if let Some(first_opt_space) = first_opt_space {
+            ret_s.extend_from_slice(&first_opt_space);
+        }
+        for (fws_opt, dtext) in dtexts {
+            if let Some(fws_opt) = fws_opt {
+                ret_s.extend_from_slice(&fws_opt);
+            }
+            ret_s.push(dtext);
+        }
+        if let Some(end_fws) = end_fws {
+            ret_s.extend_from_slice(&end_fws);
+        }
+        ret_s.push(b']');
+        Ok((input, ret_s.into()))
+    }
+
     ///`addr-spec       =   local-part "@" domain`
     pub fn addr_spec(input: &[u8]) -> IResult<&[u8], Address> {
-        ///`obs-domain      =   atom *("." atom)`
-        fn obs_domain(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
-            let (mut input, atom_) = context("obs_domain", atom)(input)?;
-            let mut ret: Vec<u8> = atom_.into();
-            loop {
-                if !input.starts_with(b".") {
-                    break;
-                }
-                ret.push(b'.');
-                input = &input[1..];
-                if let Ok((_input, atom_)) = context("obs_domain", atom)(input) {
-                    ret.extend_from_slice(&atom_);
-                    input = _input;
-                } else {
-                    return Err(nom::Err::Error(
-                        (input, "obs_domain(): expected <atom> after DOT").into(),
-                    ));
-                }
-            }
-            Ok((input, ret.into()))
-        }
-
-        ///`local-part      =   dot-atom / quoted-string / obs-local-part`
-        fn local_part(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
-            alt((dot_atom, quoted_string))(input)
-        }
-
-        ///`domain          =   dot-atom / domain-literal / obs-domain`
-        fn domain(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
-            alt((dot_atom, domain_literal, obs_domain))(input)
-        }
-
-        ///`domain-literal  =   [CFWS] "[" *([FWS] dtext) [FWS] "]" [CFWS]`
-        fn domain_literal(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
-            use crate::email::parser::generic::fws;
-            let (input, first_opt_space) = context("domain_literal()", opt(cfws))(input)?;
-            let (input, _) = context("domain_literal()", tag("["))(input)?;
-            let (input, dtexts) = many0(pair(opt(fws), dtext))(input)?;
-            let (input, end_fws): (_, Option<_>) = context("domain_literal()", opt(fws))(input)?;
-            let (input, _) = context("domain_literal()", tag("]"))(input)?;
-            let (input, _) = context("domain_literal()", opt(cfws))(input)?;
-            let mut ret_s = vec![b'['];
-            if let Some(first_opt_space) = first_opt_space {
-                ret_s.extend_from_slice(&first_opt_space);
-            }
-            for (fws_opt, dtext) in dtexts {
-                if let Some(fws_opt) = fws_opt {
-                    ret_s.extend_from_slice(&fws_opt);
-                }
-                ret_s.push(dtext);
-            }
-            if let Some(end_fws) = end_fws {
-                ret_s.extend_from_slice(&end_fws);
-            }
-            ret_s.push(b']');
-            Ok((input, ret_s.into()))
-        }
-
         let (input, local_part) = context("addr_spec()", local_part)(input)?;
         let (input, _) = context("addr_spec()", tag("@"))(input)?;
         let (input, domain) = context("addr_spec()", domain)(input)?;
@@ -1855,6 +1862,17 @@ pub mod address {
                 format!("{}@{}", to_str!(&local_part), to_str!(&domain)),
             ),
         ))
+    }
+
+    ///Returns the raw `local_part` and `domain` parts.
+    ///
+    ///`addr-spec       =   local-part "@" domain`
+    pub fn addr_spec_raw(input: &[u8]) -> IResult<&[u8], (Cow<'_, [u8]>, Cow<'_, [u8]>)> {
+        let (input, local_part) = context("addr_spec()", local_part)(input)?;
+        let (input, _) = context("addr_spec()", tag("@"))(input)?;
+        let (input, domain) = context("addr_spec()", domain)(input)?;
+
+        Ok((input, (local_part, domain)))
     }
 
     ///`display-name    =   phrase`

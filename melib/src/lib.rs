@@ -20,21 +20,19 @@
  */
 
 //! A crate that performs mail client operations such as
-//! - Hold an `Envelope` with methods convenient for mail client use. (see module `email`)
-//! - Abstract through mail storages through the `MailBackend` trait, and handle
-//!   read/writes/updates through it. (see module `melib::backends`)
-//! - Decode attachments (see module `melib::email::attachments`)
-//! - Create new mail (see `email::Draft`)
-//! - Send mail with an SMTP client (see module `smtp`)
-//! - Manage an `addressbook` i.e. have contacts (see module `addressbook`)
-//! - Build thread structures out of a list of mail via their `In-Reply-To` and `References` header
-//!   values (see module `thread`)
+//! - Hold an [`Envelope`](./email/struct.Envelope.html) with methods convenient for mail client use. (see module [`email`](./email/index.html))
+//! - Abstract through mail storages through the [`MailBackend`](./backends/trait.MailBackend.html) trait, and handle read/writes/updates through it. (see module [`backends`](./backends/index.html))
+//! - Decode attachments (see module [`email::attachments`](./email/attachments/index.html))
+//! - Create new mail (see [`email::Draft`](./email/compose/struct.Draft.html))
+//! - Send mail with an SMTP client (see module [`smtp`](./smtp/index.html))
+//! - Manage an `addressbook` i.e. have contacts (see module [`addressbook`](./addressbook/index.html))
+//! - Build thread structures out of a list of mail via their `In-Reply-To` and `References` header values (see module [`thread`](./thread/index.html))
 //!
 //! Other exports are
-//! - Basic mail account configuration to use with `backends` (see module `conf`)
-//! - Parser combinators (see module `parsec`)
+//! - Basic mail account configuration to use with [`backends`](./backends/index.html) (see module [`conf`](./conf/index.html))
+//! - Parser combinators (see module [`parsec`](./parsec/index.html))
 //! - A `ShellExpandTrait` to expand paths like a shell.
-//! - A `debug` macro that works like `std::dbg` but for multiple threads. (see `dbg` module)
+//! - A `debug` macro that works like `std::dbg` but for multiple threads. (see [`debug` macro](./macro.debug.html))
 #[macro_use]
 pub mod dbg {
 
@@ -104,14 +102,19 @@ pub use self::logging::LoggingLevel::*;
 pub use self::logging::*;
 
 pub mod addressbook;
+pub use addressbook::*;
 pub mod backends;
+pub use backends::*;
 mod collection;
+pub use collection::*;
 pub mod conf;
+pub use conf::*;
 pub mod email;
+pub use email::*;
 pub mod error;
+pub use crate::error::*;
 pub mod thread;
-pub use crate::email::*;
-pub use crate::thread::*;
+pub use thread::*;
 pub mod connections;
 pub mod parsec;
 pub mod search;
@@ -126,26 +129,15 @@ extern crate serde_derive;
 /* parser */
 extern crate data_encoding;
 extern crate encoding;
-pub use nom;
+pub extern crate nom;
 
 #[macro_use]
 extern crate bitflags;
+pub extern crate futures;
 pub extern crate indexmap;
-extern crate uuid;
-pub use smallvec;
-
-pub use futures;
-pub use smol;
-
-pub use crate::backends::{
-    BackendEvent, BackendEventConsumer, Backends, RefreshEvent, SpecialUsageMailbox,
-};
-pub use crate::collection::*;
-pub use crate::conf::*;
-pub use crate::email::{Envelope, EnvelopeHash, Flag};
-pub use crate::error::{IntoMeliError, MeliError, Result, ResultIntoMeliError};
-
-pub use crate::addressbook::*;
+pub extern crate smallvec;
+pub extern crate smol;
+pub extern crate uuid;
 
 pub use shellexpand::ShellExpandTrait;
 pub mod shellexpand {

@@ -23,6 +23,7 @@
  */
 use super::*;
 use melib::backends::{AccountHash, Mailbox, MailboxHash};
+use melib::email::{attachment_types::*, attachments::*};
 use melib::thread::ThreadNodeHash;
 
 pub mod listing;

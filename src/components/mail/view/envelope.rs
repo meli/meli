@@ -51,7 +51,7 @@ pub struct EnvelopeView {
     subview: Option<Box<dyn Component>>,
     dirty: bool,
     mode: ViewMode,
-    wrapper: EnvelopeWrapper,
+    mail: Mail,
 
     account_hash: AccountHash,
     cmd_buf: String,
@@ -66,7 +66,7 @@ impl fmt::Display for EnvelopeView {
 
 impl EnvelopeView {
     pub fn new(
-        wrapper: EnvelopeWrapper,
+        mail: Mail,
         pager: Option<Pager>,
         subview: Option<Box<dyn Component>>,
         account_hash: AccountHash,
@@ -76,7 +76,7 @@ impl EnvelopeView {
             subview,
             dirty: true,
             mode: ViewMode::Normal,
-            wrapper,
+            mail,
             account_hash,
             cmd_buf: String::with_capacity(4),
             id: ComponentId::new_v4(),
@@ -225,15 +225,13 @@ impl Component for EnvelopeView {
         let bottom_right = bottom_right!(area);
 
         let y: usize = {
-            let envelope: &Envelope = &self.wrapper;
-
             if self.mode == ViewMode::Raw {
                 clear_area(grid, area, crate::conf::value(context, "theme_default"));
                 context.dirty_areas.push_back(area);
                 get_y(upper_left).saturating_sub(1)
             } else {
                 let (x, y) = write_string_to_grid(
-                    &format!("Date: {}", envelope.date_as_str()),
+                    &format!("Date: {}", self.mail.date_as_str()),
                     grid,
                     Color::Byte(33),
                     Color::Default,
@@ -247,7 +245,7 @@ impl Component for EnvelopeView {
                     grid[(x, y)].set_fg(Color::Default);
                 }
                 let (x, y) = write_string_to_grid(
-                    &format!("From: {}", envelope.field_from_to_string()),
+                    &format!("From: {}", self.mail.field_from_to_string()),
                     grid,
                     Color::Byte(33),
                     Color::Default,
@@ -261,7 +259,7 @@ impl Component for EnvelopeView {
                     grid[(x, y)].set_fg(Color::Default);
                 }
                 let (x, y) = write_string_to_grid(
-                    &format!("To: {}", envelope.field_to_to_string()),
+                    &format!("To: {}", self.mail.field_to_to_string()),
                     grid,
                     Color::Byte(33),
                     Color::Default,
@@ -275,7 +273,7 @@ impl Component for EnvelopeView {
                     grid[(x, y)].set_fg(Color::Default);
                 }
                 let (x, y) = write_string_to_grid(
-                    &format!("Subject: {}", envelope.subject()),
+                    &format!("Subject: {}", self.mail.subject()),
                     grid,
                     Color::Byte(33),
                     Color::Default,
@@ -289,7 +287,7 @@ impl Component for EnvelopeView {
                     grid[(x, y)].set_fg(Color::Default);
                 }
                 let (x, y) = write_string_to_grid(
-                    &format!("Message-ID: <{}>", envelope.message_id_raw()),
+                    &format!("Message-ID: <{}>", self.mail.message_id_raw()),
                     grid,
                     Color::Byte(33),
                     Color::Default,
@@ -315,7 +313,7 @@ impl Component for EnvelopeView {
         };
 
         if self.dirty {
-            let body = self.wrapper.body_bytes(self.wrapper.buffer());
+            let body = self.mail.body();
             match self.mode {
                 ViewMode::Attachment(aidx) if body.attachments()[aidx].is_html() => {
                     let attachment = &body.attachments()[aidx];
@@ -409,12 +407,7 @@ impl Component for EnvelopeView {
                     .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
 
                 {
-                    let envelope: &Envelope = self.wrapper.envelope();
-                    if let Some(u) = envelope
-                        .body_bytes(self.wrapper.buffer())
-                        .attachments()
-                        .get(lidx)
-                    {
+                    if let Some(u) = self.mail.body().attachments().get(lidx) {
                         match u.content_type() {
                             ContentType::MessageRfc822 => {
                                 self.mode = ViewMode::Subview;
@@ -518,9 +511,8 @@ impl Component for EnvelopeView {
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
                 let url = {
-                    let envelope: &Envelope = self.wrapper.envelope();
                     let finder = LinkFinder::new();
-                    let t = envelope.body_bytes(self.wrapper.buffer()).text();
+                    let t = self.mail.body().text();
                     let links: Vec<Link> = finder.links(&t).collect();
                     if let Some(u) = links.get(lidx) {
                         u.as_str().to_string()

@@ -22,38 +22,33 @@
 /*!
  * Email parsing, handling, sending etc.
  */
-use std::convert::TryInto;
-mod compose;
-pub use self::compose::*;
-
-pub mod list_management;
-mod mailto;
-pub use mailto::*;
-mod attachment_types;
+pub mod address;
+pub mod attachment_types;
 pub mod attachments;
-pub use crate::attachments::*;
-mod address;
-//pub mod parser;
+pub mod compose;
+pub mod headers;
+pub mod list_management;
+pub mod mailto;
 pub mod parser;
-use crate::parser::BytesExt;
-pub use address::*;
-mod headers;
 pub mod signatures;
+
+pub use address::{Address, MessageID, References, StrBuild, StrBuilder};
+pub use attachments::{Attachment, AttachmentBuilder};
+pub use compose::{attachment_from_file, Draft};
 pub use headers::*;
+pub use mailto::*;
 
 use crate::datetime::UnixTimestamp;
 use crate::error::{MeliError, Result};
+use crate::parser::BytesExt;
 use crate::thread::ThreadNodeHash;
 
 use smallvec::SmallVec;
 use std::borrow::Cow;
-use std::cmp::Ordering;
 use std::collections::hash_map::DefaultHasher;
-use std::fmt;
+use std::convert::TryInto;
 use std::hash::Hasher;
-use std::option::Option;
-use std::str;
-use std::string::String;
+use std::ops::Deref;
 
 bitflags! {
     #[derive(Default, Serialize, Deserialize)]
@@ -81,15 +76,16 @@ impl PartialEq<&str> for Flag {
     }
 }
 
+///`Mail` holds both the envelope info of an email in its `envelope` field and the raw bytes that
+///describe the email in `bytes`. Its body as an `melib::email::Attachment` can be parsed on demand
+///with the `melib::email::Mail::body` method.
 #[derive(Debug, Clone, Default)]
-pub struct EnvelopeWrapper {
-    envelope: Envelope,
-    buffer: Vec<u8>,
+pub struct Mail {
+    pub envelope: Envelope,
+    pub bytes: Vec<u8>,
 }
 
-use std::ops::Deref;
-
-impl Deref for EnvelopeWrapper {
+impl Deref for Mail {
     type Target = Envelope;
 
     fn deref(&self) -> &Envelope {
@@ -97,56 +93,57 @@ impl Deref for EnvelopeWrapper {
     }
 }
 
-impl EnvelopeWrapper {
-    pub fn new(buffer: Vec<u8>) -> Result<Self> {
-        Ok(EnvelopeWrapper {
-            envelope: Envelope::from_bytes(&buffer, None)?,
-            buffer,
+impl Mail {
+    pub fn new(bytes: Vec<u8>) -> Result<Self> {
+        Ok(Mail {
+            envelope: Envelope::from_bytes(&bytes, None)?,
+            bytes,
         })
     }
 
     pub fn envelope(&self) -> &Envelope {
         &self.envelope
     }
-    pub fn buffer(&self) -> &[u8] {
-        &self.buffer
+
+    pub fn bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+
+    pub fn body(&self) -> Attachment {
+        self.envelope.body_bytes(&self.bytes)
     }
 }
 
 pub type EnvelopeHash = u64;
 
-/// `Envelope` represents all the data of an email we need to know.
+/// `Envelope` represents all the header and structure data of an email we need to know.
 ///
-///  Attachments (the email's body) is parsed on demand with `body`.
+///  Attachments (the email's body) is parsed on demand with `body` method.
 ///
-///  Access to the underlying email object in the account's backend (for example the file or the
-///  entry in an IMAP server) is given through `operation_token`. For more information see
-///  `BackendOp`.
+///To access the email attachments, you need to parse them from the raw email bytes into an
+///`Attachment` object.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Envelope {
-    date: String,
-    from: SmallVec<[Address; 1]>,
-    to: SmallVec<[Address; 1]>,
-    cc: SmallVec<[Address; 1]>,
-    bcc: Vec<Address>,
-    subject: Option<String>,
-    message_id: MessageID,
-    in_reply_to: Option<MessageID>,
+    pub hash: EnvelopeHash,
+    pub date: String,
+    pub timestamp: UnixTimestamp,
+    pub from: SmallVec<[Address; 1]>,
+    pub to: SmallVec<[Address; 1]>,
+    pub cc: SmallVec<[Address; 1]>,
+    pub bcc: Vec<Address>,
+    pub subject: Option<String>,
+    pub message_id: MessageID,
+    pub in_reply_to: Option<MessageID>,
     pub references: Option<References>,
-    other_headers: HeaderMap,
-
-    timestamp: UnixTimestamp,
-    thread: ThreadNodeHash,
-
-    hash: EnvelopeHash,
-
-    flags: Flag,
-    has_attachments: bool,
-    labels: SmallVec<[u64; 8]>,
+    pub other_headers: HeaderMap,
+    pub thread: ThreadNodeHash,
+    pub flags: Flag,
+    pub has_attachments: bool,
+    pub labels: SmallVec<[u64; 8]>,
 }
 
-impl fmt::Debug for Envelope {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl core::fmt::Debug for Envelope {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         f.debug_struct("Envelope")
             .field("Subject", &self.subject())
             .field("Date", &self.date)
@@ -169,7 +166,9 @@ impl Default for Envelope {
 impl Envelope {
     pub fn new(hash: EnvelopeHash) -> Self {
         Envelope {
+            hash,
             date: String::new(),
+            timestamp: 0,
             from: SmallVec::new(),
             to: SmallVec::new(),
             cc: SmallVec::new(),
@@ -179,12 +178,7 @@ impl Envelope {
             in_reply_to: None,
             references: None,
             other_headers: Default::default(),
-
-            timestamp: 0,
-
             thread: ThreadNodeHash::null(),
-
-            hash,
             has_attachments: false,
             flags: Flag::default(),
             labels: SmallVec::new(),
@@ -212,6 +206,7 @@ impl Envelope {
     pub fn hash(&self) -> EnvelopeHash {
         self.hash
     }
+
     pub fn populate_headers(&mut self, mut bytes: &[u8]) -> Result<()> {
         if bytes.starts_with(b"From ") {
             /* Attempt to recover if message includes the mbox From label as first line */
@@ -352,9 +347,11 @@ impl Envelope {
     pub fn date_as_str(&self) -> &str {
         &self.date
     }
+
     pub fn from(&self) -> &[Address] {
         self.from.as_slice()
     }
+
     pub fn field_bcc_to_string(&self) -> String {
         if self.bcc.is_empty() {
             self.other_headers
@@ -372,6 +369,7 @@ impl Envelope {
             })
         }
     }
+
     pub fn field_cc_to_string(&self) -> String {
         if self.cc.is_empty() {
             self.other_headers
@@ -389,6 +387,7 @@ impl Envelope {
             })
         }
     }
+
     pub fn field_from_to_string(&self) -> String {
         if self.from.is_empty() {
             self.other_headers
@@ -406,9 +405,11 @@ impl Envelope {
             })
         }
     }
+
     pub fn to(&self) -> &[Address] {
         self.to.as_slice()
     }
+
     pub fn field_to_to_string(&self) -> String {
         if self.to.is_empty() {
             self.other_headers
@@ -429,6 +430,7 @@ impl Envelope {
                 })
         }
     }
+
     pub fn field_references_to_string(&self) -> String {
         let refs = self.references();
         if refs.is_empty() {
@@ -455,7 +457,6 @@ impl Envelope {
         builder.build()
     }
 
-    /// Requests bytes from backend and thus can fail
     pub fn headers<'a>(&self, bytes: &'a [u8]) -> Result<Vec<(&'a str, &'a str)>> {
         let ret = parser::headers::headers(bytes)?.1;
         let len = ret.len();
@@ -486,36 +487,46 @@ impl Envelope {
             .as_ref()
             .map(|m| String::from_utf8_lossy(m.val()))
     }
+
     pub fn in_reply_to_raw(&self) -> Option<Cow<str>> {
         self.in_reply_to
             .as_ref()
             .map(|m| String::from_utf8_lossy(m.raw()))
     }
+
     pub fn message_id(&self) -> &MessageID {
         &self.message_id
     }
+
     pub fn message_id_display(&self) -> Cow<str> {
         String::from_utf8_lossy(self.message_id.val())
     }
+
     pub fn message_id_raw(&self) -> Cow<str> {
         String::from_utf8_lossy(self.message_id.raw())
     }
+
     pub fn set_date(&mut self, new_val: &[u8]) {
         let new_val = new_val.trim();
         self.date = String::from_utf8_lossy(new_val).into_owned();
     }
+
     pub fn set_bcc(&mut self, new_val: Vec<Address>) {
         self.bcc = new_val;
     }
+
     pub fn set_cc(&mut self, new_val: SmallVec<[Address; 1]>) {
         self.cc = new_val;
     }
+
     pub fn set_from(&mut self, new_val: SmallVec<[Address; 1]>) {
         self.from = new_val;
     }
+
     pub fn set_to(&mut self, new_val: SmallVec<[Address; 1]>) {
         self.to = new_val;
     }
+
     pub fn set_in_reply_to(&mut self, new_val: &[u8]) {
         // FIXME msg_id_list
         let new_val = new_val.trim();
@@ -528,6 +539,7 @@ impl Envelope {
         };
         self.in_reply_to = Some(val);
     }
+
     pub fn set_subject(&mut self, new_val: Vec<u8>) {
         let mut new_val = String::from_utf8(new_val)
             .unwrap_or_else(|err| String::from_utf8_lossy(&err.into_bytes()).into());
@@ -542,6 +554,7 @@ impl Envelope {
 
         self.subject = Some(new_val);
     }
+
     pub fn set_message_id(&mut self, new_val: &[u8]) {
         let new_val = new_val.trim();
         match parser::address::msg_id(new_val) {
@@ -553,6 +566,7 @@ impl Envelope {
             }
         }
     }
+
     pub fn push_references(&mut self, new_ref: MessageID) {
         match self.references {
             Some(ref mut s) => {
@@ -578,6 +592,7 @@ impl Envelope {
             }
         }
     }
+
     pub fn set_references(&mut self, new_val: &[u8]) {
         let new_val = new_val.trim();
         match self.references {
@@ -592,6 +607,7 @@ impl Envelope {
             }
         }
     }
+
     pub fn references(&self) -> SmallVec<[&MessageID; 8]> {
         match self.references {
             Some(ref s) => s.refs.iter().fold(SmallVec::new(), |mut acc, x| {
@@ -613,27 +629,35 @@ impl Envelope {
     pub fn thread(&self) -> ThreadNodeHash {
         self.thread
     }
+
     pub fn set_thread(&mut self, new_val: ThreadNodeHash) {
         self.thread = new_val;
     }
+
     pub fn set_datetime(&mut self, new_val: UnixTimestamp) {
         self.timestamp = new_val;
     }
+
     pub fn set_flag(&mut self, f: Flag, value: bool) {
         self.flags.set(f, value);
     }
+
     pub fn set_flags(&mut self, f: Flag) {
         self.flags = f;
     }
+
     pub fn flags(&self) -> Flag {
         self.flags
     }
+
     pub fn set_seen(&mut self) {
         self.set_flag(Flag::SEEN, true)
     }
+
     pub fn set_unseen(&mut self) {
         self.set_flag(Flag::SEEN, false)
     }
+
     pub fn is_seen(&self) -> bool {
         self.flags.contains(Flag::SEEN)
     }
@@ -656,14 +680,15 @@ impl Envelope {
 }
 
 impl Eq for Envelope {}
+
 impl Ord for Envelope {
-    fn cmp(&self, other: &Envelope) -> Ordering {
+    fn cmp(&self, other: &Envelope) -> std::cmp::Ordering {
         self.datetime().cmp(&other.datetime())
     }
 }
 
 impl PartialOrd for Envelope {
-    fn partial_cmp(&self, other: &Envelope) -> Option<Ordering> {
+    fn partial_cmp(&self, other: &Envelope) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
     }
 }

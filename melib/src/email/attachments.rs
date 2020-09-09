@@ -18,15 +18,17 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
-use crate::email::address::StrBuilder;
-use crate::email::parser;
-use crate::email::parser::BytesExt;
-use crate::email::EnvelopeWrapper;
+
+use crate::email::{
+    address::StrBuilder,
+    parser::{self, BytesExt},
+    Mail,
+};
 use core::fmt;
 use core::str;
 use data_encoding::BASE64_MIME;
 
-pub use crate::email::attachment_types::*;
+use crate::email::attachment_types::*;
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AttachmentBuilder {
@@ -360,7 +362,7 @@ impl fmt::Display for Attachment {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.content_type {
             ContentType::MessageRfc822 => {
-                match EnvelopeWrapper::new(self.body.display_bytes(&self.raw).to_vec()) {
+                match Mail::new(self.body.display_bytes(&self.raw).to_vec()) {
                     Ok(wrapper) => write!(
                         f,
                         "message/rfc822: {} - {} - {}",

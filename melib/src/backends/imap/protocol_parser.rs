@@ -20,6 +20,7 @@
  */
 
 use super::*;
+use crate::email::address::{Address, MailboxAddress};
 use crate::email::parser::{BytesExt, IResult};
 use crate::error::ResultIntoMeliError;
 use crate::get_path_hash;

@@ -19,8 +19,11 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use crate::email::attachments::{Attachment, ContentType, MultipartType};
 use crate::email::parser::BytesExt;
+use crate::email::{
+    attachment_types::{ContentType, MultipartType},
+    attachments::Attachment,
+};
 use crate::{MeliError, Result};
 
 /// rfc3156
