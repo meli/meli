@@ -225,6 +225,65 @@ impl Address {
             .1
             .to_vec())
     }
+
+    pub fn contains_address(&self, other: &Address) -> bool {
+        match self {
+            Address::Mailbox(_) => self == other,
+            Address::Group(g) => g
+                .mailbox_list
+                .iter()
+                .any(|addr| addr.contains_address(other)),
+        }
+    }
+
+    /// Get subaddress out of an address (e.g. `ken+subaddress@example.org`).
+    ///
+    /// Subaddresses are commonly text following a "+" character in an email address's local part
+    /// . They are defined in [RFC5233 `Sieve Email Filtering: Subaddress Extension`](https://tools.ietf.org/html/rfc5233.html)
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use melib::email::Address;
+    /// let addr = "ken+sieve@example.org";
+    /// let (rest, val) = melib::email::parser::address::address(addr.as_bytes()).unwrap();
+    /// assert!(rest.is_empty());
+    /// assert_eq!(
+    ///     val.subaddress("+"),
+    ///     Some((
+    ///         Address::new(None, "ken@example.org".to_string()),
+    ///         "sieve".to_string()
+    ///     ))
+    /// );
+    /// ```
+    pub fn subaddress(&self, separator: &str) -> Option<(Self, String)> {
+        match self {
+            Address::Mailbox(_) => {
+                let email = self.get_email();
+                let (local_part, domain) =
+                    match super::parser::address::addr_spec_raw(email.as_bytes())
+                        .map_err(|err| Into::<MeliError>::into(err))
+                        .and_then(|(_, (l, d))| {
+                            Ok((String::from_utf8(l.into())?, String::from_utf8(d.into())?))
+                        }) {
+                        Ok(v) => v,
+                        Err(_) => return None,
+                    };
+                let s = local_part.split(separator).collect::<Vec<_>>();
+                if s.len() < 2 {
+                    return None;
+                }
+                let subaddress = &local_part[s[0].len() + separator.len()..];
+
+                let display_name = self.get_display_name();
+                Some((
+                    Self::new(display_name, format!("{}@{}", s[0], domain)),
+                    subaddress.to_string(),
+                ))
+            }
+            Address::Group(_) => None,
+        }
+    }
 }
 
 impl Eq for Address {}
