@@ -280,7 +280,7 @@ impl MailBackend for MaildirType {
                     }
                     if let Ok(mut env) = Envelope::from_bytes(
                         unsafe { &Mmap::open_path(&file, Protection::Read)?.as_slice() },
-                        None,
+                        Some(file.flags()),
                     ) {
                         env.set_hash(hash);
                         mailbox_index
@@ -488,7 +488,7 @@ impl MailBackend for MaildirType {
                                     unsafe {
                                         &Mmap::open_path(&pathbuf, Protection::Read)?.as_slice()
                                     },
-                                    None,
+                                    Some(pathbuf.flags()),
                                 ) {
                                     env.set_hash(new_hash);
                                     debug!("{}\t{:?}", new_hash, &pathbuf);
@@ -1162,7 +1162,7 @@ fn add_path_to_index(
     //Mmap::open_path(self.path(), Protection::Read)?
     let mut env = Envelope::from_bytes(
         unsafe { &Mmap::open_path(path, Protection::Read)?.as_slice() },
-        None,
+        Some(path.flags()),
     )?;
     env.set_hash(env_hash);
     debug!(

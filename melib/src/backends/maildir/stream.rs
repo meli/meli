@@ -148,7 +148,7 @@ impl MaildirStream {
                 }
                 match Envelope::from_bytes(
                     unsafe { &Mmap::open_path(&file, Protection::Read)?.as_slice() },
-                    None,
+                    Some(file.flags()),
                 ) {
                     Ok(mut env) => {
                         env.set_hash(env_hash);
