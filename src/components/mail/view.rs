@@ -481,20 +481,25 @@ impl MailView {
                 }
             } else {
                 match u.content_type() {
-                    ContentType::MessageRfc822 => match Mail::new(u.body().to_vec()) {
-                        Ok(wrapper) => {
-                            context
-                                .replies
-                                .push_back(UIEvent::Action(Tab(New(Some(Box::new(
-                                    EnvelopeView::new(wrapper, None, None, self.coordinates.0),
-                                ))))));
+                    ContentType::MessageRfc822 => {
+                        match Mail::new(u.body().to_vec(), Some(Flag::SEEN)) {
+                            Ok(wrapper) => {
+                                context.replies.push_back(UIEvent::Action(Tab(New(Some(
+                                    Box::new(EnvelopeView::new(
+                                        wrapper,
+                                        None,
+                                        None,
+                                        self.coordinates.0,
+                                    )),
+                                )))));
+                            }
+                            Err(e) => {
+                                context.replies.push_back(UIEvent::StatusEvent(
+                                    StatusEvent::DisplayMessage(format!("{}", e)),
+                                ));
+                            }
                         }
-                        Err(e) => {
-                            context.replies.push_back(UIEvent::StatusEvent(
-                                StatusEvent::DisplayMessage(format!("{}", e)),
-                            ));
-                        }
-                    },
+                    }
 
                     ContentType::Text { .. } | ContentType::PGPSignature => {
                         self.mode = ViewMode::Attachment(lidx);

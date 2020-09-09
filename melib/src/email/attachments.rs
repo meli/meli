@@ -362,7 +362,7 @@ impl fmt::Display for Attachment {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.content_type {
             ContentType::MessageRfc822 => {
-                match Mail::new(self.body.display_bytes(&self.raw).to_vec()) {
+                match Mail::new(self.body.display_bytes(&self.raw).to_vec(), None) {
                     Ok(wrapper) => write!(
                         f,
                         "message/rfc822: {} - {} - {}",

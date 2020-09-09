@@ -94,9 +94,9 @@ impl Deref for Mail {
 }
 
 impl Mail {
-    pub fn new(bytes: Vec<u8>) -> Result<Self> {
+    pub fn new(bytes: Vec<u8>, flags: Option<Flag>) -> Result<Self> {
         Ok(Mail {
-            envelope: Envelope::from_bytes(&bytes, None)?,
+            envelope: Envelope::from_bytes(&bytes, flags)?,
             bytes,
         })
     }
