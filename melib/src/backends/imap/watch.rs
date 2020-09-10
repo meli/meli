@@ -145,14 +145,40 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
             }
             watch = now;
         }
+        if to_str!(&line)
+            .split_rn()
+            .filter(|l| {
+                !l.starts_with("+ ")
+                    && !l.starts_with("* ok")
+                    && !l.starts_with("* ok")
+                    && !l.starts_with("* Ok")
+                    && !l.starts_with("* OK")
+            })
+            .count()
+            == 0
         {
-            let mut conn = timeout(Duration::from_secs(10), main_conn.lock()).await?;
-            conn.examine_mailbox(mailbox_hash, &mut response, false)
+            continue;
+        }
+        {
+            blockn.conn.send_raw(b"DONE").await?;
+            blockn
+                .conn
+                .read_response(&mut response, RequiredResponses::empty())
                 .await?;
             for l in to_str!(&line).split_rn() {
                 debug!("process_untagged {:?}", &l);
-                conn.process_untagged(l).await?;
+                if l.starts_with("+ ")
+                    || l.starts_with("* ok")
+                    || l.starts_with("* ok")
+                    || l.starts_with("* Ok")
+                    || l.starts_with("* OK")
+                {
+                    debug!("ignore continuation mark");
+                    continue;
+                }
+                blockn.conn.process_untagged(l).await?;
             }
+            blockn.conn.send_command(b"IDLE").await?;
         }
         *uid_store.is_online.lock().unwrap() = (Instant::now(), Ok(()));
     }
