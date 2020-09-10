@@ -225,9 +225,6 @@ impl MailView {
                             };
                             self.active_jobs.insert(job_id);
                             account.insert_job(job_id, JobRequest::AsBytes(handle));
-                            context
-                                .replies
-                                .push_back(UIEvent::StatusEvent(StatusEvent::NewJob(job_id)));
                         }
                     }
                     Err(err) => {
