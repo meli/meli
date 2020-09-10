@@ -180,7 +180,6 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
             }
             blockn.conn.send_command(b"IDLE").await?;
         }
-        *uid_store.is_online.lock().unwrap() = (Instant::now(), Ok(()));
     }
     debug!("IDLE connection dropped");
     let err: &str = blockn.err().unwrap_or("Unknown reason.");
@@ -222,7 +221,6 @@ pub async fn examine_updates(
             .examine_mailbox(mailbox_hash, &mut response, true)
             .await?
             .unwrap();
-        *uid_store.is_online.lock().unwrap() = (Instant::now(), Ok(()));
         debug!(&select_response);
         {
             let mut uidvalidities = uid_store.uidvalidity.lock().unwrap();

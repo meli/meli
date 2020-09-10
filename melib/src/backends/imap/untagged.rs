@@ -31,17 +31,13 @@ use crate::backends::{
 use crate::email::Envelope;
 use crate::error::*;
 use std::convert::TryInto;
-use std::time::Instant;
 
 impl ImapConnection {
     pub async fn process_untagged(&mut self, line: &str) -> Result<bool> {
         macro_rules! try_fail {
             ($mailbox_hash: expr, $($result:expr)+) => {
                 $(if let Err(err) = $result {
-                    *self.uid_store.is_online.lock().unwrap() = (
-                        Instant::now(),
-                        Err(err.clone()),
-                    );
+                    self.uid_store.is_online.lock().unwrap().1 = Err(err.clone());
                     debug!("failure: {}", err.to_string());
                     self.add_refresh_event(RefreshEvent {
                         account_hash: self.uid_store.account_hash,
@@ -73,8 +69,7 @@ impl ImapConnection {
             };
         match untagged_response {
             UntaggedResponse::Bye { reason } => {
-                *self.uid_store.is_online.lock().unwrap() =
-                    (std::time::Instant::now(), Err(reason.into()));
+                self.uid_store.is_online.lock().unwrap().1 = Err(reason.into());
             }
             UntaggedResponse::Expunge(n) => {
                 if self

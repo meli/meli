@@ -521,17 +521,17 @@ impl ImapConnection {
         Box::pin(async move {
             if let (instant, ref mut status @ Ok(())) = *self.uid_store.is_online.lock().unwrap() {
                 if Instant::now().duration_since(instant) >= Duration::new(60 * 30, 0) {
-                    *status = Err(MeliError::new("Connection timed out"));
-                    self.stream = Err(MeliError::new("Connection timed out"));
+                    let err = MeliError::new("Connection timed out").set_kind(ErrorKind::Timeout);
+                    *status = Err(err.clone());
+                    self.stream = Err(err);
                 }
             }
             if self.stream.is_ok() {
-                self.uid_store.is_online.lock().unwrap().0 = Instant::now();
                 return Ok(());
             }
             let new_stream = debug!(ImapStream::new_connection(&self.server_conf).await);
             if let Err(err) = new_stream.as_ref() {
-                *self.uid_store.is_online.lock().unwrap() = (Instant::now(), Err(err.clone()));
+                self.uid_store.is_online.lock().unwrap().1 = Err(err.clone());
             } else {
                 *self.uid_store.is_online.lock().unwrap() = (Instant::now(), Ok(()));
             }
@@ -616,6 +616,7 @@ impl ImapConnection {
             let mut response = String::new();
             ret.clear();
             self.stream.as_mut()?.read_response(&mut response).await?;
+            *self.uid_store.is_online.lock().unwrap() = (Instant::now(), Ok(()));
 
             match self.server_conf.protocol {
                 ImapProtocol::IMAP { .. } => {
