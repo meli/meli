@@ -135,6 +135,10 @@ impl Default for ListingSettingsOverride {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct NotificationsSettingsOverride {
+    #[doc = " Enable notifications."]
+    #[doc = " Default: True"]
+    #[serde(default)]
+    pub enable: Option<bool>,
     #[doc = " A command to pipe notifications through"]
     #[doc = " Default: None"]
     #[serde(default)]
@@ -155,6 +159,7 @@ pub struct NotificationsSettingsOverride {
 impl Default for NotificationsSettingsOverride {
     fn default() -> Self {
         NotificationsSettingsOverride {
+            enable: None,
             script: None,
             xbiff_file_path: None,
             play_sound: None,

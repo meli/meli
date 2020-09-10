@@ -22,147 +22,145 @@
 /*!
 Notification handling components.
 */
-use crate::types::RateLimit;
 use std::process::{Command, Stdio};
 
 use super::*;
 
-/// Passes notifications to the OS using the XDG specifications.
-#[derive(Debug)]
-pub struct XDGNotifications {
-    rate_limit: RateLimit,
-}
+#[cfg(feature = "dbus-notifications")]
+pub use dbus::*;
 
-impl fmt::Display for XDGNotifications {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "")
-    }
-}
-
-impl XDGNotifications {
-    pub fn new() -> Self {
-        XDGNotifications {
-            rate_limit: RateLimit::new(1000, 1000),
-        }
-    }
-}
-
-impl Component for XDGNotifications {
-    fn draw(&mut self, _grid: &mut CellBuffer, _area: Area, _context: &mut Context) {}
-    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
-        if let UIEvent::Notification(ref title, ref body, ref kind) = event {
-            if !self.rate_limit.tick() {
-                return true;
-            }
-
-            let settings = &context.runtime_settings.notifications;
-            let mut notification = notify_rust::Notification::new();
-            notification
-                .appname("meli")
-                .icon("mail-message-new")
-                .summary(title.as_ref().map(String::as_str).unwrap_or("meli"))
-                .body(&escape_str(body))
-                .icon("dialog-information");
-            match kind {
-                Some(NotificationType::NewMail) => {
-                    notification.hint(notify_rust::hints::NotificationHint::Category(
-                        "email".to_owned(),
-                    ));
-                }
-                _ => {}
-            }
-            if settings.play_sound.is_true() {
-                if let Some(ref sound_path) = settings.sound_file {
-                    notification.hint(notify_rust::hints::NotificationHint::SoundFile(
-                        sound_path.to_owned(),
-                    ));
-                } else {
-                    notification.sound_name("message-new-email");
-                }
-            }
-
-            notification.show().unwrap();
-        }
-        false
-    }
-    fn set_dirty(&mut self, _value: bool) {}
-
-    fn is_dirty(&self) -> bool {
-        false
-    }
-
-    fn id(&self) -> ComponentId {
-        ComponentId::nil()
-    }
-    fn set_id(&mut self, _id: ComponentId) {}
-}
-
-fn escape_str(s: &str) -> String {
-    let mut ret: String = String::with_capacity(s.len());
-    for c in s.chars() {
-        match c {
-            '&' => ret.push_str("&amp;"),
-            '<' => ret.push_str("&lt;"),
-            '>' => ret.push_str("&gt;"),
-            '\'' => ret.push_str("&apos;"),
-            '"' => ret.push_str("&quot;"),
-            _ => {
-                let i = c as u32;
-                if (0x1 <= i && i <= 0x8)
-                    || (0xb <= i && i <= 0xc)
-                    || (0xe <= i && i <= 0x1f)
-                    || (0x7f <= i && i <= 0x84)
-                    || (0x86 <= i && i <= 0x9f)
-                {
-                    ret.push_str(&format!("&#{:x}%{:x};", i, i));
-                } else {
-                    ret.push(c);
-                }
-            }
-        }
-    }
-    ret
-}
-
-#[cfg(test)]
-mod tests {
+#[cfg(feature = "dbus-notifications")]
+mod dbus {
     use super::*;
+    use crate::types::RateLimit;
 
-    #[test]
-    fn test_escape_str() {
-        if std::env::var("DISPLAY").is_err() {
-            return;
+    /// Passes notifications to the OS using Dbus
+    #[derive(Debug)]
+    pub struct DbusNotifications {
+        rate_limit: RateLimit,
+    }
+
+    impl fmt::Display for DbusNotifications {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            write!(f, "")
+        }
+    }
+
+    impl DbusNotifications {
+        pub fn new() -> Self {
+            DbusNotifications {
+                rate_limit: RateLimit::new(1000, 1000),
+            }
+        }
+    }
+
+    impl Component for DbusNotifications {
+        fn draw(&mut self, _grid: &mut CellBuffer, _area: Area, _context: &mut Context) {}
+
+        fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+            if !context.settings.notifications.enable {
+                return false;
+            }
+
+            if let UIEvent::Notification(ref title, ref body, ref kind) = event {
+                if !self.rate_limit.tick() {
+                    return false;
+                }
+
+                let settings = &context.settings.notifications;
+                let mut notification = notify_rust::Notification::new();
+                notification
+                    .appname("meli")
+                    .icon("mail-message-new")
+                    .summary(title.as_ref().map(String::as_str).unwrap_or("meli"))
+                    .body(&escape_str(body));
+                if *kind == Some(NotificationType::NEWMAIL) {
+                    notification.hint(notify_rust::Hint::Category("email".to_owned()));
+                }
+                if settings.play_sound.is_true() {
+                    if let Some(ref sound_path) = settings.sound_file {
+                        notification.hint(notify_rust::Hint::SoundFile(sound_path.to_owned()));
+                    } else {
+                        notification.sound_name("message-new-email");
+                    }
+                } else {
+                    notification.hint(notify_rust::Hint::SuppressSound(true));
+                }
+
+                notification.show().unwrap();
+            }
+            false
         }
 
-        let title: &str = "& > Title τίτλος";
-        let body: &str = "& > Body σώμα";
-        notify_rust::Notification::new()
-            .appname("meli")
-            .icon("mail-message-new")
-            .summary(title)
-            .body(&escape_str(body))
-            .icon("dialog-information")
-            .show()
-            .unwrap();
+        fn set_dirty(&mut self, _value: bool) {}
+
+        fn is_dirty(&self) -> bool {
+            false
+        }
+
+        fn id(&self) -> ComponentId {
+            ComponentId::nil()
+        }
+
+        fn set_id(&mut self, _id: ComponentId) {}
+    }
+
+    fn escape_str(s: &str) -> String {
+        let mut ret: String = String::with_capacity(s.len());
+        for c in s.chars() {
+            match c {
+                '&' => ret.push_str("&amp;"),
+                '<' => ret.push_str("&lt;"),
+                '>' => ret.push_str("&gt;"),
+                '\'' => ret.push_str("&apos;"),
+                '"' => ret.push_str("&quot;"),
+                _ => {
+                    let i = c as u32;
+                    if (0x1 <= i && i <= 0x8)
+                        || (0xb <= i && i <= 0xc)
+                        || (0xe <= i && i <= 0x1f)
+                        || (0x7f <= i && i <= 0x84)
+                        || (0x86 <= i && i <= 0x9f)
+                    {
+                        ret.push_str(&format!("&#{:x}%{:x};", i, i));
+                    } else {
+                        ret.push(c);
+                    }
+                }
+            }
+        }
+        ret
     }
 }
 
-/// Passes notifications to the OS using the XDG specifications.
+/// Passes notifications to a user defined shell command
 #[derive(Debug)]
-pub struct NotificationFilter {}
+pub struct NotificationCommand {}
 
-impl fmt::Display for NotificationFilter {
+impl NotificationCommand {
+    pub fn new() -> Self {
+        NotificationCommand {}
+    }
+}
+
+impl fmt::Display for NotificationCommand {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "")
     }
 }
 
-impl Component for NotificationFilter {
+impl Component for NotificationCommand {
     fn draw(&mut self, _grid: &mut CellBuffer, _area: Area, _context: &mut Context) {}
+
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+        if !context.settings.notifications.enable {
+            return false;
+        }
+
         if let UIEvent::Notification(ref title, ref body, ref kind) = event {
-            if let Some(ref bin) = context.runtime_settings.notifications.script {
+            if let Some(ref bin) = context.settings.notifications.script {
                 match Command::new(bin)
+                    .arg(&kind.map(|k| k.to_string()).unwrap_or_default())
                     .arg(title.as_ref().map(String::as_str).unwrap_or("meli"))
                     .arg(body)
                     .stdin(Stdio::piped())
@@ -177,25 +175,22 @@ impl Component for NotificationFilter {
                             format!("Could not run notification script: {}.", err.to_string()),
                             ERROR,
                         );
-                        debug!("{:?}", err);
+                        debug!("Could not run notification script: {:?}", err);
                     }
                 }
             }
 
-            match kind {
-                Some(NotificationType::NewMail) => {
-                    if let Some(ref path) = context.runtime_settings.notifications.xbiff_file_path {
-                        let mut file = std::fs::OpenOptions::new().append(true) /* writes will append to a file instead of overwriting previous contents */
+            if *kind == Some(NotificationType::NEWMAIL) {
+                if let Some(ref path) = context.settings.notifications.xbiff_file_path {
+                    let mut file = std::fs::OpenOptions::new().append(true) /* writes will append to a file instead of overwriting previous contents */
                          .create(true) /* a new file will be created if the file does not yet already exist.*/
                          .open(path).unwrap();
-                        if file.metadata().unwrap().len() > 128 {
-                            file.set_len(0).unwrap();
-                        } else {
-                            std::io::Write::write_all(&mut file, b"z").unwrap();
-                        }
+                    if file.metadata().unwrap().len() > 128 {
+                        file.set_len(0).unwrap();
+                    } else {
+                        std::io::Write::write_all(&mut file, b"z").unwrap();
                     }
                 }
-                _ => {}
             }
         }
         false

@@ -24,7 +24,6 @@ extern crate melib;
 use melib::*;
 
 use std::collections::VecDeque;
-extern crate notify_rust;
 extern crate xdg_utils;
 #[macro_use]
 extern crate serde_derive;

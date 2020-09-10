@@ -19,12 +19,16 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::default_vals::{internal_value_false, none};
+use super::default_vals::{internal_value_false, none, true_val};
 
 /// Settings for the notifications function.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct NotificationsSettings {
+    /// Enable notifications.
+    /// Default: True
+    #[serde(default = "true_val")]
+    pub enable: bool,
     /// A command to pipe notifications through
     /// Default: None
     #[serde(default = "none")]
@@ -43,6 +47,7 @@ pub struct NotificationsSettings {
 impl Default for NotificationsSettings {
     fn default() -> Self {
         Self {
+            enable: true,
             script: None,
             xbiff_file_path: None,
             play_sound: super::ToggleFlag::InternalVal(false),

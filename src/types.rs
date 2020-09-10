@@ -89,11 +89,25 @@ pub enum ForkType {
     NewDraft(File, std::process::Child),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum NotificationType {
     INFO,
     ERROR,
-    NewMail,
+    NEWMAIL,
+}
+
+impl core::fmt::Display for NotificationType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match *self {
+                NotificationType::INFO => "info",
+                NotificationType::ERROR => "error",
+                NotificationType::NEWMAIL => "new-mail",
+            }
+        )
+    }
 }
 
 #[derive(Debug)]

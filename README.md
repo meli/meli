@@ -66,6 +66,7 @@ is on the roadmap.
 
 Some functionality is held behind "feature gates", or compile-time flags. The following list explains each feature's purpose:
 
+- `dbus-notifications` enables showing notifications using `dbus`.
 - `notmuch` provides support for using a notmuch database as a mail backend
 - `jmap` provides support for connecting to a jmap server and use it as a mail backend
 - `sqlite3` provides support for builting fast search indexes in local sqlite3 databases

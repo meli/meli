@@ -30,7 +30,6 @@
 use std::alloc::System;
 use std::collections::VecDeque;
 use std::path::PathBuf;
-extern crate notify_rust;
 extern crate xdg_utils;
 #[macro_use]
 extern crate serde_derive;
@@ -336,9 +335,14 @@ fn run_app(opt: Opt) -> Result<()> {
         let status_bar = Box::new(StatusBar::new(window));
         state.register_component(status_bar);
 
-        let xdg_notifications = Box::new(components::notifications::XDGNotifications::new());
-        state.register_component(xdg_notifications);
-        state.register_component(Box::new(components::notifications::NotificationFilter {}));
+        #[cfg(feature = "dbus-notifications")]
+        {
+            let dbus_notifications = Box::new(components::notifications::DbusNotifications::new());
+            state.register_component(dbus_notifications);
+        }
+        state.register_component(Box::new(
+            components::notifications::NotificationCommand::new(),
+        ));
     }
     let enter_command_mode: Key = state
         .context

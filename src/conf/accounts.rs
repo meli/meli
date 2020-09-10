@@ -851,7 +851,7 @@ impl Account {
                             self.name,
                             self.mailbox_entries[&mailbox_hash].name()
                         ),
-                        Some(crate::types::NotificationType::NewMail),
+                        Some(crate::types::NotificationType::NEWMAIL),
                     ));
                 }
                 RefreshEventKind::Remove(env_hash) => {

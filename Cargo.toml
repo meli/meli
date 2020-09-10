@@ -41,7 +41,7 @@ indexmap = { version = "^1.5", features = ["serde-1", ] }
 linkify = "0.4.0"
 xdg-utils = "0.3.0"
 notify = "4.0.1" # >:c
-notify-rust = "^3" # >:c
+notify-rust = { version = "^4", optional = true }
 termion = "1.5.1"
 bincode = "1.2.0"
 uuid = { version = "0.8.1", features = ["serde", "v4"] }
@@ -73,12 +73,13 @@ debug = false
 members = ["melib", "tools", ]
 
 [features]
-default = ["sqlite3", "notmuch", "regexp", "smtp"]
+default = ["sqlite3", "notmuch", "regexp", "smtp", "dbus-notifications"]
 notmuch = ["melib/notmuch_backend", ]
 jmap = ["melib/jmap_backend",]
 sqlite3 = ["melib/sqlite3"]
 smtp = ["melib/smtp"]
 regexp = ["pcre2"]
+dbus-notifications = ["notify-rust",]
 cli-docs = []
 svgscreenshot = ["svg_crate"]
 
