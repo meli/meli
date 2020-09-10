@@ -41,8 +41,8 @@ macro_rules! to_str {
 }
 #[derive(Eq, PartialEq)]
 pub struct ParsingError<I> {
-    input: I,
-    error: Cow<'static, str>,
+    pub input: I,
+    pub error: Cow<'static, str>,
 }
 
 impl core::fmt::Debug for ParsingError<&'_ [u8]> {
@@ -269,13 +269,6 @@ pub fn mail(input: &[u8]) -> Result<(Vec<(&[u8], &[u8])>, &[u8])> {
 
 pub mod generic {
     use super::*;
-    pub fn angle_bracket_delimeted_list(input: &[u8]) -> IResult<&[u8], Vec<&[u8]>> {
-        separated_nonempty_list(is_a(","), delimited(tag("<"), take_until(">"), tag(">")))(
-            input.rtrim(),
-        )
-        //    separated_nonempty_list!(complete!(is_a!(",")), ws!(complete!(complete!(delimited!(tag!("<"), take_until1!(">"), tag!(">")))))));
-    }
-
     pub fn date(input: &[u8]) -> Result<crate::datetime::UnixTimestamp> {
         let (_, mut parsed_result) = encodings::phrase(&eat_comments(input), false)?;
         if let Some(pos) = parsed_result.find(b"-0000") {
@@ -835,6 +828,69 @@ pub mod generic {
             Ok((&input[1..], input[0]))
         } else {
             Err(nom::Err::Error((input, "dtext(): out of range").into()))
+        }
+    }
+}
+
+pub mod mailing_lists {
+    //! Mailing lists headers.
+    //!
+    //! Implemented RFCs:
+    //!
+    //! - [RFC2369 "The Use of URLs as Meta-Syntax for Core Mail List Commands and their Transport through Message Header Fields"](https://tools.ietf.org/html/rfc2369)
+    use super::*;
+    use generic::cfws;
+
+    ///Parse the value of headers defined in RFC2369 "The Use of URLs as Meta-Syntax for Core
+    ///Mail List Commands and their Transport through Message Header Fields"
+    pub fn rfc_2369_list_headers_action_list(input: &[u8]) -> IResult<&[u8], Vec<&[u8]>> {
+        let (input, _) = opt(cfws)(input)?;
+        let (input, ret) = alt((
+            separated_nonempty_list(
+                delimited(
+                    map(opt(cfws), |_| ()),
+                    map(is_a(", "), |_| ()),
+                    map(opt(cfws), |_| ()),
+                ),
+                delimited(tag("<"), take_until(">"), tag(">")),
+            ),
+            map(delimited(tag("<"), take_until(">"), tag(">")), |el| {
+                vec![el]
+            }),
+            map(
+                delimited(
+                    map(opt(cfws), |_| ()),
+                    map(tag("NO"), |_| ()),
+                    map(opt(cfws), |_| ()),
+                ),
+                |_| vec![],
+            ),
+        ))(input)?;
+        let (input, _) = opt(cfws)(input)?;
+        Ok((input, ret))
+    }
+
+    #[test]
+    fn test_parser_rfc_2369_list() {
+        let s = r#"List-Help: <mailto:list@host.com?subject=help> (List Instructions)
+List-Help: <mailto:list-manager@host.com?body=info>
+List-Help: <mailto:list-info@host.com> (Info about the list)
+List-Help: <http://www.host.com/list/>, <mailto:list-info@host.com>
+List-Help: <ftp://ftp.host.com/list.txt> (FTP),
+    <mailto:list@host.com?subject=help>
+List-Post: <mailto:list@host.com>
+List-Post: <mailto:moderator@host.com> (Postings are Moderated)
+List-Post: <mailto:moderator@host.com?subject=list%20posting>
+List-Post: NO (posting not allowed on this list)
+List-Archive: <mailto:archive@host.com?subject=index%20list>
+List-Archive: <ftp://ftp.host.com/pub/list/archive/>
+List-Archive: <http://www.host.com/list/archive/> (Web Archive)
+"#;
+        let (rest, headers) = headers::headers(s.as_bytes()).unwrap();
+        assert!(rest.is_empty());
+        for (h, v) in headers {
+            let (rest, action_list) = rfc_2369_list_headers_action_list(v).unwrap();
+            assert!(rest.is_empty());
         }
     }
 }

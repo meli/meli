@@ -48,7 +48,7 @@ impl<'a> From<&'a [u8]> for ListAction<'a> {
 
 impl<'a> ListAction<'a> {
     pub fn parse_options_list(input: &'a [u8]) -> Option<SmallVec<[ListAction<'a>; 4]>> {
-        parser::generic::angle_bracket_delimeted_list(input)
+        parser::mailing_lists::rfc_2369_list_headers_action_list(input)
             .map(|(_, mut vec)| {
                 /* Prefer email options first, since this _is_ a mail client after all and it's
                  * more automated */
