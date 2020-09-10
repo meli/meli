@@ -638,6 +638,7 @@ pub struct StatusBar {
     id: ComponentId,
     progress_spinner: ProgressSpinner,
     in_progress_jobs: HashSet<JobId>,
+    done_jobs: HashSet<JobId>,
 
     auto_complete: AutoComplete,
     cmd_history: Vec<String>,
@@ -664,6 +665,7 @@ impl StatusBar {
             auto_complete: AutoComplete::new(Vec::new()),
             progress_spinner: ProgressSpinner::new(3),
             in_progress_jobs: HashSet::default(),
+            done_jobs: HashSet::default(),
             cmd_history: crate::command::history::old_cmd_history(),
         }
     }
@@ -1176,17 +1178,20 @@ impl Component for StatusBar {
             }
             UIEvent::StatusEvent(StatusEvent::JobCanceled(ref job_id))
             | UIEvent::StatusEvent(StatusEvent::JobFinished(ref job_id)) => {
+                self.done_jobs.insert(*job_id);
                 self.in_progress_jobs.remove(job_id);
                 if self.in_progress_jobs.is_empty() {
                     self.progress_spinner.stop();
                     self.set_dirty(true);
                 }
             }
-            UIEvent::StatusEvent(StatusEvent::NewJob(ref job_id)) => {
+            UIEvent::StatusEvent(StatusEvent::NewJob(ref job_id))
+                if !self.done_jobs.contains(job_id) =>
+            {
                 if self.in_progress_jobs.is_empty() {
                     self.progress_spinner.start();
                 }
-                self.in_progress_jobs.insert(job_id.clone());
+                self.in_progress_jobs.insert(*job_id);
             }
             UIEvent::Timer(_) => {
                 if self.progress_spinner.process_event(event, context) {
@@ -1197,11 +1202,14 @@ impl Component for StatusBar {
         }
         false
     }
+
     fn is_dirty(&self) -> bool {
         self.dirty || self.container.is_dirty() || self.progress_spinner.is_dirty()
     }
+
     fn set_dirty(&mut self, value: bool) {
         self.dirty = value;
+        self.progress_spinner.set_dirty(value);
     }
 
     fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
