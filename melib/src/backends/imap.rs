@@ -545,6 +545,19 @@ impl MailBackend for ImapType {
                 .iter()
                 .any(|cap| cap.eq_ignore_ascii_case(b"MOVE"));
         Ok(Box::pin(async move {
+            let uids: SmallVec<[UID; 64]> = {
+                let hash_index_lck = uid_store.hash_index.lock().unwrap();
+                env_hashes
+                    .iter()
+                    .filter_map(|env_hash| {
+                        hash_index_lck.get(&env_hash).cloned().map(|(uid, _)| uid)
+                    })
+                    .collect()
+            };
+
+            if uids.is_empty() {
+                return Ok(());
+            }
             let dest_path = {
                 let mailboxes = uid_store.mailboxes.lock().await;
                 let mailbox = mailboxes
@@ -574,10 +587,9 @@ impl MailBackend for ImapType {
                 .await?;
             if has_move {
                 let command = {
-                    let hash_index_lck = uid_store.hash_index.lock().unwrap();
-                    let mut cmd = format!("UID MOVE {}", hash_index_lck[&env_hashes.first].0);
-                    for env_hash in &env_hashes.rest {
-                        cmd = format!("{},{}", cmd, hash_index_lck[env_hash].0);
+                    let mut cmd = format!("UID MOVE {}", uids[0]);
+                    for uid in uids.iter().skip(1) {
+                        cmd = format!("{},{}", cmd, uid);
                     }
                     format!("{} \"{}\"", cmd, dest_path)
                 };
@@ -586,10 +598,9 @@ impl MailBackend for ImapType {
                     .await?;
             } else {
                 let command = {
-                    let hash_index_lck = uid_store.hash_index.lock().unwrap();
-                    let mut cmd = format!("UID COPY {}", hash_index_lck[&env_hashes.first].0);
-                    for env_hash in &env_hashes.rest {
-                        cmd = format!("{},{}", cmd, hash_index_lck[env_hash].0);
+                    let mut cmd = format!("UID COPY {}", uids[0]);
+                    for uid in uids.iter().skip(1) {
+                        cmd = format!("{},{}", cmd, uid);
                     }
                     format!("{} \"{}\"", cmd, dest_path)
                 };
@@ -601,10 +612,9 @@ impl MailBackend for ImapType {
                 }
                 if move_ {
                     let command = {
-                        let hash_index_lck = uid_store.hash_index.lock().unwrap();
-                        let mut cmd = format!("UID STORE {}", hash_index_lck[&env_hashes.first].0);
-                        for env_hash in env_hashes.rest {
-                            cmd = format!("{},{}", cmd, hash_index_lck[&env_hash].0);
+                        let mut cmd = format!("UID STORE {}", uids[0]);
+                        for uid in uids.iter().skip(1) {
+                            cmd = format!("{},{}", cmd, uid);
                         }
                         format!("{} +FLAGS (\\Deleted)", cmd)
                     };
@@ -626,6 +636,20 @@ impl MailBackend for ImapType {
         let connection = self.connection.clone();
         let uid_store = self.uid_store.clone();
         Ok(Box::pin(async move {
+            let uids: SmallVec<[UID; 64]> = {
+                let hash_index_lck = uid_store.hash_index.lock().unwrap();
+                env_hashes
+                    .iter()
+                    .filter_map(|env_hash| {
+                        hash_index_lck.get(&env_hash).cloned().map(|(uid, _)| uid)
+                    })
+                    .collect()
+            };
+
+            if uids.is_empty() {
+                return Ok(());
+            }
+
             let mut response = String::with_capacity(8 * 1024);
             let mut conn = connection.lock().await;
             conn.select_mailbox(mailbox_hash, &mut response, false)
@@ -633,10 +657,9 @@ impl MailBackend for ImapType {
             if flags.iter().any(|(_, b)| *b) {
                 /* Set flags/tags to true */
                 let command = {
-                    let hash_index_lck = uid_store.hash_index.lock().unwrap();
-                    let mut cmd = format!("UID STORE {}", hash_index_lck[&env_hashes.first].0);
-                    for env_hash in &env_hashes.rest {
-                        cmd = format!("{},{}", cmd, hash_index_lck[env_hash].0);
+                    let mut cmd = format!("UID STORE {}", uids[0]);
+                    for uid in uids.iter().skip(1) {
+                        cmd = format!("{},{}", cmd, uid);
                     }
                     cmd = format!("{} +FLAGS (", cmd);
                     for (f, v) in flags.iter() {
@@ -688,10 +711,9 @@ impl MailBackend for ImapType {
             if flags.iter().any(|(_, b)| !*b) {
                 /* Set flags/tags to false */
                 let command = {
-                    let hash_index_lck = uid_store.hash_index.lock().unwrap();
-                    let mut cmd = format!("UID STORE {}", hash_index_lck[&env_hashes.first].0);
-                    for env_hash in &env_hashes.rest {
-                        cmd = format!("{},{}", cmd, hash_index_lck[env_hash].0);
+                    let mut cmd = format!("UID STORE {}", uids[0]);
+                    for uid in uids.iter().skip(1) {
+                        cmd = format!("{},{}", cmd, uid);
                     }
                     cmd = format!("{} -FLAGS (", cmd);
                     for (f, v) in flags.iter() {
