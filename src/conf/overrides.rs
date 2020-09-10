@@ -151,7 +151,7 @@ pub struct NotificationsSettingsOverride {
     pub xbiff_file_path: Option<Option<String>>,
     #[serde(alias = "play-sound")]
     #[serde(default)]
-    pub play_sound: Option<super::ToggleFlag>,
+    pub play_sound: Option<ToggleFlag>,
     #[serde(alias = "sound-file")]
     #[serde(default)]
     pub sound_file: Option<Option<String>>,

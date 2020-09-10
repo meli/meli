@@ -894,7 +894,7 @@ mod dotaddressable {
                         "accounts" => self.accounts.lookup(field, tail),
                         "pager" => self.pager.lookup(field, tail),
                         "listing" => self.listing.lookup(field, tail),
-                        "notifications" => Err(MeliError::new("unimplemented")),
+                        "notifications" => self.notifications.lookup(field, tail),
                         "shortcuts" => self.shortcuts.lookup(field, tail),
                         "tags" => Err(MeliError::new("unimplemented")),
                         "composing" => Err(MeliError::new("unimplemented")),

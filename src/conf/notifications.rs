@@ -20,6 +20,8 @@
  */
 
 use super::default_vals::{internal_value_false, none, true_val};
+use super::DotAddressable;
+use melib::{MeliError, Result, ToggleFlag};
 
 /// Settings for the notifications function.
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -39,7 +41,7 @@ pub struct NotificationsSettings {
     #[serde(default = "none", alias = "xbiff-file-path")]
     pub xbiff_file_path: Option<String>,
     #[serde(default = "internal_value_false", alias = "play-sound")]
-    pub play_sound: super::ToggleFlag,
+    pub play_sound: ToggleFlag,
     #[serde(default = "none", alias = "sound-file")]
     pub sound_file: Option<String>,
 }
@@ -50,8 +52,29 @@ impl Default for NotificationsSettings {
             enable: true,
             script: None,
             xbiff_file_path: None,
-            play_sound: super::ToggleFlag::InternalVal(false),
+            play_sound: ToggleFlag::InternalVal(false),
             sound_file: None,
+        }
+    }
+}
+impl DotAddressable for NotificationsSettings {
+    fn lookup(&self, parent_field: &str, path: &[&str]) -> Result<String> {
+        match path.first() {
+            Some(field) => {
+                let tail = &path[1..];
+                match *field {
+                    "enable" => self.enable.lookup(field, tail),
+                    "script" => self.script.lookup(field, tail),
+                    "xbiff_file_path" => self.xbiff_file_path.lookup(field, tail),
+                    "play_sound" => self.play_sound.lookup(field, tail),
+                    "sound_file" => self.sound_file.lookup(field, tail),
+                    other => Err(MeliError::new(format!(
+                        "{} has no field named {}",
+                        parent_field, other
+                    ))),
+                }
+            }
+            None => Ok(toml::to_string(self).map_err(|err| err.to_string())?),
         }
     }
 }
