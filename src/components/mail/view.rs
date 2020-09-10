@@ -126,8 +126,13 @@ pub enum MailViewState {
         chan: oneshot::Receiver<Result<Vec<u8>>>,
         pending_action: Option<PendingReplyAction>,
     },
+    Error {
+        err: MeliError,
+    },
     Loaded {
-        body: Result<Vec<u8>>,
+        bytes: Vec<u8>,
+        body: Attachment,
+        body_text: String,
     },
 }
 
@@ -216,7 +221,20 @@ impl MailView {
                             None
                         };
                         if let Ok(Some(bytes_result)) = try_recv_timeout!(&mut chan) {
-                            self.state = MailViewState::Loaded { body: bytes_result };
+                            match bytes_result {
+                                Ok(bytes) => {
+                                    let body = AttachmentBuilder::new(&bytes).build();
+                                    let body_text = self.attachment_to_text(&body, context);
+                                    self.state = MailViewState::Loaded {
+                                        body,
+                                        bytes,
+                                        body_text,
+                                    };
+                                }
+                                Err(err) => {
+                                    self.state = MailViewState::Error { err };
+                                }
+                            }
                         } else {
                             self.state = MailViewState::LoadingBody {
                                 job_id,
@@ -234,6 +252,7 @@ impl MailView {
                     }
                 }
             }
+            let account = &mut context.accounts[&self.coordinates.0];
             if !account.collection.get_env(self.coordinates.2).is_seen() {
                 let job = account.backend.write().unwrap().set_flags(
                     self.coordinates.2.into(),
@@ -279,8 +298,8 @@ impl MailView {
                 }
                 return;
             }
-            MailViewState::Loaded { body: Ok(ref b) } => b,
-            MailViewState::Loaded { body: Err(_) } => {
+            MailViewState::Loaded { ref bytes, .. } => bytes,
+            MailViewState::Error { .. } => {
                 return;
             }
         };
@@ -444,23 +463,20 @@ impl MailView {
     }
 
     fn open_attachment(&mut self, lidx: usize, context: &mut Context, use_mailcap: bool) {
-        let attachments = if let MailViewState::Loaded { ref body } = self.state {
-            match body {
-                Ok(body) => AttachmentBuilder::new(body).build().attachments(),
-                Err(err) => {
-                    context.replies.push_back(UIEvent::Notification(
-                        Some("Failed to open e-mail".to_string()),
-                        err.to_string(),
-                        Some(NotificationType::ERROR),
-                    ));
-                    log(
-                        format!("Failed to open envelope: {}", err.to_string()),
-                        ERROR,
-                    );
-                    self.init_futures(context);
-                    return;
-                }
-            }
+        let attachments = if let MailViewState::Loaded { ref body, .. } = self.state {
+            body.attachments()
+        } else if let MailViewState::Error { ref err } = self.state {
+            context.replies.push_back(UIEvent::Notification(
+                Some("Failed to open e-mail".to_string()),
+                err.to_string(),
+                Some(NotificationType::ERROR),
+            ));
+            log(
+                format!("Failed to open envelope: {}", err.to_string()),
+                ERROR,
+            );
+            self.init_futures(context);
+            return;
         } else {
             return;
         };
@@ -847,28 +863,28 @@ impl Component for MailView {
         };
 
         if !self.initialised {
-            let bytes = if let MailViewState::Loaded { ref body } = self.state {
-                match body {
-                    Ok(body) => body,
-                    Err(e) => {
-                        clear_area(
-                            grid,
-                            (set_y(upper_left, y), bottom_right),
-                            self.theme_default,
-                        );
-                        context
-                            .dirty_areas
-                            .push_back((set_y(upper_left, y), bottom_right));
-                        context.replies.push_back(UIEvent::Notification(
-                            Some("Failed to open e-mail".to_string()),
-                            e.to_string(),
-                            Some(NotificationType::ERROR),
-                        ));
-                        log(format!("Failed to open envelope: {}", e.to_string()), ERROR);
-                        self.init_futures(context);
-                        return;
-                    }
-                }
+            let bytes = if let MailViewState::Loaded { ref bytes, .. } = self.state {
+                bytes
+            } else if let MailViewState::Error { ref err } = self.state {
+                clear_area(
+                    grid,
+                    (set_y(upper_left, y), bottom_right),
+                    self.theme_default,
+                );
+                context
+                    .dirty_areas
+                    .push_back((set_y(upper_left, y), bottom_right));
+                context.replies.push_back(UIEvent::Notification(
+                    Some("Failed to open e-mail".to_string()),
+                    err.to_string(),
+                    Some(NotificationType::ERROR),
+                ));
+                log(
+                    format!("Failed to open envelope: {}", err.to_string()),
+                    ERROR,
+                );
+                self.init_futures(context);
+                return;
             } else {
                 clear_area(
                     grid,
@@ -1097,7 +1113,20 @@ impl Component for MailView {
                         } if job_id == id => {
                             let bytes_result = chan.try_recv().unwrap().unwrap();
                             debug!("bytes_result");
-                            self.state = MailViewState::Loaded { body: bytes_result };
+                            match bytes_result {
+                                Ok(bytes) => {
+                                    let body = AttachmentBuilder::new(&bytes).build();
+                                    let body_text = self.attachment_to_text(&body, context);
+                                    self.state = MailViewState::Loaded {
+                                        body,
+                                        bytes,
+                                        body_text,
+                                    };
+                                }
+                                Err(err) => {
+                                    self.state = MailViewState::Error { err };
+                                }
+                            }
                         }
                         MailViewState::Init { .. } => {
                             self.init_futures(context);
@@ -1299,7 +1328,7 @@ impl Component for MailView {
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
                 match self.state {
-                    MailViewState::LoadingBody { .. } => {}
+                    MailViewState::Error { .. } | MailViewState::LoadingBody { .. } => {}
                     MailViewState::Loaded { .. } => {
                         self.open_attachment(lidx, context, true);
                     }
@@ -1320,7 +1349,7 @@ impl Component for MailView {
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
                 match self.state {
-                    MailViewState::LoadingBody { .. } => {}
+                    MailViewState::Error { .. } | MailViewState::LoadingBody { .. } => {}
                     MailViewState::Loaded { .. } => {
                         self.open_attachment(lidx, context, false);
                     }
@@ -1351,24 +1380,15 @@ impl Component for MailView {
                     MailViewState::Init { .. } => {
                         self.init_futures(context);
                     }
-                    MailViewState::LoadingBody { .. } => {}
-                    MailViewState::Loaded { ref body } => {
+                    MailViewState::Error { .. } | MailViewState::LoadingBody { .. } => {}
+                    MailViewState::Loaded {
+                        body: _,
+                        bytes: _,
+                        ref body_text,
+                    } => {
                         let url = {
                             let finder = LinkFinder::new();
-                            let t = match body {
-                                Ok(body) => AttachmentBuilder::new(&body).build().text(),
-                                Err(e) => {
-                                    context.replies.push_back(UIEvent::Notification(
-                                        Some("Failed to open e-mail".to_string()),
-                                        e.to_string(),
-                                        Some(NotificationType::ERROR),
-                                    ));
-                                    log(e.to_string(), ERROR);
-                                    self.init_futures(context);
-                                    return true;
-                                }
-                            };
-                            let links: Vec<Link> = finder.links(&t).collect();
+                            let links: Vec<Link> = finder.links(body_text).collect();
                             if let Some(u) = links.get(lidx) {
                                 u.as_str().to_string()
                             } else {
@@ -1426,23 +1446,20 @@ impl Component for MailView {
                      * arrive */
                     return true;
                 }
-                let bytes = if let MailViewState::Loaded { ref body } = self.state {
-                    match body {
-                        Ok(body) => body,
-                        Err(err) => {
-                            context.replies.push_back(UIEvent::Notification(
-                                Some("Failed to open e-mail".to_string()),
-                                err.to_string(),
-                                Some(NotificationType::ERROR),
-                            ));
-                            log(
-                                format!("Failed to open envelope: {}", err.to_string()),
-                                ERROR,
-                            );
-                            self.init_futures(context);
-                            return true;
-                        }
-                    }
+                let bytes = if let MailViewState::Loaded { ref bytes, .. } = self.state {
+                    bytes
+                } else if let MailViewState::Error { ref err } = self.state {
+                    context.replies.push_back(UIEvent::Notification(
+                        Some("Failed to open e-mail".to_string()),
+                        err.to_string(),
+                        Some(NotificationType::ERROR),
+                    ));
+                    log(
+                        format!("Failed to open envelope: {}", err.to_string()),
+                        ERROR,
+                    );
+                    self.init_futures(context);
+                    return true;
                 } else {
                     return true;
                 };
