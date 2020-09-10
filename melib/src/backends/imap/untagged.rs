@@ -138,8 +138,6 @@ impl ImapConnection {
                 ));
             }
             UntaggedResponse::Exists(n) => {
-                /* UID FETCH ALL UID, cross-ref, then FETCH difference headers
-                 * */
                 debug!("exists {}", n);
                 try_fail!(
                     mailbox_hash,
@@ -152,6 +150,9 @@ impl ImapConnection {
                             uid, flags, body, ..
                         } in v
                         {
+                            if uid.is_none() || flags.is_none() || body.is_none() {
+                                continue;
+                            }
                             let uid = uid.unwrap();
                             if self
                                 .uid_store
@@ -260,6 +261,9 @@ impl ImapConnection {
                                     uid, flags, body, ..
                                 } in v
                                 {
+                                    if uid.is_none() || flags.is_none() || body.is_none() {
+                                        continue;
+                                    }
                                     let uid = uid.unwrap();
                                     if !self
                                         .uid_store
