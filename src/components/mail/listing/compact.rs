@@ -1549,6 +1549,7 @@ impl Component for CompactListing {
                     } else {
                         let thread_hash = self.get_thread_under_cursor(self.cursor_pos.2);
                         self.selection.entry(thread_hash).and_modify(|e| *e = !*e);
+                        self.row_updates.push(thread_hash);
                     }
                     return true;
                 }

@@ -362,13 +362,18 @@ impl MailListingTrait for ConversationsListing {
 
         let padding_fg = self.color_cache.padding.fg;
 
-        for ((idx, (thread, root_env_hash)), strings) in rows {
+        for ((idx, (thread_hash, root_env_hash)), strings) in rows {
             if !context.accounts[&self.cursor_pos.0].contains_key(root_env_hash) {
                 panic!();
             }
-            let thread = threads.thread_ref(thread);
+            let thread = threads.thread_ref(thread_hash);
 
-            let row_attr = row_attr!(self.color_cache, thread.unseen() > 0, false, false,);
+            let row_attr = row_attr!(
+                self.color_cache,
+                thread.unseen() > 0,
+                false,
+                self.selection[&thread_hash]
+            );
             /* draw flags */
             let (x, _) = write_string_to_grid(
                 &strings.flag,
@@ -382,8 +387,13 @@ impl MailListingTrait for ConversationsListing {
             for x in x..(x + 3) {
                 self.content[(x, 3 * idx)].set_bg(row_attr.bg);
             }
-            let subject_attr =
-                row_attr!(subject, self.color_cache, thread.unseen() > 0, false, false);
+            let subject_attr = row_attr!(
+                subject,
+                self.color_cache,
+                thread.unseen() > 0,
+                false,
+                self.selection[&thread_hash]
+            );
             /* draw subject */
             let (mut x, _) = write_string_to_grid(
                 &strings.subject,
@@ -423,7 +433,13 @@ impl MailListingTrait for ConversationsListing {
                     .set_fg(row_attr.fg)
                     .set_bg(row_attr.bg);
             }
-            let date_attr = row_attr!(date, self.color_cache, thread.unseen() > 0, false, false);
+            let date_attr = row_attr!(
+                date,
+                self.color_cache,
+                thread.unseen() > 0,
+                false,
+                self.selection[&thread_hash]
+            );
             /* Next line, draw date */
             let (x, _) = write_string_to_grid(
                 &strings.date,
@@ -440,7 +456,13 @@ impl MailListingTrait for ConversationsListing {
                     .set_fg(row_attr.fg)
                     .set_bg(row_attr.bg);
             }
-            let from_attr = row_attr!(from, self.color_cache, thread.unseen() > 0, false, false);
+            let from_attr = row_attr!(
+                from,
+                self.color_cache,
+                thread.unseen() > 0,
+                false,
+                self.selection[&thread_hash]
+            );
             /* draw from */
             let (x, _) = write_string_to_grid(
                 &strings.from,
@@ -494,7 +516,6 @@ impl ListingTrait for ConversationsListing {
     }
 
     fn set_coordinates(&mut self, coordinates: (AccountHash, MailboxHash)) {
-        self.new_cursor_pos = (coordinates.0, coordinates.1, 0);
         self.new_cursor_pos = (coordinates.0, coordinates.1, 0);
         self.unfocused = false;
         self.view = ThreadView::default();
@@ -553,7 +574,8 @@ impl ListingTrait for ConversationsListing {
                     .set_bg(row_attr.bg)
                     .set_attrs(row_attr.attrs);
             }
-        } else if width < width!(area) {
+        }
+        if width < width!(area) {
             /* fill any remaining columns, if our view is wider than self.content */
             for x in (x + width)..=get_x(bottom_right) {
                 grid[(x, y)]
@@ -1022,7 +1044,12 @@ impl ConversationsListing {
 
         let env_hash = threads.thread_nodes()[&thread_node_hash].message().unwrap();
 
-        let row_attr = row_attr!(self.color_cache, thread.unseen() > 0, false, false);
+        let row_attr = row_attr!(
+            self.color_cache,
+            thread.unseen() > 0,
+            false,
+            self.selection[&thread_hash]
+        );
 
         let padding_fg = if thread.unseen() > 0 {
             self.color_cache.unseen_padding.fg
@@ -1069,7 +1096,13 @@ impl ConversationsListing {
         for c in self.content.row_iter(x..(x + 4), 3 * idx) {
             self.content[c].set_bg(row_attr.bg);
         }
-        let subject_attr = row_attr!(subject, self.color_cache, thread.unseen() > 0, false, false);
+        let subject_attr = row_attr!(
+            subject,
+            self.color_cache,
+            thread.unseen() > 0,
+            false,
+            self.selection[&thread_hash]
+        );
         /* draw subject */
         let (mut x, _) = write_string_to_grid(
             &strings.subject,
@@ -1109,7 +1142,13 @@ impl ConversationsListing {
                 .set_fg(row_attr.fg)
                 .set_bg(row_attr.bg);
         }
-        let date_attr = row_attr!(date, self.color_cache, thread.unseen() > 0, false, false);
+        let date_attr = row_attr!(
+            date,
+            self.color_cache,
+            thread.unseen() > 0,
+            false,
+            self.selection[&thread_hash]
+        );
         /* Next line, draw date */
         let (x, _) = write_string_to_grid(
             &strings.date,
@@ -1126,7 +1165,13 @@ impl ConversationsListing {
                 .set_fg(row_attr.fg)
                 .set_bg(row_attr.bg);
         }
-        let from_attr = row_attr!(from, self.color_cache, thread.unseen() > 0, false, false);
+        let from_attr = row_attr!(
+            from,
+            self.color_cache,
+            thread.unseen() > 0,
+            false,
+            self.selection[&thread_hash]
+        );
         /* draw from */
         let (x, _) = write_string_to_grid(
             &strings.from,
@@ -1360,8 +1405,9 @@ impl Component for ConversationsListing {
                     if self.modifier_active {
                         self.modifier_command = Some('s');
                     } else {
-                        let thread = self.get_thread_under_cursor(self.cursor_pos.2);
-                        self.selection.entry(thread).and_modify(|e| *e = !*e);
+                        let thread_hash = self.get_thread_under_cursor(self.cursor_pos.2);
+                        self.selection.entry(thread_hash).and_modify(|e| *e = !*e);
+                        self.row_updates.push(thread_hash);
                     }
                     return true;
                 }
@@ -1531,7 +1577,6 @@ impl Component for ConversationsListing {
             {
                 self.set_coordinates((self.new_cursor_pos.0, self.new_cursor_pos.1));
                 self.refresh_mailbox(context, false);
-                self.force_draw = false;
                 self.set_dirty(true);
                 return true;
             }
