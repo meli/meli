@@ -605,7 +605,9 @@ impl Account {
     }
 
     pub fn reload(&mut self, event: RefreshEvent, mailbox_hash: MailboxHash) -> Option<UIEvent> {
-        if !self.mailbox_entries[&mailbox_hash].status.is_available() {
+        if !self.mailbox_entries[&mailbox_hash].status.is_available()
+            && !self.mailbox_entries[&mailbox_hash].status.is_parsing()
+        {
             self.event_queue.push_back((mailbox_hash, event));
             return None;
         }

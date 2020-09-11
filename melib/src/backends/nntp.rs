@@ -287,7 +287,6 @@ impl MailBackend for NntpType {
         _source_mailbox_hash: MailboxHash,
         _destination_mailbox_hash: MailboxHash,
         _move_: bool,
-        _destination_flags: Option<Flag>,
     ) -> ResultFuture<()> {
         Err(MeliError::new("Unimplemented."))
     }

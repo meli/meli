@@ -533,7 +533,6 @@ impl MailBackend for ImapType {
         source_mailbox_hash: MailboxHash,
         destination_mailbox_hash: MailboxHash,
         move_: bool,
-        destination_flags: Option<Flag>,
     ) -> ResultFuture<()> {
         let uid_store = self.uid_store.clone();
         let connection = self.connection.clone();
@@ -607,9 +606,6 @@ impl MailBackend for ImapType {
                 conn.send_command(command.as_bytes()).await?;
                 conn.read_response(&mut response, RequiredResponses::empty())
                     .await?;
-                if let Some(_flags) = destination_flags {
-                    //FIXME
-                }
                 if move_ {
                     let command = {
                         let mut cmd = format!("UID STORE {}", uids[0]);

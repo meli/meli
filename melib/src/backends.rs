@@ -318,24 +318,22 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
         mailbox_hash: MailboxHash,
         flags: Option<Flag>,
     ) -> ResultFuture<()>;
+
     fn copy_messages(
         &mut self,
-        _env_hashes: EnvelopeHashBatch,
-        _source_mailbox_hash: MailboxHash,
-        _destination_mailbox_hash: MailboxHash,
-        _move_: bool,
-        _destination_flags: Option<Flag>,
-    ) -> ResultFuture<()> {
-        Err(MeliError::new("Unimplemented."))
-    }
+        env_hashes: EnvelopeHashBatch,
+        source_mailbox_hash: MailboxHash,
+        destination_mailbox_hash: MailboxHash,
+        move_: bool,
+    ) -> ResultFuture<()>;
+
     fn set_flags(
         &mut self,
-        _env_hashes: EnvelopeHashBatch,
-        _mailbox_hash: MailboxHash,
-        _flags: SmallVec<[(std::result::Result<Flag, String>, bool); 8]>,
-    ) -> ResultFuture<()> {
-        Err(MeliError::new("Unimplemented."))
-    }
+        env_hashes: EnvelopeHashBatch,
+        mailbox_hash: MailboxHash,
+        flags: SmallVec<[(std::result::Result<Flag, String>, bool); 8]>,
+    ) -> ResultFuture<()>;
+
     fn delete_messages(
         &self,
         _env_hashes: EnvelopeHashBatch,

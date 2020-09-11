@@ -1437,6 +1437,12 @@ impl Component for ConversationsListing {
                         );
                     }
                 }
+                UIEvent::EnvelopeRemove(ref _env_hash, ref thread_hash) => {
+                    if self.order.contains_key(thread_hash) {
+                        self.refresh_mailbox(context, false);
+                        self.set_dirty(true);
+                    }
+                }
                 UIEvent::EnvelopeUpdate(ref env_hash) => {
                     let account = &context.accounts[&self.cursor_pos.0];
                     let threads = account.collection.get_threads(self.cursor_pos.1);

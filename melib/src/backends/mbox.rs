@@ -993,6 +993,25 @@ impl MailBackend for MboxType {
         )))
     }
 
+    fn copy_messages(
+        &mut self,
+        _env_hashes: EnvelopeHashBatch,
+        _source_mailbox_hash: MailboxHash,
+        _destination_mailbox_hash: MailboxHash,
+        _move_: bool,
+    ) -> ResultFuture<()> {
+        Err(MeliError::new("Unimplemented."))
+    }
+
+    fn set_flags(
+        &mut self,
+        _env_hashes: EnvelopeHashBatch,
+        _mailbox_hash: MailboxHash,
+        _flags: SmallVec<[(std::result::Result<Flag, String>, bool); 8]>,
+    ) -> ResultFuture<()> {
+        Err(MeliError::new("Unimplemented."))
+    }
+
     fn save(
         &self,
         _bytes: Vec<u8>,

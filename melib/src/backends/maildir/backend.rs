@@ -23,7 +23,7 @@ use super::{MaildirMailbox, MaildirOp, MaildirPathTrait};
 use crate::backends::{RefreshEventKind::*, *};
 use crate::conf::AccountSettings;
 use crate::email::{Envelope, EnvelopeHash, Flag};
-use crate::error::{MeliError, Result};
+use crate::error::{ErrorKind, MeliError, Result};
 use crate::shellexpand::ShellExpandTrait;
 use futures::prelude::Stream;
 
@@ -565,6 +565,14 @@ impl MailBackend for MaildirType {
                         DebouncedEvent::Rename(src, dest) => {
                             debug!("DebouncedEvent::Rename(src = {:?}, dest = {:?})", src, dest);
                             let mailbox_hash = get_path_hash!(src);
+                            let dest_mailbox = {
+                                let dest_mailbox = get_path_hash!(dest);
+                                if dest_mailbox == mailbox_hash {
+                                    None
+                                } else {
+                                    Some(dest_mailbox)
+                                }
+                            };
                             let old_hash: EnvelopeHash = get_file_hash(src.as_path());
                             let new_hash: EnvelopeHash = get_file_hash(dest.as_path());
 
@@ -578,39 +586,88 @@ impl MailBackend for MaildirType {
                             if index_lock.contains_key(&old_hash) && !index_lock[&old_hash].removed
                             {
                                 debug!("contains_old_key");
-                                index_lock.entry(old_hash).and_modify(|e| {
-                                    debug!(&e.modified);
-                                    e.modified = Some(PathMod::Hash(new_hash));
-                                });
-                                (sender)(
-                                    account_hash,
-                                    BackendEvent::Refresh(RefreshEvent {
-                                        account_hash,
-                                        mailbox_hash: get_path_hash!(dest),
-                                        kind: Rename(old_hash, new_hash),
-                                    }),
-                                );
-                                if !was_seen && is_seen {
-                                    let mut lck = mailbox_counts[&mailbox_hash].0.lock().unwrap();
-                                    *lck = lck.saturating_sub(1);
-                                } else if was_seen && !is_seen {
-                                    *mailbox_counts[&mailbox_hash].0.lock().unwrap() += 1;
-                                }
-                                if old_flags != new_flags {
+                                if let Some(dest_mailbox) = dest_mailbox {
+                                    index_lock.entry(old_hash).and_modify(|e| {
+                                        e.removed = true;
+                                    });
+
                                     (sender)(
                                         account_hash,
                                         BackendEvent::Refresh(RefreshEvent {
                                             account_hash,
-                                            mailbox_hash: get_path_hash!(dest),
-                                            kind: NewFlags(new_hash, (new_flags, vec![])),
+                                            mailbox_hash,
+                                            kind: Remove(old_hash),
                                         }),
                                     );
+                                    let file_name = dest
+                                        .as_path()
+                                        .strip_prefix(&root_path)
+                                        .unwrap()
+                                        .to_path_buf();
+                                    drop(hash_indexes_lock);
+                                    if let Ok(env) = add_path_to_index(
+                                        &hash_indexes,
+                                        dest_mailbox,
+                                        dest.as_path(),
+                                        &cache_dir,
+                                        file_name,
+                                    ) {
+                                        mailbox_index
+                                            .lock()
+                                            .unwrap()
+                                            .insert(env.hash(), dest_mailbox);
+                                        debug!(
+                                            "Create event {} {} {}",
+                                            env.hash(),
+                                            env.subject(),
+                                            dest.display()
+                                        );
+                                        if !env.is_seen() {
+                                            *mailbox_counts[&dest_mailbox].0.lock().unwrap() += 1;
+                                        }
+                                        *mailbox_counts[&dest_mailbox].1.lock().unwrap() += 1;
+                                        (sender)(
+                                            account_hash,
+                                            BackendEvent::Refresh(RefreshEvent {
+                                                account_hash,
+                                                mailbox_hash: dest_mailbox,
+                                                kind: Create(Box::new(env)),
+                                            }),
+                                        );
+                                    }
+                                } else {
+                                    index_lock.entry(old_hash).and_modify(|e| {
+                                        debug!(&e.modified);
+                                        e.modified = Some(PathMod::Hash(new_hash));
+                                    });
+                                    (sender)(
+                                        account_hash,
+                                        BackendEvent::Refresh(RefreshEvent {
+                                            account_hash,
+                                            mailbox_hash,
+                                            kind: Rename(old_hash, new_hash),
+                                        }),
+                                    );
+                                    if !was_seen && is_seen {
+                                        let mut lck =
+                                            mailbox_counts[&mailbox_hash].0.lock().unwrap();
+                                        *lck = lck.saturating_sub(1);
+                                    } else if was_seen && !is_seen {
+                                        *mailbox_counts[&mailbox_hash].0.lock().unwrap() += 1;
+                                    }
+                                    if old_flags != new_flags {
+                                        (sender)(
+                                            account_hash,
+                                            BackendEvent::Refresh(RefreshEvent {
+                                                account_hash,
+                                                mailbox_hash,
+                                                kind: NewFlags(new_hash, (new_flags, vec![])),
+                                            }),
+                                        );
+                                    }
+                                    mailbox_index.lock().unwrap().insert(new_hash, mailbox_hash);
+                                    index_lock.insert(new_hash, dest.into());
                                 }
-                                mailbox_index
-                                    .lock()
-                                    .unwrap()
-                                    .insert(new_hash, get_path_hash!(dest));
-                                index_lock.insert(new_hash, dest.into());
                                 continue;
                             } else if !index_lock.contains_key(&new_hash)
                                 && index_lock
@@ -640,7 +697,7 @@ impl MailBackend for MaildirType {
                                 drop(hash_indexes_lock);
                                 if let Ok(env) = add_path_to_index(
                                     &hash_indexes,
-                                    mailbox_hash,
+                                    dest_mailbox.unwrap_or(mailbox_hash),
                                     dest.as_path(),
                                     &cache_dir,
                                     file_name,
@@ -648,7 +705,7 @@ impl MailBackend for MaildirType {
                                     mailbox_index
                                         .lock()
                                         .unwrap()
-                                        .insert(env.hash(), mailbox_hash);
+                                        .insert(env.hash(), dest_mailbox.unwrap_or(mailbox_hash));
                                     debug!(
                                         "Create event {} {} {}",
                                         env.hash(),
@@ -656,20 +713,63 @@ impl MailBackend for MaildirType {
                                         dest.display()
                                     );
                                     if !env.is_seen() {
-                                        *mailbox_counts[&mailbox_hash].0.lock().unwrap() += 1;
+                                        *mailbox_counts[&dest_mailbox.unwrap_or(mailbox_hash)]
+                                            .0
+                                            .lock()
+                                            .unwrap() += 1;
                                     }
-                                    *mailbox_counts[&mailbox_hash].1.lock().unwrap() += 1;
+                                    *mailbox_counts[&dest_mailbox.unwrap_or(mailbox_hash)]
+                                        .1
+                                        .lock()
+                                        .unwrap() += 1;
                                     (sender)(
                                         account_hash,
                                         BackendEvent::Refresh(RefreshEvent {
                                             account_hash,
-                                            mailbox_hash,
+                                            mailbox_hash: dest_mailbox.unwrap_or(mailbox_hash),
                                             kind: Create(Box::new(env)),
                                         }),
                                     );
                                     continue;
                                 } else {
                                     debug!("not valid email");
+                                }
+                            } else if let Some(dest_mailbox) = dest_mailbox {
+                                drop(hash_indexes_lock);
+                                let file_name = dest
+                                    .as_path()
+                                    .strip_prefix(&root_path)
+                                    .unwrap()
+                                    .to_path_buf();
+                                if let Ok(env) = add_path_to_index(
+                                    &hash_indexes,
+                                    dest_mailbox,
+                                    dest.as_path(),
+                                    &cache_dir,
+                                    file_name,
+                                ) {
+                                    mailbox_index
+                                        .lock()
+                                        .unwrap()
+                                        .insert(env.hash(), dest_mailbox);
+                                    debug!(
+                                        "Create event {} {} {}",
+                                        env.hash(),
+                                        env.subject(),
+                                        dest.display()
+                                    );
+                                    if !env.is_seen() {
+                                        *mailbox_counts[&dest_mailbox].0.lock().unwrap() += 1;
+                                    }
+                                    *mailbox_counts[&dest_mailbox].1.lock().unwrap() += 1;
+                                    (sender)(
+                                        account_hash,
+                                        BackendEvent::Refresh(RefreshEvent {
+                                            account_hash,
+                                            mailbox_hash: dest_mailbox,
+                                            kind: Create(Box::new(env)),
+                                        }),
+                                    );
                                 }
                             } else {
                                 if was_seen && !is_seen {
@@ -679,7 +779,7 @@ impl MailBackend for MaildirType {
                                     account_hash,
                                     BackendEvent::Refresh(RefreshEvent {
                                         account_hash,
-                                        mailbox_hash: get_path_hash!(dest),
+                                        mailbox_hash,
                                         kind: Rename(old_hash, new_hash),
                                     }),
                                 );
@@ -689,7 +789,7 @@ impl MailBackend for MaildirType {
                                         account_hash,
                                         BackendEvent::Refresh(RefreshEvent {
                                             account_hash,
-                                            mailbox_hash: get_path_hash!(dest),
+                                            mailbox_hash,
                                             kind: NewFlags(new_hash, (new_flags, vec![])),
                                         }),
                                     );
@@ -808,6 +908,60 @@ impl MailBackend for MaildirType {
                 debug!("renaming {:?} to {:?}", path, new_name);
                 fs::rename(&path, &new_name)?;
                 debug!("success in rename");
+            }
+            Ok(())
+        }))
+    }
+
+    fn copy_messages(
+        &mut self,
+        env_hashes: EnvelopeHashBatch,
+        source_mailbox_hash: MailboxHash,
+        destination_mailbox_hash: MailboxHash,
+        move_: bool,
+    ) -> ResultFuture<()> {
+        let hash_index = self.hash_indexes.clone();
+        if !self.mailboxes.contains_key(&source_mailbox_hash) {
+            return Err(MeliError::new("Invalid source mailbox hash").set_kind(ErrorKind::Bug));
+        } else if !self.mailboxes.contains_key(&destination_mailbox_hash) {
+            return Err(MeliError::new("Invalid destination mailbox hash").set_kind(ErrorKind::Bug));
+        }
+        let mut dest_path: PathBuf = self.mailboxes[&destination_mailbox_hash].fs_path().into();
+        dest_path.push("cur");
+        Ok(Box::pin(async move {
+            let mut hash_indexes_lck = hash_index.lock().unwrap();
+            let hash_index = hash_indexes_lck.entry(source_mailbox_hash).or_default();
+
+            for env_hash in env_hashes.iter() {
+                let path_src = {
+                    if !hash_index.contains_key(&env_hash) {
+                        continue;
+                    }
+                    if let Some(modif) = &hash_index[&env_hash].modified {
+                        match modif {
+                            PathMod::Path(ref path) => path.clone(),
+                            PathMod::Hash(hash) => hash_index[&hash].to_path_buf(),
+                        }
+                    } else {
+                        hash_index[&env_hash].to_path_buf()
+                    }
+                };
+                let filename = path_src
+                    .file_name()
+                    .expect(&format!("Could not get filename of {}", path_src.display()));
+                dest_path.push(filename);
+                hash_index.entry(env_hash).or_default().modified =
+                    Some(PathMod::Path(dest_path.clone()));
+                if move_ {
+                    debug!("renaming {:?} to {:?}", path_src, dest_path);
+                    fs::rename(&path_src, &dest_path)?;
+                    debug!("success in rename");
+                } else {
+                    debug!("copying {:?} to {:?}", path_src, dest_path);
+                    fs::copy(&path_src, &dest_path)?;
+                    debug!("success in copy");
+                }
+                dest_path.pop();
             }
             Ok(())
         }))

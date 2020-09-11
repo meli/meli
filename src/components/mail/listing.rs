@@ -270,7 +270,6 @@ pub trait MailListingTrait: ListingTrait {
                             mailbox_hash,
                             destination_mailbox_hash,
                             /* move? */ false,
-                            /* flags */ None,
                         )
                     }) {
                     Err(err) => {
@@ -309,7 +308,6 @@ pub trait MailListingTrait: ListingTrait {
                             mailbox_hash,
                             destination_mailbox_hash,
                             /* move? */ true,
-                            /* flags */ None,
                         )
                     }) {
                     Err(err) => {

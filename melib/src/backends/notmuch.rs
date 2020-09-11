@@ -684,6 +684,16 @@ impl MailBackend for NotmuchDb {
         Ok(Box::pin(async { Ok(()) }))
     }
 
+    fn copy_messages(
+        &mut self,
+        _env_hashes: EnvelopeHashBatch,
+        _source_mailbox_hash: MailboxHash,
+        _destination_mailbox_hash: MailboxHash,
+        _move_: bool,
+    ) -> ResultFuture<()> {
+        Err(MeliError::new("Unimplemented."))
+    }
+
     fn set_flags(
         &mut self,
         env_hashes: EnvelopeHashBatch,
