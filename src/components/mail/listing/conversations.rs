@@ -123,6 +123,8 @@ pub struct ConversationsListing {
     color_cache: ColorCache,
 
     movement: Option<PageMovement>,
+    modifier_active: bool,
+    modifier_command: Option<char>,
     id: ComponentId,
 }
 
@@ -848,6 +850,10 @@ impl ListingTrait for ConversationsListing {
         }
     }
 
+    fn set_command_modifier(&mut self, is_active: bool) {
+        self.modifier_active = is_active;
+    }
+
     fn set_movement(&mut self, mvm: PageMovement) {
         self.movement = Some(mvm);
         self.set_dirty(true);
@@ -884,6 +890,8 @@ impl ConversationsListing {
             view: ThreadView::default(),
             color_cache: ColorCache::default(),
             movement: None,
+            modifier_active: false,
+            modifier_command: None,
             id: ComponentId::new_v4(),
         }
     }
@@ -1201,20 +1209,81 @@ impl Component for ConversationsListing {
 
                 area = (set_y(upper_left, y + 1), bottom_right);
             }
+            let (upper_left, bottom_right) = area;
+            let rows = (get_y(bottom_right) - get_y(upper_left) + 1) / 3;
+            if let Some('s') = self.modifier_command.take() {
+                self.set_command_modifier(false);
+                if let Some(mvm) = self.movement.as_ref() {
+                    match mvm {
+                        PageMovement::Up(amount) => {
+                            for c in self.new_cursor_pos.2.saturating_sub(*amount)
+                                ..=self.new_cursor_pos.2
+                            {
+                                let thread = self.get_thread_under_cursor(c);
+                                self.selection.entry(thread).and_modify(|e| *e = !*e);
+                                self.row_updates.push(thread);
+                            }
+                        }
+                        PageMovement::PageUp(multiplier) => {
+                            for c in self.new_cursor_pos.2.saturating_sub(rows * multiplier)
+                                ..=self.new_cursor_pos.2
+                            {
+                                let thread = self.get_thread_under_cursor(c);
+                                self.selection.entry(thread).and_modify(|e| *e = !*e);
+                                self.row_updates.push(thread);
+                            }
+                        }
+                        PageMovement::Down(amount) => {
+                            for c in self.new_cursor_pos.2
+                                ..std::cmp::min(self.length, self.new_cursor_pos.2 + amount + 1)
+                            {
+                                let thread = self.get_thread_under_cursor(c);
+                                self.selection.entry(thread).and_modify(|e| *e = !*e);
+                                self.row_updates.push(thread);
+                            }
+                        }
+                        PageMovement::PageDown(multiplier) => {
+                            for c in self.new_cursor_pos.2
+                                ..std::cmp::min(
+                                    self.new_cursor_pos.2 + rows * multiplier + 1,
+                                    self.length,
+                                )
+                            {
+                                let thread = self.get_thread_under_cursor(c);
+                                self.selection.entry(thread).and_modify(|e| *e = !*e);
+                                self.row_updates.push(thread);
+                            }
+                        }
+                        PageMovement::Right(_) | PageMovement::Left(_) => {}
+                        PageMovement::Home => {
+                            for c in 0..=self.new_cursor_pos.2 {
+                                let thread = self.get_thread_under_cursor(c);
+                                self.selection.entry(thread).and_modify(|e| *e = !*e);
+                                self.row_updates.push(thread);
+                            }
+                        }
+                        PageMovement::End => {
+                            for c in self.new_cursor_pos.2..self.length {
+                                let thread = self.get_thread_under_cursor(c);
+                                self.selection.entry(thread).and_modify(|e| *e = !*e);
+                                self.row_updates.push(thread);
+                            }
+                        }
+                    }
+                }
+            }
             if !self.row_updates.is_empty() {
                 /* certain rows need to be updated (eg an unseen message was just set seen)
                  * */
-                let (upper_left, bottom_right) = area;
                 while let Some(row) = self.row_updates.pop() {
                     self.update_line(context, row);
                     let row: usize = self.order[&row];
 
-                    let rows = (get_y(bottom_right) - get_y(upper_left) + 1) / 3;
                     let page_no = (self.cursor_pos.2).wrapping_div(rows);
 
                     let top_idx = page_no * rows;
                     /* Update row only if it's currently visible */
-                    if row >= top_idx && row <= top_idx + rows {
+                    if row >= top_idx && row < top_idx + rows {
                         let area = (
                             set_y(upper_left, get_y(upper_left) + (3 * (row % rows))),
                             set_y(bottom_right, get_y(upper_left) + (3 * (row % rows) + 2)),
@@ -1288,8 +1357,12 @@ impl Component for ConversationsListing {
                             key == shortcuts[ConversationsListing::DESCRIPTION]["select_entry"]
                         ) =>
                 {
-                    let thread = self.get_thread_under_cursor(self.cursor_pos.2);
-                    self.selection.entry(thread).and_modify(|e| *e = !*e);
+                    if self.modifier_active {
+                        self.modifier_command = Some('s');
+                    } else {
+                        let thread = self.get_thread_under_cursor(self.cursor_pos.2);
+                        self.selection.entry(thread).and_modify(|e| *e = !*e);
+                    }
                     return true;
                 }
                 UIEvent::EnvelopeRename(ref old_hash, ref new_hash) => {
