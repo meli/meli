@@ -1580,8 +1580,11 @@ impl Component for ConversationsListing {
                 if !self.unfocused
                     && self.selection.values().cloned().any(std::convert::identity) =>
             {
-                for v in self.selection.values_mut() {
-                    *v = false;
+                for (k, v) in self.selection.iter_mut() {
+                    if *v {
+                        *v = false;
+                        self.row_updates.push(*k);
+                    }
                 }
                 self.dirty = true;
                 return true;
