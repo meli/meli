@@ -631,6 +631,7 @@ impl Component for MailView {
         if !self.is_dirty() && !self.force_draw_headers {
             return;
         }
+        self.dirty = false;
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
 
@@ -639,7 +640,6 @@ impl Component for MailView {
             if !account.contains_key(self.coordinates.2) {
                 /* The envelope has been renamed or removed, so wait for the appropriate event to
                  * arrive */
-                self.dirty = false;
                 return;
             }
             let envelope: EnvelopeRef = account.collection.get_env(self.coordinates.2);
@@ -1026,7 +1026,6 @@ impl Component for MailView {
         if let ViewMode::ContactSelector(ref mut s) = self.mode {
             s.draw(grid, center_area(area, s.content.size()), context);
         }
-        self.dirty = false;
     }
 
     fn process_event(&mut self, mut event: &mut UIEvent, context: &mut Context) -> bool {
