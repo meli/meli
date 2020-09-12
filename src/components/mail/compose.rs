@@ -157,14 +157,14 @@ impl Composer {
             ..Default::default()
         };
         for (h, v) in
-            mailbox_acc_settings!(context[account_hash].composing.default_header_values).iter()
+            account_settings!(context[account_hash].composing.default_header_values).iter()
         {
             if v.is_empty() {
                 continue;
             }
             ret.draft.set_header(h, v.into());
         }
-        if *mailbox_acc_settings!(context[account_hash].composing.insert_user_agent) {
+        if *account_settings!(context[account_hash].composing.insert_user_agent) {
             ret.draft.set_header(
                 "User-Agent",
                 format!("meli {}", option_env!("CARGO_PKG_VERSION").unwrap_or("0.0")),
@@ -429,7 +429,7 @@ impl Composer {
             write_string_to_grid(
                 &format!(
                     "☑ sign with {}",
-                    mailbox_acc_settings!(context[self.account_hash].pgp.key)
+                    account_settings!(context[self.account_hash].pgp.key)
                         .as_ref()
                         .map(|s| s.as_str())
                         .unwrap_or("default key")
@@ -520,7 +520,7 @@ impl Component for Composer {
 
         if !self.initialized {
             if self.sign_mail.is_unset() {
-                self.sign_mail = ToggleFlag::InternalVal(*mailbox_acc_settings!(
+                self.sign_mail = ToggleFlag::InternalVal(*account_settings!(
                     context[self.account_hash].pgp.auto_sign
                 ));
             }
@@ -1078,8 +1078,7 @@ impl Component for Composer {
             {
                 /* Edit draft in $EDITOR */
                 let editor = if let Some(editor_command) =
-                    mailbox_acc_settings!(context[self.account_hash].composing.editor_command)
-                        .as_ref()
+                    account_settings!(context[self.account_hash].composing.editor_command).as_ref()
                 {
                     editor_command.to_string()
                 } else {
@@ -1104,7 +1103,7 @@ impl Component for Composer {
                     true,
                 );
 
-                if *mailbox_acc_settings!(context[self.account_hash].composing.embed) {
+                if *account_settings!(context[self.account_hash].composing.embed) {
                     self.embed = Some(EmbedStatus::Running(
                         crate::terminal::embed::create_pty(
                             width!(self.embed_area),
@@ -1358,7 +1357,7 @@ impl Component for Composer {
         };
 
         let our_map: ShortcutMap =
-            mailbox_acc_settings!(context[self.account_hash].shortcuts.composing).key_values();
+            account_settings!(context[self.account_hash].shortcuts.composing).key_values();
         map.insert(Composer::DESCRIPTION, our_map);
 
         map
@@ -1411,7 +1410,7 @@ pub fn send_draft(
     flags: Flag,
     complete_in_background: bool,
 ) -> Result<Option<(JobId, JoinHandle, JobChannel<()>)>> {
-    let format_flowed = *mailbox_acc_settings!(context[account_hash].composing.format_flowed);
+    let format_flowed = *account_settings!(context[account_hash].composing.format_flowed);
     if sign_mail.is_true() {
         let mut content_type = ContentType::default();
         if format_flowed {
@@ -1446,10 +1445,10 @@ pub fn send_draft(
         }
         let output = crate::components::mail::pgp::sign(
             body.into(),
-            mailbox_acc_settings!(context[account_hash].pgp.gpg_binary)
+            account_settings!(context[account_hash].pgp.gpg_binary)
                 .as_ref()
                 .map(|s| s.as_str()),
-            mailbox_acc_settings!(context[account_hash].pgp.key)
+            account_settings!(context[account_hash].pgp.key)
                 .as_ref()
                 .map(|s| s.as_str()),
         );
@@ -1498,7 +1497,7 @@ pub fn send_draft(
         }
     }
     let bytes = draft.finalise().unwrap();
-    let send_mail = mailbox_acc_settings!(context[account_hash].composing.send_mail).clone();
+    let send_mail = account_settings!(context[account_hash].composing.send_mail).clone();
     let ret =
         context.accounts[&account_hash].send(bytes.clone(), send_mail, complete_in_background);
     save_draft(bytes.as_bytes(), context, mailbox_type, flags, account_hash);

@@ -928,6 +928,8 @@ impl CompactListing {
                         .ignore_tags
                 )
                 .contains(t)
+                    || account_settings!(context[self.cursor_pos.0].tags.ignore_tags).contains(t)
+                    || context.settings.tags.ignore_tags.contains(t)
                     || !tags_lck.contains_key(t)
                 {
                     continue;
@@ -938,7 +940,13 @@ impl CompactListing {
                 colors.push(
                     mailbox_settings!(context[self.cursor_pos.0][&self.cursor_pos.1].tags.colors)
                         .get(t)
-                        .map(|&c| c),
+                        .cloned()
+                        .or_else(|| {
+                            account_settings!(context[self.cursor_pos.0].tags.colors)
+                                .get(t)
+                                .cloned()
+                                .or_else(|| context.settings.tags.colors.get(t).cloned())
+                        }),
                 );
             }
             if !tags.is_empty() {

@@ -78,7 +78,7 @@ macro_rules! split_command {
 }
 
 #[macro_export]
-macro_rules! mailbox_acc_settings {
+macro_rules! account_settings {
     ($context:ident[$account_hash:expr].$setting:ident.$field:ident) => {{
         $context.accounts[&$account_hash]
             .settings
