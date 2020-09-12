@@ -42,6 +42,82 @@ macro_rules! address_list {
     }};
 }
 
+macro_rules! row_attr {
+    ($color_cache:expr, $even: expr, $unseen:expr, $highlighted:expr, $selected:expr  $(,)*) => {{
+        ThemeAttribute {
+            fg: if $highlighted {
+                if $even {
+                    $color_cache.even_highlighted.fg
+                } else {
+                    $color_cache.odd_highlighted.fg
+                }
+            } else if $selected {
+                if $even {
+                    $color_cache.even_selected.fg
+                } else {
+                    $color_cache.odd_selected.fg
+                }
+            } else if $unseen {
+                if $even {
+                    $color_cache.even_unseen.fg
+                } else {
+                    $color_cache.odd_unseen.fg
+                }
+            } else if $even {
+                $color_cache.even.fg
+            } else {
+                $color_cache.odd.fg
+            },
+            bg: if $highlighted {
+                if $even {
+                    $color_cache.even_highlighted.bg
+                } else {
+                    $color_cache.odd_highlighted.bg
+                }
+            } else if $selected {
+                if $even {
+                    $color_cache.even_selected.bg
+                } else {
+                    $color_cache.odd_selected.bg
+                }
+            } else if $unseen {
+                if $even {
+                    $color_cache.even_unseen.bg
+                } else {
+                    $color_cache.odd_unseen.bg
+                }
+            } else if $even {
+                $color_cache.even.bg
+            } else {
+                $color_cache.odd.bg
+            },
+            attrs: if $highlighted {
+                if $even {
+                    $color_cache.even_highlighted.attrs
+                } else {
+                    $color_cache.odd_highlighted.attrs
+                }
+            } else if $selected {
+                if $even {
+                    $color_cache.even_selected.attrs
+                } else {
+                    $color_cache.odd_selected.attrs
+                }
+            } else if $unseen {
+                if $even {
+                    $color_cache.even_unseen.attrs
+                } else {
+                    $color_cache.odd_unseen.attrs
+                }
+            } else if $even {
+                $color_cache.even.attrs
+            } else {
+                $color_cache.odd.attrs
+            },
+        }
+    }};
+}
+
 /// A list of all mail (`Envelope`s) in a `Mailbox`. On `\n` it opens the `Envelope` content in a
 /// `MailView`.
 #[derive(Debug)]
@@ -285,69 +361,13 @@ impl ListingTrait for PlainListing {
         let account = &context.accounts[&self.cursor_pos.0];
         let envelope: EnvelopeRef = account.collection.get_env(i);
 
-        let fg_color = if !envelope.is_seen() {
-            if idx % 2 == 0 {
-                self.color_cache.even_unseen.fg
-            } else {
-                self.color_cache.odd_unseen.fg
-            }
-        } else if self.cursor_pos.2 == idx {
-            if idx % 2 == 0 {
-                self.color_cache.even_highlighted.fg
-            } else {
-                self.color_cache.odd_highlighted.fg
-            }
-        } else if idx % 2 == 0 {
-            self.color_cache.even.fg
-        } else {
-            self.color_cache.odd.fg
-        };
-        let bg_color = if self.cursor_pos.2 == idx {
-            if idx % 2 == 0 {
-                self.color_cache.even_highlighted.bg
-            } else {
-                self.color_cache.odd_highlighted.bg
-            }
-        } else if self.selection[&i] {
-            if idx % 2 == 0 {
-                self.color_cache.even_selected.bg
-            } else {
-                self.color_cache.odd_selected.bg
-            }
-        } else if !envelope.is_seen() {
-            if idx % 2 == 0 {
-                self.color_cache.even_unseen.bg
-            } else {
-                self.color_cache.odd_unseen.bg
-            }
-        } else if idx % 2 == 0 {
-            self.color_cache.even.bg
-        } else {
-            self.color_cache.odd.bg
-        };
-        let attrs = if self.cursor_pos.2 == idx {
-            if idx % 2 == 0 {
-                self.color_cache.even_highlighted.attrs
-            } else {
-                self.color_cache.odd_highlighted.attrs
-            }
-        } else if self.selection[&i] {
-            if idx % 2 == 0 {
-                self.color_cache.even_selected.attrs
-            } else {
-                self.color_cache.odd_selected.attrs
-            }
-        } else if !envelope.is_seen() {
-            if idx % 2 == 0 {
-                self.color_cache.even_unseen.attrs
-            } else {
-                self.color_cache.odd_unseen.attrs
-            }
-        } else if idx % 2 == 0 {
-            self.color_cache.even.attrs
-        } else {
-            self.color_cache.odd.attrs
-        };
+        let row_attr = row_attr!(
+            self.color_cache,
+            idx % 2 == 0,
+            !envelope.is_seen(),
+            self.cursor_pos.2 == idx,
+            self.selection[&i]
+        );
 
         let (upper_left, bottom_right) = area;
         let x = get_x(upper_left)
@@ -360,7 +380,10 @@ impl ListingTrait for PlainListing {
             get_x(upper_left)..(get_x(bottom_right) + 1),
             get_y(upper_left),
         ) {
-            grid[c].set_fg(fg_color).set_bg(bg_color).set_attrs(attrs);
+            grid[c]
+                .set_fg(row_attr.fg)
+                .set_bg(row_attr.bg)
+                .set_attrs(row_attr.attrs);
         }
         copy_area(
             grid,
@@ -372,7 +395,7 @@ impl ListingTrait for PlainListing {
             ),
         );
         for c in grid.row_iter(x..(x + self.data_columns.widths[3]), get_y(upper_left)) {
-            grid[c].set_bg(bg_color).set_attrs(attrs);
+            grid[c].set_bg(row_attr.bg).set_attrs(row_attr.attrs);
         }
     }
 
@@ -878,17 +901,14 @@ impl PlainListing {
             }
 
             let envelope: EnvelopeRef = context.accounts[&self.cursor_pos.0].collection.get_env(i);
-            let row_attr = if !envelope.is_seen() {
-                if idx % 2 == 0 {
-                    self.color_cache.even_unseen
-                } else {
-                    self.color_cache.odd_unseen
-                }
-            } else if idx % 2 == 0 {
-                self.color_cache.even
-            } else {
-                self.color_cache.odd
-            };
+            let row_attr = row_attr!(
+                self.color_cache,
+                idx % 2 == 0,
+                !envelope.is_seen(),
+                false,
+                false
+            );
+
             let (x, _) = write_string_to_grid(
                 &idx.to_string(),
                 &mut columns[0],

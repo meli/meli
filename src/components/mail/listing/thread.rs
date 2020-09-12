@@ -931,7 +931,7 @@ impl ThreadListing {
 
                 panic!();
             }
-            let row_attr = row_attr!(self.color_cache, idx % 2 == 0, !*is_seen, false, false,);
+            let row_attr = row_attr!(self.color_cache, idx % 2 == 0, !*is_seen, false, false);
             let (x, _) = write_string_to_grid(
                 &idx.to_string(),
                 &mut self.data_columns.columns[0],
