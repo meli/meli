@@ -87,7 +87,13 @@ mod dbus {
                     notification.hint(notify_rust::Hint::SuppressSound(true));
                 }
 
-                notification.show().unwrap();
+                if let Err(err) = notification.show() {
+                    debug!("Could not show dbus notification: {:?}", &err);
+                    melib::log(
+                        format!("Could not show dbus notification: {}", err),
+                        melib::ERROR,
+                    );
+                }
             }
             false
         }
@@ -182,13 +188,9 @@ impl Component for NotificationCommand {
 
             if *kind == Some(NotificationType::NEWMAIL) {
                 if let Some(ref path) = context.settings.notifications.xbiff_file_path {
-                    let mut file = std::fs::OpenOptions::new().append(true) /* writes will append to a file instead of overwriting previous contents */
-                         .create(true) /* a new file will be created if the file does not yet already exist.*/
-                         .open(path).unwrap();
-                    if file.metadata().unwrap().len() > 128 {
-                        file.set_len(0).unwrap();
-                    } else {
-                        std::io::Write::write_all(&mut file, b"z").unwrap();
+                    if let Err(err) = update_xbiff(path) {
+                        debug!("Could not update xbiff file: {:?}", &err);
+                        melib::log(format!("Could not update xbiff file: {}.", err), ERROR);
                     }
                 }
             }
@@ -203,4 +205,17 @@ impl Component for NotificationCommand {
     }
     fn set_dirty(&mut self, _value: bool) {}
     fn set_id(&mut self, _id: ComponentId) {}
+}
+
+fn update_xbiff(path: &str) -> Result<()> {
+    let mut file = std::fs::OpenOptions::new()
+        .append(true) /* writes will append to a file instead of overwriting previous contents */
+        .create(true) /* a new file will be created if the file does not yet already exist.*/
+        .open(path)?;
+    if file.metadata()?.len() > 128 {
+        file.set_len(0)?;
+    } else {
+        std::io::Write::write_all(&mut file, b"z")?;
+    }
+    Ok(())
 }
