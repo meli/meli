@@ -762,7 +762,9 @@ impl ImapConnection {
         self.read_response(ret, RequiredResponses::SELECT_REQUIRED)
             .await?;
         debug!("select response {}", ret);
-        let select_response = protocol_parser::select_response(&ret)?;
+        let select_response = protocol_parser::select_response(&ret).chain_err_summary(|| {
+            format!("Could not parse select response for mailbox {}", imap_path)
+        })?;
         {
             if self.uid_store.keep_offline_cache {
                 #[cfg(not(feature = "sqlite3"))]

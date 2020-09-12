@@ -54,7 +54,8 @@ pub struct CachedEnvelope {
     pub modsequence: Option<ModSequence>,
 }
 
-pub trait ImapCache: Send {
+pub trait ImapCache: Send + core::fmt::Debug {
+    fn reset(&mut self) -> Result<()>;
     fn mailbox_state(&mut self, mailbox_hash: MailboxHash) -> Result<Option<()>>;
 
     fn find_envelope(
@@ -67,6 +68,12 @@ pub trait ImapCache: Send {
         &mut self,
         mailbox_hash: MailboxHash,
         refresh_events: &[(UID, RefreshEvent)],
+    ) -> Result<()>;
+
+    fn update_mailbox(
+        &mut self,
+        mailbox_hash: MailboxHash,
+        select_response: &SelectResponse,
     ) -> Result<()>;
 
     fn insert_envelopes(
@@ -99,6 +106,7 @@ mod sqlite3_m {
 
     type Sqlite3UID = i32;
 
+    #[derive(Debug)]
     pub struct Sqlite3Cache {
         connection: crate::sqlite3::Connection,
         loaded_mailboxes: BTreeSet<MailboxHash>,
@@ -178,6 +186,10 @@ mod sqlite3_m {
     }
 
     impl ImapCache for Sqlite3Cache {
+        fn reset(&mut self) -> Result<()> {
+            sqlite3::reset_db(&DB_DESCRIPTION, Some(self.uid_store.account_name.as_str()))
+        }
+
         fn mailbox_state(&mut self, mailbox_hash: MailboxHash) -> Result<Option<()>> {
             if self.loaded_mailboxes.contains(&mailbox_hash) {
                 return Ok(Some(()));
@@ -287,6 +299,64 @@ mod sqlite3_m {
                         format!(
                             "Could not insert mailbox {} in header_cache of account {}",
                             select_response.uidvalidity, self.uid_store.account_name
+                        )
+                    })?;
+            }
+            Ok(())
+        }
+
+        fn update_mailbox(
+            &mut self,
+            mailbox_hash: MailboxHash,
+            select_response: &SelectResponse,
+        ) -> Result<()> {
+            if self.mailbox_state(mailbox_hash)?.is_none() {
+                return self.clear(mailbox_hash, select_response);
+            }
+
+            if let Some(Ok(highestmodseq)) = select_response.highestmodseq {
+                self.connection
+                    .execute(
+                        "UPDATE mailbox SET flags=?1, highestmodseq =?2 where mailbox_hash = ?3;",
+                        sqlite3::params![
+                            select_response
+                                .flags
+                                .1
+                                .iter()
+                                .map(|s| s.as_str())
+                                .collect::<Vec<&str>>()
+                                .join("\0")
+                                .as_bytes(),
+                            highestmodseq,
+                            mailbox_hash as i64
+                        ],
+                    )
+                    .chain_err_summary(|| {
+                        format!(
+                            "Could not update mailbox {} in header_cache of account {}",
+                            mailbox_hash, self.uid_store.account_name
+                        )
+                    })?;
+            } else {
+                self.connection
+                    .execute(
+                        "UPDATE mailbox SET flags=?1 where mailbox_hash = ?2;",
+                        sqlite3::params![
+                            select_response
+                                .flags
+                                .1
+                                .iter()
+                                .map(|s| s.as_str())
+                                .collect::<Vec<&str>>()
+                                .join("\0")
+                                .as_bytes(),
+                            mailbox_hash as i64
+                        ],
+                    )
+                    .chain_err_summary(|| {
+                        format!(
+                            "Could not update mailbox {} in header_cache of account {}",
+                            mailbox_hash, self.uid_store.account_name
                         )
                     })?;
             }
@@ -581,6 +651,7 @@ pub(super) async fn fetch_cached_envs(state: &mut FetchState) -> Result<Option<V
         ref mut connection,
         mailbox_hash,
         ref uid_store,
+        cache_handle: _,
     } = state;
     debug!(uid_store.keep_offline_cache);
     let mailbox_hash = *mailbox_hash;
@@ -638,6 +709,8 @@ pub use default_m::*;
 
 #[cfg(not(feature = "sqlite3"))]
 mod default_m {
+    use super::*;
+    #[derive(Debug)]
     pub struct DefaultCache;
 
     impl DefaultCache {
@@ -647,6 +720,10 @@ mod default_m {
     }
 
     impl ImapCache for DefaultCache {
+        fn reset(&mut self) -> Result<()> {
+            Err(MeliError::new("melib is not built with any imap cache").set_kind(ErrorKind::Bug))
+        }
+
         fn mailbox_state(&mut self, _mailbox_hash: MailboxHash) -> Result<Option<()>> {
             Err(MeliError::new("melib is not built with any imap cache").set_kind(ErrorKind::Bug))
         }
@@ -671,6 +748,14 @@ mod default_m {
             Err(MeliError::new("melib is not built with any imap cache").set_kind(ErrorKind::Bug))
         }
 
+        fn update_mailbox(
+            &mut self,
+            _mailbox_hash: MailboxHash,
+            _select_response: &SelectResponse,
+        ) -> Result<()> {
+            Err(MeliError::new("melib is not built with any imap cache").set_kind(ErrorKind::Bug))
+        }
+
         fn update(
             &mut self,
             _mailbox_hash: MailboxHash,
@@ -684,6 +769,14 @@ mod default_m {
             _identifier: std::result::Result<UID, EnvelopeHash>,
             _mailbox_hash: MailboxHash,
         ) -> Result<Option<CachedEnvelope>> {
+            Err(MeliError::new("melib is not built with any imap cache").set_kind(ErrorKind::Bug))
+        }
+
+        fn rfc822(
+            &mut self,
+            _identifier: std::result::Result<UID, EnvelopeHash>,
+            _mailbox_hash: MailboxHash,
+        ) -> Result<Option<Vec<u8>>> {
             Err(MeliError::new("melib is not built with any imap cache").set_kind(ErrorKind::Bug))
         }
     }

@@ -37,8 +37,6 @@ impl ImapConnection {
             return Ok(None);
         }
 
-        self.select_mailbox(mailbox_hash, &mut String::new(), false)
-            .await?;
         match self.sync_policy {
             SyncPolicy::None => Ok(None),
             SyncPolicy::Basic => self.resync_basic(cache_handle, mailbox_hash).await,
@@ -87,15 +85,10 @@ impl ImapConnection {
         debug!("build_cache {}", mailbox_hash);
         let mut response = String::with_capacity(8 * 1024);
         // 1 get uidvalidity, highestmodseq
-        self.select_mailbox(mailbox_hash, &mut response, true)
-            .await?;
-        let select_response =
-            protocol_parser::select_response(&response).chain_err_summary(|| {
-                format!(
-                    "Could not parse select response for mailbox {}",
-                    mailbox_hash
-                )
-            })?;
+        let select_response = self
+            .select_mailbox(mailbox_hash, &mut response, true)
+            .await?
+            .unwrap();
         self.uid_store
             .uidvalidity
             .lock()
@@ -159,9 +152,10 @@ impl ImapConnection {
         let mut new_unseen = BTreeSet::default();
         debug!("current_uidvalidity is {}", current_uidvalidity);
         debug!("max_uid is {}", max_uid);
-        self.select_mailbox(mailbox_hash, &mut response, true)
-            .await?;
-        let select_response = protocol_parser::select_response(&response)?;
+        let select_response = self
+            .select_mailbox(mailbox_hash, &mut response, true)
+            .await?
+            .unwrap();
         debug!(
             "select_response.uidvalidity is {}",
             select_response.uidvalidity
@@ -171,6 +165,7 @@ impl ImapConnection {
             cache_handle.clear(mailbox_hash, &select_response)?;
             return Ok(None);
         }
+        cache_handle.update_mailbox(mailbox_hash, &select_response)?;
 
         // 2.  tag1 UID FETCH <lastseenuid+1>:* <descriptors>
         self.send_command(
@@ -403,9 +398,10 @@ impl ImapConnection {
         debug!("current_uidvalidity is {}", cached_uidvalidity);
         debug!("max_uid is {}", cached_max_uid);
         // 1. check UIDVALIDITY. If fail, discard cache and rebuild
-        self.select_mailbox(mailbox_hash, &mut response, true)
-            .await?;
-        let select_response = protocol_parser::select_response(&response)?;
+        let select_response = self
+            .select_mailbox(mailbox_hash, &mut response, true)
+            .await?
+            .unwrap();
         debug!(
             "select_response.uidvalidity is {}",
             select_response.uidvalidity
@@ -436,6 +432,7 @@ impl ImapConnection {
             }
             return self.resync_basic(cache_handle, mailbox_hash).await;
         }
+        cache_handle.update_mailbox(mailbox_hash, &select_response)?;
         let new_highestmodseq = select_response.highestmodseq.unwrap().unwrap();
         let mut refresh_events = vec![];
         // 1b) Check the mailbox HIGHESTMODSEQ.
@@ -662,8 +659,7 @@ impl ImapConnection {
          * returns READ-ONLY for both cases) */
         let mut select_response = self
             .select_mailbox(mailbox_hash, &mut response, true)
-            .await
-            .chain_err_summary(|| format!("Could not select mailbox {}", mailbox_path))?
+            .await?
             .unwrap();
         debug!(
             "mailbox: {} select_response: {:?}",

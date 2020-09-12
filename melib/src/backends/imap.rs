@@ -298,6 +298,27 @@ impl MailBackend for ImapType {
         &mut self,
         mailbox_hash: MailboxHash,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<Vec<Envelope>>> + Send + 'static>>> {
+        let cache_handle = {
+            #[cfg(feature = "sqlite3")]
+            if self.uid_store.keep_offline_cache {
+                match cache::Sqlite3Cache::get(self.uid_store.clone()).chain_err_summary(|| {
+                    format!(
+                        "Could not initialize cache for IMAP account {}",
+                        self.uid_store.account_name
+                    )
+                }) {
+                    Ok(v) => Some(v),
+                    Err(err) => {
+                        (self.uid_store.event_consumer)(self.uid_store.account_hash, err.into());
+                        None
+                    }
+                }
+            } else {
+                None
+            }
+            #[cfg(not(feature = "sqlite3"))]
+            None
+        };
         let mut state = FetchState {
             stage: if self.uid_store.keep_offline_cache {
                 FetchStage::InitialCache
@@ -307,6 +328,7 @@ impl MailBackend for ImapType {
             connection: self.connection.clone(),
             mailbox_hash,
             uid_store: self.uid_store.clone(),
+            cache_handle,
         };
 
         Ok(Box::pin(async_stream::try_stream! {
@@ -1455,6 +1477,7 @@ struct FetchState {
     connection: Arc<FutureMutex<ImapConnection>>,
     mailbox_hash: MailboxHash,
     uid_store: Arc<UIDStore>,
+    cache_handle: Option<Box<dyn cache::ImapCache>>,
 }
 
 async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
@@ -1468,6 +1491,17 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
                     .await
                     .init_mailbox(state.mailbox_hash)
                     .await?;
+                if let Some(ref mut cache_handle) = state.cache_handle {
+                    if let Err(err) = cache_handle
+                        .update_mailbox(state.mailbox_hash, &select_response)
+                        .chain_err_summary(|| {
+                            format!("Could not update cache for mailbox {}.", state.mailbox_hash)
+                        })
+                    {
+                        (state.uid_store.event_consumer)(state.uid_store.account_hash, err.into());
+                    }
+                }
+
                 if select_response.exists == 0 {
                     state.stage = FetchStage::Finished;
                     return Ok(Vec::new());
@@ -1478,36 +1512,57 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
                 continue;
             }
             FetchStage::InitialCache => {
-                if let Some(cached_payload) = cache::fetch_cached_envs(state).await? {
-                    state.stage = FetchStage::ResyncCache;
-                    debug!(
-                        "fetch_hlpr fetch_cached_envs payload {} len for mailbox_hash {}",
-                        cached_payload.len(),
-                        state.mailbox_hash
-                    );
-                    let (mailbox_exists, unseen) = {
-                        let f = &state.uid_store.mailboxes.lock().await[&state.mailbox_hash];
-                        (f.exists.clone(), f.unseen.clone())
-                    };
-                    unseen.lock().unwrap().insert_existing_set(
-                        cached_payload
-                            .iter()
-                            .filter_map(|env| {
-                                if !env.is_seen() {
-                                    Some(env.hash())
-                                } else {
-                                    None
-                                }
-                            })
-                            .collect(),
-                    );
-                    mailbox_exists.lock().unwrap().insert_existing_set(
-                        cached_payload.iter().map(|env| env.hash()).collect::<_>(),
-                    );
-                    return Ok(cached_payload);
+                match cache::fetch_cached_envs(state).await {
+                    Err(err) => {
+                        crate::log(
+                            format!(
+                                "IMAP cache error: could not fetch cache for {}. Reason: {}",
+                                state.uid_store.account_name, err
+                            ),
+                            crate::ERROR,
+                        );
+                        /* Try resetting the database */
+                        if let Some(ref mut cache_handle) = state.cache_handle {
+                            if let Err(err) = cache_handle.reset() {
+                                crate::log(format!("IMAP cache error: could not reset cache for {}. Reason: {}", state.uid_store.account_name, err), crate::ERROR);
+                            }
+                        }
+                        state.stage = FetchStage::InitialFresh;
+                        continue;
+                    }
+                    Ok(None) => {
+                        state.stage = FetchStage::InitialFresh;
+                        continue;
+                    }
+                    Ok(Some(cached_payload)) => {
+                        state.stage = FetchStage::ResyncCache;
+                        debug!(
+                            "fetch_hlpr fetch_cached_envs payload {} len for mailbox_hash {}",
+                            cached_payload.len(),
+                            state.mailbox_hash
+                        );
+                        let (mailbox_exists, unseen) = {
+                            let f = &state.uid_store.mailboxes.lock().await[&state.mailbox_hash];
+                            (f.exists.clone(), f.unseen.clone())
+                        };
+                        unseen.lock().unwrap().insert_existing_set(
+                            cached_payload
+                                .iter()
+                                .filter_map(|env| {
+                                    if !env.is_seen() {
+                                        Some(env.hash())
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect(),
+                        );
+                        mailbox_exists.lock().unwrap().insert_existing_set(
+                            cached_payload.iter().map(|env| env.hash()).collect::<_>(),
+                        );
+                        return Ok(cached_payload);
+                    }
                 }
-                state.stage = FetchStage::InitialFresh;
-                continue;
             }
             FetchStage::ResyncCache => {
                 let mailbox_hash = state.mailbox_hash;
@@ -1526,6 +1581,7 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
                     ref connection,
                     mailbox_hash,
                     ref uid_store,
+                    ref mut cache_handle,
                 } = state;
                 let mailbox_hash = *mailbox_hash;
                 let mut our_unseen: BTreeSet<EnvelopeHash> = BTreeSet::default();
@@ -1608,17 +1664,21 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
                             }
                         }
                     }
-                    #[cfg(feature = "sqlite3")]
-                    if uid_store.keep_offline_cache {
-                        let mut cache_handle = cache::Sqlite3Cache::get(uid_store.clone())?;
-                        debug!(cache_handle
+                    if let Some(ref mut cache_handle) = cache_handle {
+                        if let Err(err) = debug!(cache_handle
                             .insert_envelopes(mailbox_hash, &v)
                             .chain_err_summary(|| {
                                 format!(
                                     "Could not save envelopes in cache for mailbox {}",
                                     mailbox_path
                                 )
-                            }))?;
+                            }))
+                        {
+                            (state.uid_store.event_consumer)(
+                                state.uid_store.account_hash,
+                                err.into(),
+                            );
+                        }
                     }
 
                     for FetchResponse {

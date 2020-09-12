@@ -96,6 +96,28 @@ pub fn open_or_create_db(
     Ok(conn)
 }
 
+/// Return database to a clean slate.
+pub fn reset_db(description: &DatabaseDescription, identifier: Option<&str>) -> Result<()> {
+    let db_path = if let Some(id) = identifier {
+        db_path(&format!("{}_{}", id, description.name))
+    } else {
+        db_path(description.name)
+    }?;
+    if !db_path.exists() {
+        return Ok(());
+    }
+    log(
+        format!(
+            "Resetting {} database in {}",
+            description.name,
+            db_path.display()
+        ),
+        crate::INFO,
+    );
+    std::fs::remove_file(&db_path)?;
+    Ok(())
+}
+
 impl ToSql for Envelope {
     fn to_sql(&self) -> rusqlite::Result<ToSqlOutput> {
         let v: Vec<u8> = bincode::serialize(self).map_err(|e| {
