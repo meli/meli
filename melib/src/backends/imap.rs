@@ -452,15 +452,29 @@ impl MailBackend for ImapType {
         };
         Ok(Box::pin(async move {
             debug!(has_idle);
+            let main_conn2 = main_conn.clone();
             let kit = ImapWatchKit {
                 conn,
                 main_conn,
                 uid_store,
             };
-            if has_idle {
-                idle(kit).await?;
+            if let Err(err) = if has_idle {
+                idle(kit).await
             } else {
-                poll_with_examine(kit).await?;
+                poll_with_examine(kit).await
+            } {
+                let mut main_conn = timeout(Duration::from_secs(3), main_conn2.lock()).await?;
+                if err.kind.is_network() {
+                    main_conn.uid_store.is_online.lock().unwrap().1 = Err(err.clone());
+                }
+                debug!("failure: {}", err.to_string());
+                let account_hash = main_conn.uid_store.account_hash;
+                main_conn.add_refresh_event(RefreshEvent {
+                    account_hash,
+                    mailbox_hash: 0,
+                    kind: RefreshEventKind::Failure(err.clone()),
+                });
+                return Err(err);
             }
             debug!("watch future returning");
             Ok(())
