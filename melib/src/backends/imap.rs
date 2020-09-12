@@ -273,7 +273,10 @@ impl MailBackend for ImapType {
                         }
                     }
                     _ => {
-                        if SUPPORTED_CAPABILITIES.contains(&name.as_str()) {
+                        if SUPPORTED_CAPABILITIES
+                            .iter()
+                            .any(|c| c.eq_ignore_ascii_case(&name.as_str()))
+                        {
                             *status = MailBackendExtensionStatus::Enabled { comment: None };
                         }
                     }
