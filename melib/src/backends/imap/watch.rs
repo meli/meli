@@ -37,14 +37,16 @@ pub async fn poll_with_examine(kit: ImapWatchKit) -> Result<()> {
         uid_store,
     } = kit;
     conn.connect().await?;
+    let mailboxes: HashMap<MailboxHash, ImapMailbox> = {
+        let mailboxes_lck = timeout(uid_store.timeout, uid_store.mailboxes.lock()).await?;
+        mailboxes_lck.clone()
+    };
     loop {
-        let mailboxes: HashMap<MailboxHash, ImapMailbox> = {
-            let mailboxes_lck = timeout(uid_store.timeout, uid_store.mailboxes.lock()).await?;
-            mailboxes_lck.clone()
-        };
-        for (_, mailbox) in mailboxes {
+        for (_, mailbox) in mailboxes.clone() {
             examine_updates(mailbox, &mut conn, &uid_store).await?;
         }
+        //FIXME: make sleep duration configurable
+        smol::Timer::after(std::time::Duration::from_secs(3 * 60)).await;
     }
 }
 
@@ -105,6 +107,10 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
             uidvalidities.insert(mailbox_hash, select_response.uidvalidity);
         }
     }
+    let mailboxes: HashMap<MailboxHash, ImapMailbox> = {
+        let mailboxes_lck = timeout(uid_store.timeout, uid_store.mailboxes.lock()).await?;
+        mailboxes_lck.clone()
+    };
     conn.send_command(b"IDLE").await?;
     let mut blockn = ImapBlockingConnection::from(conn);
     let mut beat = std::time::Instant::now();
@@ -134,12 +140,7 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
         if now.duration_since(watch) >= _5_MINS {
             /* Time to poll all inboxes */
             let mut conn = timeout(uid_store.timeout, main_conn.lock()).await?;
-            let mailboxes: HashMap<MailboxHash, ImapMailbox> = {
-                let mailboxes_lck =
-                    timeout(uid_store.timeout, uid_store.mailboxes.lock()).await?;
-                mailboxes_lck.clone()
-            };
-            for (h, mailbox) in mailboxes {
+            for (h, mailbox) in mailboxes.clone() {
                 if mailbox_hash == h {
                     continue;
                 }
@@ -193,6 +194,9 @@ pub async fn examine_updates(
     conn: &mut ImapConnection,
     uid_store: &Arc<UIDStore>,
 ) -> Result<()> {
+    if mailbox.no_select {
+        return Ok(());
+    }
     let mailbox_hash = mailbox.hash();
     debug!("examining mailbox {} {}", mailbox_hash, mailbox.path());
     if let Some(new_envelopes) = conn.resync(mailbox_hash).await? {

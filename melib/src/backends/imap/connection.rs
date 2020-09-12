@@ -781,10 +781,21 @@ impl ImapConnection {
         {
             return Ok(None);
         }
-        let (imap_path, permissions) = {
+        let (imap_path, no_select, permissions) = {
             let m = &self.uid_store.mailboxes.lock().await[&mailbox_hash];
-            (m.imap_path().to_string(), m.permissions.clone())
+            (
+                m.imap_path().to_string(),
+                m.no_select,
+                m.permissions.clone(),
+            )
         };
+        if no_select {
+            return Err(MeliError::new(format!(
+                "Trying to select a \\NoSelect mailbox: {}",
+                &imap_path
+            ))
+            .set_kind(crate::error::ErrorKind::Bug));
+        }
         self.send_command(format!("SELECT \"{}\"", imap_path).as_bytes())
             .await?;
         self.read_response(ret, RequiredResponses::SELECT_REQUIRED)
@@ -856,18 +867,25 @@ impl ImapConnection {
         {
             return Ok(None);
         }
-        self.send_command(
-            format!(
-                "EXAMINE \"{}\"",
-                self.uid_store.mailboxes.lock().await[&mailbox_hash].imap_path()
-            )
-            .as_bytes(),
-        )
-        .await?;
+        let (imap_path, no_select) = {
+            let m = &self.uid_store.mailboxes.lock().await[&mailbox_hash];
+            (m.imap_path().to_string(), m.no_select)
+        };
+        if no_select {
+            return Err(MeliError::new(format!(
+                "Trying to examine a \\NoSelect mailbox: {}",
+                &imap_path
+            ))
+            .set_kind(crate::error::ErrorKind::Bug));
+        }
+        self.send_command(format!("EXAMINE \"{}\"", &imap_path).as_bytes())
+            .await?;
         self.read_response(ret, RequiredResponses::EXAMINE_REQUIRED)
             .await?;
         debug!("examine response {}", ret);
-        let select_response = protocol_parser::select_response(&ret)?;
+        let select_response = protocol_parser::select_response(&ret).chain_err_summary(|| {
+            format!("Could not parse select response for mailbox {}", imap_path)
+        })?;
         self.stream.as_mut()?.current_mailbox = MailboxSelection::Examine(mailbox_hash);
         if !self
             .uid_store
