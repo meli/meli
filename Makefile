@@ -31,8 +31,10 @@ CARGO_BIN ?= cargo
 MANPAGES ?= meli.1 meli.conf.5 meli-themes.5
 FEATURES ?= --features "${MELI_FEATURES}"
 
-MANPATHS = `ACCUM="";for m in \`manpath 2> /dev/null | tr ':' ' '\`; do if [ -d "$${m}" ]; then REAL_PATH=\`cd $${m} && pwd\` ACCUM="$${ACCUM}:$${REAL_PATH}";fi;done;echo -n $${ACCUM} | sed 's/^://'`
-VERSION ?= `sed -n "s/^version\s*=\s*\"\(.*\)\"/\1/p" Cargo.toml`
+MANPATHS != ACCUM="";for m in `manpath 2> /dev/null | tr ':' ' '`; do if [ -d "$${m}" ]; then REAL_PATH=`cd $${m} && pwd` ACCUM="$${ACCUM}:$${REAL_PATH}";fi;done;echo -n $${ACCUM} | sed 's/^://'
+VERSION != sed -n "s/^version\s*=\s*\"\(.*\)\"/\1/p" Cargo.toml
+GIT_COMMIT != git show-ref -s --abbrev HEAD
+DATE != date -I
 
 # Output parameters
 BOLD ?= `[ -z $${TERM} ] && echo "" || tput bold`
@@ -63,6 +65,7 @@ help:
 	@echo " - ${BOLD}dist${ANSI_RESET} (creates release tarball named meli-"${VERSION}".tar.gz in this directory)"
 	@echo " - ${BOLD}deb-dist${ANSI_RESET} (builds debian package in the parent directory)"
 	@echo " - ${BOLD}distclean${ANSI_RESET} (cleans distribution build artifacts)"
+	@echo " - ${BOLD}build-rustdoc${ANSI_RESET} (builds rustdoc documentation for all packages in \$$CARGO_TARGET_DIR)"
 	@echo "\nENVIRONMENT variables of interest:"
 	@echo "* PREFIX = ${UNDERLINE}${EXPANDED_PREFIX}${ANSI_RESET}"
 	@echo -n "* MELI_FEATURES = ${UNDERLINE}"
@@ -154,3 +157,7 @@ dist:
 deb-dist:
 	@dpkg-buildpackage -b -rfakeroot -us -uc
 	@echo ${BOLD}${GREEN}Generated${ANSI_RESET}  ../meli_${VERSION}-1_amd64.deb
+
+.PHONY: build-rustdoc
+build-rustdoc:
+	@RUSTDOCFLAGS="--crate-version ${VERSION}_${GIT_COMMIT}_${DATE}" ${CARGO_BIN} doc ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" --all-features --no-deps --workspace --document-private-items --open

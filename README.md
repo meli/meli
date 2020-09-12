@@ -18,6 +18,7 @@ Secondary subcommands:
  - dist (creates release tarball named `meli-VERSION.tar.gz` in this directory)
  - deb-dist (builds debian package in the parent directory)
  - distclean (cleans distribution build artifacts)
+ - build-rustdoc (builds rustdoc documentation for all packages in `$CARGO_TARGET_DIR`)
 
 The Makefile *should* be portable and not require a specific `make` version.
 
