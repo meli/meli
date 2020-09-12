@@ -526,8 +526,23 @@ impl ImapConnection {
                     self.stream = Err(err);
                 }
             }
-            if self.stream.is_ok() {
-                return Ok(());
+            if debug!(self.stream.is_ok()) {
+                let mut ret = String::new();
+                if let Err(err) = try_await(async {
+                    self.send_command(b"NOOP").await?;
+                    self.read_response(&mut ret, RequiredResponses::empty())
+                        .await
+                })
+                .await
+                {
+                    debug!("connect(): connection is probably dead: {:?}", &err);
+                } else {
+                    debug!(
+                        "connect(): connection is probably alive, NOOP returned {:?}",
+                        &ret
+                    );
+                    return Ok(());
+                }
             }
             let new_stream = debug!(ImapStream::new_connection(&self.server_conf).await);
             if let Err(err) = new_stream.as_ref() {
@@ -714,6 +729,7 @@ impl ImapConnection {
             }
             Err(err)
         } else {
+            *self.uid_store.is_online.lock().unwrap() = (Instant::now(), Ok(()));
             Ok(())
         }
     }
