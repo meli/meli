@@ -141,7 +141,6 @@ pub struct Account {
     name: String,
     hash: AccountHash,
     pub is_online: Result<()>,
-    pub last_online_request: std::time::Instant,
     pub(crate) mailbox_entries: IndexMap<MailboxHash, MailboxEntry>,
     pub(crate) mailboxes_order: Vec<MailboxHash>,
     tree: Vec<MailboxNode>,
@@ -429,7 +428,6 @@ impl Account {
             } else {
                 Err(MeliError::new("Attempting connection."))
             },
-            last_online_request: std::time::Instant::now(),
             mailbox_entries: Default::default(),
             mailboxes_order: Default::default(),
             tree: Default::default(),
@@ -895,6 +893,13 @@ impl Account {
                 }
                 RefreshEventKind::Failure(err) => {
                     debug!("RefreshEvent Failure: {}", err.to_string());
+                    while let Some((job_id, _)) =
+                        self.active_jobs.iter().find(|(_, j)| j.is_watch())
+                    {
+                        let job_id = *job_id;
+                        let j = self.active_jobs.remove(&job_id);
+                        drop(j);
+                    }
                     /*
                     context
                         .1
@@ -907,7 +912,7 @@ impl Account {
                     */
                     self.watch();
                     return Some(Notification(
-                        None,
+                        Some("Account watch failed".into()),
                         err.to_string(),
                         Some(crate::types::NotificationType::ERROR),
                     ));
@@ -1563,7 +1568,6 @@ impl Account {
                             {
                                 self.watch();
                             }
-                            self.last_online_request = std::time::Instant::now();
                             self.is_online = Ok(());
                             return true;
                         }
@@ -1578,8 +1582,8 @@ impl Account {
                 }
                 JobRequest::Refresh(_mailbox_hash, _, ref mut chan) => {
                     let r = chan.try_recv().unwrap();
-                    if let Some(r) = r {
-                        if r.is_ok() {
+                    match r {
+                        Some(Ok(())) => {
                             if self.is_online.is_err()
                                 && !self
                                     .is_online
@@ -1590,23 +1594,39 @@ impl Account {
                             {
                                 self.watch();
                             }
+                            if !(self.is_online.is_err()
+                                && self
+                                    .is_online
+                                    .as_ref()
+                                    .unwrap_err()
+                                    .kind
+                                    .is_authentication())
+                            {
+                                self.is_online = Ok(());
+                                self.sender
+                                    .send(ThreadEvent::UIEvent(UIEvent::AccountStatusChange(
+                                        self.hash,
+                                    )))
+                                    .unwrap();
+                            }
                         }
-                        if !(self.is_online.is_err()
-                            && self
-                                .is_online
-                                .as_ref()
-                                .unwrap_err()
-                                .kind
-                                .is_authentication())
-                        {
-                            self.last_online_request = std::time::Instant::now();
-                            self.is_online = Ok(());
+                        Some(Err(err)) => {
+                            if !err.kind.is_authentication() {
+                                let online_job = self.backend.read().unwrap().is_online();
+                                if let Ok(online_job) = online_job {
+                                    let (rcvr, handle, job_id) =
+                                        self.job_executor.spawn_specialized(online_job);
+                                    self.insert_job(job_id, JobRequest::IsOnline(handle, rcvr));
+                                };
+                            }
+                            self.is_online = Err(err);
                             self.sender
                                 .send(ThreadEvent::UIEvent(UIEvent::AccountStatusChange(
                                     self.hash,
                                 )))
                                 .unwrap();
                         }
+                        None => {}
                     }
                 }
                 JobRequest::SetFlags(_, _, ref mut chan) => {
