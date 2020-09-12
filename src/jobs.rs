@@ -19,6 +19,13 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+//! Async job executor thread pool
+//!
+//! ## Usage
+//! ```no_run
+//!  let (channel, handle, job_id) = job_executor.spawn(job);
+//! ```
+
 use melib::error::Result;
 use melib::smol;
 use std::future::Future;
@@ -96,7 +103,6 @@ pub struct MeliTask {
 
 #[derive(Debug)]
 pub struct JobExecutor {
-    active_jobs: Vec<JobId>,
     global_queue: Arc<Injector<MeliTask>>,
     workers: Vec<Stealer<MeliTask>>,
     sender: Sender<ThreadEvent>,
@@ -108,7 +114,6 @@ impl JobExecutor {
     pub fn new(sender: Sender<ThreadEvent>) -> Self {
         // Create a queue.
         let mut ret = JobExecutor {
-            active_jobs: vec![],
             global_queue: Arc::new(Injector::new()),
             workers: vec![],
             parkers: vec![],
@@ -151,6 +156,7 @@ impl JobExecutor {
         }
         ret
     }
+
     /// Spawns a future on the executor.
     pub fn spawn<F>(&self, future: F) -> (JoinHandle, JobId)
     where
@@ -180,7 +186,7 @@ impl JobExecutor {
         (JoinHandle(handle), job_id)
     }
 
-    ///// Spawns a future on the executor.
+    /// Spawns a future with a generic return value `R`
     pub fn spawn_specialized<F, R>(&self, future: F) -> (oneshot::Receiver<R>, JoinHandle, JobId)
     where
         F: Future<Output = R> + Send + 'static,
@@ -211,6 +217,7 @@ impl JobExecutor {
         (receiver, JoinHandle(handle), job_id)
     }
 
+    /// Spawns a future with a generic return value `R` that might block on a new thread
     pub fn spawn_blocking<F, R>(&self, future: F) -> (oneshot::Receiver<R>, JoinHandle, JobId)
     where
         F: Future<Output = R> + Send + 'static,
@@ -222,22 +229,8 @@ impl JobExecutor {
 
 pub type JobChannel<T> = oneshot::Receiver<Result<T>>;
 
-///// Spawns a future on the executor.
-//fn spawn<F, R>(future: F) -> JoinHandle<R>
-//where
-//    F: Future<Output = R> + Send + 'static,
-//    R: Send + 'static,
-//{
-//    // Create a task and schedule it for execution.
-//    let (task, handle) = async_task::spawn(future, |t| QUEUE.send(t).unwrap(), ());
-//    task.schedule();
-//
-//    // Return a join handle that retrieves the output of the future.
-//    JoinHandle(handle)
-//}
-
 #[derive(Debug)]
-/// Awaits the output of a spawned future.
+/// JoinHandle for the future that allows us to cancel the task.
 pub struct JoinHandle(pub async_task::JoinHandle<Result<()>, ()>);
 
 impl Future for JoinHandle {
@@ -250,19 +243,3 @@ impl Future for JoinHandle {
         }
     }
 }
-
-/*
-fn _test() {
-    let executor = JobExecutor::new();
-    futures::executor::block_on(async {
-        // Spawn a future.
-        let handle = executor.spawn(async {
-            println!("Running task...");
-            panic!();
-        });
-
-        // Await its output.
-        handle.await;
-    });
-}
-*/
