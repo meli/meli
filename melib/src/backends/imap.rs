@@ -678,6 +678,7 @@ impl MailBackend for ImapType {
             if flags.iter().any(|(_, b)| *b) {
                 /* Set flags/tags to true */
                 let command = {
+                    let mut tag_lck = uid_store.tag_index.write().unwrap();
                     let mut cmd = format!("UID STORE {}", uids[0]);
                     for uid in uids.iter().skip(1) {
                         cmd = format!("{},{}", cmd, uid);
@@ -704,17 +705,14 @@ impl MailBackend for ImapType {
                                 cmd.push_str("\\Draft ");
                             }
                             Ok(_) => {
-                                crate::log(
-                                    format!(
-                        "Application error: more than one flag bit set in set_flags: {:?}", flags
-                    ),
-                                    crate::ERROR,
-                                );
-                                return Err(MeliError::new(format!(
-                        "Application error: more than one flag bit set in set_flags: {:?}", flags
-                    )));
+                                crate::log(format!("Application error: more than one flag bit set in set_flags: {:?}", flags), crate::ERROR);
+                                return Err(MeliError::new(format!("Application error: more than one flag bit set in set_flags: {:?}", flags)).set_kind(crate::ErrorKind::Bug));
                             }
                             Err(tag) => {
+                                let hash = tag_hash!(tag);
+                                if !tag_lck.contains_key(&hash) {
+                                    tag_lck.insert(hash, tag.to_string());
+                                }
                                 cmd.push_str(tag);
                                 cmd.push(' ');
                             }
