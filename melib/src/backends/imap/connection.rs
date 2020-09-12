@@ -80,6 +80,7 @@ pub struct ImapStream {
     pub stream: AsyncWrapper<Connection>,
     pub protocol: ImapProtocol,
     pub current_mailbox: MailboxSelection,
+    pub timeout: Option<Duration>,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -134,8 +135,12 @@ impl ImapStream {
             };
 
             let mut socket = AsyncWrapper::new(Connection::Tcp(
-                TcpStream::connect_timeout(&addr, Duration::new(4, 0))
-                    .chain_err_kind(crate::error::ErrorKind::Network)?,
+                if let Some(timeout) = server_conf.timeout {
+                    TcpStream::connect_timeout(&addr, timeout)
+                        .chain_err_kind(crate::error::ErrorKind::Network)?
+                } else {
+                    TcpStream::connect(&addr).chain_err_kind(crate::error::ErrorKind::Network)?
+                },
             ))
             .chain_err_kind(crate::error::ErrorKind::Network)?;
             if server_conf.use_starttls {
@@ -239,8 +244,12 @@ impl ImapStream {
                 )));
             };
             AsyncWrapper::new(Connection::Tcp(
-                TcpStream::connect_timeout(&addr, Duration::new(4, 0))
-                    .chain_err_kind(crate::error::ErrorKind::Network)?,
+                if let Some(timeout) = server_conf.timeout {
+                    TcpStream::connect_timeout(&addr, timeout)
+                        .chain_err_kind(crate::error::ErrorKind::Network)?
+                } else {
+                    TcpStream::connect(&addr).chain_err_kind(crate::error::ErrorKind::Network)?
+                },
             ))
             .chain_err_kind(crate::error::ErrorKind::Network)?
         };
@@ -250,6 +259,7 @@ impl ImapStream {
             stream,
             protocol: server_conf.protocol,
             current_mailbox: MailboxSelection::None,
+            timeout: server_conf.timeout,
         };
         if let ImapProtocol::ManageSieve = server_conf.protocol {
             use data_encoding::BASE64;
@@ -384,7 +394,7 @@ impl ImapStream {
         ret.clear();
         let mut last_line_idx: usize = 0;
         loop {
-            match timeout(Duration::from_secs(16), self.stream.read(&mut buf)).await? {
+            match timeout(self.timeout, self.stream.read(&mut buf)).await? {
                 Ok(0) => break,
                 Ok(b) => {
                     ret.push_str(unsafe { std::str::from_utf8_unchecked(&buf[0..b]) });
@@ -432,7 +442,7 @@ impl ImapStream {
 
     pub async fn send_command(&mut self, command: &[u8]) -> Result<()> {
         if let Err(err) = timeout(
-            Duration::from_secs(16),
+            self.timeout,
             try_await(async move {
                 let command = command.trim();
                 match self.protocol {
@@ -603,6 +613,7 @@ impl ImapConnection {
                                     stream,
                                     protocol,
                                     current_mailbox,
+                                    timeout,
                                 } = std::mem::replace(&mut self.stream, Err(MeliError::new("")))?;
                                 let stream = stream.into_inner()?;
                                 self.stream = Ok(ImapStream {
@@ -610,6 +621,7 @@ impl ImapConnection {
                                     stream: AsyncWrapper::new(stream.deflate())?,
                                     protocol,
                                     current_mailbox,
+                                    timeout,
                                 });
                             }
                         }

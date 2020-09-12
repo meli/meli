@@ -240,6 +240,12 @@ Use IDLE extension.
 Use COMPRESS=DEFLATE extension (if built with DEFLATE support).
 .\" default value
 .Pq Em true
+.It Ic timeout Ar integer
+.Pq Em optional
+Timeout to use for server connections in seconds.
+A timeout of 0 seconds means there's no timeout.
+.\" default value
+.Pq Em 16
 .El
 .Ss JMAP only
 JMAP specific options

@@ -39,7 +39,7 @@ pub async fn poll_with_examine(kit: ImapWatchKit) -> Result<()> {
     conn.connect().await?;
     loop {
         let mailboxes: HashMap<MailboxHash, ImapMailbox> = {
-            let mailboxes_lck = timeout(Duration::from_secs(3), uid_store.mailboxes.lock()).await?;
+            let mailboxes_lck = timeout(uid_store.timeout, uid_store.mailboxes.lock()).await?;
             mailboxes_lck.clone()
         };
         for (_, mailbox) in mailboxes {
@@ -109,14 +109,16 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
     let mut blockn = ImapBlockingConnection::from(conn);
     let mut beat = std::time::Instant::now();
     let mut watch = std::time::Instant::now();
+    /* duration interval before IMAP timeouts */
+    const _35_MINS: std::time::Duration = std::time::Duration::from_secs(35 * 60);
     /* duration interval to send heartbeat */
     const _26_MINS: std::time::Duration = std::time::Duration::from_secs(26 * 60);
     /* duration interval to check other mailboxes for changes */
     const _5_MINS: std::time::Duration = std::time::Duration::from_secs(5 * 60);
-    while let Some(line) = timeout(Duration::from_secs(35 * 60), blockn.as_stream()).await? {
+    while let Some(line) = timeout(Some(_35_MINS), blockn.as_stream()).await? {
         let now = std::time::Instant::now();
         if now.duration_since(beat) >= _26_MINS {
-            let mut main_conn_lck = timeout(Duration::from_secs(3), main_conn.lock()).await?;
+            let mut main_conn_lck = timeout(uid_store.timeout, main_conn.lock()).await?;
             blockn.conn.send_raw(b"DONE").await?;
             blockn
                 .conn
@@ -131,10 +133,10 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
         }
         if now.duration_since(watch) >= _5_MINS {
             /* Time to poll all inboxes */
-            let mut conn = timeout(Duration::from_secs(3), main_conn.lock()).await?;
+            let mut conn = timeout(uid_store.timeout, main_conn.lock()).await?;
             let mailboxes: HashMap<MailboxHash, ImapMailbox> = {
                 let mailboxes_lck =
-                    timeout(Duration::from_secs(3), uid_store.mailboxes.lock()).await?;
+                    timeout(uid_store.timeout, uid_store.mailboxes.lock()).await?;
                 mailboxes_lck.clone()
             };
             for (h, mailbox) in mailboxes {
@@ -183,16 +185,6 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
     }
     debug!("IDLE connection dropped");
     let err: &str = blockn.err().unwrap_or("Unknown reason.");
-    timeout(Duration::from_secs(3), main_conn.lock())
-        .await?
-        .add_refresh_event(RefreshEvent {
-            account_hash: uid_store.account_hash,
-            mailbox_hash,
-            kind: RefreshEventKind::Failure(MeliError::new(format!(
-                "IDLE connection dropped: {}",
-                &err
-            ))),
-        });
     Err(MeliError::new(format!("IDLE connection dropped: {}", err)))
 }
 

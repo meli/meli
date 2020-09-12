@@ -97,6 +97,7 @@ pub struct ImapServerConf {
     pub use_tls: bool,
     pub danger_accept_invalid_certs: bool,
     pub protocol: ImapProtocol,
+    pub timeout: Option<Duration>,
 }
 
 struct IsSubscribedFn(Box<dyn Fn(&str) -> bool + Send + Sync>);
@@ -167,6 +168,7 @@ pub struct UIDStore {
     mailboxes: Arc<FutureMutex<HashMap<MailboxHash, ImapMailbox>>>,
     is_online: Arc<Mutex<(Instant, Result<()>)>>,
     event_consumer: BackendEventConsumer,
+    timeout: Option<Duration>,
 }
 
 impl UIDStore {
@@ -174,6 +176,7 @@ impl UIDStore {
         account_hash: AccountHash,
         account_name: Arc<String>,
         event_consumer: BackendEventConsumer,
+        timeout: Option<Duration>,
     ) -> Self {
         UIDStore {
             account_hash,
@@ -197,6 +200,7 @@ impl UIDStore {
                 Err(MeliError::new("Account is uninitialised.")),
             ))),
             event_consumer,
+            timeout,
         }
     }
 }
@@ -354,12 +358,12 @@ impl MailBackend for ImapType {
         let main_conn = self.connection.clone();
         let uid_store = self.uid_store.clone();
         Ok(Box::pin(async move {
-            let inbox = timeout(Duration::from_secs(3), uid_store.mailboxes.lock())
+            let inbox = timeout(uid_store.timeout, uid_store.mailboxes.lock())
                 .await?
                 .get(&mailbox_hash)
                 .map(std::clone::Clone::clone)
                 .unwrap();
-            let mut conn = timeout(Duration::from_secs(3), main_conn.lock()).await?;
+            let mut conn = timeout(uid_store.timeout, main_conn.lock()).await?;
             watch::examine_updates(inbox, &mut conn, &uid_store).await?;
             Ok(())
         }))
@@ -416,11 +420,12 @@ impl MailBackend for ImapType {
 
     fn is_online(&self) -> ResultFuture<()> {
         let connection = self.connection.clone();
+        let timeout_dur = self.server_conf.timeout;
         Ok(Box::pin(async move {
-            match timeout(std::time::Duration::from_secs(3), connection.lock()).await {
+            match timeout(timeout_dur, connection.lock()).await {
                 Ok(mut conn) => {
                     debug!("is_online");
-                    match debug!(timeout(std::time::Duration::from_secs(3), conn.connect()).await) {
+                    match debug!(timeout(timeout_dur, conn.connect()).await) {
                         Ok(Ok(())) => Ok(()),
                         Err(err) | Ok(Err(err)) => {
                             conn.stream = Err(err.clone());
@@ -453,6 +458,7 @@ impl MailBackend for ImapType {
         Ok(Box::pin(async move {
             debug!(has_idle);
             let main_conn2 = main_conn.clone();
+            let timeout_dur = uid_store.timeout;
             let kit = ImapWatchKit {
                 conn,
                 main_conn,
@@ -463,7 +469,7 @@ impl MailBackend for ImapType {
             } else {
                 poll_with_examine(kit).await
             } {
-                let mut main_conn = timeout(Duration::from_secs(3), main_conn2.lock()).await?;
+                let mut main_conn = timeout(timeout_dur, main_conn2.lock()).await?;
                 if err.kind.is_network() {
                     main_conn.uid_store.is_online.lock().unwrap().1 = Err(err.clone());
                 }
@@ -1222,6 +1228,12 @@ impl ImapType {
                 s.name,
             )));
         }
+        let timeout = get_conf_val!(s["timeout"], 16_u64)?;
+        let timeout = if timeout == 0 {
+            None
+        } else {
+            Some(Duration::from_secs(timeout))
+        };
         let server_conf = ImapServerConf {
             server_hostname: server_hostname.to_string(),
             server_username: server_username.to_string(),
@@ -1238,6 +1250,7 @@ impl ImapType {
                     deflate: get_conf_val!(s["use_deflate"], true)?,
                 },
             },
+            timeout,
         };
         let account_hash = {
             let mut hasher = DefaultHasher::new();
@@ -1247,7 +1260,12 @@ impl ImapType {
         let account_name = Arc::new(s.name().to_string());
         let uid_store: Arc<UIDStore> = Arc::new(UIDStore {
             keep_offline_cache,
-            ..UIDStore::new(account_hash, account_name, event_consumer)
+            ..UIDStore::new(
+                account_hash,
+                account_name,
+                event_consumer,
+                server_conf.timeout,
+            )
         });
         let connection = ImapConnection::new_connection(&server_conf, uid_store.clone());
 
@@ -1262,15 +1280,18 @@ impl ImapType {
     pub fn shell(&mut self) {
         let mut conn = ImapConnection::new_connection(&self.server_conf, self.uid_store.clone());
 
-        futures::executor::block_on(timeout(Duration::from_secs(3), conn.connect()))
+        futures::executor::block_on(timeout(self.server_conf.timeout, conn.connect()))
             .unwrap()
             .unwrap();
         let mut res = String::with_capacity(8 * 1024);
-        futures::executor::block_on(timeout(Duration::from_secs(3), conn.send_command(b"NOOP")))
-            .unwrap()
-            .unwrap();
         futures::executor::block_on(timeout(
-            Duration::from_secs(3),
+            self.server_conf.timeout,
+            conn.send_command(b"NOOP"),
+        ))
+        .unwrap()
+        .unwrap();
+        futures::executor::block_on(timeout(
+            self.server_conf.timeout,
             conn.read_response(&mut res, RequiredResponses::empty()),
         ))
         .unwrap()
@@ -1284,13 +1305,13 @@ impl ImapType {
             match io::stdin().read_line(&mut input) {
                 Ok(_) => {
                     futures::executor::block_on(timeout(
-                        Duration::from_secs(3),
+                        self.server_conf.timeout,
                         conn.send_command(input.as_bytes()),
                     ))
                     .unwrap()
                     .unwrap();
                     futures::executor::block_on(timeout(
-                        Duration::from_secs(3),
+                        self.server_conf.timeout,
                         conn.read_lines(&mut res, String::new()),
                     ))
                     .unwrap()
@@ -1460,6 +1481,7 @@ impl ImapType {
                 s.name.as_str(),
             )));
         }
+        let _timeout = get_conf_val!(s["timeout"], 16_u64)?;
         Ok(())
     }
 

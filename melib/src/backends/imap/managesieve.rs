@@ -96,6 +96,12 @@ pub fn new_managesieve_connection(
     let server_password = get_conf_val!(s["server_password"])?;
     let server_port = get_conf_val!(s["server_port"], 4190)?;
     let danger_accept_invalid_certs: bool = get_conf_val!(s["danger_accept_invalid_certs"], false)?;
+    let timeout = get_conf_val!(s["timeout"], 16_u64)?;
+    let timeout = if timeout == 0 {
+        None
+    } else {
+        Some(std::time::Duration::from_secs(timeout))
+    };
     let server_conf = ImapServerConf {
         server_hostname: server_hostname.to_string(),
         server_username: server_username.to_string(),
@@ -105,13 +111,19 @@ pub fn new_managesieve_connection(
         use_tls: true,
         danger_accept_invalid_certs,
         protocol: ImapProtocol::ManageSieve,
+        timeout,
     };
     let uid_store = Arc::new(UIDStore {
         is_online: Arc::new(Mutex::new((
             Instant::now(),
             Err(MeliError::new("Account is uninitialised.")),
         ))),
-        ..UIDStore::new(account_hash, Arc::new(account_name), event_consumer)
+        ..UIDStore::new(
+            account_hash,
+            Arc::new(account_name),
+            event_consumer,
+            server_conf.timeout,
+        )
     });
     Ok(ImapConnection::new_connection(&server_conf, uid_store))
 }
