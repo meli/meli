@@ -27,7 +27,7 @@ color_aliases = { "neon_green" = "#6ef9d4",  "darkgrey" = "#4a4a4a",  "neon_purp
 "mail.listing.plain.odd_highlighted" = { fg = "theme_default", bg = "Grey58", attrs = "theme_default" }
 "mail.listing.plain.odd_selected" = { fg = "theme_default", bg = "LightCoral", attrs = "theme_default" }
 "mail.listing.plain.odd_unseen" = { fg = "Black", bg = "Grey78", attrs = "theme_default" }
-"mail.listing.tag_default" = { fg = "$darkgrey", bg = "$neon_green", attrs = "Bold" }
+"mail.listing.tag_default" = { fg = "Black", bg = "$neon_green", attrs = "theme_default" }
 "mail.listing.thread_snooze_flag" = { fg = "Red", bg = "theme_default", attrs = "theme_default" }
 "mail.sidebar" = { fg = "$darkgrey", bg = "theme_default", attrs = "theme_default" }
 "mail.sidebar_highlighted" = { fg = "Grey7", bg = "White", attrs = "theme_default" }
@@ -42,12 +42,12 @@ color_aliases = { "neon_green" = "#6ef9d4",  "darkgrey" = "#4a4a4a",  "neon_purp
 "mail.sidebar_unread_count" = { fg = "Grey46", bg = "theme_default", attrs = "theme_default" }
 "mail.view.body" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
 "mail.view.headers" = { fg = "DodgerBlue1", bg = "theme_default", attrs = "theme_default" }
-"mail.view.thread.indentation.a" = { fg = "theme_default", bg = "CornflowerBlue", attrs = "theme_default" }
-"mail.view.thread.indentation.b" = { fg = "theme_default", bg = "Red1", attrs = "theme_default" }
-"mail.view.thread.indentation.c" = { fg = "theme_default", bg = "Pink3", attrs = "theme_default" }
-"mail.view.thread.indentation.d" = { fg = "theme_default", bg = "Gold1", attrs = "theme_default" }
-"mail.view.thread.indentation.e" = { fg = "theme_default", bg = "Orange3", attrs = "theme_default" }
-"mail.view.thread.indentation.f" = { fg = "theme_default", bg = "CadetBlue", attrs = "theme_default" }
+"mail.view.thread.indentation.a" = { fg = "theme_default", bg = "#EC4436", attrs = "theme_default" }
+"mail.view.thread.indentation.b" = { fg = "theme_default", bg = "#D301F9", attrs = "theme_default" }
+"mail.view.thread.indentation.c" = { fg = "theme_default", bg = "#314EFB", attrs = "theme_default" }
+"mail.view.thread.indentation.d" = { fg = "theme_default", bg = "#068ACD", attrs = "theme_default" }
+"mail.view.thread.indentation.e" = { fg = "theme_default", bg = "#019589", attrs = "theme_default" }
+"mail.view.thread.indentation.f" = { fg = "theme_default", bg = "#68A033", attrs = "theme_default" }
 "pager.highlight_search" = { fg = "White", bg = "Teal", attrs = "Bold" }
 "pager.highlight_search_current" = { fg = "White", bg = "NavyBlue", attrs = "Bold" }
 "status.bar" = { fg = "White", bg = "Black", attrs = "theme_default" }
