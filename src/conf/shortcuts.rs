@@ -27,9 +27,9 @@ use melib::{MeliError, Result};
 #[macro_export]
 macro_rules! shortcut {
     ($key:ident == $shortcuts:ident[$section:expr][$val:literal]) => {
-        $shortcuts[$section]
-            .get($val)
-            .map(|v| v == $key)
+        $shortcuts
+            .get($section)
+            .and_then(|s| s.get($val).map(|v| v == $key))
             .unwrap_or(false)
     };
 }
