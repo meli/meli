@@ -70,6 +70,7 @@ pub static SUPPORTED_CAPABILITIES: &[&str] = &[
     "ENABLE",
     "IDLE",
     "IMAP4REV1",
+    "LIST-EXTENDED",
     "LIST-STATUS",
     "LITERAL+",
     "LOGIN",
@@ -340,6 +341,10 @@ impl MailBackend for ImapType {
                 let f = &state.uid_store.mailboxes.lock().await[&mailbox_hash];
                 f.exists.lock().unwrap().clear();
                 f.unseen.lock().unwrap().clear();
+                if f.no_select {
+                    yield vec![];
+                    return;
+                }
             };
             loop {
                 let res = fetch_hlpr(&mut state).await.map_err(|err| {

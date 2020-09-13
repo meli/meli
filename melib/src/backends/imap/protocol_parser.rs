@@ -416,10 +416,13 @@ pub fn list_mailbox_result(input: &[u8]) -> IResult<&[u8], ImapMailbox> {
             let separator: u8 = separator[0];
             let mut f = ImapMailbox::default();
             f.no_select = false;
-            f.is_subscribed = false;
+            f.is_subscribed = path == "INBOX";
             for p in properties.split(|&b| b == b' ') {
-                if p.eq_ignore_ascii_case(b"\\NoSelect") {
+                if p.eq_ignore_ascii_case(b"\\NoSelect") || p.eq_ignore_ascii_case(b"\\NonExistent")
+                {
                     f.no_select = true;
+                } else if p.eq_ignore_ascii_case(b"\\Subscribed") {
+                    f.is_subscribed = true;
                 } else if p.eq_ignore_ascii_case(b"\\Sent") {
                     let _ = f.set_special_usage(SpecialUsageMailbox::Sent);
                 } else if p.eq_ignore_ascii_case(b"\\Junk") {
@@ -428,7 +431,6 @@ pub fn list_mailbox_result(input: &[u8]) -> IResult<&[u8], ImapMailbox> {
                     let _ = f.set_special_usage(SpecialUsageMailbox::Drafts);
                 }
             }
-            f.is_subscribed = path == "INBOX";
             f.imap_path = path.into();
             f.hash = get_path_hash!(&f.imap_path);
             f.path = if separator == b'/' {
