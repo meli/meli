@@ -102,20 +102,32 @@ use super::*;
                                 let attr_inner_value = f.tokens.to_string();
                                 if !attr_inner_value.starts_with("( default")
                                     && !attr_inner_value.starts_with("( default =")
+                                    && !attr_inner_value.starts_with("(default")
+                                    && !attr_inner_value.starts_with("(default =")
                                 {
                                     return Some(new_attr);
                                 }
-                                if attr_inner_value.starts_with("( default =") {
+                                if attr_inner_value.starts_with("( default =")
+                                    || attr_inner_value.starts_with("(default =")
+                                {
                                     let rest = g.stream().into_iter().skip(4);
                                     new_attr.tokens = quote! { ( #(#rest)*) };
-                                    if new_attr.tokens.to_string().as_str() == "( )" {
-                                        return None;
+                                    match new_attr.tokens.to_string().as_str() {
+                                        "( )" | "()" => {
+                                            return None;
+                                        }
+                                        _ => {}
                                     }
-                                } else if attr_inner_value.starts_with("( default") {
+                                } else if attr_inner_value.starts_with("( default")
+                                    || attr_inner_value.starts_with("(default")
+                                {
                                     let rest = g.stream().into_iter().skip(2);
                                     new_attr.tokens = quote! { ( #(#rest)*) };
-                                    if new_attr.tokens.to_string().as_str() == "( )" {
-                                        return None;
+                                    match new_attr.tokens.to_string().as_str() {
+                                        "( )" | "()" => {
+                                            return None;
+                                        }
+                                        _ => {}
                                     }
                                 }
                             }
