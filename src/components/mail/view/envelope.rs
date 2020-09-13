@@ -101,31 +101,33 @@ impl EnvelopeView {
                             .stdin(Stdio::piped())
                             .stdout(Stdio::piped())
                             .spawn();
-                        if command_obj.is_err() {
-                            context.replies.push_back(UIEvent::Notification(
-                                Some(format!(
-                                    "Failed to start html filter process: {}",
-                                    filter_invocation,
-                                )),
-                                String::new(),
-                                Some(NotificationType::ERROR),
-                            ));
-                            return;
-                        }
-
-                        let mut html_filter = command_obj.unwrap();
-                        html_filter
-                            .stdin
-                            .as_mut()
-                            .unwrap()
-                            .write_all(&v)
-                            .expect("Failed to write to stdin");
-                        *v = format!(
+                        match command_obj {
+                            Err(err) => {
+                                context.replies.push_back(UIEvent::Notification(
+                                    Some(format!(
+                                        "Failed to start html filter process: {}",
+                                        filter_invocation,
+                                    )),
+                                    err.to_string(),
+                                    Some(NotificationType::Error(melib::ErrorKind::External)),
+                                ));
+                                return;
+                            }
+                            Ok(mut html_filter) => {
+                                html_filter
+                                    .stdin
+                                    .as_mut()
+                                    .unwrap()
+                                    .write_all(&v)
+                                    .expect("Failed to write to stdin");
+                                *v = format!(
                             "Text piped through `{}`. Press `v` to open in web browser. \n\n",
                             filter_invocation
                         )
-                        .into_bytes();
-                        v.extend(html_filter.wait_with_output().unwrap().stdout);
+                                .into_bytes();
+                                v.extend(html_filter.wait_with_output().unwrap().stdout);
+                            }
+                        }
                     }
                 }
             })),

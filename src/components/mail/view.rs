@@ -342,58 +342,60 @@ impl MailView {
                             .stdin(Stdio::piped())
                             .stdout(Stdio::piped())
                             .spawn();
-                        if command_obj.is_err() {
-                            context.replies.push_back(UIEvent::Notification(
-                                Some(format!(
-                                    "Failed to start html filter process: {}",
-                                    filter_invocation,
-                                )),
-                                String::new(),
-                                Some(NotificationType::ERROR),
-                            ));
-                            return;
-                        }
-
-                        let mut html_filter = command_obj.unwrap();
-                        html_filter
-                            .stdin
-                            .as_mut()
-                            .unwrap()
-                            .write_all(&v)
-                            .expect("Failed to write to stdin");
-                        *v = format!(
+                        match command_obj {
+                            Err(err) => {
+                                context.replies.push_back(UIEvent::Notification(
+                                    Some(format!(
+                                        "Failed to start html filter process: {}",
+                                        filter_invocation,
+                                    )),
+                                    err.to_string(),
+                                    Some(NotificationType::Error(melib::ErrorKind::External)),
+                                ));
+                                return;
+                            }
+                            Ok(mut html_filter) => {
+                                html_filter
+                                    .stdin
+                                    .as_mut()
+                                    .unwrap()
+                                    .write_all(&v)
+                                    .expect("Failed to write to stdin");
+                                *v = format!(
                             "Text piped through `{}`. Press `v` to open in web browser. \n\n",
                             filter_invocation
                         )
-                        .into_bytes();
-                        v.extend(html_filter.wait_with_output().unwrap().stdout);
+                                .into_bytes();
+                                v.extend(html_filter.wait_with_output().unwrap().stdout);
+                            }
+                        }
                     } else {
-                        if let Ok(mut html_filter) = Command::new("w3m")
+                        match Command::new("w3m")
                             .args(&["-I", "utf-8", "-T", "text/html"])
                             .stdin(Stdio::piped())
                             .stdout(Stdio::piped())
                             .spawn()
                         {
-                            html_filter
-                                .stdin
-                                .as_mut()
-                                .unwrap()
-                                .write_all(&v)
-                                .expect("Failed to write to html filter stdin");
-                            *v = String::from(
+                            Ok(mut html_filter) => {
+                                html_filter
+                                    .stdin
+                                    .as_mut()
+                                    .unwrap()
+                                    .write_all(&v)
+                                    .expect("Failed to write to html filter stdin");
+                                *v = String::from(
                                 "Text piped through `w3m`. Press `v` to open in web browser. \n\n",
                             )
                             .into_bytes();
-                            v.extend(html_filter.wait_with_output().unwrap().stdout);
-                        } else {
-                            context.replies.push_back(UIEvent::Notification(
-                                Some(
-                                    "Failed to find any application to use as html filter"
-                                        .to_string(),
-                                ),
-                                String::new(),
-                                Some(NotificationType::ERROR),
-                            ));
+                                v.extend(html_filter.wait_with_output().unwrap().stdout);
+                            }
+                            Err(err) => {
+                                context.replies.push_back(UIEvent::Notification(
+                                    Some("Failed to launch w3m to use as html filter".to_string()),
+                                    err.to_string(),
+                                    Some(NotificationType::Error(melib::ErrorKind::External)),
+                                ));
+                            }
                         }
                     }
                 } else if a.is_signed() {
@@ -469,7 +471,7 @@ impl MailView {
             context.replies.push_back(UIEvent::Notification(
                 Some("Failed to open e-mail".to_string()),
                 err.to_string(),
-                Some(NotificationType::ERROR),
+                Some(NotificationType::Error(err.kind)),
             ));
             log(
                 format!("Failed to open envelope: {}", err.to_string()),
@@ -563,7 +565,7 @@ impl MailView {
                                     context.replies.push_back(UIEvent::Notification(
                                         None,
                                         s,
-                                        Some(NotificationType::ERROR),
+                                        Some(NotificationType::Error(melib::ErrorKind::None)),
                                     ));
                                 }
                                 _ => {}
@@ -877,7 +879,7 @@ impl Component for MailView {
                 context.replies.push_back(UIEvent::Notification(
                     Some("Failed to open e-mail".to_string()),
                     err.to_string(),
-                    Some(NotificationType::ERROR),
+                    Some(NotificationType::Error(err.kind)),
                 ));
                 log(
                     format!("Failed to open envelope: {}", err.to_string()),
@@ -1219,7 +1221,7 @@ impl Component for MailView {
                                     context.replies.push_back(UIEvent::Notification(
                                         Some("Failed to open e-mail".to_string()),
                                         err_string,
-                                        Some(NotificationType::ERROR),
+                                        Some(NotificationType::Error(err.kind)),
                                     ));
                                 }
                             }
@@ -1414,7 +1416,7 @@ impl Component for MailView {
                                 context.replies.push_back(UIEvent::Notification(
                                     Some("Failed to launch xdg-open".to_string()),
                                     err.to_string(),
-                                    Some(NotificationType::ERROR),
+                                    Some(NotificationType::Error(melib::ErrorKind::External)),
                                 ));
                             }
                         }
@@ -1451,7 +1453,7 @@ impl Component for MailView {
                     context.replies.push_back(UIEvent::Notification(
                         Some("Failed to open e-mail".to_string()),
                         err.to_string(),
-                        Some(NotificationType::ERROR),
+                        Some(NotificationType::Error(err.kind)),
                     ));
                     log(
                         format!("Failed to open envelope: {}", err.to_string()),
@@ -1475,7 +1477,7 @@ impl Component for MailView {
                             context.replies.push_back(UIEvent::Notification(
                                 Some(format!("Failed to create file at {}", path.display())),
                                 err.to_string(),
-                                Some(NotificationType::ERROR),
+                                Some(NotificationType::Error(melib::ErrorKind::External)),
                             ));
                             log(
                                 format!(
@@ -1501,7 +1503,7 @@ impl Component for MailView {
                     context.replies.push_back(UIEvent::Notification(
                         None,
                         format!("Saved at {}", &path.display()),
-                        Some(NotificationType::INFO),
+                        Some(NotificationType::Info),
                     ));
 
                     return true;
@@ -1515,17 +1517,17 @@ impl Component for MailView {
                         | ContentType::PGPSignature => {
                             debug!(path);
                             let mut f = match std::fs::File::create(path) {
-                                Err(e) => {
+                                Err(err) => {
                                     context.replies.push_back(UIEvent::Notification(
                                         Some(format!("Failed to create file at {}", path)),
-                                        e.to_string(),
-                                        Some(NotificationType::ERROR),
+                                        err.to_string(),
+                                        Some(NotificationType::Error(melib::ErrorKind::External)),
                                     ));
                                     log(
                                         format!(
                                             "Failed to create file at {}: {}",
                                             path,
-                                            e.to_string()
+                                            err.to_string()
                                         ),
                                         ERROR,
                                     );
@@ -1557,17 +1559,17 @@ impl Component for MailView {
                             name: ref _name, ..
                         } => {
                             let mut f = match std::fs::File::create(path.trim()) {
-                                Err(e) => {
+                                Err(err) => {
                                     context.replies.push_back(UIEvent::Notification(
                                         Some(format!("Failed to create file at {}", path)),
-                                        e.to_string(),
-                                        Some(NotificationType::ERROR),
+                                        err.to_string(),
+                                        Some(NotificationType::Error(melib::ErrorKind::External)),
                                     ));
                                     log(
                                         format!(
                                             "Failed to create file at {}: {}",
                                             path,
-                                            e.to_string()
+                                            err.to_string()
                                         ),
                                         ERROR,
                                     );
@@ -1583,7 +1585,7 @@ impl Component for MailView {
                     context.replies.push_back(UIEvent::Notification(
                         None,
                         format!("Saved at {}", &path),
-                        Some(NotificationType::INFO),
+                        Some(NotificationType::Info),
                     ));
                 } else {
                     context

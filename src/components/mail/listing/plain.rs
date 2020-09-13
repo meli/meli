@@ -1348,7 +1348,7 @@ impl Component for PlainListing {
                         context.replies.push_back(UIEvent::Notification(
                             Some("Could not perform search".to_string()),
                             err.to_string(),
-                            Some(crate::types::NotificationType::ERROR),
+                            Some(crate::types::NotificationType::Error(err.kind)),
                         ));
                     }
                 };

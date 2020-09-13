@@ -750,7 +750,7 @@ impl Component for Composer {
                             context.replies.push_back(UIEvent::Notification(
                                 Some("Sent.".into()),
                                 String::new(),
-                                Some(NotificationType::INFO),
+                                Some(NotificationType::Info),
                             ));
                             context
                                 .replies
@@ -760,7 +760,7 @@ impl Component for Composer {
                             context.replies.push_back(UIEvent::Notification(
                                 None,
                                 err.to_string(),
-                                Some(NotificationType::ERROR),
+                                Some(NotificationType::Error(err.kind)),
                             ));
                             save_draft(
                                 self.draft.clone().finalise().unwrap().as_bytes(),
@@ -869,7 +869,7 @@ impl Component for Composer {
                     context.replies.push_back(UIEvent::Notification(
                         None,
                         err.to_string(),
-                        Some(NotificationType::ERROR),
+                        Some(NotificationType::Error(err.kind)),
                     ));
                     self.set_dirty(true);
                 } else {
@@ -980,7 +980,9 @@ impl Component for Composer {
                                             "Subprocess has exited with exit code {}",
                                             exit_code
                                         ),
-                                        Some(NotificationType::ERROR),
+                                        Some(NotificationType::Error(
+                                            melib::error::ErrorKind::External,
+                                        )),
                                     ));
                                 } else if let EmbedStatus::Running(_, f) = embed {
                                     let result = f.read_to_string();
@@ -995,12 +997,12 @@ impl Component for Composer {
                                             }
                                             self.draft = new_draft;
                                         }
-                                        Err(_) => {
+                                        Err(err) => {
                                             context.replies.push_back(UIEvent::Notification(
-                                                    None,
-                                                    "Could not parse draft headers correctly. The invalid text has been set as the body of your draft".to_string(),
-                                                    Some(NotificationType::ERROR),
-                                                    ));
+                                                    Some("Could not parse draft headers correctly.".to_string()),
+                                                    format!("{}\nThe invalid text has been set as the body of your draft", &err),
+                                                    Some(NotificationType::Error(melib::error::ErrorKind::None)),
+                                            ));
                                             self.draft.set_body(result);
                                             self.has_changes = true;
                                         }
@@ -1012,6 +1014,24 @@ impl Component for Composer {
                                 context
                                     .replies
                                     .push_back(UIEvent::ChangeMode(UIMode::Normal));
+                            }
+                            #[cfg(any(target_os = "linux", target_os = "android"))]
+                            Ok(WaitStatus::PtraceEvent(_, _, _))
+                            | Ok(WaitStatus::PtraceSyscall(_)) => {
+                                drop(embed_guard);
+                                match self.embed.take() {
+                                    Some(EmbedStatus::Running(e, f))
+                                    | Some(EmbedStatus::Stopped(e, f)) => {
+                                        self.embed = Some(EmbedStatus::Stopped(e, f));
+                                    }
+                                    _ => {}
+                                }
+                                self.mode = ViewMode::Edit;
+                                context
+                                    .replies
+                                    .push_back(UIEvent::ChangeMode(UIMode::Normal));
+                                self.dirty = true;
+                                return true;
                             }
                             Ok(WaitStatus::Stopped(_, _)) => {
                                 drop(embed_guard);
@@ -1035,11 +1055,28 @@ impl Component for Composer {
                                     .push_back(UIEvent::EmbedInput((k.clone(), b.to_vec())));
                                 return true;
                             }
-                            e => {
+                            Ok(WaitStatus::Signaled(_, signal, _)) => {
+                                drop(embed_guard);
                                 context.replies.push_back(UIEvent::Notification(
                                     None,
-                                    format!("Subprocess has exited with reason {:?}", e),
-                                    Some(NotificationType::ERROR),
+                                    format!("Subprocess was killed by {} signal", signal),
+                                    Some(NotificationType::Error(
+                                        melib::error::ErrorKind::External,
+                                    )),
+                                ));
+                                self.embed = None;
+                                self.mode = ViewMode::Edit;
+                                context
+                                    .replies
+                                    .push_back(UIEvent::ChangeMode(UIMode::Normal));
+                            }
+                            Err(err) => {
+                                context.replies.push_back(UIEvent::Notification(
+                                    Some("Embed editor crashed.".to_string()),
+                                    format!("Subprocess has exited with reason {}", &err),
+                                    Some(NotificationType::Error(
+                                        melib::error::ErrorKind::External,
+                                    )),
                                 ));
                                 drop(embed_guard);
                                 self.embed = None;
@@ -1083,11 +1120,11 @@ impl Component for Composer {
                     editor_command.to_string()
                 } else {
                     match std::env::var("EDITOR") {
-                        Err(e) => {
+                        Err(err) => {
                             context.replies.push_back(UIEvent::Notification(
-                            Some(e.to_string()),
+                            Some(err.to_string()),
                             "$EDITOR is not set. You can change an envvar's value with setenv or set composing.editor_command setting in your configuration.".to_string(),
-                            Some(NotificationType::ERROR),
+                            Some(NotificationType::Error(melib::error::ErrorKind::None)),
                         ));
                             return true;
                         }
@@ -1150,7 +1187,7 @@ impl Component for Composer {
                         context.replies.push_back(UIEvent::Notification(
                             Some(format!("Failed to execute {}: {}", editor, err)),
                             err.to_string(),
-                            Some(NotificationType::ERROR),
+                            Some(NotificationType::Error(melib::error::ErrorKind::External)),
                         ));
                         context.replies.push_back(UIEvent::Fork(ForkType::Finished));
                         context.restore_input();
@@ -1167,12 +1204,15 @@ impl Component for Composer {
                         }
                         self.draft = new_draft;
                     }
-                    Err(_) => {
+                    Err(err) => {
                         context.replies.push_back(UIEvent::Notification(
-                                                    None,
-                                                    "Could not parse draft headers correctly. The invalid text has been set as the body of your draft".to_string(),
-                                                    Some(NotificationType::ERROR),
-                                                    ));
+                            Some("Could not parse draft headers correctly.".to_string()),
+                            format!(
+                                "{}\nThe invalid text has been set as the body of your draft",
+                                &err
+                            ),
+                            Some(NotificationType::Error(melib::error::ErrorKind::None)),
+                        ));
                         self.draft.set_body(result);
                         self.has_changes = true;
                     }
@@ -1181,125 +1221,127 @@ impl Component for Composer {
                 self.dirty = true;
                 return true;
             }
-            UIEvent::Action(ref a) => {
-                match a {
-                    Action::Compose(ComposeAction::AddAttachmentPipe(ref command)) => {
-                        if command.is_empty() {
+            UIEvent::Action(ref a) => match a {
+                Action::Compose(ComposeAction::AddAttachmentPipe(ref command)) => {
+                    if command.is_empty() {
+                        context.replies.push_back(UIEvent::Notification(
+                            None,
+                            format!("pipe command value is invalid: {}", command),
+                            Some(NotificationType::Error(melib::error::ErrorKind::None)),
+                        ));
+                        return false;
+                    }
+                    let f = create_temp_file(&[], None, None, true);
+                    match std::process::Command::new("sh")
+                        .args(&["-c", command])
+                        .stdin(std::process::Stdio::null())
+                        .stdout(std::process::Stdio::from(f.file()))
+                        .spawn()
+                    {
+                        Ok(child) => {
+                            let _ = child
+                                .wait_with_output()
+                                .expect("failed to launch command")
+                                .stdout;
+                            let mut attachment =
+                                match melib::email::compose::attachment_from_file(f.path()) {
+                                    Ok(a) => a,
+                                    Err(err) => {
+                                        context.replies.push_back(UIEvent::Notification(
+                                            Some("could not add attachment".to_string()),
+                                            err.to_string(),
+                                            Some(NotificationType::Error(
+                                                melib::error::ErrorKind::None,
+                                            )),
+                                        ));
+                                        self.dirty = true;
+                                        return true;
+                                    }
+                                };
+                            if let Ok(mime_type) = query_mime_info(f.path()) {
+                                match attachment.content_type {
+                                    ContentType::Other { ref mut tag, .. } => {
+                                        *tag = mime_type;
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            self.draft.attachments_mut().push(attachment);
+                            self.dirty = true;
+                            return true;
+                        }
+                        Err(err) => {
                             context.replies.push_back(UIEvent::Notification(
                                 None,
-                                format!("pipe command value is invalid: {}", command),
-                                Some(NotificationType::ERROR),
+                                format!("could not execute pipe command {}: {}", command, &err),
+                                Some(NotificationType::Error(melib::error::ErrorKind::External)),
                             ));
-                            return false;
-                        }
-                        let f = create_temp_file(&[], None, None, true);
-                        match std::process::Command::new("sh")
-                            .args(&["-c", command])
-                            .stdin(std::process::Stdio::null())
-                            .stdout(std::process::Stdio::from(f.file()))
-                            .spawn()
-                        {
-                            Ok(child) => {
-                                let _ = child
-                                    .wait_with_output()
-                                    .expect("failed to launch command")
-                                    .stdout;
-                                let mut attachment =
-                                    match melib::email::attachment_from_file(f.path()) {
-                                        Ok(a) => a,
-                                        Err(e) => {
-                                            context.replies.push_back(UIEvent::Notification(
-                                                Some("could not add attachment".to_string()),
-                                                e.to_string(),
-                                                Some(NotificationType::ERROR),
-                                            ));
-                                            self.dirty = true;
-                                            return true;
-                                        }
-                                    };
-                                if let Ok(mime_type) = query_mime_info(f.path()) {
-                                    match attachment.content_type {
-                                        ContentType::Other { ref mut tag, .. } => {
-                                            *tag = mime_type;
-                                        }
-                                        _ => {}
-                                    }
-                                }
-                                self.draft.attachments_mut().push(attachment);
-                                self.dirty = true;
-                                return true;
-                            }
-                            Err(err) => {
-                                context.replies.push_back(UIEvent::Notification(
-                                    None,
-                                    format!("could not execute pipe command {}: {}", command, err),
-                                    Some(NotificationType::ERROR),
-                                ));
-                                return true;
-                            }
+                            return true;
                         }
                     }
-                    Action::Compose(ComposeAction::AddAttachment(ref path)) => {
-                        let mut attachment = match melib::email::attachment_from_file(path) {
-                            Ok(a) => a,
-                            Err(e) => {
-                                context.replies.push_back(UIEvent::Notification(
-                                    Some("could not add attachment".to_string()),
-                                    e.to_string(),
-                                    Some(NotificationType::ERROR),
-                                ));
-                                self.dirty = true;
-                                return true;
-                            }
-                        };
-                        if let Ok(mime_type) = query_mime_info(path) {
-                            match attachment.content_type {
-                                ContentType::Other { ref mut tag, .. } => {
-                                    *tag = mime_type;
-                                }
-                                _ => {}
-                            }
-                        }
-                        self.draft.attachments_mut().push(attachment);
-                        self.dirty = true;
-                        return true;
-                    }
-                    Action::Compose(ComposeAction::RemoveAttachment(idx)) => {
-                        if *idx + 1 > self.draft.attachments().len() {
-                            context.replies.push_back(UIEvent::StatusEvent(
-                                StatusEvent::DisplayMessage(
-                                    "attachment with given index does not exist".to_string(),
-                                ),
+                }
+                Action::Compose(ComposeAction::AddAttachment(ref path)) => {
+                    let mut attachment = match melib::email::compose::attachment_from_file(path) {
+                        Ok(a) => a,
+                        Err(err) => {
+                            context.replies.push_back(UIEvent::Notification(
+                                Some("could not add attachment".to_string()),
+                                err.to_string(),
+                                Some(NotificationType::Error(melib::error::ErrorKind::None)),
                             ));
                             self.dirty = true;
                             return true;
                         }
-                        self.draft.attachments_mut().remove(*idx);
+                    };
+                    if let Ok(mime_type) = query_mime_info(path) {
+                        match attachment.content_type {
+                            ContentType::Other { ref mut tag, .. } => {
+                                *tag = mime_type;
+                            }
+                            _ => {}
+                        }
+                    }
+                    self.draft.attachments_mut().push(attachment);
+                    self.dirty = true;
+                    return true;
+                }
+                Action::Compose(ComposeAction::RemoveAttachment(idx)) => {
+                    if *idx + 1 > self.draft.attachments().len() {
                         context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage("attachment removed".to_string()),
+                            StatusEvent::DisplayMessage(
+                                "attachment with given index does not exist".to_string(),
+                            ),
                         ));
                         self.dirty = true;
                         return true;
                     }
-                    Action::Compose(ComposeAction::SaveDraft) => {
-                        save_draft(
-                            self.draft.clone().finalise().unwrap().as_bytes(),
-                            context,
-                            SpecialUsageMailbox::Drafts,
-                            Flag::SEEN | Flag::DRAFT,
-                            self.account_hash,
-                        );
-                        return true;
-                    }
-                    Action::Compose(ComposeAction::ToggleSign) => {
-                        let is_true = self.sign_mail.is_true();
-                        self.sign_mail = ToggleFlag::from(!is_true);
-                        self.dirty = true;
-                        return true;
-                    }
-                    _ => {}
+                    self.draft.attachments_mut().remove(*idx);
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
+                            "attachment removed".to_string(),
+                        )));
+                    self.dirty = true;
+                    return true;
                 }
-            }
+                Action::Compose(ComposeAction::SaveDraft) => {
+                    save_draft(
+                        self.draft.clone().finalise().unwrap().as_bytes(),
+                        context,
+                        SpecialUsageMailbox::Drafts,
+                        Flag::SEEN | Flag::DRAFT,
+                        self.account_hash,
+                    );
+                    return true;
+                }
+                Action::Compose(ComposeAction::ToggleSign) => {
+                    let is_true = self.sign_mail.is_true();
+                    self.sign_mail = ToggleFlag::from(!is_true);
+                    self.dirty = true;
+                    return true;
+                }
+                _ => {}
+            },
             _ => {}
         }
         false
@@ -1469,7 +1511,7 @@ pub fn send_draft(
                         context.accounts[&account_hash].name()
                     )),
                     err.to_string(),
-                    Some(NotificationType::ERROR),
+                    Some(NotificationType::Error(err.kind)),
                 ));
                 return Err(err);
             }
@@ -1513,12 +1555,15 @@ pub fn save_draft(
 ) {
     match context.accounts[&account_hash].save_special(bytes, mailbox_type, flags) {
         Err(MeliError {
-            summary, details, ..
+            summary,
+            details,
+            kind,
+            ..
         }) => {
             context.replies.push_back(UIEvent::Notification(
                 summary.map(|s| s.into()),
                 details.into(),
-                Some(NotificationType::ERROR),
+                Some(NotificationType::Error(kind)),
             ));
         }
         Ok(mailbox_hash) => {
@@ -1528,7 +1573,7 @@ pub fn save_draft(
                     "Message saved in `{}`",
                     &context.accounts[&account_hash].mailbox_entries[&mailbox_hash].name
                 ),
-                Some(NotificationType::INFO),
+                Some(NotificationType::Info),
             ));
         }
     }

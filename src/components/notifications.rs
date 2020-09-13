@@ -71,17 +71,46 @@ mod dbus {
                 let mut notification = notify_rust::Notification::new();
                 notification
                     .appname("meli")
-                    .icon("mail-message-new")
                     .summary(title.as_ref().map(String::as_str).unwrap_or("meli"))
                     .body(&escape_str(body));
-                if *kind == Some(NotificationType::NEWMAIL) {
-                    notification.hint(notify_rust::Hint::Category("email".to_owned()));
+                match *kind {
+                    Some(NotificationType::NewMail) => {
+                        notification.hint(notify_rust::Hint::Category("email".to_owned()));
+                        notification.icon("mail-message-new");
+                        notification.sound_name("message-new-email");
+                    }
+                    Some(NotificationType::SentMail) => {
+                        notification.hint(notify_rust::Hint::Category("email".to_owned()));
+                        notification.icon("mail-send");
+                        notification.sound_name("message-sent-email");
+                    }
+                    Some(NotificationType::Saved) => {
+                        notification.icon("document-save");
+                    }
+                    Some(NotificationType::Info) => {
+                        notification.icon("dialog-information");
+                    }
+                    Some(NotificationType::Error(melib::ErrorKind::Authentication)) => {
+                        notification.icon("dialog-password");
+                    }
+                    Some(NotificationType::Error(melib::ErrorKind::Bug)) => {
+                        notification.icon("face-embarrassed");
+                    }
+                    Some(NotificationType::Error(melib::ErrorKind::None))
+                    | Some(NotificationType::Error(melib::ErrorKind::External)) => {
+                        notification.icon("dialog-error");
+                    }
+                    Some(NotificationType::Error(melib::ErrorKind::Network)) => {
+                        notification.icon("network-error");
+                    }
+                    Some(NotificationType::Error(melib::ErrorKind::Timeout)) => {
+                        notification.icon("network-offline");
+                    }
+                    _ => {}
                 }
                 if settings.play_sound.is_true() {
                     if let Some(ref sound_path) = settings.sound_file {
                         notification.hint(notify_rust::Hint::SoundFile(sound_path.to_owned()));
-                    } else {
-                        notification.sound_name("message-new-email");
                     }
                 } else {
                     notification.hint(notify_rust::Hint::SuppressSound(true));
@@ -186,7 +215,7 @@ impl Component for NotificationCommand {
                 }
             }
 
-            if *kind == Some(NotificationType::NEWMAIL) {
+            if *kind == Some(NotificationType::NewMail) {
                 if let Some(ref path) = context.settings.notifications.xbiff_file_path {
                     if let Err(err) = update_xbiff(path) {
                         debug!("Could not update xbiff file: {:?}", &err);

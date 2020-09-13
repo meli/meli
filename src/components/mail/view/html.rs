@@ -43,32 +43,34 @@ impl HtmlView {
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
                 .spawn();
-            if command_obj.is_err() {
-                context.replies.push_back(UIEvent::Notification(
-                    Some(format!(
-                        "Failed to start html filter process: {}",
-                        filter_invocation,
-                    )),
-                    String::new(),
-                    Some(NotificationType::ERROR),
-                ));
-                String::from_utf8_lossy(&bytes).to_string()
-            } else {
-                let mut html_filter = command_obj.unwrap();
-                html_filter
-                    .stdin
-                    .as_mut()
-                    .unwrap()
-                    .write_all(&bytes)
-                    .expect("Failed to write to html filter stdin");
-                let mut display_text = format!(
-                    "Text piped through `{}`. Press `v` to open in web browser. \n\n",
-                    filter_invocation
-                );
-                display_text.push_str(&String::from_utf8_lossy(
-                    &html_filter.wait_with_output().unwrap().stdout,
-                ));
-                display_text
+            match command_obj {
+                Err(err) => {
+                    context.replies.push_back(UIEvent::Notification(
+                        Some(format!(
+                            "Failed to start html filter process: {}",
+                            filter_invocation,
+                        )),
+                        err.to_string(),
+                        Some(NotificationType::Error(melib::ErrorKind::External)),
+                    ));
+                    String::from_utf8_lossy(&bytes).to_string()
+                }
+                Ok(mut html_filter) => {
+                    html_filter
+                        .stdin
+                        .as_mut()
+                        .unwrap()
+                        .write_all(&bytes)
+                        .expect("Failed to write to html filter stdin");
+                    let mut display_text = format!(
+                        "Text piped through `{}`. Press `v` to open in web browser. \n\n",
+                        filter_invocation
+                    );
+                    display_text.push_str(&String::from_utf8_lossy(
+                        &html_filter.wait_with_output().unwrap().stdout,
+                    ));
+                    display_text
+                }
             }
         } else if let Ok(mut html_filter) = Command::new("w3m")
             .args(&["-I", "utf-8", "-T", "text/html"])
@@ -93,7 +95,7 @@ impl HtmlView {
             context.replies.push_back(UIEvent::Notification(
                 Some("Failed to find any application to use as html filter".to_string()),
                 String::new(),
-                Some(NotificationType::ERROR),
+                Some(NotificationType::Error(melib::error::ErrorKind::None)),
             ));
             String::from_utf8_lossy(&bytes).to_string()
         };

@@ -851,7 +851,7 @@ impl State {
                     self.context.replies.push_back(UIEvent::Notification(
                         None,
                         format!("Account {} was not found.", account_name),
-                        Some(NotificationType::ERROR),
+                        Some(NotificationType::Error(ErrorKind::None)),
                     ));
                     return;
                 };
@@ -867,7 +867,7 @@ impl State {
                             "Account {} doesn't have an sqlite3 search backend.",
                             account_name
                         ),
-                        Some(NotificationType::ERROR),
+                        Some(NotificationType::Error(ErrorKind::None)),
                     ));
                     return;
                 }
@@ -888,14 +888,14 @@ impl State {
                         self.context.replies.push_back(UIEvent::Notification(
                             None,
                             "Message index rebuild started.".to_string(),
-                            Some(NotificationType::INFO),
+                            Some(NotificationType::Info),
                         ));
                     }
-                    Err(e) => {
+                    Err(err) => {
                         self.context.replies.push_back(UIEvent::Notification(
-                            None,
-                            format!("Message index rebuild failed: {}.", e),
-                            Some(NotificationType::ERROR),
+                            Some("Message index rebuild failed".to_string()),
+                            err.to_string(),
+                            Some(NotificationType::Error(err.kind)),
                         ));
                     }
                 }
@@ -906,7 +906,7 @@ impl State {
                     None,
                     "Message index rebuild failed: meli is not built with sqlite3 support."
                         .to_string(),
-                    Some(NotificationType::ERROR),
+                    Some(NotificationType::Error(ErrorKind::None)),
                 ));
             }
             AccountAction(ref account_name, PrintAccountSetting(ref setting)) => {
@@ -930,7 +930,7 @@ impl State {
                     self.context.replies.push_back(UIEvent::Notification(
                         None,
                         format!("Account {} was not found.", account_name),
-                        Some(NotificationType::ERROR),
+                        Some(NotificationType::Error(ErrorKind::None)),
                     ));
                     return;
                 }

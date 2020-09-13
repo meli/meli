@@ -929,7 +929,7 @@ impl Component for Listing {
                             context.replies.push_back(UIEvent::Notification(
                                 Some("Could not refresh.".to_string()),
                                 err.to_string(),
-                                Some(NotificationType::INFO),
+                                Some(NotificationType::Error(err.kind)),
                             ));
                         }
                     }

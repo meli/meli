@@ -91,22 +91,23 @@ pub enum ForkType {
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum NotificationType {
-    INFO,
-    ERROR,
-    NEWMAIL,
+    Info,
+    Error(melib::error::ErrorKind),
+    NewMail,
+    SentMail,
+    Saved,
 }
 
 impl core::fmt::Display for NotificationType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match *self {
-                NotificationType::INFO => "info",
-                NotificationType::ERROR => "error",
-                NotificationType::NEWMAIL => "new-mail",
-            }
-        )
+        match *self {
+            NotificationType::Info => write!(f, "info"),
+            NotificationType::Error(melib::error::ErrorKind::None) => write!(f, "error"),
+            NotificationType::Error(kind) => write!(f, "error: {}", kind),
+            NotificationType::NewMail => write!(f, "new mail"),
+            NotificationType::SentMail => write!(f, "sent mail"),
+            NotificationType::Saved => write!(f, "saved"),
+        }
     }
 }
 

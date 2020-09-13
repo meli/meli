@@ -856,7 +856,7 @@ impl Account {
                             self.name,
                             self.mailbox_entries[&mailbox_hash].name()
                         ),
-                        Some(crate::types::NotificationType::NEWMAIL),
+                        Some(crate::types::NotificationType::NewMail),
                     ));
                 }
                 RefreshEventKind::Remove(env_hash) => {
@@ -906,7 +906,7 @@ impl Account {
                         .send(ThreadEvent::UIEvent(UIEvent::Notification(
                             Some(format!("{} watcher exited with error", &self.name)),
                             e.to_string(),
-                            Some(crate::types::NotificationType::ERROR),
+                            Some(crate::types::NotificationType::Error(err.kind)),
                         )))
                         .expect("Could not send event on main channel");
                     */
@@ -914,7 +914,7 @@ impl Account {
                     return Some(Notification(
                         Some("Account watch failed".into()),
                         err.to_string(),
-                        Some(crate::types::NotificationType::ERROR),
+                        Some(crate::types::NotificationType::Error(err.kind)),
                     ));
                 }
             }
@@ -1303,7 +1303,7 @@ impl Account {
                     .send(ThreadEvent::UIEvent(UIEvent::Notification(
                         None,
                         format!("'`{}` has been subscribed.", &path),
-                        Some(crate::types::NotificationType::INFO),
+                        Some(crate::types::NotificationType::Info),
                     )))
                     .expect("Could not send event on main channel");
                 Ok(())
@@ -1323,7 +1323,7 @@ impl Account {
                     .send(ThreadEvent::UIEvent(UIEvent::Notification(
                         None,
                         format!("'`{}` has been unsubscribed.", &path),
-                        Some(crate::types::NotificationType::INFO),
+                        Some(crate::types::NotificationType::Info),
                     )))
                     .expect("Could not send event on main channel");
                 Ok(())
@@ -1468,7 +1468,7 @@ impl Account {
                                     .send(ThreadEvent::UIEvent(UIEvent::Notification(
                                         Some(format!("{}: authentication error", &self.name)),
                                         err.to_string(),
-                                        Some(crate::types::NotificationType::ERROR),
+                                        Some(crate::types::NotificationType::Error(err.kind)),
                                     )))
                                     .expect("Could not send event on main channel");
                                 self.is_online = Err(err);
@@ -1511,7 +1511,7 @@ impl Account {
                             .send(ThreadEvent::UIEvent(UIEvent::Notification(
                                 Some(format!("{}: could not fetch mailbox", &self.name)),
                                 err.to_string(),
-                                Some(crate::types::NotificationType::ERROR),
+                                Some(crate::types::NotificationType::Error(err.kind)),
                             )))
                             .expect("Could not send event on main channel");
                         self.mailbox_entries
@@ -1636,7 +1636,7 @@ impl Account {
                             .send(ThreadEvent::UIEvent(UIEvent::Notification(
                                 Some(format!("{}: could not set flag", &self.name)),
                                 err.to_string(),
-                                Some(crate::types::NotificationType::ERROR),
+                                Some(crate::types::NotificationType::Error(err.kind)),
                             )))
                             .expect("Could not send event on main channel");
                     }
@@ -1665,7 +1665,7 @@ impl Account {
                                     "Message was stored in {} so that you can restore it manually.",
                                     file.path.display()
                                 ),
-                                Some(crate::types::NotificationType::INFO),
+                                Some(crate::types::NotificationType::Info),
                             )))
                             .expect("Could not send event on main channel");
                     }
@@ -1678,7 +1678,7 @@ impl Account {
                             .send(ThreadEvent::UIEvent(UIEvent::Notification(
                                 Some("Could not send message".to_string()),
                                 err.to_string(),
-                                Some(crate::types::NotificationType::ERROR),
+                                Some(crate::types::NotificationType::Error(err.kind)),
                             )))
                             .expect("Could not send event on main channel");
                     }
@@ -1694,7 +1694,7 @@ impl Account {
                             .send(ThreadEvent::UIEvent(UIEvent::Notification(
                                 Some(format!("{}: could not save message", &self.name)),
                                 err.to_string(),
-                                Some(crate::types::NotificationType::ERROR),
+                                Some(crate::types::NotificationType::Error(err.kind)),
                             )))
                             .expect("Could not send event on main channel");
                     }
@@ -1706,7 +1706,7 @@ impl Account {
                             .send(ThreadEvent::UIEvent(UIEvent::Notification(
                                 Some(format!("{}: could not delete message", &self.name)),
                                 err.to_string(),
-                                Some(crate::types::NotificationType::ERROR),
+                                Some(crate::types::NotificationType::Error(err.kind)),
                             )))
                             .expect("Could not send event on main channel");
                     }
@@ -1727,7 +1727,7 @@ impl Account {
                                             &self.name, path
                                         )),
                                         err.to_string(),
-                                        Some(crate::types::NotificationType::ERROR),
+                                        Some(crate::types::NotificationType::Error(err.kind)),
                                     )))
                                     .expect("Could not send event on main channel");
                             }
@@ -1807,7 +1807,7 @@ impl Account {
                                 .send(ThreadEvent::UIEvent(UIEvent::Notification(
                                     Some(format!("{}: could not delete mailbox", &self.name)),
                                     err.to_string(),
-                                    Some(crate::types::NotificationType::ERROR),
+                                    Some(crate::types::NotificationType::Error(err.kind)),
                                 )))
                                 .expect("Could not send event on main channel");
                         }
@@ -1862,7 +1862,7 @@ impl Account {
                                 .send(ThreadEvent::UIEvent(UIEvent::Notification(
                                     Some(format!("{}: mailbox deleted successfully", &self.name)),
                                     String::new(),
-                                    Some(crate::types::NotificationType::INFO),
+                                    Some(crate::types::NotificationType::Info),
                                 )))
                                 .expect("Could not send event on main channel");
                         }
@@ -1882,7 +1882,7 @@ impl Account {
                                         &self.name
                                     )),
                                     err.to_string(),
-                                    Some(crate::types::NotificationType::ERROR),
+                                    Some(crate::types::NotificationType::Error(err.kind)),
                                 )))
                                 .expect("Could not send event on main channel");
                         }
@@ -1894,7 +1894,7 @@ impl Account {
                                         &self.name
                                     )),
                                     String::new(),
-                                    Some(crate::types::NotificationType::INFO),
+                                    Some(crate::types::NotificationType::Info),
                                 )))
                                 .expect("Could not send event on main channel");
                         }
@@ -1912,7 +1912,7 @@ impl Account {
                                         &self.name
                                     )),
                                     err.to_string(),
-                                    Some(crate::types::NotificationType::ERROR),
+                                    Some(crate::types::NotificationType::Error(err.kind)),
                                 )))
                                 .expect("Could not send event on main channel");
                         }
@@ -1924,7 +1924,7 @@ impl Account {
                                         &self.name
                                     )),
                                     String::new(),
-                                    Some(crate::types::NotificationType::INFO),
+                                    Some(crate::types::NotificationType::Info),
                                 )))
                                 .expect("Could not send event on main channel");
                         }
@@ -1947,7 +1947,7 @@ impl Account {
                                 .send(ThreadEvent::UIEvent(UIEvent::Notification(
                                     Some(format!("{}: watch thread failed", &self.name)),
                                     err.to_string(),
-                                    Some(crate::types::NotificationType::ERROR),
+                                    Some(crate::types::NotificationType::Error(err.kind)),
                                 )))
                                 .expect("Could not send event on main channel");
                         }
@@ -1967,7 +1967,7 @@ impl Account {
                                 .send(ThreadEvent::UIEvent(UIEvent::Notification(
                                     Some(format!("{}: {} failed", &self.name, name,)),
                                     err.to_string(),
-                                    Some(crate::types::NotificationType::ERROR),
+                                    Some(crate::types::NotificationType::Error(err.kind)),
                                 )))
                                 .expect("Could not send event on main channel");
                         }
@@ -1977,7 +1977,7 @@ impl Account {
                                     .send(ThreadEvent::UIEvent(UIEvent::Notification(
                                         Some(format!("{}: {} succeeded", &self.name, name,)),
                                         String::new(),
-                                        Some(crate::types::NotificationType::INFO),
+                                        Some(crate::types::NotificationType::Info),
                                     )))
                                     .expect("Could not send event on main channel");
                             }

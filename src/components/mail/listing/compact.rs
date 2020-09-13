@@ -1358,13 +1358,13 @@ impl CompactListing {
                 self.new_cursor_pos.2 = 0;
                 let message = format!(
                     "Encountered an error while searching for `{}`: {}.",
-                    search_term, err
+                    search_term, &err
                 );
                 log(message.clone(), ERROR);
                 context.replies.push_back(UIEvent::Notification(
                     Some("Could not perform search".to_string()),
                     message,
-                    Some(crate::types::NotificationType::ERROR),
+                    Some(crate::types::NotificationType::Error(err.kind)),
                 ));
             }
         }
@@ -1710,7 +1710,7 @@ impl Component for CompactListing {
                         context.replies.push_back(UIEvent::Notification(
                             Some("Could not perform search".to_string()),
                             err.to_string(),
-                            Some(crate::types::NotificationType::ERROR),
+                            Some(crate::types::NotificationType::Error(err.kind)),
                         ));
                     }
                 };
@@ -1739,7 +1739,7 @@ impl Component for CompactListing {
                         context.replies.push_back(UIEvent::Notification(
                             Some("Could not perform search".to_string()),
                             err.to_string(),
-                            Some(crate::types::NotificationType::ERROR),
+                            Some(crate::types::NotificationType::Error(err.kind)),
                         ));
                     }
                 };

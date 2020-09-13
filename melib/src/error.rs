@@ -37,10 +37,28 @@ pub type Result<T> = result::Result<T, MeliError>;
 #[derive(Debug, Copy, PartialEq, Clone)]
 pub enum ErrorKind {
     None,
+    External,
     Authentication,
     Bug,
     Network,
     Timeout,
+}
+
+impl fmt::Display for ErrorKind {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            fmt,
+            "{}",
+            match self {
+                ErrorKind::None => "None",
+                ErrorKind::External => "External",
+                ErrorKind::Authentication => "Authentication",
+                ErrorKind::Bug => "Bug, please report this!",
+                ErrorKind::Network => "Network",
+                ErrorKind::Timeout => "Timeout",
+            }
+        )
+    }
 }
 
 impl ErrorKind {
@@ -172,17 +190,7 @@ impl fmt::Display for MeliError {
             write!(f, "\nCaused by: {}", source)?;
         }
         if self.kind != ErrorKind::None {
-            write!(
-                f,
-                "\nKind: {}",
-                match self.kind {
-                    ErrorKind::None => "None",
-                    ErrorKind::Authentication => "Authentication",
-                    ErrorKind::Bug => "Bug, please report this!",
-                    ErrorKind::Network => "Network",
-                    ErrorKind::Timeout => "Timeout",
-                }
-            )?;
+            write!(f, "\nKind: {}", self.kind)?;
         }
         Ok(())
     }

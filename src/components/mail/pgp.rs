@@ -28,7 +28,7 @@ pub fn verify_signature(a: &Attachment, context: &mut Context) -> Vec<u8> {
         Ok((bytes, sig)) => {
             let bytes_file = create_temp_file(&bytes, None, None, true);
             let signature_file = create_temp_file(sig, None, None, true);
-            if let Ok(gpg) = Command::new(
+            match Command::new(
                 context
                     .settings
                     .pgp
@@ -48,29 +48,35 @@ pub fn verify_signature(a: &Attachment, context: &mut Context) -> Vec<u8> {
             .stderr(Stdio::piped())
             .spawn()
             {
-                return gpg.wait_with_output().unwrap().stderr;
-            } else {
-                context.replies.push_back(UIEvent::Notification(
-                    Some(format!(
-                        "Failed to launch {} to verify PGP signature",
-                        context
-                            .settings
-                            .pgp
-                            .gpg_binary
-                            .as_ref()
-                            .map(String::as_str)
-                            .unwrap_or("gpg2"),
-                    )),
-                    "see meli.conf(5) for configuration setting pgp.gpg_binary".to_string(),
-                    Some(NotificationType::ERROR),
-                ));
+                Ok(gpg) => {
+                    return gpg.wait_with_output().unwrap().stderr;
+                }
+                Err(err) => {
+                    context.replies.push_back(UIEvent::Notification(
+                        Some(format!(
+                            "Failed to launch {} to verify PGP signature",
+                            context
+                                .settings
+                                .pgp
+                                .gpg_binary
+                                .as_ref()
+                                .map(String::as_str)
+                                .unwrap_or("gpg2"),
+                        )),
+                        format!(
+                            "{}\nsee meli.conf(5) for configuration setting pgp.gpg_binary",
+                            &err
+                        ),
+                        Some(NotificationType::Error(melib::error::ErrorKind::External)),
+                    ));
+                }
             }
         }
-        Err(e) => {
+        Err(err) => {
             context.replies.push_back(UIEvent::Notification(
-                Some(e.to_string()),
-                String::new(),
-                Some(NotificationType::ERROR),
+                Some("Could not verify signature.".to_string()),
+                err.to_string(),
+                Some(NotificationType::Error(err.kind)),
             ));
         }
     }
