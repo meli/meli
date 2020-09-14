@@ -984,7 +984,7 @@ pub struct ImapBlockingConnection {
     result: Vec<u8>,
     prev_res_length: usize,
     pub conn: ImapConnection,
-    err: Option<String>,
+    err: Option<MeliError>,
 }
 
 impl From<ImapConnection> for ImapBlockingConnection {
@@ -1004,8 +1004,8 @@ impl ImapBlockingConnection {
         self.conn
     }
 
-    pub fn err(&self) -> Option<&str> {
-        self.err.as_deref()
+    pub fn err(&mut self) -> Option<MeliError> {
+        self.err.take()
     }
 
     pub fn as_stream<'a>(&'a mut self) -> impl Future<Output = Option<Vec<u8>>> + 'a {
@@ -1056,10 +1056,10 @@ async fn read(
             }
             *prev_failure = None;
         }
-        Err(e) => {
+        Err(_err) => {
             debug!(&conn.stream);
-            debug!(&e);
-            *err = Some(e.to_string());
+            debug!(&_err);
+            *err = Some(Into::<MeliError>::into(_err).set_kind(crate::error::ErrorKind::Network));
             *break_flag = true;
             *prev_failure = Some(Instant::now());
         }

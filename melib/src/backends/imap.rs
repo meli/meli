@@ -479,6 +479,17 @@ impl MailBackend for ImapType {
                     main_conn.uid_store.is_online.lock().unwrap().1 = Err(err.clone());
                 }
                 debug!("failure: {}", err.to_string());
+                match timeout(timeout_dur, main_conn.connect())
+                    .await
+                    .and_then(|res| res)
+                {
+                    Err(err2) => {
+                        debug!("reconnect attempt failed: {}", err2.to_string());
+                    }
+                    Ok(()) => {
+                        debug!("reconnect attempt succesful");
+                    }
+                }
                 let account_hash = main_conn.uid_store.account_hash;
                 main_conn.add_refresh_event(RefreshEvent {
                     account_hash,

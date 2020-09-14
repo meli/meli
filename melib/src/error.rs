@@ -205,7 +205,9 @@ impl Error for MeliError {
 impl From<io::Error> for MeliError {
     #[inline]
     fn from(kind: io::Error) -> MeliError {
-        MeliError::new(kind.to_string()).set_source(Some(Arc::new(kind)))
+        MeliError::new(kind.to_string())
+            .set_summary(format!("{:?}", kind.kind()))
+            .set_source(Some(Arc::new(kind)))
     }
 }
 

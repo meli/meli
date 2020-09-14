@@ -1355,24 +1355,19 @@ impl Account {
         let mut timeout = false;
         let mut drain: SmallVec<[std::time::Instant; 16]> = SmallVec::new();
         const ONLINE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
-        for (_instant, j) in self
+        for (_instant, _) in self
             .active_job_instants
             .range(..std::time::Instant::now() - ONLINE_TIMEOUT)
         {
-            if self.active_jobs.contains_key(j) {
-                debug!("timeout for {} {:?}", j, self.active_jobs[j]);
-                let req = self.active_jobs.remove(j).unwrap();
-                self.sender
-                    .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
-                        StatusEvent::JobCanceled(*j),
-                    )))
-                    .unwrap();
-                timeout |= !req.is_watch();
-            }
             drain.push(*_instant);
         }
-        for j in drain {
-            self.active_job_instants.remove(&j);
+        for inst in drain {
+            if let Some(j) = self.active_job_instants.remove(&inst) {
+                if let Some(req) = self.cancel_job(j) {
+                    debug!("timeout for {} {:?}", j, &req);
+                    timeout |= !req.is_watch();
+                }
+            }
         }
         if self.is_online.is_err()
             && self
@@ -2008,6 +2003,19 @@ impl Account {
                 StatusEvent::NewJob(job_id),
             )))
             .unwrap();
+    }
+
+    pub fn cancel_job(&mut self, job_id: JobId) -> Option<JobRequest> {
+        if let Some(req) = self.active_jobs.remove(&job_id) {
+            self.sender
+                .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
+                    StatusEvent::JobCanceled(job_id),
+                )))
+                .unwrap();
+            Some(req)
+        } else {
+            None
+        }
     }
 }
 

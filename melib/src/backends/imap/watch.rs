@@ -185,8 +185,10 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
         }
     }
     debug!("IDLE connection dropped");
-    let err: &str = blockn.err().unwrap_or("Unknown reason.");
-    Err(MeliError::new(format!("IDLE connection dropped: {}", err)))
+    Err(blockn
+        .err()
+        .unwrap_or(MeliError::new("Unknown reason.").set_kind(crate::error::ErrorKind::Network))
+        .set_summary("IDLE connection dropped".to_string()))
 }
 
 pub async fn examine_updates(
