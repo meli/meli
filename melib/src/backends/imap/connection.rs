@@ -253,6 +253,15 @@ impl ImapStream {
             ))
             .chain_err_kind(crate::error::ErrorKind::Network)?
         };
+        if let Err(err) = stream
+            .get_ref()
+            .set_keepalive(Some(Duration::new(60 * 9, 0)))
+        {
+            crate::log(
+                format!("Could not set TCP keepalive in IMAP connection: {}", err),
+                crate::LoggingLevel::WARN,
+            );
+        }
         let mut res = String::with_capacity(8 * 1024);
         let mut ret = ImapStream {
             cmd_id,
