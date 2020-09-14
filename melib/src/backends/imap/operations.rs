@@ -67,6 +67,7 @@ impl BackendOp for ImapOp {
                 let mut response = String::with_capacity(8 * 1024);
                 {
                     let mut conn = timeout(uid_store.timeout, connection.lock()).await?;
+                    conn.connect().await?;
                     conn.examine_mailbox(mailbox_hash, &mut response, false)
                         .await?;
                     conn.send_command(format!("UID FETCH {} (FLAGS RFC822)", uid).as_bytes())
@@ -127,6 +128,7 @@ impl BackendOp for ImapOp {
             };
             if !exists_in_cache {
                 let mut conn = connection.lock().await;
+                conn.connect().await?;
                 conn.examine_mailbox(mailbox_hash, &mut response, false)
                     .await?;
                 conn.send_command(format!("UID FETCH {} FLAGS", uid).as_bytes())
