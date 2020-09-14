@@ -1441,9 +1441,6 @@ impl ImapType {
                 protocol_parser::list_mailbox_result(l.as_bytes()).map(|(_, v)| v)
             {
                 if let Some(f) = mailboxes.get_mut(&subscription.hash()) {
-                    if subscription.no_select {
-                        continue;
-                    }
                     f.is_subscribed = true;
                 }
             } else {
