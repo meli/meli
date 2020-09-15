@@ -1576,15 +1576,11 @@ pub mod encodings {
         }
     }
 
-    fn quoted_printable_soft_break(input: &[u8]) -> IResult<&[u8], &[u8]> {
-        if input.len() < 2 {
-            Err(nom::Err::Error(
-                (input, "quoted_printable_soft_break(): found EOF").into(),
-            ))
-        } else if input[0] == b'=' && input[1] == b'\n' {
-            Ok((&input[2..], &input[0..2])) // `=\n` is an escaped space character.
-        } else if input.len() > 3 && input.starts_with(b"=\r\n") {
-            Ok((&input[3..], &input[0..3])) // `=\r\n` is an escaped space character.
+    fn quoted_printable_soft_break(input: &[u8]) -> IResult<&[u8], u8> {
+        if input.starts_with(b"=\n") {
+            Ok((&input[2..], input[1])) // `=\n` is an escaped space character.
+        } else if input.starts_with(b"=\r\n") {
+            Ok((&input[3..], input[2])) // `=\r\n` is an escaped space character.
         } else {
             Err(nom::Err::Error(
                 (input, "quoted_printable_soft_break(): invalid input").into(),
@@ -1606,6 +1602,9 @@ pub mod encodings {
     // For atoms in Header values.
     pub fn quoted_printable_bytes(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
         many0(alt((
+            terminated(quoted_printable_soft_break, tag("\n")),
+            terminated(quoted_printable_soft_break, tag("\r\n")),
+            terminated(quoted_printable_soft_break, generic::eof),
             preceded(quoted_printable_soft_break, quoted_printable_byte),
             preceded(quoted_printable_soft_break, le_u8),
             quoted_printable_byte,
