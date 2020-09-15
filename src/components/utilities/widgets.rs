@@ -996,12 +996,13 @@ pub struct ProgressSpinner {
     timer: crate::timer::PosixTimer,
     stage: usize,
     kind: usize,
+    active: bool,
     dirty: bool,
     id: ComponentId,
 }
 
 impl ProgressSpinner {
-    const KINDS: &'static [&'static [&'static str]] = &[
+    const KINDS: [&'static [&'static str]; 15] = [
         &["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"],
         &["⣀", "⣄", "⣤", "⣦", "⣶", "⣷", "⣿"],
         &["⣀", "⣄", "⣆", "⣇", "⣧", "⣷", "⣿"],
@@ -1029,16 +1030,19 @@ impl ProgressSpinner {
             nix::sys::signal::Signal::SIGALRM,
         )
         .unwrap();
+        debug!("Requested timer {:?} for ProgressSpinner", timer.si_value);
         ProgressSpinner {
             timer,
             stage: 0,
             kind: kind % Self::KINDS.len(),
             dirty: true,
+            active: false,
             id: ComponentId::new_v4(),
         }
     }
 
     pub fn start(&mut self) {
+        self.active = true;
         self.timer
             .set_interval(Self::INTERVAL)
             .set_value(Self::VALUE)
@@ -1046,6 +1050,8 @@ impl ProgressSpinner {
     }
 
     pub fn stop(&mut self) {
+        self.active = false;
+        self.stage = 0;
         self.timer
             .set_interval(std::time::Duration::from_millis(0))
             .set_value(std::time::Duration::from_millis(0))
@@ -1064,17 +1070,19 @@ impl Component for ProgressSpinner {
         if self.dirty {
             let theme_attr = crate::conf::value(context, "status.bar");
             clear_area(grid, area, theme_attr);
-            let stage = self.stage;
-            self.stage = (self.stage + 1).wrapping_rem(Self::KINDS[self.kind].len());
-            write_string_to_grid(
-                Self::KINDS[self.kind][stage],
-                grid,
-                theme_attr.fg,
-                theme_attr.bg,
-                theme_attr.attrs,
-                area,
-                None,
-            );
+            if self.active {
+                let stage = self.stage;
+                self.stage = (self.stage + 1).wrapping_rem(Self::KINDS[self.kind].len());
+                write_string_to_grid(
+                    Self::KINDS[self.kind][stage],
+                    grid,
+                    theme_attr.fg,
+                    theme_attr.bg,
+                    theme_attr.attrs,
+                    area,
+                    None,
+                );
+            }
             context.dirty_areas.push_back(area);
             self.dirty = false;
         }

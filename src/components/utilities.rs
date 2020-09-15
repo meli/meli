@@ -663,7 +663,7 @@ impl StatusBar {
             height: 1,
             id: ComponentId::new_v4(),
             auto_complete: AutoComplete::new(Vec::new()),
-            progress_spinner: ProgressSpinner::new(3),
+            progress_spinner: ProgressSpinner::new(1),
             in_progress_jobs: HashSet::default(),
             done_jobs: HashSet::default(),
             cmd_history: crate::command::history::old_cmd_history(),
@@ -1182,8 +1182,8 @@ impl Component for StatusBar {
                 self.in_progress_jobs.remove(job_id);
                 if self.in_progress_jobs.is_empty() {
                     self.progress_spinner.stop();
-                    self.set_dirty(true);
                 }
+                self.progress_spinner.set_dirty(true);
             }
             UIEvent::StatusEvent(StatusEvent::NewJob(ref job_id))
                 if !self.done_jobs.contains(job_id) =>
@@ -1191,6 +1191,7 @@ impl Component for StatusBar {
                 if self.in_progress_jobs.is_empty() {
                     self.progress_spinner.start();
                 }
+                self.progress_spinner.set_dirty(true);
                 self.in_progress_jobs.insert(*job_id);
             }
             UIEvent::Timer(_) => {
