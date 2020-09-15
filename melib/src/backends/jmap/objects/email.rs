@@ -232,7 +232,7 @@ impl std::fmt::Display for EmailAddress {
 impl std::convert::From<EmailObject> for crate::Envelope {
     fn from(mut t: EmailObject) -> crate::Envelope {
         let mut env = crate::Envelope::new(0);
-        if let Ok(d) = crate::email::parser::generic::date(env.date_as_str().as_bytes()) {
+        if let Ok(d) = crate::email::parser::dates::rfc5322_date(env.date_as_str().as_bytes()) {
             env.set_datetime(d);
         }
         if let Some(ref mut sent_at) = t.sent_at {
@@ -260,7 +260,7 @@ impl std::convert::From<EmailObject> for crate::Envelope {
         }
         if let Some(v) = t.headers.get("Date") {
             env.set_date(v.as_bytes());
-            if let Ok(d) = crate::email::parser::generic::date(v.as_bytes()) {
+            if let Ok(d) = crate::email::parser::dates::rfc5322_date(v.as_bytes()) {
                 env.set_datetime(d);
             }
         }

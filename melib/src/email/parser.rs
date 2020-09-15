@@ -22,8 +22,8 @@
 use crate::error::{MeliError, Result, ResultIntoMeliError};
 use nom::{
     branch::alt,
-    bytes::complete::{is_a, is_not, tag, take_until, take_while},
-    character::is_hex_digit,
+    bytes::complete::{is_a, is_not, tag, take, take_until, take_while, take_while1},
+    character::{is_alphabetic, is_digit, is_hex_digit},
     combinator::peek,
     combinator::{map, opt},
     error::{context, ErrorKind},
@@ -267,17 +267,232 @@ pub fn mail(input: &[u8]) -> Result<(Vec<(&[u8], &[u8])>, &[u8])> {
     Ok(result)
 }
 
-pub mod generic {
+pub mod dates {
+    use super::generic::*;
     use super::*;
-    pub fn date(input: &[u8]) -> Result<crate::datetime::UnixTimestamp> {
-        let (_, mut parsed_result) = encodings::phrase(&eat_comments(input), false)?;
+    use crate::datetime::UnixTimestamp;
+
+    fn take_n_digits(n: usize) -> impl Fn(&[u8]) -> IResult<&[u8], &[u8]> {
+        move |input: &[u8]| {
+            let (input, ret) = take(n)(input)?;
+            if !ret.iter().all(|c| is_digit(*c)) {
+                return Err(nom::Err::Error(
+                    (input, "take_n_digits(): not digits").into(),
+                ));
+            }
+            Ok((input, ret))
+        }
+    }
+
+    ///In the obsolete time zone, "UT" and "GMT" are indications of
+    ///"Universal Time" and "Greenwich Mean Time", respectively, and are
+    ///both semantically identical to "+0000".
+
+    ///The remaining three character zones are the US time zones.  The first
+    ///letter, "E", "C", "M", or "P" stands for "Eastern", "Central",
+    ///"Mountain", and "Pacific".  The second letter is either "S" for
+    ///"Standard" time, or "D" for "Daylight Savings" (or summer) time.
+    ///Their interpretations are as follows:
+
+    ///   EDT is semantically equivalent to -0400
+    ///   EST is semantically equivalent to -0500
+    ///   CDT is semantically equivalent to -0500
+    ///   CST is semantically equivalent to -0600
+    ///   MDT is semantically equivalent to -0600
+    ///   MST is semantically equivalent to -0700
+    ///   PDT is semantically equivalent to -0700
+    ///   PST is semantically equivalent to -0800
+
+    ///The 1 character military time zones were defined in a non-standard
+    ///way in [RFC0822] and are therefore unpredictable in their meaning.
+    ///The original definitions of the military zones "A" through "I" are
+    ///equivalent to "+0100" through "+0900", respectively; "K", "L", and
+    ///"M" are equivalent to "+1000", "+1100", and "+1200", respectively;
+    ///"N" through "Y" are equivalent to "-0100" through "-1200".
+    ///respectively; and "Z" is equivalent to "+0000".  However, because of
+    ///the error in [RFC0822], they SHOULD all be considered equivalent to
+    ///"-0000" unless there is out-of-band information confirming their
+    ///meaning.
+
+    ///Other multi-character (usually between 3 and 5) alphabetic time zones
+    ///have been used in Internet messages.  Any such time zone whose
+    ///meaning is not known SHOULD be considered equivalent to "-0000"
+    ///unless there is out-of-band information confirming their meaning.
+    fn obs_zone(input: &[u8]) -> IResult<&[u8], (&[u8], &[u8])> {
+        alt((
+            map(tag("UT"), |_| (&b"+"[..], &b"0000"[..])),
+            map(tag("GMT"), |_| (&b"+"[..], &b"0000"[..])),
+            map(tag("EDT"), |_| (&b"-"[..], &b"0400"[..])),
+            map(tag("EST"), |_| (&b"-"[..], &b"0500"[..])),
+            map(tag("CDT"), |_| (&b"-"[..], &b"0500"[..])),
+            map(tag("CST"), |_| (&b"-"[..], &b"0600"[..])),
+            map(tag("MDT"), |_| (&b"-"[..], &b"0600"[..])),
+            map(tag("MST"), |_| (&b"-"[..], &b"0700"[..])),
+            map(tag("PDT"), |_| (&b"-"[..], &b"0700"[..])),
+            map(tag("PST"), |_| (&b"-"[..], &b"0800"[..])),
+            map(take_while1(is_alphabetic), |_| (&b"-"[..], &b"0000"[..])),
+        ))(input)
+    }
+
+    ///zone            =   (FWS ( "+" / "-" ) 4DIGIT) / obs-zone
+    fn zone(input: &[u8]) -> IResult<&[u8], (&[u8], &[u8])> {
+        alt((
+            |input| {
+                let (input, sign) = alt((tag("+"), tag("-")))(input)?;
+                let (input, zone) = take_n_digits(4)(input)?;
+                Ok((input, (sign, zone)))
+            },
+            obs_zone,
+        ))(input)
+    }
+
+    ///date-time       =   [ day-of-week "," ] date time [CFWS]
+    ///date            =   day month year
+    ///time            =   time-of-day zone
+    ///time-of-day     =   hour ":" minute [ ":" second ]
+    ///hour            =   2DIGIT / obs-hour
+    ///minute          =   2DIGIT / obs-minute
+    ///second          =   2DIGIT / obs-second
+    fn date_time(input: &[u8]) -> IResult<&[u8], UnixTimestamp> {
+        let orig_input = input;
+        let mut accum: SmallVec<[u8; 32]> = SmallVec::new();
+        let (input, day_of_week) = opt(terminated(day_of_week, tag(",")))(input)?;
+        let (input, day) = day(input)?;
+        let (input, month) = month(input)?;
+        let (input, year) = year(input)?;
+        let (input, hour) = take_n_digits(2)(input)?;
+        let (input, _) = tag(":")(input)?;
+        let (input, minute) = take_n_digits(2)(input)?;
+        let (input, second) = opt(preceded(tag(":"), take_n_digits(2)))(input)?;
+        let (input, _) = fws(input)?;
+        let (input, (sign, zone)) = zone(input)?;
+        let (input, _) = opt(cfws)(input)?;
+        if let Some(day_of_week) = day_of_week {
+            accum.extend_from_slice(&day_of_week);
+            accum.extend_from_slice(b", ");
+        }
+        accum.extend_from_slice(&day);
+        accum.extend_from_slice(b" ");
+        accum.extend_from_slice(&month);
+        accum.extend_from_slice(b" ");
+        accum.extend_from_slice(&year);
+        accum.extend_from_slice(b" ");
+        accum.extend_from_slice(&hour);
+        accum.extend_from_slice(b":");
+        accum.extend_from_slice(&minute);
+        if let Some(second) = second {
+            accum.extend_from_slice(b":");
+            accum.extend_from_slice(&second);
+        }
+        accum.extend_from_slice(b" ");
+        accum.extend_from_slice(&sign);
+        accum.extend_from_slice(&zone);
+        match crate::datetime::rfc822_to_timestamp(accum.to_vec()) {
+            Ok(t) => Ok((input, t)),
+            Err(_err) => Err(nom::Err::Error(
+                (
+                    orig_input,
+                    "date_time(): could not convert date from rfc822",
+                )
+                    .into(),
+            )),
+        }
+    }
+
+    ///`day-of-week     =   ([FWS] day-name) / obs-day-of-week`
+    ///day-name        =   "Mon" / "Tue" / "Wed" / "Thu" /
+    ///                    "Fri" / "Sat" / "Sun"
+    fn day_of_week(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
+        let (input, day_name) = alt((
+            tag("Mon"),
+            tag("Tue"),
+            tag("Wed"),
+            tag("Thu"),
+            tag("Fri"),
+            tag("Sat"),
+            tag("Sun"),
+        ))(input)?;
+        Ok((input, day_name.into()))
+    }
+
+    ///day             =   ([FWS] 1*2DIGIT FWS) / obs-day
+    fn day(input: &[u8]) -> IResult<&[u8], &[u8]> {
+        let (input, _) = opt(fws)(input)?;
+        let (input, ret) = alt((take_n_digits(2), take_n_digits(1)))(input)?;
+        let (input, _) = fws(input)?;
+
+        Ok((input, ret))
+    }
+
+    ///month           =   "Jan" / "Feb" / "Mar" / "Apr" /
+    ///                    "May" / "Jun" / "Jul" / "Aug" /
+    ///                    "Sep" / "Oct" / "Nov" / "Dec"
+    fn month(input: &[u8]) -> IResult<&[u8], &[u8]> {
+        alt((
+            tag("Jan"),
+            tag("Feb"),
+            tag("Mar"),
+            tag("Apr"),
+            tag("May"),
+            tag("Jun"),
+            tag("Jul"),
+            tag("Aug"),
+            tag("Sep"),
+            tag("Oct"),
+            tag("Nov"),
+            tag("Dec"),
+        ))(input)
+    }
+
+    ///year            =   (FWS 4*DIGIT FWS) / obs-year
+    fn year(input: &[u8]) -> IResult<&[u8], &[u8]> {
+        let (input, _) = fws(input)?;
+        let (input, ret) = take_n_digits(4)(input)?;
+        let (input, _) = fws(input)?;
+        Ok((input, ret))
+    }
+
+    pub fn rfc5322_date(input: &[u8]) -> Result<crate::datetime::UnixTimestamp> {
+        date_time(input)
+            .or_else(|_| {
+                //let (_, mut parsed_result) = encodings::phrase(&eat_comments(input), false)?;
+                let (rest, parsed_result) = encodings::phrase(input, false)?;
+                let (_, ret) = match date_time(&parsed_result) {
+                    Ok(v) => v,
+                    Err(_) => {
+                        return Err(nom::Err::Error(
+                            (rest, "rfc5322_date(): invalid input").into(),
+                        ));
+                    }
+                };
+                Ok((rest, ret))
+            })
+            .map(|(_, r)| r)
+            .map_err(|err: nom::Err<ParsingError<_>>| err.into())
+        /*
+        }
         if let Some(pos) = parsed_result.find(b"-0000") {
             parsed_result[pos] = b'+';
         }
 
         crate::datetime::rfc822_to_timestamp(parsed_result.trim())
+            */
     }
 
+    #[test]
+    fn test_date_new() {
+        let s = b"Thu, 31 Aug 2017 13:43:37 +0000 (UTC)";
+        let _s = b"Thu, 31 Aug 2017 13:43:37 +0000";
+        let __s = b"=?utf-8?q?Thu=2C_31_Aug_2017_13=3A43=3A37_-0000?=";
+        assert_eq!(rfc5322_date(s).unwrap(), rfc5322_date(_s).unwrap());
+        assert_eq!(rfc5322_date(_s).unwrap(), rfc5322_date(__s).unwrap());
+        let val = b"Fri, 23 Dec 0001 21:20:36 -0800 (PST)";
+        assert_eq!(rfc5322_date(val).unwrap(), 0);
+    }
+}
+
+pub mod generic {
+    use super::*;
     ///`%x21-7E`
     fn vchar(input: &[u8]) -> IResult<&[u8], u8> {
         if input.is_empty() {
@@ -440,26 +655,6 @@ pub mod generic {
             },
             fws,
         ))(input)
-    }
-
-    fn eat_comments(input: &[u8]) -> Vec<u8> {
-        let mut in_comment = false;
-        input
-            .iter()
-            .fold(Vec::with_capacity(input.len()), |mut acc, x| {
-                if *x == b'(' && !in_comment {
-                    in_comment = true;
-                    acc
-                } else if *x == b')' && in_comment {
-                    in_comment = false;
-                    acc
-                } else if in_comment {
-                    acc
-                } else {
-                    acc.push(*x);
-                    acc
-                }
-            })
     }
 
     ///`unstructured    =   (*([FWS] VCHAR) *WSP) / obs-unstruct`
@@ -2242,19 +2437,6 @@ mod tests {
             ),
             rfc2822address_list(s).unwrap()
         );
-    }
-
-    #[test]
-    fn test_date() {
-        let s = b"Thu, 31 Aug 2017 13:43:37 +0000 (UTC)";
-        let _s = b"Thu, 31 Aug 2017 13:43:37 +0000";
-        let __s = b"=?utf-8?q?Thu=2C_31_Aug_2017_13=3A43=3A37_-0000?=";
-        debug!("{:?}, {:?}", date(s), date(_s));
-        debug!("{:?}", date(__s));
-        assert_eq!(date(s).unwrap(), date(_s).unwrap());
-        assert_eq!(date(_s).unwrap(), date(__s).unwrap());
-        let val = b"Fri, 23 Dec 0001 21:20:36 -0800 (PST)";
-        assert_eq!(date(val).unwrap(), 0);
     }
 
     #[test]

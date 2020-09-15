@@ -124,7 +124,9 @@ pub fn over_article(input: &str) -> IResult<&str, (UID, Envelope)> {
             let mut env = Envelope::new(env_hash);
             if let Some(date) = date {
                 env.set_date(date.as_bytes());
-                if let Ok(d) = crate::email::parser::generic::date(env.date_as_str().as_bytes()) {
+                if let Ok(d) =
+                    crate::email::parser::dates::rfc5322_date(env.date_as_str().as_bytes())
+                {
                     env.set_datetime(d);
                 }
             }

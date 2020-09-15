@@ -1231,7 +1231,9 @@ pub fn envelope(input: &[u8]) -> IResult<&[u8], Envelope> {
             let mut env = Envelope::new(0);
             if let Some(date) = date {
                 env.set_date(&date);
-                if let Ok(d) = crate::email::parser::generic::date(env.date_as_str().as_bytes()) {
+                if let Ok(d) =
+                    crate::email::parser::dates::rfc5322_date(env.date_as_str().as_bytes())
+                {
                     env.set_datetime(d);
                 }
             }
