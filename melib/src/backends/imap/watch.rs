@@ -113,30 +113,35 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
     };
     conn.send_command(b"IDLE").await?;
     let mut blockn = ImapBlockingConnection::from(conn);
-    let mut beat = std::time::Instant::now();
     let mut watch = std::time::Instant::now();
-    /* duration interval before IMAP timeouts */
-    const _35_MINS: std::time::Duration = std::time::Duration::from_secs(35 * 60);
     /* duration interval to send heartbeat */
-    const _26_MINS: std::time::Duration = std::time::Duration::from_secs(26 * 60);
+    const _10_MINS: std::time::Duration = std::time::Duration::from_secs(10 * 60);
     /* duration interval to check other mailboxes for changes */
     const _5_MINS: std::time::Duration = std::time::Duration::from_secs(5 * 60);
-    while let Some(line) = timeout(Some(_35_MINS), blockn.as_stream()).await? {
+    loop {
+        let line = match timeout(Some(_10_MINS), blockn.as_stream()).await {
+            Ok(Some(line)) => line,
+            Ok(None) => {
+                debug!("IDLE connection dropped: {:?}", &blockn.err());
+                blockn.conn.connect().await?;
+                let mut main_conn_lck = timeout(uid_store.timeout, main_conn.lock()).await?;
+                main_conn_lck.connect().await?;
+                continue;
+            }
+            Err(_) => {
+                /* Timeout */
+                blockn.conn.send_raw(b"DONE").await?;
+                blockn
+                    .conn
+                    .read_response(&mut response, RequiredResponses::empty())
+                    .await?;
+                blockn.conn.send_command(b"IDLE").await?;
+                let mut main_conn_lck = timeout(uid_store.timeout, main_conn.lock()).await?;
+                main_conn_lck.connect().await?;
+                continue;
+            }
+        };
         let now = std::time::Instant::now();
-        if now.duration_since(beat) >= _26_MINS {
-            let mut main_conn_lck = timeout(uid_store.timeout, main_conn.lock()).await?;
-            blockn.conn.send_raw(b"DONE").await?;
-            blockn
-                .conn
-                .read_response(&mut response, RequiredResponses::empty())
-                .await?;
-            blockn.conn.send_command(b"IDLE").await?;
-            main_conn_lck.send_command(b"NOOP").await?;
-            main_conn_lck
-                .read_response(&mut response, RequiredResponses::empty())
-                .await?;
-            beat = now;
-        }
         if now.duration_since(watch) >= _5_MINS {
             /* Time to poll all inboxes */
             let mut conn = timeout(uid_store.timeout, main_conn.lock()).await?;
@@ -184,11 +189,6 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
             blockn.conn.send_command(b"IDLE").await?;
         }
     }
-    debug!("IDLE connection dropped");
-    Err(blockn
-        .err()
-        .unwrap_or(MeliError::new("Unknown reason.").set_kind(crate::error::ErrorKind::Network))
-        .set_summary("IDLE connection dropped".to_string()))
 }
 
 pub async fn examine_updates(

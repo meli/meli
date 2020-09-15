@@ -444,7 +444,7 @@ impl MailBackend for ImapType {
     }
 
     fn watch(&self) -> ResultFuture<()> {
-        let conn = ImapConnection::new_connection(&self.server_conf, self.uid_store.clone());
+        let server_conf = self.server_conf.clone();
         let main_conn = self.connection.clone();
         let uid_store = self.uid_store.clone();
         let has_idle: bool = match self.server_conf.protocol {
@@ -462,24 +462,27 @@ impl MailBackend for ImapType {
         };
         Ok(Box::pin(async move {
             debug!(has_idle);
-            let main_conn2 = main_conn.clone();
-            let timeout_dur = uid_store.timeout;
-            let kit = ImapWatchKit {
-                conn,
-                main_conn,
-                uid_store,
-            };
-            if let Err(err) = if has_idle {
-                idle(kit).await
+            while let Err(err) = if has_idle {
+                idle(ImapWatchKit {
+                    conn: ImapConnection::new_connection(&server_conf, uid_store.clone()),
+                    main_conn: main_conn.clone(),
+                    uid_store: uid_store.clone(),
+                })
+                .await
             } else {
-                poll_with_examine(kit).await
+                poll_with_examine(ImapWatchKit {
+                    conn: ImapConnection::new_connection(&server_conf, uid_store.clone()),
+                    main_conn: main_conn.clone(),
+                    uid_store: uid_store.clone(),
+                })
+                .await
             } {
-                let mut main_conn = timeout(timeout_dur, main_conn2.lock()).await?;
+                let mut main_conn_lck = timeout(uid_store.timeout, main_conn.lock()).await?;
                 if err.kind.is_network() {
-                    main_conn.uid_store.is_online.lock().unwrap().1 = Err(err.clone());
+                    uid_store.is_online.lock().unwrap().1 = Err(err.clone());
                 }
                 debug!("failure: {}", err.to_string());
-                match timeout(timeout_dur, main_conn.connect())
+                match timeout(uid_store.timeout, main_conn_lck.connect())
                     .await
                     .and_then(|res| res)
                 {
@@ -488,10 +491,11 @@ impl MailBackend for ImapType {
                     }
                     Ok(()) => {
                         debug!("reconnect attempt succesful");
+                        continue;
                     }
                 }
-                let account_hash = main_conn.uid_store.account_hash;
-                main_conn.add_refresh_event(RefreshEvent {
+                let account_hash = uid_store.account_hash;
+                main_conn_lck.add_refresh_event(RefreshEvent {
                     account_hash,
                     mailbox_hash: 0,
                     kind: RefreshEventKind::Failure(err.clone()),
