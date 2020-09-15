@@ -799,6 +799,7 @@ impl Component for StatusBar {
                 let mut suggestions: Vec<AutoCompleteEntry> = self
                     .cmd_history
                     .iter()
+                    .rev()
                     .filter_map(|h| {
                         let sug = self.ex_buffer.as_str();
                         if h.starts_with(sug) && !unique_suggestions.contains(sug) {
