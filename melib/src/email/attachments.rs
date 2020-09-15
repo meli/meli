@@ -390,7 +390,7 @@ impl fmt::Display for Attachment {
                 let name = String::from_utf8_lossy(
                     parameters
                         .iter()
-                        .find(|(name, _)| name == b"name")
+                        .find(|(name, _)| name.eq_ignore_ascii_case(b"name"))
                         .map(|(_, value)| value)
                         .unwrap(),
                 );

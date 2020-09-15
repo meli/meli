@@ -280,7 +280,7 @@ impl Envelope {
                         builder.set_content_type_from_bytes(value);
                         let mut boundary = None;
                         for (n, v) in params {
-                            if n == b"boundary" {
+                            if n.eq_ignore_ascii_case(b"boundary") {
                                 boundary = Some(v);
                                 break;
                             }
