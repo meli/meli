@@ -1165,7 +1165,12 @@ impl Account {
             .write()
             .unwrap()
             .save(bytes.to_vec(), mailbox_hash, flags)?;
-        let (channel, handle, job_id) = self.job_executor.spawn_specialized(job);
+
+        let (channel, handle, job_id) = if self.backend_capabilities.is_async {
+            self.job_executor.spawn_specialized(job)
+        } else {
+            self.job_executor.spawn_blocking(job)
+        };
         self.insert_job(
             job_id,
             JobRequest::SaveMessage {
@@ -1508,8 +1513,11 @@ impl Account {
                             }
                             let mailboxes_job = self.backend.read().unwrap().mailboxes();
                             if let Ok(mailboxes_job) = mailboxes_job {
-                                let (rcvr, handle, job_id) =
-                                    self.job_executor.spawn_specialized(mailboxes_job);
+                                let (rcvr, handle, job_id) = if self.backend_capabilities.is_async {
+                                    self.job_executor.spawn_specialized(mailboxes_job)
+                                } else {
+                                    self.job_executor.spawn_blocking(mailboxes_job)
+                                };
                                 self.insert_job(job_id, JobRequest::Mailboxes(handle, rcvr));
                             };
                         }
@@ -1534,8 +1542,11 @@ impl Account {
                             .unwrap();
                         return true;
                     }
-                    let (rcvr, handle, job_id) =
-                        self.job_executor.spawn_specialized(rest.into_future());
+                    let (rcvr, handle, job_id) = if self.backend_capabilities.is_async {
+                        self.job_executor.spawn_specialized(rest.into_future())
+                    } else {
+                        self.job_executor.spawn_blocking(rest.into_future())
+                    };
                     self.insert_job(job_id, JobRequest::Fetch(mailbox_hash, handle, rcvr));
                     let payload = payload.unwrap();
                     if let Err(err) = payload {
@@ -1607,8 +1618,11 @@ impl Account {
                     }
                     let online_job = self.backend.read().unwrap().is_online();
                     if let Ok(online_job) = online_job {
-                        let (rcvr, handle, job_id) =
-                            self.job_executor.spawn_specialized(online_job);
+                        let (rcvr, handle, job_id) = if self.backend_capabilities.is_async {
+                            self.job_executor.spawn_specialized(online_job)
+                        } else {
+                            self.job_executor.spawn_blocking(online_job)
+                        };
                         self.insert_job(job_id, JobRequest::IsOnline(handle, rcvr));
                     };
                 }
@@ -1647,7 +1661,11 @@ impl Account {
                                 let online_job = self.backend.read().unwrap().is_online();
                                 if let Ok(online_job) = online_job {
                                     let (rcvr, handle, job_id) =
-                                        self.job_executor.spawn_specialized(online_job);
+                                        if self.backend_capabilities.is_async {
+                                            self.job_executor.spawn_specialized(online_job)
+                                        } else {
+                                            self.job_executor.spawn_blocking(online_job)
+                                        };
                                     self.insert_job(job_id, JobRequest::IsOnline(handle, rcvr));
                                 };
                             }
