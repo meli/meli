@@ -174,20 +174,20 @@ impl StatusPanel {
             ret
         };
         self.content
-            .resize(120, 40 + context.accounts.len() * 20, default_cell);
+            .resize(120, 40 + context.accounts.len() * 45, default_cell);
         write_string_to_grid(
             "Accounts",
             &mut self.content,
             self.theme_default.fg,
             self.theme_default.bg,
             self.theme_default.attrs,
-            ((2, 10), (120 - 1, 10)),
+            ((2, 2), (120 - 1, 2)),
             Some(2),
         );
 
         for (i, (_h, a)) in context.accounts.iter().enumerate() {
             for x in 2..(120 - 1) {
-                set_and_join_box(&mut self.content, (x, 12 + i * 10), BoxBoundary::Horizontal);
+                set_and_join_box(&mut self.content, (x, 4 + i * 10), BoxBoundary::Horizontal);
             }
             //create_box(&mut self.content, ((2, 5 + i * 10), (120 - 1, 15 + i * 10)));
             let (x, y) = write_string_to_grid(
@@ -196,7 +196,7 @@ impl StatusPanel {
                 self.theme_default.fg,
                 self.theme_default.bg,
                 Attr::BOLD,
-                ((3, 12 + i * 10), (120 - 2, 12 + i * 10)),
+                ((3, 4 + i * 10), (120 - 2, 4 + i * 10)),
                 Some(3),
             );
             write_string_to_grid(
@@ -205,7 +205,7 @@ impl StatusPanel {
                 Color::Byte(32),
                 self.theme_default.bg,
                 self.theme_default.attrs,
-                ((x, y), (120 - 2, 12 + i * 10)),
+                ((x, y), (120 - 2, y)),
                 None,
             );
             write_string_to_grid(
@@ -469,7 +469,7 @@ impl Component for AccountStatus {
                 None,
             );
             line += 1;
-            for (i, (name, status)) in extensions.into_iter().enumerate() {
+            for (name, status) in extensions.into_iter() {
                 let (width, height) = self.content.size();
                 write_string_to_grid(
                     name.trim_at_boundary(30),
@@ -477,7 +477,7 @@ impl Component for AccountStatus {
                     self.theme_default.fg,
                     self.theme_default.bg,
                     self.theme_default.attrs,
-                    ((1, line + i), (width - 1, height - 1)),
+                    ((1, line), (width - 1, height - 1)),
                     None,
                 );
 
@@ -489,7 +489,7 @@ impl Component for AccountStatus {
                         Color::Red,
                         self.theme_default.bg,
                         self.theme_default.attrs,
-                        ((max_name_width + 6, line + i), (width - 1, height - 1)),
+                        ((max_name_width + 6, line), (width - 1, height - 1)),
                         None,
                     ),
                     MailBackendExtensionStatus::Supported { comment: _ } => write_string_to_grid(
@@ -498,7 +498,7 @@ impl Component for AccountStatus {
                         Color::Green,
                         self.theme_default.bg,
                         self.theme_default.attrs,
-                        ((max_name_width + 6, line + i), (width - 1, height - 1)),
+                        ((max_name_width + 6, line), (width - 1, height - 1)),
                         None,
                     ),
                     MailBackendExtensionStatus::Enabled { comment: _ } => write_string_to_grid(
@@ -507,7 +507,7 @@ impl Component for AccountStatus {
                         Color::Green,
                         self.theme_default.bg,
                         self.theme_default.attrs,
-                        ((max_name_width + 6, line + i), (width - 1, height - 1)),
+                        ((max_name_width + 6, line), (width - 1, height - 1)),
                         None,
                     ),
                 };
@@ -546,7 +546,51 @@ impl Component for AccountStatus {
                         }
                     }
                 };
+                line += 1;
             }
+        }
+        line += 2;
+
+        write_string_to_grid(
+            "In-progress jobs:",
+            &mut self.content,
+            self.theme_default.fg,
+            self.theme_default.bg,
+            Attr::BOLD,
+            ((1, line), (width - 1, height - 1)),
+            None,
+        );
+
+        for (job_id, req) in a.active_jobs.iter() {
+            use crate::conf::accounts::JobRequest;
+            let (x, y) = write_string_to_grid(
+                &format!("{} {}", req, job_id),
+                &mut self.content,
+                self.theme_default.fg,
+                self.theme_default.bg,
+                self.theme_default.attrs,
+                ((1, line), (width - 1, height - 1)),
+                None,
+            );
+            if let JobRequest::DeleteMailbox { mailbox_hash, .. }
+            | JobRequest::SetMailboxPermissions(mailbox_hash, _, _)
+            | JobRequest::SetMailboxSubscription(mailbox_hash, _, _)
+            | JobRequest::CopyTo(mailbox_hash, _, _)
+            | JobRequest::Refresh(mailbox_hash, _, _)
+            | JobRequest::Fetch(mailbox_hash, _, _) = req
+            {
+                write_string_to_grid(
+                    a.mailbox_entries[mailbox_hash].name(),
+                    &mut self.content,
+                    self.theme_default.fg,
+                    self.theme_default.bg,
+                    self.theme_default.attrs,
+                    ((x + 1, y), (width - 1, height - 1)),
+                    None,
+                );
+            }
+
+            line += 1;
         }
 
         /* self.content may have been resized with write_string_to_grid() calls above since it has

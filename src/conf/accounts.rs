@@ -278,22 +278,59 @@ impl core::fmt::Debug for JobRequest {
     }
 }
 
+impl core::fmt::Display for JobRequest {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        match self {
+            JobRequest::Generic { name, .. } => write!(f, "{}", name),
+            JobRequest::Mailboxes(_, _) => write!(f, "Get mailbox list"),
+            JobRequest::Fetch(_, _, _) => write!(f, "Mailbox fetch"),
+            JobRequest::IsOnline(_, _) => write!(f, "Online status check"),
+            JobRequest::Refresh(_, _, _) => write!(f, "Refresh mailbox"),
+            JobRequest::SetFlags(batch, _, _) => write!(
+                f,
+                "Set flags for {} message{}",
+                batch.len(),
+                if batch.len() == 1 { "" } else { "s" }
+            ),
+            JobRequest::SaveMessage { .. } => write!(f, "Save message"),
+            JobRequest::CopyTo(_, _, _) => write!(f, "Copy message."),
+            JobRequest::DeleteMessages(batch, _, _) => write!(
+                f,
+                "Delete {} message{}",
+                batch.len(),
+                if batch.len() == 1 { "" } else { "s" }
+            ),
+            JobRequest::CreateMailbox { path, .. } => write!(f, "Create mailbox {}", path),
+            JobRequest::DeleteMailbox { .. } => write!(f, "Delete mailbox"),
+            //JobRequest::RenameMailbox,
+            JobRequest::Search(_) => write!(f, "Search"),
+            JobRequest::AsBytes(_) => write!(f, "Message body fetch"),
+            JobRequest::SetMailboxPermissions(_, _, _) => write!(f, "Set mailbox permissions"),
+            JobRequest::SetMailboxSubscription(_, _, _) => write!(f, "Set mailbox subscription"),
+            JobRequest::Watch { .. } => write!(f, "Background watch"),
+            JobRequest::SendMessageBackground(_, _) | JobRequest::SendMessage => {
+                write!(f, "Sending message")
+            }
+        }
+    }
+}
+
 impl JobRequest {
-    fn is_watch(&self) -> bool {
+    pub fn is_watch(&self) -> bool {
         match self {
             JobRequest::Watch { .. } => true,
             _ => false,
         }
     }
 
-    fn is_fetch(&self, mailbox_hash: MailboxHash) -> bool {
+    pub fn is_fetch(&self, mailbox_hash: MailboxHash) -> bool {
         match self {
             JobRequest::Fetch(h, _, _) if *h == mailbox_hash => true,
             _ => false,
         }
     }
 
-    fn is_online(&self) -> bool {
+    pub fn is_online(&self) -> bool {
         match self {
             JobRequest::IsOnline(_, _) => true,
             _ => false,
