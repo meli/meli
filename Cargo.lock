@@ -972,7 +972,6 @@ dependencies = [
  "unicode-segmentation",
  "uuid",
  "xdg",
- "xdg-utils",
 ]
 
 [[package]]
@@ -1006,6 +1005,7 @@ dependencies = [
  "unicode-segmentation",
  "uuid",
  "xdg",
+ "xdg-utils",
 ]
 
 [[package]]

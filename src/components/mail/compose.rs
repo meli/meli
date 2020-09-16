@@ -32,7 +32,6 @@ use nix::sys::wait::WaitStatus;
 use std::convert::TryInto;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
-use xdg_utils::query_mime_info;
 
 #[derive(Debug, PartialEq)]
 enum Cursor {
@@ -1243,7 +1242,7 @@ impl Component for Composer {
                                 .wait_with_output()
                                 .expect("failed to launch command")
                                 .stdout;
-                            let mut attachment =
+                            let attachment =
                                 match melib::email::compose::attachment_from_file(f.path()) {
                                     Ok(a) => a,
                                     Err(err) => {
@@ -1258,14 +1257,6 @@ impl Component for Composer {
                                         return true;
                                     }
                                 };
-                            if let Ok(mime_type) = query_mime_info(f.path()) {
-                                match attachment.content_type {
-                                    ContentType::Other { ref mut tag, .. } => {
-                                        *tag = mime_type;
-                                    }
-                                    _ => {}
-                                }
-                            }
                             self.draft.attachments_mut().push(attachment);
                             self.dirty = true;
                             return true;
@@ -1281,7 +1272,7 @@ impl Component for Composer {
                     }
                 }
                 Action::Compose(ComposeAction::AddAttachment(ref path)) => {
-                    let mut attachment = match melib::email::compose::attachment_from_file(path) {
+                    let attachment = match melib::email::compose::attachment_from_file(path) {
                         Ok(a) => a,
                         Err(err) => {
                             context.replies.push_back(UIEvent::Notification(
@@ -1293,14 +1284,6 @@ impl Component for Composer {
                             return true;
                         }
                     };
-                    if let Ok(mime_type) = query_mime_info(path) {
-                        match attachment.content_type {
-                            ContentType::Other { ref mut tag, .. } => {
-                                *tag = mime_type;
-                            }
-                            _ => {}
-                        }
-                    }
                     self.draft.attachments_mut().push(attachment);
                     self.dirty = true;
                     return true;

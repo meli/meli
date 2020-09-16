@@ -30,6 +30,7 @@ use std::ffi::OsStr;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::str;
+use xdg_utils::query_mime_info;
 
 pub mod mime;
 pub mod random;
@@ -244,21 +245,25 @@ impl Draft {
         }
         for (k, v) in self.headers.deref() {
             if v.is_ascii() {
-                ret.extend(format!("{}: {}\n", k, v).chars());
+                ret.extend(format!("{}: {}\r\n", k, v).chars());
             } else {
-                ret.extend(format!("{}: {}\n", k, mime::encode_header(v)).chars());
+                ret.extend(format!("{}: {}\r\n", k, mime::encode_header(v)).chars());
             }
         }
-        ret.push_str("MIME-Version: 1.0\n");
+        ret.push_str("MIME-Version: 1.0\r\n");
 
         if self.attachments.is_empty() {
             let content_type: ContentType = Default::default();
             let content_transfer_encoding: ContentTransferEncoding = ContentTransferEncoding::_8Bit;
-            ret.extend(format!("Content-Type: {}; charset=\"utf-8\"\n", content_type).chars());
+            ret.extend(format!("Content-Type: {}; charset=\"utf-8\"\r\n", content_type).chars());
             ret.extend(
-                format!("Content-Transfer-Encoding: {}\n", content_transfer_encoding).chars(),
+                format!(
+                    "Content-Transfer-Encoding: {}\r\n",
+                    content_transfer_encoding
+                )
+                .chars(),
             );
-            ret.push('\n');
+            ret.push_str("\r\n");
             ret.push_str(&self.body);
         } else if self.body.is_empty() && self.attachments.len() == 1 {
             let attachment = std::mem::replace(&mut self.attachments, Vec::new()).remove(0);
@@ -283,18 +288,18 @@ fn build_multipart(ret: &mut String, kind: MultipartType, parts: Vec<AttachmentB
     let boundary = ContentType::make_boundary(&parts);
     ret.extend(
         format!(
-            "Content-Type: {}; charset=\"utf-8\"; boundary=\"{}\"\n",
+            "Content-Type: {}; charset=\"utf-8\"; boundary=\"{}\"\r\n",
             kind, boundary
         )
         .chars(),
     );
-    ret.push('\n');
+    ret.push_str("\r\n");
     /* rfc1341 */
-    ret.push_str("This is a MIME formatted message with attachments. Use a MIME-compliant client to view it properly.\n");
+    ret.push_str("This is a MIME formatted message with attachments. Use a MIME-compliant client to view it properly.\r\n");
     for sub in parts {
         ret.push_str("--");
         ret.push_str(&boundary);
-        ret.push('\n');
+        ret.push_str("\r\n");
         print_attachment(ret, &kind, sub);
     }
     ret.push_str("--");
@@ -310,13 +315,13 @@ fn print_attachment(ret: &mut String, kind: &MultipartType, a: AttachmentBuilder
             charset: Charset::UTF8,
             parameters: ref v,
         } if v.is_empty() => {
-            ret.push('\n');
+            ret.push_str("\r\n");
             ret.push_str(&String::from_utf8_lossy(a.raw()));
-            ret.push('\n');
+            ret.push_str("\r\n");
         }
         Text { .. } => {
             ret.push_str(&a.build().into_raw());
-            ret.push('\n');
+            ret.push_str("\r\n");
         }
         Multipart {
             boundary: _boundary,
@@ -331,13 +336,14 @@ fn print_attachment(ret: &mut String, kind: &MultipartType, a: AttachmentBuilder
                     .map(|s| s.into())
                     .collect::<Vec<AttachmentBuilder>>(),
             );
-            ret.push('\n');
+            ret.push_str("\r\n");
         }
         MessageRfc822 | PGPSignature => {
-            ret.push_str(&format!("Content-Type: {}; charset=\"utf-8\"\n", kind));
-            ret.push('\n');
+            ret.push_str(&format!("Content-Type: {}; charset=\"utf-8\"\r\n", kind));
+            ret.push_str("Content-Disposition: attachment\r\n");
+            ret.push_str("\r\n");
             ret.push_str(&String::from_utf8_lossy(a.raw()));
-            ret.push('\n');
+            ret.push_str("\r\n");
         }
         _ => {
             let content_transfer_encoding: ContentTransferEncoding =
@@ -345,7 +351,7 @@ fn print_attachment(ret: &mut String, kind: &MultipartType, a: AttachmentBuilder
             if let Some(name) = a.content_type().name() {
                 ret.extend(
                     format!(
-                        "Content-Type: {}; name=\"{}\"; charset=\"utf-8\"\n",
+                        "Content-Type: {}; name=\"{}\"; charset=\"utf-8\"\r\n",
                         a.content_type(),
                         name
                     )
@@ -353,15 +359,20 @@ fn print_attachment(ret: &mut String, kind: &MultipartType, a: AttachmentBuilder
                 );
             } else {
                 ret.extend(
-                    format!("Content-Type: {}; charset=\"utf-8\"\n", a.content_type()).chars(),
+                    format!("Content-Type: {}; charset=\"utf-8\"\r\n", a.content_type()).chars(),
                 );
             }
+            ret.push_str("Content-Disposition: attachment\r\n");
             ret.extend(
-                format!("Content-Transfer-Encoding: {}\n", content_transfer_encoding).chars(),
+                format!(
+                    "Content-Transfer-Encoding: {}\r\n",
+                    content_transfer_encoding
+                )
+                .chars(),
             );
-            ret.push('\n');
+            ret.push_str("\r\n");
             ret.push_str(&BASE64_MIME.encode(a.raw()).trim());
-            ret.push('\n');
+            ret.push_str("\r\n");
         }
     }
 }
@@ -428,12 +439,17 @@ where
     let mut contents = Vec::new();
     file.read_to_end(&mut contents)?;
     let mut attachment = AttachmentBuilder::default();
+
     attachment
         .set_raw(contents)
         .set_body_to_raw()
         .set_content_type(ContentType::Other {
             name: path.file_name().map(|s| s.to_string_lossy().into()),
-            tag: b"application/octet-stream".to_vec(),
+            tag: if let Ok(mime_type) = query_mime_info(&path) {
+                mime_type
+            } else {
+                b"application/octet-stream".to_vec()
+            },
         });
 
     Ok(attachment)

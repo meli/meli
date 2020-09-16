@@ -1,20 +1,11 @@
 use melib;
 use melib::email::Draft;
-use xdg_utils::query_mime_info;
 
 #[test]
 fn build_draft() {
     let mut new_draft = Draft::default();
-    let mut attachment = melib::email::attachment_from_file(&"./tests/test_image.gif")
+    let attachment = melib::email::attachment_from_file(&"./tests/test_image.gif")
         .expect("Could not open test_image.gif.");
-    if let Ok(mime_type) = query_mime_info("./tests/test_image.gif") {
-        match attachment.content_type {
-            melib::email::attachment_types::ContentType::Other { ref mut tag, .. } => {
-                *tag = mime_type;
-            }
-            _ => {}
-        }
-    }
     new_draft.headers_mut().remove("User-Agent");
     new_draft.headers_mut().remove("Date");
 
@@ -27,5 +18,5 @@ fn build_draft() {
     let boundary_str = &boundary["bzz_bzz__bzz__".len()..];
 
     let raw = raw.replace(boundary_str, "");
-    assert_eq!(include_str!("generated.mail"), &raw);
+    assert_eq!(include_str!("generated_email.eml"), &raw);
 }

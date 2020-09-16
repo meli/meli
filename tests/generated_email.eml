@@ -12,6 +12,7 @@ This is a MIME formatted message with attachments. Use a MIME-compliant client t
 hello world.
 --bzz_bzz__bzz__
 Content-Type: image/gif; name="test_image.gif"; charset="utf-8"
+Content-Disposition: attachment
 Content-Transfer-Encoding: base64
 
 R0lGODdhKAAXAOfZAAABzAADzQAEzgQFtBEAxAAGxBcAxwALvRcFwAAPwBcLugATuQEUuxoNuxYQ

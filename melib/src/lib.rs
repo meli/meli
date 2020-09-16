@@ -138,6 +138,7 @@ pub extern crate indexmap;
 pub extern crate smallvec;
 pub extern crate smol;
 pub extern crate uuid;
+pub extern crate xdg_utils;
 
 pub use shellexpand::ShellExpandTrait;
 pub mod shellexpand {
