@@ -53,6 +53,7 @@ pub struct LineBreakCandidateIter<'a> {
     reg_ind_streak: u32,
     /* Needed for break before and after opportunities */
     break_now: bool,
+    last_break: usize,
 }
 
 impl<'a> LineBreakCandidateIter<'a> {
@@ -63,6 +64,7 @@ impl<'a> LineBreakCandidateIter<'a> {
             iter: UnicodeSegmentation::grapheme_indices(text, true).peekable(),
             reg_ind_streak: 0,
             break_now: false,
+            last_break: 0,
         }
     }
 }
@@ -118,6 +120,20 @@ macro_rules! next_grapheme_class {
     });
 }
 
+trait EvenAfterSpaces {
+    fn even_after_spaces(&self) -> &Self;
+}
+
+impl EvenAfterSpaces for str {
+    fn even_after_spaces(&self) -> &Self {
+        let mut ret = self;
+        while !ret.is_empty() && get_class!(&ret) != SP {
+            ret = &ret[get_base_character!(ret).unwrap().len_utf8()..];
+        }
+        ret
+    }
+}
+
 /// Returns positions where breaks can happen
 /// Examples:
 /// ```
@@ -134,14 +150,24 @@ impl<'a> Iterator for LineBreakCandidateIter<'a> {
     type Item = (usize, LineBreakCandidate);
     fn next(&mut self) -> Option<Self::Item> {
         loop {
+            macro_rules! set_last_break {
+                ($last_break:expr, $pos:expr) => {
+                    if $last_break == $pos {
+                        continue;
+                    }
+                    $last_break = $pos;
+                };
+            };
             // After end of text, there are no breaks.
-            if self.pos >= self.text.len() {
+            if self.pos > self.text.len() {
                 return None;
             }
             // LB3 Always break at the end of text
-            if self.pos + 1 == self.text.len() {
+            if self.pos == self.text.len() {
+                let ret = self.pos;
                 self.pos += 1;
-                return Some((self.pos, MandatoryBreak));
+                set_last_break!(self.last_break, ret);
+                return Some((ret, MandatoryBreak));
             }
 
             let LineBreakCandidateIter {
@@ -149,18 +175,13 @@ impl<'a> Iterator for LineBreakCandidateIter<'a> {
                 ref text,
                 ref mut reg_ind_streak,
                 ref mut break_now,
+                ref mut last_break,
                 ref mut pos,
             } = self;
             let (idx, mut grapheme) = iter.next().unwrap();
             let iter = iter.by_ref();
 
             debug_assert_eq!(idx, *pos);
-
-            // LB2 Never break at the start of text
-            if idx == 0 {
-                *pos += grapheme.len();
-                continue;
-            }
 
             let class = get_class!(grapheme);
 
@@ -184,12 +205,13 @@ impl<'a> Iterator for LineBreakCandidateIter<'a> {
             // TODO: LB1
 
             /* Check if next character class allows breaks before it */
-            let next_char: Option<&(usize, &str)> = iter.peek();
+            let mut next_char: Option<&(usize, &str)> = iter.peek();
 
             match class {
                 BK => {
                     // LB4 Always Break after hard line breaks.
                     *pos += grapheme.len();
+                    set_last_break!(*last_break, *pos);
                     return Some((*pos, MandatoryBreak));
                 }
                 // LB5 Treat CR followed by LF, as well as CR, LF, and NL as hard line breaks
@@ -197,10 +219,12 @@ impl<'a> Iterator for LineBreakCandidateIter<'a> {
                     *pos += grapheme.len();
                     assert!(Some(LF) == next_grapheme_class!(iter, grapheme));
                     *pos += grapheme.len();
+                    set_last_break!(*last_break, *pos);
                     return Some((*pos, MandatoryBreak));
                 }
                 CR | LF | NL => {
                     *pos += grapheme.len();
+                    set_last_break!(*last_break, *pos);
                     return Some((*pos, MandatoryBreak));
                 }
                 _ => {}
@@ -219,10 +243,21 @@ impl<'a> Iterator for LineBreakCandidateIter<'a> {
                         *pos += grapheme.len();
                         continue;
                     }
+                    WJ => {
+                        /*: LB11 Do not break before or after Word joiner and related characters.*/
+                        *pos += grapheme.len();
+                        continue;
+                    }
                     _ if *break_now => {
                         *break_now = false;
                         let ret = *pos;
                         *pos += grapheme.len();
+                        // LB2 Never break at the start of text
+                        if ret == 0 {
+                            continue;
+                        }
+
+                        set_last_break!(*last_break, ret);
                         return Some((ret, BreakAllowed));
                     }
                     _ => {}
@@ -234,9 +269,13 @@ impl<'a> Iterator for LineBreakCandidateIter<'a> {
                     // spaces intervene
                     // ZW SP* ÷
                     *pos += grapheme.len();
-                    while Some(SP) == next_grapheme_class!(iter, grapheme) {
+                    while next_grapheme_class!((next_char is SP)) {
+                        let (_idx, grapheme) = iter.next().unwrap();
+                        debug_assert_eq!(get_class!(grapheme), SP);
                         *pos += grapheme.len();
+                        next_char = iter.peek();
                     }
+                    set_last_break!(*last_break, *pos);
                     return Some((*pos, MandatoryBreak));
                 }
                 ZWJ => {
@@ -292,8 +331,9 @@ impl<'a> Iterator for LineBreakCandidateIter<'a> {
 
             match class {
                 /* LB13 Do not break before ‘]’ or ‘!’ or ‘;’ or ‘/’, even after spaces. */
-                SP if !text[idx..].trim_start().is_empty()
-                    && [CL, CP, EX, IS, SY].contains(&get_class!(text[idx..].trim_start())) =>
+                SP if !text[idx..].even_after_spaces().is_empty()
+                    && [CL, CP, EX, IS, SY]
+                        .contains(&get_class!(text[idx..].even_after_spaces())) =>
                 {
                     *pos += grapheme.len();
                     while ![CL, CP, EX, IS, SY]
@@ -308,22 +348,27 @@ impl<'a> Iterator for LineBreakCandidateIter<'a> {
                     /* LB14 Do not break after ‘[’, even after spaces.
                      * OP SP* ×
                      */
-                    while let Some((idx, grapheme)) = self.iter.next() {
-                        *pos = idx + grapheme.len();
-                        if !(get_class!(grapheme) == SP) {
-                            break;
-                        }
+                    *pos += grapheme.len();
+                    while next_grapheme_class!((next_char is SP)) {
+                        let (_idx, grapheme) = iter.next().unwrap();
+                        debug_assert_eq!(get_class!(grapheme), SP);
+                        *pos += grapheme.len();
+                        next_char = iter.peek();
                     }
                     continue;
                 }
-                QU if get_class!(text[idx + grapheme.len()..].trim_start()) == OP => {
+                QU if !text[idx + grapheme.len()..].even_after_spaces().is_empty()
+                    && get_class!(text[idx + grapheme.len()..].even_after_spaces()) == OP =>
+                {
                     /* LB15 Do not break within ‘”[’, even with intervening spaces.
                      * QU SP* × OP */
                     *pos += grapheme.len();
-                    while Some(SP) == next_grapheme_class!(iter, grapheme) {
+                    while next_grapheme_class!((next_char is SP)) {
+                        let (_idx, grapheme) = iter.next().unwrap();
+                        debug_assert_eq!(get_class!(grapheme), SP);
                         *pos += grapheme.len();
+                        next_char = iter.peek();
                     }
-                    *pos = idx;
                     continue;
                 }
                 QU => {
@@ -334,7 +379,10 @@ impl<'a> Iterator for LineBreakCandidateIter<'a> {
                     }
                     continue;
                 }
-                CL | CP if get_class!(text[idx + grapheme.len()..].trim_start()) == NS => {
+                CL | CP
+                    if !text[idx + grapheme.len()..].even_after_spaces().is_empty()
+                        && get_class!(text[idx + grapheme.len()..].even_after_spaces()) == NS =>
+                {
                     /* LB16 Do not break between closing punctuation and a nonstarter (lb=NS), even with
                      * intervening spaces.
                      * (CL | CP) SP* × NS */
@@ -344,15 +392,18 @@ impl<'a> Iterator for LineBreakCandidateIter<'a> {
                     }
                     continue;
                 }
-                B2 if get_class!(text[idx..].trim_start()) == B2 => {
+                B2 if !text[idx + grapheme.len()..].even_after_spaces().is_empty()
+                    && get_class!(text[idx + grapheme.len()..].even_after_spaces()) == B2 =>
+                {
+                    /* LB17 Do not break within ‘——’, even with intervening spaces.
+                     * B2 SP* × B2*/
                     *pos += grapheme.len();
-                    *break_now = true;
-                    return Some((*pos, BreakAllowed));
+                    continue;
                 }
                 SP => {
                     /* LB18 Break after spaces.  SP ÷ */
-                    // Space 0x20 is 1 byte long.
-                    *pos += 1;
+                    *pos += grapheme.len();
+                    set_last_break!(*last_break, *pos);
                     return Some((*pos, BreakAllowed));
                 }
                 _ => {}
@@ -372,12 +423,19 @@ impl<'a> Iterator for LineBreakCandidateIter<'a> {
             match class {
                 CB => {
                     /* LB20 Break before and after unresolved CB. */
+                    let ret = *pos;
                     *pos += grapheme.len();
-                    return Some((*pos - 1, BreakAllowed));
+                    *break_now = true;
+                    // LB2 Never break at the start of text
+                    if ret == 0 {
+                        continue;
+                    }
+                    set_last_break!(*last_break, ret);
+                    return Some((ret, BreakAllowed));
                 }
                 /* LB21 Do not break before hyphen-minus, other hyphens, fixed-width spaces, small
                  * kana, and other non-starters, or after acute accents.  × BA,  × HY, × NS,  BB × */
-                BB => {
+                BB if !*break_now => {
                     *pos += grapheme.len();
                     continue;
                 }
@@ -391,6 +449,7 @@ impl<'a> Iterator for LineBreakCandidateIter<'a> {
                         /* LB21 Do not break before hyphen-minus, other hyphens, fixed-width spaces, small
                          * kana, and other non-starters, or after acute accents.  × BA,  × HY, × NS,  BB × */
                         *pos += grapheme.len();
+                        //*pos += next_grapheme.len();
                         continue;
                     }
                     _ => {}
@@ -696,17 +755,49 @@ impl<'a> Iterator for LineBreakCandidateIter<'a> {
                     *reg_ind_streak += 1;
                     *pos += grapheme.len();
                     if *reg_ind_streak % 2 == 1 {
-                        return Some((*pos - grapheme.len(), BreakAllowed));
+                        let ret = *pos - grapheme.len();
+                        // LB2 Never break at the start of text
+                        if ret == 0 {
+                            continue;
+                        }
+                        set_last_break!(*last_break, ret);
+                        return Some((ret, BreakAllowed));
                     }
                     self.iter.next();
                     continue;
                 }
-                _ if next_char.is_none() => {
-                    return None;
+                CL | CP | IS | SY => {
+                    *pos += grapheme.len();
+                    continue;
+                }
+                BK | CR | LF | NL => {
+                    *pos += grapheme.len();
+                    continue;
+                }
+                SP | ZW => {
+                    *pos += grapheme.len();
+                    continue;
+                }
+                BA | HY | NS => {
+                    *pos += grapheme.len();
+                    continue;
                 }
                 _ => {
+                    /* LB31 Break everywhere else.
+                     * ALL ÷
+                     * ÷ ALL
+                     */
+                    let ret = *pos;
+                    // ALL ÷
+                    *break_now = true;
                     *pos += grapheme.len();
-                    return Some((*pos - grapheme.len(), BreakAllowed));
+                    // LB2 Never break at the start of text
+                    if ret == 0 {
+                        continue;
+                    }
+                    // ÷ ALL
+                    set_last_break!(*last_break, ret);
+                    return Some((ret, BreakAllowed));
                 }
             }
         }
