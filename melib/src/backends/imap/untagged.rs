@@ -33,7 +33,7 @@ use crate::error::*;
 use std::convert::TryInto;
 
 impl ImapConnection {
-    pub async fn process_untagged(&mut self, line: &str) -> Result<bool> {
+    pub async fn process_untagged(&mut self, line: &[u8]) -> Result<bool> {
         macro_rules! try_fail {
             ($mailbox_hash: expr, $($result:expr)+) => {
                 $(if let Err(err) = $result {
@@ -59,7 +59,7 @@ impl ImapConnection {
         let mut cache_handle = super::cache::DefaultCache::get(self.uid_store.clone())?;
         #[cfg(feature = "sqlite3")]
         let mut cache_handle = super::cache::Sqlite3Cache::get(self.uid_store.clone())?;
-        let mut response = String::with_capacity(8 * 1024);
+        let mut response = Vec::with_capacity(8 * 1024);
         let untagged_response =
             match super::protocol_parser::untagged_responses(line).map(|(_, v, _)| v) {
                 Ok(None) | Err(_) => {
@@ -233,7 +233,7 @@ impl ImapConnection {
                     self.send_command(b"UID SEARCH RECENT").await
                     self.read_response(&mut response, RequiredResponses::SEARCH).await
                 );
-                match super::protocol_parser::search_results_raw(response.as_bytes())
+                match super::protocol_parser::search_results_raw(&response)
                     .map(|(_, v)| v)
                     .map_err(MeliError::from)
                 {
@@ -339,7 +339,7 @@ impl ImapConnection {
                         debug!(
                             "UID SEARCH RECENT err: {}\nresp: {}",
                             e.to_string(),
-                            &response
+                            to_str!(&response)
                         );
                     }
                 }
@@ -381,9 +381,9 @@ impl ImapConnection {
                         ).await
                                 self.read_response(&mut response, RequiredResponses::SEARCH).await
                             );
-                        debug!(&response);
+                        debug!(to_str!(&response));
                         match super::protocol_parser::search_results(
-                            response.split_rn().next().unwrap_or("").as_bytes(),
+                            response.split_rn().next().unwrap_or(b""),
                         )
                         .map(|(_, v)| v)
                         {
@@ -392,7 +392,7 @@ impl ImapConnection {
                                 return Ok(false);
                             }
                             Err(e) => {
-                                debug!(&response);
+                                debug!(to_str!(&response));
                                 debug!(e);
                                 return Ok(false);
                             }

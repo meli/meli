@@ -165,7 +165,7 @@ impl ImapStream {
                     .flush()
                     .await
                     .chain_err_kind(crate::error::ErrorKind::Network)?;
-                let mut response = String::with_capacity(1024);
+                let mut response = Vec::with_capacity(1024);
                 let mut broken = false;
                 let now = Instant::now();
 
@@ -174,24 +174,24 @@ impl ImapStream {
                         .read(&mut buf)
                         .await
                         .chain_err_kind(crate::error::ErrorKind::Network)?;
-                    response.push_str(unsafe { std::str::from_utf8_unchecked(&buf[0..len]) });
+                    response.extend_from_slice(&buf[0..len]);
                     match server_conf.protocol {
                         ImapProtocol::IMAP { .. } => {
-                            if response.starts_with("* OK ") && response.find("\r\n").is_some() {
-                                if let Some(pos) = response.as_bytes().find(b"\r\n") {
+                            if response.starts_with(b"* OK ") && response.find(b"\r\n").is_some() {
+                                if let Some(pos) = response.find(b"\r\n") {
                                     response.drain(0..pos + 2);
                                 }
                             }
                         }
                         ImapProtocol::ManageSieve => {
-                            if response.starts_with("OK ") && response.find("\r\n").is_some() {
+                            if response.starts_with(b"OK ") && response.find(b"\r\n").is_some() {
                                 response.clear();
                                 broken = true;
                                 break;
                             }
                         }
                     }
-                    if response.starts_with("M1 OK") {
+                    if response.starts_with(b"M1 OK") {
                         broken = true;
                         break;
                     }
@@ -262,7 +262,7 @@ impl ImapStream {
                 crate::LoggingLevel::WARN,
             );
         }
-        let mut res = String::with_capacity(8 * 1024);
+        let mut res = Vec::with_capacity(8 * 1024);
         let mut ret = ImapStream {
             cmd_id,
             stream,
@@ -295,10 +295,10 @@ impl ImapStream {
         ret.read_response(&mut res).await?;
         let capabilities: std::result::Result<Vec<&[u8]>, _> = res
             .split_rn()
-            .find(|l| l.starts_with("* CAPABILITY"))
+            .find(|l| l.starts_with(b"* CAPABILITY"))
             .ok_or_else(|| MeliError::new(""))
             .and_then(|res| {
-                protocol_parser::capabilities(res.as_bytes())
+                protocol_parser::capabilities(&res)
                     .map_err(|_| MeliError::new(""))
                     .map(|(_, v)| v)
             });
@@ -306,8 +306,10 @@ impl ImapStream {
         if capabilities.is_err() {
             return Err(MeliError::new(format!(
                 "Could not connect to {}: expected CAPABILITY response but got:{}",
-                &server_conf.server_hostname, res
-            )));
+                &server_conf.server_hostname,
+                String::from_utf8_lossy(&res)
+            ))
+            .set_kind(ErrorKind::Bug));
         }
 
         let capabilities = capabilities.unwrap();
@@ -342,22 +344,22 @@ impl ImapStream {
         let tag_start = format!("M{} ", (ret.cmd_id - 1));
 
         loop {
-            ret.read_lines(&mut res, &String::new(), false).await?;
+            ret.read_lines(&mut res, &[], false).await?;
             let mut should_break = false;
             for l in res.split_rn() {
-                if l.starts_with("* CAPABILITY") {
-                    capabilities = protocol_parser::capabilities(l.as_bytes())
+                if l.starts_with(b"* CAPABILITY") {
+                    capabilities = protocol_parser::capabilities(&l)
                         .map(|(_, capabilities)| {
                             HashSet::from_iter(capabilities.into_iter().map(|s: &[u8]| s.to_vec()))
                         })
                         .ok();
                 }
 
-                if l.starts_with(tag_start.as_str()) {
-                    if !l[tag_start.len()..].trim().starts_with("OK ") {
+                if l.starts_with(tag_start.as_bytes()) {
+                    if !l[tag_start.len()..].trim().starts_with(b"OK ") {
                         return Err(MeliError::new(format!(
                             "Could not connect. Server replied with '{}'",
-                            l[tag_start.len()..].trim()
+                            String::from_utf8_lossy(l[tag_start.len()..].trim())
                         ))
                         .set_err_kind(crate::error::ErrorKind::Authentication));
                     }
@@ -375,7 +377,7 @@ impl ImapStream {
             drop(capabilities);
             ret.send_command(b"CAPABILITY").await?;
             ret.read_response(&mut res).await.unwrap();
-            let capabilities = protocol_parser::capabilities(res.as_bytes())?.1;
+            let capabilities = protocol_parser::capabilities(&res)?.1;
             let capabilities = HashSet::from_iter(capabilities.into_iter().map(|s| s.to_vec()));
             Ok((capabilities, ret))
         } else {
@@ -384,10 +386,10 @@ impl ImapStream {
         }
     }
 
-    pub async fn read_response(&mut self, ret: &mut String) -> Result<()> {
+    pub async fn read_response(&mut self, ret: &mut Vec<u8>) -> Result<()> {
         let id = match self.protocol {
-            ImapProtocol::IMAP { .. } => format!("M{} ", self.cmd_id - 1),
-            ImapProtocol::ManageSieve => String::new(),
+            ImapProtocol::IMAP { .. } => format!("M{} ", self.cmd_id - 1).into_bytes(),
+            ImapProtocol::ManageSieve => Vec::new(),
         };
         self.read_lines(ret, &id, true).await?;
         Ok(())
@@ -395,8 +397,8 @@ impl ImapStream {
 
     pub async fn read_lines(
         &mut self,
-        ret: &mut String,
-        termination_string: &str,
+        ret: &mut Vec<u8>,
+        termination_string: &[u8],
         keep_termination_string: bool,
     ) -> Result<()> {
         let mut buf: Vec<u8> = vec![0; Connection::IO_BUF_SIZE];
@@ -406,31 +408,31 @@ impl ImapStream {
             match timeout(self.timeout, self.stream.read(&mut buf)).await? {
                 Ok(0) => break,
                 Ok(b) => {
-                    ret.push_str(unsafe { std::str::from_utf8_unchecked(&buf[0..b]) });
+                    ret.extend_from_slice(&buf[0..b]);
                     if let Some(mut pos) = ret[last_line_idx..].rfind("\r\n") {
-                        if ret[last_line_idx..].starts_with("* BYE") {
+                        if ret[last_line_idx..].starts_with(b"* BYE") {
                             return Err(MeliError::new("Disconnected"));
                         }
                         if let Some(prev_line) =
-                            ret[last_line_idx..pos + last_line_idx].rfind("\r\n")
+                            ret[last_line_idx..pos + last_line_idx].rfind(b"\r\n")
                         {
-                            last_line_idx += prev_line + "\r\n".len();
-                            pos -= prev_line + "\r\n".len();
+                            last_line_idx += prev_line + b"\r\n".len();
+                            pos -= prev_line + b"\r\n".len();
                         }
-                        if Some(pos + "\r\n".len()) == ret.get(last_line_idx..).map(|r| r.len()) {
+                        if Some(pos + b"\r\n".len()) == ret.get(last_line_idx..).map(|r| r.len()) {
                             if !termination_string.is_empty()
                                 && ret[last_line_idx..].starts_with(termination_string)
                             {
                                 debug!(&ret[last_line_idx..]);
                                 if !keep_termination_string {
-                                    ret.replace_range(last_line_idx.., "");
+                                    ret.splice(last_line_idx.., std::iter::empty::<u8>());
                                 }
                                 break;
                             } else if termination_string.is_empty() {
                                 break;
                             }
                         }
-                        last_line_idx += pos + "\r\n".len();
+                        last_line_idx += pos + b"\r\n".len();
                     }
                 }
                 Err(e) => {
@@ -443,9 +445,9 @@ impl ImapStream {
     }
 
     pub async fn wait_for_continuation_request(&mut self) -> Result<()> {
-        let term = "+ ".to_string();
-        let mut ret = String::new();
-        self.read_lines(&mut ret, &term, false).await?;
+        let term = b"+ ";
+        let mut ret = Vec::new();
+        self.read_lines(&mut ret, &term[..], false).await?;
         Ok(())
     }
 
@@ -546,7 +548,7 @@ impl ImapConnection {
                 }
             }
             if debug!(self.stream.is_ok()) {
-                let mut ret = String::new();
+                let mut ret = Vec::new();
                 if let Err(err) = try_await(async {
                     self.send_command(b"NOOP").await?;
                     self.read_response(&mut ret, RequiredResponses::empty())
@@ -586,7 +588,7 @@ impl ImapConnection {
                             SyncPolicy::None => { /* do nothing, sync is disabled */ }
                             _ => {
                                 /* Upgrade to Condstore */
-                                let mut ret = String::new();
+                                let mut ret = Vec::new();
                                 if capabilities.contains(&b"ENABLE"[..]) {
                                     self.send_command(b"ENABLE CONDSTORE").await?;
                                     self.read_response(&mut ret, RequiredResponses::empty())
@@ -605,11 +607,11 @@ impl ImapConnection {
                     }
                     #[cfg(feature = "deflate_compression")]
                     if capabilities.contains(&b"COMPRESS=DEFLATE"[..]) && deflate {
-                        let mut ret = String::new();
+                        let mut ret = Vec::new();
                         self.send_command(b"COMPRESS DEFLATE").await?;
                         self.read_response(&mut ret, RequiredResponses::empty())
                             .await?;
-                        match ImapResponse::try_from(ret.as_str())? {
+                        match ImapResponse::try_from(ret.as_slice())? {
                             ImapResponse::No(code)
                             | ImapResponse::Bad(code)
                             | ImapResponse::Preauth(code)
@@ -645,25 +647,25 @@ impl ImapConnection {
 
     pub fn read_response<'a>(
         &'a mut self,
-        ret: &'a mut String,
+        ret: &'a mut Vec<u8>,
         required_responses: RequiredResponses,
     ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>> {
         Box::pin(async move {
-            let mut response = String::new();
+            let mut response = Vec::new();
             ret.clear();
             self.stream.as_mut()?.read_response(&mut response).await?;
             *self.uid_store.is_online.lock().unwrap() = (Instant::now(), Ok(()));
 
             match self.server_conf.protocol {
                 ImapProtocol::IMAP { .. } => {
-                    let r: ImapResponse = ImapResponse::try_from(response.as_str())?;
+                    let r: ImapResponse = ImapResponse::try_from(response.as_slice())?;
                     match r {
                         ImapResponse::Bye(ref response_code) => {
                             self.stream = Err(MeliError::new(format!(
                                 "Offline: received BYE: {:?}",
                                 response_code
                             )));
-                            ret.push_str(&response);
+                            ret.extend_from_slice(&response);
                             return r.into();
                         }
                         ImapResponse::No(ref response_code)
@@ -685,7 +687,7 @@ impl ImapConnection {
                                     level: crate::logging::LoggingLevel::ERROR,
                                 },
                             );
-                            ret.push_str(&response);
+                            ret.extend_from_slice(&response);
                             return r.into();
                         }
                         ImapResponse::Bad(ref response_code) => {
@@ -699,7 +701,7 @@ impl ImapConnection {
                                     level: crate::logging::LoggingLevel::ERROR,
                                 },
                             );
-                            ret.push_str(&response);
+                            ret.extend_from_slice(&response);
                             return r.into();
                         }
                         _ => {}
@@ -711,20 +713,24 @@ impl ImapConnection {
                     for l in response.split_rn() {
                         /*debug!("check line: {}", &l);*/
                         if required_responses.check(l) || !self.process_untagged(l).await? {
-                            ret.push_str(l);
+                            ret.extend_from_slice(l);
                         }
                     }
                     Ok(())
                 }
                 ImapProtocol::ManageSieve => {
-                    ret.push_str(&response);
+                    ret.extend_from_slice(&response);
                     Ok(())
                 }
             }
         })
     }
 
-    pub async fn read_lines(&mut self, ret: &mut String, termination_string: String) -> Result<()> {
+    pub async fn read_lines(
+        &mut self,
+        ret: &mut Vec<u8>,
+        termination_string: Vec<u8>,
+    ) -> Result<()> {
         self.stream
             .as_mut()?
             .read_lines(ret, &termination_string, false)
@@ -783,7 +789,7 @@ impl ImapConnection {
     pub async fn select_mailbox(
         &mut self,
         mailbox_hash: MailboxHash,
-        ret: &mut String,
+        ret: &mut Vec<u8>,
         force: bool,
     ) -> Result<Option<SelectResponse>> {
         if !force && self.stream.as_ref()?.current_mailbox == MailboxSelection::Select(mailbox_hash)
@@ -809,7 +815,11 @@ impl ImapConnection {
             .await?;
         self.read_response(ret, RequiredResponses::SELECT_REQUIRED)
             .await?;
-        debug!("select response {}", ret);
+        debug!(
+            "{} select response {}",
+            imap_path,
+            String::from_utf8_lossy(&ret)
+        );
         let select_response = protocol_parser::select_response(&ret).chain_err_summary(|| {
             format!("Could not parse select response for mailbox {}", imap_path)
         })?;
@@ -868,7 +878,7 @@ impl ImapConnection {
     pub async fn examine_mailbox(
         &mut self,
         mailbox_hash: MailboxHash,
-        ret: &mut String,
+        ret: &mut Vec<u8>,
         force: bool,
     ) -> Result<Option<SelectResponse>> {
         if !force
@@ -891,7 +901,7 @@ impl ImapConnection {
             .await?;
         self.read_response(ret, RequiredResponses::EXAMINE_REQUIRED)
             .await?;
-        debug!("examine response {}", ret);
+        debug!("examine response {}", String::from_utf8_lossy(&ret));
         let select_response = protocol_parser::select_response(&ret).chain_err_summary(|| {
             format!("Could not parse select response for mailbox {}", imap_path)
         })?;
@@ -915,7 +925,7 @@ impl ImapConnection {
         match self.stream.as_mut()?.current_mailbox.take() {
             MailboxSelection::Examine(_) |
                 MailboxSelection::Select(_) => {
-                    let mut response = String::with_capacity(8 * 1024);
+                    let mut response = Vec::with_capacity(8 * 1024);
                     if self
                         .uid_store
                             .capabilities
@@ -970,7 +980,7 @@ impl ImapConnection {
         _select_response: &SelectResponse,
     ) -> Result<()> {
         debug_assert!(low > 0);
-        let mut response = String::new();
+        let mut response = Vec::new();
         self.send_command(format!("UID SEARCH {}:*", low).as_bytes())
             .await?;
         self.read_response(&mut response, RequiredResponses::SEARCH)
@@ -980,7 +990,7 @@ impl ImapConnection {
         let msn_index = msn_index_lck.entry(mailbox_hash).or_default();
         let _ = msn_index.drain(low - 1..);
         msn_index.extend(
-            debug!(protocol_parser::search_results(response.as_bytes()))?
+            debug!(protocol_parser::search_results(&response))?
                 .1
                 .into_iter(),
         );

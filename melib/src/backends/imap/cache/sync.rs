@@ -83,7 +83,7 @@ impl ImapConnection {
         mailbox_hash: MailboxHash,
     ) -> Result<()> {
         debug!("build_cache {}", mailbox_hash);
-        let mut response = String::with_capacity(8 * 1024);
+        let mut response = Vec::with_capacity(8 * 1024);
         // 1 get uidvalidity, highestmodseq
         let select_response = self
             .select_mailbox(mailbox_hash, &mut response, true)
@@ -119,7 +119,7 @@ impl ImapConnection {
     ) -> Result<Option<Vec<Envelope>>> {
         let mut payload = vec![];
         debug!("resync_basic");
-        let mut response = String::with_capacity(8 * 1024);
+        let mut response = Vec::with_capacity(8 * 1024);
         let cached_uidvalidity = self
             .uid_store
             .uidvalidity
@@ -181,7 +181,7 @@ impl ImapConnection {
         debug!(
             "fetch response is {} bytes and {} lines",
             response.len(),
-            response.lines().count()
+            String::from_utf8_lossy(&response).lines().count()
         );
         let (_, mut v, _) = protocol_parser::fetch_responses(&response)?;
         debug!("responses len is {}", v.len());
@@ -344,7 +344,7 @@ impl ImapConnection {
     ) -> Result<Option<Vec<Envelope>>> {
         let mut payload = vec![];
         debug!("resync_condstore");
-        let mut response = String::with_capacity(8 * 1024);
+        let mut response = Vec::with_capacity(8 * 1024);
         let cached_uidvalidity = self
             .uid_store
             .uidvalidity
@@ -465,7 +465,7 @@ impl ImapConnection {
             debug!(
                 "fetch response is {} bytes and {} lines",
                 response.len(),
-                response.lines().count()
+                String::from_utf8_lossy(&response).lines().count()
             );
             let (_, mut v, _) = protocol_parser::fetch_responses(&response)?;
             debug!("responses len is {}", v.len());
@@ -597,7 +597,7 @@ impl ImapConnection {
         self.read_response(&mut response, RequiredResponses::SEARCH)
             .await?;
         //1) update cached flags for old messages;
-        let (_, v) = protocol_parser::search_results(response.as_bytes())?;
+        let (_, v) = protocol_parser::search_results(response.as_slice())?;
         for uid in v {
             valid_envs.insert(generate_envelope_hash(&mailbox_path, &uid));
         }
@@ -644,7 +644,7 @@ impl ImapConnection {
     }
 
     pub async fn init_mailbox(&mut self, mailbox_hash: MailboxHash) -> Result<SelectResponse> {
-        let mut response = String::with_capacity(8 * 1024);
+        let mut response = Vec::with_capacity(8 * 1024);
         let (mailbox_path, mailbox_exists, unseen, permissions) = {
             let f = &self.uid_store.mailboxes.lock().await[&mailbox_hash];
             (
@@ -708,7 +708,7 @@ impl ImapConnection {
                 .await?;
             self.read_response(&mut response, RequiredResponses::STATUS)
                 .await?;
-            let (_, status) = protocol_parser::status_response(response.as_bytes())?;
+            let (_, status) = protocol_parser::status_response(response.as_slice())?;
             if let Some(uidnext) = status.uidnext {
                 if uidnext == 0 {
                     return Err(MeliError::new(

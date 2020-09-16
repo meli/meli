@@ -74,12 +74,12 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
         }
     };
     let mailbox_hash = mailbox.hash();
-    let mut response = String::with_capacity(8 * 1024);
+    let mut response = Vec::with_capacity(8 * 1024);
     let select_response = conn
         .select_mailbox(mailbox_hash, &mut response, true)
         .await?
         .unwrap();
-    debug!("select response {}", &response);
+    debug!("select response {}", String::from_utf8_lossy(&response));
     {
         let mut uidvalidities = uid_store.uidvalidity.lock().unwrap();
 
@@ -153,14 +153,14 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
             }
             watch = now;
         }
-        if to_str!(&line)
+        if line
             .split_rn()
             .filter(|l| {
-                !l.starts_with("+ ")
-                    && !l.starts_with("* ok")
-                    && !l.starts_with("* ok")
-                    && !l.starts_with("* Ok")
-                    && !l.starts_with("* OK")
+                !l.starts_with(b"+ ")
+                    && !l.starts_with(b"* ok")
+                    && !l.starts_with(b"* ok")
+                    && !l.starts_with(b"* Ok")
+                    && !l.starts_with(b"* OK")
             })
             .count()
             == 0
@@ -173,13 +173,13 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
                 .conn
                 .read_response(&mut response, RequiredResponses::empty())
                 .await?;
-            for l in to_str!(&line).split_rn() {
+            for l in line.split_rn() {
                 debug!("process_untagged {:?}", &l);
-                if l.starts_with("+ ")
-                    || l.starts_with("* ok")
-                    || l.starts_with("* ok")
-                    || l.starts_with("* Ok")
-                    || l.starts_with("* OK")
+                if l.starts_with(b"+ ")
+                    || l.starts_with(b"* ok")
+                    || l.starts_with(b"* ok")
+                    || l.starts_with(b"* Ok")
+                    || l.starts_with(b"* OK")
                 {
                     debug!("ignore continuation mark");
                     continue;
@@ -214,7 +214,7 @@ pub async fn examine_updates(
         let mut cache_handle = super::cache::DefaultCache::get(uid_store.clone())?;
         #[cfg(feature = "sqlite3")]
         let mut cache_handle = super::cache::Sqlite3Cache::get(uid_store.clone())?;
-        let mut response = String::with_capacity(8 * 1024);
+        let mut response = Vec::with_capacity(8 * 1024);
         let select_response = conn
             .examine_mailbox(mailbox_hash, &mut response, true)
             .await?
@@ -249,9 +249,12 @@ pub async fn examine_updates(
             conn.send_command(b"UID SEARCH RECENT").await?;
             conn.read_response(&mut response, RequiredResponses::SEARCH)
                 .await?;
-            let v = protocol_parser::search_results(response.as_bytes()).map(|(_, v)| v)?;
+            let v = protocol_parser::search_results(response.as_slice()).map(|(_, v)| v)?;
             if v.is_empty() {
-                debug!("search response was empty: {}", response);
+                debug!(
+                    "search response was empty: {}",
+                    String::from_utf8_lossy(&response)
+                );
                 return Ok(());
             }
             let mut cmd = "UID FETCH ".to_string();

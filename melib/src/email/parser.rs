@@ -177,9 +177,19 @@ macro_rules! is_whitespace {
 pub trait BytesExt {
     fn rtrim(&self) -> &Self;
     fn ltrim(&self) -> &Self;
+    fn trim_start(&self) -> &Self {
+        self.ltrim()
+    }
+    fn trim_end(&self) -> &Self {
+        self.rtrim()
+    }
     fn trim(&self) -> &Self;
-    fn find(&self, needle: &[u8]) -> Option<usize>;
-    fn rfind(&self, needle: &[u8]) -> Option<usize>;
+    fn find<T: AsRef<[u8]>>(&self, needle: T) -> Option<usize>;
+    fn contains_subsequence<T: AsRef<[u8]>>(&self, needle: T) -> bool {
+        self.find(needle.as_ref()).is_some()
+    }
+
+    fn rfind<T: AsRef<[u8]>>(&self, needle: T) -> Option<usize>;
     fn replace(&self, from: &[u8], to: &[u8]) -> Vec<u8>;
     fn is_quoted(&self) -> bool;
 }
@@ -202,8 +212,10 @@ impl BytesExt for [u8] {
     fn trim(&self) -> &[u8] {
         self.rtrim().ltrim()
     }
+
     // https://stackoverflow.com/a/35907071
-    fn find(&self, needle: &[u8]) -> Option<usize> {
+    fn find<T: AsRef<[u8]>>(&self, needle: T) -> Option<usize> {
+        let needle = needle.as_ref();
         if needle.is_empty() {
             return None;
         }
@@ -211,7 +223,8 @@ impl BytesExt for [u8] {
             .position(|window| window == needle)
     }
 
-    fn rfind(&self, needle: &[u8]) -> Option<usize> {
+    fn rfind<T: AsRef<[u8]>>(&self, needle: T) -> Option<usize> {
+        let needle = needle.as_ref();
         if needle.is_empty() {
             return None;
         }

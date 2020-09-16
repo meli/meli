@@ -44,7 +44,7 @@ use crate::backends::{
 
 use crate::conf::AccountSettings;
 use crate::connections::timeout;
-use crate::email::*;
+use crate::email::{parser::BytesExt, *};
 use crate::error::{MeliError, Result, ResultIntoMeliError};
 use futures::lock::Mutex as FutureMutex;
 use futures::stream::Stream;
@@ -534,7 +534,7 @@ impl MailBackend for ImapType {
         let uid_store = self.uid_store.clone();
         let connection = self.connection.clone();
         Ok(Box::pin(async move {
-            let mut response = String::with_capacity(8 * 1024);
+            let mut response = Vec::with_capacity(8 * 1024);
             let mut conn = connection.lock().await;
             conn.select_mailbox(mailbox_hash, &mut response, true)
                 .await?;
@@ -645,7 +645,7 @@ impl MailBackend for ImapType {
 
                 mailbox.imap_path().to_string()
             };
-            let mut response = String::with_capacity(8 * 1024);
+            let mut response = Vec::with_capacity(8 * 1024);
             let mut conn = connection.lock().await;
             conn.select_mailbox(source_mailbox_hash, &mut response, false)
                 .await?;
@@ -711,7 +711,7 @@ impl MailBackend for ImapType {
                 return Ok(());
             }
 
-            let mut response = String::with_capacity(8 * 1024);
+            let mut response = Vec::with_capacity(8 * 1024);
             let mut conn = connection.lock().await;
             conn.select_mailbox(mailbox_hash, &mut response, false)
                 .await?;
@@ -883,7 +883,7 @@ impl MailBackend for ImapType {
                  * flag set. */
             }
 
-            let mut response = String::with_capacity(8 * 1024);
+            let mut response = Vec::with_capacity(8 * 1024);
             {
                 let mut conn_lck = connection.lock().await;
                 conn_lck.unselect().await?;
@@ -901,11 +901,11 @@ impl MailBackend for ImapType {
                     .read_response(&mut response, RequiredResponses::empty())
                     .await?;
             }
-            let ret: Result<()> = ImapResponse::try_from(response.as_str())?.into();
+            let ret: Result<()> = ImapResponse::try_from(response.as_slice())?.into();
             ret?;
             let new_hash = get_path_hash!(path.as_str());
             uid_store.mailboxes.lock().await.clear();
-            Ok((new_hash, new_mailbox_fut?.await.map_err(|err| MeliError::new(format!("Mailbox create was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", response, err)))?))
+            Ok((new_hash, new_mailbox_fut?.await.map_err(|err| MeliError::new(format!("Mailbox create was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", String::from_utf8_lossy(&response), err)))?))
         }))
     }
 
@@ -928,7 +928,7 @@ impl MailBackend for ImapType {
                     return Err(MeliError::new(format!("You do not have permission to delete `{}`. Set permissions for this mailbox are {}", mailboxes[&mailbox_hash].name(), permissions)));
                 }
             }
-            let mut response = String::with_capacity(8 * 1024);
+            let mut response = Vec::with_capacity(8 * 1024);
             {
                 let mut conn_lck = connection.lock().await;
                 /* make sure mailbox is not selected before it gets deleted, otherwise
@@ -950,10 +950,10 @@ impl MailBackend for ImapType {
                     .read_response(&mut response, RequiredResponses::empty())
                     .await?;
             }
-            let ret: Result<()> = ImapResponse::try_from(response.as_str())?.into();
+            let ret: Result<()> = ImapResponse::try_from(response.as_slice())?.into();
             ret?;
             uid_store.mailboxes.lock().await.clear();
-            new_mailbox_fut?.await.map_err(|err| format!("Mailbox delete was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", response, err).into())
+            new_mailbox_fut?.await.map_err(|err| format!("Mailbox delete was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", String::from_utf8_lossy(&response), err).into())
         }))
     }
 
@@ -974,7 +974,7 @@ impl MailBackend for ImapType {
                 command = format!("SUBSCRIBE \"{}\"", mailboxes[&mailbox_hash].imap_path());
             }
 
-            let mut response = String::with_capacity(8 * 1024);
+            let mut response = Vec::with_capacity(8 * 1024);
             {
                 let mut conn_lck = connection.lock().await;
                 if new_val {
@@ -989,7 +989,7 @@ impl MailBackend for ImapType {
                     .await?;
             }
 
-            let ret: Result<()> = ImapResponse::try_from(response.as_str())?.into();
+            let ret: Result<()> = ImapResponse::try_from(response.as_slice())?.into();
             if ret.is_ok() {
                 uid_store
                     .mailboxes
@@ -1014,7 +1014,7 @@ impl MailBackend for ImapType {
         let new_mailbox_fut = self.mailboxes();
         Ok(Box::pin(async move {
             let command: String;
-            let mut response = String::with_capacity(8 * 1024);
+            let mut response = Vec::with_capacity(8 * 1024);
             {
                 let mailboxes = uid_store.mailboxes.lock().await;
                 let permissions = mailboxes[&mailbox_hash].permissions();
@@ -1041,10 +1041,10 @@ impl MailBackend for ImapType {
                     .await?;
             }
             let new_hash = get_path_hash!(new_path.as_str());
-            let ret: Result<()> = ImapResponse::try_from(response.as_str())?.into();
+            let ret: Result<()> = ImapResponse::try_from(response.as_slice())?.into();
             ret?;
             uid_store.mailboxes.lock().await.clear();
-            new_mailbox_fut?.await.map_err(|err| format!("Mailbox rename was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", response, err))?;
+            new_mailbox_fut?.await.map_err(|err| format!("Mailbox rename was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", String::from_utf8_lossy(&response), err))?;
             Ok(BackendMailbox::clone(
                 &uid_store.mailboxes.lock().await[&new_hash],
             ))
@@ -1172,7 +1172,7 @@ impl MailBackend for ImapType {
         let uid_store = self.uid_store.clone();
 
         Ok(Box::pin(async move {
-            let mut response = String::with_capacity(8 * 1024);
+            let mut response = Vec::with_capacity(8 * 1024);
             let mut conn = connection.lock().await;
             conn.examine_mailbox(mailbox_hash, &mut response, false)
                 .await?;
@@ -1180,16 +1180,18 @@ impl MailBackend for ImapType {
                 .await?;
             conn.read_response(&mut response, RequiredResponses::SEARCH)
                 .await?;
-            debug!(&response);
+            debug!(
+                "searching for {} returned: {}",
+                query_str,
+                String::from_utf8_lossy(&response)
+            );
 
-            let mut lines = response.lines();
-            for l in lines.by_ref() {
-                if l.starts_with("* SEARCH") {
+            for l in response.split_rn() {
+                if l.starts_with(b"* SEARCH") {
                     use std::iter::FromIterator;
                     let uid_index = uid_store.uid_index.lock()?;
                     return Ok(SmallVec::from_iter(
-                        l["* SEARCH".len()..]
-                            .trim()
+                        String::from_utf8_lossy(l[b"* SEARCH".len()..].trim())
                             .split_whitespace()
                             .map(UID::from_str)
                             .filter_map(std::result::Result::ok)
@@ -1198,7 +1200,9 @@ impl MailBackend for ImapType {
                     ));
                 }
             }
-            Err(MeliError::new(response))
+            Err(MeliError::new(
+                String::from_utf8_lossy(&response).to_string(),
+            ))
         }))
     }
 }
@@ -1303,7 +1307,7 @@ impl ImapType {
         futures::executor::block_on(timeout(self.server_conf.timeout, conn.connect()))
             .unwrap()
             .unwrap();
-        let mut res = String::with_capacity(8 * 1024);
+        let mut res = Vec::with_capacity(8 * 1024);
         futures::executor::block_on(timeout(
             self.server_conf.timeout,
             conn.send_command(b"NOOP"),
@@ -1332,7 +1336,7 @@ impl ImapType {
                     .unwrap();
                     futures::executor::block_on(timeout(
                         self.server_conf.timeout,
-                        conn.read_lines(&mut res, String::new()),
+                        conn.read_lines(&mut res, Vec::new()),
                     ))
                     .unwrap()
                     .unwrap();
@@ -1348,7 +1352,7 @@ impl ImapType {
                         conn = iter.into_conn();
                     }
                     */
-                    println!("S: {}", &res);
+                    println!("S: {}", String::from_utf8_lossy(&res));
                 }
                 Err(error) => println!("error: {}", error),
             }
@@ -1359,7 +1363,7 @@ impl ImapType {
         connection: &Arc<FutureMutex<ImapConnection>>,
     ) -> Result<HashMap<MailboxHash, ImapMailbox>> {
         let mut mailboxes: HashMap<MailboxHash, ImapMailbox> = Default::default();
-        let mut res = String::with_capacity(8 * 1024);
+        let mut res = Vec::with_capacity(8 * 1024);
         let mut conn = connection.lock().await;
         let has_list_status: bool = conn
             .uid_store
@@ -1381,14 +1385,12 @@ impl ImapType {
             conn.read_response(&mut res, RequiredResponses::LIST_REQUIRED)
                 .await?;
         }
-        debug!("out: {}", &res);
+        debug!("out: {}", String::from_utf8_lossy(&res));
         let mut lines = res.split_rn();
         /* Remove "M__ OK .." line */
         lines.next_back();
         for l in lines {
-            if let Ok(mut mailbox) =
-                protocol_parser::list_mailbox_result(l.as_bytes()).map(|(_, v)| v)
-            {
+            if let Ok(mut mailbox) = protocol_parser::list_mailbox_result(&l).map(|(_, v)| v) {
                 if let Some(parent) = mailbox.parent {
                     if mailboxes.contains_key(&parent) {
                         mailboxes
@@ -1414,9 +1416,7 @@ impl ImapType {
                 } else {
                     mailboxes.insert(mailbox.hash, mailbox);
                 }
-            } else if let Ok(status) =
-                protocol_parser::status_response(l.as_bytes()).map(|(_, v)| v)
-            {
+            } else if let Ok(status) = protocol_parser::status_response(&l).map(|(_, v)| v) {
                 if let Some(mailbox_hash) = status.mailbox {
                     if mailboxes.contains_key(&mailbox_hash) {
                         let entry = mailboxes.entry(mailbox_hash).or_default();
@@ -1437,13 +1437,11 @@ impl ImapType {
         conn.read_response(&mut res, RequiredResponses::LSUB_REQUIRED)
             .await?;
         let mut lines = res.split_rn();
-        debug!("out: {}", &res);
+        debug!("out: {}", String::from_utf8_lossy(&res));
         /* Remove "M__ OK .." line */
         lines.next_back();
         for l in lines {
-            if let Ok(subscription) =
-                protocol_parser::list_mailbox_result(l.as_bytes()).map(|(_, v)| v)
-            {
+            if let Ok(subscription) = protocol_parser::list_mailbox_result(&l).map(|(_, v)| v) {
                 if let Some(f) = mailboxes.get_mut(&subscription.hash()) {
                     f.is_subscribed = true;
                 }
@@ -1651,7 +1649,7 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
                 }
                 let mut conn = connection.lock().await;
                 debug!("locked for fetch {}", mailbox_path);
-                let mut response = String::with_capacity(8 * 1024);
+                let mut response = Vec::with_capacity(8 * 1024);
                 let max_uid_left = max_uid;
                 let chunk_size = 250;
 
@@ -1686,7 +1684,7 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
                     debug!(
                         "fetch response is {} bytes and {} lines",
                         response.len(),
-                        response.lines().count()
+                        String::from_utf8_lossy(&response).lines().count()
                     );
                     let (_, mut v, _) = protocol_parser::fetch_responses(&response)?;
                     debug!("responses len is {}", v.len());

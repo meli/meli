@@ -64,7 +64,7 @@ impl BackendOp for ImapOp {
                 cache.bytes.is_some()
             };
             if !exists_in_cache {
-                let mut response = String::with_capacity(8 * 1024);
+                let mut response = Vec::with_capacity(8 * 1024);
                 {
                     let mut conn = timeout(uid_store.timeout, connection.lock()).await?;
                     conn.connect().await?;
@@ -78,7 +78,7 @@ impl BackendOp for ImapOp {
                 debug!(
                     "fetch response is {} bytes and {} lines",
                     response.len(),
-                    response.lines().count()
+                    String::from_utf8_lossy(&response).lines().count()
                 );
                 let mut results = protocol_parser::fetch_responses(&response)?.1;
                 if results.len() != 1 {
@@ -114,7 +114,7 @@ impl BackendOp for ImapOp {
     }
 
     fn fetch_flags(&self) -> ResultFuture<Flag> {
-        let mut response = String::with_capacity(8 * 1024);
+        let mut response = Vec::with_capacity(8 * 1024);
         let connection = self.connection.clone();
         let mailbox_hash = self.mailbox_hash;
         let uid = self.uid;
@@ -138,9 +138,9 @@ impl BackendOp for ImapOp {
                 debug!(
                     "fetch response is {} bytes and {} lines",
                     response.len(),
-                    response.lines().count()
+                    String::from_utf8_lossy(&response).lines().count()
                 );
-                let v = protocol_parser::uid_fetch_flags_responses(response.as_bytes())
+                let v = protocol_parser::uid_fetch_flags_responses(&response)
                     .map(|(_, v)| v)
                     .map_err(MeliError::from)?;
                 if v.len() != 1 {
