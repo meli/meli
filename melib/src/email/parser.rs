@@ -506,22 +506,111 @@ pub mod dates {
 
 pub mod generic {
     use super::*;
+    fn byte_in_range<'a>(a: u8, b: u8) -> impl Fn(&'a [u8]) -> IResult<&'a [u8], u8> {
+        move |input| {
+            if input.is_empty() {
+                return Err(nom::Err::Error((input, "empty input").into()));
+            }
+            if input[0] >= a && input[0] <= b {
+                Ok((&input[1..], input[0]))
+            } else {
+                Err(nom::Err::Error((input, "out of range").into()))
+            }
+        }
+    }
+
+    ///UTF-8 characters can be defined in terms of octets using the
+    ///following ABNF [RFC5234], taken from [RFC3629]:
+    ///UTF8-non-ascii  =   UTF8-2 / UTF8-3 / UTF8-4
+    fn utf8_non_ascii(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
+        /// UTF8-2      = %xC2-DF UTF8-tail
+        fn utf8_2(input: &[u8]) -> IResult<&[u8], &[u8]> {
+            let (rest, _) = byte_in_range(0xc2, 0xdf)(input)?;
+            let (rest, _) = utf8_tail(rest)?;
+            Ok((rest, &input[0..2]))
+        }
+        /// UTF8-3      = %xE0 %xA0-BF UTF8-tail / %xE1-EC 2( UTF8-tail ) / %xED %x80-9F UTF8-tail / %xEE-EF 2( UTF8-tail )
+        fn utf8_3<'a>(input: &'a [u8]) -> IResult<&'a [u8], &'a [u8]> {
+            alt((
+                |input: &'a [u8]| -> IResult<&'a [u8], &'a [u8]> {
+                    let (rest, _) = byte_in_range(0xe0, 0xe0)(input)?;
+                    let (rest, _) = byte_in_range(0xa0, 0xbf)(rest)?;
+                    let (rest, _) = utf8_tail(rest)?;
+                    Ok((rest, &input[0..3]))
+                },
+                |input: &'a [u8]| -> IResult<&'a [u8], &'a [u8]> {
+                    let (rest, _) = byte_in_range(0xe1, 0xec)(input)?;
+                    let (rest, _) = utf8_tail(rest)?;
+                    let (rest, _) = utf8_tail(rest)?;
+                    Ok((rest, &input[0..3]))
+                },
+                |input: &'a [u8]| -> IResult<&'a [u8], &'a [u8]> {
+                    let (rest, _) = byte_in_range(0xed, 0xed)(input)?;
+                    let (rest, _) = byte_in_range(0x80, 0x9f)(rest)?;
+                    let (rest, _) = utf8_tail(rest)?;
+                    Ok((rest, &input[0..3]))
+                },
+                |input: &'a [u8]| -> IResult<&'a [u8], &'a [u8]> {
+                    let (rest, _) = byte_in_range(0xee, 0xef)(input)?;
+                    let (rest, _) = utf8_tail(rest)?;
+                    let (rest, _) = utf8_tail(rest)?;
+                    Ok((rest, &input[0..3]))
+                },
+            ))(input)
+        }
+        /// UTF8-4      = %xF0 %x90-BF 2( UTF8-tail ) / %xF1-F3 3( UTF8-tail ) / %xF4 %x80-8F 2( UTF8-tail )
+        fn utf8_4<'a>(input: &'a [u8]) -> IResult<&'a [u8], &'a [u8]> {
+            alt((
+                |input: &'a [u8]| -> IResult<&'a [u8], &'a [u8]> {
+                    let (rest, _) = byte_in_range(0xf0, 0xf0)(input)?;
+                    let (rest, _) = byte_in_range(0x90, 0xbf)(rest)?;
+                    let (rest, _) = utf8_tail(rest)?;
+                    let (rest, _) = utf8_tail(rest)?;
+                    Ok((rest, &input[0..4]))
+                },
+                |input: &'a [u8]| {
+                    let (rest, _) = byte_in_range(0xf1, 0xf3)(input)?;
+                    let (rest, _) = utf8_tail(rest)?;
+                    let (rest, _) = utf8_tail(rest)?;
+                    let (rest, _) = utf8_tail(rest)?;
+                    Ok((rest, &input[0..4]))
+                },
+                |input: &'a [u8]| {
+                    let (rest, _) = byte_in_range(0xf4, 0xf4)(input)?;
+                    let (rest, _) = byte_in_range(0x80, 0x8f)(rest)?;
+                    let (rest, _) = utf8_tail(rest)?;
+                    let (rest, _) = utf8_tail(rest)?;
+                    Ok((rest, &input[0..4]))
+                },
+            ))(input)
+        }
+        ///  UTF8-tail   = %x80-BF
+        fn utf8_tail(input: &[u8]) -> IResult<&[u8], &[u8]> {
+            let (rest, _) = byte_in_range(0x80, 0xbf)(input)?;
+            Ok((rest, &input[0..1]))
+        }
+
+        let (rest, ret) = alt((utf8_2, utf8_3, utf8_4))(input)?;
+
+        Ok((rest, ret.into()))
+    }
+
     ///`%x21-7E`
+    /// RFC6532 adds: `VCHAR   =/  UTF8-non-ascii`
     fn vchar(input: &[u8]) -> IResult<&[u8], u8> {
-        if input.is_empty() {
-            return Err(nom::Err::Error((input, "vchar(): empty input").into()));
-        }
-        if input[0] >= 0x21 && input[0] <= 0x7e {
-            Ok((&input[1..], input[0]))
-        } else {
-            Err(nom::Err::Error((input, "vchar(): out of range").into()))
-        }
+        byte_in_range(0x21, 0x7e)(input)
     }
 
     ///`quoted-pair     =   ("\" (VCHAR / WSP)) / obs-qp`
     fn quoted_pair(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
-        let (input, byte) = preceded(tag("\\"), alt((vchar, wsp)))(input)?;
-        Ok((input, vec![byte].into()))
+        preceded(
+            tag("\\"),
+            alt((
+                utf8_non_ascii,
+                map(vchar, |byte| vec![byte].into()),
+                map(wsp, |byte| vec![byte].into()),
+            )),
+        )(input)
     }
 
     ///```text
@@ -531,17 +620,17 @@ pub mod generic {
     ///                     obs-ctext
     ///```
     fn ctext(input: &[u8]) -> IResult<&[u8], ()> {
-        if input.is_empty() {
-            return Err(nom::Err::Error((input, "ctext(): empty input").into()));
-        }
-        if (input[0] >= 33 && input[0] <= 39)
-            || (input[0] >= 42 && input[0] <= 91)
-            || (input[0] >= 93 && input[0] <= 126)
-        {
-            Ok((&input[1..], ()))
-        } else {
-            Err(nom::Err::Error((input, "ctext(): out of range").into()))
-        }
+        alt((
+            map(
+                alt((
+                    byte_in_range(33, 39),
+                    byte_in_range(42, 91),
+                    byte_in_range(93, 126),
+                )),
+                |_| (),
+            ),
+            map(utf8_non_ascii, |_| ()),
+        ))(input)
     }
 
     ///```text
@@ -967,7 +1056,7 @@ pub mod generic {
         let mut at_least_one = false;
         while let Ok((_input, atext_r)) = atext(input) {
             at_least_one = true;
-            ret.push(atext_r);
+            ret.extend_from_slice(&atext_r);
             input = _input;
         }
         if !at_least_one {
@@ -985,7 +1074,7 @@ pub mod generic {
             let mut at_least_one = false;
             while let Ok((_input, atext_r)) = atext(input) {
                 at_least_one = true;
-                ret.push(atext_r);
+                ret.extend_from_slice(&atext_r);
                 input = _input;
             }
             if !at_least_one {
@@ -998,7 +1087,7 @@ pub mod generic {
     }
 
     ///`atext           =   ALPHA / DIGIT /    ; Printable US-ASCII "!" / "#" /        ;  characters not including "$" / "%" /        ;  specials.  Used for atoms.  "&" / "'" / "*" / "+" / "-" / "/" / "=" / "?" / "^" / "_" / "`" / "{" / "|" / "}" / "~"`
-    pub fn atext(input: &[u8]) -> IResult<&[u8], u8> {
+    pub fn atext_ascii(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
         if input.is_empty() {
             return Err(nom::Err::Error((input, "atext(): empty input").into()));
         }
@@ -1009,10 +1098,14 @@ pub mod generic {
             ]
             .contains(&input[0])
         {
-            Ok((&input[1..], input[0]))
+            Ok((&input[1..], input[0..1].into()))
         } else {
             return Err(nom::Err::Error((input, "atext(): invalid byte").into()));
         }
+    }
+
+    pub fn atext(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
+        alt((atext_ascii, utf8_non_ascii))(input)
     }
 
     ///dot-atom        =   [CFWS] dot-atom-text [CFWS]
@@ -1029,14 +1122,7 @@ pub mod generic {
     ///                    obs-dtext          ;  "[", "]", or "\"
     ///```
     pub fn dtext(input: &[u8]) -> IResult<&[u8], u8> {
-        if input.is_empty() {
-            return Err(nom::Err::Error((input, "dtext(): empty input").into()));
-        }
-        if (input[0] >= 33 && input[0] <= 90) || (input[0] > 94 && input[0] < 126) {
-            Ok((&input[1..], input[0]))
-        } else {
-            Err(nom::Err::Error((input, "dtext(): out of range").into()))
-        }
+        alt((byte_in_range(33, 90), byte_in_range(94, 125)))(input)
     }
 }
 
