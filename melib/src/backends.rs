@@ -609,7 +609,11 @@ impl std::convert::TryFrom<&[EnvelopeHash]> for EnvelopeHashBatch {
 }
 
 impl EnvelopeHashBatch {
-    fn iter(&self) -> impl std::iter::Iterator<Item = EnvelopeHash> + '_ {
+    pub fn iter(&self) -> impl std::iter::Iterator<Item = EnvelopeHash> + '_ {
         std::iter::once(self.first).chain(self.rest.iter().cloned())
+    }
+
+    pub fn len(&self) -> usize {
+        1 + self.rest.len()
     }
 }
