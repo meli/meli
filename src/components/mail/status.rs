@@ -77,12 +77,12 @@ impl Component for StatusPanel {
         }
 
         match *event {
-            UIEvent::Input(Key::Char('k')) => {
+            UIEvent::Input(Key::Char('k')) if self.status.is_none() => {
                 self.account_cursor = self.account_cursor.saturating_sub(1);
                 self.dirty = true;
                 return true;
             }
-            UIEvent::Input(Key::Char('j')) => {
+            UIEvent::Input(Key::Char('j')) if self.status.is_none() => {
                 if self.account_cursor + 1 < context.accounts.len() {
                     self.account_cursor += 1;
                     self.dirty = true;
@@ -97,28 +97,31 @@ impl Component for StatusPanel {
                 self.status = None;
                 return true;
             }
-            UIEvent::Input(Key::Left) => {
+            UIEvent::Input(Key::Left) if self.status.is_none() => {
                 self.cursor.0 = self.cursor.0.saturating_sub(1);
                 self.dirty = true;
                 return true;
             }
-            UIEvent::Input(Key::Right) => {
+            UIEvent::Input(Key::Right) if self.status.is_none() => {
                 self.cursor.0 = self.cursor.0 + 1;
                 self.dirty = true;
                 return true;
             }
-            UIEvent::Input(Key::Up) => {
+            UIEvent::Input(Key::Up) if self.status.is_none() => {
                 self.cursor.1 = self.cursor.1.saturating_sub(1);
                 self.dirty = true;
                 return true;
             }
-            UIEvent::Input(Key::Down) => {
+            UIEvent::Input(Key::Down) if self.status.is_none() => {
                 self.cursor.1 = self.cursor.1 + 1;
                 self.dirty = true;
                 return true;
             }
-            UIEvent::MailboxUpdate(_) => {
-                self.dirty = true;
+            UIEvent::MailboxUpdate(_)
+            | UIEvent::StatusEvent(StatusEvent::NewJob(_))
+            | UIEvent::StatusEvent(StatusEvent::JobFinished(_))
+            | UIEvent::StatusEvent(StatusEvent::JobCanceled(_)) => {
+                self.set_dirty(true);
             }
             _ => {}
         }
