@@ -29,7 +29,7 @@ use nom::{
 };
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::SystemTime;
 
 pub fn managesieve_capabilities(input: &[u8]) -> Result<Vec<(&[u8], &[u8])>> {
     let (_, ret) = separated_nonempty_list(
@@ -115,7 +115,7 @@ pub fn new_managesieve_connection(
     };
     let uid_store = Arc::new(UIDStore {
         is_online: Arc::new(Mutex::new((
-            Instant::now(),
+            SystemTime::now(),
             Err(MeliError::new("Account is uninitialised.")),
         ))),
         ..UIDStore::new(

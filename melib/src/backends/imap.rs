@@ -56,7 +56,7 @@ use std::hash::Hasher;
 use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex, RwLock};
-use std::time::{Duration, Instant};
+use std::time::{Duration, SystemTime};
 
 pub type ImapNum = usize;
 pub type UID = ImapNum;
@@ -167,7 +167,7 @@ pub struct UIDStore {
     reverse_modseq: Arc<Mutex<HashMap<MailboxHash, BTreeMap<ModSequence, EnvelopeHash>>>>,
     highestmodseqs: Arc<Mutex<HashMap<MailboxHash, std::result::Result<ModSequence, ()>>>>,
     mailboxes: Arc<FutureMutex<HashMap<MailboxHash, ImapMailbox>>>,
-    is_online: Arc<Mutex<(Instant, Result<()>)>>,
+    is_online: Arc<Mutex<(SystemTime, Result<()>)>>,
     event_consumer: BackendEventConsumer,
     timeout: Option<Duration>,
 }
@@ -197,7 +197,7 @@ impl UIDStore {
             mailboxes: Arc::new(FutureMutex::new(Default::default())),
             tag_index: Arc::new(RwLock::new(Default::default())),
             is_online: Arc::new(Mutex::new((
-                Instant::now(),
+                SystemTime::now(),
                 Err(MeliError::new("Account is uninitialised.")),
             ))),
             event_consumer,

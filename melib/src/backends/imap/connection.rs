@@ -34,7 +34,9 @@ use std::future::Future;
 use std::iter::FromIterator;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
+
+const IMAP_PROTOCOL_TIMEOUT: Duration = Duration::from_secs(60 * 28);
 
 use super::protocol_parser;
 use super::{Capabilities, ImapServerConf, UIDStore};
@@ -540,8 +542,8 @@ impl ImapConnection {
 
     pub fn connect<'a>(&'a mut self) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>> {
         Box::pin(async move {
-            if let (instant, ref mut status @ Ok(())) = *self.uid_store.is_online.lock().unwrap() {
-                if Instant::now().duration_since(instant) >= Duration::new(60 * 30, 0) {
+            if let (time, ref mut status @ Ok(())) = *self.uid_store.is_online.lock().unwrap() {
+                if SystemTime::now().duration_since(time).unwrap_or_default() >= IMAP_PROTOCOL_TIMEOUT {
                     let err = MeliError::new("Connection timed out").set_kind(ErrorKind::Timeout);
                     *status = Err(err.clone());
                     self.stream = Err(err);
@@ -569,7 +571,7 @@ impl ImapConnection {
             if let Err(err) = new_stream.as_ref() {
                 self.uid_store.is_online.lock().unwrap().1 = Err(err.clone());
             } else {
-                *self.uid_store.is_online.lock().unwrap() = (Instant::now(), Ok(()));
+                *self.uid_store.is_online.lock().unwrap() = (SystemTime::now(), Ok(()));
             }
             let (capabilities, stream) = new_stream?;
             self.stream = Ok(stream);
@@ -654,7 +656,7 @@ impl ImapConnection {
             let mut response = Vec::new();
             ret.clear();
             self.stream.as_mut()?.read_response(&mut response).await?;
-            *self.uid_store.is_online.lock().unwrap() = (Instant::now(), Ok(()));
+            *self.uid_store.is_online.lock().unwrap() = (SystemTime::now(), Ok(()));
 
             match self.server_conf.protocol {
                 ImapProtocol::IMAP { .. } => {
@@ -756,7 +758,7 @@ impl ImapConnection {
             }
             Err(err)
         } else {
-            *self.uid_store.is_online.lock().unwrap() = (Instant::now(), Ok(()));
+            *self.uid_store.is_online.lock().unwrap() = (SystemTime::now(), Ok(()));
             Ok(())
         }
     }
@@ -1052,7 +1054,7 @@ impl ImapBlockingConnection {
 async fn read(
     conn: &mut ImapBlockingConnection,
     break_flag: &mut bool,
-    prev_failure: &mut Option<Instant>,
+    prev_failure: &mut Option<SystemTime>,
 ) -> Option<Vec<u8>> {
     let ImapBlockingConnection {
         ref mut prev_res_length,
@@ -1080,7 +1082,7 @@ async fn read(
             debug!(&_err);
             *err = Some(Into::<MeliError>::into(_err).set_kind(crate::error::ErrorKind::Network));
             *break_flag = true;
-            *prev_failure = Some(Instant::now());
+            *prev_failure = Some(SystemTime::now());
         }
     }
     None
