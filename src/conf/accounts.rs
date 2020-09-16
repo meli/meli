@@ -1394,23 +1394,6 @@ impl Account {
             return Ok(());
         }
 
-        let mut timeout = false;
-        let mut drain: SmallVec<[std::time::Instant; 16]> = SmallVec::new();
-        const ONLINE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
-        for (_instant, _) in self
-            .active_job_instants
-            .range(..std::time::Instant::now() - ONLINE_TIMEOUT)
-        {
-            drain.push(*_instant);
-        }
-        for inst in drain {
-            if let Some(j) = self.active_job_instants.remove(&inst) {
-                if let Some(req) = self.cancel_job(j) {
-                    debug!("timeout for {} {:?}", j, &req);
-                    timeout |= !req.is_watch();
-                }
-            }
-        }
         if self.is_online.is_err()
             && self
                 .is_online
@@ -1421,7 +1404,7 @@ impl Account {
         {
             return self.is_online.clone();
         }
-        if self.is_online.is_ok() && !timeout {
+        if self.is_online.is_ok() {
             return Ok(());
         }
         if !self.active_jobs.values().any(JobRequest::is_online) {
