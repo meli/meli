@@ -261,8 +261,12 @@ impl ImapConnection {
             .unwrap()
             .insert_existing_set(payload.iter().map(|(_, env)| env.hash()).collect::<_>());
         // 3.  tag2 UID FETCH 1:<lastseenuid> FLAGS
-        self.send_command(format!("UID FETCH 1:{} FLAGS", max_uid).as_bytes())
-            .await?;
+        if max_uid == 0 {
+            self.send_command("UID FETCH 1:* FLAGS".as_bytes()).await?;
+        } else {
+            self.send_command(format!("UID FETCH 1:{} FLAGS", max_uid).as_bytes())
+                .await?;
+        }
         self.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)
             .await?;
         //1) update cached flags for old messages;
@@ -539,14 +543,25 @@ impl ImapConnection {
                 .unwrap()
                 .insert_existing_set(payload.iter().map(|(_, env)| env.hash()).collect::<_>());
             // 3.  tag2 UID FETCH 1:<lastseenuid> FLAGS
-            self.send_command(
-                format!(
-                    "UID FETCH 1:{} FLAGS (CHANGEDSINCE {})",
-                    cached_max_uid, cached_highestmodseq
+            if cached_max_uid == 0 {
+                self.send_command(
+                    format!(
+                        "UID FETCH 1:* FLAGS (CHANGEDSINCE {})",
+                        cached_highestmodseq
+                    )
+                    .as_bytes(),
                 )
-                .as_bytes(),
-            )
-            .await?;
+                .await?;
+            } else {
+                self.send_command(
+                    format!(
+                        "UID FETCH 1:{} FLAGS (CHANGEDSINCE {})",
+                        cached_max_uid, cached_highestmodseq
+                    )
+                    .as_bytes(),
+                )
+                .await?;
+            }
             self.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)
                 .await?;
             //1) update cached flags for old messages;

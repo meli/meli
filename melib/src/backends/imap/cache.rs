@@ -539,7 +539,7 @@ mod sqlite3_m {
                 }
             }
             tx.commit()?;
-            let new_max_uid = self.max_uid(mailbox_hash)?;
+            let new_max_uid = self.max_uid(mailbox_hash).unwrap_or(0);
             self.uid_store
                 .max_uids
                 .lock()
