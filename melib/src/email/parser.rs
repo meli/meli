@@ -506,7 +506,22 @@ pub mod dates {
 
 pub mod generic {
     use super::*;
-    fn byte_in_range<'a>(a: u8, b: u8) -> impl Fn(&'a [u8]) -> IResult<&'a [u8], u8> {
+    #[inline(always)]
+    pub fn byte_in_slice<'a>(slice: &'static [u8]) -> impl Fn(&'a [u8]) -> IResult<&'a [u8], u8> {
+        move |input| {
+            if input.is_empty() {
+                return Err(nom::Err::Error((input, "empty input").into()));
+            }
+            if slice.contains(&input[0]) {
+                Ok((&input[1..], input[0]))
+            } else {
+                Err(nom::Err::Error((input, "out of range").into()))
+            }
+        }
+    }
+
+    #[inline(always)]
+    pub fn byte_in_range<'a>(a: u8, b: u8) -> impl Fn(&'a [u8]) -> IResult<&'a [u8], u8> {
         move |input| {
             if input.is_empty() {
                 return Err(nom::Err::Error((input, "empty input").into()));
@@ -1678,10 +1693,11 @@ pub mod attachments {
     pub fn content_disposition(input: &[u8]) -> IResult<&[u8], ContentDisposition> {
         let (input, kind) = alt((take_until(";"), take_while(|_| true)))(input.trim())?;
         let mut ret = ContentDisposition {
-            kind: if kind.trim().eq_ignore_ascii_case(b"attachment") {
-                ContentDispositionKind::Attachment
-            } else {
+            /* RFC2183 Content-Disposition: "Unrecognized disposition types should be treated as `attachment'." */
+            kind: if kind.trim().eq_ignore_ascii_case(b"inline") {
                 ContentDispositionKind::Inline
+            } else {
+                ContentDispositionKind::Attachment
             },
             ..ContentDisposition::default()
         };

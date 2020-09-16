@@ -21,7 +21,10 @@
 
 use super::*;
 use crate::email::address::{Address, MailboxAddress};
-use crate::email::parser::{BytesExt, IResult};
+use crate::email::parser::{
+    generic::{byte_in_range, byte_in_slice},
+    BytesExt, IResult,
+};
 use crate::error::ResultIntoMeliError;
 use crate::get_path_hash;
 use nom::{
@@ -30,7 +33,7 @@ use nom::{
     character::complete::digit1,
     character::is_digit,
     combinator::{map, map_res, opt},
-    multi::{fold_many1, length_data, many0, separated_nonempty_list},
+    multi::{fold_many1, length_data, many0, many1, separated_nonempty_list},
     sequence::{delimited, preceded},
 };
 use std::convert::TryFrom;
@@ -602,38 +605,10 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
             }
         } else if input[i..].starts_with(b"BODYSTRUCTURE ") {
             i += b"BODYSTRUCTURE ".len();
-            let mut struct_ptr = i;
-            let mut parenth_level = 0;
-            let mut inside_quote = false;
-            while struct_ptr != input.len() {
-                if !inside_quote {
-                    if input[struct_ptr] == b'(' {
-                        parenth_level += 1;
-                    } else if input[struct_ptr] == b')' {
-                        if parenth_level == 0 {
-                            return debug!(Err(MeliError::new(format!(
-                                "Unexpected input while parsing UID FETCH response. Got: `{:.40}`",
-                                String::from_utf8_lossy(&input[struct_ptr..])
-                            ))));
-                        }
-                        parenth_level -= 1;
-                        if parenth_level == 0 {
-                            struct_ptr += 1;
-                            break;
-                        }
-                    } else if input[struct_ptr] == b'"' {
-                        inside_quote = true;
-                    }
-                } else if input[struct_ptr] == b'\"'
-                    && (struct_ptr == 0 || (input[struct_ptr - 1] != b'\\'))
-                {
-                    inside_quote = false;
-                }
-                struct_ptr += 1;
-            }
 
-            has_attachments = bodystructure_has_attachments(&input[i..struct_ptr]);
-            i = struct_ptr;
+            let (rest, _has_attachments) = bodystructure_has_attachments(&input[i..])?;
+            has_attachments = _has_attachments;
+            i += input[i..].len() - rest.len();
         } else if input[i..].starts_with(b")\r\n") {
             i += b")\r\n".len();
             break;
@@ -1427,11 +1402,10 @@ pub fn uid_fetch_envelopes_response(
             let (input, _) = tag(" ENVELOPE ")(input)?;
             let (input, env) = envelope(input.ltrim())?;
             let (input, _) = tag("BODYSTRUCTURE ")(input)?;
-            let (input, bodystructure) = take_until(")\r\n")(input)?;
+            let (input, has_attachments) = bodystructure_has_attachments(input)?;
             let (input, _) = tag(")\r\n")(input)?;
             Ok((input, {
                 let mut env = env;
-                let has_attachments = bodystructure_has_attachments(bodystructure);
                 env.set_has_attachments(has_attachments);
                 (uid_flags.0, uid_flags.1, env)
             }))
@@ -1439,8 +1413,43 @@ pub fn uid_fetch_envelopes_response(
     )(input)
 }
 
-pub fn bodystructure_has_attachments(input: &[u8]) -> bool {
-    input.rfind(b" \"mixed\" ").is_some() || input.rfind(b" \"MIXED\" ").is_some()
+pub fn bodystructure_has_attachments(input: &[u8]) -> IResult<&[u8], bool> {
+    let (input, _) = eat_whitespace(input)?;
+    let (input, _) = tag("(")(input)?;
+    let (mut input, _) = eat_whitespace(input)?;
+    let mut has_attachments = false;
+    let mut first_in_line = true;
+    while !input.is_empty() && !input.starts_with(b")") {
+        if input.starts_with(b"\"") || input[0].is_ascii_alphanumeric() {
+            let (_input, token) = astring_token(input)?;
+            input = _input;
+            if first_in_line {
+                has_attachments |= token.eq_ignore_ascii_case(b"attachment");
+            }
+        } else if input.starts_with(b"(") {
+            let (_input, _has_attachments) = bodystructure_has_attachments(input)?;
+            has_attachments |= _has_attachments;
+            input = _input;
+        }
+        let (_input, _) = eat_whitespace(input)?;
+        input = _input;
+        first_in_line = false;
+    }
+    let (input, _) = tag(")")(input)?;
+    Ok((input, has_attachments))
+}
+
+fn eat_whitespace(mut input: &[u8]) -> IResult<&[u8], ()> {
+    while !input.is_empty() {
+        if input[0] == b' ' || input[0] == b'\n' || input[0] == b'\t' {
+            input = &input[1..];
+        } else if input.starts_with(b"\r\n") {
+            input = &input[2..];
+        } else {
+            break;
+        }
+    }
+    return Ok((input, ()));
 }
 
 #[derive(Debug, Default, Clone)]
@@ -1525,7 +1534,7 @@ pub fn mailbox_token<'i>(input: &'i [u8]) -> IResult<&'i [u8], std::borrow::Cow<
 
 // astring = 1*ASTRING-CHAR / string
 fn astring_token(input: &[u8]) -> IResult<&[u8], &[u8]> {
-    alt((string_token, astring_char_tokens))(input)
+    alt((string_token, astring_char))(input)
 }
 
 // string = quoted / literal
@@ -1554,9 +1563,66 @@ fn string_token(input: &[u8]) -> IResult<&[u8], &[u8]> {
 // atom = 1*ATOM-CHAR
 // ATOM-CHAR = <any CHAR except atom-specials>
 // atom-specials = "(" / ")" / "{" / SP / CTL / list-wildcards / quoted-specials / resp-specials
-fn astring_char_tokens(input: &[u8]) -> IResult<&[u8], &[u8]> {
-    // FIXME
-    is_not(" \r\n")(input)
+fn astring_char(input: &[u8]) -> IResult<&[u8], &[u8]> {
+    let (rest, chars) = many1(atom_char)(input)?;
+    Ok((rest, &input[0..chars.len()]))
+}
+
+fn atom_char(mut input: &[u8]) -> IResult<&[u8], u8> {
+    if input.is_empty() {
+        return Err(nom::Err::Error(
+            (input, "astring_char_tokens(): EOF").into(),
+        ));
+    }
+    if atom_specials(input).is_ok() {
+        return Err(nom::Err::Error(
+            (input, "astring_char_tokens(): invalid input").into(),
+        ));
+    }
+    let ret = input[0];
+    input = &input[1..];
+    Ok((input, ret))
+}
+
+#[inline(always)]
+fn atom_specials(input: &[u8]) -> IResult<&[u8], u8> {
+    alt((
+        raw_chars,
+        ctl,
+        list_wildcards,
+        quoted_specials,
+        resp_specials,
+    ))(input)
+}
+
+#[inline(always)]
+fn raw_chars(input: &[u8]) -> IResult<&[u8], u8> {
+    byte_in_slice(&[b'(', b')', b'{', b' '])(input)
+}
+
+#[inline(always)]
+fn list_wildcards(input: &[u8]) -> IResult<&[u8], u8> {
+    byte_in_slice(&[b'%', b'*'])(input)
+}
+
+#[inline(always)]
+fn quoted_specials(input: &[u8]) -> IResult<&[u8], u8> {
+    byte_in_slice(&[b'"', b'\\'])(input)
+}
+
+#[inline(always)]
+fn resp_specials(input: &[u8]) -> IResult<&[u8], u8> {
+    byte_in_slice(&[b']'])(input)
+}
+
+#[inline(always)]
+fn ctl(input: &[u8]) -> IResult<&[u8], u8> {
+    //U+0000—U+001F (C0 controls), U+007F (delete), and U+0080—U+009F (C1 controls
+    alt((
+        byte_in_range(0, 0x1f),
+        byte_in_range(0x7f, 0x7f),
+        byte_in_range(0x80, 0x9f),
+    ))(input)
 }
 
 pub fn generate_envelope_hash(mailbox_path: &str, uid: &UID) -> EnvelopeHash {

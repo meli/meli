@@ -27,6 +27,7 @@ use crate::email::{
 use core::fmt;
 use core::str;
 use data_encoding::BASE64_MIME;
+use smallvec::SmallVec;
 
 use crate::email::attachment_types::*;
 
@@ -146,15 +147,19 @@ impl AttachmentBuilder {
                             break;
                         }
                     }
-                    assert!(boundary.is_some());
-                    let boundary = boundary.unwrap().to_vec();
-                    let parts = Self::parts(self.body(), &boundary);
+                    if let Some(boundary) = boundary {
+                        let parts = Self::parts(self.body(), &boundary);
 
-                    self.content_type = ContentType::Multipart {
-                        boundary,
-                        kind: MultipartType::from(cst),
-                        parts,
-                    };
+                        let boundary = boundary.to_vec();
+                        self.content_type = ContentType::Multipart {
+                            boundary,
+                            kind: MultipartType::from(cst),
+                            parts,
+                        };
+                    } else {
+                        self.content_type = ContentType::default();
+                        return self;
+                    }
                 } else if ct.eq_ignore_ascii_case(b"text") {
                     self.content_type = ContentType::default();
                     for (n, v) in params {
@@ -465,15 +470,48 @@ impl Attachment {
         if bytes.is_empty() {
             return false;
         }
-        // FIXME: check if any part is multipart/mixed as well
 
         match parser::attachments::multipart_parts(bytes, boundary) {
             Ok((_, parts)) => {
                 for p in parts {
-                    for (n, v) in
-                        crate::email::parser::generic::HeaderIterator(p.display_bytes(bytes))
+                    let (body, headers) = match parser::headers::headers_raw(p.display_bytes(bytes))
                     {
-                        if !n.eq_ignore_ascii_case(b"content-type") && !v.starts_with(b"text/") {
+                        Ok(v) => v,
+                        Err(_err) => return false,
+                    };
+                    let headers = crate::email::parser::generic::HeaderIterator(headers)
+                        .collect::<SmallVec<[(&[u8], &[u8]); 16]>>();
+                    let disposition = headers
+                        .iter()
+                        .find(|(n, _)| n.eq_ignore_ascii_case(b"content-disposition"))
+                        .map(|(_, v)| ContentDisposition::from(*v))
+                        .unwrap_or_default();
+                    if disposition.kind.is_attachment() {
+                        return true;
+                    }
+                    if let Some(boundary) = headers
+                        .iter()
+                        .find(|(n, _)| n.eq_ignore_ascii_case(b"content-type"))
+                        .and_then(|(_, v)| {
+                            match parser::attachments::content_type(v) {
+                                Ok((_, (ct, _cst, params))) => {
+                                    if ct.eq_ignore_ascii_case(b"multipart") {
+                                        let mut boundary = None;
+                                        for (n, v) in params {
+                                            if n.eq_ignore_ascii_case(b"boundary") {
+                                                boundary = Some(v);
+                                                break;
+                                            }
+                                        }
+                                        return boundary;
+                                    }
+                                }
+                                _ => {}
+                            }
+                            None
+                        })
+                    {
+                        if Attachment::check_if_has_attachments_quick(body, boundary) {
                             return true;
                         }
                     }
