@@ -390,6 +390,8 @@ impl Drop for Account {
 pub struct MailboxNode {
     pub hash: MailboxHash,
     pub depth: usize,
+    pub indentation: u32,
+    pub has_sibling: bool,
     pub children: Vec<MailboxNode>,
 }
 
@@ -2088,6 +2090,8 @@ fn build_mailboxes_order(
                     hash: h,
                     children: Vec::new(),
                     depth,
+                    indentation: 0,
+                    has_sibling: false,
                 };
                 for &c in mailbox_entries[&h].ref_mailbox.children() {
                     if mailbox_entries.contains_key(&c) {
@@ -2150,5 +2154,25 @@ fn build_mailboxes_order(
             mailboxes_order.push(next.hash);
             stack.extend(next.children.iter().rev().map(Some));
         }
+    }
+    drop(stack);
+    for node in tree.iter_mut() {
+        fn rec(node: &mut MailboxNode, depth: usize, mut indentation: u32, has_sibling: bool) {
+            node.indentation = indentation;
+            node.has_sibling = has_sibling;
+            let mut iter = (0..node.children.len()).peekable();
+            if has_sibling {
+                indentation <<= 1;
+                indentation |= 1;
+            } else {
+                indentation <<= 1;
+            }
+            while let Some(i) = iter.next() {
+                let c = &mut node.children[i];
+                rec(c, depth + 1, indentation, iter.peek() != None);
+            }
+        };
+
+        rec(node, 0, 1, false);
     }
 }

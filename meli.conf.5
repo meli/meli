@@ -772,7 +772,88 @@ Example:
 .Bd -literal
 filter = "not flags:seen" # show only unseen messages
 .Ed
+.It Ic index_style Ar String
+Sets the way mailboxes are displayed.
+.It Ic sidebar_mailbox_tree_has_sibling Ar String
+.Pq Em optional
+Sets the string to print in the mailbox tree for a level where its root has a sibling.
+See example below for a clear explanation and examples.
+.It Ic sidebar_mailbox_tree_no_sibling Ar String
+.Pq Em optional
+Sets the string to print in the mailbox tree for a level where its root has no sibling.
+.It Ic sidebar_mailbox_tree_has_sibling_leaf Ar String
+.Pq Em optional
+Sets the string to print in the mailbox tree for a leaf level where its root has a sibling.
+.It Ic sidebar_mailbox_tree_no_sibling_leaf Ar String
+.Pq Em optional
+Sets the string to print in the mailbox tree for a leaf level where its root has no sibling.
 .El
+.Ss Examples of sidebar mailbox tree customization
+The default values
+
+.Bd
+ has_sibling = " "
+ no_sibling = " ";
+ has_sibling_leaf = " "
+ no_sibling_leaf = " "
+.Ed
+
+render a mailbox tree like the following:
+
+.Bd -literal
+0  Inbox 3
+1   Archive
+2   Drafts
+3   Lists
+4    example-list-a
+5    example-list-b
+6   Sent 
+7   Spam
+8   Trash
+.Ed
+
+Other possible trees:
+
+.Bd -literal
+has_sibling = " ┃"
+no_sibling = "  "
+has_sibling_leaf = " ┣━"
+no_sibling_leaf = " ┗━"
+.Ed
+
+.Bd -literal
+0  Inbox 3
+1   ┣━Archive
+2   ┣━Drafts
+3   ┣━Lists
+4   ┃ ┣━example-list-a
+5   ┃ ┗━example-list-b
+6   ┣━Sent 
+7   ┣━Spam
+8   ┗━Trash
+.Ed
+
+A completely ASCII one:
+
+.Bd -literal
+has_sibling = " |"
+no_sibling = "  "
+has_sibling_leaf = " |\\_"
+no_sibling_leaf = " \\_"
+.Ed
+
+.Bd -literal
+0  Inbox 3
+1   |\\_Archive
+2   |\\_Drafts
+3   |\\_Lists
+4   | |\\_example-list-a
+5   |  \\_example-list-b
+6   |\\_Sent 
+7   |\\_Spam
+8    \\_Trash
+.Ed
+
 .Sh TAGS
 .Bl -tag -width 36n
 .It Ic colours Ar hash table String[Color]

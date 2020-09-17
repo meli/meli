@@ -24,6 +24,31 @@ use melib::search::Query;
 use melib::{MeliError, Result};
 
 /// Settings for mail listings
+///
+///
+/// Tree decoration examples:
+///
+///```no_run
+///const HAS_SIBLING: &'static str = " ┃";
+///const NO_SIBLING: &'static str = "  ";
+///const HAS_SIBLING_LEAF: &'static str = " ┣━";
+///const NO_SIBLING_LEAF: &'static str = " ┗━";
+///
+///const HAS_SIBLING: &'static str = " |";
+///const NO_SIBLING: &'static str = "  ";
+///const HAS_SIBLING_LEAF: &'static str = " |\\_";
+///const NO_SIBLING_LEAF: &'static str = " \\_";
+///
+///const HAS_SIBLING: &'static str = " ";
+///const NO_SIBLING: &'static str = " ";
+///const HAS_SIBLING_LEAF: &'static str = " ";
+///const NO_SIBLING_LEAF: &'static str = " ";
+///
+///const HAS_SIBLING: &'static str = " │";
+///const NO_SIBLING: &'static str = "  ";
+///const HAS_SIBLING_LEAF: &'static str = " ├─";
+///const NO_SIBLING_LEAF: &'static str = " ╰─";
+///```
 #[derive(Debug, Deserialize, Clone, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ListingSettings {
@@ -49,6 +74,22 @@ pub struct ListingSettings {
 
     #[serde(default, alias = "index-style")]
     pub index_style: IndexStyle,
+
+    ///Default: " "
+    #[serde(default = "none")]
+    pub sidebar_mailbox_tree_has_sibling: Option<String>,
+
+    ///Default: " "
+    #[serde(default)]
+    pub sidebar_mailbox_tree_no_sibling: Option<String>,
+
+    ///Default: " "
+    #[serde(default)]
+    pub sidebar_mailbox_tree_has_sibling_leaf: Option<String>,
+
+    ///Default: " "
+    #[serde(default)]
+    pub sidebar_mailbox_tree_no_sibling_leaf: Option<String>,
 }
 
 impl Default for ListingSettings {
@@ -59,6 +100,10 @@ impl Default for ListingSettings {
             recent_dates: true,
             filter: None,
             index_style: IndexStyle::default(),
+            sidebar_mailbox_tree_has_sibling: None,
+            sidebar_mailbox_tree_no_sibling: None,
+            sidebar_mailbox_tree_has_sibling_leaf: None,
+            sidebar_mailbox_tree_no_sibling_leaf: None,
         }
     }
 }
@@ -74,6 +119,18 @@ impl DotAddressable for ListingSettings {
                     "recent_dates" => self.recent_dates.lookup(field, tail),
                     "filter" => self.filter.lookup(field, tail),
                     "index_style" => self.index_style.lookup(field, tail),
+                    "sidebar_mailbox_tree_has_sibling" => {
+                        self.sidebar_mailbox_tree_has_sibling.lookup(field, tail)
+                    }
+                    "sidebar_mailbox_tree_no_sibling" => {
+                        self.sidebar_mailbox_tree_no_sibling.lookup(field, tail)
+                    }
+                    "sidebar_mailbox_tree_has_sibling_leaf" => self
+                        .sidebar_mailbox_tree_has_sibling_leaf
+                        .lookup(field, tail),
+                    "sidebar_mailbox_tree_no_sibling_leaf" => self
+                        .sidebar_mailbox_tree_no_sibling_leaf
+                        .lookup(field, tail),
                     other => Err(MeliError::new(format!(
                         "{} has no field named {}",
                         parent_field, other

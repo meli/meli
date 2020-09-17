@@ -136,7 +136,7 @@ struct AccountMenuEntry {
     name: String,
     hash: AccountHash,
     index: usize,
-    entries: SmallVec<[(usize, MailboxHash); 16]>,
+    entries: SmallVec<[(usize, u32, bool, MailboxHash); 16]>,
 }
 
 pub trait MailListingTrait: ListingTrait {
@@ -587,7 +587,7 @@ impl Component for Listing {
                                 .ref_mailbox
                                 .is_subscribed()
                         })
-                        .map(|f| (f.depth, f.hash))
+                        .map(|f| (f.depth, f.indentation, f.has_sibling, f.hash))
                         .collect::<_>();
                     self.set_dirty(true);
                 }
@@ -607,7 +607,7 @@ impl Component for Listing {
                             .ref_mailbox
                             .is_subscribed()
                     })
-                    .map(|f| (f.depth, f.hash))
+                    .map(|f| (f.depth, f.indentation, f.has_sibling, f.hash))
                     .collect::<_>();
                 if self.cursor_pos.0 == account_index {
                     self.cursor_pos.1 = std::cmp::min(
@@ -616,7 +616,7 @@ impl Component for Listing {
                     );
                     self.component.set_coordinates((
                         self.accounts[self.cursor_pos.0].hash,
-                        self.accounts[self.cursor_pos.0].entries[self.cursor_pos.1].1,
+                        self.accounts[self.cursor_pos.0].entries[self.cursor_pos.1].3,
                     ));
                     self.component.refresh_mailbox(context, true);
                 }
@@ -772,7 +772,7 @@ impl Component for Listing {
                         return true;
                     }
                     Action::ViewMailbox(idx) => {
-                        if let Some((_, mailbox_hash)) =
+                        if let Some((_, _, _, mailbox_hash)) =
                             self.accounts[self.cursor_pos.0].entries.get(*idx)
                         {
                             let account_hash = self.accounts[self.cursor_pos.0].hash;
@@ -1195,7 +1195,7 @@ impl Component for Listing {
     }
 
     fn get_status(&self, context: &Context) -> String {
-        let mailbox_hash = if let Some((_, mailbox_hash)) = self.accounts[self.cursor_pos.0]
+        let mailbox_hash = if let Some((_, _, _, mailbox_hash)) = self.accounts[self.cursor_pos.0]
             .entries
             .get(self.cursor_pos.1)
         {
@@ -1233,11 +1233,11 @@ impl Listing {
             .iter()
             .enumerate()
             .map(|(i, (h, a))| {
-                let entries: SmallVec<[(usize, MailboxHash); 16]> = a
+                let entries: SmallVec<[(usize, u32, bool, MailboxHash); 16]> = a
                     .list_mailboxes()
                     .into_iter()
                     .filter(|mailbox_node| a[&mailbox_node.hash].ref_mailbox.is_subscribed())
-                    .map(|f| (f.depth, f.hash))
+                    .map(|f| (f.depth, f.indentation, f.has_sibling, f.hash))
                     .collect::<_>();
 
                 AccountMenuEntry {
@@ -1321,18 +1321,20 @@ impl Listing {
             && self.cursor_pos.0 == a.index)
             || (self.focus == ListingFocus::Menu && self.menu_cursor_pos.0 == a.index);
 
-        let mut lines: Vec<(usize, usize, MailboxHash, Option<usize>)> = Vec::new();
+        let mut lines: Vec<(usize, usize, u32, bool, MailboxHash, Option<usize>)> = Vec::new();
 
-        for (i, &(depth, mailbox_hash)) in a.entries.iter().enumerate() {
+        for (i, &(depth, indentation, has_sibling, mailbox_hash)) in a.entries.iter().enumerate() {
             if mailboxes[&mailbox_hash].is_subscribed() {
                 match context.accounts[a.index][&mailbox_hash].status {
                     crate::conf::accounts::MailboxStatus::Failed(_) => {
-                        lines.push((depth, i, mailbox_hash, None));
+                        lines.push((depth, i, indentation, has_sibling, mailbox_hash, None));
                     }
                     _ => {
                         lines.push((
                             depth,
                             i,
+                            indentation,
+                            has_sibling,
                             mailbox_hash,
                             mailboxes[&mailbox_hash].count().ok().map(|(v, _)| v),
                         ));
@@ -1372,6 +1374,7 @@ impl Listing {
 
         let lines_len = lines.len();
         let mut idx = 0;
+        let mut branches = String::with_capacity(16);
 
         for y in get_y(upper_left) + 1..get_y(bottom_right) {
             if idx == lines_len {
@@ -1411,7 +1414,7 @@ impl Listing {
                 )
             };
 
-            let (depth, inc, mailbox_idx, count) = lines[idx];
+            let (depth, inc, indentation, has_sibling, mailbox_idx, count) = lines[idx];
             /* Calculate how many columns the mailbox index tags should occupy with right alignment,
              * eg.
              *  1
@@ -1429,6 +1432,33 @@ impl Listing {
                 }
                 ctr
             };
+
+            let has_sibling_str: &str =
+                account_settings!(context[a.hash].listing.sidebar_mailbox_tree_has_sibling)
+                    .as_ref()
+                    .map(|s| s.as_str())
+                    .unwrap_or(" ");
+            let no_sibling_str: &str =
+                account_settings!(context[a.hash].listing.sidebar_mailbox_tree_no_sibling)
+                    .as_ref()
+                    .map(|s| s.as_str())
+                    .unwrap_or(" ");
+
+            let has_sibling_leaf_str: &str = account_settings!(
+                context[a.hash]
+                    .listing
+                    .sidebar_mailbox_tree_has_sibling_leaf
+            )
+            .as_ref()
+            .map(|s| s.as_str())
+            .unwrap_or(" ");
+
+            let no_sibling_leaf_str: &str =
+                account_settings!(context[a.hash].listing.sidebar_mailbox_tree_no_sibling_leaf)
+                    .as_ref()
+                    .map(|s| s.as_str())
+                    .unwrap_or(" ");
+
             let (x, _) = write_string_to_grid(
                 &format!("{:>width$}", inc, width = total_mailbox_no_digits),
                 grid,
@@ -1438,8 +1468,29 @@ impl Listing {
                 (set_y(upper_left, y), bottom_right),
                 None,
             );
+            {
+                branches.clear();
+                branches.push_str(no_sibling_str);
+                let mut o = 1;
+                let leading_zeros = indentation.leading_zeros();
+                for _ in 0..(30_u32.saturating_sub(leading_zeros)) {
+                    if indentation & o > 0 {
+                        branches.push_str(has_sibling_str);
+                    } else {
+                        branches.push_str(no_sibling_str);
+                    }
+                    o <<= 1;
+                }
+                if depth > 0 {
+                    if has_sibling {
+                        branches.push_str(has_sibling_leaf_str);
+                    } else {
+                        branches.push_str(no_sibling_leaf_str);
+                    }
+                }
+            }
             let (x, _) = write_string_to_grid(
-                &" ".repeat(depth + 1),
+                &branches,
                 grid,
                 att.fg,
                 att.bg,
@@ -1511,10 +1562,10 @@ impl Listing {
                     .ref_mailbox
                     .is_subscribed()
             })
-            .map(|f| (f.depth, f.hash))
+            .map(|f| (f.depth, f.indentation, f.has_sibling, f.hash))
             .collect::<_>();
         /* Account might have no mailboxes yet if it's offline */
-        if let Some((_, mailbox_hash)) = self.accounts[self.cursor_pos.0]
+        if let Some((_, _, _, mailbox_hash)) = self.accounts[self.cursor_pos.0]
             .entries
             .get(self.cursor_pos.1)
         {

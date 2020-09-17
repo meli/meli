@@ -119,6 +119,18 @@ pub struct ListingSettingsOverride {
     #[serde(alias = "index-style")]
     #[serde(default)]
     pub index_style: Option<IndexStyle>,
+    #[doc = "Default: \" \""]
+    #[serde(default)]
+    pub sidebar_mailbox_tree_has_sibling: Option<Option<String>>,
+    #[doc = "Default: \" \""]
+    #[serde(default)]
+    pub sidebar_mailbox_tree_no_sibling: Option<Option<String>>,
+    #[doc = "Default: \" \""]
+    #[serde(default)]
+    pub sidebar_mailbox_tree_has_sibling_leaf: Option<Option<String>>,
+    #[doc = "Default: \" \""]
+    #[serde(default)]
+    pub sidebar_mailbox_tree_no_sibling_leaf: Option<Option<String>>,
 }
 impl Default for ListingSettingsOverride {
     fn default() -> Self {
@@ -128,6 +140,10 @@ impl Default for ListingSettingsOverride {
             recent_dates: None,
             filter: None,
             index_style: None,
+            sidebar_mailbox_tree_has_sibling: None,
+            sidebar_mailbox_tree_no_sibling: None,
+            sidebar_mailbox_tree_has_sibling_leaf: None,
+            sidebar_mailbox_tree_no_sibling_leaf: None,
         }
     }
 }
