@@ -664,7 +664,7 @@ impl Account {
                         );
                     }
                     #[cfg(feature = "sqlite3")]
-                    {
+                    if self.settings.conf.search_backend == crate::conf::SearchBackend::Sqlite3 {
                         match crate::sqlite3::remove(old_hash).map(|_| {
                             crate::sqlite3::insert(
                                 (*envelope).clone(),
@@ -722,7 +722,7 @@ impl Account {
                             entry.set_flags(flags);
                         });
                     #[cfg(feature = "sqlite3")]
-                    {
+                    if self.settings.conf.search_backend == crate::conf::SearchBackend::Sqlite3 {
                         match crate::sqlite3::remove(env_hash).map(|_| {
                             crate::sqlite3::insert(
                                 self.collection.envelopes.read().unwrap()[&env_hash].clone(),
@@ -771,7 +771,7 @@ impl Account {
                         return Some(EnvelopeRename(old_hash, new_hash));
                     }
                     #[cfg(feature = "sqlite3")]
-                    {
+                    if self.settings.conf.search_backend == crate::conf::SearchBackend::Sqlite3 {
                         match crate::sqlite3::remove(old_hash).map(|_| {
                             crate::sqlite3::insert(
                                 self.collection.envelopes.read().unwrap()[&new_hash].clone(),
@@ -832,7 +832,7 @@ impl Account {
                         )
                     };
                     #[cfg(feature = "sqlite3")]
-                    {
+                    if self.settings.conf.search_backend == crate::conf::SearchBackend::Sqlite3 {
                         let (channel, handle, job_id) =
                             self.job_executor.spawn_blocking(crate::sqlite3::insert(
                                 (*envelope).clone(),
@@ -909,10 +909,10 @@ impl Account {
                         )
                     };
                     #[cfg(feature = "sqlite3")]
-                    {
-                        let envelopes = self.collection.envelopes.read();
-                        let envelopes = envelopes.unwrap();
+                    if self.settings.conf.search_backend == crate::conf::SearchBackend::Sqlite3 {
                         if let Err(err) = crate::sqlite3::remove(env_hash) {
+                            let envelopes = self.collection.envelopes.read();
+                            let envelopes = envelopes.unwrap();
                             melib::log(
                                 format!(
                                     "Failed to remove envelope {} [{}] in cache: {}",
