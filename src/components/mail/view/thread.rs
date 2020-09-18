@@ -50,6 +50,7 @@ pub struct ThreadView {
     entries: Vec<ThreadEntry>,
     visible_entries: Vec<Vec<usize>>,
     indentation_colors: [ThemeAttribute; 6],
+    use_color: bool,
 
     movement: Option<PageMovement>,
     dirty: bool,
@@ -91,6 +92,7 @@ impl ThreadView {
                 crate::conf::value(context, "mail.view.thread.indentation.e"),
                 crate::conf::value(context, "mail.view.thread.indentation.f"),
             ],
+            use_color: context.settings.terminal.use_color(),
             ..Default::default()
         };
         view.initiate(expanded_hash, context);
@@ -420,6 +422,16 @@ impl ThreadView {
         if idx == *visibles[self.cursor_pos] {
             let fg_color = Color::Default;
             let bg_color = Color::Byte(246);
+            let attrs = if self.use_color {
+                Attr::DEFAULT
+            } else {
+                Attr::REVERSE
+            };
+            for row in grid.bounds_iter(dest_area) {
+                for c in row {
+                    grid[c].set_fg(fg_color).set_bg(bg_color).set_attrs(attrs);
+                }
+            }
             change_colors(grid, dest_area, fg_color, bg_color);
             return;
         }
