@@ -1121,7 +1121,8 @@ pub fn flags(input: &[u8]) -> IResult<&[u8], (Flag, Vec<String>)> {
 
     let mut input = input;
     while !input.starts_with(b")") && !input.is_empty() {
-        if input.starts_with(b"\\") {
+        let is_system_flag = input.starts_with(b"\\");
+        if is_system_flag {
             input = &input[1..];
         }
         let mut match_end = 0;
@@ -1132,23 +1133,24 @@ pub fn flags(input: &[u8]) -> IResult<&[u8], (Flag, Vec<String>)> {
             match_end += 1;
         }
 
-        match &input[..match_end] {
-            b"Answered" => {
+        match (is_system_flag, &input[..match_end]) {
+            (true, t) if t.eq_ignore_ascii_case(b"Answered") => {
                 ret.set(Flag::REPLIED, true);
             }
-            b"Flagged" => {
+            (true, t) if t.eq_ignore_ascii_case(b"Flagged") => {
                 ret.set(Flag::FLAGGED, true);
             }
-            b"Deleted" => {
+            (true, t) if t.eq_ignore_ascii_case(b"Deleted") => {
                 ret.set(Flag::TRASHED, true);
             }
-            b"Seen" => {
+            (true, t) if t.eq_ignore_ascii_case(b"Seen") => {
                 ret.set(Flag::SEEN, true);
             }
-            b"Draft" => {
+            (true, t) if t.eq_ignore_ascii_case(b"Draft") => {
                 ret.set(Flag::DRAFT, true);
             }
-            f => {
+            (true, t) if t.eq_ignore_ascii_case(b"Recent") => { /* ignore */ }
+            (_, f) => {
                 keywords.push(String::from_utf8_lossy(&f).into());
             }
         }
