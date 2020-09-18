@@ -197,10 +197,10 @@ impl ImapConnection {
             env.set_hash(generate_envelope_hash(&mailbox_path, &uid));
             let mut tag_lck = self.uid_store.tag_index.write().unwrap();
             if let Some((flags, keywords)) = flags {
-                if !flags.intersects(Flag::SEEN) {
+                env.set_flags(*flags);
+                if !env.is_seen() {
                     new_unseen.insert(env.hash());
                 }
-                env.set_flags(*flags);
                 for f in keywords {
                     let hash = tag_hash!(f);
                     if !tag_lck.contains_key(&hash) {
@@ -485,10 +485,10 @@ impl ImapConnection {
                 env.set_hash(generate_envelope_hash(&mailbox_path, &uid));
                 let mut tag_lck = self.uid_store.tag_index.write().unwrap();
                 if let Some((flags, keywords)) = flags {
-                    if !flags.intersects(Flag::SEEN) {
+                    env.set_flags(*flags);
+                    if !env.is_seen() {
                         new_unseen.insert(env.hash());
                     }
-                    env.set_flags(*flags);
                     for f in keywords {
                         let hash = tag_hash!(f);
                         if !tag_lck.contains_key(&hash) {
