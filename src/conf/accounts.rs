@@ -2157,10 +2157,24 @@ fn build_mailboxes_order(
     }
     drop(stack);
     for node in tree.iter_mut() {
-        fn rec(node: &mut MailboxNode, depth: usize, mut indentation: u32, has_sibling: bool) {
+        fn rec(
+            node: &mut MailboxNode,
+            mailbox_entries: &IndexMap<MailboxHash, MailboxEntry>,
+            depth: usize,
+            mut indentation: u32,
+            has_sibling: bool,
+        ) {
             node.indentation = indentation;
             node.has_sibling = has_sibling;
-            let mut iter = (0..node.children.len()).peekable();
+            let mut iter = (0..node.children.len())
+                .filter(|i| {
+                    mailbox_entries[&node.children[*i].hash]
+                        .ref_mailbox
+                        .is_subscribed()
+                })
+                .collect::<SmallVec<[_; 8]>>()
+                .into_iter()
+                .peekable();
             if has_sibling {
                 indentation <<= 1;
                 indentation |= 1;
@@ -2169,10 +2183,16 @@ fn build_mailboxes_order(
             }
             while let Some(i) = iter.next() {
                 let c = &mut node.children[i];
-                rec(c, depth + 1, indentation, iter.peek() != None);
+                rec(
+                    c,
+                    mailbox_entries,
+                    depth + 1,
+                    indentation,
+                    iter.peek() != None,
+                );
             }
         };
 
-        rec(node, 0, 1, false);
+        rec(node, &mailbox_entries, 0, 1, false);
     }
 }
