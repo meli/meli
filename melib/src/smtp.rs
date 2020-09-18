@@ -50,7 +50,11 @@
  *        require_auth: true,
  *    },
  *};
- *std::thread::spawn(|| smol::run(futures::future::pending::<()>()));
+ *
+ *std::thread::Builder::new().spawn(move || {
+ *    let ex = smol::Executor::new();
+ *    futures::executor::block_on(ex.run(futures::future::pending::<()>()));
+ *}).unwrap();
  *
  *let mut conn = futures::executor::block_on(SmtpConnection::new_connection(conf)).unwrap();
  *futures::executor::block_on(conn.mail_transaction(r#"To: l10@mail.gr
@@ -73,7 +77,7 @@ use crate::error::{MeliError, Result, ResultIntoMeliError};
 use futures::io::{AsyncReadExt, AsyncWriteExt};
 use native_tls::TlsConnector;
 use smallvec::SmallVec;
-use smol::blocking;
+use smol::unblock;
 use smol::Async as AsyncWrapper;
 use std::borrow::Cow;
 use std::convert::TryFrom;
@@ -310,7 +314,9 @@ impl SmtpConnection {
                     let _path = path.clone();
 
                     socket.set_nonblocking(false)?;
-                    let conn_result = blocking!(connector.connect(&_path, socket));
+                    let conn = unblock(move || connector.connect(&_path, socket))
+                        .await
+                        .chain_err_kind(crate::error::ErrorKind::Network)?;
                     /*
                     if let Err(native_tls::HandshakeError::WouldBlock(midhandshake_stream)) =
                         conn_result
@@ -332,10 +338,8 @@ impl SmtpConnection {
                         }
                     }
                         */
-                    AsyncWrapper::new(Connection::Tls(
-                        conn_result.chain_err_kind(crate::error::ErrorKind::Network)?,
-                    ))
-                    .chain_err_kind(crate::error::ErrorKind::Network)?
+                    AsyncWrapper::new(Connection::Tls(conn))
+                        .chain_err_kind(crate::error::ErrorKind::Network)?
                 };
                 ret.write_all(b"EHLO meli.delivery\r\n")
                     .await
@@ -418,12 +422,15 @@ impl SmtpConnection {
                         Password::CommandEval(command) => {
                             let _command = command.clone();
 
-                            let mut output = blocking!(Command::new("sh")
-                                .args(&["-c", &_command])
-                                .stdin(std::process::Stdio::piped())
-                                .stdout(std::process::Stdio::piped())
-                                .stderr(std::process::Stdio::piped())
-                                .output())?;
+                            let mut output = unblock(move || {
+                                Command::new("sh")
+                                    .args(&["-c", &_command])
+                                    .stdin(std::process::Stdio::piped())
+                                    .stdout(std::process::Stdio::piped())
+                                    .stderr(std::process::Stdio::piped())
+                                    .output()
+                            })
+                            .await?;
                             if !output.status.success() {
                                 return Err(MeliError::new(format!(
                                     "SMTP password evaluation command `{}` returned {}: {}",

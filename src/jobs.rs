@@ -132,7 +132,9 @@ impl JobExecutor {
         thread::Builder::new()
             .name("meli-reactor".to_string())
             .spawn(move || {
-                smol::run(futures::future::pending::<()>());
+                let ex = smol::Executor::new();
+
+                futures::executor::block_on(ex.run(futures::future::pending::<()>()));
             })
             .unwrap();
 
@@ -223,7 +225,7 @@ impl JobExecutor {
         F: Future<Output = R> + Send + 'static,
         R: Send + 'static,
     {
-        self.spawn_specialized(smol::Task::blocking(async move { future.await }))
+        self.spawn_specialized(smol::unblock(move || futures::executor::block_on(future)))
     }
 }
 

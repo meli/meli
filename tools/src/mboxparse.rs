@@ -21,7 +21,6 @@
 
 extern crate melib;
 use melib::Result;
-use melib::*;
 
 /// Parses e-mail from files and prints the debug information of the parsed `Envelope`
 ///

@@ -20,9 +20,10 @@ fn main() -> Result<()> {
         },
         envelope_from: String::new(),
     };
-    for _ in 0..1 {
-        std::thread::spawn(|| smol::run(futures::future::pending::<()>()));
-    }
+    std::thread::spawn(move || {
+        let ex = smol::Executor::new();
+        futures::executor::block_on(ex.run(futures::future::pending::<()>()));
+    });
 
     let mut conn = futures::executor::block_on(SmtpConnection::new_connection(conf)).unwrap();
     futures::executor::block_on(conn.mail_transaction(

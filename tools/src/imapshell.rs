@@ -48,7 +48,10 @@ fn main() -> Result<()> {
         BackendEventConsumer::new(std::sync::Arc::new(|_, _| ())),
     )?;
 
-    std::thread::spawn(|| smol::run(futures::future::pending::<()>()));
+    std::thread::spawn(move || {
+        let ex = smol::Executor::new();
+        futures::executor::block_on(ex.run(futures::future::pending::<()>()));
+    });
     (imap.as_any_mut())
         .downcast_mut::<ImapType>()
         .unwrap()
