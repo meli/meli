@@ -621,23 +621,17 @@ impl Serialize for IndexStyle {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum SearchBackend {
     None,
+    Auto,
     #[cfg(feature = "sqlite3")]
     Sqlite3,
 }
 
 impl Default for SearchBackend {
     fn default() -> Self {
-        #[cfg(feature = "sqlite3")]
-        {
-            SearchBackend::Sqlite3
-        }
-        #[cfg(not(feature = "sqlite3"))]
-        {
-            SearchBackend::None
-        }
+        SearchBackend::Auto
     }
 }
 
@@ -649,8 +643,14 @@ impl<'de> Deserialize<'de> for SearchBackend {
         let s = <String>::deserialize(deserializer)?;
         match s.as_str() {
             #[cfg(feature = "sqlite3")]
-            "sqlite3" => Ok(SearchBackend::Sqlite3),
-            "nothing" | "none" | "" => Ok(SearchBackend::None),
+            sqlite3 if sqlite3.eq_ignore_ascii_case("sqlite3") => Ok(SearchBackend::Sqlite3),
+            none if none.eq_ignore_ascii_case("none")
+                || none.eq_ignore_ascii_case("nothing")
+                || none.is_empty() =>
+            {
+                Ok(SearchBackend::None)
+            }
+            auto if auto.eq_ignore_ascii_case("auto") => Ok(SearchBackend::Auto),
             _ => Err(de::Error::custom("invalid `search_backend` value")),
         }
     }
@@ -665,6 +665,7 @@ impl Serialize for SearchBackend {
             #[cfg(feature = "sqlite3")]
             SearchBackend::Sqlite3 => serializer.serialize_str("sqlite3"),
             SearchBackend::None => serializer.serialize_str("none"),
+            SearchBackend::Auto => serializer.serialize_str("auto"),
         }
     }
 }

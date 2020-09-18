@@ -370,8 +370,12 @@ impl Component for AccountStatus {
                 a.settings.conf.search_backend(),
                 a.backend_capabilities.supports_search,
             ) {
-                (SearchBackend::None, true) => "backend-side search".to_string(),
-                (SearchBackend::None, false) => "none (search will be slow)".to_string(),
+                (SearchBackend::Auto, true) | (SearchBackend::None, true) => {
+                    "backend-side search".to_string()
+                }
+                (SearchBackend::Auto, false) | (SearchBackend::None, false) => {
+                    "none (search will be slow)".to_string()
+                }
                 #[cfg(feature = "sqlite3")]
                 (SearchBackend::Sqlite3, _) => {
                     if let Ok(path) = crate::sqlite3::db_path() {

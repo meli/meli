@@ -437,8 +437,19 @@ impl Account {
             }
         };
 
-        if ["imap", "jmap", "notmuch"].contains(&settings.account().format()) {
-            settings.conf.search_backend = crate::conf::SearchBackend::None;
+        if settings.conf.search_backend == crate::conf::SearchBackend::Auto {
+            if backend.capabilities().supports_search {
+                settings.conf.search_backend = crate::conf::SearchBackend::None;
+            } else {
+                #[cfg(feature = "sqlite3")]
+                {
+                    settings.conf.search_backend = crate::conf::SearchBackend::Sqlite3;
+                }
+                #[cfg(not(feature = "sqlite3"))]
+                {
+                    settings.conf.search_backend = crate::conf::SearchBackend::None;
+                }
+            }
         }
 
         let mut active_jobs = HashMap::default();
@@ -1433,7 +1444,7 @@ impl Account {
         match self.settings.conf.search_backend {
             #[cfg(feature = "sqlite3")]
             crate::conf::SearchBackend::Sqlite3 => crate::sqlite3::search(&query, _sort),
-            crate::conf::SearchBackend::None => {
+            crate::conf::SearchBackend::Auto | crate::conf::SearchBackend::None => {
                 if self.backend_capabilities.supports_search {
                     self.backend
                         .read()
