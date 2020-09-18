@@ -241,12 +241,18 @@ impl ImapConnection {
                         debug!("UID SEARCH RECENT returned no results");
                     }
                     Ok(v) => {
+                        let command = {
+                            let mut iter = v.split(u8::is_ascii_whitespace);
+                            let first = iter.next().unwrap_or(v);
+                            let mut accum = format!("{}", to_str!(first).trim());
+                            for ms in iter {
+                                accum = format!("{},{}", accum, to_str!(ms).trim());
+                            }
+                            format!("UID FETCH {} (FLAGS RFC822)", accum)
+                        };
                         try_fail!(
                             mailbox_hash,
-                            self.send_command(
-                                &[b"UID FETCH", v, b"(FLAGS RFC822)"]
-                                .join(&b' '),
-                                ).await
+                            self.send_command(command.as_bytes()).await
                             self.read_response(&mut response, RequiredResponses::FETCH_REQUIRED).await
                         );
                         debug!(&response);
