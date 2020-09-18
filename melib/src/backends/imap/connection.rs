@@ -425,7 +425,7 @@ impl ImapStream {
                             if !termination_string.is_empty()
                                 && ret[last_line_idx..].starts_with(termination_string)
                             {
-                                debug!(&ret[last_line_idx..]);
+                                debug!(String::from_utf8_lossy(&ret[last_line_idx..]));
                                 if !keep_termination_string {
                                     ret.splice(last_line_idx.., std::iter::empty::<u8>());
                                 }
@@ -562,7 +562,7 @@ impl ImapConnection {
                 } else {
                     debug!(
                         "connect(): connection is probably alive, NOOP returned {:?}",
-                        &ret
+                        &String::from_utf8_lossy(&ret)
                     );
                     return Ok(());
                 }
@@ -675,12 +675,17 @@ impl ImapConnection {
                         {
                             debug!(
                                 "Received expected NO response: {:?} {:?}",
-                                response_code, response
+                                response_code,
+                                String::from_utf8_lossy(&response)
                             );
                         }
                         ImapResponse::No(ref response_code) => {
                             //FIXME return error
-                            debug!("Received NO response: {:?} {:?}", response_code, response);
+                            debug!(
+                                "Received NO response: {:?} {:?}",
+                                response_code,
+                                String::from_utf8_lossy(&response)
+                            );
                             (self.uid_store.event_consumer)(
                                 self.uid_store.account_hash,
                                 crate::backends::BackendEvent::Notice {
@@ -694,7 +699,11 @@ impl ImapConnection {
                         }
                         ImapResponse::Bad(ref response_code) => {
                             //FIXME return error
-                            debug!("Received BAD response: {:?} {:?}", response_code, response);
+                            debug!(
+                                "Received BAD response: {:?} {:?}",
+                                response_code,
+                                String::from_utf8_lossy(&response)
+                            );
                             (self.uid_store.event_consumer)(
                                 self.uid_store.account_hash,
                                 crate::backends::BackendEvent::Notice {

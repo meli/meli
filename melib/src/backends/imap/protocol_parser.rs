@@ -829,7 +829,10 @@ pub fn untagged_responses(input: &[u8]) -> ImapParseResult<Option<UntaggedRespon
     let (input, _tag) =
         take_until::<_, &[u8], (&[u8], nom::error::ErrorKind)>(&b"\r\n"[..])(input)?;
     let (input, _) = tag::<_, &[u8], (&[u8], nom::error::ErrorKind)>(b"\r\n")(input)?;
-    debug!("Parse untagged response from {:?}", orig_input);
+    debug!(
+        "Parse untagged response from {:?}",
+        String::from_utf8_lossy(&orig_input)
+    );
     Ok((
         input,
         {
