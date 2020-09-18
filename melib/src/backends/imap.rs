@@ -1443,6 +1443,11 @@ impl ImapType {
         for l in lines {
             if let Ok(subscription) = protocol_parser::list_mailbox_result(&l).map(|(_, v)| v) {
                 if let Some(f) = mailboxes.get_mut(&subscription.hash()) {
+                    if f.special_usage() == SpecialUsageMailbox::Normal
+                        && subscription.special_usage() != SpecialUsageMailbox::Normal
+                    {
+                        f.set_special_usage(subscription.special_usage())?;
+                    }
                     f.is_subscribed = true;
                 }
             } else {

@@ -425,9 +425,15 @@ pub fn list_mailbox_result(input: &[u8]) -> IResult<&[u8], ImapMailbox> {
                 } else if p.eq_ignore_ascii_case(b"\\Sent") {
                     let _ = f.set_special_usage(SpecialUsageMailbox::Sent);
                 } else if p.eq_ignore_ascii_case(b"\\Junk") {
+                    let _ = f.set_special_usage(SpecialUsageMailbox::Junk);
+                } else if p.eq_ignore_ascii_case(b"\\Trash") {
                     let _ = f.set_special_usage(SpecialUsageMailbox::Trash);
                 } else if p.eq_ignore_ascii_case(b"\\Drafts") {
                     let _ = f.set_special_usage(SpecialUsageMailbox::Drafts);
+                } else if p.eq_ignore_ascii_case(b"\\Flagged") {
+                    let _ = f.set_special_usage(SpecialUsageMailbox::Flagged);
+                } else if p.eq_ignore_ascii_case(b"\\Archive") {
+                    let _ = f.set_special_usage(SpecialUsageMailbox::Archive);
                 }
             }
             f.imap_path = path.to_string();
