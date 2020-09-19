@@ -1431,7 +1431,7 @@ pub fn bodystructure_has_attachments(input: &[u8]) -> IResult<&[u8], bool> {
     let mut has_attachments = false;
     let mut first_in_line = true;
     while !input.is_empty() && !input.starts_with(b")") {
-        if input.starts_with(b"\"") || input[0].is_ascii_alphanumeric() {
+        if input.starts_with(b"\"") || input[0].is_ascii_alphanumeric() || input[0] == b'{' {
             let (_input, token) = astring_token(input)?;
             input = _input;
             if first_in_line {
