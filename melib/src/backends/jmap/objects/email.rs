@@ -134,54 +134,54 @@ pub struct EmailObject {
     #[serde(default)]
     pub blob_id: String,
     #[serde(default)]
-    mailbox_ids: HashMap<Id, bool>,
+    pub mailbox_ids: HashMap<Id, bool>,
     #[serde(default)]
-    size: u64,
+    pub size: u64,
     #[serde(default)]
-    received_at: String,
+    pub received_at: String,
     #[serde(default)]
-    message_id: Vec<String>,
+    pub message_id: Vec<String>,
     #[serde(default)]
-    to: SmallVec<[EmailAddress; 1]>,
+    pub to: Option<SmallVec<[EmailAddress; 1]>>,
     #[serde(default)]
-    bcc: Option<Vec<EmailAddress>>,
+    pub bcc: Option<Vec<EmailAddress>>,
     #[serde(default)]
-    reply_to: Option<Vec<EmailAddress>>,
+    pub reply_to: Option<Vec<EmailAddress>>,
     #[serde(default)]
-    cc: Option<SmallVec<[EmailAddress; 1]>>,
+    pub cc: Option<SmallVec<[EmailAddress; 1]>>,
     #[serde(default)]
-    sender: Option<Vec<EmailAddress>>,
+    pub sender: Option<Vec<EmailAddress>>,
     #[serde(default)]
-    from: SmallVec<[EmailAddress; 1]>,
+    pub from: Option<SmallVec<[EmailAddress; 1]>>,
     #[serde(default)]
-    in_reply_to: Option<Vec<String>>,
+    pub in_reply_to: Option<Vec<String>>,
     #[serde(default)]
-    references: Option<Vec<String>>,
+    pub references: Option<Vec<String>>,
     #[serde(default)]
-    keywords: HashMap<String, bool>,
+    pub keywords: HashMap<String, bool>,
     #[serde(default)]
-    attached_emails: Option<Id>,
+    pub attached_emails: Option<Id>,
     #[serde(default)]
-    attachments: Vec<Value>,
+    pub attachments: Vec<Value>,
     #[serde(default)]
-    has_attachment: bool,
+    pub has_attachment: bool,
     #[serde(default)]
     #[serde(deserialize_with = "deserialize_header")]
-    headers: HashMap<String, String>,
+    pub headers: HashMap<String, String>,
     #[serde(default)]
-    html_body: Vec<HtmlBody>,
+    pub html_body: Vec<HtmlBody>,
     #[serde(default)]
-    preview: Option<String>,
+    pub preview: Option<String>,
     #[serde(default)]
-    sent_at: Option<String>,
+    pub sent_at: Option<String>,
     #[serde(default)]
-    subject: Option<String>,
+    pub subject: Option<String>,
     #[serde(default)]
-    text_body: Vec<TextBody>,
+    pub text_body: Vec<TextBody>,
     #[serde(default)]
-    thread_id: Id,
+    pub thread_id: Id,
     #[serde(flatten)]
-    extra: HashMap<String, Value>,
+    pub extra: HashMap<String, Value>,
 }
 
 impl EmailObject {
@@ -190,9 +190,9 @@ impl EmailObject {
 
 #[derive(Deserialize, Serialize, Debug, Default)]
 #[serde(rename_all = "camelCase")]
-struct Header {
-    name: String,
-    value: String,
+pub struct Header {
+    pub name: String,
+    pub value: String,
 }
 
 fn deserialize_header<'de, D>(
@@ -207,9 +207,9 @@ where
 
 #[derive(Deserialize, Serialize, Debug, Default)]
 #[serde(rename_all = "camelCase")]
-struct EmailAddress {
-    email: String,
-    name: Option<String>,
+pub struct EmailAddress {
+    pub email: String,
+    pub name: Option<String>,
 }
 
 impl Into<crate::email::Address> for EmailAddress {
@@ -269,18 +269,22 @@ impl std::convert::From<EmailObject> for crate::Envelope {
             env.set_subject(std::mem::replace(subject, String::new()).into_bytes());
         }
 
-        env.set_from(
-            std::mem::replace(&mut t.from, SmallVec::new())
-                .into_iter()
-                .map(|addr| addr.into())
-                .collect::<SmallVec<[crate::email::Address; 1]>>(),
-        );
-        env.set_to(
-            std::mem::replace(&mut t.to, SmallVec::new())
-                .into_iter()
-                .map(|addr| addr.into())
-                .collect::<SmallVec<[crate::email::Address; 1]>>(),
-        );
+        if let Some(ref mut from) = t.from {
+            env.set_from(
+                std::mem::replace(from, SmallVec::new())
+                    .into_iter()
+                    .map(|addr| addr.into())
+                    .collect::<SmallVec<[crate::email::Address; 1]>>(),
+            );
+        }
+        if let Some(ref mut to) = t.to {
+            env.set_to(
+                std::mem::replace(to, SmallVec::new())
+                    .into_iter()
+                    .map(|addr| addr.into())
+                    .collect::<SmallVec<[crate::email::Address; 1]>>(),
+            );
+        }
 
         if let Some(ref mut cc) = t.cc {
             env.set_cc(
@@ -300,15 +304,8 @@ impl std::convert::From<EmailObject> for crate::Envelope {
             );
         }
 
-        if env.references.is_some() {
-            if let Some(pos) = env
-                .references
-                .as_ref()
-                .map(|r| &r.refs)
-                .unwrap()
-                .iter()
-                .position(|r| r == env.message_id())
-            {
+        if let Some(ref r) = env.references {
+            if let Some(pos) = r.refs.iter().position(|r| r == env.message_id()) {
                 env.references.as_mut().unwrap().refs.remove(pos);
             }
         }
@@ -322,56 +319,56 @@ impl std::convert::From<EmailObject> for crate::Envelope {
 
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
-struct HtmlBody {
-    blob_id: Id,
+pub struct HtmlBody {
+    pub blob_id: Id,
     #[serde(default)]
-    charset: String,
+    pub charset: String,
     #[serde(default)]
-    cid: Option<String>,
+    pub cid: Option<String>,
     #[serde(default)]
-    disposition: Option<String>,
+    pub disposition: Option<String>,
     #[serde(default)]
-    headers: Value,
+    pub headers: Value,
     #[serde(default)]
-    language: Option<Vec<String>>,
+    pub language: Option<Vec<String>>,
     #[serde(default)]
-    location: Option<String>,
+    pub location: Option<String>,
     #[serde(default)]
-    name: Option<String>,
+    pub name: Option<String>,
     #[serde(default)]
-    part_id: Option<String>,
-    size: u64,
+    pub part_id: Option<String>,
+    pub size: u64,
     #[serde(alias = "type")]
-    content_type: String,
+    pub content_type: String,
     #[serde(default)]
-    sub_parts: Vec<Value>,
+    pub sub_parts: Vec<Value>,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
-struct TextBody {
-    blob_id: Id,
+pub struct TextBody {
+    pub blob_id: Id,
     #[serde(default)]
-    charset: String,
+    pub charset: String,
     #[serde(default)]
-    cid: Option<String>,
+    pub cid: Option<String>,
     #[serde(default)]
-    disposition: Option<String>,
+    pub disposition: Option<String>,
     #[serde(default)]
-    headers: Value,
+    pub headers: Value,
     #[serde(default)]
-    language: Option<Vec<String>>,
+    pub language: Option<Vec<String>>,
     #[serde(default)]
-    location: Option<String>,
+    pub location: Option<String>,
     #[serde(default)]
-    name: Option<String>,
+    pub name: Option<String>,
     #[serde(default)]
-    part_id: Option<String>,
-    size: u64,
+    pub part_id: Option<String>,
+    pub size: u64,
     #[serde(alias = "type")]
-    content_type: String,
+    pub content_type: String,
     #[serde(default)]
-    sub_parts: Vec<Value>,
+    pub sub_parts: Vec<Value>,
 }
 
 impl Object for EmailObject {
