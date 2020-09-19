@@ -29,6 +29,9 @@ use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::hash::Hasher;
 
+mod import;
+pub use import::*;
+
 // 4.1.1.
 // Metadata
 // These properties represent metadata about the message in the mail

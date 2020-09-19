@@ -815,3 +815,30 @@ pub fn upload_request_format(session: &JmapSession, account_id: &Id) -> String {
     }
     ret
 }
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct UploadResponse {
+    ///o  accountId: "Id"
+    ///
+    ///   The id of the account used for the call.
+    pub account_id: String,
+    ///o  blobId: "Id"
+    ///
+    ///The id representing the binary data uploaded.  The data for this id is immutable.
+    ///The id *only* refers to the binary data, not any metadata.
+    pub blob_id: String,
+    ///o  type: "String"
+    ///
+    ///The media type of the file (as specified in [RFC6838],
+    ///Section 4.2) as set in the Content-Type header of the upload HTTP
+    ///request.
+
+    #[serde(rename = "type")]
+    pub _type: String,
+
+    ///o  size: "UnsignedInt"
+    ///
+    /// The size of the file in octets.
+    pub size: usize,
+}

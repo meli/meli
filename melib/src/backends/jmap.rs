@@ -283,11 +283,80 @@ impl MailBackend for JmapType {
 
     fn save(
         &self,
-        _bytes: Vec<u8>,
-        _mailbox_hash: MailboxHash,
+        bytes: Vec<u8>,
+        mailbox_hash: MailboxHash,
         _flags: Option<Flag>,
     ) -> ResultFuture<()> {
-        Err(MeliError::new("Unimplemented."))
+        let mailboxes = self.mailboxes.clone();
+        let connection = self.connection.clone();
+        Ok(Box::pin(async move {
+            let mut conn = connection.lock().await;
+            conn.connect().await?;
+            /*
+             * 1. upload binary blob, get blobId
+             * 2. Email/import
+             */
+            let mut res = conn
+                .client
+                .post_async(
+                    &upload_request_format(&conn.session, conn.mail_account_id()),
+                    bytes,
+                )
+                .await?;
+
+            let mailbox_id: String = {
+                let mailboxes_lck = mailboxes.read().unwrap();
+                if let Some(mailbox) = mailboxes_lck.get(&mailbox_hash) {
+                    mailbox.id.clone()
+                } else {
+                    return Err(MeliError::new(format!(
+                        "Mailbox with hash {} not found",
+                        mailbox_hash
+                    )));
+                }
+            };
+            let res_text = res.text_async().await?;
+
+            let upload_response: UploadResponse = serde_json::from_str(&res_text)?;
+            let mut req = Request::new(conn.request_no.clone());
+            let creation_id = "1".to_string();
+            let mut email_imports = HashMap::default();
+            let mut mailbox_ids = HashMap::default();
+            mailbox_ids.insert(mailbox_id, true);
+            email_imports.insert(
+                creation_id.clone(),
+                EmailImport::new()
+                    .blob_id(upload_response.blob_id)
+                    .mailbox_ids(mailbox_ids),
+            );
+
+            let import_call: ImportCall = ImportCall::new()
+                .account_id(conn.mail_account_id().to_string())
+                .emails(email_imports);
+
+            req.add_call(&import_call);
+            let mut res = conn
+                .client
+                .post_async(&conn.session.api_url, serde_json::to_string(&req)?)
+                .await?;
+            let res_text = res.text_async().await?;
+
+            let mut v: MethodResponse = serde_json::from_str(&res_text)?;
+            let m = ImportResponse::try_from(v.method_responses.remove(0)).or_else(|err| {
+                let ierr: Result<ImportError> =
+                    serde_json::from_str(&res_text).map_err(|err| err.into());
+                if let Ok(err) = ierr {
+                    Err(MeliError::new(format!("Could not save message: {:?}", err)))
+                } else {
+                    Err(err.into())
+                }
+            })?;
+
+            if let Some(err) = m.not_created.get(&creation_id) {
+                return Err(MeliError::new(format!("Could not save message: {:?}", err)));
+            }
+            Ok(())
+        }))
     }
 
     fn tags(&self) -> Option<Arc<RwLock<BTreeMap<u64, String>>>> {
