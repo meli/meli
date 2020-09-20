@@ -35,7 +35,7 @@ use std::convert::TryInto;
 impl ImapConnection {
     pub async fn process_untagged(&mut self, line: &[u8]) -> Result<bool> {
         macro_rules! try_fail {
-            ($mailbox_hash: expr, $($result:expr)+) => {
+            ($mailbox_hash: expr, $($result:expr $(,)*)+) => {
                 $(if let Err(err) = $result {
                     self.uid_store.is_online.lock().unwrap().1 = Err(err.clone());
                     debug!("failure: {}", err.to_string());
@@ -358,35 +358,17 @@ impl ImapConnection {
                 body: _,
                 envelope: _,
             }) => {
-                if let Some(modseq) = modseq {
-                    if self
-                        .uid_store
-                        .reverse_modseq
-                        .lock()
-                        .unwrap()
-                        .entry(mailbox_hash)
-                        .or_default()
-                        .contains_key(&modseq)
-                    {
-                        return Ok(true);
-                    }
-                }
-
                 if let Some(flags) = flags {
                     let uid = if let Some(uid) = uid {
                         uid
                     } else {
                         try_fail!(
-                                mailbox_hash,
-                        self.send_command(
-                            &[
-                            b"UID SEARCH",
-                            format!("{}", msg_seq).as_bytes(),
-                            ]
-                            .join(&b' '),
-                        ).await
-                                self.read_response(&mut response, RequiredResponses::SEARCH).await
-                            );
+                            mailbox_hash,
+                            self.send_command(format!("UID SEARCH {}", msg_seq).as_bytes())
+                                .await,
+                            self.read_response(&mut response, RequiredResponses::SEARCH)
+                                .await,
+                        );
                         debug!(to_str!(&response));
                         match super::protocol_parser::search_results(
                             response.split_rn().next().unwrap_or(b""),
@@ -398,8 +380,8 @@ impl ImapConnection {
                                 return Ok(false);
                             }
                             Err(e) => {
+                                debug!("SEARCH error failed: {}", e);
                                 debug!(to_str!(&response));
-                                debug!(e);
                                 return Ok(false);
                             }
                         }
@@ -419,13 +401,6 @@ impl ImapConnection {
                             mailbox.unseen.lock().unwrap().remove(env_hash);
                         }
                         if let Some(modseq) = modseq {
-                            self.uid_store
-                                .reverse_modseq
-                                .lock()
-                                .unwrap()
-                                .entry(mailbox_hash)
-                                .or_default()
-                                .insert(modseq, env_hash);
                             self.uid_store
                                 .modseq
                                 .lock()
