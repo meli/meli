@@ -1695,9 +1695,19 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
                         ref uid,
                         ref mut envelope,
                         ref mut flags,
+                        ref raw_fetch_value,
                         ..
                     } in v.iter_mut()
                     {
+                        if uid.is_none() || envelope.is_none() || flags.is_none() {
+                            debug!("in fetch is none");
+                            debug!(uid);
+                            debug!(envelope);
+                            debug!(flags);
+                            debug!("response was: {}", String::from_utf8_lossy(&response));
+                            debug!(conn.process_untagged(raw_fetch_value).await)?;
+                            continue;
+                        }
                         let uid = uid.unwrap();
                         let env = envelope.as_mut().unwrap();
                         env.set_hash(generate_envelope_hash(&mailbox_path, &uid));

@@ -446,6 +446,7 @@ mod sqlite3_m {
                     flags: _,
                     body: _,
                     envelope: Some(envelope),
+                    raw_fetch_value: _,
                 } = item
                 {
                     max_uid = std::cmp::max(max_uid, *uid);

@@ -357,6 +357,7 @@ impl ImapConnection {
                 flags,
                 body: _,
                 envelope: _,
+                raw_fetch_value: _,
             }) => {
                 if let Some(flags) = flags {
                     let uid = if let Some(uid) = uid {

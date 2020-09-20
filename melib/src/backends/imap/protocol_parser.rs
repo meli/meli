@@ -465,6 +465,7 @@ pub struct FetchResponse<'a> {
     pub flags: Option<(Flag, Vec<String>)>,
     pub body: Option<&'a [u8]>,
     pub envelope: Option<Envelope>,
+    pub raw_fetch_value: &'a [u8],
 }
 
 pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
@@ -520,6 +521,7 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
         flags: None,
         body: None,
         envelope: None,
+        raw_fetch_value: &[],
     };
 
     while input[i].is_ascii_digit() {
@@ -629,6 +631,7 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
             ))));
         }
     }
+    ret.raw_fetch_value = &input[..i];
 
     if let Some(env) = ret.envelope.as_mut() {
         env.set_has_attachments(has_attachments);
@@ -877,7 +880,8 @@ fn test_untagged_responses() {
             modseq: Some(ModSequence(std::num::NonZeroU64::new(1365_u64).unwrap())),
             flags: Some((Flag::SEEN, vec![])),
             body: None,
-            envelope: None
+            envelope: None,
+            raw_fetch_value: &b"* 1079 FETCH (UID 1103 MODSEQ (1365) FLAGS (\\Seen))\r\n"[..],
         })
     );
     assert_eq!(
@@ -891,7 +895,8 @@ fn test_untagged_responses() {
             modseq: None,
             flags: Some((Flag::SEEN, vec![])),
             body: None,
-            envelope: None
+            envelope: None,
+            raw_fetch_value: &b"* 1 FETCH (FLAGS (\\Seen))\r\n"[..],
         })
     );
 }
