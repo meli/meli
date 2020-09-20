@@ -25,6 +25,7 @@ use melib::error::{MeliError, Result};
 use std::collections::HashMap;
 use std::io::Write;
 use std::os::unix::net::{UnixListener, UnixStream};
+use std::path::PathBuf;
 use std::process::Stdio;
 use uuid::Uuid;
 
@@ -73,9 +74,24 @@ pub struct PluginManager {
     listener: UnixListener,
 }
 
+fn socket_path() -> PathBuf {
+    xdg::BaseDirectories::new()
+        .and_then(|base_dirs| {
+            base_dirs
+                .place_runtime_file("meli-plugins")
+                .or_else(|_| base_dirs.place_cache_file("meli-plugins"))
+                .or_else(|_| {
+                    let mut p = base_dirs.get_cache_home();
+                    p.push("meli-plugins");
+                    Ok(p)
+                })
+        })
+        .unwrap_or_else(|_| PathBuf::from("."))
+}
+
 impl Drop for PluginManager {
     fn drop(&mut self) {
-        let _ = std::fs::remove_file("./soworkfile");
+        let _ = std::fs::remove_file(&socket_path());
         for (k, c) in self.instances.iter_mut() {
             if let Err(err) = debug!(c.kill()) {
                 eprintln!(
@@ -91,8 +107,9 @@ impl Drop for PluginManager {
 
 impl PluginManager {
     pub fn new() -> Self {
-        let _ = std::fs::remove_file("./soworkfile");
-        let listener = UnixListener::bind("./soworkfile").unwrap();
+        let socket_path = socket_path();
+        let _ = std::fs::remove_file(&socket_path);
+        let listener = UnixListener::bind(&socket_path).unwrap();
         /*
             debug!("bound");
             // accept connections and process them, spawning a new thread for each one
