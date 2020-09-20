@@ -445,12 +445,93 @@ impl MailBackend for JmapType {
 
     fn copy_messages(
         &mut self,
-        _env_hashes: EnvelopeHashBatch,
-        _source_mailbox_hash: MailboxHash,
-        _destination_mailbox_hash: MailboxHash,
-        _move_: bool,
+        env_hashes: EnvelopeHashBatch,
+        source_mailbox_hash: MailboxHash,
+        destination_mailbox_hash: MailboxHash,
+        move_: bool,
     ) -> ResultFuture<()> {
-        Err(MeliError::new("Unimplemented."))
+        let mailboxes = self.mailboxes.clone();
+        let store = self.store.clone();
+        let connection = self.connection.clone();
+        Ok(Box::pin(async move {
+            let (source_mailbox_id, destination_mailbox_id) = {
+                let mailboxes_lck = mailboxes.read().unwrap();
+                if !mailboxes_lck.contains_key(&source_mailbox_hash) {
+                    return Err(MeliError::new(format!(
+                        "Could not find source mailbox with hash {}",
+                        source_mailbox_hash
+                    )));
+                }
+                if !mailboxes_lck.contains_key(&destination_mailbox_hash) {
+                    return Err(MeliError::new(format!(
+                        "Could not find destination mailbox with hash {}",
+                        destination_mailbox_hash
+                    )));
+                }
+
+                (
+                    mailboxes_lck[&source_mailbox_hash].id.clone(),
+                    mailboxes_lck[&destination_mailbox_hash].id.clone(),
+                )
+            };
+            let mut update_map: HashMap<String, Value> = HashMap::default();
+            let mut ids: Vec<Id> = Vec::with_capacity(env_hashes.rest.len() + 1);
+            let mut id_map: HashMap<Id, EnvelopeHash> = HashMap::default();
+            let mut update_keywords: HashMap<String, Value> = HashMap::default();
+            update_keywords.insert(
+                format!("mailboxIds/{}", &destination_mailbox_id),
+                serde_json::json!(true),
+            );
+            if move_ {
+                update_keywords.insert(
+                    format!("mailboxIds/{}", &source_mailbox_hash),
+                    serde_json::json!(null),
+                );
+            }
+            {
+                let store_lck = store.read().unwrap();
+                for env_hash in env_hashes.iter() {
+                    if let Some(id) = store_lck.id_store.get(&env_hash) {
+                        ids.push(id.clone());
+                        id_map.insert(id.clone(), env_hash);
+                        update_map.insert(id.clone(), serde_json::json!(update_keywords.clone()));
+                    }
+                }
+            }
+            let conn = connection.lock().await;
+
+            let email_set_call: EmailSet = EmailSet::new(
+                Set::<EmailObject>::new()
+                    .account_id(conn.mail_account_id().to_string())
+                    .update(Some(update_map)),
+            );
+
+            let mut req = Request::new(conn.request_no.clone());
+            let _prev_seq = req.add_call(&email_set_call);
+
+            let mut res = conn
+                .client
+                .post_async(&conn.session.api_url, serde_json::to_string(&req)?)
+                .await?;
+
+            let res_text = res.text_async().await?;
+
+            let mut v: MethodResponse = serde_json::from_str(&res_text).unwrap();
+            *conn.online_status.lock().await = (std::time::Instant::now(), Ok(()));
+            let m = SetResponse::<EmailObject>::try_from(v.method_responses.remove(0))?;
+            if let Some(ids) = m.not_updated {
+                if !ids.is_empty() {
+                    return Err(MeliError::new(format!(
+                        "Could not update ids: {}",
+                        ids.into_iter()
+                            .map(|err| err.to_string())
+                            .collect::<Vec<String>>()
+                            .join(",")
+                    )));
+                }
+            }
+            Ok(())
+        }))
     }
 
     fn set_flags(
