@@ -28,7 +28,7 @@ MIN_RUSTC ?= 1.39.0
 CARGO_BIN ?= cargo
 
 # Installation parameters
-MANPAGES ?= meli.1 meli.conf.5 meli-themes.5
+MANPAGES ?= docs/meli.1 docs/meli.conf.5 docs/meli-themes.5
 FEATURES ?= --features "${MELI_FEATURES}"
 
 MANPATHS != ACCUM="";for m in `manpath 2> /dev/null | tr ':' ' '`; do if [ -d "$${m}" ]; then REAL_PATH=`cd $${m} && pwd` ACCUM="$${ACCUM}:$${REAL_PATH}";fi;done;echo -n $${ACCUM} | sed 's/^://'

@@ -49,9 +49,9 @@ fn main() {
 
         let output = Command::new("mandoc")
             .args(MANDOC_OPTS)
-            .arg("meli.1")
+            .arg("docs/meli.1")
             .output()
-            .or_else(|_| Command::new("man").arg("-l").arg("meli.1").output())
+            .or_else(|_| Command::new("man").arg("-l").arg("docs/meli.1").output())
             .unwrap();
 
         let mut file = File::create(&out_dir_path).unwrap();
@@ -61,9 +61,14 @@ fn main() {
         out_dir_path.push("meli.conf.txt");
         let output = Command::new("mandoc")
             .args(MANDOC_OPTS)
-            .arg("meli.conf.5")
+            .arg("docs/meli.conf.5")
             .output()
-            .or_else(|_| Command::new("man").arg("-l").arg("meli.conf.5").output())
+            .or_else(|_| {
+                Command::new("man")
+                    .arg("-l")
+                    .arg("docs/meli.conf.5")
+                    .output()
+            })
             .unwrap();
         let mut file = File::create(&out_dir_path).unwrap();
         file.write_all(&output.stdout).unwrap();
@@ -72,9 +77,14 @@ fn main() {
         out_dir_path.push("meli-themes.txt");
         let output = Command::new("mandoc")
             .args(MANDOC_OPTS)
-            .arg("meli-themes.5")
+            .arg("docs/meli-themes.5")
             .output()
-            .or_else(|_| Command::new("man").arg("-l").arg("meli-themes.5").output())
+            .or_else(|_| {
+                Command::new("man")
+                    .arg("-l")
+                    .arg("docs/meli-themes.5")
+                    .output()
+            })
             .unwrap();
         let mut file = File::create(&out_dir_path).unwrap();
         file.write_all(&output.stdout).unwrap();
