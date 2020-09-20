@@ -880,19 +880,24 @@ impl Account {
                         return Some(UIEvent::MailboxUpdate((self.hash, mailbox_hash)));
                     }
 
-                    let thread = {
-                        let thread_hash = self.collection.get_env(env_hash).thread();
-                        self.collection.get_threads(mailbox_hash).find_group(
-                            self.collection.get_threads(mailbox_hash)[&thread_hash].group,
-                        )
-                    };
+                    let thread_hash = self.collection.get_env(env_hash).thread();
                     if self
                         .collection
                         .get_threads(mailbox_hash)
-                        .thread_ref(thread)
-                        .snoozed()
+                        .thread_nodes()
+                        .contains_key(&thread_hash)
                     {
-                        return Some(UIEvent::MailboxUpdate((self.hash, mailbox_hash)));
+                        let thread = self.collection.get_threads(mailbox_hash).find_group(
+                            self.collection.get_threads(mailbox_hash)[&thread_hash].group,
+                        );
+                        if self
+                            .collection
+                            .get_threads(mailbox_hash)
+                            .thread_ref(thread)
+                            .snoozed()
+                        {
+                            return Some(UIEvent::MailboxUpdate((self.hash, mailbox_hash)));
+                        }
                     }
                     if is_seen || is_draft {
                         return Some(UIEvent::MailboxUpdate((self.hash, mailbox_hash)));
@@ -913,12 +918,6 @@ impl Account {
                     if !self.collection.contains_key(&env_hash) {
                         return None;
                     }
-                    let thread_hash = {
-                        let thread_hash = self.collection.get_env(env_hash).thread();
-                        self.collection.get_threads(mailbox_hash).find_group(
-                            self.collection.get_threads(mailbox_hash)[&thread_hash].group,
-                        )
-                    };
                     #[cfg(feature = "sqlite3")]
                     if self.settings.conf.search_backend == crate::conf::SearchBackend::Sqlite3 {
                         if let Err(err) = crate::sqlite3::remove(env_hash) {
@@ -935,6 +934,19 @@ impl Account {
                             );
                         }
                     }
+                    let thread_hash = self.collection.get_env(env_hash).thread();
+                    if !self
+                        .collection
+                        .get_threads(mailbox_hash)
+                        .thread_nodes()
+                        .contains_key(&thread_hash)
+                    {
+                        return None;
+                    }
+                    let thread_hash = self
+                        .collection
+                        .get_threads(mailbox_hash)
+                        .find_group(self.collection.get_threads(mailbox_hash)[&thread_hash].group);
                     self.collection.remove(env_hash, mailbox_hash);
                     return Some(EnvelopeRemove(env_hash, thread_hash));
                 }

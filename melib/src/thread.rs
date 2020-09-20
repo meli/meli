@@ -33,6 +33,7 @@
  */
 
 use crate::datetime::UnixTimestamp;
+use crate::email::address::StrBuild;
 use crate::email::parser::BytesExt;
 use crate::email::*;
 
@@ -655,12 +656,21 @@ impl Threads {
         let envelopes_lck = envelopes.read().unwrap();
         let reply_to_id: Option<ThreadNodeHash> = envelopes_lck[&env_hash]
             .in_reply_to()
-            .map(crate::email::StrBuild::raw)
+            .map(StrBuild::raw)
             .and_then(|r| self.message_ids.get(r).cloned());
         let message_id = envelopes_lck[&env_hash].message_id().raw();
-        if self.message_ids_set.contains(message_id)
+        if self.message_ids.contains_key(message_id)
             && !self.missing_message_ids.contains(message_id)
         {
+            let thread_hash = self.message_ids[message_id];
+            drop(envelopes_lck);
+            envelopes
+                .write()
+                .unwrap()
+                .get_mut(&env_hash)
+                .unwrap()
+                .set_thread(thread_hash);
+
             return false;
         }
 
@@ -739,10 +749,7 @@ impl Threads {
         self.hash_set.insert(env_hash);
         if let Some(reply_to_id) = reply_to_id {
             make!((reply_to_id) parent of (new_id), self);
-        } else if let Some(r) = envelopes_lck[&env_hash]
-            .in_reply_to()
-            .map(crate::email::StrBuild::raw)
-        {
+        } else if let Some(r) = envelopes_lck[&env_hash].in_reply_to().map(StrBuild::raw) {
             let reply_to_id = ThreadNodeHash::new();
             self.thread_nodes.insert(
                 reply_to_id,
