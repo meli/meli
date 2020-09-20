@@ -28,7 +28,8 @@ MIN_RUSTC ?= 1.39.0
 CARGO_BIN ?= cargo
 
 # Installation parameters
-MANPAGES ?= docs/meli.1 docs/meli.conf.5 docs/meli-themes.5
+DOCS_SUBDIR ?= docs/
+MANPAGES ?= meli.1 meli.conf.5 meli-themes.5
 FEATURES ?= --features "${MELI_FEATURES}"
 
 MANPATHS != ACCUM="";for m in `manpath 2> /dev/null | tr ':' ' '`; do if [ -d "$${m}" ]; then REAL_PATH=`cd $${m} && pwd` ACCUM="$${ACCUM}:$${REAL_PATH}";fi;done;echo -n $${ACCUM} | sed 's/^://'
@@ -120,7 +121,7 @@ install-doc:
 			SECTION=`echo $${MANPAGE} | rev | cut -d "." -f 1`; \
 			MANPAGEPATH=${DESTDIR}${MANDIR}/man$${SECTION}/$${MANPAGE}.gz; \
 			echo "  * installing $${MANPAGE} → ${GREEN}$${MANPAGEPATH}${ANSI_RESET}"; \
-			gzip -n < $${MANPAGE} > $${MANPAGEPATH} \
+			gzip -n < ${DOCS_SUBDIR}$${MANPAGE} > $${MANPAGEPATH} \
     ; done ; \
 	(case ":${MANPATHS}:" in \
   *:${DESTDIR}${MANDIR}:*) echo -n "";; \
