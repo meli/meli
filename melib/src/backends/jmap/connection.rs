@@ -100,7 +100,7 @@ impl JmapConnection {
         Ok(())
     }
 
-    pub fn mail_account_id(&self) -> &Id {
+    pub fn mail_account_id(&self) -> &Id<Account> {
         &self.session.primary_accounts["urn:ietf:params:jmap:mail"]
     }
 
@@ -109,22 +109,16 @@ impl JmapConnection {
     }
 
     pub async fn email_changes(&self) -> Result<()> {
-        let mut current_state: String = {
-            let object_set_states_lck = self.store.object_set_states.lock().unwrap();
-            let v = if let Some(prev_state) = debug!(object_set_states_lck.get(&EmailObject::NAME))
-            {
-                prev_state.clone()
-            } else {
-                return Ok(());
-            };
-            drop(object_set_states_lck);
-            v
-        };
+        let mut current_state: State<EmailObject> = self.store.email_state.lock().unwrap().clone();
+        if current_state.is_empty() {
+            debug!("{:?}: has no saved state", EmailObject::NAME);
+            return Ok(());
+        }
         loop {
 
             let email_changes_call: EmailChanges = EmailChanges::new(
                 Changes::<EmailObject>::new()
-                    .account_id(self.mail_account_id().to_string())
+                    .account_id(self.mail_account_id().clone())
                     .since_state(current_state.clone()),
             );
 
@@ -136,7 +130,7 @@ impl JmapConnection {
                         prev_seq,
                         ResultField::<EmailChanges, EmailObject>::new("created"),
                     )))
-                    .account_id(self.mail_account_id().to_string()),
+                    .account_id(self.mail_account_id().clone()),
             );
 
             req.add_call(&email_get_call);
@@ -153,6 +147,12 @@ impl JmapConnection {
                 GetResponse::<EmailObject>::try_from(v.method_responses.pop().unwrap())?;
             debug!(&get_response);
             let GetResponse::<EmailObject> { list, .. } = get_response;
+            let changes_response =
+                ChangesResponse::<EmailObject>::try_from(v.method_responses.pop().unwrap())?;
+            if changes_response.new_state == current_state {
+                return Ok(());
+            }
+
             let mut mailbox_hashes: Vec<SmallVec<[MailboxHash; 8]>> =
                 Vec::with_capacity(list.len());
             for envobj in &list {
@@ -189,9 +189,6 @@ impl JmapConnection {
                 }
             }
 
-            let changes_response =
-                ChangesResponse::<EmailObject>::try_from(v.method_responses.pop().unwrap())?;
-            
             let ChangesResponse::<EmailObject> {
                 account_id: _,
                 new_state,
@@ -218,11 +215,7 @@ impl JmapConnection {
             if has_more_changes {
                 current_state = new_state;
             } else {
-                self.store
-                    .object_set_states
-                    .lock()
-                    .unwrap()
-                    .insert(EmailObject::NAME, new_state);
+                *self.store.email_state.lock().unwrap() = new_state;
                 break;
             }
         }

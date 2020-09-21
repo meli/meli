@@ -29,10 +29,11 @@ pub struct JmapMailbox {
     pub path: String,
     pub hash: MailboxHash,
     pub children: Vec<MailboxHash>,
-    pub id: String,
+    pub id: Id<MailboxObject>,
     pub is_subscribed: bool,
     pub my_rights: JmapRights,
-    pub parent_id: Option<String>,
+    pub parent_id: Option<Id<MailboxObject>>,
+    pub parent_hash: Option<MailboxHash>,
     pub role: Option<String>,
     pub sort_order: u64,
     pub total_emails: Arc<Mutex<u64>>,
@@ -66,7 +67,7 @@ impl BackendMailbox for JmapMailbox {
     }
 
     fn parent(&self) -> Option<MailboxHash> {
-        None
+        self.parent_hash
     }
 
     fn permissions(&self) -> MailboxPermissions {

@@ -25,7 +25,6 @@ use serde::Serialize;
 use serde_json::{json, Value};
 use std::convert::TryFrom;
 
-pub type Id = String;
 pub type UtcDate = String;
 
 use super::rfc8620::Object;
@@ -125,7 +124,8 @@ pub async fn get_mailboxes(conn: &JmapConnection) -> Result<HashMap<MailboxHash,
                 unread_emails,
                 unread_threads,
             } = r;
-            let hash = crate::get_path_hash!(&name);
+            let hash = id.into_hash();
+            let parent_hash = parent_id.clone().map(|id| id.into_hash());
             (
                 hash,
                 JmapMailbox {
@@ -137,6 +137,7 @@ pub async fn get_mailboxes(conn: &JmapConnection) -> Result<HashMap<MailboxHash,
                     is_subscribed,
                     my_rights,
                     parent_id,
+                    parent_hash,
                     role,
                     usage: Default::default(),
                     sort_order,
@@ -150,10 +151,13 @@ pub async fn get_mailboxes(conn: &JmapConnection) -> Result<HashMap<MailboxHash,
         .collect())
 }
 
-pub async fn get_message_list(conn: &JmapConnection, mailbox: &JmapMailbox) -> Result<Vec<String>> {
+pub async fn get_message_list(
+    conn: &JmapConnection,
+    mailbox: &JmapMailbox,
+) -> Result<Vec<Id<EmailObject>>> {
     let email_call: EmailQuery = EmailQuery::new(
         Query::new()
-            .account_id(conn.mail_account_id().to_string())
+            .account_id(conn.mail_account_id().clone())
             .filter(Some(Filter::Condition(
                 EmailFilterCondition::new()
                     .in_mailbox(Some(mailbox.id.clone()))
@@ -213,7 +217,7 @@ pub async fn fetch(
     let mailbox_id = store.mailboxes.read().unwrap()[&mailbox_hash].id.clone();
     let email_query_call: EmailQuery = EmailQuery::new(
         Query::new()
-            .account_id(conn.mail_account_id().to_string())
+            .account_id(conn.mail_account_id().clone())
             .filter(Some(Filter::Condition(
                 EmailFilterCondition::new()
                     .in_mailbox(Some(mailbox_id))
@@ -232,7 +236,7 @@ pub async fn fetch(
                 prev_seq,
                 EmailQuery::RESULT_FIELD_IDS,
             )))
-            .account_id(conn.mail_account_id().to_string()),
+            .account_id(conn.mail_account_id().clone()),
     );
 
     req.add_call(&email_call);
@@ -248,22 +252,15 @@ pub async fn fetch(
     let e = GetResponse::<EmailObject>::try_from(v.method_responses.pop().unwrap())?;
     let GetResponse::<EmailObject> { list, state, .. } = e;
     {
-        let v = conn
-            .store
-            .object_set_states
-            .lock()
-            .unwrap()
-            .get(&EmailObject::NAME)
-            .map(|prev_state| *prev_state == state);
-        if let Some(false) = v {
-            conn.email_changes().await?;
-        } else {
+        let (is_empty, is_equal) = {
+            let current_state_lck = conn.store.email_state.lock().unwrap();
+            (current_state_lck.is_empty(), *current_state_lck != state)
+        };
+        if is_empty {
             debug!("{:?}: inserting state {}", EmailObject::NAME, &state);
-            conn.store
-                .object_set_states
-                .lock()
-                .unwrap()
-                .insert(EmailObject::NAME, state);
+            *conn.store.email_state.lock().unwrap() = state;
+        } else if !is_equal {
+            conn.email_changes().await?;
         }
     }
     let mut ret = Vec::with_capacity(list.len());

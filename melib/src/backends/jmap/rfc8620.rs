@@ -19,12 +19,12 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::Id;
 use crate::email::parser::BytesExt;
 use core::marker::PhantomData;
 use serde::de::DeserializeOwned;
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 use serde_json::{value::RawValue, Value};
+use std::hash::{Hash, Hasher};
 
 mod filters;
 pub use filters::*;
@@ -39,21 +39,187 @@ pub trait Object {
     const NAME: &'static str;
 }
 
+#[derive(Deserialize, Serialize)]
+#[serde(transparent)]
+pub struct Id<OBJ> {
+    pub inner: String,
+    #[serde(skip)]
+    pub _ph: PhantomData<fn() -> OBJ>,
+}
+
+impl<OBJ: Object> core::fmt::Debug for Id<OBJ> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        f.debug_tuple(&format!("Id<{}>", OBJ::NAME))
+            .field(&self.inner)
+            .finish()
+    }
+}
+
+impl core::fmt::Debug for Id<String> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        f.debug_tuple("Id<Any>").field(&self.inner).finish()
+    }
+}
+
+//, Hash, Eq, PartialEq, Default)]
+impl<OBJ> Clone for Id<OBJ> {
+    fn clone(&self) -> Self {
+        Id {
+            inner: self.inner.clone(),
+            _ph: PhantomData,
+        }
+    }
+}
+
+impl<OBJ> std::cmp::Eq for Id<OBJ> {}
+
+impl<OBJ> std::cmp::PartialEq for Id<OBJ> {
+    fn eq(&self, other: &Self) -> bool {
+        self.inner == other.inner
+    }
+}
+
+impl<OBJ> Hash for Id<OBJ> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.inner.hash(state);
+    }
+}
+
+impl<OBJ> Default for Id<OBJ> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<OBJ> From<String> for Id<OBJ> {
+    fn from(inner: String) -> Self {
+        Id {
+            inner,
+            _ph: PhantomData,
+        }
+    }
+}
+
+impl<OBJ> core::fmt::Display for Id<OBJ> {
+    fn fmt(&self, fmt: &mut core::fmt::Formatter) -> core::fmt::Result {
+        core::fmt::Display::fmt(&self.inner, fmt)
+    }
+}
+
+impl<OBJ> Id<OBJ> {
+    pub fn new() -> Self {
+        Self {
+            inner: String::new(),
+            _ph: PhantomData,
+        }
+    }
+
+    pub fn as_str(&self) -> &str {
+        self.inner.as_str()
+    }
+
+    pub fn len(&self) -> usize {
+        self.inner.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+#[serde(transparent)]
+pub struct State<OBJ> {
+    pub inner: String,
+    #[serde(skip)]
+    pub _ph: PhantomData<fn() -> OBJ>,
+}
+
+//, Hash, Eq, PartialEq, Default)]
+impl<OBJ> Clone for State<OBJ> {
+    fn clone(&self) -> Self {
+        State {
+            inner: self.inner.clone(),
+            _ph: PhantomData,
+        }
+    }
+}
+
+impl<OBJ> std::cmp::Eq for State<OBJ> {}
+
+impl<OBJ> std::cmp::PartialEq for State<OBJ> {
+    fn eq(&self, other: &Self) -> bool {
+        self.inner == other.inner
+    }
+}
+
+impl<OBJ> Hash for State<OBJ> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.inner.hash(state);
+    }
+}
+
+impl<OBJ> Default for State<OBJ> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<OBJ> From<String> for State<OBJ> {
+    fn from(inner: String) -> Self {
+        State {
+            inner,
+            _ph: PhantomData,
+        }
+    }
+}
+
+impl<OBJ> core::fmt::Display for State<OBJ> {
+    fn fmt(&self, fmt: &mut core::fmt::Formatter) -> core::fmt::Result {
+        core::fmt::Display::fmt(&self.inner, fmt)
+    }
+}
+
+impl<OBJ> State<OBJ> {
+    pub fn new() -> Self {
+        Self {
+            inner: String::new(),
+            _ph: PhantomData,
+        }
+    }
+
+    pub fn as_str(&self) -> &str {
+        self.inner.as_str()
+    }
+
+    pub fn len(&self) -> usize {
+        self.inner.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+}
+
 #[derive(Deserialize, Serialize, Debug, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct JmapSession {
     pub capabilities: HashMap<String, CapabilitiesObject>,
-    pub accounts: HashMap<Id, Account>,
-    pub primary_accounts: HashMap<String, Id>,
+    pub accounts: HashMap<Id<Account>, Account>,
+    pub primary_accounts: HashMap<String, Id<Account>>,
     pub username: String,
     pub api_url: String,
     pub download_url: String,
 
     pub upload_url: String,
     pub event_source_url: String,
-    pub state: String,
+    pub state: State<JmapSession>,
     #[serde(flatten)]
     pub extra_properties: HashMap<String, Value>,
+}
+
+impl Object for JmapSession {
+    const NAME: &'static str = "Session";
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -88,6 +254,17 @@ pub struct Account {
     extra_properties: HashMap<String, Value>,
 }
 
+impl Object for Account {
+    const NAME: &'static str = "Account";
+}
+
+#[derive(Debug)]
+pub struct BlobObject;
+
+impl Object for BlobObject {
+    const NAME: &'static str = "Blob";
+}
+
 /// #`get`
 ///
 ///    Objects of type `Foo` are fetched via a call to `Foo/get`.
@@ -104,11 +281,10 @@ pub struct Get<OBJ: Object>
 where
     OBJ: std::fmt::Debug + Serialize,
 {
-    #[serde(skip_serializing_if = "String::is_empty")]
-    pub account_id: String,
+    pub account_id: Id<Account>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(flatten)]
-    pub ids: Option<JmapArgument<Vec<String>>>,
+    pub ids: Option<JmapArgument<Vec<Id<OBJ>>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub properties: Option<Vec<String>>,
     #[serde(skip)]
@@ -121,7 +297,7 @@ where
 {
     pub fn new() -> Self {
         Self {
-            account_id: String::new(),
+            account_id: Id::new(),
             ids: None,
             properties: None,
             _ph: PhantomData,
@@ -132,7 +308,7 @@ where
         ///
         ///      The id of the account to use.
         ///
-        account_id: String
+        account_id: Id<Account>
     );
     _impl!(
         ///   -  ids: `Option<JmapArgument<Vec<String>>>`
@@ -142,7 +318,7 @@ where
         ///      type and the number of records does not exceed the
         ///      "max_objects_in_get" limit.
         ///
-        ids: Option<JmapArgument<Vec<String>>>
+        ids: Option<JmapArgument<Vec<Id<OBJ>>>>
     );
     _impl!(
         ///   -  properties: Option<Vec<String>>
@@ -218,20 +394,19 @@ pub struct MethodResponse<'a> {
     #[serde(borrow)]
     pub method_responses: Vec<&'a RawValue>,
     #[serde(default)]
-    pub created_ids: HashMap<Id, Id>,
+    pub created_ids: HashMap<Id<String>, Id<String>>,
     #[serde(default)]
-    pub session_state: String,
+    pub session_state: State<JmapSession>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct GetResponse<OBJ: Object> {
-    #[serde(skip_serializing_if = "String::is_empty")]
-    pub account_id: String,
-    #[serde(default)]
-    pub state: String,
+    pub account_id: Id<Account>,
+    #[serde(default = "State::default")]
+    pub state: State<OBJ>,
     pub list: Vec<OBJ>,
-    pub not_found: Vec<String>,
+    pub not_found: Vec<Id<OBJ>>,
 }
 
 impl<OBJ: Object + DeserializeOwned> std::convert::TryFrom<&RawValue> for GetResponse<OBJ> {
@@ -244,10 +419,10 @@ impl<OBJ: Object + DeserializeOwned> std::convert::TryFrom<&RawValue> for GetRes
 }
 
 impl<OBJ: Object> GetResponse<OBJ> {
-    _impl!(get_mut  account_id_mut, account_id: String);
-    _impl!(get_mut  state_mut, state: String);
+    _impl!(get_mut  account_id_mut, account_id: Id<Account>);
+    _impl!(get_mut  state_mut, state: State<OBJ>);
     _impl!(get_mut  list_mut, list: Vec<OBJ>);
-    _impl!(get_mut  not_found_mut, not_found: Vec<String>);
+    _impl!(get_mut  not_found_mut, not_found: Vec<Id<OBJ>>);
 }
 
 #[derive(Deserialize, Debug)]
@@ -264,7 +439,7 @@ pub struct Query<F: FilterTrait<OBJ>, OBJ: Object>
 where
     OBJ: std::fmt::Debug + Serialize,
 {
-    account_id: String,
+    account_id: Id<Account>,
     filter: Option<F>,
     sort: Option<Comparator<OBJ>>,
     #[serde(default)]
@@ -288,7 +463,7 @@ where
 {
     pub fn new() -> Self {
         Self {
-            account_id: String::new(),
+            account_id: Id::new(),
             filter: None,
             sort: None,
             position: 0,
@@ -300,7 +475,7 @@ where
         }
     }
 
-    _impl!(account_id: String);
+    _impl!(account_id: Id<Account>);
     _impl!(filter: Option<F>);
     _impl!(sort: Option<Comparator<OBJ>>);
     _impl!(position: u64);
@@ -325,12 +500,11 @@ pub fn bool_true() -> bool {
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct QueryResponse<OBJ: Object> {
-    #[serde(skip_serializing_if = "String::is_empty", default)]
-    pub account_id: String,
+    pub account_id: Id<Account>,
     pub query_state: String,
     pub can_calculate_changes: bool,
     pub position: u64,
-    pub ids: Vec<Id>,
+    pub ids: Vec<Id<OBJ>>,
     #[serde(default)]
     pub total: u64,
     #[serde(default)]
@@ -349,7 +523,7 @@ impl<OBJ: Object + DeserializeOwned> std::convert::TryFrom<&RawValue> for QueryR
 }
 
 impl<OBJ: Object> QueryResponse<OBJ> {
-    _impl!(get_mut  ids_mut, ids: Vec<Id>);
+    _impl!(get_mut  ids_mut, ids: Vec<Id<OBJ>>);
 }
 
 pub struct ResultField<M: Method<OBJ>, OBJ: Object> {
@@ -410,9 +584,8 @@ pub struct Changes<OBJ: Object>
 where
     OBJ: std::fmt::Debug + Serialize,
 {
-    #[serde(skip_serializing_if = "String::is_empty")]
-    pub account_id: String,
-    pub since_state: String,
+    pub account_id: Id<Account>,
+    pub since_state: State<OBJ>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_changes: Option<u64>,
     #[serde(skip)]
@@ -425,8 +598,8 @@ where
 {
     pub fn new() -> Self {
         Self {
-            account_id: String::new(),
-            since_state: String::new(),
+            account_id: Id::new(),
+            since_state: State::new(),
             max_changes: None,
             _ph: PhantomData,
         }
@@ -436,7 +609,7 @@ where
         ///
         ///      The id of the account to use.
         ///
-        account_id: String
+        account_id: Id<Account>
     );
     _impl!(
         ///    - since_state: "String"
@@ -446,7 +619,7 @@ where
         ///     state.
         ///
         ///
-        since_state: String
+        since_state: State<OBJ>
     );
     _impl!(
         ///    - max_changes: "UnsignedInt|null"
@@ -463,14 +636,13 @@ where
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ChangesResponse<OBJ: Object> {
-    #[serde(skip_serializing_if = "String::is_empty")]
-    pub account_id: String,
-    pub old_state: String,
-    pub new_state: String,
+    pub account_id: Id<Account>,
+    pub old_state: State<OBJ>,
+    pub new_state: State<OBJ>,
     pub has_more_changes: bool,
-    pub created: Vec<Id>,
-    pub updated: Vec<Id>,
-    pub destroyed: Vec<Id>,
+    pub created: Vec<Id<OBJ>>,
+    pub updated: Vec<Id<OBJ>>,
+    pub destroyed: Vec<Id<OBJ>>,
     #[serde(skip)]
     pub _ph: PhantomData<fn() -> OBJ>,
 }
@@ -485,13 +657,13 @@ impl<OBJ: Object + DeserializeOwned> std::convert::TryFrom<&RawValue> for Change
 }
 
 impl<OBJ: Object> ChangesResponse<OBJ> {
-    _impl!(get_mut  account_id_mut, account_id: String);
-    _impl!(get_mut  old_state_mut, old_state: String);
-    _impl!(get_mut  new_state_mut, new_state: String);
+    _impl!(get_mut  account_id_mut, account_id: Id<Account>);
+    _impl!(get_mut  old_state_mut, old_state: State<OBJ>);
+    _impl!(get_mut  new_state_mut, new_state: State<OBJ>);
     _impl!(get has_more_changes, has_more_changes: bool);
-    _impl!(get_mut  created_mut, created: Vec<String>);
-    _impl!(get_mut  updated_mut, updated: Vec<String>);
-    _impl!(get_mut  destroyed_mut, destroyed: Vec<String>);
+    _impl!(get_mut  created_mut, created: Vec<Id<OBJ>>);
+    _impl!(get_mut  updated_mut, updated: Vec<Id<OBJ>>);
+    _impl!(get_mut  destroyed_mut, destroyed: Vec<Id<OBJ>>);
 }
 
 ///#`set`
@@ -508,11 +680,10 @@ pub struct Set<OBJ: Object>
 where
     OBJ: std::fmt::Debug + Serialize,
 {
-    #[serde(skip_serializing_if = "String::is_empty")]
     ///o  accountId: "Id"
     ///
     ///   The id of the account to use.
-    pub account_id: String,
+    pub account_id: Id<Account>,
     ///o  ifInState: "String|null"
     ///
     ///   This is a state string as returned by the "Foo/get" method
@@ -521,7 +692,7 @@ where
     ///   otherwise, the method will be aborted and a "stateMismatch" error
     ///   returned.  If null, any changes will be applied to the current
     ///   state.
-    pub if_in_state: Option<String>,
+    pub if_in_state: Option<State<OBJ>>,
     ///o  create: "Id[Foo]|null"
     ///
     ///   A map of a *creation id* (a temporary id set by the client) to Foo
@@ -533,7 +704,7 @@ where
     ///   The client MUST omit any properties that may only be set by the
     ///   server (for example, the "id" property on most object types).
     ///
-    pub create: Option<HashMap<Id, OBJ>>,
+    pub create: Option<HashMap<Id<OBJ>, OBJ>>,
     ///o  update: "Id[PatchObject]|null"
     ///
     ///   A map of an id to a Patch object to apply to the current Foo
@@ -577,12 +748,12 @@ where
     ///   is also a valid PatchObject.  The client may choose to optimise
     ///   network usage by just sending the diff or may send the whole
     ///   object; the server processes it the same either way.
-    pub update: Option<HashMap<Id, Value>>,
+    pub update: Option<HashMap<Id<OBJ>, Value>>,
     ///o  destroy: "Id[]|null"
     ///
     ///   A list of ids for Foo objects to permanently delete, or null if no
     ///   objects are to be destroyed.
-    pub destroy: Option<Vec<Id>>,
+    pub destroy: Option<Vec<Id<OBJ>>>,
 }
 
 impl<OBJ: Object> Set<OBJ>
@@ -591,14 +762,14 @@ where
 {
     pub fn new() -> Self {
         Self {
-            account_id: String::new(),
+            account_id: Id::new(),
             if_in_state: None,
             create: None,
             update: None,
             destroy: None,
         }
     }
-    _impl!(account_id: String);
+    _impl!(account_id: Id<Account>);
     _impl!(
         ///o  ifInState: "String|null"
         ///
@@ -608,9 +779,9 @@ where
         ///   otherwise, the method will be aborted and a "stateMismatch" error
         ///   returned.  If null, any changes will be applied to the current
         ///   state.
-        if_in_state: Option<String>
+        if_in_state: Option<State<OBJ>>
     );
-    _impl!(update: Option<HashMap<Id, Value>>);
+    _impl!(update: Option<HashMap<Id<OBJ>, Value>>);
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -619,17 +790,17 @@ pub struct SetResponse<OBJ: Object> {
     ///o  accountId: "Id"
     ///
     ///   The id of the account used for the call.
-    pub account_id: String,
+    pub account_id: Id<Account>,
     ///o  oldState: "String|null"
     ///
     ///   The state string that would have been returned by "Foo/get" before
     ///   making the requested changes, or null if the server doesn't know
     ///   what the previous state string was.
-    pub old_state: String,
+    pub old_state: State<OBJ>,
     ///o  newState: "String"
     ///
     ///   The state string that will now be returned by "Foo/get".
-    pub new_state: String,
+    pub new_state: State<OBJ>,
     ///o  created: "Id[Foo]|null"
     ///
     ///   A map of the creation id to an object containing any properties of
@@ -639,7 +810,7 @@ pub struct SetResponse<OBJ: Object> {
     ///   and thus set to a default by the server.
     ///
     ///   This argument is null if no Foo objects were successfully created.
-    pub created: Option<HashMap<Id, OBJ>>,
+    pub created: Option<HashMap<Id<OBJ>, OBJ>>,
     ///o  updated: "Id[Foo|null]|null"
     ///
     ///   The keys in this map are the ids of all Foos that were
@@ -651,12 +822,12 @@ pub struct SetResponse<OBJ: Object> {
     ///   any changes to server-set or computed properties.
     ///
     ///   This argument is null if no Foo objects were successfully updated.
-    pub updated: Option<HashMap<Id, Option<OBJ>>>,
+    pub updated: Option<HashMap<Id<OBJ>, Option<OBJ>>>,
     ///o  destroyed: "Id[]|null"
     ///
     ///   A list of Foo ids for records that were successfully destroyed, or
     ///   null if none.
-    pub destroyed: Option<Vec<Id>>,
+    pub destroyed: Option<Vec<Id<OBJ>>>,
     ///o  notCreated: "Id[SetError]|null"
     ///
     ///   A map of the creation id to a SetError object for each record that
@@ -760,8 +931,8 @@ impl core::fmt::Display for SetError {
 
 pub fn download_request_format(
     session: &JmapSession,
-    account_id: &Id,
-    blob_id: &Id,
+    account_id: &Id<Account>,
+    blob_id: &Id<BlobObject>,
     name: Option<String>,
 ) -> String {
     // https://jmap.fastmail.com/download/{accountId}/{blobId}/{name}
@@ -777,10 +948,10 @@ pub fn download_request_format(
         ret.push_str(&session.download_url[prev_pos..prev_pos + pos]);
         prev_pos += pos;
         if session.download_url[prev_pos..].starts_with("{accountId}") {
-            ret.push_str(account_id);
+            ret.push_str(account_id.as_str());
             prev_pos += "{accountId}".len();
         } else if session.download_url[prev_pos..].starts_with("{blobId}") {
-            ret.push_str(blob_id);
+            ret.push_str(blob_id.as_str());
             prev_pos += "{blobId}".len();
         } else if session.download_url[prev_pos..].starts_with("{name}") {
             ret.push_str(name.as_ref().map(String::as_str).unwrap_or(""));
@@ -793,7 +964,7 @@ pub fn download_request_format(
     ret
 }
 
-pub fn upload_request_format(session: &JmapSession, account_id: &Id) -> String {
+pub fn upload_request_format(session: &JmapSession, account_id: &Id<Account>) -> String {
     //"uploadUrl": "https://jmap.fastmail.com/upload/{accountId}/",
     let mut ret = String::with_capacity(session.upload_url.len() + account_id.len());
     let mut prev_pos = 0;
@@ -802,7 +973,7 @@ pub fn upload_request_format(session: &JmapSession, account_id: &Id) -> String {
         ret.push_str(&session.upload_url[prev_pos..prev_pos + pos]);
         prev_pos += pos;
         if session.upload_url[prev_pos..].starts_with("{accountId}") {
-            ret.push_str(account_id);
+            ret.push_str(account_id.as_str());
             prev_pos += "{accountId}".len();
             break;
         } else {
@@ -822,12 +993,12 @@ pub struct UploadResponse {
     ///o  accountId: "Id"
     ///
     ///   The id of the account used for the call.
-    pub account_id: String,
+    pub account_id: Id<Account>,
     ///o  blobId: "Id"
     ///
     ///The id representing the binary data uploaded.  The data for this id is immutable.
     ///The id *only* refers to the binary data, not any metadata.
-    pub blob_id: String,
+    pub blob_id: Id<BlobObject>,
     ///o  type: "String"
     ///
     ///The media type of the file (as specified in [RFC6838],

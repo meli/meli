@@ -32,6 +32,21 @@ use std::hash::Hasher;
 mod import;
 pub use import::*;
 
+#[derive(Debug)]
+pub struct ThreadObject;
+
+impl Object for ThreadObject {
+    const NAME: &'static str = "Thread";
+}
+
+impl Id<EmailObject> {
+    pub fn into_hash(&self) -> EnvelopeHash {
+        let mut h = DefaultHasher::new();
+        h.write(self.inner.as_bytes());
+        h.finish()
+    }
+}
+
 // 4.1.1.
 // Metadata
 // These properties represent metadata about the message in the mail
@@ -133,11 +148,11 @@ pub use import::*;
 #[serde(rename_all = "camelCase")]
 pub struct EmailObject {
     #[serde(default)]
-    pub id: Id,
+    pub id: Id<EmailObject>,
     #[serde(default)]
-    pub blob_id: String,
+    pub blob_id: Id<BlobObject>,
     #[serde(default)]
-    pub mailbox_ids: HashMap<Id, bool>,
+    pub mailbox_ids: HashMap<Id<MailboxObject>, bool>,
     #[serde(default)]
     pub size: u64,
     #[serde(default)]
@@ -163,7 +178,7 @@ pub struct EmailObject {
     #[serde(default)]
     pub keywords: HashMap<String, bool>,
     #[serde(default)]
-    pub attached_emails: Option<Id>,
+    pub attached_emails: Option<Id<BlobObject>>,
     #[serde(default)]
     pub attachments: Vec<Value>,
     #[serde(default)]
@@ -182,7 +197,7 @@ pub struct EmailObject {
     #[serde(default)]
     pub text_body: Vec<TextBody>,
     #[serde(default)]
-    pub thread_id: Id,
+    pub thread_id: Id<ThreadObject>,
     #[serde(flatten)]
     pub extra: HashMap<String, Value>,
 }
@@ -313,9 +328,7 @@ impl std::convert::From<EmailObject> for crate::Envelope {
             }
         }
 
-        let mut h = DefaultHasher::new();
-        h.write(t.id.as_bytes());
-        env.set_hash(h.finish());
+        env.set_hash(t.id.into_hash());
         env
     }
 }
@@ -323,7 +336,7 @@ impl std::convert::From<EmailObject> for crate::Envelope {
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct HtmlBody {
-    pub blob_id: Id,
+    pub blob_id: Id<BlobObject>,
     #[serde(default)]
     pub charset: String,
     #[serde(default)]
@@ -350,7 +363,7 @@ pub struct HtmlBody {
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct TextBody {
-    pub blob_id: Id,
+    pub blob_id: Id<BlobObject>,
     #[serde(default)]
     pub charset: String,
     #[serde(default)]
@@ -381,12 +394,12 @@ impl Object for EmailObject {
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct EmailQueryResponse {
-    pub account_id: Id,
+    pub account_id: Id<Account>,
     pub can_calculate_changes: bool,
     pub collapse_threads: bool,
     // FIXME
     pub filter: String,
-    pub ids: Vec<Id>,
+    pub ids: Vec<Id<EmailObject>>,
     pub position: u64,
     pub query_state: String,
     pub sort: Option<String>,
@@ -469,9 +482,9 @@ impl EmailGet {
 #[serde(rename_all = "camelCase")]
 pub struct EmailFilterCondition {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub in_mailbox: Option<Id>,
+    pub in_mailbox: Option<Id<MailboxObject>>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub in_mailbox_other_than: Vec<Id>,
+    pub in_mailbox_other_than: Vec<Id<MailboxObject>>,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub before: UtcDate,
     #[serde(skip_serializing_if = "String::is_empty")]
@@ -517,8 +530,8 @@ impl EmailFilterCondition {
         Self::default()
     }
 
-    _impl!(in_mailbox: Option<Id>);
-    _impl!(in_mailbox_other_than: Vec<Id>);
+    _impl!(in_mailbox: Option<Id<MailboxObject>>);
+    _impl!(in_mailbox_other_than: Vec<Id<MailboxObject>>);
     _impl!(before: UtcDate);
     _impl!(after: UtcDate);
     _impl!(min_size: Option<u64>);
@@ -728,7 +741,7 @@ fn test_jmap_query() {
 
         let mut r = Filter::Condition(
             EmailFilterCondition::new()
-                .in_mailbox(Some(mailbox_id))
+                .in_mailbox(Some(mailbox_id.into()))
                 .into(),
         );
         r &= f;
@@ -737,7 +750,7 @@ fn test_jmap_query() {
 
     let email_call: EmailQuery = EmailQuery::new(
         Query::new()
-            .account_id("account_id".to_string())
+            .account_id("account_id".to_string().into())
             .filter(Some(filter))
             .position(0),
     )

@@ -21,14 +21,22 @@
 
 use super::*;
 
+impl Id<MailboxObject> {
+    pub fn into_hash(&self) -> MailboxHash {
+        let mut h = DefaultHasher::new();
+        h.write(self.inner.as_bytes());
+        h.finish()
+    }
+}
+
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct MailboxObject {
-    pub id: String,
+    pub id: Id<MailboxObject>,
     pub is_subscribed: bool,
     pub my_rights: JmapRights,
     pub name: String,
-    pub parent_id: Option<String>,
+    pub parent_id: Option<Id<MailboxObject>>,
     pub role: Option<String>,
     pub sort_order: u64,
     pub total_emails: u64,

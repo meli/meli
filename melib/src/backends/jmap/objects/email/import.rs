@@ -37,7 +37,7 @@ use serde_json::value::RawValue;
 pub struct ImportCall {
     ///accountId: "Id"
     ///The id of the account to use.
-    pub account_id: String,
+    pub account_id: Id<Account>,
     ///ifInState: "String|null"
     ///This is a state string as returned by the "Email/get" method.  If
     ///supplied, the string must match the current state of the account
@@ -45,10 +45,10 @@ pub struct ImportCall {
     ///and a "stateMismatch" error returned.  If null, any changes will
     ///be applied to the current state.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub if_in_state: Option<String>,
+    pub if_in_state: Option<State<EmailObject>>,
     ///o  emails: "Id[EmailImport]"
     ///A map of creation id (client specified) to EmailImport objects.
-    pub emails: HashMap<Id, EmailImport>,
+    pub emails: HashMap<Id<EmailObject>, EmailImport>,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -56,11 +56,11 @@ pub struct ImportCall {
 pub struct EmailImport {
     ///o  blobId: "Id"
     ///The id of the blob containing the raw message [RFC5322].
-    pub blob_id: String,
+    pub blob_id: Id<BlobObject>,
     ///o  mailboxIds: "Id[Boolean]"
     ///The ids of the Mailboxes to assign this Email to.  At least one
     ///Mailbox MUST be given.
-    pub mailbox_ids: HashMap<Id, bool>,
+    pub mailbox_ids: HashMap<Id<MailboxObject>, bool>,
     ///o  keywords: "String[Boolean]" (default: {})
     ///The keywords to apply to the Email.
     pub keywords: HashMap<String, bool>,
@@ -74,7 +74,7 @@ pub struct EmailImport {
 impl ImportCall {
     pub fn new() -> Self {
         Self {
-            account_id: String::new(),
+            account_id: Id::new(),
             if_in_state: None,
             emails: HashMap::default(),
         }
@@ -85,10 +85,10 @@ impl ImportCall {
         ///
         ///      The id of the account to use.
         ///
-        account_id: String
+        account_id: Id<Account>
     );
-    _impl!(if_in_state: Option<String>);
-    _impl!(emails: HashMap<Id, EmailImport>);
+    _impl!(if_in_state: Option<State<EmailObject>>);
+    _impl!(emails: HashMap<Id<EmailObject>, EmailImport>);
 }
 
 impl Method<EmailObject> for ImportCall {
@@ -98,15 +98,15 @@ impl Method<EmailObject> for ImportCall {
 impl EmailImport {
     pub fn new() -> Self {
         Self {
-            blob_id: String::new(),
+            blob_id: Id::new(),
             mailbox_ids: HashMap::default(),
             keywords: HashMap::default(),
             received_at: None,
         }
     }
 
-    _impl!(blob_id: String);
-    _impl!(mailbox_ids: HashMap<Id, bool>);
+    _impl!(blob_id: Id<BlobObject>);
+    _impl!(mailbox_ids: HashMap<Id<MailboxObject>, bool>);
     _impl!(keywords: HashMap<String, bool>);
     _impl!(received_at: Option<String>);
 }
@@ -126,7 +126,7 @@ pub enum ImportError {
         ///the SetError object with the id of the existing Email.  If duplicates
         ///are allowed, the newly created Email object MUST have a separate id
         ///and independent mutable properties to the existing object.
-        existing_id: Id,
+        existing_id: Id<EmailObject>,
     },
     ///If the "blobId", "mailboxIds", or "keywords" properties are invalid
     ///(e.g., missing, wrong type, id not found), the server MUST reject the
@@ -155,30 +155,30 @@ pub enum ImportError {
 pub struct ImportResponse {
     ///o  accountId: "Id"
     ///The id of the account used for this call.
-    pub account_id: Id,
+    pub account_id: Id<Account>,
 
     ///o  oldState: "String|null"
     ///The state string that would have been returned by "Email/get" on
     ///this account before making the requested changes, or null if the
     ///server doesn't know what the previous state string was.
-    pub old_state: Option<String>,
+    pub old_state: Option<State<EmailObject>>,
 
     ///o  newState: "String"
     ///The state string that will now be returned by "Email/get" on this
     ///account.
-    pub new_state: Option<String>,
+    pub new_state: Option<State<EmailObject>>,
 
     ///o  created: "Id[Email]|null"
     ///A map of the creation id to an object containing the "id",
     ///"blobId", "threadId", and "size" properties for each successfully
     ///imported Email, or null if none.
-    pub created: HashMap<Id, ImportEmailResult>,
+    pub created: HashMap<Id<EmailObject>, ImportEmailResult>,
 
     ///o  notCreated: "Id[SetError]|null"
     ///A map of the creation id to a SetError object for each Email that
     ///failed to be created, or null if all successful.  The possible
     ///errors are defined above.
-    pub not_created: HashMap<Id, ImportError>,
+    pub not_created: HashMap<Id<EmailObject>, ImportError>,
 }
 
 impl std::convert::TryFrom<&RawValue> for ImportResponse {
@@ -193,8 +193,8 @@ impl std::convert::TryFrom<&RawValue> for ImportResponse {
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ImportEmailResult {
-    pub id: Id,
-    pub blob_id: Id,
-    pub thread_id: Id,
+    pub id: Id<EmailObject>,
+    pub blob_id: Id<BlobObject>,
+    pub thread_id: Id<ThreadObject>,
     pub size: usize,
 }
