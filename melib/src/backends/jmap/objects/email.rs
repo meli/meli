@@ -770,3 +770,20 @@ impl EmailSet {
         EmailSet { set_call }
     }
 }
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailChanges {
+    #[serde(flatten)]
+    pub changes_call: Changes<EmailObject>,
+}
+
+impl Method<EmailObject> for EmailChanges {
+    const NAME: &'static str = "Email/changes";
+}
+
+impl EmailChanges {
+    pub fn new(changes_call: Changes<EmailObject>) -> Self {
+        EmailChanges { changes_call }
+    }
+}

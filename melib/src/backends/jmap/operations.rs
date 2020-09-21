@@ -20,21 +20,21 @@
  */
 
 use super::*;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 /// `BackendOp` implementor for Imap
 #[derive(Debug, Clone)]
 pub struct JmapOp {
     hash: EnvelopeHash,
     connection: Arc<FutureMutex<JmapConnection>>,
-    store: Arc<RwLock<Store>>,
+    store: Arc<Store>,
 }
 
 impl JmapOp {
     pub fn new(
         hash: EnvelopeHash,
         connection: Arc<FutureMutex<JmapConnection>>,
-        store: Arc<RwLock<Store>>,
+        store: Arc<Store>,
     ) -> Self {
         JmapOp {
             hash,
@@ -47,11 +47,9 @@ impl JmapOp {
 impl BackendOp for JmapOp {
     fn as_bytes(&mut self) -> ResultFuture<Vec<u8>> {
         {
-            let store_lck = self.store.read().unwrap();
-            if store_lck.byte_cache.contains_key(&self.hash)
-                && store_lck.byte_cache[&self.hash].bytes.is_some()
-            {
-                let ret = store_lck.byte_cache[&self.hash].bytes.clone().unwrap();
+            let byte_lck = self.store.byte_cache.lock().unwrap();
+            if byte_lck.contains_key(&self.hash) && byte_lck[&self.hash].bytes.is_some() {
+                let ret = byte_lck[&self.hash].bytes.clone().unwrap();
                 return Ok(Box::pin(async move { Ok(ret.into_bytes()) }));
             }
         }
@@ -59,7 +57,7 @@ impl BackendOp for JmapOp {
         let hash = self.hash;
         let connection = self.connection.clone();
         Ok(Box::pin(async move {
-            let blob_id = store.read().unwrap().blob_id_store[&hash].clone();
+            let blob_id = store.blob_id_store.lock().unwrap()[&hash].clone();
             let mut conn = connection.lock().await;
             conn.connect().await?;
             let mut res = conn
@@ -75,9 +73,9 @@ impl BackendOp for JmapOp {
             let res_text = res.text_async().await?;
 
             store
-                .write()
-                .unwrap()
                 .byte_cache
+                .lock()
+                .unwrap()
                 .entry(hash)
                 .or_default()
                 .bytes = Some(res_text.clone());

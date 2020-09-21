@@ -472,7 +472,7 @@ pub struct ChangesResponse<OBJ: Object> {
     pub updated: Vec<Id>,
     pub destroyed: Vec<Id>,
     #[serde(skip)]
-    _ph: PhantomData<fn() -> OBJ>,
+    pub _ph: PhantomData<fn() -> OBJ>,
 }
 
 impl<OBJ: Object + DeserializeOwned> std::convert::TryFrom<&RawValue> for ChangesResponse<OBJ> {

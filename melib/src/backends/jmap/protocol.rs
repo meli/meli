@@ -23,11 +23,7 @@ use super::mailbox::JmapMailbox;
 use super::*;
 use serde::Serialize;
 use serde_json::{json, Value};
-use smallvec::SmallVec;
-use std::collections::hash_map::DefaultHasher;
-use std::collections::HashMap;
 use std::convert::TryFrom;
-use std::hash::{Hash, Hasher};
 
 pub type Id = String;
 pub type UtcDate = String;
@@ -40,19 +36,6 @@ macro_rules! get_request_no {
         let ret = *lck;
         *lck += 1;
         ret
-    }};
-}
-
-macro_rules! tag_hash {
-    ($t:ident) => {{
-        let mut hasher = DefaultHasher::default();
-        $t.hash(&mut hasher);
-        hasher.finish()
-    }};
-    ($t:literal) => {{
-        let mut hasher = DefaultHasher::default();
-        $t.hash(&mut hasher);
-        hasher.finish()
     }};
 }
 
@@ -120,12 +103,12 @@ pub async fn get_mailboxes(conn: &JmapConnection) -> Result<HashMap<MailboxHash,
 
     let res_text = res.text_async().await?;
     let mut v: MethodResponse = serde_json::from_str(&res_text).unwrap();
-    *conn.online_status.lock().await = (std::time::Instant::now(), Ok(()));
+    *conn.store.online_status.lock().await = (std::time::Instant::now(), Ok(()));
     let m = GetResponse::<MailboxObject>::try_from(v.method_responses.remove(0))?;
     let GetResponse::<MailboxObject> {
         list, account_id, ..
     } = m;
-    *conn.account_id.lock().unwrap() = account_id;
+    *conn.store.account_id.lock().unwrap() = account_id;
     Ok(list
         .into_iter()
         .map(|r| {
@@ -149,7 +132,7 @@ pub async fn get_mailboxes(conn: &JmapConnection) -> Result<HashMap<MailboxHash,
                     name: name.clone(),
                     hash,
                     path: name,
-                    v: Vec::new(),
+                    children: Vec::new(),
                     id,
                     is_subscribed,
                     my_rights,
@@ -190,12 +173,13 @@ pub async fn get_message_list(conn: &JmapConnection, mailbox: &JmapMailbox) -> R
 
     let res_text = res.text_async().await?;
     let mut v: MethodResponse = serde_json::from_str(&res_text).unwrap();
-    *conn.online_status.lock().await = (std::time::Instant::now(), Ok(()));
+    *conn.store.online_status.lock().await = (std::time::Instant::now(), Ok(()));
     let m = QueryResponse::<EmailObject>::try_from(v.method_responses.remove(0))?;
     let QueryResponse::<EmailObject> { ids, .. } = m;
     Ok(ids)
 }
 
+/*
 pub async fn get_message(conn: &JmapConnection, ids: &[String]) -> Result<Vec<Envelope>> {
     let email_call: EmailGet = EmailGet::new(
         Get::new()
@@ -219,15 +203,14 @@ pub async fn get_message(conn: &JmapConnection, ids: &[String]) -> Result<Vec<En
         .map(std::convert::Into::into)
         .collect::<Vec<Envelope>>())
 }
+*/
 
 pub async fn fetch(
     conn: &JmapConnection,
-    store: &Arc<RwLock<Store>>,
-    tag_index: &Arc<RwLock<BTreeMap<u64, String>>>,
-    mailboxes: &Arc<RwLock<HashMap<MailboxHash, JmapMailbox>>>,
+    store: &Store,
     mailbox_hash: MailboxHash,
 ) -> Result<Vec<Envelope>> {
-    let mailbox_id = mailboxes.read().unwrap()[&mailbox_hash].id.clone();
+    let mailbox_id = store.mailboxes.read().unwrap()[&mailbox_hash].id.clone();
     let email_query_call: EmailQuery = EmailQuery::new(
         Query::new()
             .account_id(conn.mail_account_id().to_string())
@@ -265,76 +248,27 @@ pub async fn fetch(
     let e = GetResponse::<EmailObject>::try_from(v.method_responses.pop().unwrap())?;
     let GetResponse::<EmailObject> { list, state, .. } = e;
     {
-        let mut states_lck = conn.method_call_states.lock().unwrap();
-
-        if let Some(prev_state) = states_lck.get_mut(&EmailGet::NAME) {
-            debug!("{:?}: prev_state was {}", EmailGet::NAME, prev_state);
-
-            if *prev_state != state { /* FIXME Query Changes. */ }
-
-            *prev_state = state;
-            debug!("{:?}: curr state is {}", EmailGet::NAME, prev_state);
+        let v = conn
+            .store
+            .object_set_states
+            .lock()
+            .unwrap()
+            .get(&EmailObject::NAME)
+            .map(|prev_state| *prev_state == state);
+        if let Some(false) = v {
+            conn.email_changes().await?;
         } else {
-            debug!("{:?}: inserting state {}", EmailGet::NAME, &state);
-            states_lck.insert(EmailGet::NAME, state);
+            debug!("{:?}: inserting state {}", EmailObject::NAME, &state);
+            conn.store
+                .object_set_states
+                .lock()
+                .unwrap()
+                .insert(EmailObject::NAME, state);
         }
     }
-    let mut tag_lck = tag_index.write().unwrap();
-    let ids = list
-        .iter()
-        .map(|obj| {
-            let tags = obj
-                .keywords()
-                .keys()
-                .map(|tag| {
-                    let tag_hash = {
-                        let mut hasher = DefaultHasher::default();
-                        tag.hash(&mut hasher);
-                        hasher.finish()
-                    };
-                    if !tag_lck.contains_key(&tag_hash) {
-                        tag_lck.insert(tag_hash, tag.to_string());
-                    }
-                    tag_hash
-                })
-                .collect::<SmallVec<[u64; 1024]>>();
-            (tags, obj.id.clone(), obj.blob_id.clone())
-        })
-        .collect::<Vec<(SmallVec<[u64; 1024]>, Id, Id)>>();
-    drop(tag_lck);
-    let mut ret = list
-        .into_iter()
-        .map(std::convert::Into::into)
-        .collect::<Vec<Envelope>>();
-
-    let mut store_lck = store.write().unwrap();
-    debug_assert_eq!(tag_hash!("$draft"), 6613915297903591176);
-    debug_assert_eq!(tag_hash!("$seen"), 1683863812294339685);
-    debug_assert_eq!(tag_hash!("$flagged"), 2714010747478170100);
-    debug_assert_eq!(tag_hash!("$answered"), 8940855303929342213);
-    debug_assert_eq!(tag_hash!("$junk"), 2656839745430720464);
-    debug_assert_eq!(tag_hash!("$notjunk"), 4091323799684325059);
-    for (env, (tags, id, blob_id)) in ret.iter_mut().zip(ids.into_iter()) {
-        store_lck.id_store.insert(env.hash(), id);
-        store_lck.blob_id_store.insert(env.hash(), blob_id);
-        for t in tags {
-            match t {
-                6613915297903591176 => {
-                    env.set_flags(env.flags() | Flag::DRAFT);
-                }
-                1683863812294339685 => {
-                    env.set_flags(env.flags() | Flag::SEEN);
-                }
-                2714010747478170100 => {
-                    env.set_flags(env.flags() | Flag::FLAGGED);
-                }
-                8940855303929342213 => {
-                    env.set_flags(env.flags() | Flag::REPLIED);
-                }
-                2656839745430720464 | 4091323799684325059 => { /* ignore */ }
-                _ => env.labels_mut().push(t),
-            }
-        }
+    let mut ret = Vec::with_capacity(list.len());
+    for obj in list {
+        ret.push(store.add_envelope(obj));
     }
     Ok(ret)
 }
