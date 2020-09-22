@@ -199,7 +199,6 @@ pub struct Store {
     pub tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
     pub mailboxes: Arc<RwLock<HashMap<MailboxHash, JmapMailbox>>>,
     pub mailboxes_index: Arc<RwLock<HashMap<MailboxHash, HashSet<EnvelopeHash>>>>,
-    pub email_state: Arc<Mutex<State<EmailObject>>>,
     pub mailbox_state: Arc<Mutex<State<MailboxObject>>>,
     pub online_status: Arc<FutureMutex<(Instant, Result<()>)>>,
     pub is_subscribed: Arc<IsSubscribedFn>,
@@ -283,7 +282,6 @@ impl Store {
         self.blob_id_store.lock().unwrap().remove(&env_hash);
         self.byte_cache.lock().unwrap().remove(&env_hash);
         let mut mailbox_hashes = SmallVec::new();
-        let mailboxes_lck = self.mailboxes.read().unwrap();
         for (k, set) in self.mailboxes_index.write().unwrap().iter_mut() {
             if set.remove(&env_hash) {
                 mailbox_hashes.push(*k);
@@ -345,12 +343,12 @@ impl MailBackend for JmapType {
         }))
     }
 
-    fn refresh(&mut self, _mailbox_hash: MailboxHash) -> ResultFuture<()> {
+    fn refresh(&mut self, mailbox_hash: MailboxHash) -> ResultFuture<()> {
         let connection = self.connection.clone();
         Ok(Box::pin(async move {
             let mut conn = connection.lock().await;
             conn.connect().await?;
-            conn.email_changes().await?;
+            conn.email_changes(mailbox_hash).await?;
             Ok(())
         }))
     }
@@ -646,7 +644,6 @@ impl MailBackend for JmapType {
         let store = self.store.clone();
         let connection = self.connection.clone();
         Ok(Box::pin(async move {
-            let mailbox_id = store.mailboxes.read().unwrap()[&mailbox_hash].id.clone();
             let mut update_map: HashMap<Id<EmailObject>, Value> = HashMap::default();
             let mut ids: Vec<Id<EmailObject>> = Vec::with_capacity(env_hashes.rest.len() + 1);
             let mut id_map: HashMap<Id<EmailObject>, EnvelopeHash> = HashMap::default();
@@ -695,7 +692,7 @@ impl MailBackend for JmapType {
                     }
                 }
             }
-            let mut conn = connection.lock().await;
+            let conn = connection.lock().await;
 
             let email_set_call: EmailSet = EmailSet::new(
                 Set::<EmailObject>::new()
@@ -704,7 +701,7 @@ impl MailBackend for JmapType {
             );
 
             let mut req = Request::new(conn.request_no.clone());
-            let prev_seq = req.add_call(&email_set_call);
+            req.add_call(&email_set_call);
             let email_call: EmailGet = EmailGet::new(
                 Get::new()
                     .ids(Some(JmapArgument::Value(ids)))
@@ -740,7 +737,7 @@ impl MailBackend for JmapType {
                 let mut tag_index_lck = store.tag_index.write().unwrap();
                 for (flag, value) in flags.iter() {
                     match flag {
-                        Ok(f) => {}
+                        Ok(_) => {}
                         Err(t) => {
                             if *value {
                                 tag_index_lck.insert(tag_hash!(t), t.clone());
@@ -754,14 +751,26 @@ impl MailBackend for JmapType {
             let GetResponse::<EmailObject> { list, state, .. } = e;
             {
                 let (is_empty, is_equal) = {
-                    let current_state_lck = conn.store.email_state.lock().unwrap();
-                    (current_state_lck.is_empty(), *current_state_lck != state)
+                    let mailboxes_lck = conn.store.mailboxes.read().unwrap();
+                    mailboxes_lck
+                        .get(&mailbox_hash)
+                        .map(|mbox| {
+                            let current_state_lck = mbox.email_state.lock().unwrap();
+                            (
+                                current_state_lck.is_some(),
+                                current_state_lck.as_ref() != Some(&state),
+                            )
+                        })
+                        .unwrap_or((true, true))
                 };
                 if is_empty {
+                    let mut mailboxes_lck = conn.store.mailboxes.write().unwrap();
                     debug!("{:?}: inserting state {}", EmailObject::NAME, &state);
-                    *conn.store.email_state.lock().unwrap() = state;
+                    mailboxes_lck.entry(mailbox_hash).and_modify(|mbox| {
+                        *mbox.email_state.lock().unwrap() = Some(state);
+                    });
                 } else if !is_equal {
-                    conn.email_changes().await?;
+                    conn.email_changes(mailbox_hash).await?;
                 }
             }
             debug!(&list);
@@ -813,7 +822,6 @@ impl JmapType {
             tag_index: Default::default(),
             mailboxes: Default::default(),
             mailboxes_index: Default::default(),
-            email_state: Default::default(),
             mailbox_state: Default::default(),
         });
 

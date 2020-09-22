@@ -108,12 +108,19 @@ impl JmapConnection {
         (self.store.event_consumer)(self.store.account_hash, BackendEvent::Refresh(event));
     }
 
-    pub async fn email_changes(&self) -> Result<()> {
-        let mut current_state: State<EmailObject> = self.store.email_state.lock().unwrap().clone();
-        if current_state.is_empty() {
-            debug!("{:?}: has no saved state", EmailObject::NAME);
+    pub async fn email_changes(&self, mailbox_hash: MailboxHash) -> Result<()> {
+        let mut current_state: State<EmailObject> = if let Some(s) = self
+            .store
+            .mailboxes
+            .read()
+            .unwrap()
+            .get(&mailbox_hash)
+            .and_then(|mbox| mbox.email_state.lock().unwrap().clone())
+        {
+            s
+        } else {
             return Ok(());
-        }
+        };
         loop {
 
             let email_changes_call: EmailChanges = EmailChanges::new(
@@ -134,7 +141,36 @@ impl JmapConnection {
             );
 
             req.add_call(&email_get_call);
-            
+            if let Some(mailbox) = self.store.mailboxes.read().unwrap().get(&mailbox_hash) {
+                if let Some(email_query_state) = mailbox.email_query_state.lock().unwrap().clone() {
+                    let email_query_changes_call = EmailQueryChanges::new(
+                        QueryChanges::new(self.mail_account_id().clone(), email_query_state)
+                            .filter(Some(Filter::Condition(
+                                EmailFilterCondition::new()
+                                    .in_mailbox(Some(mailbox.id.clone()))
+                                    .into(),
+                            ))),
+                    );
+                    let seq_no = req.add_call(&email_query_changes_call);
+                    let email_get_call: EmailGet = EmailGet::new(
+                        Get::new()
+                            .ids(Some(JmapArgument::reference(
+                                seq_no,
+                                ResultField::<EmailQueryChanges, EmailObject>::new("removed"),
+                            )))
+                            .account_id(self.mail_account_id().clone())
+                            .properties(Some(vec![
+                                "keywords".to_string(),
+                                "mailboxIds".to_string(),
+                            ])),
+                    );
+                    req.add_call(&email_get_call);
+                } else {
+                    return Ok(());
+                }
+            } else {
+                return Ok(());
+            }
             let mut res = self
                 .client
                 .post_async(&self.session.api_url, serde_json::to_string(&req)?)
@@ -143,79 +179,159 @@ impl JmapConnection {
             let res_text = res.text_async().await?;
             debug!(&res_text);
             let mut v: MethodResponse = serde_json::from_str(&res_text).unwrap();
-            let get_response =
-                GetResponse::<EmailObject>::try_from(v.method_responses.pop().unwrap())?;
-            debug!(&get_response);
-            let GetResponse::<EmailObject> { list, .. } = get_response;
             let changes_response =
-                ChangesResponse::<EmailObject>::try_from(v.method_responses.pop().unwrap())?;
+                ChangesResponse::<EmailObject>::try_from(v.method_responses.remove(0))?;
             if changes_response.new_state == current_state {
                 return Ok(());
             }
+            let get_response = GetResponse::<EmailObject>::try_from(v.method_responses.remove(0))?;
 
-            let mut mailbox_hashes: Vec<SmallVec<[MailboxHash; 8]>> =
-                Vec::with_capacity(list.len());
-            for envobj in &list {
-                let v = self
-                    .store
-                    .mailboxes
-                    .read()
-                    .unwrap()
-                    .iter()
-                    .filter(|(_, m)| envobj.mailbox_ids.contains_key(&m.id))
-                    .map(|(k, _)| *k)
-                    .collect::<SmallVec<[MailboxHash; 8]>>();
-                mailbox_hashes.push(v);
-            }
-            
-            for (env, mailbox_hashes) in list
-                .into_iter()
-                .map(|obj| self.store.add_envelope(obj))
-                .zip(mailbox_hashes)
             {
-                for mailbox_hash in mailbox_hashes.iter().skip(1).cloned() {
-                    self.add_refresh_event(RefreshEvent {
-                        account_hash: self.store.account_hash,
-                        mailbox_hash,
-                        kind: RefreshEventKind::Create(Box::new(env.clone())),
-                    });
+                /* process get response */
+                let GetResponse::<EmailObject> { list, .. } = get_response;
+
+                let mut mailbox_hashes: Vec<SmallVec<[MailboxHash; 8]>> =
+                    Vec::with_capacity(list.len());
+                for envobj in &list {
+                    let v = self
+                        .store
+                        .mailboxes
+                        .read()
+                        .unwrap()
+                        .iter()
+                        .filter(|(_, m)| envobj.mailbox_ids.contains_key(&m.id))
+                        .map(|(k, _)| *k)
+                        .collect::<SmallVec<[MailboxHash; 8]>>();
+                    mailbox_hashes.push(v);
                 }
-                if let Some(mailbox_hash) = mailbox_hashes.first().cloned() {
+                for (env, mailbox_hashes) in list
+                    .into_iter()
+                    .map(|obj| self.store.add_envelope(obj))
+                    .zip(mailbox_hashes)
+                {
+                    for mailbox_hash in mailbox_hashes.iter().skip(1).cloned() {
+                        let mut mailboxes_lck = self.store.mailboxes.write().unwrap();
+                        mailboxes_lck.entry(mailbox_hash).and_modify(|mbox| {
+                            if !env.is_seen() {
+                                mbox.unread_emails.lock().unwrap().insert_new(env.hash());
+                            }
+                            mbox.total_emails.lock().unwrap().insert_new(env.hash());
+                        });
+                        self.add_refresh_event(RefreshEvent {
+                            account_hash: self.store.account_hash,
+                            mailbox_hash,
+                            kind: RefreshEventKind::Create(Box::new(env.clone())),
+                        });
+                    }
+                    if let Some(mailbox_hash) = mailbox_hashes.first().cloned() {
+                        let mut mailboxes_lck = self.store.mailboxes.write().unwrap();
+                        mailboxes_lck.entry(mailbox_hash).and_modify(|mbox| {
+                            if !env.is_seen() {
+                                mbox.unread_emails.lock().unwrap().insert_new(env.hash());
+                            }
+                            mbox.total_emails.lock().unwrap().insert_new(env.hash());
+                        });
+                        self.add_refresh_event(RefreshEvent {
+                            account_hash: self.store.account_hash,
+                            mailbox_hash,
+                            kind: RefreshEventKind::Create(Box::new(env)),
+                        });
+                    }
+                }
+            }
+            let reverse_id_store_lck = self.store.reverse_id_store.lock().unwrap();
+            let response = v.method_responses.remove(0);
+            match EmailQueryChangesResponse::try_from(response) {
+                Ok(EmailQueryChangesResponse {
+                    collapse_threads: _,
+                    query_changes_response:
+                        QueryChangesResponse {
+                            account_id: _,
+                            old_query_state,
+                            new_query_state,
+                            total: _,
+                            removed,
+                            added,
+                        },
+                }) if old_query_state != new_query_state => {
+                    self.store
+                        .mailboxes
+                        .write()
+                        .unwrap()
+                        .entry(mailbox_hash)
+                        .and_modify(|mbox| {
+                            *mbox.email_query_state.lock().unwrap() = Some(new_query_state);
+                        });
+                    /*  If the "filter" or "sort" includes a mutable property, the server
+                    MUST include all Foos in the current results for which this
+                    property may have changed.  The position of these may have moved
+                    in the results, so they must be reinserted by the client to ensure
+                    its query cache is correct.  */
+                    for email_obj_id in removed
+                        .into_iter()
+                        .filter(|id| !added.iter().any(|item| item.id == *id))
+                    {
+                        if let Some(env_hash) = reverse_id_store_lck.get(&email_obj_id) {
+                            let mut mailboxes_lck = self.store.mailboxes.write().unwrap();
+                            mailboxes_lck.entry(mailbox_hash).and_modify(|mbox| {
+                                mbox.unread_emails.lock().unwrap().remove(*env_hash);
+                                mbox.total_emails.lock().unwrap().insert_new(*env_hash);
+                            });
+                            self.add_refresh_event(RefreshEvent {
+                                account_hash: self.store.account_hash,
+                                mailbox_hash,
+                                kind: RefreshEventKind::Remove(*env_hash),
+                            });
+                        }
+                    }
+                    for AddedItem {
+                        id: _email_obj_id,
+                        index: _,
+                    } in added
+                    {
+                        // FIXME
+                    }
+                }
+                Ok(_) => {}
+                Err(err) => {
+                    debug!(mailbox_hash);
+                    debug!(err);
+                }
+            }
+            let GetResponse::<EmailObject> { list, .. } =
+                GetResponse::<EmailObject>::try_from(v.method_responses.remove(0))?;
+            let mut mailboxes_lck = self.store.mailboxes.write().unwrap();
+            for envobj in list {
+                if let Some(env_hash) = reverse_id_store_lck.get(&envobj.id) {
+                    let new_flags =
+                        protocol::keywords_to_flags(envobj.keywords().keys().cloned().collect());
+                    mailboxes_lck.entry(mailbox_hash).and_modify(|mbox| {
+                        if new_flags.0.contains(Flag::SEEN) {
+                            mbox.unread_emails.lock().unwrap().remove(*env_hash);
+                        } else {
+                            mbox.unread_emails.lock().unwrap().insert_new(*env_hash);
+                        }
+                    });
                     self.add_refresh_event(RefreshEvent {
                         account_hash: self.store.account_hash,
                         mailbox_hash,
-                        kind: RefreshEventKind::Create(Box::new(env)),
+                        kind: RefreshEventKind::NewFlags(*env_hash, new_flags),
                     });
                 }
             }
-
-            let ChangesResponse::<EmailObject> {
-                account_id: _,
-                new_state,
-                old_state: _,
-                has_more_changes,
-                created: _,
-                updated,
-                destroyed,
-                _ph: _,
-            } = changes_response;
-            for (env_hash, mailbox_hashes) in destroyed
-                .into_iter()
-                .filter_map(|obj_id| self.store.remove_envelope(obj_id))
-            {
-                for mailbox_hash in mailbox_hashes {
-                    self.add_refresh_event(RefreshEvent {
-                        account_hash: self.store.account_hash,
-                        mailbox_hash,
-                        kind: RefreshEventKind::Remove(env_hash),
-                    });
-                }
-            }
-
-            if has_more_changes {
-                current_state = new_state;
+            drop(mailboxes_lck);
+            if changes_response.has_more_changes {
+                current_state = changes_response.new_state;
             } else {
-                *self.store.email_state.lock().unwrap() = new_state;
+                self.store
+                    .mailboxes
+                    .write()
+                    .unwrap()
+                    .entry(mailbox_hash)
+                    .and_modify(|mbox| {
+                        *mbox.email_state.lock().unwrap() = Some(changes_response.new_state);
+                    });
+
                 break;
             }
         }

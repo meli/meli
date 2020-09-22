@@ -20,7 +20,7 @@
  */
 
 use super::*;
-use crate::backends::{MailboxPermissions, SpecialUsageMailbox};
+use crate::backends::{LazyCountSet, MailboxPermissions, SpecialUsageMailbox};
 use std::sync::{Arc, Mutex, RwLock};
 
 #[derive(Debug, Clone)]
@@ -36,11 +36,13 @@ pub struct JmapMailbox {
     pub parent_hash: Option<MailboxHash>,
     pub role: Option<String>,
     pub sort_order: u64,
-    pub total_emails: Arc<Mutex<u64>>,
+    pub total_emails: Arc<Mutex<LazyCountSet>>,
     pub total_threads: u64,
-    pub unread_emails: Arc<Mutex<u64>>,
+    pub unread_emails: Arc<Mutex<LazyCountSet>>,
     pub unread_threads: u64,
     pub usage: Arc<RwLock<SpecialUsageMailbox>>,
+    pub email_state: Arc<Mutex<Option<State<EmailObject>>>>,
+    pub email_query_state: Arc<Mutex<Option<String>>>,
 }
 
 impl BackendMailbox for JmapMailbox {
@@ -109,8 +111,8 @@ impl BackendMailbox for JmapMailbox {
 
     fn count(&self) -> Result<(usize, usize)> {
         Ok((
-            *self.unread_emails.lock()? as usize,
-            *self.total_emails.lock()? as usize,
+            self.unread_emails.lock()?.len(),
+            self.total_emails.lock()?.len(),
         ))
     }
 }

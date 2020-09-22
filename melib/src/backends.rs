@@ -58,7 +58,7 @@ use self::maildir::MaildirType;
 use self::mbox::MboxType;
 use super::email::{Envelope, EnvelopeHash, Flag};
 use std::any::Any;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::fmt::Debug;
 use std::ops::Deref;
@@ -616,4 +616,71 @@ impl EnvelopeHashBatch {
     pub fn len(&self) -> usize {
         1 + self.rest.len()
     }
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct LazyCountSet {
+    not_yet_seen: usize,
+    set: BTreeSet<EnvelopeHash>,
+}
+
+impl LazyCountSet {
+    pub fn set_not_yet_seen(&mut self, new_val: usize) {
+        self.not_yet_seen = new_val;
+    }
+
+    pub fn insert_existing(&mut self, new_val: EnvelopeHash) -> bool {
+        if self.not_yet_seen == 0 {
+            false
+        } else {
+            self.not_yet_seen -= 1;
+            self.set.insert(new_val);
+            true
+        }
+    }
+
+    pub fn insert_existing_set(&mut self, set: BTreeSet<EnvelopeHash>) -> bool {
+        debug!("insert_existing_set {:?}", &set);
+        if self.not_yet_seen < set.len() {
+            false
+        } else {
+            self.not_yet_seen -= set.len();
+            self.set.extend(set.into_iter());
+            true
+        }
+    }
+
+    #[inline(always)]
+    pub fn len(&self) -> usize {
+        self.set.len() + self.not_yet_seen
+    }
+
+    #[inline(always)]
+    pub fn clear(&mut self) {
+        self.set.clear();
+        self.not_yet_seen = 0;
+    }
+
+    pub fn insert_new(&mut self, new_val: EnvelopeHash) {
+        self.set.insert(new_val);
+    }
+
+    pub fn insert_set(&mut self, set: BTreeSet<EnvelopeHash>) {
+        debug!("insert__set {:?}", &set);
+        self.set.extend(set.into_iter());
+    }
+
+    pub fn remove(&mut self, new_val: EnvelopeHash) -> bool {
+        self.set.remove(&new_val)
+    }
+}
+
+#[test]
+fn test_lazy_count_set() {
+    let mut new = LazyCountSet::default();
+    new.set_not_yet_seen(10);
+    for i in 0..10 {
+        assert!(new.insert_existing(i));
+    }
+    assert!(!new.insert_existing(10));
 }

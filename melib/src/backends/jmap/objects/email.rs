@@ -24,6 +24,7 @@ use crate::backends::jmap::rfc8620::bool_false;
 use crate::email::address::{Address, MailboxAddress};
 use core::marker::PhantomData;
 use serde::de::{Deserialize, Deserializer};
+use serde_json::value::RawValue;
 use serde_json::Value;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
@@ -389,21 +390,6 @@ pub struct TextBody {
 
 impl Object for EmailObject {
     const NAME: &'static str = "Email";
-}
-
-#[derive(Deserialize, Serialize, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct EmailQueryResponse {
-    pub account_id: Id<Account>,
-    pub can_calculate_changes: bool,
-    pub collapse_threads: bool,
-    // FIXME
-    pub filter: String,
-    pub ids: Vec<Id<EmailObject>>,
-    pub position: u64,
-    pub query_state: String,
-    pub sort: Option<String>,
-    pub total: usize,
 }
 
 #[derive(Serialize, Debug)]
@@ -798,5 +784,42 @@ impl Method<EmailObject> for EmailChanges {
 impl EmailChanges {
     pub fn new(changes_call: Changes<EmailObject>) -> Self {
         EmailChanges { changes_call }
+    }
+}
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailQueryChanges {
+    #[serde(flatten)]
+    pub query_changes_call: QueryChanges<Filter<EmailFilterCondition, EmailObject>, EmailObject>,
+}
+
+impl Method<EmailObject> for EmailQueryChanges {
+    const NAME: &'static str = "Email/queryChanges";
+}
+
+impl EmailQueryChanges {
+    pub fn new(
+        query_changes_call: QueryChanges<Filter<EmailFilterCondition, EmailObject>, EmailObject>,
+    ) -> Self {
+        EmailQueryChanges { query_changes_call }
+    }
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+pub struct EmailQueryChangesResponse {
+    ///o  The "collapseThreads" argument that was used with "Email/query".
+    #[serde(default = "bool_false")]
+    pub collapse_threads: bool,
+    #[serde(flatten)]
+    pub query_changes_response: QueryChangesResponse<EmailObject>,
+}
+
+impl std::convert::TryFrom<&RawValue> for EmailQueryChangesResponse {
+    type Error = crate::error::MeliError;
+    fn try_from(t: &RawValue) -> Result<EmailQueryChangesResponse> {
+        let res: (String, EmailQueryChangesResponse, String) = serde_json::from_str(t.get())?;
+        assert_eq!(&res.0, "Email/queryChanges");
+        Ok(res.1)
     }
 }

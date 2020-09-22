@@ -18,9 +18,8 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
-use crate::backends::imap::LazyCountSet;
 use crate::backends::{
-    BackendMailbox, Mailbox, MailboxHash, MailboxPermissions, SpecialUsageMailbox,
+    BackendMailbox, LazyCountSet, Mailbox, MailboxHash, MailboxPermissions, SpecialUsageMailbox,
 };
 use crate::error::*;
 use std::sync::{Arc, Mutex};

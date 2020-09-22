@@ -23,7 +23,7 @@ use super::mailbox::JmapMailbox;
 use super::*;
 use serde::Serialize;
 use serde_json::{json, Value};
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 
 pub type UtcDate = String;
 
@@ -124,6 +124,12 @@ pub async fn get_mailboxes(conn: &JmapConnection) -> Result<HashMap<MailboxHash,
                 unread_emails,
                 unread_threads,
             } = r;
+            let mut total_emails_set = LazyCountSet::default();
+            total_emails_set.set_not_yet_seen(total_emails.try_into().unwrap_or(0));
+            let total_emails = total_emails_set;
+            let mut unread_emails_set = LazyCountSet::default();
+            unread_emails_set.set_not_yet_seen(unread_emails.try_into().unwrap_or(0));
+            let unread_emails = unread_emails_set;
             let hash = id.into_hash();
             let parent_hash = parent_id.clone().map(|id| id.into_hash());
             (
@@ -145,6 +151,8 @@ pub async fn get_mailboxes(conn: &JmapConnection) -> Result<HashMap<MailboxHash,
                     total_threads,
                     unread_emails: Arc::new(Mutex::new(unread_emails)),
                     unread_threads,
+                    email_state: Arc::new(Mutex::new(None)),
+                    email_query_state: Arc::new(Mutex::new(None)),
                 },
             )
         })
@@ -250,23 +258,59 @@ pub async fn fetch(
 
     let mut v: MethodResponse = serde_json::from_str(&res_text).unwrap();
     let e = GetResponse::<EmailObject>::try_from(v.method_responses.pop().unwrap())?;
+    let query_response = QueryResponse::<EmailObject>::try_from(v.method_responses.pop().unwrap())?;
+    store
+        .mailboxes
+        .write()
+        .unwrap()
+        .entry(mailbox_hash)
+        .and_modify(|mbox| {
+            *mbox.email_query_state.lock().unwrap() = Some(query_response.query_state);
+        });
     let GetResponse::<EmailObject> { list, state, .. } = e;
     {
         let (is_empty, is_equal) = {
-            let current_state_lck = conn.store.email_state.lock().unwrap();
-            (current_state_lck.is_empty(), *current_state_lck != state)
+            let mailboxes_lck = conn.store.mailboxes.read().unwrap();
+            mailboxes_lck
+                .get(&mailbox_hash)
+                .map(|mbox| {
+                    let current_state_lck = mbox.email_state.lock().unwrap();
+                    (
+                        current_state_lck.is_none(),
+                        current_state_lck.as_ref() != Some(&state),
+                    )
+                })
+                .unwrap_or((true, true))
         };
         if is_empty {
+            let mut mailboxes_lck = conn.store.mailboxes.write().unwrap();
             debug!("{:?}: inserting state {}", EmailObject::NAME, &state);
-            *conn.store.email_state.lock().unwrap() = state;
+            mailboxes_lck.entry(mailbox_hash).and_modify(|mbox| {
+                *mbox.email_state.lock().unwrap() = Some(state);
+            });
         } else if !is_equal {
-            conn.email_changes().await?;
+            conn.email_changes(mailbox_hash).await?;
         }
     }
+    let mut total = BTreeSet::default();
+    let mut unread = BTreeSet::default();
     let mut ret = Vec::with_capacity(list.len());
     for obj in list {
-        ret.push(store.add_envelope(obj));
+        let env = store.add_envelope(obj);
+        total.insert(env.hash());
+        if !env.is_seen() {
+            unread.insert(env.hash());
+        }
+        ret.push(env);
     }
+    let mut mailboxes_lck = store.mailboxes.write().unwrap();
+    mailboxes_lck.entry(mailbox_hash).and_modify(|mbox| {
+        mbox.total_emails.lock().unwrap().insert_existing_set(total);
+        mbox.unread_emails
+            .lock()
+            .unwrap()
+            .insert_existing_set(unread);
+    });
     Ok(ret)
 }
 

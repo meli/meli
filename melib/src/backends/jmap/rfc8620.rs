@@ -1013,3 +1013,161 @@ pub struct UploadResponse {
     /// The size of the file in octets.
     pub size: usize,
 }
+
+/// #`queryChanges`
+///
+///   The "Foo/queryChanges" method allows a client to efficiently update
+///   the state of a cached query to match the new state on the server.  It
+///   takes the following arguments:
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct QueryChanges<F: FilterTrait<OBJ>, OBJ: Object>
+where
+    OBJ: std::fmt::Debug + Serialize,
+{
+    pub account_id: Id<Account>,
+    pub filter: Option<F>,
+    pub sort: Option<Comparator<OBJ>>,
+    ///sinceQueryState: "String"
+    ///
+    ///The current state of the query in the client.  This is the string
+    ///that was returned as the "queryState" argument in the "Foo/query"
+    ///response with the same sort/filter.  The server will return the
+    ///changes made to the query since this state.
+    pub since_query_state: String,
+    ///o  maxChanges: "UnsignedInt|null"
+    ///
+    ///The maximum number of changes to return in the response.  See
+    ///error descriptions below for more details.
+    pub max_changes: Option<usize>,
+    ///o  upToId: "Id|null"
+    ///
+    ///The last (highest-index) id the client currently has cached from
+    ///the query results.  When there are a large number of results, in a
+    ///common case, the client may have only downloaded and cached a
+    ///small subset from the beginning of the results.  If the sort and
+    ///filter are both only on immutable properties, this allows the
+    ///server to omit changes after this point in the results, which can
+    ///significantly increase efficiency.  If they are not immutable,
+    ///this argument is ignored.
+    pub up_to_id: Option<Id<OBJ>>,
+
+    ///o  calculateTotal: "Boolean" (default: false)
+    ///
+    ///Does the client wish to know the total number of results now in
+    ///the query?  This may be slow and expensive for servers to
+    ///calculate, particularly with complex filters, so clients should
+    ///take care to only request the total when needed.
+    #[serde(default = "bool_false")]
+    pub calculate_total: bool,
+
+    #[serde(skip)]
+    _ph: PhantomData<fn() -> OBJ>,
+}
+
+impl<F: FilterTrait<OBJ>, OBJ: Object> QueryChanges<F, OBJ>
+where
+    OBJ: std::fmt::Debug + Serialize,
+{
+    pub fn new(account_id: Id<Account>, since_query_state: String) -> Self {
+        Self {
+            account_id,
+            filter: None,
+            sort: None,
+            since_query_state,
+            max_changes: None,
+            up_to_id: None,
+            calculate_total: false,
+            _ph: PhantomData,
+        }
+    }
+    _impl!(filter: Option<F>);
+    _impl!(sort: Option<Comparator<OBJ>>);
+    _impl!(max_changes: Option<usize>);
+    _impl!(up_to_id: Option<Id<OBJ>>);
+    _impl!(calculate_total: bool);
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct QueryChangesResponse<OBJ: Object> {
+    /// The id of the account used for the call.
+    pub account_id: Id<Account>,
+    /// This is the "sinceQueryState" argument echoed back; that is, the state from which the server is returning changes.
+    pub old_query_state: String,
+    ///This is the state the query will be in after applying the set of changes to the old state.
+    pub new_query_state: String,
+    /// The total number of Foos in the results (given the "filter").  This argument MUST be omitted if the "calculateTotal" request argument is not true.
+    #[serde(default)]
+    pub total: Option<usize>,
+    ///The "id" for every Foo that was in the query results in the old
+    ///state and that is not in the results in the new state.
+
+    ///If the server cannot calculate this exactly, the server MAY return
+    ///the ids of extra Foos in addition that may have been in the old
+    ///results but are not in the new results.
+
+    ///If the sort and filter are both only on immutable properties and
+    ///an "upToId" is supplied and exists in the results, any ids that
+    ///were removed but have a higher index than "upToId" SHOULD be
+    ///omitted.
+
+    ///If the "filter" or "sort" includes a mutable property, the server
+    ///MUST include all Foos in the current results for which this
+    ///property may have changed.  The position of these may have moved
+    ///in the results, so they must be reinserted by the client to ensure
+    ///its query cache is correct.
+    pub removed: Vec<Id<OBJ>>,
+    ///The id and index in the query results (in the new state) for every
+    ///Foo that has been added to the results since the old state AND
+    ///every Foo in the current results that was included in the
+    ///"removed" array (due to a filter or sort based upon a mutable
+    ///property).
+
+    ///If the sort and filter are both only on immutable properties and
+    ///an "upToId" is supplied and exists in the results, any ids that
+    ///were added but have a higher index than "upToId" SHOULD be
+    ///omitted.
+
+    ///The array MUST be sorted in order of index, with the lowest index
+    ///first.
+
+    ///An *AddedItem* object has the following properties:
+
+    ///*  id: "Id"
+
+    ///*  index: "UnsignedInt"
+
+    ///The result of this is that if the client has a cached sparse array of
+    ///Foo ids corresponding to the results in the old state, then:
+
+    ///fooIds = [ "id1", "id2", null, null, "id3", "id4", null, null, null ]
+
+    ///If it *splices out* all ids in the removed array that it has in its
+    ///cached results, then:
+
+    ///   removed = [ "id2", "id31", ... ];
+    ///   fooIds => [ "id1", null, null, "id3", "id4", null, null, null ]
+
+    ///and *splices in* (one by one in order, starting with the lowest
+    ///index) all of the ids in the added array:
+
+    ///added = [{ id: "id5", index: 0, ... }];
+    ///fooIds => [ "id5", "id1", null, null, "id3", "id4", null, null, null ]
+
+    ///and *truncates* or *extends* to the new total length, then the
+    ///results will now be in the new state.
+
+    ///Note: splicing in adds the item at the given index, incrementing the
+    ///index of all items previously at that or a higher index.  Splicing
+    ///out is the inverse, removing the item and decrementing the index of
+    ///every item after it in the array.
+    pub added: Vec<AddedItem<OBJ>>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct AddedItem<OBJ: Object> {
+    pub id: Id<OBJ>,
+    pub index: usize,
+}
