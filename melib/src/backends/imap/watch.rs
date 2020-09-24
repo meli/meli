@@ -76,7 +76,7 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
     let mailbox_hash = mailbox.hash();
     let mut response = Vec::with_capacity(8 * 1024);
     let select_response = conn
-        .select_mailbox(mailbox_hash, &mut response, true)
+        .examine_mailbox(mailbox_hash, &mut response, true)
         .await?
         .unwrap();
     debug!("select response {}", String::from_utf8_lossy(&response));
