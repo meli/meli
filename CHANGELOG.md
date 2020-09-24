@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [alpha-0.6.2] - 2020-09-24
+
+### Added
+- Add customizable mailbox tree in sidebar
+- Make `dbus` dependency opt-out (feature is `dbus-notifications`)
+- Implemented JMAP async, search, tagging, syncing
+- Preserve account order from configuration file
+- Implemented IMAP `CONDSTORE` support for IMAP cache
+- Add `timeout` setting for IMAP
+- Implement TCP keepalive for IMAP
+- Rewrote email address parsers.
+- Implement `copy_messages` for maildir
+- Implement selection with motions
+
+### Fixed
+- Fixed various problems with IMAP cache
+- Fixed various problems with IMAP message counts
+- Fixed various problems with IMAP connection hanging
+- Fixed IMAP not reconnecting on dropped IDLE connections
+- Fixed various problems with notmuch backend
+
 ## [alpha-0.6.1] - 2020-08-02
 
 ### Added
@@ -82,3 +103,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [alpha-0.5.1]: https://github.com/meli/meli/releases/tag/alpha-0.5.1
 [alpha-0.6.0]: https://github.com/meli/meli/releases/tag/alpha-0.6.0
 [alpha-0.6.1]: https://github.com/meli/meli/releases/tag/alpha-0.6.1
+[alpha-0.6.2]: https://github.com/meli/meli/releases/tag/alpha-0.6.2
