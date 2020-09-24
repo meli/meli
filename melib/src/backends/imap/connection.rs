@@ -475,9 +475,13 @@ impl ImapStream {
                 self.stream.flush().await?;
                 match self.protocol {
                     ImapProtocol::IMAP { .. } => {
-                        debug!("sent: M{} {}", self.cmd_id - 1, unsafe {
-                            std::str::from_utf8_unchecked(command)
-                        });
+                        if !command.starts_with(b"LOGIN") {
+                            debug!("sent: M{} {}", self.cmd_id - 1, unsafe {
+                                std::str::from_utf8_unchecked(command)
+                            });
+                        } else {
+                            debug!("sent: M{} LOGIN ..", self.cmd_id - 1);
+                        }
                     }
                     ImapProtocol::ManageSieve => {}
                 }
