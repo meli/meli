@@ -623,24 +623,8 @@ impl MailBackend for ImapType {
             let dest_path = {
                 let mailboxes = uid_store.mailboxes.lock().await;
                 let mailbox = mailboxes
-                    .get(&source_mailbox_hash)
-                    .ok_or_else(|| MeliError::new("Source mailbox not found"))?;
-                if move_ && !mailbox.permissions.lock().unwrap().delete_messages {
-                    return Err(MeliError::new(format!(
-                        "You are not allowed to delete messages from mailbox {}",
-                        mailbox.path()
-                    )));
-                }
-                let mailbox = mailboxes
                     .get(&destination_mailbox_hash)
                     .ok_or_else(|| MeliError::new("Destination mailbox not found"))?;
-                if !mailbox.permissions.lock().unwrap().create_messages {
-                    return Err(MeliError::new(format!(
-                        "You are not allowed to create messages in mailbox {}",
-                        mailbox.path()
-                    )));
-                }
-
                 mailbox.imap_path().to_string()
             };
             let mut response = Vec::with_capacity(8 * 1024);
