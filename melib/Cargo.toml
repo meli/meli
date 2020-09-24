@@ -8,10 +8,11 @@ build = "build.rs"
 
 homepage = "https://meli.delivery"
 repository = "https://git.meli.delivery/meli/meli.git"
-description = "backend mail client library"
-keywords = ["mail", "mua", "maildir", "imap"]
-categories = [ "email"]
+description = "mail library"
+keywords = ["mail", "mua", "maildir", "imap", "jmap"]
+categories = [ "email", "parser-implementations"]
 license = "GPL-3.0-or-later"
+readme = "README.md"
 
 [lib]
 name = "melib"

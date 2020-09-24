@@ -19,6 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+/*! Compose a `Draft`, with MIME and attachment support */
 use super::*;
 use crate::email::attachment_types::{
     Charset, ContentTransferEncoding, ContentType, MultipartType,

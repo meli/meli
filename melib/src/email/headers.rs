@@ -19,6 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+/*! Wrapper type `HeaderName` for case-insensitive comparisons */
 use crate::error::MeliError;
 use indexmap::IndexMap;
 use smallvec::SmallVec;

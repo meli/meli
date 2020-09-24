@@ -19,6 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+/*! Verification of OpenPGP signatures */
 use crate::email::parser::BytesExt;
 use crate::email::{
     attachment_types::{ContentType, MultipartType},
@@ -26,7 +27,10 @@ use crate::email::{
 };
 use crate::{MeliError, Result};
 
-/// rfc3156
+/// Convert raw attachment to the form needed for signature verification ([rfc3156](https://tools.ietf.org/html/rfc3156))
+///
+/// ## rfc3156
+/// ```text
 /// Upon receipt of a signed message, an application MUST:
 ///
 ///   (1)   Convert line endings to the canonical <CR><LF> sequence before
@@ -35,7 +39,7 @@ use crate::{MeliError, Result};
 ///   (2)   Pass both the signed data and its associated content headers
 ///         along with the OpenPGP signature to the signature verification
 ///         service.
-///
+/// ```
 pub fn convert_attachment_to_rfc_spec(input: &[u8]) -> Vec<u8> {
     if input.is_empty() {
         return Vec::new();
@@ -125,8 +129,8 @@ pub fn verify_signature(a: &Attachment) -> Result<(Vec<u8>, &[u8])> {
             };
             Ok((signed_part, signature))
         }
-        _ => {
-            unreachable!("Should not give non-signed attachments to this function");
-        }
+        _ => Err(MeliError::new(
+            "Should not give non-signed attachments to this function",
+        )),
     }
 }

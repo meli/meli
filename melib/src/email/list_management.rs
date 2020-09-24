@@ -19,6 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+/*! Parsing of rfc2369/rfc2919 `List-*` headers */
 use super::parser;
 use super::Envelope;
 use smallvec::SmallVec;

@@ -19,6 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+/*! Encoding/decoding of attachments */
 use crate::email::{
     address::StrBuilder,
     parser::{self, BytesExt},

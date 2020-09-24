@@ -19,6 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+/*! Parsers for email. See submodules */
 use crate::error::{MeliError, Result, ResultIntoMeliError};
 use nom::{
     branch::alt,
@@ -281,6 +282,7 @@ pub fn mail(input: &[u8]) -> Result<(Vec<(&[u8], &[u8])>, &[u8])> {
 }
 
 pub mod dates {
+    /*! Date values in headers */
     use super::generic::*;
     use super::*;
     use crate::datetime::UnixTimestamp;
@@ -505,6 +507,7 @@ pub mod dates {
 }
 
 pub mod generic {
+    /*! Generally useful parser combinators */
     use super::*;
     #[inline(always)]
     pub fn byte_in_slice<'a>(slice: &'static [u8]) -> impl Fn(&'a [u8]) -> IResult<&'a [u8], u8> {
@@ -1205,6 +1208,7 @@ List-Archive: <http://www.host.com/list/archive/> (Web Archive)
 }
 
 pub mod headers {
+    /*! Email headers */
     use super::*;
 
     pub fn headers(input: &[u8]) -> IResult<&[u8], Vec<(&[u8], &[u8])>> {
@@ -1465,6 +1469,7 @@ pub mod headers {
 }
 
 pub mod attachments {
+    /*! Email attachments */
     use super::*;
     use crate::email::address::*;
     use crate::email::attachment_types::{ContentDisposition, ContentDispositionKind};
@@ -1731,6 +1736,7 @@ pub mod attachments {
 }
 
 pub mod encodings {
+    /*! Email encodings (quoted printable, MIME) */
     use super::*;
     use crate::email::attachment_types::Charset;
     use data_encoding::BASE64_MIME;

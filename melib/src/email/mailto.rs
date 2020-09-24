@@ -19,6 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+/*! Parsing of `mailto` addresses */
 use super::*;
 use std::convert::TryFrom;
 
