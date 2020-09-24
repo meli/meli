@@ -1,3 +1,25 @@
+meli (0.6.2-1) buster; urgency=low
+
+  Added
+  - Add customizable mailbox tree in sidebar
+  - Make `dbus` dependency opt-out (feature is `dbus-notifications`)
+  - Implemented JMAP async, search, tagging, syncing
+  - Preserve account order from configuration file
+  - Implemented IMAP `CONDSTORE` support for IMAP cache
+  - Add `timeout` setting for IMAP
+  - Implement TCP keepalive for IMAP
+  - Rewrote email address parsers.
+  - Implement `copy_messages` for maildir
+  - Implement selection with motions
+
+  Fixed
+  - Fixed various problems with IMAP cache
+  - Fixed various problems with IMAP message counts
+  - Fixed various problems with IMAP connection hanging
+  - Fixed IMAP not reconnecting on dropped IDLE connections
+  - Fixed various problems with notmuch backend
+
+ -- Manos Pitsidianakis <epilys@nessuent.xyz>  Thu, 24 Sep 2020 18:14:00 +0200
 meli (0.6.1-1) buster; urgency=low
 
   * added experimental NNTP backend
