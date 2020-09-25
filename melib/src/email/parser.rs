@@ -1175,7 +1175,7 @@ pub mod mailing_lists {
                     map(tag("NO"), |_| ()),
                     map(opt(cfws), |_| ()),
                 ),
-                |_| vec![],
+                |_| vec![&b"NO"[..]],
             ),
         ))(input)?;
         let (input, _) = opt(cfws)(input)?;

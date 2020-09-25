@@ -223,6 +223,17 @@ impl MailView {
                         if let Ok(Some(bytes_result)) = try_recv_timeout!(&mut chan) {
                             match bytes_result {
                                 Ok(bytes) => {
+                                    if account
+                                        .collection
+                                        .get_env(self.coordinates.2)
+                                        .other_headers()
+                                        .is_empty()
+                                    {
+                                        let _ = account
+                                            .collection
+                                            .get_env_mut(self.coordinates.2)
+                                            .populate_headers(&bytes);
+                                    }
                                     let body = AttachmentBuilder::new(&bytes).build();
                                     let body_text = self.attachment_to_text(&body, context);
                                     self.state = MailViewState::Loaded {
@@ -1116,6 +1127,17 @@ impl Component for MailView {
                             debug!("bytes_result");
                             match bytes_result {
                                 Ok(bytes) => {
+                                    if context.accounts[&self.coordinates.0]
+                                        .collection
+                                        .get_env(self.coordinates.2)
+                                        .other_headers()
+                                        .is_empty()
+                                    {
+                                        let _ = context.accounts[&self.coordinates.0]
+                                            .collection
+                                            .get_env_mut(self.coordinates.2)
+                                            .populate_headers(&bytes);
+                                    }
                                     let body = AttachmentBuilder::new(&bytes).build();
                                     let body_text = self.attachment_to_text(&body, context);
                                     self.state = MailViewState::Loaded {
@@ -1693,6 +1715,7 @@ impl Component for MailView {
                                         }
                                         return true;
                                     }
+                                    list_management::ListAction::No => {}
                                 }
                             }
                         }

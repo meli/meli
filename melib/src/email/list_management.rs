@@ -25,10 +25,12 @@ use super::Envelope;
 use smallvec::SmallVec;
 use std::convert::From;
 
-#[derive(Debug, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum ListAction<'a> {
     Url(&'a [u8]),
     Email(&'a [u8]),
+    ///`List-Post` field may contain the special value "NO".
+    No,
 }
 
 impl<'a> From<&'a [u8]> for ListAction<'a> {
@@ -38,6 +40,8 @@ impl<'a> From<&'a [u8]> for ListAction<'a> {
              * parser::mailto() will handle this if user tries to unsubscribe.
              */
             ListAction::Email(value)
+        } else if value.starts_with(b"NO") {
+            ListAction::No
         } else {
             /* Otherwise treat it as url. There's no foolproof way to check if this is valid, so
              * postpone it until we try an HTTP request.
@@ -66,15 +70,6 @@ impl<'a> ListAction<'a> {
                     .collect::<SmallVec<[ListAction<'a>; 4]>>()
             })
             .ok()
-    }
-}
-
-impl<'a> Clone for ListAction<'a> {
-    fn clone(&self) -> Self {
-        match self {
-            ListAction::Url(a) => ListAction::Url(<&[u8]>::clone(a)),
-            ListAction::Email(a) => ListAction::Email(<&[u8]>::clone(a)),
-        }
     }
 }
 
@@ -129,6 +124,11 @@ impl<'a> ListActions<'a> {
 
         if let Some(post) = envelope.other_headers().get("List-Post") {
             ret.post = ListAction::parse_options_list(post.as_bytes());
+            if let Some(ref l) = ret.post {
+                if l.starts_with(&[ListAction::No]) {
+                    ret.post = None;
+                }
+            }
         }
 
         if let Some(unsubscribe) = envelope.other_headers().get("List-Unsubscribe") {
