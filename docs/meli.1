@@ -400,10 +400,20 @@ don't issue notifications for thread under cursor in thread listing
 .It Cm search Ar STRING
 search mailbox with
 .Ar STRING
-key.
-Escape exits search results
-.It Cm set read, set unread
-Set read status of message.
+query.
+Escape exits search results.
+.It Cm select Ar STRING
+select threads matching
+.Ar STRING
+query.
+.It Cm set seen, set unseen
+Set seen status of message.
+.It Cm copyto, moveto Ar MAILBOX_PATH
+Copy or move to other mailbox.
+.It Cm copyto, moveto Ar ACCOUNT Ar MAILBOX_PATH
+Copy or move to another account's  mailbox.
+.It Cm delete
+Delete selected threads.
 .It Cm create-mailbox Ar ACCOUNT Ar MAILBOX_PATH
 create mailbox with given path.
 Be careful with backends and separator sensitivity (eg IMAP)
