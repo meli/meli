@@ -763,15 +763,9 @@ pub fn interpret_format_flowed(_t: &str) -> String {
     unimplemented!()
 }
 
-fn decode_rfc822(_raw: &[u8]) -> Attachment {
-    // FIXME
-    let builder = AttachmentBuilder::new(b"message/rfc822 cannot be displayed");
-    builder.build()
-}
+type Filter<'a> = Box<dyn FnMut(&Attachment, &mut Vec<u8>) -> () + 'a>;
 
-type Filter<'a> = Box<dyn FnMut(&'a Attachment, &mut Vec<u8>) -> () + 'a>;
-
-fn decode_rec_helper<'a>(a: &'a Attachment, filter: &mut Option<Filter<'a>>) -> Vec<u8> {
+fn decode_rec_helper<'a, 'b>(a: &'a Attachment, filter: &mut Option<Filter<'b>>) -> Vec<u8> {
     match a.content_type {
         ContentType::Other { .. } => Vec::new(),
         ContentType::Text { .. } => decode_helper(a, filter),
@@ -780,8 +774,13 @@ fn decode_rec_helper<'a>(a: &'a Attachment, filter: &mut Option<Filter<'a>>) -> 
         }
         ContentType::PGPSignature => Vec::new(),
         ContentType::MessageRfc822 => {
-            let temp = decode_rfc822(a.body());
-            decode_rec(&temp, None)
+            if a.content_disposition.kind.is_inline() {
+                let b = AttachmentBuilder::new(a.body()).build();
+                let ret = decode_rec_helper(&b, filter);
+                ret
+            } else {
+                b"message/rfc822 attachment".to_vec()
+            }
         }
         ContentType::Multipart {
             ref kind,
@@ -820,11 +819,11 @@ fn decode_rec_helper<'a>(a: &'a Attachment, filter: &mut Option<Filter<'a>>) -> 
     }
 }
 
-pub fn decode_rec<'a>(a: &'a Attachment, mut filter: Option<Filter<'a>>) -> Vec<u8> {
+pub fn decode_rec<'a, 'b>(a: &'a Attachment, mut filter: Option<Filter<'b>>) -> Vec<u8> {
     decode_rec_helper(a, &mut filter)
 }
 
-fn decode_helper<'a>(a: &'a Attachment, filter: &mut Option<Filter<'a>>) -> Vec<u8> {
+fn decode_helper<'a, 'b>(a: &'a Attachment, filter: &mut Option<Filter<'b>>) -> Vec<u8> {
     let charset = match a.content_type {
         ContentType::Text { charset: c, .. } => c,
         _ => Default::default(),
@@ -861,6 +860,6 @@ fn decode_helper<'a>(a: &'a Attachment, filter: &mut Option<Filter<'a>>) -> Vec<
     ret
 }
 
-pub fn decode<'a>(a: &'a Attachment, mut filter: Option<Filter<'a>>) -> Vec<u8> {
+pub fn decode<'a, 'b>(a: &'a Attachment, mut filter: Option<Filter<'b>>) -> Vec<u8> {
     decode_helper(a, &mut filter)
 }

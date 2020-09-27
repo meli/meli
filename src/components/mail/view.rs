@@ -332,16 +332,12 @@ impl MailView {
     }
 
     /// Returns the string to be displayed in the Viewer
-    fn attachment_to_text<'closure, 's: 'closure, 'context: 's>(
-        &'s mut self,
-        body: &'context Attachment,
-        context: &'context mut Context,
-    ) -> String {
+    fn attachment_to_text(&mut self, body: &Attachment, context: &mut Context) -> String {
         let finder = LinkFinder::new();
         let coordinates = self.coordinates;
         let body_text = String::from_utf8_lossy(&decode_rec(
             body,
-            Some(Box::new(move |a: &'closure Attachment, v: &mut Vec<u8>| {
+            Some(Box::new(move |a: &Attachment, v: &mut Vec<u8>| {
                 if a.content_type().is_text_html() {
                     /* FIXME: duplication with view/html.rs */
                     if let Some(filter_invocation) =

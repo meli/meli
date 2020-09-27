@@ -84,11 +84,7 @@ impl EnvelopeView {
     }
 
     /// Returns the string to be displayed in the Viewer
-    fn attachment_to_text<'closure, 's: 'closure, 'context: 's>(
-        &'s self,
-        body: &'context Attachment,
-        context: &'context mut Context,
-    ) -> String {
+    fn attachment_to_text(&self, body: &Attachment, context: &mut Context) -> String {
         let finder = LinkFinder::new();
         let body_text = String::from_utf8_lossy(&decode_rec(
             &body,
