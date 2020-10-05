@@ -246,6 +246,10 @@ pub mod segment_tree {
 
         /// (left, right) is inclusive
         pub fn get_max(&self, mut left: usize, mut right: usize) -> u8 {
+            if self.array.is_empty() {
+                return 0;
+            }
+
             let len = self.array.len();
             debug_assert!(left <= right);
             if right >= len {
