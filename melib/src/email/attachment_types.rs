@@ -135,6 +135,7 @@ impl Display for Charset {
 pub enum MultipartType {
     Alternative,
     Digest,
+    Encrypted,
     Mixed,
     Related,
     Signed,
@@ -148,13 +149,18 @@ impl Default for MultipartType {
 
 impl Display for MultipartType {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        match self {
-            MultipartType::Alternative => write!(f, "multipart/alternative"),
-            MultipartType::Digest => write!(f, "multipart/digest"),
-            MultipartType::Mixed => write!(f, "multipart/mixed"),
-            MultipartType::Related => write!(f, "multipart/related"),
-            MultipartType::Signed => write!(f, "multipart/signed"),
-        }
+        write!(
+            f,
+            "{}",
+            match self {
+                MultipartType::Alternative => "multipart/alternative",
+                MultipartType::Digest => "multipart/digest",
+                MultipartType::Encrypted => "multipart/encrypted",
+                MultipartType::Mixed => "multipart/mixed",
+                MultipartType::Related => "multipart/related",
+                MultipartType::Signed => "multipart/signed",
+            }
+        )
     }
 }
 
@@ -166,6 +172,8 @@ impl From<&[u8]> for MultipartType {
             MultipartType::Alternative
         } else if val.eq_ignore_ascii_case(b"digest") {
             MultipartType::Digest
+        } else if val.eq_ignore_ascii_case(b"encrypted") {
+            MultipartType::Encrypted
         } else if val.eq_ignore_ascii_case(b"signed") {
             MultipartType::Signed
         } else if val.eq_ignore_ascii_case(b"related") {
@@ -205,6 +213,74 @@ impl Default for ContentType {
             kind: Text::Plain,
             parameters: Vec::new(),
             charset: Charset::UTF8,
+        }
+    }
+}
+
+impl PartialEq<&str> for ContentType {
+    fn eq(&self, other: &&str) -> bool {
+        match (self, *other) {
+            (
+                ContentType::Text {
+                    kind: Text::Plain, ..
+                },
+                "text/plain",
+            ) => true,
+            (
+                ContentType::Text {
+                    kind: Text::Html, ..
+                },
+                "text/html",
+            ) => true,
+            (
+                ContentType::Multipart {
+                    kind: MultipartType::Alternative,
+                    ..
+                },
+                "multipart/alternative",
+            ) => true,
+            (
+                ContentType::Multipart {
+                    kind: MultipartType::Digest,
+                    ..
+                },
+                "multipart/digest",
+            ) => true,
+            (
+                ContentType::Multipart {
+                    kind: MultipartType::Encrypted,
+                    ..
+                },
+                "multipart/encrypted",
+            ) => true,
+            (
+                ContentType::Multipart {
+                    kind: MultipartType::Mixed,
+                    ..
+                },
+                "multipart/mixed",
+            ) => true,
+            (
+                ContentType::Multipart {
+                    kind: MultipartType::Related,
+                    ..
+                },
+                "multipart/related",
+            ) => true,
+            (
+                ContentType::Multipart {
+                    kind: MultipartType::Signed,
+                    ..
+                },
+                "multipart/signed",
+            ) => true,
+            (ContentType::PGPSignature, "application/pgp-signature") => true,
+            (ContentType::MessageRfc822, "message/rfc822") => true,
+            (ContentType::Other { tag, .. }, _) => {
+                other.eq_ignore_ascii_case(&String::from_utf8_lossy(&tag))
+            }
+            (ContentType::OctetStream { .. }, "application/octet-stream") => true,
+            _ => false,
         }
     }
 }

@@ -119,6 +119,8 @@ pub mod connections;
 pub mod parsec;
 pub mod search;
 
+#[cfg(feature = "gpgme")]
+pub mod gpgme;
 #[cfg(feature = "smtp")]
 pub mod smtp;
 #[cfg(feature = "sqlite3")]
@@ -139,6 +141,35 @@ pub extern crate smallvec;
 pub extern crate smol;
 pub extern crate uuid;
 pub extern crate xdg_utils;
+
+#[derive(Debug, Copy, Clone)]
+pub struct Bytes(pub usize);
+
+impl Bytes {
+    pub const KILOBYTE: f64 = 1024.0;
+    pub const MEGABYTE: f64 = Self::KILOBYTE * 1024.0;
+    pub const GIGABYTE: f64 = Self::MEGABYTE * 1024.0;
+    pub const PETABYTE: f64 = Self::GIGABYTE * 1024.0;
+}
+
+impl core::fmt::Display for Bytes {
+    fn fmt(&self, fmt: &mut core::fmt::Formatter) -> core::fmt::Result {
+        let bytes: f64 = self.0 as f64;
+        if bytes == 0.0 {
+            write!(fmt, "0")
+        } else if bytes < Self::KILOBYTE {
+            write!(fmt, "{:.2} bytes", bytes)
+        } else if bytes < Self::MEGABYTE {
+            write!(fmt, "{:.2} KiB", bytes / Self::KILOBYTE)
+        } else if bytes < Self::GIGABYTE {
+            write!(fmt, "{:.2} MiB", bytes / Self::MEGABYTE)
+        } else if bytes < Self::PETABYTE {
+            write!(fmt, "{:.2} GiB", bytes / Self::GIGABYTE)
+        } else {
+            write!(fmt, "{:.2} PiB", bytes / Self::PETABYTE)
+        }
+    }
+}
 
 pub use shellexpand::ShellExpandTrait;
 pub mod shellexpand {

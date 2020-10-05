@@ -20,15 +20,38 @@
  */
 
 use super::*;
+use melib::email::pgp as melib_pgp;
 use std::io::Write;
 use std::process::{Command, Stdio};
 
-pub fn verify_signature(a: &Attachment, context: &mut Context) -> Vec<u8> {
-    match melib::signatures::verify_signature(a) {
-        Ok((bytes, sig)) => {
-            let bytes_file = create_temp_file(&bytes, None, None, true);
-            let signature_file = create_temp_file(sig, None, None, true);
-            match Command::new(
+pub fn verify_signature(a: &Attachment, context: &mut Context) -> Result<Vec<u8>> {
+    let (bytes, sig) =
+        melib_pgp::verify_signature(a).chain_err_summary(|| "Could not verify signature.")?;
+    let bytes_file = create_temp_file(&bytes, None, None, true);
+    let signature_file = create_temp_file(sig, None, None, true);
+    let binary = context
+        .settings
+        .pgp
+        .gpg_binary
+        .as_ref()
+        .map(String::as_str)
+        .unwrap_or("gpg2");
+    Ok(Command::new(binary)
+        .args(&[
+            "--output",
+            "-",
+            "--verify",
+            signature_file.path.to_str().unwrap(),
+            bytes_file.path.to_str().unwrap(),
+        ])
+        .stdin(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .and_then(|gpg| gpg.wait_with_output())
+        .map(|gpg| gpg.stderr)
+        .chain_err_summary(|| {
+            format!(
+                "Failed to launch {} to verify PGP signature",
                 context
                     .settings
                     .pgp
@@ -37,50 +60,7 @@ pub fn verify_signature(a: &Attachment, context: &mut Context) -> Vec<u8> {
                     .map(String::as_str)
                     .unwrap_or("gpg2"),
             )
-            .args(&[
-                "--output",
-                "-",
-                "--verify",
-                signature_file.path.to_str().unwrap(),
-                bytes_file.path.to_str().unwrap(),
-            ])
-            .stdin(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            {
-                Ok(gpg) => {
-                    return gpg.wait_with_output().unwrap().stderr;
-                }
-                Err(err) => {
-                    context.replies.push_back(UIEvent::Notification(
-                        Some(format!(
-                            "Failed to launch {} to verify PGP signature",
-                            context
-                                .settings
-                                .pgp
-                                .gpg_binary
-                                .as_ref()
-                                .map(String::as_str)
-                                .unwrap_or("gpg2"),
-                        )),
-                        format!(
-                            "{}\nsee meli.conf(5) for configuration setting pgp.gpg_binary",
-                            &err
-                        ),
-                        Some(NotificationType::Error(melib::error::ErrorKind::External)),
-                    ));
-                }
-            }
-        }
-        Err(err) => {
-            context.replies.push_back(UIEvent::Notification(
-                Some("Could not verify signature.".to_string()),
-                err.to_string(),
-                Some(NotificationType::Error(err.kind)),
-            ));
-        }
-    }
-    Vec::new()
+        })?)
 }
 
 /// Returns multipart/signed
@@ -89,7 +69,8 @@ pub fn sign(
     gpg_binary: Option<&str>,
     pgp_key: Option<&str>,
 ) -> Result<AttachmentBuilder> {
-    let mut command = Command::new(gpg_binary.unwrap_or("gpg2"));
+    let binary = gpg_binary.unwrap_or("gpg2");
+    let mut command = Command::new(binary);
     command.args(&[
         "--digest-algo",
         "sha512",
@@ -102,23 +83,27 @@ pub fn sign(
         command.args(&["--local-user", key]);
     }
     let a: Attachment = a.into();
-    let mut gpg = command
+
+    let sig_attachment = command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
-        .spawn()?;
-
-    let sig_attachment = {
-        gpg.stdin
-            .as_mut()
-            .unwrap()
-            .write_all(&melib::signatures::convert_attachment_to_rfc_spec(
-                a.into_raw().as_bytes(),
+        .spawn()
+        .and_then(|mut gpg| {
+            gpg.stdin
+                .as_mut()
+                .expect("Could not get gpg stdin")
+                .write_all(&melib_pgp::convert_attachment_to_rfc_spec(
+                    a.into_raw().as_bytes(),
+                ))?;
+            let gpg = gpg.wait_with_output()?;
+            Ok(Attachment::new(
+                ContentType::PGPSignature,
+                Default::default(),
+                gpg.stdout,
             ))
-            .unwrap();
-        let gpg = gpg.wait_with_output().unwrap();
-        Attachment::new(ContentType::PGPSignature, Default::default(), gpg.stdout)
-    };
+        })
+        .chain_err_summary(|| format!("Failed to launch {} to verify PGP signature", binary))?;
 
     let a: AttachmentBuilder = a.into();
     let parts = vec![a, sig_attachment.into()];
@@ -133,4 +118,62 @@ pub fn sign(
         Vec::new(),
     )
     .into())
+}
+
+pub async fn decrypt(
+    raw: Vec<u8>,
+    gpg_binary: Option<String>,
+    decrypt_key: Option<String>,
+) -> Result<(melib_pgp::DecryptionMetadata, Vec<u8>)> {
+    let bin = gpg_binary.as_ref().map(|s| s.as_str()).unwrap_or("gpg2");
+    let mut command = Command::new(bin);
+    command.args(&["--digest-algo", "sha512", "--output", "-"]);
+    if let Some(ref key) = decrypt_key {
+        command.args(&["--local-user", key]);
+    }
+
+    let stdout = command
+        .args(&["--decrypt"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .and_then(|mut gpg| {
+            gpg.stdin
+                .as_mut()
+                .expect("Could not get gpg stdin")
+                .write_all(&raw)?;
+            let gpg = gpg.wait_with_output()?;
+            Ok(gpg.stdout)
+        })
+        .chain_err_summary(|| format!("Failed to launch {} to verify PGP signature", bin))?;
+    Ok((melib_pgp::DecryptionMetadata::default(), stdout))
+}
+
+pub async fn verify(a: Attachment, gpg_binary: Option<String>) -> Result<Vec<u8>> {
+    let (bytes, sig) =
+        melib_pgp::verify_signature(&a).chain_err_summary(|| "Could not verify signature.")?;
+    let bytes_file = create_temp_file(&bytes, None, None, true);
+    let signature_file = create_temp_file(sig, None, None, true);
+    Ok(
+        Command::new(gpg_binary.as_ref().map(String::as_str).unwrap_or("gpg2"))
+            .args(&[
+                "--output",
+                "-",
+                "--verify",
+                signature_file.path.to_str().unwrap(),
+                bytes_file.path.to_str().unwrap(),
+            ])
+            .stdin(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .and_then(|gpg| gpg.wait_with_output())
+            .map(|gpg| gpg.stderr)
+            .chain_err_summary(|| {
+                format!(
+                    "Failed to launch {} to verify PGP signature",
+                    gpg_binary.as_ref().map(String::as_str).unwrap_or("gpg2"),
+                )
+            })?,
+    )
 }

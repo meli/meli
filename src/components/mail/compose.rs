@@ -428,7 +428,7 @@ impl Composer {
             write_string_to_grid(
                 &format!(
                     "☑ sign with {}",
-                    account_settings!(context[self.account_hash].pgp.key)
+                    account_settings!(context[self.account_hash].pgp.sign_key)
                         .as_ref()
                         .map(|s| s.as_str())
                         .unwrap_or("default key")
@@ -1473,7 +1473,7 @@ pub fn send_draft(
             account_settings!(context[account_hash].pgp.gpg_binary)
                 .as_ref()
                 .map(|s| s.as_str()),
-            account_settings!(context[account_hash].pgp.key)
+            account_settings!(context[account_hash].pgp.sign_key)
                 .as_ref()
                 .map(|s| s.as_str()),
         );

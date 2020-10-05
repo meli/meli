@@ -97,7 +97,7 @@ pub mod headers;
 pub mod list_management;
 pub mod mailto;
 pub mod parser;
-pub mod signatures;
+pub mod pgp;
 
 pub use address::{Address, MessageID, References, StrBuild, StrBuilder};
 pub use attachments::{Attachment, AttachmentBuilder};
@@ -219,6 +219,7 @@ impl core::fmt::Debug for Envelope {
             .field("Message-ID", &self.message_id_display())
             .field("In-Reply-To", &self.in_reply_to_display())
             .field("References", &self.references)
+            .field("Flags", &self.flags)
             .field("Hash", &self.hash)
             .finish()
     }

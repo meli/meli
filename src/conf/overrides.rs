@@ -292,12 +292,23 @@ pub struct PGPSettingsOverride {
     #[serde(alias = "auto-verify-signatures")]
     #[serde(default)]
     pub auto_verify_signatures: Option<bool>,
+    #[doc = " auto decrypt encrypted e-mail"]
+    #[serde(alias = "auto-decrypt")]
+    #[serde(default)]
+    pub auto_decrypt: Option<bool>,
     #[doc = " always sign sent messages"]
     #[serde(alias = "auto-sign")]
     #[serde(default)]
     pub auto_sign: Option<bool>,
+    #[serde(alias = "sign-key")]
     #[serde(default)]
-    pub key: Option<Option<String>>,
+    pub sign_key: Option<Option<String>>,
+    #[serde(alias = "decrypt-key")]
+    #[serde(default)]
+    pub decrypt_key: Option<Option<String>>,
+    #[serde(alias = "encrypt-key")]
+    #[serde(default)]
+    pub encrypt_key: Option<Option<String>>,
     #[doc = " gpg binary name or file location to use"]
     #[serde(alias = "gpg-binary")]
     #[serde(default)]
@@ -307,8 +318,11 @@ impl Default for PGPSettingsOverride {
     fn default() -> Self {
         PGPSettingsOverride {
             auto_verify_signatures: None,
+            auto_decrypt: None,
             auto_sign: None,
-            key: None,
+            sign_key: None,
+            decrypt_key: None,
+            encrypt_key: None,
             gpg_binary: None,
         }
     }

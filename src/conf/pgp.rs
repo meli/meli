@@ -29,13 +29,23 @@ pub struct PGPSettings {
     #[serde(default = "true_val", alias = "auto-verify-signatures")]
     pub auto_verify_signatures: bool,
 
+    /// auto decrypt encrypted e-mail
+    #[serde(default = "true_val", alias = "auto-decrypt")]
+    pub auto_decrypt: bool,
+
     /// always sign sent messages
     #[serde(default = "false_val", alias = "auto-sign")]
     pub auto_sign: bool,
 
     // https://tools.ietf.org/html/rfc4880#section-12.2
-    #[serde(default = "none")]
-    pub key: Option<String>,
+    #[serde(default = "none", alias = "sign-key")]
+    pub sign_key: Option<String>,
+
+    #[serde(default = "none", alias = "decrypt-key")]
+    pub decrypt_key: Option<String>,
+
+    #[serde(default = "none", alias = "encrypt-key")]
+    pub encrypt_key: Option<String>,
 
     /// gpg binary name or file location to use
     #[serde(default, alias = "gpg-binary")]
@@ -46,8 +56,11 @@ impl Default for PGPSettings {
     fn default() -> Self {
         PGPSettings {
             auto_verify_signatures: true,
+            auto_decrypt: true,
             auto_sign: false,
-            key: None,
+            sign_key: None,
+            decrypt_key: None,
+            encrypt_key: None,
             gpg_binary: None,
         }
     }

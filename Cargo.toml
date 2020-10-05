@@ -72,7 +72,7 @@ debug = false
 members = ["melib", "tools", ]
 
 [features]
-default = ["sqlite3", "notmuch", "regexp", "smtp", "dbus-notifications"]
+default = ["sqlite3", "notmuch", "regexp", "smtp", "dbus-notifications", "gpgme"]
 notmuch = ["melib/notmuch_backend", ]
 jmap = ["melib/jmap_backend",]
 sqlite3 = ["melib/sqlite3"]
@@ -81,6 +81,7 @@ regexp = ["pcre2"]
 dbus-notifications = ["notify-rust",]
 cli-docs = []
 svgscreenshot = ["svg_crate"]
+gpgme = ["melib/gpgme"]
 
 # Print tracing logs as meli runs in stderr
 # enable for debug tracing logs: build with --features=debug-tracing

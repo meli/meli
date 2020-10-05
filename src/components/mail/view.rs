@@ -22,6 +22,7 @@
 use super::*;
 use crate::conf::accounts::JobRequest;
 use crate::jobs::{oneshot, JobId};
+use melib::email::attachment_types::ContentType;
 use melib::list_management;
 use melib::parser::BytesExt;
 use smallvec::SmallVec;
@@ -29,6 +30,7 @@ use std::collections::HashSet;
 use std::io::Write;
 
 use std::convert::TryFrom;
+use std::os::unix::fs::PermissionsExt;
 use std::process::{Command, Stdio};
 
 mod html;
@@ -39,7 +41,7 @@ pub use self::thread::*;
 mod envelope;
 pub use self::envelope::*;
 
-use linkify::{Link, LinkFinder};
+use linkify::LinkFinder;
 use xdg_utils::query_default_app;
 
 #[derive(PartialEq, Copy, Clone, Debug)]
@@ -54,7 +56,7 @@ enum ViewMode {
     Url,
     Attachment(usize),
     Source(Source),
-    Ansi(RawBuffer),
+    //Ansi(RawBuffer),
     Subview,
     ContactSelector(UIDialog<Card>),
 }
@@ -66,12 +68,14 @@ impl Default for ViewMode {
 }
 
 impl ViewMode {
+    /*
     fn is_ansi(&self) -> bool {
         match self {
             ViewMode::Ansi(_) => true,
             _ => false,
         }
     }
+    */
     fn is_attachment(&self) -> bool {
         match self {
             ViewMode::Attachment(_) => true,
@@ -86,6 +90,56 @@ impl ViewMode {
     }
 }
 
+#[derive(Debug)]
+pub enum AttachmentDisplay {
+    InlineText {
+        inner: Attachment,
+        text: String,
+    },
+    InlineOther {
+        inner: Attachment,
+    },
+    Attachment {
+        inner: Attachment,
+    },
+    SignedPending {
+        inner: Attachment,
+        display: Vec<AttachmentDisplay>,
+        chan:
+            std::result::Result<oneshot::Receiver<Result<()>>, oneshot::Receiver<Result<Vec<u8>>>>,
+        job_id: JobId,
+    },
+    SignedFailed {
+        inner: Attachment,
+        display: Vec<AttachmentDisplay>,
+        error: MeliError,
+    },
+    SignedUnverified {
+        inner: Attachment,
+        display: Vec<AttachmentDisplay>,
+    },
+    SignedVerified {
+        inner: Attachment,
+        display: Vec<AttachmentDisplay>,
+        description: String,
+    },
+    EncryptedPending {
+        inner: Attachment,
+        chan: oneshot::Receiver<Result<(melib::pgp::DecryptionMetadata, Vec<u8>)>>,
+        job_id: JobId,
+    },
+    EncryptedFailed {
+        inner: Attachment,
+        error: MeliError,
+    },
+    EncryptedSuccess {
+        inner: Attachment,
+        plaintext: Attachment,
+        plaintext_display: Vec<AttachmentDisplay>,
+        description: String,
+    },
+}
+
 /// Contains an Envelope view, with sticky headers, a pager for the body, and subviews for more
 /// menus
 #[derive(Debug, Default)]
@@ -98,6 +152,7 @@ pub struct MailView {
     mode: ViewMode,
     expand_headers: bool,
     attachment_tree: String,
+    attachment_paths: Vec<Vec<usize>>,
     headers_no: usize,
     headers_cursor: usize,
     force_draw_headers: bool,
@@ -117,7 +172,7 @@ pub enum PendingReplyAction {
 }
 
 #[derive(Debug)]
-pub enum MailViewState {
+enum MailViewState {
     Init {
         pending_action: Option<PendingReplyAction>,
     },
@@ -132,8 +187,23 @@ pub enum MailViewState {
     Loaded {
         bytes: Vec<u8>,
         body: Attachment,
+        display: Vec<AttachmentDisplay>,
         body_text: String,
+        links: Vec<Link>,
     },
+}
+
+#[derive(Copy, Clone, Debug)]
+enum LinkKind {
+    Url,
+    Email,
+}
+
+#[derive(Debug, Copy, Clone)]
+struct Link {
+    start: usize,
+    end: usize,
+    kind: LinkKind,
 }
 
 impl Default for MailViewState {
@@ -152,6 +222,7 @@ impl Clone for MailView {
             pager: self.pager.clone(),
             mode: ViewMode::Normal,
             attachment_tree: self.attachment_tree.clone(),
+            attachment_paths: self.attachment_paths.clone(),
             state: MailViewState::default(),
             active_jobs: self.active_jobs.clone(),
             ..*self
@@ -182,6 +253,7 @@ impl MailView {
             mode: ViewMode::Normal,
             expand_headers: false,
             attachment_tree: String::new(),
+            attachment_paths: vec![],
 
             headers_no: 5,
             headers_cursor: 0,
@@ -235,11 +307,24 @@ impl MailView {
                                             .populate_headers(&bytes);
                                     }
                                     let body = AttachmentBuilder::new(&bytes).build();
-                                    let body_text = self.attachment_to_text(&body, context);
+                                    let display = Self::attachment_to(
+                                        &body,
+                                        context,
+                                        self.coordinates,
+                                        &mut self.active_jobs,
+                                    );
+                                    let (paths, attachment_tree_s) =
+                                        self.attachment_displays_to_tree(&display);
+                                    self.attachment_tree = attachment_tree_s;
+                                    self.attachment_paths = paths;
+                                    let body_text =
+                                        self.attachment_displays_to_text(&display, context);
                                     self.state = MailViewState::Loaded {
+                                        display,
                                         body,
                                         bytes,
                                         body_text,
+                                        links: vec![],
                                     };
                                 }
                                 Err(err) => {
@@ -331,132 +416,418 @@ impl MailView {
             .push_back(UIEvent::Action(Tab(New(Some(composer)))));
     }
 
-    /// Returns the string to be displayed in the Viewer
-    fn attachment_to_text(&mut self, body: &Attachment, context: &mut Context) -> String {
-        let finder = LinkFinder::new();
-        let coordinates = self.coordinates;
-        let body_text = String::from_utf8_lossy(&decode_rec(
-            body,
-            Some(Box::new(move |a: &Attachment, v: &mut Vec<u8>| {
-                if a.content_type().is_text_html() {
-                    /* FIXME: duplication with view/html.rs */
-                    if let Some(filter_invocation) =
-                        mailbox_settings!(context[coordinates.0][&coordinates.1].pager.html_filter)
-                            .as_ref()
-                    {
-                        let command_obj = Command::new("sh")
-                            .args(&["-c", filter_invocation])
-                            .stdin(Stdio::piped())
-                            .stdout(Stdio::piped())
-                            .spawn();
-                        match command_obj {
-                            Err(err) => {
-                                context.replies.push_back(UIEvent::Notification(
-                                    Some(format!(
-                                        "Failed to start html filter process: {}",
-                                        filter_invocation,
-                                    )),
-                                    err.to_string(),
-                                    Some(NotificationType::Error(melib::ErrorKind::External)),
-                                ));
-                                return;
-                            }
-                            Ok(mut html_filter) => {
-                                html_filter
-                                    .stdin
-                                    .as_mut()
-                                    .unwrap()
-                                    .write_all(&v)
-                                    .expect("Failed to write to stdin");
-                                *v = format!(
+    fn attachment_displays_to_text(
+        &self,
+        displays: &[AttachmentDisplay],
+        context: &mut Context,
+    ) -> String {
+        let mut acc = String::new();
+        for d in displays {
+            use AttachmentDisplay::*;
+            match d {
+                InlineText { inner: _, text } => acc.push_str(&text),
+                InlineOther { inner } => {
+                    if !acc.ends_with("\n\n") {
+                        acc.push_str("\n\n");
+                    }
+                    acc.push_str(&inner.to_string());
+                    if !acc.ends_with("\n\n") {
+                        acc.push_str("\n\n");
+                    }
+                }
+                Attachment { inner: _ } => {}
+                SignedPending {
+                    inner: _,
+                    display,
+                    chan: _,
+                    job_id: _,
+                } => {
+                    acc.push_str("Waiting for signature verification.\n\n");
+                    acc.push_str(&self.attachment_displays_to_text(display, context));
+                }
+                SignedUnverified { inner: _, display } => {
+                    acc.push_str("Unverified signature.\n\n");
+                    acc.push_str(&self.attachment_displays_to_text(display, context))
+                }
+                SignedFailed {
+                    inner: _,
+                    display,
+                    error,
+                } => {
+                    acc.push_str(&format!("Failed to verify signature: {}.\n\n", error));
+                    acc.push_str(&self.attachment_displays_to_text(display, context));
+                }
+                SignedVerified {
+                    inner: _,
+                    display,
+                    description,
+                } => {
+                    if description.is_empty() {
+                        acc.push_str("Verified signature.\n\n");
+                    } else {
+                        acc.push_str(&description);
+                        acc.push_str("\n\n");
+                    }
+                    acc.push_str(&self.attachment_displays_to_text(display, context));
+                }
+                EncryptedPending { .. } => acc.push_str("Waiting for decryption result."),
+                EncryptedFailed { inner: _, error } => {
+                    acc.push_str(&format!("Decryption failed: {}.", &error))
+                }
+                EncryptedSuccess {
+                    inner: _,
+                    plaintext: _,
+                    plaintext_display,
+                    description,
+                } => {
+                    if description.is_empty() {
+                        acc.push_str("Succesfully decrypted.\n\n");
+                    } else {
+                        acc.push_str(&description);
+                        acc.push_str("\n\n");
+                    }
+                    acc.push_str(&self.attachment_displays_to_text(plaintext_display, context));
+                }
+            }
+        }
+        acc
+    }
+
+    fn attachment_displays_to_tree(
+        &self,
+        displays: &[AttachmentDisplay],
+    ) -> (Vec<Vec<usize>>, String) {
+        let mut acc = String::new();
+        let mut branches = SmallVec::new();
+        let mut paths = Vec::with_capacity(displays.len());
+        let mut cur_path = vec![];
+        let mut idx = 0;
+        for (i, d) in displays.iter().enumerate() {
+            use AttachmentDisplay::*;
+            cur_path.push(i);
+            match d {
+                InlineText { inner, text: _ }
+                | InlineOther { inner }
+                | Attachment { inner }
+                | SignedPending {
+                    inner,
+                    display: _,
+                    chan: _,
+                    job_id: _,
+                }
+                | SignedUnverified { inner, display: _ }
+                | SignedFailed {
+                    inner,
+                    display: _,
+                    error: _,
+                }
+                | SignedVerified {
+                    inner,
+                    display: _,
+                    description: _,
+                }
+                | EncryptedPending {
+                    inner,
+                    chan: _,
+                    job_id: _,
+                }
+                | EncryptedFailed { inner, error: _ }
+                | EncryptedSuccess {
+                    inner: _,
+                    plaintext: inner,
+                    plaintext_display: _,
+                    description: _,
+                } => {
+                    attachment_tree(
+                        (&mut idx, (0, inner)),
+                        &mut branches,
+                        &mut paths,
+                        &mut cur_path,
+                        i + 1 < displays.len(),
+                        &mut acc,
+                    );
+                }
+            }
+            cur_path.pop();
+            idx += 1;
+        }
+        (paths, acc)
+    }
+
+    fn attachment_to(
+        body: &Attachment,
+        context: &mut Context,
+        coordinates: (AccountHash, MailboxHash, EnvelopeHash),
+        active_jobs: &mut HashSet<JobId>,
+    ) -> Vec<AttachmentDisplay> {
+        let mut ret = vec![];
+        fn rec(
+            a: &Attachment,
+            context: &mut Context,
+            coordinates: (AccountHash, MailboxHash, EnvelopeHash),
+            acc: &mut Vec<AttachmentDisplay>,
+            active_jobs: &mut HashSet<JobId>,
+        ) {
+            if a.content_disposition.kind.is_attachment() {
+                acc.push(AttachmentDisplay::Attachment { inner: a.clone() });
+            } else if a.content_type().is_text_html() {
+                let bytes = decode(a, None);
+                let filter_invocation =
+                    mailbox_settings!(context[coordinates.0][&coordinates.1].pager.html_filter)
+                        .as_ref()
+                        .map(|s| s.as_str())
+                        .unwrap_or("w3m -I utf-8 -T text/html");
+                let command_obj = Command::new("sh")
+                    .args(&["-c", filter_invocation])
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::piped())
+                    .spawn();
+                match command_obj {
+                    Err(err) => {
+                        context.replies.push_back(UIEvent::Notification(
+                            Some(format!(
+                                "Failed to start html filter process: {}",
+                                filter_invocation,
+                            )),
+                            err.to_string(),
+                            Some(NotificationType::Error(melib::ErrorKind::External)),
+                        ));
+                        let mut s = format!(
+                                "Failed to start html filter process: `{}`. Press `v` to open in web browser. \n\n",
+                                filter_invocation
+                            );
+                        s.push_str(&String::from_utf8_lossy(&bytes));
+                        acc.push(AttachmentDisplay::InlineText {
+                            inner: a.clone(),
+                            text: s,
+                        });
+                    }
+                    Ok(mut html_filter) => {
+                        html_filter
+                            .stdin
+                            .as_mut()
+                            .unwrap()
+                            .write_all(&bytes)
+                            .expect("Failed to write to stdin");
+                        let mut s = format!(
                             "Text piped through `{}`. Press `v` to open in web browser. \n\n",
                             filter_invocation
-                        )
-                                .into_bytes();
-                                v.extend(html_filter.wait_with_output().unwrap().stdout);
-                            }
-                        }
-                    } else {
-                        match Command::new("w3m")
-                            .args(&["-I", "utf-8", "-T", "text/html"])
-                            .stdin(Stdio::piped())
-                            .stdout(Stdio::piped())
-                            .spawn()
+                        );
+                        s.push_str(&String::from_utf8_lossy(
+                            &html_filter.wait_with_output().unwrap().stdout,
+                        ));
+                        acc.push(AttachmentDisplay::InlineText {
+                            inner: a.clone(),
+                            text: s,
+                        });
+                    }
+                }
+            } else if a.is_text() {
+                let bytes = decode(a, None);
+                acc.push(AttachmentDisplay::InlineText {
+                    inner: a.clone(),
+                    text: String::from_utf8_lossy(&bytes).to_string(),
+                });
+            } else if let ContentType::Multipart {
+                ref kind,
+                ref parts,
+                ..
+            } = a.content_type
+            {
+                match kind {
+                    MultipartType::Alternative => {
+                        if let Some(text_attachment_pos) =
+                            parts.iter().position(|a| a.content_type == "text/plain")
                         {
-                            Ok(mut html_filter) => {
-                                html_filter
-                                    .stdin
-                                    .as_mut()
-                                    .unwrap()
-                                    .write_all(&v)
-                                    .expect("Failed to write to html filter stdin");
-                                *v = String::from(
-                                "Text piped through `w3m`. Press `v` to open in web browser. \n\n",
-                            )
-                            .into_bytes();
-                                v.extend(html_filter.wait_with_output().unwrap().stdout);
-                            }
-                            Err(err) => {
-                                context.replies.push_back(UIEvent::Notification(
-                                    Some("Failed to launch w3m to use as html filter".to_string()),
-                                    err.to_string(),
-                                    Some(NotificationType::Error(melib::ErrorKind::External)),
-                                ));
+                            let bytes = decode(&parts[text_attachment_pos], None);
+                            acc.push(AttachmentDisplay::InlineText {
+                                inner: a.clone(),
+                                text: String::from_utf8_lossy(&bytes).to_string(),
+                            });
+                        } else {
+                            for a in parts {
+                                rec(a, context, coordinates, acc, active_jobs);
                             }
                         }
                     }
-                } else if a.is_signed() {
-                    v.clear();
-                    if context.settings.pgp.auto_verify_signatures {
-                        v.extend(crate::mail::pgp::verify_signature(a, context).into_iter());
+                    MultipartType::Signed => {
+                        if *mailbox_settings!(
+                            context[coordinates.0][&coordinates.1]
+                                .pgp
+                                .auto_verify_signatures
+                        ) {
+                            if let Some(bin) = mailbox_settings!(
+                                context[coordinates.0][&coordinates.1].pgp.gpg_binary
+                            ) {
+                                let verify_fut = crate::components::mail::pgp::verify(
+                                    a.clone(),
+                                    Some(bin.to_string()),
+                                );
+                                let (chan, _handle, job_id) =
+                                    context.job_executor.spawn_blocking(verify_fut);
+                                active_jobs.insert(job_id);
+                                acc.push(AttachmentDisplay::SignedPending {
+                                    inner: a.clone(),
+                                    display: {
+                                        let mut v = vec![];
+                                        rec(&parts[0], context, coordinates, &mut v, active_jobs);
+                                        v
+                                    },
+                                    chan: Err(chan),
+                                    job_id,
+                                });
+                            } else {
+                                #[cfg(not(feature = "gpgme"))]
+                                {
+                                    acc.push(AttachmentDisplay::SignedUnverified {
+                                        inner: a.clone(),
+                                        display: {
+                                            let mut v = vec![];
+                                            rec(
+                                                &parts[0],
+                                                context,
+                                                coordinates,
+                                                &mut v,
+                                                active_jobs,
+                                            );
+                                            v
+                                        },
+                                    });
+                                }
+                                #[cfg(feature = "gpgme")]
+                                match melib::gpgme::Context::new().and_then(|mut ctx| {
+                                    let sig = ctx.new_data_mem(&parts[1].raw())?;
+                                    let mut f = std::fs::File::create("/tmp/sig").unwrap();
+                                    f.write_all(&parts[1].raw())?;
+                                    let mut f = std::fs::File::create("/tmp/data").unwrap();
+                                    f.write_all(&parts[0].raw())?;
+                                    let data = ctx.new_data_mem(&parts[0].raw())?;
+                                    ctx.verify(sig, data)
+                                }) {
+                                    Ok(verify_fut) => {
+                                        let (chan, _handle, job_id) =
+                                            context.job_executor.spawn_specialized(verify_fut);
+                                        active_jobs.insert(job_id);
+                                        acc.push(AttachmentDisplay::SignedPending {
+                                            inner: a.clone(),
+                                            display: {
+                                                let mut v = vec![];
+                                                rec(
+                                                    &parts[0],
+                                                    context,
+                                                    coordinates,
+                                                    &mut v,
+                                                    active_jobs,
+                                                );
+                                                v
+                                            },
+                                            chan: Ok(chan),
+                                            job_id,
+                                        });
+                                    }
+                                    Err(error) => {
+                                        acc.push(AttachmentDisplay::SignedFailed {
+                                            inner: a.clone(),
+                                            display: {
+                                                let mut v = vec![];
+                                                rec(
+                                                    &parts[0],
+                                                    context,
+                                                    coordinates,
+                                                    &mut v,
+                                                    active_jobs,
+                                                );
+                                                v
+                                            },
+                                            error,
+                                        });
+                                    }
+                                }
+                            }
+                        } else {
+                            acc.push(AttachmentDisplay::SignedUnverified {
+                                inner: a.clone(),
+                                display: {
+                                    let mut v = vec![];
+                                    rec(&parts[0], context, coordinates, &mut v, active_jobs);
+                                    v
+                                },
+                            });
+                        }
+                    }
+                    MultipartType::Encrypted => {
+                        for a in parts {
+                            if a.content_type == "application/octet-stream" {
+                                if *mailbox_settings!(
+                                    context[coordinates.0][&coordinates.1].pgp.auto_decrypt
+                                ) {
+                                    let _verify = *mailbox_settings!(
+                                        context[coordinates.0][&coordinates.1]
+                                            .pgp
+                                            .auto_verify_signatures
+                                    );
+                                    if let Some(bin) = mailbox_settings!(
+                                        context[coordinates.0][&coordinates.1].pgp.gpg_binary
+                                    ) {
+                                        let decrypt_fut = crate::components::mail::pgp::decrypt(
+                                            a.raw().to_vec(),
+                                            Some(bin.to_string()),
+                                            None,
+                                        );
+                                        let (chan, _handle, job_id) =
+                                            context.job_executor.spawn_blocking(decrypt_fut);
+                                        active_jobs.insert(job_id);
+                                        acc.push(AttachmentDisplay::EncryptedPending {
+                                            inner: a.clone(),
+                                            chan,
+                                            job_id,
+                                        });
+                                    } else {
+                                        #[cfg(not(feature = "gpgme"))]
+                                        {
+                                            acc.push(AttachmentDisplay::EncryptedFailed {
+                                                inner: a.clone(),
+                                                error: MeliError::new("Cannot decrypt: define `gpg_binary` in configuration."),
+                                            });
+                                        }
+                                        #[cfg(feature = "gpgme")]
+                                        match melib::gpgme::Context::new().and_then(|mut ctx| {
+                                            let cipher = ctx.new_data_mem(&a.raw())?;
+                                            ctx.decrypt(cipher)
+                                        }) {
+                                            Ok(decrypt_fut) => {
+                                                let (chan, _handle, job_id) = context
+                                                    .job_executor
+                                                    .spawn_specialized(decrypt_fut);
+                                                active_jobs.insert(job_id);
+                                                acc.push(AttachmentDisplay::EncryptedPending {
+                                                    inner: a.clone(),
+                                                    chan,
+                                                    job_id,
+                                                });
+                                            }
+                                            Err(error) => {
+                                                acc.push(AttachmentDisplay::EncryptedFailed {
+                                                    inner: a.clone(),
+                                                    error,
+                                                });
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    _ => {
+                        for a in parts {
+                            rec(a, context, coordinates, acc, active_jobs);
+                        }
                     }
                 }
-            })),
-        ))
-        .into_owned();
-        if body.count_attachments() > 1 {
-            self.attachment_tree.clear();
-            attachment_tree(
-                (&mut 0, (0, &body)),
-                &mut SmallVec::new(),
-                false,
-                &mut self.attachment_tree,
-            );
-        }
-        match self.mode {
-            ViewMode::Normal
-            | ViewMode::Subview
-            | ViewMode::ContactSelector(_)
-            | ViewMode::Source(Source::Decoded) => {
-                format!("{}\n\n{}", body_text, self.attachment_tree)
             }
-            ViewMode::Source(Source::Raw) => String::from_utf8_lossy(body.body()).into_owned(),
-            ViewMode::Url => {
-                let mut t = body_text;
-                for (lidx, l) in finder.links(&body.text()).enumerate() {
-                    let offset = if lidx < 10 {
-                        lidx * 3
-                    } else if lidx < 100 {
-                        26 + (lidx - 9) * 4
-                    } else if lidx < 1000 {
-                        385 + (lidx - 99) * 5
-                    } else {
-                        panic!("FIXME: Message body with more than 100 urls, fix this");
-                    };
-                    t.insert_str(l.start() + offset, &format!("[{}]", lidx));
-                }
-                t.push_str("\n\n");
-                t.push_str(&self.attachment_tree);
-                t
-            }
-            ViewMode::Attachment(aidx) => {
-                let attachments = body.attachments();
-                let mut ret = "Viewing attachment. Press `r` to return \n".to_string();
-                ret.push_str(&attachments[aidx].text());
-                ret
-            }
-            ViewMode::Ansi(_) => "Viewing attachment. Press `r` to return \n".to_string(),
-        }
+        };
+        rec(body, context, coordinates, &mut ret, active_jobs);
+        ret
     }
 
     pub fn update(
@@ -471,167 +842,94 @@ impl MailView {
         self.set_dirty(true);
     }
 
-    fn open_attachment(&mut self, lidx: usize, context: &mut Context, use_mailcap: bool) {
-        let attachments = if let MailViewState::Loaded { ref body, .. } = self.state {
-            body.attachments()
-        } else if let MailViewState::Error { ref err } = self.state {
-            context.replies.push_back(UIEvent::Notification(
-                Some("Failed to open e-mail".to_string()),
-                err.to_string(),
-                Some(NotificationType::Error(err.kind)),
-            ));
-            log(
-                format!("Failed to open envelope: {}", err.to_string()),
-                ERROR,
-            );
-            self.init_futures(context);
-            return;
-        } else {
-            return;
-        };
-        if let Some(u) = attachments.get(lidx) {
-            if use_mailcap {
-                if let Ok(()) = crate::mailcap::MailcapEntry::execute(u, context) {
-                    self.set_dirty(true);
-                } else {
-                    context
-                        .replies
-                        .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(format!(
-                            "no mailcap entry found for {}",
-                            u.content_type()
-                        ))));
-                }
-            } else {
-                match u.content_type() {
-                    ContentType::MessageRfc822 => {
-                        match Mail::new(u.body().to_vec(), Some(Flag::SEEN)) {
-                            Ok(wrapper) => {
-                                context.replies.push_back(UIEvent::Action(Tab(New(Some(
-                                    Box::new(EnvelopeView::new(
-                                        wrapper,
-                                        None,
-                                        None,
-                                        self.coordinates.0,
-                                    )),
-                                )))));
-                            }
-                            Err(e) => {
-                                context.replies.push_back(UIEvent::StatusEvent(
-                                    StatusEvent::DisplayMessage(format!("{}", e)),
-                                ));
-                            }
-                        }
-                    }
-
-                    ContentType::Text { .. } | ContentType::PGPSignature => {
-                        self.mode = ViewMode::Attachment(lidx);
-                        self.initialised = false;
-                        self.dirty = true;
-                    }
-                    ContentType::Multipart { .. } => {
-                        context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(
-                                "Multipart attachments are not supported yet.".to_string(),
-                            ),
-                        ));
-                    }
-                    ContentType::Other { ref name, .. } => {
-                        let attachment_type = u.mime_type();
-                        let binary = query_default_app(&attachment_type);
-                        let mut name_opt = name.as_ref().and_then(|n| {
-                            melib::email::parser::encodings::phrase(n.as_bytes(), false)
-                                .map(|(_, v)| v)
-                                .ok()
-                                .and_then(|n| String::from_utf8(n).ok())
-                        });
-                        if name_opt.is_none() {
-                            name_opt = name.as_ref().map(|n| n.clone());
-                        }
-                        if let Ok(binary) = binary {
-                            let p = create_temp_file(
-                                &decode(u, None),
-                                name_opt.as_ref().map(String::as_str),
-                                None,
-                                true,
-                            );
-                            match debug!(context.plugin_manager.activate_hook(
-                                "attachment-view",
-                                p.path().display().to_string().into_bytes()
-                            )) {
-                                Ok(crate::plugins::FilterResult::Ansi(s)) => {
-                                    if let Some(buf) = crate::terminal::ansi::ansi_to_cellbuffer(&s)
-                                    {
-                                        let raw_buf = RawBuffer::new(buf, name_opt);
-                                        self.mode = ViewMode::Ansi(raw_buf);
-                                        self.initialised = false;
-                                        self.dirty = true;
-                                        return;
-                                    }
-                                }
-                                Ok(crate::plugins::FilterResult::UiMessage(s)) => {
-                                    context.replies.push_back(UIEvent::Notification(
-                                        None,
-                                        s,
-                                        Some(NotificationType::Error(melib::ErrorKind::None)),
-                                    ));
-                                }
-                                _ => {}
-                            }
-                            match Command::new(&binary)
-                                .arg(p.path())
-                                .stdin(Stdio::piped())
-                                .stdout(Stdio::piped())
-                                .spawn()
-                            {
-                                Ok(child) => {
-                                    context.temp_files.push(p);
-                                    context.children.push(child);
-                                }
-                                Err(err) => {
-                                    context.replies.push_back(UIEvent::StatusEvent(
-                                        StatusEvent::DisplayMessage(format!(
-                                            "Failed to start {}: {}",
-                                            binary.display(),
-                                            err
-                                        )),
-                                    ));
-                                }
-                            }
-                        } else {
-                            context.replies.push_back(UIEvent::StatusEvent(
-                                StatusEvent::DisplayMessage(if name.is_some() {
-                                    format!(
-                                        "Couldn't find a default application for file {} (type {})",
-                                        name.as_ref().unwrap(),
-                                        attachment_type
-                                    )
-                                } else {
-                                    format!(
-                                        "Couldn't find a default application for type {}",
-                                        attachment_type
-                                    )
-                                }),
-                            ));
-                        }
-                    }
-                    ContentType::OctetStream { ref name } => {
-                        context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(format!(
-                                "Failed to open {}. application/octet-stream isn't supported yet",
-                                name.as_ref().map(|n| n.as_str()).unwrap_or("file")
-                            )),
-                        ));
-                    }
-                }
-            }
-        } else {
-            context
-                .replies
-                .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(format!(
-                    "Attachment `{}` not found.",
-                    lidx
-                ))));
+    fn open_attachment(
+        &'_ self,
+        lidx: usize,
+        context: &mut Context,
+    ) -> Option<&'_ melib::Attachment> {
+        if lidx == 0 {
+            return None;
         }
+        let display = if let MailViewState::Loaded { ref display, .. } = self.state {
+            display
+        } else {
+            return None;
+        };
+        if let Some(path) =
+            self.attachment_paths.get(lidx).and_then(
+                |path| {
+                    if path.len() > 0 {
+                        Some(path)
+                    } else {
+                        None
+                    }
+                },
+            )
+        {
+            let first = path[0];
+            use AttachmentDisplay::*;
+            let root_attachment = match &display[first] {
+                InlineText { inner, text: _ }
+                | InlineOther { inner }
+                | Attachment { inner }
+                | SignedPending {
+                    inner,
+                    display: _,
+                    chan: _,
+                    job_id: _,
+                }
+                | SignedFailed {
+                    inner,
+                    display: _,
+                    error: _,
+                }
+                | SignedVerified {
+                    inner,
+                    display: _,
+                    description: _,
+                }
+                | SignedUnverified { inner, display: _ }
+                | EncryptedPending {
+                    inner,
+                    chan: _,
+                    job_id: _,
+                }
+                | EncryptedFailed { inner, error: _ }
+                | EncryptedSuccess {
+                    inner: _,
+                    plaintext: inner,
+                    plaintext_display: _,
+                    description: _,
+                } => inner,
+            };
+            fn find_attachment<'a>(
+                a: &'a melib::Attachment,
+                path: &[usize],
+            ) -> Option<&'a melib::Attachment> {
+                if path.is_empty() {
+                    return Some(a);
+                }
+                match a.content_type {
+                    ContentType::Multipart { ref parts, .. } => {
+                        let first = path[0];
+                        if first < parts.len() {
+                            return find_attachment(&parts[first], &path[1..]);
+                        }
+                    }
+                    _ => {}
+                }
+                None
+            }
+
+            return find_attachment(root_attachment, &path[1..]);
+        }
+        context
+            .replies
+            .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(format!(
+                "Attachment `{}` not found.",
+                lidx
+            ))));
+        None
     }
 }
 
@@ -872,8 +1170,15 @@ impl Component for MailView {
         };
 
         if !self.initialised {
-            let bytes = if let MailViewState::Loaded { ref bytes, .. } = self.state {
-                bytes
+            let (body, body_text, bytes, links) = if let MailViewState::Loaded {
+                ref body,
+                ref body_text,
+                ref bytes,
+                ref mut links,
+                ..
+            } = self.state
+            {
+                (body, body_text, bytes, links)
             } else if let MailViewState::Error { ref err } = self.state {
                 clear_area(
                     grid,
@@ -906,18 +1211,31 @@ impl Component for MailView {
                 return;
             };
             self.initialised = true;
-            let body = AttachmentBuilder::new(bytes).build();
+            //let body = AttachmentBuilder::new(bytes).build();
             match self.mode {
-                ViewMode::Attachment(aidx) if body.attachments()[aidx].is_html() => {
-                    let attachment = &body.attachments()[aidx];
-                    self.subview = Some(Box::new(HtmlView::new(&attachment, context)));
-                    self.mode = ViewMode::Subview;
-                    self.initialised = false;
+                ViewMode::Attachment(aidx) => {
+                    let mut text = "Viewing attachment. Press `r` to return \n".to_string();
+                    if let Some(attachment) = self.open_attachment(aidx, context) {
+                        if attachment.is_html() {
+                            self.subview = Some(Box::new(HtmlView::new(&attachment, context)));
+                            self.mode = ViewMode::Subview;
+                        } else {
+                            text.push_str(&attachment.text());
+                            let colors = crate::conf::value(context, "mail.view.body");
+                            self.pager =
+                                Pager::from_string(text, Some(context), Some(0), None, colors);
+                            self.subview = None;
+                        }
+                    } else {
+                        text.push_str("Internal error. MailView::open_attachment failed.");
+                        let colors = crate::conf::value(context, "mail.view.body");
+                        self.pager = Pager::from_string(text, Some(context), Some(0), None, colors);
+                        self.subview = None;
+                    }
                 }
                 ViewMode::Normal if body.is_html() => {
                     self.subview = Some(Box::new(HtmlView::new(&body, context)));
                     self.mode = ViewMode::Subview;
-                    self.initialised = false;
                 }
                 ViewMode::Normal
                     if mailbox_settings!(
@@ -979,14 +1297,21 @@ impl Component for MailView {
                                 })
                                 .map(|v| String::from_utf8_lossy(&v).into_owned())
                                 .unwrap_or_else(|err: MeliError| err.to_string());
-                            ret.push_str("\n\n");
-                            ret.extend(self.attachment_to_text(&body, context).chars());
+                            if !ret.ends_with("\n\n") {
+                                ret.push_str("\n\n");
+                            }
+                            ret.extend(body_text.chars());
+                            if !ret.ends_with("\n\n") {
+                                ret.push_str("\n\n");
+                            }
+                            ret.push_str(&self.attachment_tree);
                             ret
                         }
                     };
                     let colors = crate::conf::value(context, "mail.view.body");
                     self.pager = Pager::from_string(text, Some(context), None, None, colors);
                 }
+                /*
                 ViewMode::Ansi(ref buf) => {
                     write_string_to_grid(
                         &format!("Viewing `{}`. Press `r` to return", buf.title()),
@@ -998,14 +1323,52 @@ impl Component for MailView {
                         Some(get_x(upper_left)),
                     );
                 }
+                */
+                ViewMode::Url => {
+                    let mut text = body_text.clone();
+                    if links.is_empty() {
+                        let finder = LinkFinder::new();
+                        *links = finder
+                            .links(&text)
+                            .filter_map(|l| {
+                                if *l.kind() == linkify::LinkKind::Url {
+                                    Some(Link {
+                                        start: l.start(),
+                                        end: l.end(),
+                                        kind: LinkKind::Url,
+                                    })
+                                } else if *l.kind() == linkify::LinkKind::Email {
+                                    Some(Link {
+                                        start: l.start(),
+                                        end: l.end(),
+                                        kind: LinkKind::Email,
+                                    })
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect::<Vec<Link>>();
+                    }
+                    for (lidx, l) in links.iter().enumerate().rev() {
+                        text.insert_str(l.start, &format!("[{}]", lidx));
+                    }
+                    if !text.ends_with("\n\n") {
+                        text.push_str("\n\n");
+                    }
+                    text.push_str(&self.attachment_tree);
+
+                    let cursor_pos = self.pager.cursor_pos();
+                    let colors = crate::conf::value(context, "mail.view.body");
+                    self.pager =
+                        Pager::from_string(text, Some(context), Some(cursor_pos), None, colors);
+                    self.subview = None;
+                }
                 _ => {
-                    let text = {
-                        self.attachment_to_text(&body, context)
-                        /*
-                        // URL indexes must be colored (ugh..)
-                        MailView::plain_text_to_buf(&text, self.mode == ViewMode::Url)
-                        */
-                    };
+                    let mut text = body_text.clone();
+                    if !text.ends_with("\n\n") {
+                        text.push_str("\n\n");
+                    }
+                    text.push_str(&self.attachment_tree);
                     let cursor_pos = if self.mode.is_attachment() {
                         0
                     } else {
@@ -1024,9 +1387,10 @@ impl Component for MailView {
                     s.draw(grid, (set_y(upper_left, y), bottom_right), context);
                 }
             }
+            /*
             ViewMode::Ansi(ref mut buf) => {
                 buf.draw(grid, (set_y(upper_left, y + 1), bottom_right), context);
-            }
+            }*/
             _ => {
                 self.pager
                     .draw(grid, (set_y(upper_left, y), bottom_right), context);
@@ -1040,11 +1404,11 @@ impl Component for MailView {
     fn process_event(&mut self, mut event: &mut UIEvent, context: &mut Context) -> bool {
         let shortcuts = self.get_shortcuts(context);
         match (&mut self.mode, &mut event) {
-            (ViewMode::Ansi(ref mut buf), _) => {
+            /*(ViewMode::Ansi(ref mut buf), _) => {
                 if buf.process_event(event, context) {
                     return true;
                 }
-            }
+            }*/
             (ViewMode::Subview, _) => {
                 if let Some(s) = self.subview.as_mut() {
                     if s.process_event(event, context) {
@@ -1120,7 +1484,6 @@ impl Component for MailView {
                             pending_action: _,
                         } if job_id == id => {
                             let bytes_result = chan.try_recv().unwrap().unwrap();
-                            debug!("bytes_result");
                             match bytes_result {
                                 Ok(bytes) => {
                                     if context.accounts[&self.coordinates.0]
@@ -1135,10 +1498,23 @@ impl Component for MailView {
                                             .populate_headers(&bytes);
                                     }
                                     let body = AttachmentBuilder::new(&bytes).build();
-                                    let body_text = self.attachment_to_text(&body, context);
+                                    let display = Self::attachment_to(
+                                        &body,
+                                        context,
+                                        self.coordinates,
+                                        &mut self.active_jobs,
+                                    );
+                                    let (paths, attachment_tree_s) =
+                                        self.attachment_displays_to_tree(&display);
+                                    self.attachment_tree = attachment_tree_s;
+                                    self.attachment_paths = paths;
+                                    let body_text =
+                                        self.attachment_displays_to_text(&display, context);
                                     self.state = MailViewState::Loaded {
-                                        body,
                                         bytes,
+                                        body,
+                                        display,
+                                        links: vec![],
                                         body_text,
                                     };
                                 }
@@ -1149,6 +1525,133 @@ impl Component for MailView {
                         }
                         MailViewState::Init { .. } => {
                             self.init_futures(context);
+                        }
+                        MailViewState::Loaded {
+                            ref mut display, ..
+                        } => {
+                            let mut caught = false;
+                            for d in display.iter_mut() {
+                                match d {
+                                    AttachmentDisplay::SignedPending {
+                                        inner,
+                                        chan,
+                                        display,
+                                        job_id: id,
+                                    } if id == job_id => {
+                                        caught = true;
+                                        self.initialised = false;
+                                        match chan {
+                                            Ok(chan) => match chan.try_recv().unwrap().unwrap() {
+                                                Ok(()) => {
+                                                    *d = AttachmentDisplay::SignedVerified {
+                                                        inner: std::mem::replace(
+                                                            inner,
+                                                            AttachmentBuilder::new(&[]).build(),
+                                                        ),
+                                                        display: std::mem::replace(display, vec![]),
+                                                        description: String::new(),
+                                                    };
+                                                }
+                                                Err(error) => {
+                                                    *d = AttachmentDisplay::SignedFailed {
+                                                        inner: std::mem::replace(
+                                                            inner,
+                                                            AttachmentBuilder::new(&[]).build(),
+                                                        ),
+                                                        display: std::mem::replace(display, vec![]),
+                                                        error,
+                                                    };
+                                                }
+                                            },
+                                            Err(chan) => match chan.try_recv().unwrap().unwrap() {
+                                                Ok(verify_bytes) => {
+                                                    *d = AttachmentDisplay::SignedVerified {
+                                                        inner: std::mem::replace(
+                                                            inner,
+                                                            AttachmentBuilder::new(&[]).build(),
+                                                        ),
+                                                        display: std::mem::replace(display, vec![]),
+                                                        description: String::from_utf8_lossy(
+                                                            &verify_bytes,
+                                                        )
+                                                        .to_string(),
+                                                    };
+                                                }
+                                                Err(error) => {
+                                                    *d = AttachmentDisplay::SignedFailed {
+                                                        inner: std::mem::replace(
+                                                            inner,
+                                                            AttachmentBuilder::new(&[]).build(),
+                                                        ),
+                                                        display: std::mem::replace(display, vec![]),
+                                                        error,
+                                                    };
+                                                }
+                                            },
+                                        }
+                                    }
+                                    AttachmentDisplay::EncryptedPending {
+                                        inner,
+                                        chan,
+                                        job_id: id,
+                                    } if id == job_id => {
+                                        caught = true;
+                                        self.initialised = false;
+                                        match chan.try_recv().unwrap().unwrap() {
+                                            Ok((metadata, decrypted_bytes)) => {
+                                                let plaintext =
+                                                    AttachmentBuilder::new(&decrypted_bytes)
+                                                        .build();
+                                                let plaintext_display = Self::attachment_to(
+                                                    &plaintext,
+                                                    context,
+                                                    self.coordinates,
+                                                    &mut self.active_jobs,
+                                                );
+                                                *d = AttachmentDisplay::EncryptedSuccess {
+                                                    inner: std::mem::replace(
+                                                        inner,
+                                                        AttachmentBuilder::new(&[]).build(),
+                                                    ),
+                                                    plaintext,
+                                                    plaintext_display,
+                                                    description: format!("{:?}", metadata),
+                                                };
+                                            }
+                                            Err(error) => {
+                                                *d = AttachmentDisplay::EncryptedFailed {
+                                                    inner: std::mem::replace(
+                                                        inner,
+                                                        AttachmentBuilder::new(&[]).build(),
+                                                    ),
+                                                    error,
+                                                };
+                                            }
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            if caught {
+                                let mut new_body_text = String::new();
+                                if let MailViewState::Loaded { ref display, .. } = self.state {
+                                    new_body_text =
+                                        self.attachment_displays_to_text(&display, context);
+                                    let (paths, attachment_tree_s) =
+                                        self.attachment_displays_to_tree(&display);
+                                    self.attachment_tree = attachment_tree_s;
+                                    self.attachment_paths = paths;
+                                }
+                                if let MailViewState::Loaded {
+                                    ref mut body_text,
+                                    ref mut links,
+                                    ..
+                                } = self.state
+                                {
+                                    links.clear();
+                                    *body_text = new_body_text;
+                                }
+                            }
                         }
                         _ => {}
                     }
@@ -1322,7 +1825,7 @@ impl Component for MailView {
             }
             UIEvent::Input(ref key)
                 if (self.mode.is_attachment()
-                    || self.mode.is_ansi()
+                    /*|| self.mode.is_ansi()*/
                     || self.mode == ViewMode::Subview
                     || self.mode == ViewMode::Url
                     || self.mode == ViewMode::Source(Source::Decoded)
@@ -1349,7 +1852,20 @@ impl Component for MailView {
                 match self.state {
                     MailViewState::Error { .. } | MailViewState::LoadingBody { .. } => {}
                     MailViewState::Loaded { .. } => {
-                        self.open_attachment(lidx, context, true);
+                        if let Some(attachment) = self.open_attachment(lidx, context) {
+                            if let Ok(()) =
+                                crate::mailcap::MailcapEntry::execute(attachment, context)
+                            {
+                                self.set_dirty(true);
+                            } else {
+                                context.replies.push_back(UIEvent::StatusEvent(
+                                    StatusEvent::DisplayMessage(format!(
+                                        "no mailcap entry found for {}",
+                                        attachment.content_type()
+                                    )),
+                                ));
+                            }
+                        }
                     }
                     MailViewState::Init { .. } => {
                         self.init_futures(context);
@@ -1370,7 +1886,99 @@ impl Component for MailView {
                 match self.state {
                     MailViewState::Error { .. } | MailViewState::LoadingBody { .. } => {}
                     MailViewState::Loaded { .. } => {
-                        self.open_attachment(lidx, context, false);
+                        if let Some(attachment) = self.open_attachment(lidx, context) {
+                            match attachment.content_type() {
+                                ContentType::MessageRfc822 => {
+                                    match Mail::new(attachment.body().to_vec(), Some(Flag::SEEN)) {
+                                        Ok(wrapper) => {
+                                            context.replies.push_back(UIEvent::Action(Tab(New(
+                                                Some(Box::new(EnvelopeView::new(
+                                                    wrapper,
+                                                    None,
+                                                    None,
+                                                    self.coordinates.0,
+                                                ))),
+                                            ))));
+                                        }
+                                        Err(e) => {
+                                            context.replies.push_back(UIEvent::StatusEvent(
+                                                StatusEvent::DisplayMessage(format!("{}", e)),
+                                            ));
+                                        }
+                                    }
+                                }
+
+                                ContentType::Text { .. } | ContentType::PGPSignature => {
+                                    self.mode = ViewMode::Attachment(lidx);
+                                    self.initialised = false;
+                                    self.dirty = true;
+                                }
+                                ContentType::Multipart { .. } => {
+                                    context.replies.push_back(UIEvent::StatusEvent(
+                                        StatusEvent::DisplayMessage(
+                                            "Multipart attachments are not supported yet."
+                                                .to_string(),
+                                        ),
+                                    ));
+                                }
+                                ContentType::Other { .. } => {
+                                    let attachment_type = attachment.mime_type();
+                                    let binary = query_default_app(&attachment_type);
+                                    let filename = attachment.filename();
+                                    if let Ok(binary) = binary {
+                                        let p = create_temp_file(
+                                            &decode(attachment, None),
+                                            filename.as_ref().map(|s| s.as_str()),
+                                            None,
+                                            true,
+                                        );
+                                        match Command::new(&binary)
+                                            .arg(p.path())
+                                            .stdin(Stdio::piped())
+                                            .stdout(Stdio::piped())
+                                            .spawn()
+                                        {
+                                            Ok(child) => {
+                                                context.temp_files.push(p);
+                                                context.children.push(child);
+                                            }
+                                            Err(err) => {
+                                                context.replies.push_back(UIEvent::StatusEvent(
+                                                    StatusEvent::DisplayMessage(format!(
+                                                        "Failed to start {}: {}",
+                                                        binary.display(),
+                                                        err
+                                                    )),
+                                                ));
+                                            }
+                                        }
+                                    } else {
+                                        context.replies.push_back(UIEvent::StatusEvent(
+                                        StatusEvent::DisplayMessage(if let Some(filename) = filename.as_ref() {
+                                            format!(
+                                                "Couldn't find a default application for file {} (type {})",
+                                                filename,
+                                                attachment_type
+                                            )
+                                        } else {
+                                            format!(
+                                                "Couldn't find a default application for type {}",
+                                                attachment_type
+                                            )
+                                        }),
+                                ));
+                                    }
+                                }
+                                ContentType::OctetStream { ref name } => {
+                                    context.replies.push_back(UIEvent::StatusEvent(
+                                        StatusEvent::DisplayMessage(format!(
+                                "Failed to open {}. application/octet-stream isn't supported yet",
+                                name.as_ref().map(|n| n.as_str()).unwrap_or("file")
+                            )),
+                                    ));
+                                }
+                            }
+                        }
                     }
                     MailViewState::Init { .. } => {
                         self.init_futures(context);
@@ -1403,13 +2011,16 @@ impl Component for MailView {
                     MailViewState::Loaded {
                         body: _,
                         bytes: _,
+                        display: _,
                         ref body_text,
+                        ref links,
                     } => {
-                        let url = {
-                            let finder = LinkFinder::new();
-                            let links: Vec<Link> = finder.links(body_text).collect();
-                            if let Some(u) = links.get(lidx) {
-                                u.as_str().to_string()
+                        let (_kind, url) = {
+                            if let Some(l) = links
+                                .get(lidx)
+                                .and_then(|l| Some((l.kind, body_text.get(l.start..l.end)?)))
+                            {
+                                l
                             } else {
                                 context.replies.push_back(UIEvent::StatusEvent(
                                     StatusEvent::DisplayMessage(format!(
@@ -1483,14 +2094,14 @@ impl Component for MailView {
                     return true;
                 };
 
+                let mut path = std::path::Path::new(path).to_path_buf();
                 if a_i == 0 {
-                    let mut path = std::path::Path::new(path).to_path_buf();
-                    let envelope: EnvelopeRef = account.collection.get_env(self.coordinates.2);
                     // Save entire message as eml
                     if path.is_dir() {
+                        let envelope: EnvelopeRef = account.collection.get_env(self.coordinates.2);
                         path.push(format!("{}.eml", envelope.message_id_display()));
                     }
-                    let mut f = match std::fs::File::create(&path) {
+                    match save_attachment(&path, bytes) {
                         Err(err) => {
                             context.replies.push_back(UIEvent::Notification(
                                 Some(format!("Failed to create file at {}", path.display())),
@@ -1507,104 +2118,51 @@ impl Component for MailView {
                             );
                             return true;
                         }
-                        Ok(f) => f,
-                    };
-                    use std::os::unix::fs::PermissionsExt;
-                    let metadata = f.metadata().unwrap();
-                    let mut permissions = metadata.permissions();
-
-                    permissions.set_mode(0o600); // Read/write for owner only.
-                    f.set_permissions(permissions).unwrap();
-
-                    f.write_all(bytes).unwrap();
-                    f.flush().unwrap();
-                    context.replies.push_back(UIEvent::Notification(
-                        None,
-                        format!("Saved at {}", &path.display()),
-                        Some(NotificationType::Info),
-                    ));
+                        Ok(()) => {
+                            context.replies.push_back(UIEvent::Notification(
+                                None,
+                                format!("Saved at {}", &path.display()),
+                                Some(NotificationType::Info),
+                            ));
+                        }
+                    }
 
                     return true;
                 }
 
-                let attachments = AttachmentBuilder::new(bytes).build().attachments();
-                if let Some(u) = attachments.get(a_i) {
-                    match u.content_type() {
-                        ContentType::MessageRfc822
-                        | ContentType::Text { .. }
-                        | ContentType::PGPSignature => {
-                            debug!(path);
-                            let mut f = match std::fs::File::create(path) {
-                                Err(err) => {
-                                    context.replies.push_back(UIEvent::Notification(
-                                        Some(format!("Failed to create file at {}", path)),
-                                        err.to_string(),
-                                        Some(NotificationType::Error(melib::ErrorKind::External)),
-                                    ));
-                                    log(
-                                        format!(
-                                            "Failed to create file at {}: {}",
-                                            path,
-                                            err.to_string()
-                                        ),
-                                        ERROR,
-                                    );
-                                    return true;
-                                }
-                                Ok(f) => f,
-                            };
-                            use std::os::unix::fs::PermissionsExt;
-                            let metadata = f.metadata().unwrap();
-                            let mut permissions = metadata.permissions();
-
-                            permissions.set_mode(0o600); // Read/write for owner only.
-                            f.set_permissions(permissions).unwrap();
-
-                            f.write_all(&decode(u, None)).unwrap();
-                            f.flush().unwrap();
-                        }
-
-                        ContentType::Multipart { .. } => {
-                            context.replies.push_back(UIEvent::StatusEvent(
-                                StatusEvent::DisplayMessage(
-                                    "Multipart attachments are not supported yet.".to_string(),
-                                ),
-                            ));
-                            return true;
-                        }
-                        ContentType::OctetStream { name: ref _name }
-                        | ContentType::Other {
-                            name: ref _name, ..
-                        } => {
-                            let mut f = match std::fs::File::create(path.trim()) {
-                                Err(err) => {
-                                    context.replies.push_back(UIEvent::Notification(
-                                        Some(format!("Failed to create file at {}", path)),
-                                        err.to_string(),
-                                        Some(NotificationType::Error(melib::ErrorKind::External)),
-                                    ));
-                                    log(
-                                        format!(
-                                            "Failed to create file at {}: {}",
-                                            path,
-                                            err.to_string()
-                                        ),
-                                        ERROR,
-                                    );
-                                    return true;
-                                }
-                                Ok(f) => f,
-                            };
-
-                            f.write_all(&decode(u, None)).unwrap();
-                            f.flush().unwrap();
+                if let Some(u) = self.open_attachment(a_i, context) {
+                    if path.is_dir() {
+                        if let Some(filename) = u.filename() {
+                            path.push(filename);
+                        } else {
+                            let u = Uuid::new_v4();
+                            path.push(u.to_hyphenated().to_string());
                         }
                     }
-                    context.replies.push_back(UIEvent::Notification(
-                        None,
-                        format!("Saved at {}", &path),
-                        Some(NotificationType::Info),
-                    ));
+                    match save_attachment(&path, &decode(u, None)) {
+                        Err(err) => {
+                            context.replies.push_back(UIEvent::Notification(
+                                Some(format!("Failed to create file at {}", path.display())),
+                                err.to_string(),
+                                Some(NotificationType::Error(melib::ErrorKind::External)),
+                            ));
+                            log(
+                                format!(
+                                    "Failed to create file at {}: {}",
+                                    path.display(),
+                                    err.to_string()
+                                ),
+                                ERROR,
+                            );
+                        }
+                        Ok(()) => {
+                            context.replies.push_back(UIEvent::Notification(
+                                None,
+                                format!("Saved at {}", path.display()),
+                                Some(NotificationType::Info),
+                            ));
+                        }
+                    }
                 } else {
                     context
                         .replies
@@ -1612,8 +2170,8 @@ impl Component for MailView {
                             "Attachment `{}` not found.",
                             a_i
                         ))));
-                    return true;
                 }
+                return true;
             }
             UIEvent::Action(MailingListAction(ref e)) => {
                 let account = &context.accounts[&self.coordinates.0];
@@ -1756,8 +2314,8 @@ impl Component for MailView {
             || self.subview.as_ref().map(|p| p.is_dirty()).unwrap_or(false)
             || if let ViewMode::ContactSelector(ref s) = self.mode {
                 s.is_dirty()
-            } else if let ViewMode::Ansi(ref r) = self.mode {
-                r.is_dirty()
+            /*} else if let ViewMode::Ansi(ref r) = self.mode {
+            r.is_dirty()*/
             } else {
                 false
             }
@@ -1788,7 +2346,7 @@ impl Component for MailView {
         let mut our_map = context.settings.shortcuts.envelope_view.key_values();
 
         if !(self.mode.is_attachment()
-            || self.mode.is_ansi()
+            /*|| self.mode.is_ansi()*/
             || self.mode == ViewMode::Subview
             || self.mode == ViewMode::Source(Source::Decoded)
             || self.mode == ViewMode::Source(Source::Raw)
@@ -1816,16 +2374,19 @@ impl Component for MailView {
     }
 
     fn kill(&mut self, id: ComponentId, context: &mut Context) {
-        debug_assert!(self.id == id);
-        context
-            .replies
-            .push_back(UIEvent::Action(Tab(Kill(self.id))));
+        if self.id == id {
+            context
+                .replies
+                .push_back(UIEvent::Action(Tab(Kill(self.id))));
+        }
     }
 }
 
 fn attachment_tree(
     (idx, (depth, att)): (&mut usize, (usize, &Attachment)),
     branches: &mut SmallVec<[bool; 8]>,
+    paths: &mut Vec<Vec<usize>>,
+    cur_path: &mut Vec<usize>,
     has_sibling: bool,
     s: &mut String,
 ) {
@@ -1846,16 +2407,12 @@ fn attachment_tree(
         }
         s.push_str("\\_ ");
     } else {
-        if has_sibling {
-            s.push('|');
-            s.push('\\');
-        } else {
-            s.push(' ');
-        }
+        s.push(' ');
         s.push(' ');
     }
 
     s.extend(att.to_string().chars());
+    paths.push(cur_path.clone());
     match att.content_type {
         ContentType::Multipart {
             parts: ref sub_att_vec,
@@ -1869,15 +2426,29 @@ fn attachment_tree(
             }
             while let Some(i) = iter.next() {
                 *idx += 1;
+                cur_path.push(i);
                 attachment_tree(
                     (idx, (depth + 1, &sub_att_vec[i])),
                     branches,
+                    paths,
+                    cur_path,
                     iter.peek() != None,
                     s,
                 );
+                cur_path.pop();
             }
             branches.pop();
         }
         _ => {}
     }
+}
+
+fn save_attachment(path: &std::path::Path, bytes: &[u8]) -> Result<()> {
+    let mut f = std::fs::File::create(path)?;
+    let mut permissions = f.metadata()?.permissions();
+    permissions.set_mode(0o600); // Read/write for owner only.
+    f.set_permissions(permissions)?;
+    f.write_all(bytes)?;
+    f.flush()?;
+    Ok(())
 }

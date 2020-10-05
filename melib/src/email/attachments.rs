@@ -351,16 +351,14 @@ pub struct Attachment {
 
 impl fmt::Debug for Attachment {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Attachment {{\n content_type: {:?},\n content_transfer_encoding: {:?},\n raw: Vec of {} bytes\n, body:\n{}\n}}",
-        self.content_type,
-        self.content_transfer_encoding,
-        self.raw.len(),
-        {
-            let mut text = Vec::with_capacity(4096);
-            self.get_text_recursive(&mut text);
-            std::str::from_utf8(&text).map(std::string::ToString::to_string).unwrap_or_else(|e| format!("Unicode error {}", e))
-        }
-        )
+        let mut text = Vec::with_capacity(4096);
+        self.get_text_recursive(&mut text);
+        f.debug_struct("Attachment")
+            .field("content_type", &self.content_type)
+            .field("content_transfer_encoding", &self.content_transfer_encoding)
+            .field("raw bytes length", &self.raw.len())
+            .field("body", &String::from_utf8_lossy(&text))
+            .finish()
     }
 }
 
@@ -371,44 +369,63 @@ impl fmt::Display for Attachment {
                 match Mail::new(self.body.display_bytes(&self.raw).to_vec(), None) {
                     Ok(wrapper) => write!(
                         f,
-                        "message/rfc822: {} - {} - {}",
+                        "{} - {} - {} [message/rfc822] {}",
                         wrapper.date(),
                         wrapper.field_from_to_string(),
-                        wrapper.subject()
+                        wrapper.subject(),
+                        crate::Bytes(self.raw.len()),
                     ),
-                    Err(e) => write!(f, "{}", e),
+                    Err(err) => write!(
+                        f,
+                        "could not parse: {} [message/rfc822] {}",
+                        err,
+                        crate::Bytes(self.raw.len()),
+                    ),
                 }
             }
-            ContentType::PGPSignature => write!(f, "pgp signature {}", self.mime_type()),
-            ContentType::OctetStream { ref name } => {
-                write!(f, "{}", name.clone().unwrap_or_else(|| self.mime_type()))
+            ContentType::PGPSignature => write!(f, "pgp signature [{}]", self.mime_type()),
+            ContentType::OctetStream { .. } | ContentType::Other { .. } => {
+                if let Some(name) = self.filename() {
+                    write!(
+                        f,
+                        "\"{}\", [{}] {}",
+                        name,
+                        self.mime_type(),
+                        crate::Bytes(self.raw.len())
+                    )
+                } else {
+                    write!(
+                        f,
+                        "Data attachment [{}] {}",
+                        self.mime_type(),
+                        crate::Bytes(self.raw.len())
+                    )
+                }
             }
-            ContentType::Other {
-                name: Some(ref name),
-                ..
-            } => write!(f, "\"{}\", [{}]", name, self.mime_type()),
-            ContentType::Other { .. } => write!(f, "Data attachment of type {}", self.mime_type()),
-            ContentType::Text { ref parameters, .. }
-                if parameters
-                    .iter()
-                    .any(|(name, _)| name.eq_ignore_ascii_case(b"name")) =>
-            {
-                let name = String::from_utf8_lossy(
-                    parameters
-                        .iter()
-                        .find(|(name, _)| name.eq_ignore_ascii_case(b"name"))
-                        .map(|(_, value)| value)
-                        .unwrap(),
-                );
-                write!(f, "\"{}\", [{}]", name, self.mime_type())
+            ContentType::Text { .. } => {
+                if let Some(name) = self.filename() {
+                    write!(
+                        f,
+                        "\"{}\", [{}] {}",
+                        name,
+                        self.mime_type(),
+                        crate::Bytes(self.raw.len())
+                    )
+                } else {
+                    write!(
+                        f,
+                        "Text attachment [{}] {}",
+                        self.mime_type(),
+                        crate::Bytes(self.raw.len())
+                    )
+                }
             }
-            ContentType::Text { .. } => write!(f, "Text attachment of type {}", self.mime_type()),
             ContentType::Multipart {
                 parts: ref sub_att_vec,
                 ..
             } => write!(
                 f,
-                "{} attachment with {} subs",
+                "{} attachment with {} parts",
                 self.mime_type(),
                 sub_att_vec.len()
             ),
@@ -627,6 +644,16 @@ impl Attachment {
         }
     }
 
+    pub fn is_encrypted(&self) -> bool {
+        match self.content_type {
+            ContentType::Multipart {
+                kind: MultipartType::Encrypted,
+                ..
+            } => true,
+            _ => false,
+        }
+    }
+
     pub fn is_signed(&self) -> bool {
         match self.content_type {
             ContentType::Multipart {
@@ -641,7 +668,7 @@ impl Attachment {
         let mut ret = String::with_capacity(2 * self.raw.len());
         fn into_raw_helper(a: &Attachment, ret: &mut String) {
             ret.push_str(&format!(
-                "Content-Transfer-Encoding: {}\n",
+                "Content-Transfer-Encoding: {}\r\n",
                 a.content_transfer_encoding
             ));
             match &a.content_type {
@@ -667,7 +694,7 @@ impl Attachment {
                         }
                     }
 
-                    ret.push_str("\n\n");
+                    ret.push_str("\r\n\r\n");
                     ret.push_str(&String::from_utf8_lossy(a.body()));
                 }
                 ContentType::Multipart {
@@ -680,36 +707,36 @@ impl Attachment {
                     if *kind == MultipartType::Signed {
                         ret.push_str("; micalg=pgp-sha512; protocol=\"application/pgp-signature\"");
                     }
-                    ret.push('\n');
+                    ret.push_str("\r\n");
 
-                    let boundary_start = format!("\n--{}\n", boundary);
+                    let boundary_start = format!("\r\n--{}\r\n", boundary);
                     for p in parts {
                         ret.push_str(&boundary_start);
                         into_raw_helper(p, ret);
                     }
-                    ret.push_str(&format!("--{}--\n\n", boundary));
+                    ret.push_str(&format!("--{}--\r\n\r\n", boundary));
                 }
                 ContentType::MessageRfc822 => {
-                    ret.push_str(&format!("Content-Type: {}\n\n", a.content_type));
+                    ret.push_str(&format!("Content-Type: {}\r\n\r\n", a.content_type));
                     ret.push_str(&String::from_utf8_lossy(a.body()));
                 }
                 ContentType::PGPSignature => {
-                    ret.push_str(&format!("Content-Type: {}\n\n", a.content_type));
+                    ret.push_str(&format!("Content-Type: {}\r\n\r\n", a.content_type));
                     ret.push_str(&String::from_utf8_lossy(a.body()));
                 }
                 ContentType::OctetStream { ref name } => {
                     if let Some(name) = name {
                         ret.push_str(&format!(
-                            "Content-Type: {}; name={}\n\n",
+                            "Content-Type: {}; name={}\r\n\r\n",
                             a.content_type, name
                         ));
                     } else {
-                        ret.push_str(&format!("Content-Type: {}\n\n", a.content_type));
+                        ret.push_str(&format!("Content-Type: {}\r\n\r\n", a.content_type));
                     }
                     ret.push_str(&BASE64_MIME.encode(a.body()).trim());
                 }
                 _ => {
-                    ret.push_str(&format!("Content-Type: {}\n\n", a.content_type));
+                    ret.push_str(&format!("Content-Type: {}\r\n\r\n", a.content_type));
                     ret.push_str(&String::from_utf8_lossy(a.body()));
                 }
             }
@@ -752,8 +779,17 @@ impl Attachment {
                     h.eq_ignore_ascii_case(b"name") | h.eq_ignore_ascii_case(b"filename")
                 })
                 .map(|(_, v)| String::from_utf8_lossy(v).to_string()),
-            ContentType::Other { name, .. } | ContentType::OctetStream { name, .. } => name.clone(),
+            ContentType::Other { .. } | ContentType::OctetStream { .. } => {
+                self.content_type.name().map(|s| s.to_string())
+            }
             _ => None,
+        })
+        .map(|s| {
+            crate::email::parser::encodings::phrase(s.as_bytes(), false)
+                .map(|(_, v)| v)
+                .ok()
+                .and_then(|n| String::from_utf8(n).ok())
+                .unwrap_or_else(|| s)
         })
         .map(|n| n.replace(|c| std::path::is_separator(c) || c.is_ascii_control(), "_"))
     }
@@ -802,6 +838,16 @@ fn decode_rec_helper<'a, 'b>(a: &'a Attachment, filter: &mut Option<Filter<'b>>)
                 let mut vec = Vec::new();
                 for a in parts {
                     vec.extend(decode_rec_helper(a, filter));
+                }
+                vec.extend(decode_helper(a, filter));
+                vec
+            }
+            MultipartType::Encrypted => {
+                let mut vec = Vec::new();
+                for a in parts {
+                    if a.content_type == "application/octet-stream" {
+                        vec.extend(decode_rec_helper(a, filter));
+                    }
                 }
                 vec.extend(decode_helper(a, filter));
                 vec

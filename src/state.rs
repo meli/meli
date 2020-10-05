@@ -113,7 +113,7 @@ pub struct Context {
     sender: Sender<ThreadEvent>,
     receiver: Receiver<ThreadEvent>,
     input_thread: InputHandler,
-    job_executor: Arc<JobExecutor>,
+    pub job_executor: Arc<JobExecutor>,
     pub children: Vec<std::process::Child>,
     pub plugin_manager: PluginManager,
 
