@@ -633,7 +633,7 @@ impl Component for Listing {
         let shortcuts = self.get_shortcuts(context);
         if self.focus == ListingFocus::Mailbox {
             match *event {
-                UIEvent::Input(Key::Left) => {
+                UIEvent::Input(Key::Left) if self.menu_visibility => {
                     self.focus = ListingFocus::Menu;
                     self.ratio = 50;
                     self.set_dirty(true);
