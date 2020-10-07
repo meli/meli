@@ -81,6 +81,7 @@ pub struct Composer {
     embed_area: Area,
     embed: Option<EmbedStatus>,
     sign_mail: ToggleFlag,
+    encrypt_mail: ToggleFlag,
     dirty: bool,
     has_changes: bool,
     initialized: bool,
@@ -103,6 +104,7 @@ impl Default for Composer {
 
             mode: ViewMode::Edit,
             sign_mail: ToggleFlag::Unset,
+            encrypt_mail: ToggleFlag::Unset,
             dirty: true,
             has_changes: false,
             embed_area: ((0, 0), (0, 0)),
@@ -451,9 +453,15 @@ impl Composer {
                 None,
             );
         }
-        if attachments_no == 0 {
+        if self.encrypt_mail.is_true() {
             write_string_to_grid(
-                "no attachments",
+                &format!(
+                    "☑ encrypt with {}",
+                    account_settings!(context[self.account_hash].pgp.encrypt_key)
+                        .as_ref()
+                        .map(|s| s.as_str())
+                        .unwrap_or("default key")
+                ),
                 grid,
                 theme_default.fg,
                 theme_default.bg,
@@ -463,12 +471,33 @@ impl Composer {
             );
         } else {
             write_string_to_grid(
-                &format!("{} attachments ", attachments_no),
+                "☐ don't encrypt",
                 grid,
                 theme_default.fg,
                 theme_default.bg,
                 theme_default.attrs,
                 (pos_inc(upper_left!(area), (0, 2)), bottom_right!(area)),
+                None,
+            );
+        }
+        if attachments_no == 0 {
+            write_string_to_grid(
+                "no attachments",
+                grid,
+                theme_default.fg,
+                theme_default.bg,
+                theme_default.attrs,
+                (pos_inc(upper_left!(area), (0, 3)), bottom_right!(area)),
+                None,
+            );
+        } else {
+            write_string_to_grid(
+                &format!("{} attachments ", attachments_no),
+                grid,
+                theme_default.fg,
+                theme_default.bg,
+                theme_default.attrs,
+                (pos_inc(upper_left!(area), (0, 3)), bottom_right!(area)),
                 None,
             );
             for (i, a) in self.draft.attachments().iter().enumerate() {
@@ -485,7 +514,7 @@ impl Composer {
                         theme_default.fg,
                         theme_default.bg,
                         theme_default.attrs,
-                        (pos_inc(upper_left!(area), (0, 3 + i)), bottom_right!(area)),
+                        (pos_inc(upper_left!(area), (0, 4 + i)), bottom_right!(area)),
                         None,
                     );
                 } else {
@@ -495,7 +524,7 @@ impl Composer {
                         theme_default.fg,
                         theme_default.bg,
                         theme_default.attrs,
-                        (pos_inc(upper_left!(area), (0, 3 + i)), bottom_right!(area)),
+                        (pos_inc(upper_left!(area), (0, 4 + i)), bottom_right!(area)),
                         None,
                     );
                 }
@@ -521,6 +550,11 @@ impl Component for Composer {
             if self.sign_mail.is_unset() {
                 self.sign_mail = ToggleFlag::InternalVal(*account_settings!(
                     context[self.account_hash].pgp.auto_sign
+                ));
+            }
+            if self.encrypt_mail.is_unset() {
+                self.encrypt_mail = ToggleFlag::InternalVal(*account_settings!(
+                    context[self.account_hash].pgp.auto_encrypt
                 ));
             }
             if !self.draft.headers().contains_key("From") || self.draft.headers()["From"].is_empty()
@@ -1320,6 +1354,12 @@ impl Component for Composer {
                 Action::Compose(ComposeAction::ToggleSign) => {
                     let is_true = self.sign_mail.is_true();
                     self.sign_mail = ToggleFlag::from(!is_true);
+                    self.dirty = true;
+                    return true;
+                }
+                Action::Compose(ComposeAction::ToggleEncrypt) => {
+                    let is_true = self.encrypt_mail.is_true();
+                    self.encrypt_mail = ToggleFlag::from(!is_true);
                     self.dirty = true;
                     return true;
                 }

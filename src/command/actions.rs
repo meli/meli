@@ -81,6 +81,7 @@ pub enum ComposeAction {
     RemoveAttachment(usize),
     SaveDraft,
     ToggleSign,
+    ToggleEncrypt,
 }
 
 #[derive(Debug)]

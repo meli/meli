@@ -542,6 +542,19 @@ define_commands!([
                       }
                   )
                 },
+                { tags: ["toggle encrypt"],
+                  desc: "toggle encryption for this draft",
+                  tokens: &[One(Literal("toggle")), One(Literal("encrypt"))],
+                  parser:(
+                      fn toggle_encrypt(input: &[u8]) -> IResult<&[u8], Action> {
+                          let (input, _) = tag("toggle")(input)?;
+                          let (input, _) = is_a(" ")(input)?;
+                          let (input, _) = tag("encrypt")(input)?;
+                          let (input, _) = eof(input)?;
+                          Ok((input, Compose(ToggleEncrypt)))
+                      }
+                  )
+                },
                 { tags: ["create-mailbox "],
                   desc: "create-mailbox ACCOUNT MAILBOX_PATH",
                   tokens: &[One(Literal("create-mailbox")), One(AccountName), One(MailboxPath)],
@@ -765,7 +778,13 @@ fn listing_action(input: &[u8]) -> IResult<&[u8], Action> {
 }
 
 fn compose_action(input: &[u8]) -> IResult<&[u8], Action> {
-    alt((add_attachment, remove_attachment, toggle_sign, save_draft))(input)
+    alt((
+        add_attachment,
+        remove_attachment,
+        toggle_sign,
+        toggle_encrypt,
+        save_draft,
+    ))(input)
 }
 
 fn account_action(input: &[u8]) -> IResult<&[u8], Action> {
