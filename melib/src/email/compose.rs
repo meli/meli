@@ -268,7 +268,7 @@ impl Draft {
             ret.push_str(&self.body);
         } else if self.body.is_empty() && self.attachments.len() == 1 {
             let attachment = std::mem::replace(&mut self.attachments, Vec::new()).remove(0);
-            print_attachment(&mut ret, &Default::default(), attachment);
+            print_attachment(&mut ret, attachment);
         } else {
             let mut parts = Vec::with_capacity(self.attachments.len() + 1);
             let attachments = std::mem::replace(&mut self.attachments, Vec::new());
@@ -301,14 +301,14 @@ fn build_multipart(ret: &mut String, kind: MultipartType, parts: Vec<AttachmentB
         ret.push_str("--");
         ret.push_str(&boundary);
         ret.push_str("\r\n");
-        print_attachment(ret, &kind, sub);
+        print_attachment(ret, sub);
     }
     ret.push_str("--");
     ret.push_str(&boundary);
     ret.push_str("--\n");
 }
 
-fn print_attachment(ret: &mut String, kind: &MultipartType, a: AttachmentBuilder) {
+fn print_attachment(ret: &mut String, a: AttachmentBuilder) {
     use ContentType::*;
     match a.content_type {
         ContentType::Text {
@@ -339,9 +339,23 @@ fn print_attachment(ret: &mut String, kind: &MultipartType, a: AttachmentBuilder
             );
             ret.push_str("\r\n");
         }
-        MessageRfc822 | PGPSignature => {
-            ret.push_str(&format!("Content-Type: {}; charset=\"utf-8\"\r\n", kind));
+        MessageRfc822 => {
+            ret.push_str(&format!(
+                "Content-Type: {}; charset=\"utf-8\"\r\n",
+                a.content_type
+            ));
             ret.push_str("Content-Disposition: attachment\r\n");
+            ret.push_str("\r\n");
+            ret.push_str(&String::from_utf8_lossy(a.raw()));
+            ret.push_str("\r\n");
+        }
+        PGPSignature => {
+            ret.push_str(&format!(
+                "Content-Type: {}; charset=\"utf-8\"; name=\"signature.asc\"\r\n",
+                a.content_type
+            ));
+            ret.push_str("Content-Description: Digital signature\r\n");
+            ret.push_str("Content-Disposition: inline\r\n");
             ret.push_str("\r\n");
             ret.push_str(&String::from_utf8_lossy(a.raw()));
             ret.push_str("\r\n");
