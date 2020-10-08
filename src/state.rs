@@ -110,7 +110,7 @@ pub struct Context {
 
     /// Events queue that components send back to the state
     pub replies: VecDeque<UIEvent>,
-    sender: Sender<ThreadEvent>,
+    pub sender: Sender<ThreadEvent>,
     receiver: Receiver<ThreadEvent>,
     input_thread: InputHandler,
     pub job_executor: Arc<JobExecutor>,

@@ -48,6 +48,7 @@ use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::convert::TryFrom;
 use std::fs;
+use std::future::Future;
 use std::io;
 use std::ops::{Index, IndexMut};
 use std::os::unix::fs::PermissionsExt;
@@ -1274,6 +1275,68 @@ impl Account {
                 }
                 Ok(Some((job_id, handle, chan)))
             }
+        }
+    }
+
+    pub fn send_async(
+        &self,
+        send_mail: crate::conf::composing::SendMail,
+    ) -> impl FnOnce(Arc<String>) -> Pin<Box<dyn Future<Output = Result<()>> + Send>> + Send {
+        |message: Arc<String>| -> Pin<Box<dyn Future<Output = Result<()>> + Send>> {
+            Box::pin(async move {
+                use crate::conf::composing::SendMail;
+                use std::io::Write;
+                use std::process::{Command, Stdio};
+                match send_mail {
+                    SendMail::ShellCommand(ref command) => {
+                        if command.is_empty() {
+                            return Err(MeliError::new(
+                                "send_mail shell command configuration value is empty",
+                            ));
+                        }
+                        let mut msmtp = Command::new("sh")
+                            .args(&["-c", command])
+                            .stdin(Stdio::piped())
+                            .stdout(Stdio::piped())
+                            .spawn()
+                            .expect("Failed to start mailer command");
+                        {
+                            let stdin = msmtp.stdin.as_mut().expect("failed to open stdin");
+                            stdin
+                                .write_all(message.as_bytes())
+                                .expect("Failed to write to stdin");
+                        }
+                        let output = msmtp.wait().expect("Failed to wait on mailer");
+                        if output.success() {
+                            melib::log("Message sent.", melib::LoggingLevel::TRACE);
+                        } else {
+                            let error_message = if let Some(exit_code) = output.code() {
+                                format!(
+                                    "Could not send e-mail using `{}`: Process exited with {}",
+                                    command, exit_code
+                                )
+                            } else {
+                                format!(
+                            "Could not send e-mail using `{}`: Process was killed by signal",
+                            command
+                        )
+                            };
+                            melib::log(&error_message, melib::LoggingLevel::ERROR);
+                            return Err(MeliError::new(error_message.clone())
+                                .set_summary("Message not sent."));
+                        }
+                        Ok(())
+                    }
+                    #[cfg(feature = "smtp")]
+                    SendMail::Smtp(conf) => {
+                        let mut smtp_connection =
+                            melib::smtp::SmtpConnection::new_connection(conf).await?;
+                        smtp_connection
+                            .mail_transaction(message.as_str(), None)
+                            .await
+                    }
+                }
+            })
         }
     }
 

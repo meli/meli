@@ -21,7 +21,9 @@
 
 use super::*;
 use melib::email::pgp as melib_pgp;
+use std::future::Future;
 use std::io::Write;
+use std::pin::Pin;
 use std::process::{Command, Stdio};
 
 pub fn verify_signature(a: &Attachment, context: &mut Context) -> Result<Vec<u8>> {
@@ -175,5 +177,71 @@ pub async fn verify(a: Attachment, gpg_binary: Option<String>) -> Result<Vec<u8>
                     gpg_binary.as_ref().map(String::as_str).unwrap_or("gpg2"),
                 )
             })?,
+    )
+}
+
+pub fn sign_filter(
+    gpg_binary: Option<String>,
+    pgp_key: Option<String>,
+) -> Result<
+    impl FnOnce(AttachmentBuilder) -> Pin<Box<dyn Future<Output = Result<AttachmentBuilder>> + Send>>
+        + Send,
+> {
+    let binary = gpg_binary.unwrap_or("gpg2".to_string());
+    let mut command = Command::new(&binary);
+    command.args(&[
+        "--digest-algo",
+        "sha512",
+        "--output",
+        "-",
+        "--detach-sig",
+        "--armor",
+    ]);
+    if let Some(key) = pgp_key.as_ref() {
+        command.args(&["--local-user", key]);
+    }
+    Ok(
+        move |a: AttachmentBuilder| -> Pin<Box<dyn Future<Output = Result<AttachmentBuilder>>+Send>> {
+            Box::pin(async move {
+                let a: Attachment = a.into();
+
+                let sig_attachment = command
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::null())
+                    .spawn()
+                    .and_then(|mut gpg| {
+                        gpg.stdin
+                            .as_mut()
+                            .expect("Could not get gpg stdin")
+                            .write_all(&melib_pgp::convert_attachment_to_rfc_spec(
+                                a.into_raw().as_bytes(),
+                            ))?;
+                        let gpg = gpg.wait_with_output()?;
+                        Ok(Attachment::new(
+                            ContentType::PGPSignature,
+                            Default::default(),
+                            gpg.stdout,
+                        ))
+                    })
+                    .chain_err_summary(|| {
+                        format!("Failed to launch {} to verify PGP signature", binary)
+                    })?;
+
+                let a: AttachmentBuilder = a.into();
+                let parts = vec![a, sig_attachment.into()];
+                let boundary = ContentType::make_boundary(&parts);
+                Ok(Attachment::new(
+                    ContentType::Multipart {
+                        boundary: boundary.into_bytes(),
+                        kind: MultipartType::Signed,
+                        parts: parts.into_iter().map(|a| a.into()).collect::<Vec<_>>(),
+                    },
+                    Default::default(),
+                    Vec::new(),
+                )
+                .into())
+            })
+        },
     )
 }

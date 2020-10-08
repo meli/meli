@@ -30,6 +30,7 @@ use crate::terminal::embed::EmbedGrid;
 use indexmap::IndexSet;
 use nix::sys::wait::WaitStatus;
 use std::convert::TryInto;
+use std::future::Future;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
@@ -81,7 +82,6 @@ pub struct Composer {
     embed_area: Area,
     embed: Option<EmbedStatus>,
     sign_mail: ToggleFlag,
-    encrypt_mail: ToggleFlag,
     dirty: bool,
     has_changes: bool,
     initialized: bool,
@@ -104,7 +104,6 @@ impl Default for Composer {
 
             mode: ViewMode::Edit,
             sign_mail: ToggleFlag::Unset,
-            encrypt_mail: ToggleFlag::Unset,
             dirty: true,
             has_changes: false,
             embed_area: ((0, 0), (0, 0)),
@@ -453,33 +452,15 @@ impl Composer {
                 None,
             );
         }
-        if self.encrypt_mail.is_true() {
-            write_string_to_grid(
-                &format!(
-                    "☑ encrypt with {}",
-                    account_settings!(context[self.account_hash].pgp.encrypt_key)
-                        .as_ref()
-                        .map(|s| s.as_str())
-                        .unwrap_or("default key")
-                ),
-                grid,
-                theme_default.fg,
-                theme_default.bg,
-                theme_default.attrs,
-                (pos_inc(upper_left!(area), (0, 2)), bottom_right!(area)),
-                None,
-            );
-        } else {
-            write_string_to_grid(
-                "☐ don't encrypt",
-                grid,
-                theme_default.fg,
-                theme_default.bg,
-                theme_default.attrs,
-                (pos_inc(upper_left!(area), (0, 2)), bottom_right!(area)),
-                None,
-            );
-        }
+        write_string_to_grid(
+            "☐ don't encrypt",
+            grid,
+            theme_default.fg,
+            theme_default.bg,
+            theme_default.attrs,
+            (pos_inc(upper_left!(area), (0, 2)), bottom_right!(area)),
+            None,
+        );
         if attachments_no == 0 {
             write_string_to_grid(
                 "no attachments",
@@ -550,11 +531,6 @@ impl Component for Composer {
             if self.sign_mail.is_unset() {
                 self.sign_mail = ToggleFlag::InternalVal(*account_settings!(
                     context[self.account_hash].pgp.auto_sign
-                ));
-            }
-            if self.encrypt_mail.is_unset() {
-                self.encrypt_mail = ToggleFlag::InternalVal(*account_settings!(
-                    context[self.account_hash].pgp.auto_encrypt
                 ));
             }
             if !self.draft.headers().contains_key("From") || self.draft.headers()["From"].is_empty()
@@ -752,16 +728,16 @@ impl Component for Composer {
             {
                 if let Some(true) = result.downcast_ref::<bool>() {
                     self.update_draft();
-                    match send_draft(
+                    match send_draft_async(
                         self.sign_mail,
                         context,
                         self.account_hash,
                         self.draft.clone(),
                         SpecialUsageMailbox::Sent,
                         Flag::SEEN,
-                        false,
                     ) {
-                        Ok(Some((job_id, handle, chan))) => {
+                        Ok(job) => {
+                            let (chan, handle, job_id) = context.job_executor.spawn_blocking(job);
                             self.mode = ViewMode::WaitingForSendResult(
                                 UIDialog::new(
                                     "Waiting for confirmation.. The tab will close automatically on successful submission.",
@@ -773,21 +749,11 @@ impl Component for Composer {
                                     Some(Box::new(move |id: ComponentId, results: &[char]| {
                                         Some(UIEvent::FinishedUIDialog(
                                                 id,
-                                                Box::new(results.get(0).map(|c| *c).unwrap_or('c')),
+                                                Box::new(results.get(0).cloned().unwrap_or('c')),
                                         ))
                                     })),
                                     context,
                                 ), handle, job_id, chan);
-                        }
-                        Ok(None) => {
-                            context.replies.push_back(UIEvent::Notification(
-                                Some("Sent.".into()),
-                                String::new(),
-                                Some(NotificationType::Info),
-                            ));
-                            context
-                                .replies
-                                .push_back(UIEvent::Action(Tab(Kill(self.id))));
                         }
                         Err(err) => {
                             context.replies.push_back(UIEvent::Notification(
@@ -1358,9 +1324,6 @@ impl Component for Composer {
                     return true;
                 }
                 Action::Compose(ComposeAction::ToggleEncrypt) => {
-                    let is_true = self.encrypt_mail.is_true();
-                    self.encrypt_mail = ToggleFlag::from(!is_true);
-                    self.dirty = true;
                     return true;
                 }
                 _ => {}
@@ -1600,4 +1563,99 @@ pub fn save_draft(
             ));
         }
     }
+}
+
+pub fn send_draft_async(
+    sign_mail: ToggleFlag,
+    context: &mut Context,
+    account_hash: AccountHash,
+    mut draft: Draft,
+    mailbox_type: SpecialUsageMailbox,
+    flags: Flag,
+) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send>>> {
+    let format_flowed = *account_settings!(context[account_hash].composing.format_flowed);
+    let event_sender = context.sender.clone();
+    let mut filters_stack: Vec<
+        Box<
+            dyn FnOnce(
+                    AttachmentBuilder,
+                )
+                    -> Pin<Box<dyn Future<Output = Result<AttachmentBuilder>> + Send>>
+                + Send,
+        >,
+    > = vec![];
+    if sign_mail.is_true() {
+        filters_stack.push(Box::new(crate::components::mail::pgp::sign_filter(
+            account_settings!(context[account_hash].pgp.gpg_binary)
+                .as_ref()
+                .map(|s| s.to_string()),
+            account_settings!(context[account_hash].pgp.sign_key)
+                .as_ref()
+                .map(|s| s.to_string()),
+        )?));
+    }
+    let send_mail = account_settings!(context[account_hash].composing.send_mail).clone();
+    let send_cb = context.accounts[&account_hash].send_async(send_mail);
+    let mut content_type = ContentType::default();
+    if format_flowed {
+        if let ContentType::Text {
+            ref mut parameters, ..
+        } = content_type
+        {
+            parameters.push((b"format".to_vec(), b"flowed".to_vec()));
+        }
+    }
+    let mut body: AttachmentBuilder = Attachment::new(
+        content_type,
+        Default::default(),
+        std::mem::replace(&mut draft.body, String::new()).into_bytes(),
+    )
+    .into();
+    if !draft.attachments.is_empty() {
+        let mut parts = std::mem::replace(&mut draft.attachments, Vec::new());
+        parts.insert(0, body);
+        let boundary = ContentType::make_boundary(&parts);
+        body = Attachment::new(
+            ContentType::Multipart {
+                boundary: boundary.into_bytes(),
+                kind: MultipartType::Mixed,
+                parts: parts.into_iter().map(|a| a.into()).collect::<Vec<_>>(),
+            },
+            Default::default(),
+            Vec::new(),
+        )
+        .into();
+    }
+    Ok(Box::pin(async move {
+        for f in filters_stack {
+            body = f(body).await?;
+        }
+
+        draft.attachments.insert(0, body);
+        let message = Arc::new(draft.finalise()?);
+        let ret = send_cb(message.clone()).await;
+        let is_ok = ret.is_ok();
+        event_sender
+            .send(ThreadEvent::UIEvent(UIEvent::Callback(CallbackFn(
+                Box::new(move |context| {
+                    save_draft(
+                        message.as_bytes(),
+                        context,
+                        if is_ok {
+                            mailbox_type
+                        } else {
+                            SpecialUsageMailbox::Drafts
+                        },
+                        if is_ok {
+                            flags
+                        } else {
+                            Flag::SEEN | Flag::DRAFT
+                        },
+                        account_hash,
+                    );
+                }),
+            ))))
+            .unwrap();
+        ret
+    }))
 }
