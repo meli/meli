@@ -31,6 +31,7 @@ use indexmap::IndexSet;
 use nix::sys::wait::WaitStatus;
 use std::convert::TryInto;
 use std::future::Future;
+use std::process::{Command, Stdio};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
@@ -1262,7 +1263,6 @@ impl Component for Composer {
                     self.mode = ViewMode::Embed;
                     return true;
                 }
-                use std::process::{Command, Stdio};
                 /* Kill input thread so that spawned command can be sole receiver of stdin */
                 {
                     context.input_kill();
@@ -1334,17 +1334,22 @@ impl Component for Composer {
                         return false;
                     }
                     let f = create_temp_file(&[], None, None, true);
-                    match std::process::Command::new("sh")
+                    match Command::new("sh")
                         .args(&["-c", command])
-                        .stdin(std::process::Stdio::null())
-                        .stdout(std::process::Stdio::from(f.file()))
+                        .stdin(Stdio::null())
+                        .stdout(Stdio::from(f.file()))
                         .spawn()
+                        .and_then(|child| Ok(child.wait_with_output()?.stderr))
                     {
-                        Ok(child) => {
-                            let _ = child
-                                .wait_with_output()
-                                .expect("failed to launch command")
-                                .stdout;
+                        Ok(stderr) => {
+                            if !stderr.is_empty() {
+                                context.replies.push_back(UIEvent::StatusEvent(
+                                    StatusEvent::DisplayMessage(format!(
+                                        "Command stderr output: `{}`.",
+                                        String::from_utf8_lossy(&stderr)
+                                    )),
+                                ));
+                            }
                             let attachment =
                                 match melib::email::compose::attachment_from_file(f.path()) {
                                     Ok(a) => a,
@@ -1361,6 +1366,7 @@ impl Component for Composer {
                                     }
                                 };
                             self.draft.attachments_mut().push(attachment);
+                            self.has_changes = true;
                             self.dirty = true;
                             return true;
                         }
@@ -1388,6 +1394,78 @@ impl Component for Composer {
                         }
                     };
                     self.draft.attachments_mut().push(attachment);
+                    self.has_changes = true;
+                    self.dirty = true;
+                    return true;
+                }
+                Action::Compose(ComposeAction::AddAttachmentFilePicker(ref command)) => {
+                    let command = if let Some(ref cmd) = command
+                        .as_ref()
+                        .or_else(|| context.settings.terminal.file_picker_command.as_ref())
+                    {
+                        cmd.as_str()
+                    } else {
+                        context.replies.push_back(UIEvent::Notification(
+                            None,
+                            "You haven't defined any command to launch.".into(),
+                            Some(NotificationType::Error(melib::error::ErrorKind::None)),
+                        ));
+                        return true;
+                    };
+                    /* Kill input thread so that spawned command can be sole receiver of stdin */
+                    {
+                        context.input_kill();
+                    }
+
+                    log(
+                        format!("Executing: sh -c \"{}\"", command.replace("\"", "\\\"")),
+                        DEBUG,
+                    );
+                    match Command::new("sh")
+                        .args(&["-c", command])
+                        .stdin(Stdio::inherit())
+                        .stdout(Stdio::inherit())
+                        .stderr(Stdio::piped())
+                        .spawn()
+                        .and_then(|child| Ok(child.wait_with_output()?.stderr))
+                    {
+                        Ok(stderr) => {
+                            debug!(&String::from_utf8_lossy(&stderr));
+                            for path in stderr.split(|c| [b'\0', b'\t', b'\n'].contains(c)) {
+                                match melib::email::compose::attachment_from_file(
+                                    &String::from_utf8_lossy(&path).as_ref(),
+                                ) {
+                                    Ok(a) => {
+                                        self.draft.attachments_mut().push(a);
+                                        self.has_changes = true;
+                                    }
+                                    Err(err) => {
+                                        context.replies.push_back(UIEvent::Notification(
+                                            Some(format!(
+                                                "could not add attachment: {}",
+                                                String::from_utf8_lossy(&path)
+                                            )),
+                                            err.to_string(),
+                                            Some(NotificationType::Error(
+                                                melib::error::ErrorKind::None,
+                                            )),
+                                        ));
+                                    }
+                                };
+                            }
+                        }
+                        Err(err) => {
+                            let command = command.to_string();
+                            context.replies.push_back(UIEvent::Notification(
+                                Some(format!("Failed to execute {}: {}", command, err)),
+                                err.to_string(),
+                                Some(NotificationType::Error(melib::error::ErrorKind::External)),
+                            ));
+                            context.restore_input();
+                            return true;
+                        }
+                    }
+                    context.replies.push_back(UIEvent::Fork(ForkType::Finished));
                     self.dirty = true;
                     return true;
                 }

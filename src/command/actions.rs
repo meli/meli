@@ -79,6 +79,7 @@ pub enum ViewAction {
 #[derive(Debug)]
 pub enum ComposeAction {
     AddAttachment(String),
+    AddAttachmentFilePicker(Option<String>),
     AddAttachmentPipe(String),
     RemoveAttachment(usize),
     SaveDraft,

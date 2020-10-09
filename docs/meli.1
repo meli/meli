@@ -451,6 +451,16 @@ as an attachment
 in composer, pipe
 .Ar CMD Ar ARGS
 output into an attachment
+.It Cm add-attachment-file-picker
+Launch command defined in the configuration value
+.Ic file_picker_command
+in
+.Xr meli.conf 5 TERMINAL
+.It Cm add-attachment-file-picker < Ar CMD Ar ARGS
+Launch command
+.Ar CMD Ar ARGS Ns
+\&.
+The command should print file paths in stderr, separated by NULL bytes.
 .It Cm remove-attachment Ar INDEX
 remove attachment with given index
 .It Cm toggle sign

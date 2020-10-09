@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Add import command to import email from files into accounts
+- Add add-attachment-file-picker command and `file_picker_command` setting to
+  use external commands to choose files when composing new mail
 
 ## [alpha-0.6.2] - 2020-09-24
 

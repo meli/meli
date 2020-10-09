@@ -920,6 +920,14 @@ If false, no ANSI colors are used.
 Set window title in xterm compatible terminals An empty string means no window title is set.
 .\" default value
 .Pq Em "meli"
+.It Ic file_picker_command Ar String
+.Pq Em optional
+Set command that prints file paths in stderr, separated by NULL bytes.
+Used with
+.Ic add-attachment-file-picker
+when composing new mail.
+.\" default value
+.Pq Em None
 .It Ic themes Ar hash table String[String[Attribute]]
 Define UI themes.
 See

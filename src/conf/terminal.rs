@@ -37,6 +37,8 @@ pub struct TerminalSettings {
     pub use_color: ToggleFlag,
     #[serde(deserialize_with = "non_empty_string")]
     pub window_title: Option<String>,
+    #[serde(deserialize_with = "non_empty_string")]
+    pub file_picker_command: Option<String>,
 }
 
 impl Default for TerminalSettings {
@@ -47,6 +49,7 @@ impl Default for TerminalSettings {
             ascii_drawing: false,
             use_color: ToggleFlag::InternalVal(true),
             window_title: Some("meli".to_string()),
+            file_picker_command: None,
         }
     }
 }
@@ -74,6 +77,7 @@ impl DotAddressable for TerminalSettings {
                     "ascii_drawing" => self.ascii_drawing.lookup(field, tail),
                     "use_color" => self.use_color.lookup(field, tail),
                     "window_title" => self.window_title.lookup(field, tail),
+                    "file_picker_command" => self.file_picker_command.lookup(field, tail),
                     other => Err(MeliError::new(format!(
                         "{} has no field named {}",
                         parent_field, other

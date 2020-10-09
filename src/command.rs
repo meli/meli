@@ -57,7 +57,7 @@ macro_rules! to_stream {
     };
     ($($tokens:expr),*) => {
         TokenStream {
-            tokens: &[$($token),*],
+            tokens: &[$($tokens),*],
         }
     };
 }
@@ -495,9 +495,10 @@ define_commands!([
                       }
                   )
                 },
-                { tags: ["add-attachment "],
+                { tags: ["add-attachment ", "add-attachment-file-picker "],
                   desc: "add-attachment PATH",
-                  tokens: &[One(Literal("add-attachment")), One(Filepath)],
+                  tokens: &[One(
+Alternatives(&[to_stream!(One(Literal("add-attachment")), One(Filepath)), to_stream!(One(Literal("add-attachment-file-picker")))]))],
                   parser:(
                       fn add_attachment<'a>(input: &'a [u8]) -> IResult<&'a [u8], Action> {
                           alt((
@@ -515,6 +516,18 @@ define_commands!([
                                       let (input, path) = quoted_argument(input)?;
                                       let (input, _) = eof(input)?;
                                       Ok((input, Compose(AddAttachment(path.to_string()))))
+                                  }, |input: &'a [u8]| -> IResult<&'a [u8], Action> {
+                                      let (input, _) = tag("add-attachment-file-picker")(input.trim())?;
+                                      let (input, _) = eof(input)?;
+                                      Ok((input, Compose(AddAttachmentFilePicker(None))))
+                                  }, |input: &'a [u8]| -> IResult<&'a [u8], Action> {
+                                      let (input, _) = tag("add-attachment-file-picker")(input.trim())?;
+                                      let (input, _) = is_a(" ")(input)?;
+                                      let (input, _) = tag("<")(input.trim())?;
+                                      let (input, _) = is_a(" ")(input)?;
+                                      let (input, shell) = map_res(not_line_ending, std::str::from_utf8)(input)?;
+                                      let (input, _) = eof(input)?;
+                                      Ok((input, Compose(AddAttachmentFilePicker(Some(shell.to_string())))))
                                   }
                               ))(input)
                       }
