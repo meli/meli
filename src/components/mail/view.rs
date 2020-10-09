@@ -1402,6 +1402,9 @@ impl Component for MailView {
     }
 
     fn process_event(&mut self, mut event: &mut UIEvent, context: &mut Context) -> bool {
+        if self.coordinates.0 == 0 || self.coordinates.1 == 0 {
+            return false;
+        }
         let shortcuts = self.get_shortcuts(context);
         match (&mut self.mode, &mut event) {
             /*(ViewMode::Ansi(ref mut buf), _) => {
