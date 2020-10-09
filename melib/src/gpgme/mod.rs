@@ -19,18 +19,23 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use crate::email::pgp::{DecryptionMetadata, Recipient};
+use crate::email::{
+    pgp::{DecryptionMetadata, Recipient},
+    Address,
+};
 use crate::error::{ErrorKind, IntoMeliError, MeliError, Result, ResultIntoMeliError};
 use futures::FutureExt;
 use smol::Async;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ffi::{CStr, CString, OsStr};
+use std::future::Future;
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::io::{AsRawFd, RawFd};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use std::future::Future;
+const GPGME_MIN_VERSION: &str = "1.12.0";
 
 macro_rules! call {
     ($lib:expr, $func:ty) => {{
@@ -43,9 +48,48 @@ macro_rules! call {
         func
     }};
 }
+
+macro_rules! c_string_literal {
+    ($lit:literal) => {{
+        unsafe {
+            CStr::from_bytes_with_nul_unchecked(concat!($lit, "\0").as_bytes()).as_ptr()
+                as *const ::std::os::raw::c_char
+        }
+    }};
+}
 mod bindings;
 use bindings::*;
 mod io;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum GpgmeFlag {
+    ///"auto-key-retrieve"
+    AutoKeyRetrieve,
+    OfflineMode,
+}
+
+bitflags! {
+    pub struct LocateKey: u8 {
+        /// Locate a key using DNS CERT, as specified in RFC-4398.
+        const CERT = 0b1;
+        /// Locate a key using DNS PKA.
+        const PKA  = 0b10;
+        /// Locate a key using DANE, as specified in draft-ietf-dane-openpgpkey-05.txt.
+        const DANE  = 0b100;
+        /// Locate a key using the Web Key Directory protocol.
+        const WKD  = 0b1000;
+        /// Using DNS Service Discovery, check the domain in question for any LDAP keyservers to use. If this fails, attempt to locate the key using the PGP Universal method of checking ‘ldap://keys.(thedomain)’.
+        const LDAP = 0b10000;
+        /// Locate a key using a keyserver.
+        const KEYSERVER  = 0b100000;
+        /// In addition, a keyserver URL as used in the dirmngr configuration may be used here to query that particular keyserver.
+        const KEYSERVER_URL = 0b1000000;
+        /// Locate the key using the local keyrings. This mechanism allows the user to select the order a local key lookup is done. Thus using ‘--auto-key-locate local’ is identical to --no-auto-key-locate.
+        const LOCAL = 0b10000000;
+        /// This flag disables the standard local key lookup, done before any of the mechanisms defined by the --auto-key-locate are tried. The position of this mechanism in the list does not matter. It is not required if local is also used.
+        const NODEFAULT = 0;
+    }
+}
 
 struct IoState {
     max_idx: usize,
@@ -86,9 +130,23 @@ impl Drop for ContextInner {
 
 impl Context {
     pub fn new() -> Result<Self> {
-        let version = CString::new("1.12.0").unwrap();
-        let lib = Arc::new(libloading::Library::new("libgpgme.so")?);
-        unsafe { call!(&lib, gpgme_check_version)(version.as_c_str().as_ptr() as *mut _) };
+        let version = CString::new(GPGME_MIN_VERSION).unwrap();
+        let lib = Arc::new(libloading::Library::new(libloading::library_filename(
+            "gpgme",
+        ))?);
+        if unsafe { call!(&lib, gpgme_check_version)(version.as_c_str().as_ptr() as *mut _) }
+            .is_null()
+        {
+            return Err(MeliError::new(format!(
+                "Could not use libgpgme: requested version compatible with {} but got {}",
+                GPGME_MIN_VERSION,
+                unsafe {
+                    CStr::from_ptr(call!(&lib, gpgme_check_version)(std::ptr::null_mut()))
+                        .to_string_lossy()
+                },
+            ))
+            .set_kind(ErrorKind::External));
+        };
         let (sender, receiver) = smol::channel::unbounded();
         let (key_sender, key_receiver) = smol::channel::unbounded();
 
@@ -118,7 +176,7 @@ impl Context {
             gpgme_error_try(&lib, call!(&lib, gpgme_new)(&mut ptr))?;
             call!(&lib, gpgme_set_io_cbs)(ptr, &mut io_cbs);
         }
-        Ok(Context {
+        let ret = Context {
             inner: Arc::new(ContextInner {
                 inner: core::ptr::NonNull::new(ptr).ok_or_else(|| {
                     MeliError::new("Could not use libgpgme").set_kind(ErrorKind::Bug)
@@ -126,7 +184,142 @@ impl Context {
                 lib,
             }),
             io_state,
-        })
+        };
+        ret.set_flag(GpgmeFlag::AutoKeyRetrieve, false)?;
+        ret.set_flag(GpgmeFlag::OfflineMode, true)?;
+        ret.set_auto_key_locate(LocateKey::LOCAL)?;
+        Ok(ret)
+    }
+
+    fn set_flag_inner(
+        &self,
+        raw_flag: *const ::std::os::raw::c_char,
+        raw_value: *const ::std::os::raw::c_char,
+    ) -> Result<()> {
+        unsafe {
+            gpgme_error_try(
+                &self.inner.lib,
+                call!(&self.inner.lib, gpgme_set_ctx_flag)(
+                    self.inner.inner.as_ptr(),
+                    raw_flag,
+                    raw_value,
+                ),
+            )?;
+        }
+        Ok(())
+    }
+
+    pub fn set_flag(&self, flag: GpgmeFlag, value: bool) -> Result<()> {
+        match flag {
+            GpgmeFlag::AutoKeyRetrieve => {}
+            GpgmeFlag::OfflineMode => {
+                unsafe {
+                    call!(&self.inner.lib, gpgme_set_offline)(
+                        self.inner.inner.as_ptr(),
+                        if value { 1 } else { 0 },
+                    );
+                };
+                return Ok(());
+            }
+        };
+        const VALUE_ON: &[u8; 2] = b"1\0";
+        const VALUE_OFF: &[u8; 2] = b"0\0";
+        let raw_flag = match flag {
+            GpgmeFlag::AutoKeyRetrieve => c_string_literal!("auto-key-retrieve"),
+            GpgmeFlag::OfflineMode => unreachable!(),
+        };
+        self.set_flag_inner(
+            raw_flag,
+            if value { VALUE_ON } else { VALUE_OFF }.as_ptr() as *const ::std::os::raw::c_char,
+        )
+    }
+
+    fn get_flag_inner(
+        &self,
+        raw_flag: *const ::std::os::raw::c_char,
+    ) -> *const ::std::os::raw::c_char {
+        unsafe { call!(&self.inner.lib, gpgme_get_ctx_flag)(self.inner.inner.as_ptr(), raw_flag) }
+    }
+
+    pub fn get_flag(&self, flag: GpgmeFlag) -> Result<bool> {
+        let raw_flag = match flag {
+            GpgmeFlag::AutoKeyRetrieve => c_string_literal!("auto-key-retrieve"),
+            GpgmeFlag::OfflineMode => {
+                return Ok(unsafe {
+                    call!(&self.inner.lib, gpgme_get_offline)(self.inner.inner.as_ptr()) > 0
+                });
+            }
+        };
+        let val = self.get_flag_inner(raw_flag);
+        Ok(!val.is_null())
+    }
+
+    pub fn set_auto_key_locate(&self, val: LocateKey) -> Result<()> {
+        let auto_key_locate: *const ::std::os::raw::c_char = c_string_literal!("auto-key-locate");
+        if val == LocateKey::NODEFAULT {
+            self.set_flag_inner(auto_key_locate, c_string_literal!("clear,nodefault"))
+        } else {
+            let mut accum = String::new();
+            macro_rules! is_set {
+                ($flag:expr, $string:literal) => {{
+                    if val.intersects($flag) {
+                        accum.push_str($string);
+                        accum.push_str(",");
+                    }
+                }};
+            }
+            is_set!(LocateKey::CERT, "cert");
+            is_set!(LocateKey::PKA, "pka");
+            is_set!(LocateKey::WKD, "wkd");
+            is_set!(LocateKey::LDAP, "ldap");
+            is_set!(LocateKey::KEYSERVER, "keyserver");
+            is_set!(LocateKey::KEYSERVER_URL, "keyserver-url");
+            is_set!(LocateKey::LOCAL, "local");
+            accum.pop();
+            accum.push('\0');
+            self.set_flag_inner(
+                auto_key_locate,
+                CStr::from_bytes_with_nul(accum.as_bytes())
+                    .expect(accum.as_str())
+                    .as_ptr() as *const _,
+            )
+        }
+    }
+
+    pub fn get_auto_key_locate(&self) -> Result<LocateKey> {
+        let auto_key_locate: *const ::std::os::raw::c_char = c_string_literal!("auto-key-locate");
+        let raw_value =
+            unsafe { CStr::from_ptr(self.get_flag_inner(auto_key_locate)) }.to_string_lossy();
+        let mut val = LocateKey::NODEFAULT;
+        if !raw_value.contains("nodefault") {
+            for mechanism in raw_value.split(",") {
+                match mechanism {
+                    "cert" => val.set(LocateKey::CERT, true),
+                    "pka" => {
+                        val.set(LocateKey::PKA, true);
+                    }
+                    "wkd" => {
+                        val.set(LocateKey::WKD, true);
+                    }
+                    "ldap" => {
+                        val.set(LocateKey::LDAP, true);
+                    }
+                    "keyserver" => {
+                        val.set(LocateKey::KEYSERVER, true);
+                    }
+                    "keyserver-url" => {
+                        val.set(LocateKey::KEYSERVER_URL, true);
+                    }
+                    "local" => {
+                        val.set(LocateKey::LOCAL, true);
+                    }
+                    unknown => {
+                        debug!("unknown mechanism: {}", unknown);
+                    }
+                }
+            }
+        }
+        Ok(val)
     }
 
     pub fn new_data_mem(&self, bytes: &[u8]) -> Result<Data> {
@@ -286,14 +479,27 @@ impl Context {
         })
     }
 
-    pub fn keylist(&mut self) -> Result<impl Future<Output = Result<Vec<String>>>> {
+    pub fn keylist(
+        &mut self,
+        secret: bool,
+        pattern: Option<String>,
+    ) -> Result<impl Future<Output = Result<Vec<Key>>>> {
+        let pattern = if let Some(pattern) = pattern {
+            Some(CString::new(pattern)?)
+        } else {
+            None
+        };
         unsafe {
             gpgme_error_try(
                 &self.inner.lib,
                 call!(&self.inner.lib, gpgme_op_keylist_start)(
                     self.inner.inner.as_ptr(),
-                    std::ptr::null_mut(),
-                    0,
+                    pattern
+                        .as_ref()
+                        .map(|cs| cs.as_ptr())
+                        .unwrap_or(std::ptr::null_mut())
+                        as *const ::std::os::raw::c_char,
+                    if secret { 1 } else { 0 },
                 ),
             )?;
         }
@@ -378,20 +584,9 @@ impl Context {
                 .take()
                 .unwrap_or_else(|| Err(MeliError::new("Unspecified libgpgme error")))?;
             let mut keys = vec![];
-            while let Ok(key) = key_receiver.try_recv() {
-                unsafe {
-                    if (*(key.inner.as_ptr())).uids.is_null() {
-                        keys.push("null".to_string());
-                    } else {
-                        keys.push(format!(
-                            "{} <{}>",
-                            CStr::from_ptr((*((*(key.inner.as_ptr())).uids)).name)
-                                .to_string_lossy(),
-                            CStr::from_ptr((*((*(key.inner.as_ptr())).uids)).email)
-                                .to_string_lossy()
-                        ));
-                    }
-                }
+            while let Ok(inner) = key_receiver.try_recv() {
+                let key = Key::new(inner, ctx.lib.clone());
+                keys.push(key);
             }
             Ok(keys)
         })
@@ -760,6 +955,87 @@ impl Clone for Key {
             inner: self.inner.clone(),
             lib,
         }
+    }
+}
+
+impl Key {
+    #[inline(always)]
+    fn new(inner: KeyInner, lib: Arc<libloading::Library>) -> Self {
+        Key { inner, lib }
+    }
+
+    pub fn primary_uid(&self) -> Option<Address> {
+        unsafe {
+            if (*(self.inner.inner.as_ptr())).uids.is_null() {
+                return None;
+            }
+            let uid = (*(self.inner.inner.as_ptr())).uids;
+            if (*uid).name.is_null() && (*uid).email.is_null() {
+                None
+            } else if (*uid).name.is_null() {
+                Some(Address::new(
+                    None,
+                    CStr::from_ptr((*uid).email).to_string_lossy().to_string(),
+                ))
+            } else if (*uid).email.is_null() {
+                Some(Address::new(
+                    None,
+                    CStr::from_ptr((*uid).name).to_string_lossy().to_string(),
+                ))
+            } else {
+                Some(Address::new(
+                    Some(CStr::from_ptr((*uid).name).to_string_lossy().to_string()),
+                    CStr::from_ptr((*uid).email).to_string_lossy().to_string(),
+                ))
+            }
+        }
+    }
+
+    pub fn revoked(&self) -> bool {
+        unsafe { (*self.inner.inner.as_ptr()).revoked() > 0 }
+    }
+
+    pub fn expired(&self) -> bool {
+        unsafe { (*self.inner.inner.as_ptr()).expired() > 0 }
+    }
+
+    pub fn disabled(&self) -> bool {
+        unsafe { (*self.inner.inner.as_ptr()).disabled() > 0 }
+    }
+
+    pub fn invalid(&self) -> bool {
+        unsafe { (*self.inner.inner.as_ptr()).invalid() > 0 }
+    }
+
+    pub fn can_encrypt(&self) -> bool {
+        unsafe { (*self.inner.inner.as_ptr()).can_encrypt() > 0 }
+    }
+
+    pub fn can_sign(&self) -> bool {
+        unsafe { (*self.inner.inner.as_ptr()).can_sign() > 0 }
+    }
+
+    pub fn secret(&self) -> bool {
+        unsafe { (*self.inner.inner.as_ptr()).secret() > 0 }
+    }
+
+    pub fn fingerprint(&self) -> Cow<'_, str> {
+        (unsafe { CStr::from_ptr((*(self.inner.inner.as_ptr())).fpr) }).to_string_lossy()
+    }
+}
+
+impl std::fmt::Debug for Key {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        fmt.debug_struct("Key")
+            .field("fingerprint", &self.fingerprint())
+            .field("uid", &self.primary_uid())
+            .field("can_encrypt", &self.can_encrypt())
+            .field("can_sign", &self.can_sign())
+            .field("secret", &self.secret())
+            .field("revoked", &self.revoked())
+            .field("expired", &self.expired())
+            .field("invalid", &self.invalid())
+            .finish()
     }
 }
 

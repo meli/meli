@@ -7195,19 +7195,16 @@ pub type gpgme_interact_cb_t = ::std::option::Option<
 >;
 pub type gpgme_new = unsafe extern "C" fn(ctx: *mut gpgme_ctx_t) -> gpgme_error_t;
 pub type gpgme_release = unsafe extern "C" fn(ctx: gpgme_ctx_t);
-extern "C" {
-    pub fn gpgme_set_ctx_flag(
-        ctx: gpgme_ctx_t,
-        name: *const ::std::os::raw::c_char,
-        value: *const ::std::os::raw::c_char,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_get_ctx_flag(
-        ctx: gpgme_ctx_t,
-        name: *const ::std::os::raw::c_char,
-    ) -> *const ::std::os::raw::c_char;
-}
+pub type gpgme_set_ctx_flag = unsafe extern "C" fn(
+    ctx: gpgme_ctx_t,
+    name: *const ::std::os::raw::c_char,
+    value: *const ::std::os::raw::c_char,
+) -> gpgme_error_t;
+
+pub type gpgme_get_ctx_flag = unsafe extern "C" fn(
+    ctx: gpgme_ctx_t,
+    name: *const ::std::os::raw::c_char,
+) -> *const ::std::os::raw::c_char;
 extern "C" {
     pub fn gpgme_set_protocol(ctx: gpgme_ctx_t, proto: gpgme_protocol_t) -> gpgme_error_t;
 }
@@ -7235,24 +7232,17 @@ extern "C" {
 extern "C" {
     pub fn gpgme_get_textmode(ctx: gpgme_ctx_t) -> ::std::os::raw::c_int;
 }
-extern "C" {
-    pub fn gpgme_set_offline(ctx: gpgme_ctx_t, yes: ::std::os::raw::c_int);
-}
-extern "C" {
-    pub fn gpgme_get_offline(ctx: gpgme_ctx_t) -> ::std::os::raw::c_int;
-}
+pub type gpgme_set_offline = extern "C" fn(ctx: gpgme_ctx_t, yes: ::std::os::raw::c_int);
+pub type gpgme_get_offline = extern "C" fn(ctx: gpgme_ctx_t) -> ::std::os::raw::c_int;
 extern "C" {
     pub fn gpgme_set_include_certs(ctx: gpgme_ctx_t, nr_of_certs: ::std::os::raw::c_int);
 }
 extern "C" {
     pub fn gpgme_get_include_certs(ctx: gpgme_ctx_t) -> ::std::os::raw::c_int;
 }
-extern "C" {
-    pub fn gpgme_set_keylist_mode(ctx: gpgme_ctx_t, mode: gpgme_keylist_mode_t) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_get_keylist_mode(ctx: gpgme_ctx_t) -> gpgme_keylist_mode_t;
-}
+pub type gpgme_set_keylist_mode =
+    unsafe extern "C" fn(ctx: gpgme_ctx_t, mode: gpgme_keylist_mode_t) -> gpgme_error_t;
+pub type gpgme_get_keylist_mode = unsafe extern "C" fn(ctx: gpgme_ctx_t) -> gpgme_keylist_mode_t;
 extern "C" {
     pub fn gpgme_set_pinentry_mode(ctx: gpgme_ctx_t, mode: gpgme_pinentry_mode_t) -> gpgme_error_t;
 }
