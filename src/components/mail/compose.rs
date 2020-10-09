@@ -82,6 +82,7 @@ pub struct Composer {
     embed_area: Area,
     embed: Option<EmbedStatus>,
     sign_mail: ToggleFlag,
+    encrypt_mail: ToggleFlag,
     dirty: bool,
     has_changes: bool,
     initialized: bool,
@@ -104,6 +105,7 @@ impl Default for Composer {
 
             mode: ViewMode::Edit,
             sign_mail: ToggleFlag::Unset,
+            encrypt_mail: ToggleFlag::Unset,
             dirty: true,
             has_changes: false,
             embed_area: ((0, 0), (0, 0)),
@@ -452,15 +454,33 @@ impl Composer {
                 None,
             );
         }
-        write_string_to_grid(
-            "☐ don't encrypt",
-            grid,
-            theme_default.fg,
-            theme_default.bg,
-            theme_default.attrs,
-            (pos_inc(upper_left!(area), (0, 2)), bottom_right!(area)),
-            None,
-        );
+        if self.encrypt_mail.is_true() {
+            write_string_to_grid(
+                &format!(
+                    "☑ encrypt with {}",
+                    account_settings!(context[self.account_hash].pgp.encrypt_key)
+                        .as_ref()
+                        .map(|s| s.as_str())
+                        .unwrap_or("default key")
+                ),
+                grid,
+                theme_default.fg,
+                theme_default.bg,
+                theme_default.attrs,
+                (pos_inc(upper_left!(area), (0, 2)), bottom_right!(area)),
+                None,
+            );
+        } else {
+            write_string_to_grid(
+                "☐ don't encrypt",
+                grid,
+                theme_default.fg,
+                theme_default.bg,
+                theme_default.attrs,
+                (pos_inc(upper_left!(area), (0, 2)), bottom_right!(area)),
+                None,
+            );
+        }
         if attachments_no == 0 {
             write_string_to_grid(
                 "no attachments",
@@ -531,6 +551,11 @@ impl Component for Composer {
             if self.sign_mail.is_unset() {
                 self.sign_mail = ToggleFlag::InternalVal(*account_settings!(
                     context[self.account_hash].pgp.auto_sign
+                ));
+            }
+            if self.encrypt_mail.is_unset() {
+                self.encrypt_mail = ToggleFlag::InternalVal(*account_settings!(
+                    context[self.account_hash].pgp.auto_encrypt
                 ));
             }
             if !self.draft.headers().contains_key("From") || self.draft.headers()["From"].is_empty()
@@ -730,6 +755,7 @@ impl Component for Composer {
                     self.update_draft();
                     match send_draft_async(
                         self.sign_mail,
+                        self.encrypt_mail,
                         context,
                         self.account_hash,
                         self.draft.clone(),
@@ -1324,6 +1350,9 @@ impl Component for Composer {
                     return true;
                 }
                 Action::Compose(ComposeAction::ToggleEncrypt) => {
+                    let is_true = self.encrypt_mail.is_true();
+                    self.encrypt_mail = ToggleFlag::from(!is_true);
+                    self.dirty = true;
                     return true;
                 }
                 _ => {}
@@ -1567,6 +1596,7 @@ pub fn save_draft(
 
 pub fn send_draft_async(
     sign_mail: ToggleFlag,
+    encrypt_mail: ToggleFlag,
     context: &mut Context,
     account_hash: AccountHash,
     mut draft: Draft,
@@ -1592,6 +1622,32 @@ pub fn send_draft_async(
             account_settings!(context[account_hash].pgp.sign_key)
                 .as_ref()
                 .map(|s| s.to_string()),
+        )?));
+    }
+    if encrypt_mail.is_true() {
+        let mut recipients = vec![];
+        if let Ok((_, v)) =
+            melib::email::parser::address::rfc2822address_list(draft.headers()["To"].as_bytes())
+        {
+            for addr in v {
+                recipients.push(addr.get_email());
+            }
+        }
+        if let Ok((_, v)) =
+            melib::email::parser::address::rfc2822address_list(draft.headers()["Cc"].as_bytes())
+        {
+            for addr in v {
+                recipients.push(addr.get_email());
+            }
+        }
+        filters_stack.push(Box::new(crate::components::mail::pgp::encrypt_filter(
+            account_settings!(context[account_hash].pgp.gpg_binary)
+                .as_ref()
+                .map(|s| s.to_string()),
+            account_settings!(context[account_hash].pgp.encrypt_key)
+                .as_ref()
+                .map(|s| s.to_string()),
+            recipients,
         )?));
     }
     let send_mail = account_settings!(context[account_hash].composing.send_mail).clone();
