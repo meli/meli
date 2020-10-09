@@ -834,6 +834,22 @@ impl Component for Composer {
                 self.set_dirty(true);
                 return true;
             }
+            (ViewMode::Send(ref dialog), UIEvent::ComponentKill(ref id)) if *id == dialog.id() => {
+                self.mode = ViewMode::Edit;
+                self.set_dirty(true);
+            }
+            (ViewMode::SelectRecipients(ref dialog), UIEvent::ComponentKill(ref id))
+                if *id == dialog.id() =>
+            {
+                self.mode = ViewMode::Edit;
+                self.set_dirty(true);
+            }
+            (ViewMode::Discard(_, ref dialog), UIEvent::ComponentKill(ref id))
+                if *id == dialog.id() =>
+            {
+                self.mode = ViewMode::Edit;
+                self.set_dirty(true);
+            }
             (ViewMode::Send(ref mut selector), _) => {
                 if selector.process_event(event, context) {
                     return true;
