@@ -22,7 +22,7 @@
 use super::EntryStrings;
 use super::*;
 use crate::components::utilities::PageMovement;
-use crate::jobs::{oneshot, JobId, JoinHandle};
+use crate::jobs::{JobId, JoinHandle};
 use std::cmp;
 use std::iter::FromIterator;
 
@@ -133,11 +133,7 @@ pub struct PlainListing {
     /// Cache current view.
     data_columns: DataColumns,
 
-    search_job: Option<(
-        String,
-        oneshot::Receiver<Result<SmallVec<[EnvelopeHash; 512]>>>,
-        JobId,
-    )>,
+    search_job: Option<(String, JoinHandle<Result<SmallVec<[EnvelopeHash; 512]>>>)>,
     filter_term: String,
     filtered_selection: Vec<EnvelopeHash>,
     filtered_order: HashMap<EnvelopeHash, usize>,
@@ -155,7 +151,7 @@ pub struct PlainListing {
     _row_updates: SmallVec<[ThreadHash; 8]>,
     color_cache: ColorCache,
 
-    active_jobs: HashMap<JobId, (JoinHandle, oneshot::Receiver<Result<()>>)>,
+    active_jobs: HashMap<JobId, JoinHandle<Result<()>>>,
     movement: Option<PageMovement>,
     id: ComponentId,
 }
@@ -1074,8 +1070,8 @@ impl PlainListing {
                     )));
             }
             Ok(fut) => {
-                let (rcvr, handle, job_id) = account.job_executor.spawn_specialized(fut);
-                self.active_jobs.insert(job_id, (handle, rcvr));
+                let handle = account.job_executor.spawn_specialized(fut);
+                self.active_jobs.insert(handle.job_id, handle);
             }
         }
         self.row_updates.push(env_hash);
@@ -1337,12 +1333,10 @@ impl Component for PlainListing {
                     self.cursor_pos.1,
                 ) {
                     Ok(job) => {
-                        let (chan, handle, job_id) = context.accounts[&self.cursor_pos.0]
+                        let handle = context.accounts[&self.cursor_pos.0]
                             .job_executor
                             .spawn_specialized(job);
-                        context.accounts[&self.cursor_pos.0]
-                            .insert_job(job_id, crate::conf::accounts::JobRequest::Search(handle));
-                        self.search_job = Some((filter_term.to_string(), chan, job_id));
+                        self.search_job = Some((filter_term.to_string(), handle));
                     }
                     Err(err) => {
                         context.replies.push_back(UIEvent::Notification(
@@ -1358,11 +1352,11 @@ impl Component for PlainListing {
                 if self
                     .search_job
                     .as_ref()
-                    .map(|(_, _, j)| j == job_id)
+                    .map(|(_, j)| j == job_id)
                     .unwrap_or(false) =>
             {
-                let (filter_term, mut rcvr, _job_id) = self.search_job.take().unwrap();
-                let results = rcvr.try_recv().unwrap().unwrap();
+                let (filter_term, mut handle) = self.search_job.take().unwrap();
+                let results = handle.chan.try_recv().unwrap().unwrap();
                 self.filter(filter_term, results, context);
                 self.set_dirty(true);
             }

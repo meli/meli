@@ -177,9 +177,9 @@ pub trait MailListingTrait: ListingTrait {
                         ));
                     }
                     Ok(fut) => {
-                        let (channel, handle, job_id) = account.job_executor.spawn_specialized(fut);
+                        let handle = account.job_executor.spawn_specialized(fut);
                         account
-                            .insert_job(job_id, JobRequest::SetFlags(env_hashes, handle, channel));
+                            .insert_job(handle.job_id, JobRequest::SetFlags { env_hashes, handle });
                     }
                 }
             }
@@ -196,9 +196,9 @@ pub trait MailListingTrait: ListingTrait {
                         ));
                     }
                     Ok(fut) => {
-                        let (channel, handle, job_id) = account.job_executor.spawn_specialized(fut);
+                        let handle = account.job_executor.spawn_specialized(fut);
                         account
-                            .insert_job(job_id, JobRequest::SetFlags(env_hashes, handle, channel));
+                            .insert_job(handle.job_id, JobRequest::SetFlags { env_hashes, handle });
                     }
                 }
             }
@@ -215,9 +215,9 @@ pub trait MailListingTrait: ListingTrait {
                         ));
                     }
                     Ok(fut) => {
-                        let (channel, handle, job_id) = account.job_executor.spawn_specialized(fut);
+                        let handle = account.job_executor.spawn_specialized(fut);
                         account
-                            .insert_job(job_id, JobRequest::SetFlags(env_hashes, handle, channel));
+                            .insert_job(handle.job_id, JobRequest::SetFlags { env_hashes, handle });
                     }
                 }
             }
@@ -234,9 +234,9 @@ pub trait MailListingTrait: ListingTrait {
                         ));
                     }
                     Ok(fut) => {
-                        let (channel, handle, job_id) = account.job_executor.spawn_specialized(fut);
+                        let handle = account.job_executor.spawn_specialized(fut);
                         account
-                            .insert_job(job_id, JobRequest::SetFlags(env_hashes, handle, channel));
+                            .insert_job(handle.job_id, JobRequest::SetFlags { env_hashes, handle });
                     }
                 }
             }
@@ -253,10 +253,10 @@ pub trait MailListingTrait: ListingTrait {
                         ));
                     }
                     Ok(fut) => {
-                        let (channel, handle, job_id) = account.job_executor.spawn_specialized(fut);
+                        let handle = account.job_executor.spawn_specialized(fut);
                         account.insert_job(
-                            job_id,
-                            JobRequest::DeleteMessages(env_hashes, handle, channel),
+                            handle.job_id,
+                            JobRequest::DeleteMessages { env_hashes, handle },
                         );
                     }
                 }
@@ -278,13 +278,12 @@ pub trait MailListingTrait: ListingTrait {
                         ));
                     }
                     Ok(fut) => {
-                        let (channel, handle, job_id) = account.job_executor.spawn_specialized(fut);
+                        let handle = account.job_executor.spawn_specialized(fut);
                         account.insert_job(
-                            job_id,
+                            handle.job_id,
                             JobRequest::Generic {
                                 name: "message copying".into(),
                                 handle,
-                                channel,
                                 on_finish: None,
                                 logging_level: melib::LoggingLevel::INFO,
                             },
@@ -316,13 +315,12 @@ pub trait MailListingTrait: ListingTrait {
                         ));
                     }
                     Ok(fut) => {
-                        let (channel, handle, job_id) = account.job_executor.spawn_specialized(fut);
+                        let handle = account.job_executor.spawn_specialized(fut);
                         account.insert_job(
-                            job_id,
+                            handle.job_id,
                             JobRequest::Generic {
                                 name: "message moving".into(),
                                 handle,
-                                channel,
                                 on_finish: None,
                                 logging_level: melib::LoggingLevel::INFO,
                             },

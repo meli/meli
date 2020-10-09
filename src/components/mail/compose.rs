@@ -25,7 +25,7 @@ use melib::list_management;
 use melib::Draft;
 
 use crate::conf::accounts::JobRequest;
-use crate::jobs::{JobChannel, JobId, JoinHandle};
+use crate::jobs::JoinHandle;
 use crate::terminal::embed::EmbedGrid;
 use indexmap::IndexSet;
 use nix::sys::wait::WaitStatus;
@@ -125,7 +125,7 @@ enum ViewMode {
     Embed,
     SelectRecipients(UIDialog<Address>),
     Send(UIConfirmationDialog),
-    WaitingForSendResult(UIDialog<char>, JoinHandle, JobId, JobChannel<()>),
+    WaitingForSendResult(UIDialog<char>, JoinHandle<Result<()>>),
 }
 
 impl ViewMode {
@@ -579,11 +579,6 @@ impl Component for Composer {
                     context[self.account_hash].pgp.auto_sign
                 ));
             }
-            if self.encrypt_mail.is_unset() {
-                self.encrypt_mail = ToggleFlag::InternalVal(*account_settings!(
-                    context[self.account_hash].pgp.auto_encrypt
-                ));
-            }
             if !self.draft.headers().contains_key("From") || self.draft.headers()["From"].is_empty()
             {
                 self.draft.set_header(
@@ -763,7 +758,7 @@ impl Component for Composer {
                 /* Let user choose whether to quit with/without saving or cancel */
                 s.draw(grid, center_area(area, s.content.size()), context);
             }
-            ViewMode::WaitingForSendResult(ref mut s, _, _, _) => {
+            ViewMode::WaitingForSendResult(ref mut s, _) => {
                 /* Let user choose whether to wait for success or cancel */
                 s.draw(grid, center_area(area, s.content.size()), context);
             }
@@ -796,7 +791,7 @@ impl Component for Composer {
                         Flag::SEEN,
                     ) {
                         Ok(job) => {
-                            let (chan, handle, job_id) = context.job_executor.spawn_blocking(job);
+                            let handle = context.job_executor.spawn_blocking(job);
                             self.mode = ViewMode::WaitingForSendResult(
                                 UIDialog::new(
                                     "Waiting for confirmation.. The tab will close automatically on successful submission.",
@@ -812,7 +807,7 @@ impl Component for Composer {
                                         ))
                                     })),
                                     context,
-                                ), handle, job_id, chan);
+                                ), handle);
                         }
                         Err(err) => {
                             context.replies.push_back(UIEvent::Notification(
@@ -906,7 +901,7 @@ impl Component for Composer {
                 }
             }
             (
-                ViewMode::WaitingForSendResult(ref selector, _, _, _),
+                ViewMode::WaitingForSendResult(ref selector, _),
                 UIEvent::FinishedUIDialog(id, result),
             ) if selector.id() == *id => {
                 if let Some(key) = result.downcast_mut::<char>() {
@@ -919,12 +914,12 @@ impl Component for Composer {
                         }
                         'n' => {
                             self.set_dirty(true);
-                            if let ViewMode::WaitingForSendResult(_, handle, job_id, chan) =
+                            if let ViewMode::WaitingForSendResult(_, handle) =
                                 std::mem::replace(&mut self.mode, ViewMode::Edit)
                             {
                                 context.accounts[&self.account_hash].active_jobs.insert(
-                                    job_id,
-                                    JobRequest::SendMessageBackground(handle, chan),
+                                    handle.job_id,
+                                    JobRequest::SendMessageBackground { handle },
                                 );
                             }
                         }
@@ -934,10 +929,10 @@ impl Component for Composer {
                 return true;
             }
             (
-                ViewMode::WaitingForSendResult(_, _, ref our_job_id, ref mut chan),
+                ViewMode::WaitingForSendResult(_, ref mut handle),
                 UIEvent::StatusEvent(StatusEvent::JobFinished(ref job_id)),
-            ) if *our_job_id == *job_id => {
-                let result = chan.try_recv().unwrap();
+            ) if handle.job_id == *job_id => {
+                let result = handle.chan.try_recv().unwrap();
                 if let Some(Err(err)) = result {
                     self.mode = ViewMode::Edit;
                     context.replies.push_back(UIEvent::Notification(
@@ -953,7 +948,7 @@ impl Component for Composer {
                 }
                 return true;
             }
-            (ViewMode::WaitingForSendResult(ref mut selector, _, _, _), _) => {
+            (ViewMode::WaitingForSendResult(ref mut selector, _), _) => {
                 if selector.process_event(event, context) {
                     return true;
                 }
@@ -1548,7 +1543,7 @@ pub fn send_draft(
     mailbox_type: SpecialUsageMailbox,
     flags: Flag,
     complete_in_background: bool,
-) -> Result<Option<(JobId, JoinHandle, JobChannel<()>)>> {
+) -> Result<Option<JoinHandle<Result<()>>>> {
     let format_flowed = *account_settings!(context[account_hash].composing.format_flowed);
     if sign_mail.is_true() {
         let mut content_type = ContentType::default();

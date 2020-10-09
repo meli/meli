@@ -873,14 +873,12 @@ impl State {
                 }
                 match crate::sqlite3::index(&mut self.context, account_index) {
                     Ok(job) => {
-                        let (channel, handle, job_id) =
-                            self.context.job_executor.spawn_blocking(job);
+                        let handle = self.context.job_executor.spawn_blocking(job);
                         self.context.accounts[account_index].active_jobs.insert(
-                            job_id,
+                            handle.job_id,
                             crate::conf::accounts::JobRequest::Generic {
                                 name: "Message index rebuild".into(),
                                 handle,
-                                channel,
                                 on_finish: None,
                                 logging_level: melib::LoggingLevel::INFO,
                             },

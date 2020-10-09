@@ -21,7 +21,7 @@
 
 use super::*;
 use crate::components::utilities::PageMovement;
-use crate::jobs::{oneshot, JobId};
+use crate::jobs::JoinHandle;
 use std::iter::FromIterator;
 
 macro_rules! row_attr {
@@ -104,11 +104,7 @@ pub struct ConversationsListing {
     /// Cache current view.
     content: CellBuffer,
 
-    search_job: Option<(
-        String,
-        oneshot::Receiver<Result<SmallVec<[EnvelopeHash; 512]>>>,
-        JobId,
-    )>,
+    search_job: Option<(String, JoinHandle<Result<SmallVec<[EnvelopeHash; 512]>>>)>,
     filter_term: String,
     filtered_selection: Vec<ThreadHash>,
     filtered_order: HashMap<ThreadHash, usize>,
@@ -1555,13 +1551,10 @@ impl Component for ConversationsListing {
                         self.cursor_pos.1,
                     ) {
                         Ok(job) => {
-                            let (chan, handle, job_id) = context.accounts[&self.cursor_pos.0]
+                            let handle = context.accounts[&self.cursor_pos.0]
                                 .job_executor
                                 .spawn_specialized(job);
-                            context.accounts[&self.cursor_pos.0]
-                                .active_jobs
-                                .insert(job_id, crate::conf::accounts::JobRequest::Search(handle));
-                            self.search_job = Some((filter_term.to_string(), chan, job_id));
+                            self.search_job = Some((filter_term.to_string(), handle));
                         }
                         Err(err) => {
                             context.replies.push_back(UIEvent::Notification(
@@ -1601,11 +1594,11 @@ impl Component for ConversationsListing {
                 if self
                     .search_job
                     .as_ref()
-                    .map(|(_, _, j)| j == job_id)
+                    .map(|(_, j)| j == job_id)
                     .unwrap_or(false) =>
             {
-                let (filter_term, mut rcvr, _job_id) = self.search_job.take().unwrap();
-                let results = rcvr.try_recv().unwrap().unwrap();
+                let (filter_term, mut handle) = self.search_job.take().unwrap();
+                let results = handle.chan.try_recv().unwrap().unwrap();
                 self.filter(filter_term, results, context);
                 self.set_dirty(true);
             }

@@ -24,7 +24,7 @@
  */
 
 use super::{AccountConf, FileMailboxConf};
-use crate::jobs::{JobChannel, JobExecutor, JobId, JoinHandle};
+use crate::jobs::{JobExecutor, JobId, JoinHandle};
 use indexmap::IndexMap;
 use melib::backends::*;
 use melib::email::*;
@@ -40,7 +40,6 @@ use std::collections::{HashMap, HashSet};
 use crate::types::UIEvent::{self, EnvelopeRemove, EnvelopeRename, EnvelopeUpdate, Notification};
 use crate::{StatusEvent, ThreadEvent};
 use crossbeam::Sender;
-use futures::channel::oneshot;
 use futures::future::FutureExt;
 pub use futures::stream::Stream;
 use futures::stream::StreamExt;
@@ -160,87 +159,112 @@ pub struct Account {
 }
 
 pub enum JobRequest {
-    Mailboxes(
-        JoinHandle,
-        oneshot::Receiver<Result<HashMap<MailboxHash, Mailbox>>>,
-    ),
-    Fetch(
-        MailboxHash,
-        JoinHandle,
-        oneshot::Receiver<(
+    Mailboxes {
+        handle: JoinHandle<Result<HashMap<MailboxHash, Mailbox>>>,
+    },
+    Fetch {
+        mailbox_hash: MailboxHash,
+        handle: JoinHandle<(
             Option<Result<Vec<Envelope>>>,
             Pin<Box<dyn Stream<Item = Result<Vec<Envelope>>> + Send + 'static>>,
         )>,
-    ),
+    },
     Generic {
         name: Cow<'static, str>,
         logging_level: melib::LoggingLevel,
-        handle: JoinHandle,
-        channel: JobChannel<()>,
+        handle: JoinHandle<Result<()>>,
         on_finish: Option<crate::types::CallbackFn>,
     },
-    IsOnline(JoinHandle, oneshot::Receiver<Result<()>>),
-    Refresh(MailboxHash, JoinHandle, oneshot::Receiver<Result<()>>),
-    SetFlags(EnvelopeHashBatch, JoinHandle, oneshot::Receiver<Result<()>>),
+    IsOnline {
+        handle: JoinHandle<Result<()>>,
+    },
+    Refresh {
+        mailbox_hash: MailboxHash,
+        handle: JoinHandle<Result<()>>,
+    },
+    SetFlags {
+        env_hashes: EnvelopeHashBatch,
+        handle: JoinHandle<Result<()>>,
+    },
     SaveMessage {
         bytes: Vec<u8>,
         mailbox_hash: MailboxHash,
-        handle: JoinHandle,
-        channel: oneshot::Receiver<Result<()>>,
+        handle: JoinHandle<Result<()>>,
     },
     SendMessage,
-    SendMessageBackground(JoinHandle, JobChannel<()>),
-    CopyTo(MailboxHash, JoinHandle, oneshot::Receiver<Result<Vec<u8>>>),
-    DeleteMessages(EnvelopeHashBatch, JoinHandle, oneshot::Receiver<Result<()>>),
+    SendMessageBackground {
+        handle: JoinHandle<Result<()>>,
+    },
+    CopyTo {
+        dest_mailbox_hash: MailboxHash,
+        handle: JoinHandle<Result<Vec<u8>>>,
+    },
+    DeleteMessages {
+        env_hashes: EnvelopeHashBatch,
+        handle: JoinHandle<Result<()>>,
+    },
     CreateMailbox {
         path: String,
-        handle: JoinHandle,
-        channel: JobChannel<(MailboxHash, HashMap<MailboxHash, Mailbox>)>,
+        handle: JoinHandle<Result<(MailboxHash, HashMap<MailboxHash, Mailbox>)>>,
     },
     DeleteMailbox {
         mailbox_hash: MailboxHash,
-        handle: JoinHandle,
-        channel: JobChannel<HashMap<MailboxHash, Mailbox>>,
+        handle: JoinHandle<Result<HashMap<MailboxHash, Mailbox>>>,
     },
     //RenameMailbox,
-    Search(JoinHandle),
-    AsBytes(JoinHandle),
-    SetMailboxPermissions(MailboxHash, JoinHandle, oneshot::Receiver<Result<()>>),
-    SetMailboxSubscription(MailboxHash, JoinHandle, oneshot::Receiver<Result<()>>),
+    Search {
+        handle: JoinHandle<Result<()>>,
+    },
+    AsBytes {
+        handle: JoinHandle<Result<()>>,
+    },
+    SetMailboxPermissions {
+        mailbox_hash: MailboxHash,
+        handle: JoinHandle<Result<()>>,
+    },
+    SetMailboxSubscription {
+        mailbox_hash: MailboxHash,
+        handle: JoinHandle<Result<()>>,
+    },
     Watch {
-        channel: oneshot::Receiver<Result<()>>,
-        handle: JoinHandle,
+        handle: JoinHandle<Result<()>>,
     },
 }
 
 impl Drop for JobRequest {
     fn drop(&mut self) {
         match self {
-            JobRequest::Generic { handle, .. } => handle.0.cancel(),
-            JobRequest::Mailboxes(h, _) => h.0.cancel(),
-            JobRequest::Fetch(_, h, _) => h.0.cancel(),
-            JobRequest::IsOnline(h, _) => h.0.cancel(),
-            JobRequest::Refresh(_, h, _) => h.0.cancel(),
-            JobRequest::SetFlags(_, h, _) => h.0.cancel(),
-            JobRequest::SaveMessage { handle, .. } => handle.0.cancel(),
-            JobRequest::CopyTo(_, h, _) => h.0.cancel(),
-            JobRequest::DeleteMessages(_, h, _) => h.0.cancel(),
-            JobRequest::CreateMailbox { handle, .. } => handle.0.cancel(),
-            JobRequest::DeleteMailbox { handle, .. } => handle.0.cancel(),
+            JobRequest::Generic { handle, .. } |
+            JobRequest::IsOnline { handle, .. } |
+            JobRequest::Refresh { handle, .. } |
+            JobRequest::SetFlags { handle, .. } |
+            JobRequest::SaveMessage { handle, .. } |
             //JobRequest::RenameMailbox,
-            JobRequest::Search(h) => h.0.cancel(),
-            JobRequest::AsBytes(h) => h.0.cancel(),
-            JobRequest::SetMailboxPermissions(_, h, _) => {
-                h.0.cancel();
+            JobRequest::Search { handle, .. } |
+            JobRequest::AsBytes { handle, .. } |
+            JobRequest::SetMailboxPermissions { handle, .. } |
+            JobRequest::SetMailboxSubscription { handle, .. } |
+            JobRequest::Watch { handle, .. } |
+            JobRequest::SendMessageBackground { handle, .. } => {
+                handle.cancel();
             }
-            JobRequest::SetMailboxSubscription(_, h, _) => {
-                h.0.cancel();
+            JobRequest::DeleteMessages { handle, .. } => {
+                handle.cancel();
             }
-            JobRequest::Watch { handle, .. } => handle.0.cancel(),
+            JobRequest::CreateMailbox { handle, .. } => {
+                handle.cancel();
+            }
+            JobRequest::DeleteMailbox { handle, .. } => {
+                handle.cancel();
+            }
+            JobRequest::Fetch { handle, .. } => {
+                handle.cancel();
+            }
+            JobRequest::Mailboxes { handle, .. } => {
+                handle.cancel();
+            }
+            JobRequest::CopyTo { handle, .. } => { handle.cancel(); }
             JobRequest::SendMessage => {}
-            JobRequest::SendMessageBackground(h, _) => {
-                h.0.cancel();
-            }
         }
     }
 }
@@ -249,30 +273,32 @@ impl core::fmt::Debug for JobRequest {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         match self {
             JobRequest::Generic { name, .. } => write!(f, "JobRequest::Generic({})", name),
-            JobRequest::Mailboxes(_, _) => write!(f, "JobRequest::Mailboxes"),
-            JobRequest::Fetch(hash, _, _) => write!(f, "JobRequest::Fetch({})", hash),
-            JobRequest::IsOnline(_, _) => write!(f, "JobRequest::IsOnline"),
-            JobRequest::Refresh(_, _, _) => write!(f, "JobRequest::Refresh"),
-            JobRequest::SetFlags(_, _, _) => write!(f, "JobRequest::SetFlags"),
+            JobRequest::Mailboxes { .. } => write!(f, "JobRequest::Mailboxes"),
+            JobRequest::Fetch { mailbox_hash, .. } => {
+                write!(f, "JobRequest::Fetch({})", mailbox_hash)
+            }
+            JobRequest::IsOnline { .. } => write!(f, "JobRequest::IsOnline"),
+            JobRequest::Refresh { .. } => write!(f, "JobRequest::Refresh"),
+            JobRequest::SetFlags { .. } => write!(f, "JobRequest::SetFlags"),
             JobRequest::SaveMessage { .. } => write!(f, "JobRequest::SaveMessage"),
-            JobRequest::CopyTo(_, _, _) => write!(f, "JobRequest::CopyTo"),
-            JobRequest::DeleteMessages(_, _, _) => write!(f, "JobRequest::DeleteMessages"),
+            JobRequest::CopyTo { .. } => write!(f, "JobRequest::CopyTo"),
+            JobRequest::DeleteMessages { .. } => write!(f, "JobRequest::DeleteMessages"),
             JobRequest::CreateMailbox { .. } => write!(f, "JobRequest::CreateMailbox"),
             JobRequest::DeleteMailbox { mailbox_hash, .. } => {
                 write!(f, "JobRequest::DeleteMailbox({})", mailbox_hash)
             }
             //JobRequest::RenameMailbox,
-            JobRequest::Search(_) => write!(f, "JobRequest::Search"),
-            JobRequest::AsBytes(_) => write!(f, "JobRequest::AsBytes"),
-            JobRequest::SetMailboxPermissions(_, _, _) => {
+            JobRequest::Search { .. } => write!(f, "JobRequest::Search"),
+            JobRequest::AsBytes { .. } => write!(f, "JobRequest::AsBytes"),
+            JobRequest::SetMailboxPermissions { .. } => {
                 write!(f, "JobRequest::SetMailboxPermissions")
             }
-            JobRequest::SetMailboxSubscription(_, _, _) => {
+            JobRequest::SetMailboxSubscription { .. } => {
                 write!(f, "JobRequest::SetMailboxSubscription")
             }
             JobRequest::Watch { .. } => write!(f, "JobRequest::Watch"),
             JobRequest::SendMessage => write!(f, "JobRequest::SendMessage"),
-            JobRequest::SendMessageBackground(_, _) => {
+            JobRequest::SendMessageBackground { .. } => {
                 write!(f, "JobRequest::SendMessageBackground")
             }
         }
@@ -283,33 +309,33 @@ impl core::fmt::Display for JobRequest {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         match self {
             JobRequest::Generic { name, .. } => write!(f, "{}", name),
-            JobRequest::Mailboxes(_, _) => write!(f, "Get mailbox list"),
-            JobRequest::Fetch(_, _, _) => write!(f, "Mailbox fetch"),
-            JobRequest::IsOnline(_, _) => write!(f, "Online status check"),
-            JobRequest::Refresh(_, _, _) => write!(f, "Refresh mailbox"),
-            JobRequest::SetFlags(batch, _, _) => write!(
+            JobRequest::Mailboxes { .. } => write!(f, "Get mailbox list"),
+            JobRequest::Fetch { .. } => write!(f, "Mailbox fetch"),
+            JobRequest::IsOnline { .. } => write!(f, "Online status check"),
+            JobRequest::Refresh { .. } => write!(f, "Refresh mailbox"),
+            JobRequest::SetFlags { env_hashes, .. } => write!(
                 f,
                 "Set flags for {} message{}",
-                batch.len(),
-                if batch.len() == 1 { "" } else { "s" }
+                env_hashes.len(),
+                if env_hashes.len() == 1 { "" } else { "s" }
             ),
             JobRequest::SaveMessage { .. } => write!(f, "Save message"),
-            JobRequest::CopyTo(_, _, _) => write!(f, "Copy message."),
-            JobRequest::DeleteMessages(batch, _, _) => write!(
+            JobRequest::CopyTo { .. } => write!(f, "Copy message."),
+            JobRequest::DeleteMessages { env_hashes, .. } => write!(
                 f,
                 "Delete {} message{}",
-                batch.len(),
-                if batch.len() == 1 { "" } else { "s" }
+                env_hashes.len(),
+                if env_hashes.len() == 1 { "" } else { "s" }
             ),
             JobRequest::CreateMailbox { path, .. } => write!(f, "Create mailbox {}", path),
             JobRequest::DeleteMailbox { .. } => write!(f, "Delete mailbox"),
             //JobRequest::RenameMailbox,
-            JobRequest::Search(_) => write!(f, "Search"),
-            JobRequest::AsBytes(_) => write!(f, "Message body fetch"),
-            JobRequest::SetMailboxPermissions(_, _, _) => write!(f, "Set mailbox permissions"),
-            JobRequest::SetMailboxSubscription(_, _, _) => write!(f, "Set mailbox subscription"),
+            JobRequest::Search { .. } => write!(f, "Search"),
+            JobRequest::AsBytes { .. } => write!(f, "Message body fetch"),
+            JobRequest::SetMailboxPermissions { .. } => write!(f, "Set mailbox permissions"),
+            JobRequest::SetMailboxSubscription { .. } => write!(f, "Set mailbox subscription"),
             JobRequest::Watch { .. } => write!(f, "Background watch"),
-            JobRequest::SendMessageBackground(_, _) | JobRequest::SendMessage => {
+            JobRequest::SendMessageBackground { .. } | JobRequest::SendMessage => {
                 write!(f, "Sending message")
             }
         }
@@ -326,14 +352,16 @@ impl JobRequest {
 
     pub fn is_fetch(&self, mailbox_hash: MailboxHash) -> bool {
         match self {
-            JobRequest::Fetch(h, _, _) if *h == mailbox_hash => true,
+            JobRequest::Fetch {
+                mailbox_hash: h, ..
+            } if *h == mailbox_hash => true,
             _ => false,
         }
     }
 
     pub fn is_online(&self) -> bool {
         match self {
-            JobRequest::IsOnline(_, _) => true,
+            JobRequest::IsOnline { .. } => true,
             _ => false,
         }
     }
@@ -457,12 +485,13 @@ impl Account {
         let mut active_job_instants = BTreeMap::default();
         if let Ok(mailboxes_job) = backend.mailboxes() {
             if let Ok(online_job) = backend.is_online() {
-                let (rcvr, handle, job_id) = if backend.capabilities().is_async {
+                let handle = if backend.capabilities().is_async {
                     job_executor.spawn_specialized(online_job.then(|_| mailboxes_job))
                 } else {
                     job_executor.spawn_blocking(online_job.then(|_| mailboxes_job))
                 };
-                active_jobs.insert(job_id, JobRequest::Mailboxes(handle, rcvr));
+                let job_id = handle.job_id;
+                active_jobs.insert(job_id, JobRequest::Mailboxes { handle });
                 active_job_instants.insert(std::time::Instant::now(), job_id);
                 sender
                     .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
@@ -625,18 +654,24 @@ impl Account {
                     entry.status = MailboxStatus::Parsing(0, total);
                     if let Ok(mailbox_job) = self.backend.write().unwrap().fetch(*h) {
                         let mailbox_job = mailbox_job.into_future();
-                        let (rcvr, handle, job_id) = if self.backend_capabilities.is_async {
+                        let handle = if self.backend_capabilities.is_async {
                             self.job_executor.spawn_specialized(mailbox_job)
                         } else {
                             self.job_executor.spawn_blocking(mailbox_job)
                         };
+                        let job_id = handle.job_id;
                         self.sender
                             .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
                                 StatusEvent::NewJob(job_id),
                             )))
                             .unwrap();
-                        self.active_jobs
-                            .insert(job_id, JobRequest::Fetch(*h, handle, rcvr));
+                        self.active_jobs.insert(
+                            job_id,
+                            JobRequest::Fetch {
+                                mailbox_hash: *h,
+                                handle,
+                            },
+                        );
                         self.active_job_instants
                             .insert(std::time::Instant::now(), job_id);
                     }
@@ -695,10 +730,9 @@ impl Account {
                                 );
                             }
                             Ok(job) => {
-                                let (channel, handle, job_id) =
-                                    self.job_executor.spawn_blocking(job);
+                                let handle = self.job_executor.spawn_blocking(job);
                                 self.insert_job(
-                                    job_id,
+                                    handle.job_id,
                                     JobRequest::Generic {
                                         name: format!(
                                             "Update envelope {} in sqlite3 cache",
@@ -706,7 +740,6 @@ impl Account {
                                         )
                                         .into(),
                                         handle,
-                                        channel,
                                         logging_level: melib::LoggingLevel::TRACE,
                                         on_finish: None,
                                     },
@@ -743,10 +776,9 @@ impl Account {
                             )
                         }) {
                             Ok(job) => {
-                                let (channel, handle, job_id) =
-                                    self.job_executor.spawn_blocking(job);
+                                let handle = self.job_executor.spawn_blocking(job);
                                 self.insert_job(
-                                    job_id,
+                                    handle.job_id,
                                     JobRequest::Generic {
                                         name: format!(
                                             "Update envelope {} in sqlite3 cache",
@@ -755,7 +787,6 @@ impl Account {
                                         )
                                         .into(),
                                         handle,
-                                        channel,
                                         logging_level: melib::LoggingLevel::TRACE,
                                         on_finish: None,
                                     },
@@ -803,10 +834,9 @@ impl Account {
                                 );
                             }
                             Ok(job) => {
-                                let (channel, handle, job_id) =
-                                    self.job_executor.spawn_blocking(job);
+                                let handle = self.job_executor.spawn_blocking(job);
                                 self.insert_job(
-                                    job_id,
+                                    handle.job_id,
                                     JobRequest::Generic {
                                         name: format!(
                                             "Update envelope {} in sqlite3 cache",
@@ -815,7 +845,6 @@ impl Account {
                                         )
                                         .into(),
                                         handle,
-                                        channel,
                                         logging_level: melib::LoggingLevel::TRACE,
                                         on_finish: None,
                                     },
@@ -845,14 +874,13 @@ impl Account {
                     };
                     #[cfg(feature = "sqlite3")]
                     if self.settings.conf.search_backend == crate::conf::SearchBackend::Sqlite3 {
-                        let (channel, handle, job_id) =
-                            self.job_executor.spawn_blocking(crate::sqlite3::insert(
-                                (*envelope).clone(),
-                                self.backend.clone(),
-                                self.name.clone(),
-                            ));
+                        let handle = self.job_executor.spawn_blocking(crate::sqlite3::insert(
+                            (*envelope).clone(),
+                            self.backend.clone(),
+                            self.name.clone(),
+                        ));
                         self.insert_job(
-                            job_id,
+                            handle.job_id,
                             JobRequest::Generic {
                                 name: format!(
                                     "Update envelope {} in sqlite3 cache",
@@ -860,7 +888,6 @@ impl Account {
                                 )
                                 .into(),
                                 handle,
-                                channel,
                                 logging_level: melib::LoggingLevel::TRACE,
                                 on_finish: None,
                             },
@@ -1006,12 +1033,18 @@ impl Account {
         }
         let refresh_job = self.backend.write().unwrap().refresh(mailbox_hash);
         if let Ok(refresh_job) = refresh_job {
-            let (rcvr, handle, job_id) = if self.backend_capabilities.is_async {
+            let handle = if self.backend_capabilities.is_async {
                 self.job_executor.spawn_specialized(refresh_job)
             } else {
                 self.job_executor.spawn_blocking(refresh_job)
             };
-            self.insert_job(job_id, JobRequest::Refresh(mailbox_hash, handle, rcvr));
+            self.insert_job(
+                handle.job_id,
+                JobRequest::Refresh {
+                    mailbox_hash,
+                    handle,
+                },
+            );
         }
         Ok(())
     }
@@ -1024,13 +1057,13 @@ impl Account {
         if !self.active_jobs.values().any(|j| j.is_watch()) {
             match self.backend.read().unwrap().watch() {
                 Ok(fut) => {
-                    let (channel, handle, job_id) = if self.backend_capabilities.is_async {
+                    let handle = if self.backend_capabilities.is_async {
                         self.job_executor.spawn_specialized(fut)
                     } else {
                         self.job_executor.spawn_blocking(fut)
                     };
                     self.active_jobs
-                        .insert(job_id, JobRequest::Watch { channel, handle });
+                        .insert(handle.job_id, JobRequest::Watch { handle });
                 }
                 Err(e) => {
                     self.sender
@@ -1096,12 +1129,18 @@ impl Account {
                     match mailbox_job {
                         Ok(mailbox_job) => {
                             let mailbox_job = mailbox_job.into_future();
-                            let (rcvr, handle, job_id) = if self.backend_capabilities.is_async {
+                            let handle = if self.backend_capabilities.is_async {
                                 self.job_executor.spawn_specialized(mailbox_job)
                             } else {
                                 self.job_executor.spawn_blocking(mailbox_job)
                             };
-                            self.insert_job(job_id, JobRequest::Fetch(mailbox_hash, handle, rcvr));
+                            self.insert_job(
+                                handle.job_id,
+                                JobRequest::Fetch {
+                                    mailbox_hash,
+                                    handle,
+                                },
+                            );
                         }
                         Err(err) => {
                             self.mailbox_entries
@@ -1192,18 +1231,17 @@ impl Account {
             .unwrap()
             .save(bytes.to_vec(), mailbox_hash, flags)?;
 
-        let (channel, handle, job_id) = if self.backend_capabilities.is_async {
+        let handle = if self.backend_capabilities.is_async {
             self.job_executor.spawn_specialized(job)
         } else {
             self.job_executor.spawn_blocking(job)
         };
         self.insert_job(
-            job_id,
+            handle.job_id,
             JobRequest::SaveMessage {
                 bytes: bytes.to_vec(),
                 mailbox_hash,
                 handle,
-                channel,
             },
         );
         Ok(())
@@ -1214,7 +1252,7 @@ impl Account {
         message: String,
         send_mail: crate::conf::composing::SendMail,
         complete_in_background: bool,
-    ) -> Result<Option<(JobId, JoinHandle, JobChannel<()>)>> {
+    ) -> Result<Option<JoinHandle<Result<()>>>> {
         use crate::conf::composing::SendMail;
         use std::io::Write;
         use std::process::{Command, Stdio};
@@ -1262,18 +1300,18 @@ impl Account {
             }
             #[cfg(feature = "smtp")]
             SendMail::Smtp(conf) => {
-                let (chan, handle, job_id) = self.job_executor.spawn_specialized(async move {
+                let handle = self.job_executor.spawn_specialized(async move {
                     let mut smtp_connection =
                         melib::smtp::SmtpConnection::new_connection(conf).await?;
                     smtp_connection.mail_transaction(&message, None).await
                 });
                 if complete_in_background {
-                    self.insert_job(job_id, JobRequest::SendMessageBackground(handle, chan));
+                    self.insert_job(handle.job_id, JobRequest::SendMessageBackground { handle });
                     return Ok(None);
                 } else {
-                    self.insert_job(job_id, JobRequest::SendMessage);
+                    self.insert_job(handle.job_id, JobRequest::SendMessage);
                 }
-                Ok(Some((job_id, handle, chan)))
+                Ok(Some(handle))
             }
         }
     }
@@ -1381,19 +1419,12 @@ impl Account {
                     .write()
                     .unwrap()
                     .create_mailbox(path.to_string())?;
-                let (channel, handle, job_id) = if self.backend_capabilities.is_async {
+                let handle = if self.backend_capabilities.is_async {
                     self.job_executor.spawn_specialized(job)
                 } else {
                     self.job_executor.spawn_blocking(job)
                 };
-                self.insert_job(
-                    job_id,
-                    JobRequest::CreateMailbox {
-                        path,
-                        handle,
-                        channel,
-                    },
-                );
+                self.insert_job(handle.job_id, JobRequest::CreateMailbox { path, handle });
                 Ok(())
             }
             MailboxOperation::Delete(path) => {
@@ -1403,17 +1434,16 @@ impl Account {
 
                 let mailbox_hash = self.mailbox_by_path(&path)?;
                 let job = self.backend.write().unwrap().delete_mailbox(mailbox_hash)?;
-                let (channel, handle, job_id) = if self.backend_capabilities.is_async {
+                let handle = if self.backend_capabilities.is_async {
                     self.job_executor.spawn_specialized(job)
                 } else {
                     self.job_executor.spawn_blocking(job)
                 };
                 self.insert_job(
-                    job_id,
+                    handle.job_id,
                     JobRequest::DeleteMailbox {
                         mailbox_hash,
                         handle,
-                        channel,
                     },
                 );
                 Ok(())
@@ -1498,12 +1528,12 @@ impl Account {
         if !self.active_jobs.values().any(JobRequest::is_online) {
             let online_job = self.backend.read().unwrap().is_online();
             if let Ok(online_job) = online_job {
-                let (rcvr, handle, job_id) = if self.backend_capabilities.is_async {
+                let handle = if self.backend_capabilities.is_async {
                     self.job_executor.spawn_specialized(online_job)
                 } else {
                     self.job_executor.spawn_blocking(online_job)
                 };
-                self.insert_job(job_id, JobRequest::IsOnline(handle, rcvr));
+                self.insert_job(handle.job_id, JobRequest::IsOnline { handle });
             }
         }
         return self.is_online.clone();
@@ -1563,8 +1593,8 @@ impl Account {
 
         if self.active_jobs.contains_key(job_id) {
             match self.active_jobs.remove(job_id).unwrap() {
-                JobRequest::Mailboxes(_, ref mut chan) => {
-                    if let Some(mailboxes) = chan.try_recv().unwrap() {
+                JobRequest::Mailboxes { ref mut handle } => {
+                    if let Some(mailboxes) = handle.chan.try_recv().unwrap() {
                         self.sender
                             .send(ThreadEvent::UIEvent(UIEvent::AccountStatusChange(
                                 self.hash,
@@ -1584,19 +1614,23 @@ impl Account {
                             }
                             let mailboxes_job = self.backend.read().unwrap().mailboxes();
                             if let Ok(mailboxes_job) = mailboxes_job {
-                                let (rcvr, handle, job_id) = if self.backend_capabilities.is_async {
+                                let handle = if self.backend_capabilities.is_async {
                                     self.job_executor.spawn_specialized(mailboxes_job)
                                 } else {
                                     self.job_executor.spawn_blocking(mailboxes_job)
                                 };
-                                self.insert_job(job_id, JobRequest::Mailboxes(handle, rcvr));
+                                self.insert_job(handle.job_id, JobRequest::Mailboxes { handle });
                             };
                         }
                     }
                 }
-                JobRequest::Fetch(mailbox_hash, _, ref mut chan) => {
+                JobRequest::Fetch {
+                    mailbox_hash,
+                    ref mut handle,
+                    ..
+                } => {
                     let (payload, rest): (Option<Result<Vec<Envelope>>>, _) =
-                        chan.try_recv().unwrap().unwrap();
+                        handle.chan.try_recv().unwrap().unwrap();
                     debug!("got payload in status for {}", mailbox_hash);
                     if payload.is_none() {
                         debug!("finished in status for {}", mailbox_hash);
@@ -1613,12 +1647,18 @@ impl Account {
                             .unwrap();
                         return true;
                     }
-                    let (rcvr, handle, job_id) = if self.backend_capabilities.is_async {
+                    let handle = if self.backend_capabilities.is_async {
                         self.job_executor.spawn_specialized(rest.into_future())
                     } else {
                         self.job_executor.spawn_blocking(rest.into_future())
                     };
-                    self.insert_job(job_id, JobRequest::Fetch(mailbox_hash, handle, rcvr));
+                    self.insert_job(
+                        handle.job_id,
+                        JobRequest::Fetch {
+                            mailbox_hash,
+                            handle,
+                        },
+                    );
                     let payload = payload.unwrap();
                     if let Err(err) = payload {
                         self.sender
@@ -1663,8 +1703,8 @@ impl Account {
                         ))))
                         .unwrap();
                 }
-                JobRequest::IsOnline(_, ref mut chan) => {
-                    let is_online = chan.try_recv().unwrap();
+                JobRequest::IsOnline { ref mut handle, .. } => {
+                    let is_online = handle.chan.try_recv().unwrap();
                     if let Some(is_online) = is_online {
                         self.sender
                             .send(ThreadEvent::UIEvent(UIEvent::AccountStatusChange(
@@ -1689,16 +1729,16 @@ impl Account {
                     }
                     let online_job = self.backend.read().unwrap().is_online();
                     if let Ok(online_job) = online_job {
-                        let (rcvr, handle, job_id) = if self.backend_capabilities.is_async {
+                        let handle = if self.backend_capabilities.is_async {
                             self.job_executor.spawn_specialized(online_job)
                         } else {
                             self.job_executor.spawn_blocking(online_job)
                         };
-                        self.insert_job(job_id, JobRequest::IsOnline(handle, rcvr));
+                        self.insert_job(handle.job_id, JobRequest::IsOnline { handle });
                     };
                 }
-                JobRequest::Refresh(_mailbox_hash, _, ref mut chan) => {
-                    let r = chan.try_recv().unwrap();
+                JobRequest::Refresh { ref mut handle, .. } => {
+                    let r = handle.chan.try_recv().unwrap();
                     match r {
                         Some(Ok(())) => {
                             if self.is_online.is_err()
@@ -1731,13 +1771,12 @@ impl Account {
                             if !err.kind.is_authentication() {
                                 let online_job = self.backend.read().unwrap().is_online();
                                 if let Ok(online_job) = online_job {
-                                    let (rcvr, handle, job_id) =
-                                        if self.backend_capabilities.is_async {
-                                            self.job_executor.spawn_specialized(online_job)
-                                        } else {
-                                            self.job_executor.spawn_blocking(online_job)
-                                        };
-                                    self.insert_job(job_id, JobRequest::IsOnline(handle, rcvr));
+                                    let handle = if self.backend_capabilities.is_async {
+                                        self.job_executor.spawn_specialized(online_job)
+                                    } else {
+                                        self.job_executor.spawn_blocking(online_job)
+                                    };
+                                    self.insert_job(handle.job_id, JobRequest::IsOnline { handle });
                                 };
                             }
                             self.is_online = Err(err);
@@ -1750,8 +1789,8 @@ impl Account {
                         None => {}
                     }
                 }
-                JobRequest::SetFlags(_, _, ref mut chan) => {
-                    let r = chan.try_recv().unwrap();
+                JobRequest::SetFlags { ref mut handle, .. } => {
+                    let r = handle.chan.try_recv().unwrap();
                     if let Some(Err(err)) = r {
                         self.sender
                             .send(ThreadEvent::UIEvent(UIEvent::Notification(
@@ -1763,11 +1802,11 @@ impl Account {
                     }
                 }
                 JobRequest::SaveMessage {
-                    ref mut channel,
+                    ref mut handle,
                     ref bytes,
                     ..
                 } => {
-                    let r = channel.try_recv().unwrap();
+                    let r = handle.chan.try_recv().unwrap();
                     if let Some(Err(err)) = r {
                         melib::log(format!("Could not save message: {}", err), melib::ERROR);
                         let file = crate::types::create_temp_file(bytes, None, None, false);
@@ -1792,8 +1831,8 @@ impl Account {
                     }
                 }
                 JobRequest::SendMessage => {}
-                JobRequest::SendMessageBackground(_, ref mut chan) => {
-                    let r = chan.try_recv().unwrap();
+                JobRequest::SendMessageBackground { ref mut handle, .. } => {
+                    let r = handle.chan.try_recv().unwrap();
                     if let Some(Err(err)) = r {
                         self.sender
                             .send(ThreadEvent::UIEvent(UIEvent::Notification(
@@ -1804,8 +1843,13 @@ impl Account {
                             .expect("Could not send event on main channel");
                     }
                 }
-                JobRequest::CopyTo(mailbox_hash, _, ref mut chan) => {
-                    if let Err(err) = chan
+                JobRequest::CopyTo {
+                    dest_mailbox_hash: mailbox_hash,
+                    ref mut handle,
+                    ..
+                } => {
+                    if let Err(err) = handle
+                        .chan
                         .try_recv()
                         .unwrap()
                         .unwrap()
@@ -1820,8 +1864,8 @@ impl Account {
                             .expect("Could not send event on main channel");
                     }
                 }
-                JobRequest::DeleteMessages(_, _, ref mut chan) => {
-                    let r = chan.try_recv().unwrap();
+                JobRequest::DeleteMessages { ref mut handle, .. } => {
+                    let r = handle.chan.try_recv().unwrap();
                     if let Some(Err(err)) = r {
                         self.sender
                             .send(ThreadEvent::UIEvent(UIEvent::Notification(
@@ -1834,10 +1878,10 @@ impl Account {
                 }
                 JobRequest::CreateMailbox {
                     ref path,
-                    ref mut channel,
+                    ref mut handle,
                     ..
                 } => {
-                    let r = channel.try_recv().unwrap();
+                    let r = handle.chan.try_recv().unwrap();
                     if let Some(r) = r {
                         match r {
                             Err(err) => {
@@ -1918,10 +1962,10 @@ impl Account {
                 }
                 JobRequest::DeleteMailbox {
                     mailbox_hash,
-                    ref mut channel,
+                    ref mut handle,
                     ..
                 } => {
-                    let r = channel.try_recv().unwrap();
+                    let r = handle.chan.try_recv().unwrap();
                     match r {
                         Some(Err(err)) => {
                             self.sender
@@ -1991,9 +2035,9 @@ impl Account {
                     }
                 }
                 //JobRequest::RenameMailbox,
-                JobRequest::Search(_) | JobRequest::AsBytes(_) => {}
-                JobRequest::SetMailboxPermissions(_, _, ref mut chan) => {
-                    let r = chan.try_recv().unwrap();
+                JobRequest::Search { .. } | JobRequest::AsBytes { .. } => {}
+                JobRequest::SetMailboxPermissions { ref mut handle, .. } => {
+                    let r = handle.chan.try_recv().unwrap();
                     match r {
                         Some(Err(err)) => {
                             self.sender
@@ -2022,8 +2066,8 @@ impl Account {
                         None => {}
                     }
                 }
-                JobRequest::SetMailboxSubscription(_, _, ref mut chan) => {
-                    let r = chan.try_recv().unwrap();
+                JobRequest::SetMailboxSubscription { ref mut handle, .. } => {
+                    let r = handle.chan.try_recv().unwrap();
                     match r {
                         Some(Err(err)) => {
                             self.sender
@@ -2052,12 +2096,9 @@ impl Account {
                         None => {}
                     }
                 }
-                JobRequest::Watch {
-                    ref mut channel,
-                    handle: _,
-                } => {
+                JobRequest::Watch { ref mut handle } => {
                     debug!("JobRequest::Watch finished??? ");
-                    let r = channel.try_recv().unwrap();
+                    let r = handle.chan.try_recv().unwrap();
                     debug!("JobRequest::Watch {:?}", r);
                     if let Some(Err(err)) = r {
                         if err.kind.is_timeout() {
@@ -2076,12 +2117,11 @@ impl Account {
                 }
                 JobRequest::Generic {
                     ref name,
-                    ref mut channel,
-                    handle: _,
+                    ref mut handle,
                     ref mut on_finish,
                     logging_level,
                 } => {
-                    let r = channel.try_recv().unwrap();
+                    let r = handle.chan.try_recv().unwrap();
                     match r {
                         Some(Err(err)) => {
                             self.sender

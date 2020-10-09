@@ -21,7 +21,7 @@
 
 use super::*;
 use crate::conf::accounts::JobRequest;
-use crate::jobs::{oneshot, JobId};
+use crate::jobs::{JobId, JoinHandle};
 use melib::email::attachment_types::ContentType;
 use melib::list_management;
 use melib::parser::BytesExt;
@@ -105,8 +105,7 @@ pub enum AttachmentDisplay {
     SignedPending {
         inner: Attachment,
         display: Vec<AttachmentDisplay>,
-        chan:
-            std::result::Result<oneshot::Receiver<Result<()>>, oneshot::Receiver<Result<Vec<u8>>>>,
+        handle: std::result::Result<JoinHandle<Result<()>>, JoinHandle<Result<Vec<u8>>>>,
         job_id: JobId,
     },
     SignedFailed {
@@ -125,8 +124,7 @@ pub enum AttachmentDisplay {
     },
     EncryptedPending {
         inner: Attachment,
-        chan: oneshot::Receiver<Result<(melib::pgp::DecryptionMetadata, Vec<u8>)>>,
-        job_id: JobId,
+        handle: JoinHandle<Result<(melib::pgp::DecryptionMetadata, Vec<u8>)>>,
     },
     EncryptedFailed {
         inner: Attachment,
@@ -177,8 +175,7 @@ enum MailViewState {
         pending_action: Option<PendingReplyAction>,
     },
     LoadingBody {
-        job_id: JobId,
-        chan: oneshot::Receiver<Result<Vec<u8>>>,
+        handle: JoinHandle<Result<Vec<u8>>>,
         pending_action: Option<PendingReplyAction>,
     },
     Error {
@@ -282,8 +279,8 @@ impl MailView {
                     .and_then(|mut op| op.as_bytes())
                 {
                     Ok(fut) => {
-                        let (mut chan, handle, job_id) =
-                            account.job_executor.spawn_specialized(fut);
+                        let mut handle = account.job_executor.spawn_specialized(fut);
+                        let job_id = handle.job_id;
                         pending_action = if let MailViewState::Init {
                             ref mut pending_action,
                         } = self.state
@@ -292,7 +289,7 @@ impl MailView {
                         } else {
                             None
                         };
-                        if let Ok(Some(bytes_result)) = try_recv_timeout!(&mut chan) {
+                        if let Ok(Some(bytes_result)) = try_recv_timeout!(&mut handle.chan) {
                             match bytes_result {
                                 Ok(bytes) => {
                                     if account
@@ -333,12 +330,10 @@ impl MailView {
                             }
                         } else {
                             self.state = MailViewState::LoadingBody {
-                                job_id,
-                                chan,
+                                handle,
                                 pending_action: pending_action.take(),
                             };
                             self.active_jobs.insert(job_id);
-                            account.insert_job(job_id, JobRequest::AsBytes(handle));
                         }
                     }
                     Err(err) => {
@@ -357,10 +352,13 @@ impl MailView {
                 );
                 match job {
                     Ok(fut) => {
-                        let (rcvr, handle, job_id) = account.job_executor.spawn_specialized(fut);
+                        let handle = account.job_executor.spawn_specialized(fut);
                         account.insert_job(
-                            job_id,
-                            JobRequest::SetFlags(self.coordinates.2.into(), handle, rcvr),
+                            handle.job_id,
+                            JobRequest::SetFlags {
+                                env_hashes: self.coordinates.2.into(),
+                                handle,
+                            },
                         );
                     }
                     Err(e) => {
@@ -439,7 +437,7 @@ impl MailView {
                 SignedPending {
                     inner: _,
                     display,
-                    chan: _,
+                    handle: _,
                     job_id: _,
                 } => {
                     acc.push_str("Waiting for signature verification.\n\n");
@@ -512,7 +510,7 @@ impl MailView {
                 | SignedPending {
                     inner,
                     display: _,
-                    chan: _,
+                    handle: _,
                     job_id: _,
                 }
                 | SignedUnverified { inner, display: _ }
@@ -526,11 +524,7 @@ impl MailView {
                     display: _,
                     description: _,
                 }
-                | EncryptedPending {
-                    inner,
-                    chan: _,
-                    job_id: _,
-                }
+                | EncryptedPending { inner, handle: _ }
                 | EncryptedFailed { inner, error: _ }
                 | EncryptedSuccess {
                     inner: _,
@@ -663,9 +657,8 @@ impl MailView {
                                     a.clone(),
                                     Some(bin.to_string()),
                                 );
-                                let (chan, _handle, job_id) =
-                                    context.job_executor.spawn_blocking(verify_fut);
-                                active_jobs.insert(job_id);
+                                let handle = context.job_executor.spawn_blocking(verify_fut);
+                                active_jobs.insert(handle.job_id);
                                 acc.push(AttachmentDisplay::SignedPending {
                                     inner: a.clone(),
                                     display: {
@@ -673,8 +666,8 @@ impl MailView {
                                         rec(&parts[0], context, coordinates, &mut v, active_jobs);
                                         v
                                     },
-                                    chan: Err(chan),
-                                    job_id,
+                                    job_id: handle.job_id,
+                                    handle: Err(handle),
                                 });
                             } else {
                                 #[cfg(not(feature = "gpgme"))]
@@ -705,11 +698,12 @@ impl MailView {
                                     ctx.verify(sig, data)
                                 }) {
                                     Ok(verify_fut) => {
-                                        let (chan, _handle, job_id) =
+                                        let handle =
                                             context.job_executor.spawn_specialized(verify_fut);
-                                        active_jobs.insert(job_id);
+                                        active_jobs.insert(handle.job_id);
                                         acc.push(AttachmentDisplay::SignedPending {
                                             inner: a.clone(),
+                                            job_id: handle.job_id,
                                             display: {
                                                 let mut v = vec![];
                                                 rec(
@@ -721,8 +715,7 @@ impl MailView {
                                                 );
                                                 v
                                             },
-                                            chan: Ok(chan),
-                                            job_id,
+                                            handle: Ok(handle),
                                         });
                                     }
                                     Err(error) => {
@@ -774,13 +767,12 @@ impl MailView {
                                             Some(bin.to_string()),
                                             None,
                                         );
-                                        let (chan, _handle, job_id) =
+                                        let handle =
                                             context.job_executor.spawn_blocking(decrypt_fut);
-                                        active_jobs.insert(job_id);
+                                        active_jobs.insert(handle.job_id);
                                         acc.push(AttachmentDisplay::EncryptedPending {
                                             inner: a.clone(),
-                                            chan,
-                                            job_id,
+                                            handle,
                                         });
                                     } else {
                                         #[cfg(not(feature = "gpgme"))]
@@ -796,14 +788,13 @@ impl MailView {
                                             ctx.decrypt(cipher)
                                         }) {
                                             Ok(decrypt_fut) => {
-                                                let (chan, _handle, job_id) = context
+                                                let handle = context
                                                     .job_executor
                                                     .spawn_specialized(decrypt_fut);
-                                                active_jobs.insert(job_id);
+                                                active_jobs.insert(handle.job_id);
                                                 acc.push(AttachmentDisplay::EncryptedPending {
                                                     inner: a.clone(),
-                                                    chan,
-                                                    job_id,
+                                                    handle,
                                                 });
                                             }
                                             Err(error) => {
@@ -875,7 +866,7 @@ impl MailView {
                 | SignedPending {
                     inner,
                     display: _,
-                    chan: _,
+                    handle: _,
                     job_id: _,
                 }
                 | SignedFailed {
@@ -889,11 +880,7 @@ impl MailView {
                     description: _,
                 }
                 | SignedUnverified { inner, display: _ }
-                | EncryptedPending {
-                    inner,
-                    chan: _,
-                    job_id: _,
-                }
+                | EncryptedPending { inner, handle: _ }
                 | EncryptedFailed { inner, error: _ }
                 | EncryptedSuccess {
                     inner: _,
@@ -1482,11 +1469,10 @@ impl Component for MailView {
                 {
                     match self.state {
                         MailViewState::LoadingBody {
-                            job_id: ref id,
-                            ref mut chan,
+                            ref mut handle,
                             pending_action: _,
-                        } if job_id == id => {
-                            let bytes_result = chan.try_recv().unwrap().unwrap();
+                        } if handle.job_id == *job_id => {
+                            let bytes_result = handle.chan.try_recv().unwrap().unwrap();
                             match bytes_result {
                                 Ok(bytes) => {
                                     if context.accounts[&self.coordinates.0]
@@ -1537,14 +1523,19 @@ impl Component for MailView {
                                 match d {
                                     AttachmentDisplay::SignedPending {
                                         inner,
-                                        chan,
+                                        handle,
                                         display,
-                                        job_id: id,
-                                    } if id == job_id => {
+                                        job_id: our_job_id,
+                                    } if *our_job_id == *job_id => {
                                         caught = true;
                                         self.initialised = false;
-                                        match chan {
-                                            Ok(chan) => match chan.try_recv().unwrap().unwrap() {
+                                        match handle.as_mut() {
+                                            Ok(handle) => match handle
+                                                .chan
+                                                .try_recv()
+                                                .unwrap()
+                                                .unwrap()
+                                            {
                                                 Ok(()) => {
                                                     *d = AttachmentDisplay::SignedVerified {
                                                         inner: std::mem::replace(
@@ -1566,7 +1557,12 @@ impl Component for MailView {
                                                     };
                                                 }
                                             },
-                                            Err(chan) => match chan.try_recv().unwrap().unwrap() {
+                                            Err(handle) => match handle
+                                                .chan
+                                                .try_recv()
+                                                .unwrap()
+                                                .unwrap()
+                                            {
                                                 Ok(verify_bytes) => {
                                                     *d = AttachmentDisplay::SignedVerified {
                                                         inner: std::mem::replace(
@@ -1593,14 +1589,12 @@ impl Component for MailView {
                                             },
                                         }
                                     }
-                                    AttachmentDisplay::EncryptedPending {
-                                        inner,
-                                        chan,
-                                        job_id: id,
-                                    } if id == job_id => {
+                                    AttachmentDisplay::EncryptedPending { inner, handle }
+                                        if handle.job_id == *job_id =>
+                                    {
                                         caught = true;
                                         self.initialised = false;
-                                        match chan.try_recv().unwrap().unwrap() {
+                                        match handle.chan.try_recv().unwrap().unwrap() {
                                             Ok((metadata, decrypted_bytes)) => {
                                                 let plaintext =
                                                     AttachmentBuilder::new(&decrypted_bytes)
@@ -1700,7 +1694,7 @@ impl Component for MailView {
                     let _ = sender.send(operation?.as_bytes()?.await);
                     Ok(())
                 };
-                let (channel, handle, job_id) = if context.accounts[&account_hash]
+                let handle = if context.accounts[&account_hash]
                     .backend_capabilities
                     .is_async
                 {
@@ -1713,11 +1707,10 @@ impl Component for MailView {
                         .spawn_blocking(bytes_job)
                 };
                 context.accounts[&account_hash].insert_job(
-                    job_id,
+                    handle.job_id,
                     crate::conf::accounts::JobRequest::Generic {
                         name: "fetch envelope".into(),
                         handle,
-                        channel,
                         on_finish: Some(CallbackFn(Box::new(move |context: &mut Context| {
                             let result = receiver.try_recv().unwrap().unwrap();
                             match result.and_then(|bytes| {

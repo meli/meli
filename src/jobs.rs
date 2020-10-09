@@ -30,9 +30,7 @@ use melib::error::Result;
 use melib::smol;
 use std::future::Future;
 use std::panic::catch_unwind;
-use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{Context, Poll};
 use std::thread;
 use std::time::Duration;
 use uuid::Uuid;
@@ -159,37 +157,8 @@ impl JobExecutor {
         ret
     }
 
-    /// Spawns a future on the executor.
-    pub fn spawn<F>(&self, future: F) -> (JoinHandle, JobId)
-    where
-        F: Future<Output = Result<()>> + Send + 'static,
-    {
-        let job_id = JobId::new();
-        let finished_sender = self.sender.clone();
-        let injector = self.global_queue.clone();
-        // Create a task and schedule it for execution.
-        let (task, handle) = async_task::spawn(
-            async move {
-                let r = future.await;
-                finished_sender
-                    .send(ThreadEvent::JobFinished(job_id))
-                    .unwrap();
-                r
-            },
-            move |task| injector.push(MeliTask { task, id: job_id }),
-            (),
-        );
-        task.schedule();
-        for unparker in self.parkers.iter() {
-            unparker.unpark();
-        }
-
-        // Return a join handle that retrieves the output of the future.
-        (JoinHandle(handle), job_id)
-    }
-
     /// Spawns a future with a generic return value `R`
-    pub fn spawn_specialized<F, R>(&self, future: F) -> (oneshot::Receiver<R>, JoinHandle, JobId)
+    pub fn spawn_specialized<F, R>(&self, future: F) -> JoinHandle<R>
     where
         F: Future<Output = R> + Send + 'static,
         R: Send + 'static,
@@ -216,11 +185,15 @@ impl JobExecutor {
             unparker.unpark();
         }
 
-        (receiver, JoinHandle(handle), job_id)
+        JoinHandle {
+            inner: handle,
+            chan: receiver,
+            job_id,
+        }
     }
 
     /// Spawns a future with a generic return value `R` that might block on a new thread
-    pub fn spawn_blocking<F, R>(&self, future: F) -> (oneshot::Receiver<R>, JoinHandle, JobId)
+    pub fn spawn_blocking<F, R>(&self, future: F) -> JoinHandle<R>
     where
         F: Future<Output = R> + Send + 'static,
         R: Send + 'static,
@@ -229,19 +202,39 @@ impl JobExecutor {
     }
 }
 
-pub type JobChannel<T> = oneshot::Receiver<Result<T>>;
+pub type JobChannel<T> = oneshot::Receiver<T>;
 
 #[derive(Debug)]
 /// JoinHandle for the future that allows us to cancel the task.
-pub struct JoinHandle(pub async_task::JoinHandle<Result<()>, ()>);
+pub struct JoinHandle<T> {
+    pub inner: async_task::JoinHandle<Result<()>, ()>,
+    pub chan: JobChannel<T>,
+    pub job_id: JobId,
+}
 
+impl<T> JoinHandle<T> {
+    pub fn cancel(&self) {
+        self.inner.cancel()
+    }
+}
+
+impl<T> std::cmp::PartialEq<JobId> for JoinHandle<T> {
+    fn eq(&self, other: &JobId) -> bool {
+        self.job_id == *other
+    }
+}
+
+/*
+use std::pin::Pin;
+use std::task::{Context, Poll};
 impl Future for JoinHandle {
     type Output = Result<()>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match Pin::new(&mut self.0).poll(cx) {
+        match Pin::new(&mut self.inner).poll(cx) {
             Poll::Pending => Poll::Pending,
             Poll::Ready(output) => Poll::Ready(output.expect("task failed")),
         }
     }
 }
+*/

@@ -580,11 +580,14 @@ impl Component for AccountStatus {
                 None,
             );
             if let JobRequest::DeleteMailbox { mailbox_hash, .. }
-            | JobRequest::SetMailboxPermissions(mailbox_hash, _, _)
-            | JobRequest::SetMailboxSubscription(mailbox_hash, _, _)
-            | JobRequest::CopyTo(mailbox_hash, _, _)
-            | JobRequest::Refresh(mailbox_hash, _, _)
-            | JobRequest::Fetch(mailbox_hash, _, _) = req
+            | JobRequest::SetMailboxPermissions { mailbox_hash, .. }
+            | JobRequest::SetMailboxSubscription { mailbox_hash, .. }
+            | JobRequest::CopyTo {
+                dest_mailbox_hash: mailbox_hash,
+                ..
+            }
+            | JobRequest::Refresh { mailbox_hash, .. }
+            | JobRequest::Fetch { mailbox_hash, .. } = req
             {
                 write_string_to_grid(
                     a.mailbox_entries[mailbox_hash].name(),
