@@ -1160,6 +1160,7 @@ impl Component for StatusBar {
                 context
                     .replies
                     .push_back(UIEvent::ChangeMode(UIMode::Normal));
+                self.dirty = true;
                 return true;
             }
             UIEvent::Resize => {
@@ -1792,13 +1793,17 @@ impl Component for Tabbed {
             _ => {}
         }
         let c = self.cursor_pos;
-        self.children[c].process_event(event, context)
-            || self.children.iter_mut().enumerate().any(|(idx, child)| {
-                if idx == c {
-                    return false;
-                }
-                child.process_event(event, context)
-            })
+        if let UIEvent::Input(_) | UIEvent::CmdInput(_) | UIEvent::EmbedInput(_) = event {
+            self.children[c].process_event(event, context)
+        } else {
+            self.children[c].process_event(event, context)
+                || self.children.iter_mut().enumerate().any(|(idx, child)| {
+                    if idx == c {
+                        return false;
+                    }
+                    child.process_event(event, context)
+                })
+        }
     }
     fn is_dirty(&self) -> bool {
         self.dirty || self.children[self.cursor_pos].is_dirty()
@@ -1918,6 +1923,7 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                 self.done = true;
                 if let Some(event) = self.done() {
                     context.replies.push_back(event);
+                    context.replies.push_back(UIEvent::ComponentKill(self.id));
                 }
                 return true;
             }
@@ -1953,6 +1959,7 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                 self.done = true;
                 if let Some(event) = self.done() {
                     context.replies.push_back(event);
+                    context.replies.push_back(UIEvent::ComponentKill(self.id));
                 }
                 return true;
             }
@@ -1963,6 +1970,7 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                 self.done = true;
                 if let Some(event) = self.done() {
                     context.replies.push_back(event);
+                    context.replies.push_back(UIEvent::ComponentKill(self.id));
                 }
                 return true;
             }
@@ -1973,6 +1981,7 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                 self.done = true;
                 if let Some(event) = self.done() {
                     context.replies.push_back(event);
+                    context.replies.push_back(UIEvent::ComponentKill(self.id));
                 }
                 return true;
             }
@@ -2206,6 +2215,7 @@ impl Component for UIConfirmationDialog {
                 self.done = true;
                 if let Some(event) = self.done() {
                     context.replies.push_back(event);
+                    context.replies.push_back(UIEvent::ComponentKill(self.id));
                 }
                 return true;
             }
@@ -2241,6 +2251,7 @@ impl Component for UIConfirmationDialog {
                 self.done = true;
                 if let Some(event) = self.done() {
                     context.replies.push_back(event);
+                    context.replies.push_back(UIEvent::ComponentKill(self.id));
                 }
                 return true;
             }
@@ -2251,6 +2262,7 @@ impl Component for UIConfirmationDialog {
                 self.done = true;
                 if let Some(event) = self.done() {
                     context.replies.push_back(event);
+                    context.replies.push_back(UIEvent::ComponentKill(self.id));
                 }
                 return true;
             }
@@ -2261,6 +2273,7 @@ impl Component for UIConfirmationDialog {
                 self.done = true;
                 if let Some(event) = self.done() {
                     context.replies.push_back(event);
+                    context.replies.push_back(UIEvent::ComponentKill(self.id));
                 }
                 return true;
             }

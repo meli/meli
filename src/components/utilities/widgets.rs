@@ -560,6 +560,7 @@ impl Component for FormWidget {
             }
             UIEvent::ChangeMode(UIMode::Normal) if self.focus == FormFocus::TextInput => {
                 self.focus = FormFocus::Fields;
+                return false;
             }
             UIEvent::InsertInput(Key::Backspace) if self.focus == FormFocus::TextInput => {
                 let field = self.fields.get_mut(&self.layout[self.cursor]).unwrap();
