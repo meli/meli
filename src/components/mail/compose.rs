@@ -38,7 +38,9 @@ use std::sync::{Arc, Mutex};
 enum Cursor {
     Headers,
     Body,
-    //Attachments,
+    Sign,
+    Encrypt,
+    Attachments,
 }
 
 #[derive(Debug)]
@@ -438,7 +440,11 @@ impl Composer {
                 ),
                 grid,
                 theme_default.fg,
-                theme_default.bg,
+                if self.cursor == Cursor::Sign {
+                    Color::Byte(237)
+                } else {
+                    theme_default.bg
+                },
                 theme_default.attrs,
                 (pos_inc(upper_left!(area), (0, 1)), bottom_right!(area)),
                 None,
@@ -448,7 +454,11 @@ impl Composer {
                 "☐ don't sign",
                 grid,
                 theme_default.fg,
-                theme_default.bg,
+                if self.cursor == Cursor::Sign {
+                    Color::Byte(237)
+                } else {
+                    theme_default.bg
+                },
                 theme_default.attrs,
                 (pos_inc(upper_left!(area), (0, 1)), bottom_right!(area)),
                 None,
@@ -465,7 +475,11 @@ impl Composer {
                 ),
                 grid,
                 theme_default.fg,
-                theme_default.bg,
+                if self.cursor == Cursor::Encrypt {
+                    Color::Byte(237)
+                } else {
+                    theme_default.bg
+                },
                 theme_default.attrs,
                 (pos_inc(upper_left!(area), (0, 2)), bottom_right!(area)),
                 None,
@@ -475,7 +489,11 @@ impl Composer {
                 "☐ don't encrypt",
                 grid,
                 theme_default.fg,
-                theme_default.bg,
+                if self.cursor == Cursor::Encrypt {
+                    Color::Byte(237)
+                } else {
+                    theme_default.bg
+                },
                 theme_default.attrs,
                 (pos_inc(upper_left!(area), (0, 2)), bottom_right!(area)),
                 None,
@@ -486,7 +504,11 @@ impl Composer {
                 "no attachments",
                 grid,
                 theme_default.fg,
-                theme_default.bg,
+                if self.cursor == Cursor::Attachments {
+                    Color::Byte(237)
+                } else {
+                    theme_default.bg
+                },
                 theme_default.attrs,
                 (pos_inc(upper_left!(area), (0, 3)), bottom_right!(area)),
                 None,
@@ -496,7 +518,11 @@ impl Composer {
                 &format!("{} attachments ", attachments_no),
                 grid,
                 theme_default.fg,
-                theme_default.bg,
+                if self.cursor == Cursor::Attachments {
+                    Color::Byte(237)
+                } else {
+                    theme_default.bg
+                },
                 theme_default.attrs,
                 (pos_inc(upper_left!(area), (0, 3)), bottom_right!(area)),
                 None,
@@ -602,13 +628,16 @@ impl Component for Composer {
         );
         let attachments_no = self.draft.attachments().len();
         let attachment_area = (
-            (mid + 1, get_y(bottom_right) - 2 - attachments_no),
+            (
+                mid + 1,
+                get_y(bottom_right).saturating_sub(4 + attachments_no),
+            ),
             pos_dec(bottom_right, (mid, 0)),
         );
 
         let body_area = (
             pos_inc(upper_left, (mid + 1, header_height + 1)),
-            pos_dec(bottom_right, (mid, 3 + attachments_no)),
+            pos_dec(bottom_right, (mid, 4 + attachments_no)),
         );
 
         let (x, y) = write_string_to_grid(
@@ -696,26 +725,30 @@ impl Component for Composer {
             self.pager.draw(grid, body_area, context);
         }
 
-        if self.cursor == Cursor::Body {
-            change_colors(
-                grid,
-                (
-                    set_y(upper_left!(body_area), get_y(bottom_right!(body_area))),
-                    bottom_right!(body_area),
-                ),
-                theme_default.fg,
-                Color::Byte(237),
-            );
-        } else {
-            change_colors(
-                grid,
-                (
-                    set_y(upper_left!(body_area), get_y(bottom_right!(body_area))),
-                    bottom_right!(body_area),
-                ),
-                theme_default.fg,
-                theme_default.bg,
-            );
+        match self.cursor {
+            Cursor::Headers => {
+                change_colors(
+                    grid,
+                    (
+                        set_y(upper_left!(body_area), get_y(bottom_right!(body_area))),
+                        bottom_right!(body_area),
+                    ),
+                    theme_default.fg,
+                    theme_default.bg,
+                );
+            }
+            Cursor::Body => {
+                change_colors(
+                    grid,
+                    (
+                        set_y(upper_left!(body_area), get_y(bottom_right!(body_area))),
+                        bottom_right!(body_area),
+                    ),
+                    theme_default.fg,
+                    Color::Byte(237),
+                );
+            }
+            Cursor::Sign | Cursor::Encrypt | Cursor::Attachments => {}
         }
 
         match self.mode {
@@ -948,16 +981,49 @@ impl Component for Composer {
             return true;
             }*/
             UIEvent::Input(ref key)
-                if shortcut!(key == shortcuts[Self::DESCRIPTION]["scroll_up"]) =>
+                if self.mode.is_edit()
+                    && shortcut!(key == shortcuts[Self::DESCRIPTION]["scroll_up"]) =>
             {
-                self.cursor = Cursor::Headers;
-                self.form.process_event(event, context);
+                self.cursor = match self.cursor {
+                    Cursor::Headers => return true,
+                    Cursor::Body => {
+                        self.form.process_event(event, context);
+                        Cursor::Headers
+                    }
+                    Cursor::Sign => Cursor::Body,
+                    Cursor::Encrypt => Cursor::Sign,
+                    Cursor::Attachments => Cursor::Encrypt,
+                };
                 self.dirty = true;
             }
             UIEvent::Input(ref key)
-                if shortcut!(key == shortcuts[Self::DESCRIPTION]["scroll_down"]) =>
+                if self.mode.is_edit()
+                    && shortcut!(key == shortcuts[Self::DESCRIPTION]["scroll_down"]) =>
             {
-                self.cursor = Cursor::Body;
+                self.cursor = match self.cursor {
+                    Cursor::Headers => Cursor::Body,
+                    Cursor::Body => Cursor::Sign,
+                    Cursor::Sign => Cursor::Encrypt,
+                    Cursor::Encrypt => Cursor::Attachments,
+                    Cursor::Attachments => return true,
+                };
+                self.dirty = true;
+            }
+            UIEvent::Input(Key::Char('\n'))
+                if self.mode.is_edit()
+                    && (self.cursor == Cursor::Sign || self.cursor == Cursor::Encrypt) =>
+            {
+                match self.cursor {
+                    Cursor::Sign => {
+                        let is_true = self.sign_mail.is_true();
+                        self.sign_mail = ToggleFlag::from(!is_true);
+                    }
+                    Cursor::Encrypt => {
+                        let is_true = self.encrypt_mail.is_true();
+                        self.encrypt_mail = ToggleFlag::from(!is_true);
+                    }
+                    _ => {}
+                };
                 self.dirty = true;
             }
             UIEvent::Input(ref key)
