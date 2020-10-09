@@ -25,6 +25,7 @@
 
 use crate::components::Component;
 pub use melib::thread::{SortField, SortOrder};
+use std::path::PathBuf;
 
 extern crate uuid;
 use uuid::Uuid;
@@ -49,6 +50,7 @@ pub enum ListingAction {
     CopyToOtherAccount(AccountName, MailboxPath),
     MoveTo(MailboxPath),
     MoveToOtherAccount(AccountName, MailboxPath),
+    Import(PathBuf, MailboxPath),
     Delete,
     OpenInNewTab,
     Tag(TagAction),

@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Add import command to import email from files into accounts
+
 ## [alpha-0.6.2] - 2020-09-24
 
 ### Added

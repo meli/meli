@@ -750,6 +750,28 @@ impl Component for Listing {
                         self.component.set_style(IndexStyle::Conversations);
                         return true;
                     }
+                    Action::Listing(ListingAction::Import(file_path, mailbox_path)) => {
+                        let account = &mut context.accounts[self.cursor_pos.0];
+                        if let Err(err) = account
+                            .mailbox_by_path(&mailbox_path)
+                            .and_then(|mailbox_hash| {
+                                Ok((
+                                    std::fs::read(&file_path).chain_err_summary(|| {
+                                        format!("Could not read {}", file_path.display())
+                                    })?,
+                                    mailbox_hash,
+                                ))
+                            })
+                            .and_then(|(bytes, mailbox_hash)| {
+                                account.save(&bytes, mailbox_hash, None)
+                            })
+                        {
+                            context.replies.push_back(UIEvent::StatusEvent(
+                                StatusEvent::DisplayMessage(err.to_string()),
+                            ));
+                        }
+                        return true;
+                    }
                     Action::Listing(a @ ListingAction::SetSeen)
                     | Action::Listing(a @ ListingAction::SetUnseen)
                     | Action::Listing(a @ ListingAction::Delete)

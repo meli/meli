@@ -303,6 +303,21 @@ define_commands!([
                        }
                    )
                  },
+                { tags: ["import "],
+                  desc: "import FILESYSTEM_PATH MAILBOX_PATH",
+                  tokens: &[One(Literal("import")), One(Filepath), One(MailboxPath)],
+                  parser:(
+                      fn import(input: &[u8]) -> IResult<&[u8], Action> {
+                          let (input, _) = tag("import")(input.trim())?;
+                          let (input, _) = is_a(" ")(input)?;
+                          let (input, file) = quoted_argument(input)?;
+                          let (input, _) = is_a(" ")(input)?;
+                          let (input, mailbox_path) = quoted_argument(input)?;
+                          let (input, _) = eof(input)?;
+                          Ok((input, Listing(Import(file.to_string().into(), mailbox_path.to_string()))))
+                      }
+                  )
+                },
                  { tags: ["close"],
                    desc: "close non-sticky tabs",
                    tokens: &[One(Literal("close"))],
@@ -769,6 +784,7 @@ fn listing_action(input: &[u8]) -> IResult<&[u8], Action> {
         seen_flag,
         delete_message,
         copymove,
+        import,
         search,
         select,
         toggle_thread_snooze,
