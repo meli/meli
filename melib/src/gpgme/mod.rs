@@ -1039,6 +1039,12 @@ impl std::fmt::Debug for Key {
     }
 }
 
+impl std::cmp::PartialEq for Key {
+    fn eq(&self, other: &Key) -> bool {
+        self.fingerprint() == other.fingerprint()
+    }
+}
+
 impl Drop for Key {
     #[inline]
     fn drop(&mut self) {
