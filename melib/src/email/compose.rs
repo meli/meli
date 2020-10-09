@@ -287,14 +287,14 @@ impl Draft {
 
 fn build_multipart(ret: &mut String, kind: MultipartType, parts: Vec<AttachmentBuilder>) {
     let boundary = ContentType::make_boundary(&parts);
-    ret.extend(
-        format!(
-            "Content-Type: {}; charset=\"utf-8\"; boundary=\"{}\"\r\n",
-            kind, boundary
-        )
-        .chars(),
-    );
-    ret.push_str("\r\n");
+    ret.push_str(&format!(
+        r#"Content-Type: {}; charset="utf-8"; boundary="{}""#,
+        kind, boundary
+    ));
+    if kind == MultipartType::Encrypted {
+        ret.push_str(r#"; protocol="application/pgp-encrypted""#);
+    }
+    ret.push_str("\r\n\r\n");
     /* rfc1341 */
     ret.push_str("This is a MIME formatted message with attachments. Use a MIME-compliant client to view it properly.\r\n");
     for sub in parts {
@@ -325,14 +325,14 @@ fn print_attachment(ret: &mut String, a: AttachmentBuilder) {
             ret.push_str("\r\n");
         }
         Multipart {
-            boundary: _boundary,
+            boundary: _,
             kind,
-            parts: subparts,
+            parts,
         } => {
             build_multipart(
                 ret,
                 kind,
-                subparts
+                parts
                     .into_iter()
                     .map(|s| s.into())
                     .collect::<Vec<AttachmentBuilder>>(),
@@ -361,8 +361,11 @@ fn print_attachment(ret: &mut String, a: AttachmentBuilder) {
             ret.push_str("\r\n");
         }
         _ => {
-            let content_transfer_encoding: ContentTransferEncoding =
-                ContentTransferEncoding::Base64;
+            let content_transfer_encoding: ContentTransferEncoding = if a.raw().is_ascii() {
+                ContentTransferEncoding::_8Bit
+            } else {
+                ContentTransferEncoding::Base64
+            };
             if let Some(name) = a.content_type().name() {
                 ret.extend(
                     format!(
@@ -386,7 +389,14 @@ fn print_attachment(ret: &mut String, a: AttachmentBuilder) {
                 .chars(),
             );
             ret.push_str("\r\n");
-            ret.push_str(&BASE64_MIME.encode(a.raw()).trim());
+            if content_transfer_encoding == ContentTransferEncoding::Base64 {
+                ret.push_str(&BASE64_MIME.encode(a.raw()).trim());
+            } else {
+                for l in unsafe { std::str::from_utf8_unchecked(a.raw()) }.lines() {
+                    ret.push_str(l);
+                    ret.push_str("\r\n");
+                }
+            }
             ret.push_str("\r\n");
         }
     }
