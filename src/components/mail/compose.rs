@@ -532,11 +532,11 @@ impl Composer {
                 if let Some(name) = a.content_type().name() {
                     write_string_to_grid(
                         &format!(
-                            "[{}] \"{}\", {} {} bytes",
+                            "[{}] \"{}\", {} {}",
                             i,
                             name,
                             a.content_type(),
-                            a.raw.len()
+                            melib::Bytes(a.raw.len())
                         ),
                         grid,
                         theme_default.fg,
@@ -547,7 +547,7 @@ impl Composer {
                     );
                 } else {
                     write_string_to_grid(
-                        &format!("[{}] {} {} bytes", i, a.content_type(), a.raw.len()),
+                        &format!("[{}] {} {}", i, a.content_type(), melib::Bytes(a.raw.len())),
                         grid,
                         theme_default.fg,
                         theme_default.bg,
