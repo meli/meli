@@ -1520,7 +1520,19 @@ impl Component for Composer {
     fn is_dirty(&self) -> bool {
         match self.mode {
             ViewMode::Embed => true,
-            _ => self.dirty || self.pager.is_dirty() || self.form.is_dirty(),
+            ViewMode::Edit => self.dirty || self.pager.is_dirty() || self.form.is_dirty(),
+            ViewMode::Discard(_, ref widget) => {
+                widget.is_dirty() || self.pager.is_dirty() || self.form.is_dirty()
+            }
+            ViewMode::SelectRecipients(ref widget) => {
+                widget.is_dirty() || self.pager.is_dirty() || self.form.is_dirty()
+            }
+            ViewMode::Send(ref widget) => {
+                widget.is_dirty() || self.pager.is_dirty() || self.form.is_dirty()
+            }
+            ViewMode::WaitingForSendResult(ref widget, _) => {
+                widget.is_dirty() || self.pager.is_dirty() || self.form.is_dirty()
+            }
         }
     }
 

@@ -337,6 +337,7 @@ impl FormWidget {
 
     pub fn hide_buttons(&mut self) {
         self.hide_buttons = true;
+        self.buttons.set_dirty(false);
     }
 
     pub fn len(&self) -> usize {
@@ -499,9 +500,9 @@ impl Component for FormWidget {
                 ),
                 theme_default,
             );
-            self.dirty = false;
+            self.set_dirty(false);
+            context.dirty_areas.push_back(area);
         }
-        context.dirty_areas.push_back(area);
     }
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         if self.focus == FormFocus::Buttons && self.buttons.process_event(event, context) {
@@ -512,42 +513,59 @@ impl Component for FormWidget {
             UIEvent::Input(Key::Up) if self.focus == FormFocus::Buttons => {
                 self.focus = FormFocus::Fields;
                 self.buttons.set_focus(false);
+                self.set_dirty(true);
+                return true;
             }
             UIEvent::InsertInput(Key::Up) if self.focus == FormFocus::TextInput => {
                 let field = self.fields.get_mut(&self.layout[self.cursor]).unwrap();
                 field.process_event(event, context);
+                self.set_dirty(true);
+                return true;
             }
             UIEvent::Input(Key::Up) => {
                 self.cursor = self.cursor.saturating_sub(1);
+                self.set_dirty(true);
+                return true;
             }
             UIEvent::InsertInput(Key::Down) if self.focus == FormFocus::TextInput => {
                 let field = self.fields.get_mut(&self.layout[self.cursor]).unwrap();
                 field.process_event(event, context);
+                self.set_dirty(true);
+                return true;
             }
             UIEvent::Input(Key::Down) if self.cursor < self.layout.len().saturating_sub(1) => {
                 self.cursor += 1;
+                self.set_dirty(true);
+                return true;
             }
             UIEvent::Input(Key::Down) if self.focus == FormFocus::Fields => {
                 self.focus = FormFocus::Buttons;
                 self.buttons.set_focus(true);
+                self.set_dirty(true);
                 if self.hide_buttons {
-                    self.set_dirty(true);
                     return false;
                 }
+                return true;
             }
             UIEvent::InsertInput(Key::Char('\t')) if self.focus == FormFocus::TextInput => {
                 let field = self.fields.get_mut(&self.layout[self.cursor]).unwrap();
                 field.process_event(event, context);
+                self.set_dirty(true);
+                return true;
             }
             UIEvent::Input(Key::Char('\n')) if self.focus == FormFocus::Fields => {
                 self.focus = FormFocus::TextInput;
                 context
                     .replies
                     .push_back(UIEvent::ChangeMode(UIMode::Insert));
+                self.set_dirty(true);
+                return true;
             }
             UIEvent::InsertInput(Key::Right) if self.focus == FormFocus::TextInput => {
                 let field = self.fields.get_mut(&self.layout[self.cursor]).unwrap();
                 field.process_event(event, context);
+                self.set_dirty(true);
+                return true;
             }
             UIEvent::InsertInput(Key::Left) if self.focus == FormFocus::TextInput => {
                 let field = self.fields.get_mut(&self.layout[self.cursor]).unwrap();
@@ -557,6 +575,8 @@ impl Component for FormWidget {
                         .replies
                         .push_back(UIEvent::ChangeMode(UIMode::Normal));
                 }
+                self.set_dirty(true);
+                return true;
             }
             UIEvent::ChangeMode(UIMode::Normal) if self.focus == FormFocus::TextInput => {
                 self.focus = FormFocus::Fields;
@@ -565,17 +585,18 @@ impl Component for FormWidget {
             UIEvent::InsertInput(Key::Backspace) if self.focus == FormFocus::TextInput => {
                 let field = self.fields.get_mut(&self.layout[self.cursor]).unwrap();
                 field.process_event(event, context);
+                self.set_dirty(true);
+                return true;
             }
             UIEvent::InsertInput(_) if self.focus == FormFocus::TextInput => {
                 let field = self.fields.get_mut(&self.layout[self.cursor]).unwrap();
                 field.process_event(event, context);
+                self.set_dirty(true);
+                return true;
             }
-            _ => {
-                return false;
-            }
+            _ => {}
         }
-        self.set_dirty(true);
-        true
+        false
     }
     fn is_dirty(&self) -> bool {
         self.dirty || self.buttons.is_dirty()
@@ -690,19 +711,22 @@ where
                         .remove(&self.layout[self.cursor])
                         .unwrap_or_default(),
                 );
+                self.set_dirty(true);
+                return true;
             }
             UIEvent::Input(Key::Left) => {
                 self.cursor = self.cursor.saturating_sub(1);
+                self.set_dirty(true);
+                return true;
             }
             UIEvent::Input(Key::Right) if self.cursor < self.layout.len().saturating_sub(1) => {
                 self.cursor += 1;
+                self.set_dirty(true);
+                return true;
             }
-            _ => {
-                return false;
-            }
+            _ => {}
         }
-        self.set_dirty(true);
-        true
+        false
     }
     fn is_dirty(&self) -> bool {
         self.dirty
