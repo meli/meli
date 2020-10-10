@@ -112,7 +112,6 @@
 #[pgp]
 #auto_sign = false # always sign sent messages
 #auto_verify_signatures = true # always verify signatures when reading signed e-mails
-#gpg_binary = "/usr/bin/gpg2" #optional
 #
 #[terminal]
 #theme = "dark" # or "light"

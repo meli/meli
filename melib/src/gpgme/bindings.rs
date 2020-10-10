@@ -7220,12 +7220,8 @@ extern "C" {
 extern "C" {
     pub fn gpgme_get_protocol_name(proto: gpgme_protocol_t) -> *const ::std::os::raw::c_char;
 }
-extern "C" {
-    pub fn gpgme_set_armor(ctx: gpgme_ctx_t, yes: ::std::os::raw::c_int);
-}
-extern "C" {
-    pub fn gpgme_get_armor(ctx: gpgme_ctx_t) -> ::std::os::raw::c_int;
-}
+pub type gpgme_set_armor = unsafe extern "C" fn(ctx: gpgme_ctx_t, yes: ::std::os::raw::c_int);
+pub type gpgme_get_armor = unsafe extern "C" fn(ctx: gpgme_ctx_t) -> ::std::os::raw::c_int;
 extern "C" {
     pub fn gpgme_set_textmode(ctx: gpgme_ctx_t, yes: ::std::os::raw::c_int);
 }
@@ -7309,12 +7305,10 @@ extern "C" {
         home_dir: *const ::std::os::raw::c_char,
     ) -> gpgme_error_t;
 }
-extern "C" {
-    pub fn gpgme_signers_clear(ctx: gpgme_ctx_t);
-}
-extern "C" {
-    pub fn gpgme_signers_add(ctx: gpgme_ctx_t, key: gpgme_key_t) -> gpgme_error_t;
-}
+pub type gpgme_signers_clear = unsafe extern "C" fn(ctx: gpgme_ctx_t);
+
+pub type gpgme_signers_add =
+    unsafe extern "C" fn(ctx: gpgme_ctx_t, key: gpgme_key_t) -> gpgme_error_t;
 extern "C" {
     pub fn gpgme_signers_count(ctx: gpgme_ctx_t) -> ::std::os::raw::c_uint;
 }
@@ -7763,9 +7757,7 @@ fn bindgen_test_layout__gpgme_op_encrypt_result() {
     );
 }
 pub type gpgme_encrypt_result_t = *mut _gpgme_op_encrypt_result;
-extern "C" {
-    pub fn gpgme_op_encrypt_result(ctx: gpgme_ctx_t) -> gpgme_encrypt_result_t;
-}
+pub type gpgme_op_encrypt_result = unsafe extern "C" fn(ctx: gpgme_ctx_t) -> gpgme_encrypt_result_t;
 pub const gpgme_encrypt_flags_t_GPGME_ENCRYPT_ALWAYS_TRUST: gpgme_encrypt_flags_t = 1;
 pub const gpgme_encrypt_flags_t_GPGME_ENCRYPT_NO_ENCRYPT_TO: gpgme_encrypt_flags_t = 2;
 pub const gpgme_encrypt_flags_t_GPGME_ENCRYPT_PREPARE: gpgme_encrypt_flags_t = 4;
@@ -7776,15 +7768,13 @@ pub const gpgme_encrypt_flags_t_GPGME_ENCRYPT_THROW_KEYIDS: gpgme_encrypt_flags_
 pub const gpgme_encrypt_flags_t_GPGME_ENCRYPT_WRAP: gpgme_encrypt_flags_t = 128;
 pub const gpgme_encrypt_flags_t_GPGME_ENCRYPT_WANT_ADDRESS: gpgme_encrypt_flags_t = 256;
 pub type gpgme_encrypt_flags_t = u32;
-extern "C" {
-    pub fn gpgme_op_encrypt_start(
-        ctx: gpgme_ctx_t,
-        recp: *mut gpgme_key_t,
-        flags: gpgme_encrypt_flags_t,
-        plain: gpgme_data_t,
-        cipher: gpgme_data_t,
-    ) -> gpgme_error_t;
-}
+pub type gpgme_op_encrypt_start = unsafe extern "C" fn(
+    ctx: gpgme_ctx_t,
+    recp: *mut gpgme_key_t,
+    flags: gpgme_encrypt_flags_t,
+    plain: gpgme_data_t,
+    cipher: gpgme_data_t,
+) -> gpgme_error_t;
 extern "C" {
     pub fn gpgme_op_encrypt(
         ctx: gpgme_ctx_t,
@@ -7814,15 +7804,13 @@ extern "C" {
         cipher: gpgme_data_t,
     ) -> gpgme_error_t;
 }
-extern "C" {
-    pub fn gpgme_op_encrypt_sign_start(
-        ctx: gpgme_ctx_t,
-        recp: *mut gpgme_key_t,
-        flags: gpgme_encrypt_flags_t,
-        plain: gpgme_data_t,
-        cipher: gpgme_data_t,
-    ) -> gpgme_error_t;
-}
+pub type gpgme_op_encrypt_sign_start = unsafe extern "C" fn(
+    ctx: gpgme_ctx_t,
+    recp: *mut gpgme_key_t,
+    flags: gpgme_encrypt_flags_t,
+    plain: gpgme_data_t,
+    cipher: gpgme_data_t,
+) -> gpgme_error_t;
 extern "C" {
     pub fn gpgme_op_encrypt_sign(
         ctx: gpgme_ctx_t,

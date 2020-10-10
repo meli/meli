@@ -128,6 +128,7 @@ pub enum ToggleFlag {
     InternalVal(bool),
     False,
     True,
+    Ask,
 }
 
 impl From<bool> for ToggleFlag {
@@ -157,9 +158,15 @@ impl ToggleFlag {
             false
         }
     }
+
+    pub fn is_ask(&self) -> bool {
+        *self == ToggleFlag::Ask
+    }
+
     pub fn is_false(&self) -> bool {
         ToggleFlag::False == *self || ToggleFlag::InternalVal(false) == *self
     }
+
     pub fn is_true(&self) -> bool {
         ToggleFlag::True == *self || ToggleFlag::InternalVal(true) == *self
     }
@@ -174,6 +181,7 @@ impl Serialize for ToggleFlag {
             ToggleFlag::Unset | ToggleFlag::InternalVal(_) => serializer.serialize_none(),
             ToggleFlag::False => serializer.serialize_bool(false),
             ToggleFlag::True => serializer.serialize_bool(true),
+            ToggleFlag::Ask => serializer.serialize_str("ask"),
         }
     }
 }
@@ -183,10 +191,17 @@ impl<'de> Deserialize<'de> for ToggleFlag {
     where
         D: Deserializer<'de>,
     {
-        let s = <bool>::deserialize(deserializer);
+        let s = <String>::deserialize(deserializer);
         Ok(match s? {
-            true => ToggleFlag::True,
-            false => ToggleFlag::False,
+            s if s.eq_ignore_ascii_case("true") => ToggleFlag::True,
+            s if s.eq_ignore_ascii_case("false") => ToggleFlag::False,
+            s if s.eq_ignore_ascii_case("ask") => ToggleFlag::Ask,
+            s => {
+                return Err(serde::de::Error::custom(format!(
+                    r#"expected one of "true", "false", "ask", found `{}`"#,
+                    s
+                )))
+            }
         })
     }
 }

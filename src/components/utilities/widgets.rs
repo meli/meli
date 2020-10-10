@@ -375,6 +375,10 @@ impl FormWidget {
         self.fields.insert(value.0, value.1);
     }
 
+    pub fn values(&self) -> &HashMap<String, Field> {
+        &self.fields
+    }
+
     pub fn values_mut(&mut self) -> &mut HashMap<String, Field> {
         &mut self.fields
     }

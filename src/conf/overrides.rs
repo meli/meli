@@ -285,45 +285,77 @@ impl Default for TagsSettingsOverride {
     }
 }
 
+#[cfg(feature = "gpgme")]
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct PGPSettingsOverride {
     #[doc = " auto verify signed e-mail according to RFC3156"]
+    #[doc = " Default: true"]
     #[serde(alias = "auto-verify-signatures")]
     #[serde(default)]
     pub auto_verify_signatures: Option<bool>,
     #[doc = " auto decrypt encrypted e-mail"]
+    #[doc = " Default: true"]
     #[serde(alias = "auto-decrypt")]
     #[serde(default)]
     pub auto_decrypt: Option<bool>,
-    #[doc = " always sign sent messages"]
+    #[doc = " always sign sent e-mail"]
+    #[doc = " Default: false"]
     #[serde(alias = "auto-sign")]
     #[serde(default)]
     pub auto_sign: Option<bool>,
+    #[doc = " Auto encrypt sent e-mail"]
+    #[doc = " Default: false"]
+    #[serde(alias = "auto-encrypt")]
+    #[serde(default)]
+    pub auto_encrypt: Option<bool>,
+    #[doc = " Default: None"]
     #[serde(alias = "sign-key")]
     #[serde(default)]
     pub sign_key: Option<Option<String>>,
+    #[doc = " Default: None"]
     #[serde(alias = "decrypt-key")]
     #[serde(default)]
     pub decrypt_key: Option<Option<String>>,
+    #[doc = " Default: None"]
     #[serde(alias = "encrypt-key")]
     #[serde(default)]
     pub encrypt_key: Option<Option<String>>,
-    #[doc = " gpg binary name or file location to use"]
-    #[serde(alias = "gpg-binary")]
+    #[doc = " Allow remote lookups"]
+    #[doc = " Default: None"]
+    #[serde(alias = "allow-remote-lookups")]
     #[serde(default)]
-    pub gpg_binary: Option<Option<String>>,
+    pub allow_remote_lookup: Option<ToggleFlag>,
+    #[doc = " Remote lookup mechanisms."]
+    #[doc = " Default: \"local,wkd\""]
+    #[serde(alias = "remote-lookup-mechanisms")]
+    #[serde(default)]
+    pub remote_lookup_mechanisms: Option<melib::gpgme::LocateKey>,
 }
+#[cfg(feature = "gpgme")]
 impl Default for PGPSettingsOverride {
     fn default() -> Self {
         PGPSettingsOverride {
             auto_verify_signatures: None,
             auto_decrypt: None,
             auto_sign: None,
+            auto_encrypt: None,
             sign_key: None,
             decrypt_key: None,
             encrypt_key: None,
-            gpg_binary: None,
+            allow_remote_lookup: None,
+            remote_lookup_mechanisms: None,
         }
+    }
+}
+
+#[cfg(not(feature = "gpgme"))]
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct PGPSettingsOverride {}
+#[cfg(not(feature = "gpgme"))]
+impl Default for PGPSettingsOverride {
+    fn default() -> Self {
+        PGPSettingsOverride {}
     }
 }

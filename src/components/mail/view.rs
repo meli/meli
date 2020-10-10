@@ -105,7 +105,7 @@ pub enum AttachmentDisplay {
     SignedPending {
         inner: Attachment,
         display: Vec<AttachmentDisplay>,
-        handle: std::result::Result<JoinHandle<Result<()>>, JoinHandle<Result<Vec<u8>>>>,
+        handle: JoinHandle<Result<()>>,
         job_id: JobId,
     },
     SignedFailed {
@@ -645,99 +645,8 @@ impl MailView {
                         }
                     }
                     MultipartType::Signed => {
-                        if *mailbox_settings!(
-                            context[coordinates.0][&coordinates.1]
-                                .pgp
-                                .auto_verify_signatures
-                        ) {
-                            if let Some(bin) = mailbox_settings!(
-                                context[coordinates.0][&coordinates.1].pgp.gpg_binary
-                            ) {
-                                let verify_fut = crate::components::mail::pgp::verify(
-                                    a.clone(),
-                                    Some(bin.to_string()),
-                                );
-                                let handle = context.job_executor.spawn_blocking(verify_fut);
-                                active_jobs.insert(handle.job_id);
-                                acc.push(AttachmentDisplay::SignedPending {
-                                    inner: a.clone(),
-                                    display: {
-                                        let mut v = vec![];
-                                        rec(&parts[0], context, coordinates, &mut v, active_jobs);
-                                        v
-                                    },
-                                    job_id: handle.job_id,
-                                    handle: Err(handle),
-                                });
-                            } else {
-                                #[cfg(not(feature = "gpgme"))]
-                                {
-                                    acc.push(AttachmentDisplay::SignedUnverified {
-                                        inner: a.clone(),
-                                        display: {
-                                            let mut v = vec![];
-                                            rec(
-                                                &parts[0],
-                                                context,
-                                                coordinates,
-                                                &mut v,
-                                                active_jobs,
-                                            );
-                                            v
-                                        },
-                                    });
-                                }
-                                #[cfg(feature = "gpgme")]
-                                match melib::gpgme::Context::new().and_then(|mut ctx| {
-                                    let sig = ctx.new_data_mem(&parts[1].raw())?;
-                                    let mut f = std::fs::File::create("/tmp/sig").unwrap();
-                                    f.write_all(&parts[1].raw())?;
-                                    let mut f = std::fs::File::create("/tmp/data").unwrap();
-                                    f.write_all(&parts[0].raw())?;
-                                    let data = ctx.new_data_mem(&parts[0].raw())?;
-                                    ctx.verify(sig, data)
-                                }) {
-                                    Ok(verify_fut) => {
-                                        let handle =
-                                            context.job_executor.spawn_specialized(verify_fut);
-                                        active_jobs.insert(handle.job_id);
-                                        acc.push(AttachmentDisplay::SignedPending {
-                                            inner: a.clone(),
-                                            job_id: handle.job_id,
-                                            display: {
-                                                let mut v = vec![];
-                                                rec(
-                                                    &parts[0],
-                                                    context,
-                                                    coordinates,
-                                                    &mut v,
-                                                    active_jobs,
-                                                );
-                                                v
-                                            },
-                                            handle: Ok(handle),
-                                        });
-                                    }
-                                    Err(error) => {
-                                        acc.push(AttachmentDisplay::SignedFailed {
-                                            inner: a.clone(),
-                                            display: {
-                                                let mut v = vec![];
-                                                rec(
-                                                    &parts[0],
-                                                    context,
-                                                    coordinates,
-                                                    &mut v,
-                                                    active_jobs,
-                                                );
-                                                v
-                                            },
-                                            error,
-                                        });
-                                    }
-                                }
-                            }
-                        } else {
+                        #[cfg(not(feature = "gpgme"))]
+                        {
                             acc.push(AttachmentDisplay::SignedUnverified {
                                 inner: a.clone(),
                                 display: {
@@ -747,63 +656,67 @@ impl MailView {
                                 },
                             });
                         }
+                        #[cfg(feature = "gpgme")]
+                        {
+                            if *mailbox_settings!(
+                                context[coordinates.0][&coordinates.1]
+                                    .pgp
+                                    .auto_verify_signatures
+                            ) {
+                                let verify_fut = crate::components::mail::pgp::verify(a.clone());
+                                let handle = context.job_executor.spawn_specialized(verify_fut);
+                                active_jobs.insert(handle.job_id);
+                                acc.push(AttachmentDisplay::SignedPending {
+                                    inner: a.clone(),
+                                    job_id: handle.job_id,
+                                    display: {
+                                        let mut v = vec![];
+                                        rec(&parts[0], context, coordinates, &mut v, active_jobs);
+                                        v
+                                    },
+                                    handle,
+                                });
+                            } else {
+                                acc.push(AttachmentDisplay::SignedUnverified {
+                                    inner: a.clone(),
+                                    display: {
+                                        let mut v = vec![];
+                                        rec(&parts[0], context, coordinates, &mut v, active_jobs);
+                                        v
+                                    },
+                                });
+                            }
+                        }
                     }
                     MultipartType::Encrypted => {
                         for a in parts {
                             if a.content_type == "application/octet-stream" {
-                                if *mailbox_settings!(
-                                    context[coordinates.0][&coordinates.1].pgp.auto_decrypt
-                                ) {
-                                    let _verify = *mailbox_settings!(
-                                        context[coordinates.0][&coordinates.1]
-                                            .pgp
-                                            .auto_verify_signatures
-                                    );
-                                    if let Some(bin) = mailbox_settings!(
-                                        context[coordinates.0][&coordinates.1].pgp.gpg_binary
+                                #[cfg(not(feature = "gpgme"))]
+                                {
+                                    acc.push(AttachmentDisplay::EncryptedFailed {
+                                                inner: a.clone(),
+                                                error: MeliError::new("Cannot decrypt: meli must be compiled with libgpgme support."),
+                                            });
+                                }
+                                #[cfg(feature = "gpgme")]
+                                {
+                                    if *mailbox_settings!(
+                                        context[coordinates.0][&coordinates.1].pgp.auto_decrypt
                                     ) {
-                                        let decrypt_fut = crate::components::mail::pgp::decrypt(
-                                            a.raw().to_vec(),
-                                            Some(bin.to_string()),
-                                            None,
-                                        );
+                                        let decrypt_fut =
+                                            crate::components::mail::pgp::decrypt(a.raw().to_vec());
                                         let handle =
-                                            context.job_executor.spawn_blocking(decrypt_fut);
+                                            context.job_executor.spawn_specialized(decrypt_fut);
                                         active_jobs.insert(handle.job_id);
                                         acc.push(AttachmentDisplay::EncryptedPending {
                                             inner: a.clone(),
                                             handle,
                                         });
                                     } else {
-                                        #[cfg(not(feature = "gpgme"))]
-                                        {
-                                            acc.push(AttachmentDisplay::EncryptedFailed {
-                                                inner: a.clone(),
-                                                error: MeliError::new("Cannot decrypt: define `gpg_binary` in configuration."),
-                                            });
-                                        }
-                                        #[cfg(feature = "gpgme")]
-                                        match melib::gpgme::Context::new().and_then(|mut ctx| {
-                                            let cipher = ctx.new_data_mem(&a.raw())?;
-                                            ctx.decrypt(cipher)
-                                        }) {
-                                            Ok(decrypt_fut) => {
-                                                let handle = context
-                                                    .job_executor
-                                                    .spawn_specialized(decrypt_fut);
-                                                active_jobs.insert(handle.job_id);
-                                                acc.push(AttachmentDisplay::EncryptedPending {
-                                                    inner: a.clone(),
-                                                    handle,
-                                                });
-                                            }
-                                            Err(error) => {
-                                                acc.push(AttachmentDisplay::EncryptedFailed {
-                                                    inner: a.clone(),
-                                                    error,
-                                                });
-                                            }
-                                        }
+                                        acc.push(AttachmentDisplay::EncryptedFailed {
+                                            inner: a.clone(),
+                                            error: MeliError::new("Undecrypted."),
+                                        });
                                     }
                                 }
                             }
@@ -1529,64 +1442,27 @@ impl Component for MailView {
                                     } if *our_job_id == *job_id => {
                                         caught = true;
                                         self.initialised = false;
-                                        match handle.as_mut() {
-                                            Ok(handle) => match handle
-                                                .chan
-                                                .try_recv()
-                                                .unwrap()
-                                                .unwrap()
-                                            {
-                                                Ok(()) => {
-                                                    *d = AttachmentDisplay::SignedVerified {
-                                                        inner: std::mem::replace(
-                                                            inner,
-                                                            AttachmentBuilder::new(&[]).build(),
-                                                        ),
-                                                        display: std::mem::replace(display, vec![]),
-                                                        description: String::new(),
-                                                    };
-                                                }
-                                                Err(error) => {
-                                                    *d = AttachmentDisplay::SignedFailed {
-                                                        inner: std::mem::replace(
-                                                            inner,
-                                                            AttachmentBuilder::new(&[]).build(),
-                                                        ),
-                                                        display: std::mem::replace(display, vec![]),
-                                                        error,
-                                                    };
-                                                }
-                                            },
-                                            Err(handle) => match handle
-                                                .chan
-                                                .try_recv()
-                                                .unwrap()
-                                                .unwrap()
-                                            {
-                                                Ok(verify_bytes) => {
-                                                    *d = AttachmentDisplay::SignedVerified {
-                                                        inner: std::mem::replace(
-                                                            inner,
-                                                            AttachmentBuilder::new(&[]).build(),
-                                                        ),
-                                                        display: std::mem::replace(display, vec![]),
-                                                        description: String::from_utf8_lossy(
-                                                            &verify_bytes,
-                                                        )
-                                                        .to_string(),
-                                                    };
-                                                }
-                                                Err(error) => {
-                                                    *d = AttachmentDisplay::SignedFailed {
-                                                        inner: std::mem::replace(
-                                                            inner,
-                                                            AttachmentBuilder::new(&[]).build(),
-                                                        ),
-                                                        display: std::mem::replace(display, vec![]),
-                                                        error,
-                                                    };
-                                                }
-                                            },
+                                        match handle.chan.try_recv().unwrap().unwrap() {
+                                            Ok(()) => {
+                                                *d = AttachmentDisplay::SignedVerified {
+                                                    inner: std::mem::replace(
+                                                        inner,
+                                                        AttachmentBuilder::new(&[]).build(),
+                                                    ),
+                                                    display: std::mem::replace(display, vec![]),
+                                                    description: String::new(),
+                                                };
+                                            }
+                                            Err(error) => {
+                                                *d = AttachmentDisplay::SignedFailed {
+                                                    inner: std::mem::replace(
+                                                        inner,
+                                                        AttachmentBuilder::new(&[]).build(),
+                                                    ),
+                                                    display: std::mem::replace(display, vec![]),
+                                                    error,
+                                                };
+                                            }
                                         }
                                     }
                                     AttachmentDisplay::EncryptedPending { inner, handle }

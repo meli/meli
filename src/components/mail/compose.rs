@@ -84,8 +84,8 @@ pub struct Composer {
 
     embed_area: Area,
     embed: Option<EmbedStatus>,
-    sign_mail: ToggleFlag,
-    encrypt_mail: ToggleFlag,
+    #[cfg(feature = "gpgme")]
+    gpg_state: gpg::GpgComposeState,
     dirty: bool,
     has_changes: bool,
     initialized: bool,
@@ -107,8 +107,8 @@ impl Default for Composer {
             form: FormWidget::default(),
 
             mode: ViewMode::Edit,
-            sign_mail: ToggleFlag::Unset,
-            encrypt_mail: ToggleFlag::Unset,
+            #[cfg(feature = "gpgme")]
+            gpg_state: gpg::GpgComposeState::new(),
             dirty: true,
             has_changes: false,
             embed_area: ((0, 0), (0, 0)),
@@ -125,6 +125,8 @@ enum ViewMode {
     Edit,
     Embed,
     SelectRecipients(UIDialog<Address>),
+    #[cfg(feature = "gpgme")]
+    SelectEncryptKey(bool, gpg::KeySelection),
     Send(UIConfirmationDialog),
     WaitingForSendResult(UIDialog<char>, JoinHandle<Result<()>>),
 }
@@ -430,14 +432,23 @@ impl Composer {
         let attachments_no = self.draft.attachments().len();
         let theme_default = crate::conf::value(context, "theme_default");
         clear_area(grid, area, theme_default);
-        if self.sign_mail.is_true() {
+        #[cfg(feature = "gpgme")]
+        if self.gpg_state.sign_mail.is_true() {
+            let key_list = self
+                .gpg_state
+                .sign_keys
+                .iter()
+                .map(|k| k.fingerprint())
+                .collect::<Vec<_>>()
+                .join(", ");
             write_string_to_grid(
                 &format!(
                     "☑ sign with {}",
-                    account_settings!(context[self.account_hash].pgp.sign_key)
-                        .as_ref()
-                        .map(|s| s.as_str())
-                        .unwrap_or("default key")
+                    if self.gpg_state.sign_keys.is_empty() {
+                        "default key"
+                    } else {
+                        key_list.as_str()
+                    }
                 ),
                 grid,
                 theme_default.fg,
@@ -465,14 +476,29 @@ impl Composer {
                 None,
             );
         }
-        if self.encrypt_mail.is_true() {
+        #[cfg(feature = "gpgme")]
+        if self.gpg_state.encrypt_mail.is_true() {
+            let key_list = self
+                .gpg_state
+                .encrypt_keys
+                .iter()
+                .map(|k| k.fingerprint())
+                .collect::<Vec<_>>()
+                .join(", ");
+
             write_string_to_grid(
                 &format!(
-                    "☑ encrypt with {}",
-                    account_settings!(context[self.account_hash].pgp.encrypt_key)
-                        .as_ref()
-                        .map(|s| s.as_str())
-                        .unwrap_or("default key")
+                    "{}{}",
+                    if self.gpg_state.encrypt_keys.is_empty() {
+                        "☐ no keys to encrypt with!"
+                    } else {
+                        "☑ encrypt with "
+                    },
+                    if self.gpg_state.encrypt_keys.is_empty() {
+                        ""
+                    } else {
+                        key_list.as_str()
+                    }
                 ),
                 grid,
                 theme_default.fg,
@@ -575,8 +601,9 @@ impl Component for Composer {
         let width = width!(area);
 
         if !self.initialized {
-            if self.sign_mail.is_unset() {
-                self.sign_mail = ToggleFlag::InternalVal(*account_settings!(
+            #[cfg(feature = "gpgme")]
+            if self.gpg_state.sign_mail.is_unset() {
+                self.gpg_state.sign_mail = ToggleFlag::InternalVal(*account_settings!(
                     context[self.account_hash].pgp.auto_sign
                 ));
             }
@@ -752,6 +779,18 @@ impl Component for Composer {
             ViewMode::Send(ref mut s) => {
                 s.draw(grid, center_area(area, s.content.size()), context);
             }
+            #[cfg(feature = "gpgme")]
+            ViewMode::SelectEncryptKey(
+                _,
+                gpg::KeySelection::Loaded {
+                    ref mut widget,
+                    keys: _,
+                },
+            ) => {
+                widget.draw(grid, center_area(area, widget.content.size()), context);
+            }
+            #[cfg(feature = "gpgme")]
+            ViewMode::SelectEncryptKey(_, _) => {}
             ViewMode::SelectRecipients(ref mut s) => {
                 s.draw(grid, center_area(area, s.content.size()), context);
             }
@@ -783,8 +822,8 @@ impl Component for Composer {
                 if let Some(true) = result.downcast_ref::<bool>() {
                     self.update_draft();
                     match send_draft_async(
-                        self.sign_mail,
-                        self.encrypt_mail,
+                        #[cfg(feature = "gpgme")]
+                        self.gpg_state.clone(),
                         context,
                         self.account_hash,
                         self.draft.clone(),
@@ -845,6 +884,14 @@ impl Component for Composer {
             {
                 self.mode = ViewMode::Edit;
                 self.set_dirty(true);
+            }
+            #[cfg(feature = "gpgme")]
+            (ViewMode::SelectEncryptKey(_, ref mut selector), UIEvent::ComponentKill(ref id))
+                if *id == selector.id() =>
+            {
+                self.mode = ViewMode::Edit;
+                self.set_dirty(true);
+                return true;
             }
             (ViewMode::Send(ref mut selector), _) => {
                 if selector.process_event(event, context) {
@@ -954,6 +1001,34 @@ impl Component for Composer {
                     return true;
                 }
             }
+            #[cfg(feature = "gpgme")]
+            (
+                ViewMode::SelectEncryptKey(is_encrypt, ref mut selector),
+                UIEvent::FinishedUIDialog(id, result),
+            ) if *id == selector.id() => {
+                debug!(&result);
+                if let Some(key) = result.downcast_mut::<Option<melib::gpgme::Key>>() {
+                    debug!("got key {:?}", key);
+                    if let Some(key) = key {
+                        if *is_encrypt {
+                            self.gpg_state.encrypt_keys.clear();
+                            self.gpg_state.encrypt_keys.push(key.clone());
+                        } else {
+                            self.gpg_state.sign_keys.clear();
+                            self.gpg_state.sign_keys.push(key.clone());
+                        }
+                    }
+                }
+                self.mode = ViewMode::Edit;
+                self.set_dirty(true);
+                return true;
+            }
+            #[cfg(feature = "gpgme")]
+            (ViewMode::SelectEncryptKey(_, ref mut selector), _) => {
+                if selector.process_event(event, context) {
+                    return true;
+                }
+            }
             _ => {}
         }
         if self.cursor == Cursor::Headers
@@ -1025,14 +1100,15 @@ impl Component for Composer {
                 if self.mode.is_edit()
                     && (self.cursor == Cursor::Sign || self.cursor == Cursor::Encrypt) =>
             {
+                #[cfg(feature = "gpgme")]
                 match self.cursor {
                     Cursor::Sign => {
-                        let is_true = self.sign_mail.is_true();
-                        self.sign_mail = ToggleFlag::from(!is_true);
+                        let is_true = self.gpg_state.sign_mail.is_true();
+                        self.gpg_state.sign_mail = ToggleFlag::from(!is_true);
                     }
                     Cursor::Encrypt => {
-                        let is_true = self.encrypt_mail.is_true();
-                        self.encrypt_mail = ToggleFlag::from(!is_true);
+                        let is_true = self.gpg_state.encrypt_mail.is_true();
+                        self.gpg_state.encrypt_mail = ToggleFlag::from(!is_true);
                     }
                     _ => {}
                 };
@@ -1189,6 +1265,86 @@ impl Component for Composer {
                                     .push_back(UIEvent::ChangeMode(UIMode::Normal));
                             }
                         }
+                    }
+                }
+                self.set_dirty(true);
+                return true;
+            }
+            UIEvent::Input(ref key)
+                if self.mode.is_edit()
+                    && self.cursor == Cursor::Sign
+                    && shortcut!(key == shortcuts[Self::DESCRIPTION]["edit_mail"]) =>
+            {
+                #[cfg(feature = "gpgme")]
+                match melib::email::parser::address::rfc2822address_list(
+                    self.form.values()["From"].as_str().as_bytes(),
+                )
+                .map_err(|_err| -> MeliError { "No valid sender address in `From:`".into() })
+                .and_then(|(_, list)| {
+                    list.get(0)
+                        .cloned()
+                        .ok_or_else(|| "No valid sender address in `From:`".into())
+                })
+                .and_then(|addr| {
+                    gpg::KeySelection::new(
+                        false,
+                        account_settings!(context[self.account_hash].pgp.allow_remote_lookup)
+                            .is_true(),
+                        addr.get_email(),
+                        *account_settings!(context[self.account_hash].pgp.allow_remote_lookup),
+                        context,
+                    )
+                }) {
+                    Ok(widget) => {
+                        self.gpg_state.sign_mail = ToggleFlag::from(true);
+                        self.mode = ViewMode::SelectEncryptKey(false, widget);
+                    }
+                    Err(err) => {
+                        context.replies.push_back(UIEvent::Notification(
+                            Some("Could not list keys.".to_string()),
+                            format!("libgpgme error: {}", &err),
+                            Some(NotificationType::Error(melib::error::ErrorKind::External)),
+                        ));
+                    }
+                }
+                self.set_dirty(true);
+                return true;
+            }
+            UIEvent::Input(ref key)
+                if self.mode.is_edit()
+                    && self.cursor == Cursor::Encrypt
+                    && shortcut!(key == shortcuts[Self::DESCRIPTION]["edit_mail"]) =>
+            {
+                #[cfg(feature = "gpgme")]
+                match melib::email::parser::address::rfc2822address_list(
+                    self.form.values()["To"].as_str().as_bytes(),
+                )
+                .map_err(|_err| -> MeliError { "No valid recipient addresses in `To:`".into() })
+                .and_then(|(_, list)| {
+                    list.get(0)
+                        .cloned()
+                        .ok_or_else(|| "No valid recipient addresses in `To:`".into())
+                })
+                .and_then(|addr| {
+                    gpg::KeySelection::new(
+                        false,
+                        account_settings!(context[self.account_hash].pgp.allow_remote_lookup)
+                            .is_true(),
+                        addr.get_email(),
+                        *account_settings!(context[self.account_hash].pgp.allow_remote_lookup),
+                        context,
+                    )
+                }) {
+                    Ok(widget) => {
+                        self.gpg_state.encrypt_mail = ToggleFlag::from(true);
+                        self.mode = ViewMode::SelectEncryptKey(true, widget);
+                    }
+                    Err(err) => {
+                        context.replies.push_back(UIEvent::Notification(
+                            Some("Could not list keys.".to_string()),
+                            format!("libgpgme error: {}", &err),
+                            Some(NotificationType::Error(melib::error::ErrorKind::External)),
+                        ));
                     }
                 }
                 self.set_dirty(true);
@@ -1498,15 +1654,17 @@ impl Component for Composer {
                     );
                     return true;
                 }
+                #[cfg(feature = "gpgme")]
                 Action::Compose(ComposeAction::ToggleSign) => {
-                    let is_true = self.sign_mail.is_true();
-                    self.sign_mail = ToggleFlag::from(!is_true);
+                    let is_true = self.gpg_state.sign_mail.is_true();
+                    self.gpg_state.sign_mail = ToggleFlag::from(!is_true);
                     self.dirty = true;
                     return true;
                 }
+                #[cfg(feature = "gpgme")]
                 Action::Compose(ComposeAction::ToggleEncrypt) => {
-                    let is_true = self.encrypt_mail.is_true();
-                    self.encrypt_mail = ToggleFlag::from(!is_true);
+                    let is_true = self.gpg_state.encrypt_mail.is_true();
+                    self.gpg_state.encrypt_mail = ToggleFlag::from(!is_true);
                     self.dirty = true;
                     return true;
                 }
@@ -1525,6 +1683,10 @@ impl Component for Composer {
                 widget.is_dirty() || self.pager.is_dirty() || self.form.is_dirty()
             }
             ViewMode::SelectRecipients(ref widget) => {
+                widget.is_dirty() || self.pager.is_dirty() || self.form.is_dirty()
+            }
+            #[cfg(feature = "gpgme")]
+            ViewMode::SelectEncryptKey(_, ref widget) => {
                 widget.is_dirty() || self.pager.is_dirty() || self.form.is_dirty()
             }
             ViewMode::Send(ref widget) => {
@@ -1626,7 +1788,7 @@ impl Component for Composer {
 }
 
 pub fn send_draft(
-    sign_mail: ToggleFlag,
+    _sign_mail: ToggleFlag,
     context: &mut Context,
     account_hash: AccountHash,
     mut draft: Draft,
@@ -1635,7 +1797,7 @@ pub fn send_draft(
     complete_in_background: bool,
 ) -> Result<Option<JoinHandle<Result<()>>>> {
     let format_flowed = *account_settings!(context[account_hash].composing.format_flowed);
-    if sign_mail.is_true() {
+    /*    if sign_mail.is_true() {
         let mut content_type = ContentType::default();
         if format_flowed {
             if let ContentType::Text {
@@ -1667,41 +1829,44 @@ pub fn send_draft(
             )
             .into();
         }
-        let output = crate::components::mail::pgp::sign(
-            body.into(),
-            account_settings!(context[account_hash].pgp.gpg_binary)
-                .as_ref()
-                .map(|s| s.as_str()),
-            account_settings!(context[account_hash].pgp.sign_key)
-                .as_ref()
-                .map(|s| s.as_str()),
-        );
-        match output {
-            Err(err) => {
-                debug!("{:?} could not sign draft msg", err);
-                log(
-                    format!(
-                        "Could not sign draft in account `{}`: {}.",
-                        context.accounts[&account_hash].name(),
-                        err.to_string()
-                    ),
-                    ERROR,
-                );
-                context.replies.push_back(UIEvent::Notification(
-                    Some(format!(
-                        "Could not sign draft in account `{}`.",
-                        context.accounts[&account_hash].name()
-                    )),
-                    err.to_string(),
-                    Some(NotificationType::Error(err.kind)),
-                ));
-                return Err(err);
-            }
-            Ok(output) => {
-                draft.attachments.push(output);
-            }
+    let output = todo!();
+    crate::components::mail::pgp::sign(
+        body.into(),
+        account_settings!(context[account_hash].pgp.gpg_binary)
+            .as_ref()
+            .map(|s| s.as_str()),
+        account_settings!(context[account_hash].pgp.sign_key)
+            .as_ref()
+            .map(|s| s.as_str()),
+    );
+    match output {
+        Err(err) => {
+            debug!("{:?} could not sign draft msg", err);
+            log(
+                format!(
+                    "Could not sign draft in account `{}`: {}.",
+                    context.accounts[&account_hash].name(),
+                    err.to_string()
+                ),
+                ERROR,
+            );
+            context.replies.push_back(UIEvent::Notification(
+                Some(format!(
+                    "Could not sign draft in account `{}`.",
+                    context.accounts[&account_hash].name()
+                )),
+                err.to_string(),
+                Some(NotificationType::Error(err.kind)),
+            ));
+            return Err(err);
         }
+        Ok(output) => {
+            draft.attachments.push(output);
+        }
+    }
     } else {
+    */
+    {
         let mut content_type = ContentType::default();
         if format_flowed {
             if let ContentType::Text {
@@ -1762,8 +1927,7 @@ pub fn save_draft(
 }
 
 pub fn send_draft_async(
-    sign_mail: ToggleFlag,
-    encrypt_mail: ToggleFlag,
+    #[cfg(feature = "gpgme")] gpg_state: gpg::GpgComposeState,
     context: &mut Context,
     account_hash: AccountHash,
     mut draft: Draft,
@@ -1772,6 +1936,7 @@ pub fn send_draft_async(
 ) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send>>> {
     let format_flowed = *account_settings!(context[account_hash].composing.format_flowed);
     let event_sender = context.sender.clone();
+    #[cfg(feature = "gpgme")]
     let mut filters_stack: Vec<
         Box<
             dyn FnOnce(
@@ -1781,40 +1946,19 @@ pub fn send_draft_async(
                 + Send,
         >,
     > = vec![];
-    if sign_mail.is_true() {
+    #[cfg(feature = "gpgme")]
+    if gpg_state.sign_mail.is_true() && !gpg_state.encrypt_mail.is_true() {
         filters_stack.push(Box::new(crate::components::mail::pgp::sign_filter(
-            account_settings!(context[account_hash].pgp.gpg_binary)
-                .as_ref()
-                .map(|s| s.to_string()),
-            account_settings!(context[account_hash].pgp.sign_key)
-                .as_ref()
-                .map(|s| s.to_string()),
+            gpg_state.sign_keys.clone(),
         )?));
-    }
-    if encrypt_mail.is_true() {
-        let mut recipients = vec![];
-        if let Ok((_, v)) =
-            melib::email::parser::address::rfc2822address_list(draft.headers()["To"].as_bytes())
-        {
-            for addr in v {
-                recipients.push(addr.get_email());
-            }
-        }
-        if let Ok((_, v)) =
-            melib::email::parser::address::rfc2822address_list(draft.headers()["Cc"].as_bytes())
-        {
-            for addr in v {
-                recipients.push(addr.get_email());
-            }
-        }
+    } else if gpg_state.encrypt_mail.is_true() {
         filters_stack.push(Box::new(crate::components::mail::pgp::encrypt_filter(
-            account_settings!(context[account_hash].pgp.gpg_binary)
-                .as_ref()
-                .map(|s| s.to_string()),
-            account_settings!(context[account_hash].pgp.encrypt_key)
-                .as_ref()
-                .map(|s| s.to_string()),
-            recipients,
+            if gpg_state.sign_mail.is_true() {
+                Some(gpg_state.sign_keys.clone())
+            } else {
+                None
+            },
+            gpg_state.encrypt_keys.clone(),
         )?));
     }
     let send_mail = account_settings!(context[account_hash].composing.send_mail).clone();
@@ -1850,6 +1994,7 @@ pub fn send_draft_async(
         .into();
     }
     Ok(Box::pin(async move {
+        #[cfg(feature = "gpgme")]
         for f in filters_stack {
             body = f(body).await?;
         }
@@ -1881,4 +2026,278 @@ pub fn send_draft_async(
             .unwrap();
         ret
     }))
+}
+
+#[cfg(feature = "gpgme")]
+mod gpg {
+    use super::*;
+
+    #[derive(Debug)]
+    pub enum KeySelection {
+        LoadingKeys {
+            handle: JoinHandle<Result<Vec<melib::gpgme::Key>>>,
+            progress_spinner: ProgressSpinner,
+            secret: bool,
+            local: bool,
+            pattern: String,
+            allow_remote_lookup: ToggleFlag,
+        },
+        Error {
+            id: ComponentId,
+            err: MeliError,
+        },
+        Loaded {
+            widget: UIDialog<melib::gpgme::Key>,
+            keys: Vec<melib::gpgme::Key>,
+        },
+    }
+
+    impl std::fmt::Display for KeySelection {
+        fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            write!(f, "select pgp keys")
+        }
+    }
+
+    impl KeySelection {
+        pub fn new(
+            secret: bool,
+            local: bool,
+            pattern: String,
+            allow_remote_lookup: ToggleFlag,
+            context: &mut Context,
+        ) -> Result<Self> {
+            use melib::gpgme::*;
+            debug!("KeySelection::new");
+            debug!(&secret);
+            debug!(&local);
+            debug!(&pattern);
+            debug!(&allow_remote_lookup);
+            let mut ctx = Context::new()?;
+            if local {
+                ctx.set_auto_key_locate(LocateKey::LOCAL)?;
+            } else {
+                ctx.set_auto_key_locate(LocateKey::WKD | LocateKey::LOCAL)?;
+            }
+            let job = ctx.keylist(secret, Some(pattern.clone()))?;
+            let handle = context.job_executor.spawn_specialized(job);
+            let mut progress_spinner = ProgressSpinner::new(8);
+            progress_spinner.start();
+            Ok(KeySelection::LoadingKeys {
+                handle,
+                secret,
+                local,
+                pattern,
+                allow_remote_lookup,
+                progress_spinner,
+            })
+        }
+    }
+
+    impl Component for KeySelection {
+        fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+            match self {
+                KeySelection::LoadingKeys {
+                    ref mut progress_spinner,
+                    ..
+                } => progress_spinner.draw(grid, center_area(area, (2, 2)), context),
+                KeySelection::Error { ref err, .. } => {
+                    let theme_default = crate::conf::value(context, "theme_default");
+                    write_string_to_grid(
+                        &err.to_string(),
+                        grid,
+                        theme_default.fg,
+                        theme_default.bg,
+                        theme_default.attrs,
+                        center_area(area, (15, 2)),
+                        Some(0),
+                    );
+                }
+                KeySelection::Loaded { ref mut widget, .. } => {
+                    widget.draw(grid, center_area(area, widget.content.size()), context)
+                }
+            }
+        }
+
+        fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+            debug!(&self);
+            debug!(&event);
+            match self {
+                KeySelection::LoadingKeys {
+                    ref mut progress_spinner,
+                    ref mut handle,
+                    secret,
+                    local,
+                    ref mut pattern,
+                    allow_remote_lookup,
+                    ..
+                } => match event {
+                    UIEvent::StatusEvent(StatusEvent::JobFinished(ref id))
+                        if *id == handle.job_id =>
+                    {
+                        match handle.chan.try_recv().unwrap().unwrap() {
+                            Ok(keys) => {
+                                if keys.is_empty() {
+                                    let id = progress_spinner.id();
+                                    if allow_remote_lookup.is_true() {
+                                        match Self::new(
+                                            *secret,
+                                            *local,
+                                            std::mem::replace(pattern, String::new()),
+                                            *allow_remote_lookup,
+                                            context,
+                                        ) {
+                                            Ok(w) => {
+                                                *self = w;
+                                            }
+                                            Err(err) => *self = KeySelection::Error { err, id },
+                                        }
+                                    } else if !*local && allow_remote_lookup.is_ask() {
+                                        *self = KeySelection::Error {
+                                            err: MeliError::new(format!(
+                                                "No keys found for {}, perform remote lookup?",
+                                                pattern
+                                            )),
+                                            id,
+                                        }
+                                    } else {
+                                        *self = KeySelection::Error {
+                                            err: MeliError::new(format!(
+                                                "No keys found for {}.",
+                                                pattern
+                                            )),
+                                            id,
+                                        }
+                                    }
+                                    if let KeySelection::Error { ref err, .. } = self {
+                                        context.replies.push_back(UIEvent::StatusEvent(
+                                            StatusEvent::DisplayMessage(err.to_string()),
+                                        ));
+                                        let res: Option<melib::gpgme::Key> = None;
+                                        context.replies.push_back(UIEvent::FinishedUIDialog(
+                                            id,
+                                            Box::new(res),
+                                        ));
+                                    }
+                                    return true;
+                                }
+                                let mut widget = UIDialog::new(
+                                    "select key",
+                                    keys.iter()
+                                        .map(|k| {
+                                            (
+                                                k.clone(),
+                                                if let Some(primary_uid) = k.primary_uid() {
+                                                    format!("{} {}", k.fingerprint(), primary_uid)
+                                                } else {
+                                                    k.fingerprint().to_string()
+                                                },
+                                            )
+                                        })
+                                        .collect::<Vec<(melib::gpgme::Key, String)>>(),
+                                    true,
+                                    Some(Box::new(
+                                        move |id: ComponentId, results: &[melib::gpgme::Key]| {
+                                            Some(UIEvent::FinishedUIDialog(
+                                                id,
+                                                Box::new(results.get(0).map(|k| k.clone())),
+                                            ))
+                                        },
+                                    )),
+                                    context,
+                                );
+                                widget.set_dirty(true);
+                                *self = KeySelection::Loaded { widget, keys };
+                            }
+                            Err(err) => {
+                                *self = KeySelection::Error {
+                                    err,
+                                    id: ComponentId::new_v4(),
+                                };
+                            }
+                        }
+                        true
+                    }
+                    _ => progress_spinner.process_event(event, context),
+                },
+                KeySelection::Error { .. } => false,
+                KeySelection::Loaded { ref mut widget, .. } => widget.process_event(event, context),
+            }
+        }
+
+        fn is_dirty(&self) -> bool {
+            match self {
+                KeySelection::LoadingKeys {
+                    ref progress_spinner,
+                    ..
+                } => progress_spinner.is_dirty(),
+                KeySelection::Error { .. } => true,
+                KeySelection::Loaded { ref widget, .. } => widget.is_dirty(),
+            }
+        }
+
+        fn set_dirty(&mut self, value: bool) {
+            match self {
+                KeySelection::LoadingKeys {
+                    ref mut progress_spinner,
+                    ..
+                } => progress_spinner.set_dirty(value),
+                KeySelection::Error { .. } => {}
+                KeySelection::Loaded { ref mut widget, .. } => widget.set_dirty(value),
+            }
+        }
+
+        fn kill(&mut self, _uuid: Uuid, _context: &mut Context) {}
+
+        fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
+            match self {
+                KeySelection::LoadingKeys { .. } | KeySelection::Error { .. } => {
+                    ShortcutMaps::default()
+                }
+                KeySelection::Loaded { ref widget, .. } => widget.get_shortcuts(context),
+            }
+        }
+
+        fn id(&self) -> ComponentId {
+            match self {
+                KeySelection::LoadingKeys {
+                    ref progress_spinner,
+                    ..
+                } => progress_spinner.id(),
+                KeySelection::Error { ref id, .. } => *id,
+                KeySelection::Loaded { ref widget, .. } => widget.id(),
+            }
+        }
+
+        fn set_id(&mut self, new_id: ComponentId) {
+            match self {
+                KeySelection::LoadingKeys {
+                    ref mut progress_spinner,
+                    ..
+                } => progress_spinner.set_id(new_id),
+                KeySelection::Error { ref mut id, .. } => *id = new_id,
+                KeySelection::Loaded { ref mut widget, .. } => widget.set_id(new_id),
+            }
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct GpgComposeState {
+        pub sign_mail: ToggleFlag,
+        pub encrypt_mail: ToggleFlag,
+        pub encrypt_keys: Vec<melib::gpgme::Key>,
+        pub encrypt_for_self: bool,
+        pub sign_keys: Vec<melib::gpgme::Key>,
+    }
+
+    impl GpgComposeState {
+        pub fn new() -> Self {
+            GpgComposeState {
+                sign_mail: ToggleFlag::Unset,
+                encrypt_mail: ToggleFlag::Unset,
+                encrypt_keys: vec![],
+                encrypt_for_self: true,
+                sign_keys: vec![],
+            }
+        }
+    }
 }

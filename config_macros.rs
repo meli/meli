@@ -87,6 +87,14 @@ use super::*;
                 }
                 let override_ident: syn::Ident = format_ident!("{}Override", s.ident);
                 let mut field_tokentrees = vec![];
+                let mut attrs_tokens = vec![];
+                for attr in &s.attrs {
+                    if let Ok(syn::Meta::List(ml)) = attr.parse_meta() {
+                        if ml.path.get_ident().is_some() && ml.path.get_ident().unwrap() == "cfg" {
+                            attrs_tokens.push(attr);
+                        }
+                    }
+                }
                 let mut field_idents = vec![];
                 for f in &s.fields {
                     let ident = &f.ident;
@@ -146,6 +154,7 @@ use super::*;
                 //let fields = &s.fields;
 
                 let literal_struct = quote! {
+                    #(#attrs_tokens)*
                     #[derive(Debug, Serialize, Deserialize, Clone)]
                     #[serde(deny_unknown_fields)]
                     pub struct #override_ident {
@@ -153,6 +162,7 @@ use super::*;
                     }
 
 
+                    #(#attrs_tokens)*
                     impl Default for #override_ident {
                         fn default() -> Self {
                             #override_ident {

@@ -25,11 +25,16 @@ use crate::email::{
 };
 use crate::error::{ErrorKind, IntoMeliError, MeliError, Result, ResultIntoMeliError};
 use futures::FutureExt;
+use serde::{
+    de::{self, Deserialize},
+    Deserializer, Serialize, Serializer,
+};
 use smol::Async;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ffi::{CStr, CString, OsStr};
 use std::future::Future;
+use std::io::Seek;
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::io::{AsRawFd, RawFd};
 use std::path::Path;
@@ -66,6 +71,7 @@ pub enum GpgmeFlag {
     ///"auto-key-retrieve"
     AutoKeyRetrieve,
     OfflineMode,
+    AsciiArmor,
 }
 
 bitflags! {
@@ -88,6 +94,85 @@ bitflags! {
         const LOCAL = 0b10000000;
         /// This flag disables the standard local key lookup, done before any of the mechanisms defined by the --auto-key-locate are tried. The position of this mechanism in the list does not matter. It is not required if local is also used.
         const NODEFAULT = 0;
+    }
+}
+
+impl<'de> Deserialize<'de> for LocateKey {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        if let Ok(s) = <String>::deserialize(deserializer) {
+            LocateKey::from_string_de::<'de, D, String>(s)
+        } else {
+            Err(de::Error::custom("LocateKey value must be a string."))
+        }
+    }
+}
+
+impl Serialize for LocateKey {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl LocateKey {
+    pub fn from_string_de<'de, D, T: AsRef<str>>(s: T) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Ok(match s.as_ref().trim() {
+            s if s.eq_ignore_ascii_case("cert") => LocateKey::CERT,
+            s if s.eq_ignore_ascii_case("pka") => LocateKey::PKA,
+            s if s.eq_ignore_ascii_case("dane") => LocateKey::DANE,
+            s if s.eq_ignore_ascii_case("wkd") => LocateKey::WKD,
+            s if s.eq_ignore_ascii_case("ldap") => LocateKey::LDAP,
+            s if s.eq_ignore_ascii_case("keyserver") => LocateKey::KEYSERVER,
+            s if s.eq_ignore_ascii_case("keyserver-url") => LocateKey::KEYSERVER_URL,
+            s if s.eq_ignore_ascii_case("local") => LocateKey::LOCAL,
+            combination if combination.contains(",") => {
+                let mut ret = LocateKey::NODEFAULT;
+                for c in combination.trim().split(",") {
+                    ret |= Self::from_string_de::<'de, D, &str>(c.trim())?;
+                }
+                ret
+            }
+            _ => {
+                return Err(de::Error::custom(
+                    r#"Takes valid auto-key-locate GPG values: "cert", "pka", "dane", "wkd", "ldap", "keyserver", "keyserver-URL", "local", "nodefault""#,
+                ))
+            }
+        })
+    }
+}
+
+impl std::fmt::Display for LocateKey {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        if *self == LocateKey::NODEFAULT {
+            write!(fmt, "clear,nodefault")
+        } else {
+            let mut accum = String::new();
+            macro_rules! is_set {
+                ($flag:expr, $string:literal) => {{
+                    if self.intersects($flag) {
+                        accum.push_str($string);
+                        accum.push_str(",");
+                    }
+                }};
+            }
+            is_set!(LocateKey::CERT, "cert");
+            is_set!(LocateKey::PKA, "pka");
+            is_set!(LocateKey::WKD, "wkd");
+            is_set!(LocateKey::LDAP, "ldap");
+            is_set!(LocateKey::KEYSERVER, "keyserver");
+            is_set!(LocateKey::KEYSERVER_URL, "keyserver-url");
+            is_set!(LocateKey::LOCAL, "local");
+            accum.pop();
+            write!(fmt, "{}", accum)
+        }
     }
 }
 
@@ -187,6 +272,7 @@ impl Context {
         };
         ret.set_flag(GpgmeFlag::AutoKeyRetrieve, false)?;
         ret.set_flag(GpgmeFlag::OfflineMode, true)?;
+        ret.set_flag(GpgmeFlag::AsciiArmor, true)?;
         ret.set_auto_key_locate(LocateKey::LOCAL)?;
         Ok(ret)
     }
@@ -221,12 +307,21 @@ impl Context {
                 };
                 return Ok(());
             }
+            GpgmeFlag::AsciiArmor => {
+                unsafe {
+                    call!(&self.inner.lib, gpgme_set_armor)(
+                        self.inner.inner.as_ptr(),
+                        if value { 1 } else { 0 },
+                    );
+                };
+                return Ok(());
+            }
         };
         const VALUE_ON: &[u8; 2] = b"1\0";
         const VALUE_OFF: &[u8; 2] = b"0\0";
         let raw_flag = match flag {
             GpgmeFlag::AutoKeyRetrieve => c_string_literal!("auto-key-retrieve"),
-            GpgmeFlag::OfflineMode => unreachable!(),
+            GpgmeFlag::AsciiArmor | GpgmeFlag::OfflineMode => unreachable!(),
         };
         self.set_flag_inner(
             raw_flag,
@@ -249,6 +344,11 @@ impl Context {
                     call!(&self.inner.lib, gpgme_get_offline)(self.inner.inner.as_ptr()) > 0
                 });
             }
+            GpgmeFlag::AsciiArmor => {
+                return Ok(unsafe {
+                    call!(&self.inner.lib, gpgme_get_armor)(self.inner.inner.as_ptr()) > 0
+                });
+            }
         };
         let val = self.get_flag_inner(raw_flag);
         Ok(!val.is_null())
@@ -259,23 +359,7 @@ impl Context {
         if val == LocateKey::NODEFAULT {
             self.set_flag_inner(auto_key_locate, c_string_literal!("clear,nodefault"))
         } else {
-            let mut accum = String::new();
-            macro_rules! is_set {
-                ($flag:expr, $string:literal) => {{
-                    if val.intersects($flag) {
-                        accum.push_str($string);
-                        accum.push_str(",");
-                    }
-                }};
-            }
-            is_set!(LocateKey::CERT, "cert");
-            is_set!(LocateKey::PKA, "pka");
-            is_set!(LocateKey::WKD, "wkd");
-            is_set!(LocateKey::LDAP, "ldap");
-            is_set!(LocateKey::KEYSERVER, "keyserver");
-            is_set!(LocateKey::KEYSERVER_URL, "keyserver-url");
-            is_set!(LocateKey::LOCAL, "local");
-            accum.pop();
+            let mut accum = val.to_string();
             accum.push('\0');
             self.set_flag_inner(
                 auto_key_locate,
@@ -592,11 +676,34 @@ impl Context {
         })
     }
 
-    pub fn sign<'d>(
+    pub fn sign(
         &mut self,
-        text: &'d mut Data,
-    ) -> Result<impl Future<Output = Result<()>> + 'd> {
-        let sig = std::ptr::null_mut();
+        sign_keys: Vec<Key>,
+        mut text: Data,
+    ) -> Result<impl Future<Output = Result<Vec<u8>>>> {
+        if sign_keys.is_empty() {
+            return Err(
+                MeliError::new("gpgme: Call to sign() with zero keys.").set_kind(ErrorKind::Bug)
+            );
+        }
+        let mut sig: gpgme_data_t = std::ptr::null_mut();
+        unsafe {
+            gpgme_error_try(
+                &self.inner.lib,
+                call!(&self.inner.lib, gpgme_data_new)(&mut sig),
+            )?;
+            call!(&self.inner.lib, gpgme_signers_clear)(self.inner.inner.as_ptr());
+            for k in sign_keys {
+                gpgme_error_try(
+                    &self.inner.lib,
+                    call!(&self.inner.lib, gpgme_signers_add)(
+                        self.inner.inner.as_ptr(),
+                        k.inner.inner.as_ptr(),
+                    ),
+                )?;
+            }
+        }
+
         unsafe {
             gpgme_error_try(
                 &self.inner.lib,
@@ -608,6 +715,13 @@ impl Context {
                 ),
             )?;
         }
+        let mut sig = Data {
+            lib: self.inner.lib.clone(),
+            kind: DataKind::Memory,
+            inner: core::ptr::NonNull::new(sig).ok_or_else(|| {
+                MeliError::new("internal libgpgme error").set_kind(ErrorKind::Bug)
+            })?,
+        };
 
         let io_state = self.io_state.clone();
         let io_state_lck = self.io_state.lock().unwrap();
@@ -672,13 +786,17 @@ impl Context {
             };
             let _ = rcv.recv().await;
             let io_state_lck = io_state.lock().unwrap();
-            let ret = io_state_lck
+            io_state_lck
                 .done
                 .lock()
                 .unwrap()
                 .take()
-                .unwrap_or_else(|| Err(MeliError::new("Unspecified libgpgme error")));
-            ret
+                .unwrap_or_else(|| Err(MeliError::new("Unspecified libgpgme error")))?;
+            sig.seek(std::io::SeekFrom::Start(0))
+                .chain_err_summary(|| {
+                    "libgpgme error: could not perform seek on signature data object"
+                })?;
+            Ok(sig.into_bytes()?)
         })
     }
 
@@ -830,7 +948,6 @@ impl Context {
                     recipient_iter = (*recipient_iter).next;
                 }
             }
-            use std::io::Seek;
             /* Rewind cursor */
             plain
                 .seek(std::io::SeekFrom::Start(0))
@@ -844,6 +961,168 @@ impl Context {
                 },
                 plain.into_bytes()?,
             ))
+        })
+    }
+
+    pub fn encrypt(
+        &mut self,
+        sign_keys: Option<Vec<Key>>,
+        encrypt_keys: Vec<Key>,
+        mut plain: Data,
+    ) -> Result<impl Future<Output = Result<Vec<u8>>> + Send> {
+        if encrypt_keys.is_empty() {
+            return Err(
+                MeliError::new("gpgme: Call to encrypt() with zero keys.").set_kind(ErrorKind::Bug)
+            );
+        }
+        unsafe {
+            call!(&self.inner.lib, gpgme_signers_clear)(self.inner.inner.as_ptr());
+        }
+
+        let also_sign: bool = if let Some(keys) = sign_keys {
+            if keys.is_empty() {
+                false
+            } else {
+                for k in keys {
+                    unsafe {
+                        gpgme_error_try(
+                            &self.inner.lib,
+                            call!(&self.inner.lib, gpgme_signers_add)(
+                                self.inner.inner.as_ptr(),
+                                k.inner.inner.as_ptr(),
+                            ),
+                        )?;
+                    }
+                }
+                true
+            }
+        } else {
+            false
+        };
+        let mut cipher: gpgme_data_t = std::ptr::null_mut();
+        let mut raw_keys: Vec<gpgme_key_t> = Vec::with_capacity(encrypt_keys.len() + 1);
+        raw_keys.extend(encrypt_keys.iter().map(|k| k.inner.inner.as_ptr()));
+        raw_keys.push(std::ptr::null_mut());
+        unsafe {
+            gpgme_error_try(
+                &self.inner.lib,
+                call!(&self.inner.lib, gpgme_data_new)(&mut cipher),
+            )?;
+            gpgme_error_try(
+                &self.inner.lib,
+                if also_sign {
+                    call!(&self.inner.lib, gpgme_op_encrypt_sign_start)(
+                        self.inner.inner.as_ptr(),
+                        raw_keys.as_mut_ptr(),
+                        gpgme_encrypt_flags_t_GPGME_ENCRYPT_NO_ENCRYPT_TO
+                            | gpgme_encrypt_flags_t_GPGME_ENCRYPT_NO_COMPRESS,
+                        plain.inner.as_mut(),
+                        cipher,
+                    )
+                } else {
+                    call!(&self.inner.lib, gpgme_op_encrypt_start)(
+                        self.inner.inner.as_ptr(),
+                        raw_keys.as_mut_ptr(),
+                        gpgme_encrypt_flags_t_GPGME_ENCRYPT_NO_ENCRYPT_TO
+                            | gpgme_encrypt_flags_t_GPGME_ENCRYPT_NO_COMPRESS,
+                        plain.inner.as_mut(),
+                        cipher,
+                    )
+                },
+            )?;
+        }
+        let mut cipher = Data {
+            lib: self.inner.lib.clone(),
+            kind: DataKind::Memory,
+            inner: core::ptr::NonNull::new(cipher).ok_or_else(|| {
+                MeliError::new("internal libgpgme error").set_kind(ErrorKind::Bug)
+            })?,
+        };
+
+        let ctx = self.inner.clone();
+        let io_state = self.io_state.clone();
+        let io_state_lck = self.io_state.lock().unwrap();
+        let done = io_state_lck.done.clone();
+        let fut = io_state_lck
+            .ops
+            .values()
+            .map(|a| Async::new(a.clone()).unwrap())
+            .collect::<Vec<Async<GpgmeFd>>>();
+        drop(io_state_lck);
+        Ok(async move {
+            futures::future::join_all(fut.iter().map(|fut| {
+                let done = done.clone();
+                if fut.get_ref().write {
+                    futures::future::select(
+                        fut.get_ref().receiver.recv().boxed(),
+                        fut.write_with(move |_f| {
+                            if done.lock().unwrap().is_some() {
+                                return Ok(());
+                            }
+                            unsafe {
+                                (fut.get_ref().fnc.unwrap())(
+                                    fut.get_ref().fnc_data,
+                                    fut.get_ref().fd,
+                                )
+                            };
+                            if done.lock().unwrap().is_none() {
+                                return Err(std::io::ErrorKind::WouldBlock.into());
+                            }
+                            Ok(())
+                        })
+                        .boxed(),
+                    )
+                    .boxed()
+                } else {
+                    futures::future::select(
+                        fut.get_ref().receiver.recv().boxed(),
+                        fut.read_with(move |_f| {
+                            if done.lock().unwrap().is_some() {
+                                return Ok(());
+                            }
+                            unsafe {
+                                (fut.get_ref().fnc.unwrap())(
+                                    fut.get_ref().fnc_data,
+                                    fut.get_ref().fd,
+                                )
+                            };
+                            if done.lock().unwrap().is_none() {
+                                return Err(std::io::ErrorKind::WouldBlock.into());
+                            }
+                            Ok(())
+                        })
+                        .boxed(),
+                    )
+                    .boxed()
+                }
+            }))
+            .await;
+            let rcv = {
+                let io_state_lck = io_state.lock().unwrap();
+                io_state_lck.receiver.clone()
+            };
+            let _ = rcv.recv().await;
+            let io_state_lck = io_state.lock().unwrap();
+            io_state_lck
+                .done
+                .lock()
+                .unwrap()
+                .take()
+                .unwrap_or_else(|| Err(MeliError::new("Unspecified libgpgme error")))?;
+
+            let encrypt_result =
+                unsafe { call!(&ctx.lib, gpgme_op_encrypt_result)(ctx.inner.as_ptr()) };
+            if encrypt_result.is_null() {
+                return Err(MeliError::new(
+                    "Unspecified libgpgme error: gpgme_op_encrypt_result returned NULL.",
+                )
+                .set_err_kind(ErrorKind::External));
+            }
+            /* Rewind cursor */
+            cipher
+                .seek(std::io::SeekFrom::Start(0))
+                .chain_err_summary(|| "libgpgme error: could not perform seek on plain text")?;
+            Ok(cipher.into_bytes()?)
         })
     }
 }
