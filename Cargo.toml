@@ -65,7 +65,8 @@ proc-macro2 = "1.0.18"
 
 [profile.release]
 lto = "fat"
-opt-level = "z"
+codegen-units = 1
+opt-level = "s"
 debug = false
 
 [workspace]
