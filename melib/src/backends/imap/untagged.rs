@@ -95,7 +95,7 @@ impl ImapConnection {
                     .unwrap()
                     .entry(mailbox_hash)
                     .or_default()
-                    .remove(n.try_into().unwrap());
+                    .remove(TryInto::<usize>::try_into(n).unwrap().saturating_sub(1));
                 debug!("expunge {}, UID = {}", n, deleted_uid);
                 let deleted_hash: crate::email::EnvelopeHash = match self
                     .uid_store
