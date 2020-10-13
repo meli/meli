@@ -82,9 +82,7 @@ pub static SUPPORTED_CAPABILITIES: &[&str] = &[
 
 #[derive(Debug, Default)]
 pub struct EnvelopeCache {
-    bytes: Option<String>,
-    headers: Option<String>,
-    body: Option<String>,
+    bytes: Option<Vec<u8>>,
     flags: Option<Flag>,
 }
 

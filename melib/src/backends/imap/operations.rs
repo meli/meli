@@ -103,12 +103,11 @@ impl BackendOp for ImapOp {
                     //flags.lock().await.set(Some(_flags));
                     cache.flags = Some(_flags);
                 }
-                cache.bytes =
-                    Some(unsafe { std::str::from_utf8_unchecked(body.unwrap()).to_string() });
+                cache.bytes = Some(body.unwrap().to_vec());
             }
             let mut bytes_cache = uid_store.byte_cache.lock()?;
             let cache = bytes_cache.entry(uid).or_default();
-            let ret = cache.bytes.clone().unwrap().into_bytes();
+            let ret = cache.bytes.clone().unwrap();
             Ok(ret)
         }))
     }
