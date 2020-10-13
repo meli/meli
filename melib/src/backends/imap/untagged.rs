@@ -78,7 +78,7 @@ impl ImapConnection {
                     .lock()
                     .unwrap()
                     .get(&mailbox_hash)
-                    .map(|i| i.len() < n.try_into().unwrap())
+                    .map(|i| i.len() < TryInto::<usize>::try_into(n).unwrap())
                     .unwrap_or(true)
                 {
                     debug!(
@@ -86,6 +86,64 @@ impl ImapConnection {
                         n,
                         self.uid_store.msn_index.lock().unwrap().get(&mailbox_hash)
                     );
+                    self.send_command("UID SEARCH 1:*".as_bytes()).await?;
+                    self.read_response(&mut response, RequiredResponses::SEARCH)
+                        .await?;
+                    let results = super::protocol_parser::search_results(&response)?
+                        .1
+                        .into_iter()
+                        .collect::<std::collections::BTreeSet<UID>>();
+                    {
+                        let mut lck = self.uid_store.msn_index.lock().unwrap();
+                        let msn_index = lck.entry(mailbox_hash).or_default();
+                        msn_index.clear();
+                        msn_index.extend(
+                            super::protocol_parser::search_results(&response)?
+                                .1
+                                .into_iter(),
+                        );
+                    }
+                    let mut events = vec![];
+                    for (deleted_uid, deleted_hash) in self
+                        .uid_store
+                        .uid_index
+                        .lock()
+                        .unwrap()
+                        .iter()
+                        .filter(|((mailbox_hash_, u), _)| {
+                            *mailbox_hash_ == mailbox_hash && !results.contains(u)
+                        })
+                        .map(|((_, uid), hash)| (*uid, *hash))
+                        .collect::<Vec<(UID, crate::email::EnvelopeHash)>>()
+                    {
+                        mailbox.exists.lock().unwrap().remove(deleted_hash);
+                        mailbox.unseen.lock().unwrap().remove(deleted_hash);
+                        self.uid_store
+                            .uid_index
+                            .lock()
+                            .unwrap()
+                            .remove(&(mailbox_hash, deleted_uid));
+                        self.uid_store
+                            .hash_index
+                            .lock()
+                            .unwrap()
+                            .remove(&deleted_hash);
+                        events.push((
+                            deleted_uid,
+                            RefreshEvent {
+                                account_hash: self.uid_store.account_hash,
+                                mailbox_hash,
+                                kind: Remove(deleted_hash),
+                            },
+                        ));
+                    }
+                    if self.uid_store.keep_offline_cache {
+                        cache_handle.update(mailbox_hash, &events)?;
+                    }
+                    for (_, event) in events {
+                        self.add_refresh_event(event);
+                    }
+
                     return Ok(true);
                 }
                 let deleted_uid = self
