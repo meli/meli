@@ -107,6 +107,8 @@ impl ImapConnection {
                     Some(v) => v,
                     None => return Ok(true),
                 };
+                mailbox.exists.lock().unwrap().remove(deleted_hash);
+                mailbox.unseen.lock().unwrap().remove(deleted_hash);
                 self.uid_store
                     .hash_index
                     .lock()
@@ -388,19 +390,22 @@ impl ImapConnection {
                         }
                     };
                     debug!("fetch uid {} {:?}", uid, flags);
-                    let env_hash = self
-                        .uid_store
-                        .uid_index
-                        .lock()
-                        .unwrap()
-                        .get(&(mailbox_hash, uid))
-                        .copied();
-                    if let Some(env_hash) = env_hash {
+                    if let Some(env_hash) = {
+                        let temp = self
+                            .uid_store
+                            .uid_index
+                            .lock()
+                            .unwrap()
+                            .get(&(mailbox_hash, uid))
+                            .copied();
+                        temp
+                    } {
                         if !flags.0.intersects(crate::email::Flag::SEEN) {
                             mailbox.unseen.lock().unwrap().insert_new(env_hash);
                         } else {
                             mailbox.unseen.lock().unwrap().remove(env_hash);
                         }
+                        mailbox.exists.lock().unwrap().insert_new(env_hash);
                         if let Some(modseq) = modseq {
                             self.uid_store
                                 .modseq
