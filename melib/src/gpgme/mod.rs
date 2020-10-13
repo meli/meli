@@ -40,8 +40,6 @@ use std::os::unix::io::{AsRawFd, RawFd};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-const GPGME_MIN_VERSION: &str = "1.12.0";
-
 macro_rules! call {
     ($lib:expr, $func:ty) => {{
         let func: libloading::Symbol<$func> =
@@ -215,16 +213,15 @@ impl Drop for ContextInner {
 
 impl Context {
     pub fn new() -> Result<Self> {
-        let version = CString::new(GPGME_MIN_VERSION).unwrap();
         let lib = Arc::new(libloading::Library::new(libloading::library_filename(
             "gpgme",
         ))?);
-        if unsafe { call!(&lib, gpgme_check_version)(version.as_c_str().as_ptr() as *mut _) }
+        if unsafe { call!(&lib, gpgme_check_version)(GPGME_VERSION.as_bytes().as_ptr() as *mut _) }
             .is_null()
         {
             return Err(MeliError::new(format!(
                 "Could not use libgpgme: requested version compatible with {} but got {}",
-                GPGME_MIN_VERSION,
+                GPGME_VERSION,
                 unsafe {
                     CStr::from_ptr(call!(&lib, gpgme_check_version)(std::ptr::null_mut()))
                         .to_string_lossy()
