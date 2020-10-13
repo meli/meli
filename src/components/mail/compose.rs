@@ -38,6 +38,9 @@ use std::sync::{Arc, Mutex};
 #[cfg(feature = "gpgme")]
 mod gpg;
 
+mod edit_attachments;
+use edit_attachments::*;
+
 #[derive(Debug, PartialEq)]
 enum Cursor {
     Headers,
@@ -125,6 +128,9 @@ impl Default for Composer {
 #[derive(Debug)]
 enum ViewMode {
     Discard(Uuid, UIDialog<char>),
+    EditAttachments {
+        widget: EditAttachments,
+    },
     Edit,
     Embed,
     SelectRecipients(UIDialog<Address>),
@@ -137,6 +143,14 @@ enum ViewMode {
 impl ViewMode {
     fn is_edit(&self) -> bool {
         if let ViewMode::Edit = self {
+            true
+        } else {
+            false
+        }
+    }
+
+    fn is_edit_attachments(&self) -> bool {
+        if let ViewMode::EditAttachments { .. } = self {
             true
         } else {
             false
@@ -747,8 +761,6 @@ impl Component for Composer {
             }
         } else {
             self.embed_area = (upper_left!(header_area), bottom_right!(body_area));
-            self.pager.set_dirty(true);
-            self.pager.draw(grid, body_area, context);
         }
 
         match self.cursor {
@@ -777,8 +789,31 @@ impl Component for Composer {
             Cursor::Sign | Cursor::Encrypt | Cursor::Attachments => {}
         }
 
+        if !self.mode.is_edit_attachments() {
+            self.pager.set_dirty(true);
+            self.pager.draw(grid, body_area, context);
+        }
+
         match self.mode {
             ViewMode::Edit | ViewMode::Embed => {}
+            ViewMode::EditAttachments { ref mut widget } => {
+                let inner_area = create_box(
+                    grid,
+                    (upper_left!(body_area), bottom_right!(attachment_area)),
+                );
+                (EditAttachmentsRefMut {
+                    inner: widget,
+                    draft: &mut self.draft,
+                })
+                .draw(
+                    grid,
+                    (
+                        pos_inc(upper_left!(inner_area), (1, 1)),
+                        bottom_right!(inner_area),
+                    ),
+                    context,
+                );
+            }
             ViewMode::Send(ref mut s) => {
                 s.draw(grid, center_area(area, s.content.size()), context);
             }
@@ -806,8 +841,10 @@ impl Component for Composer {
                 s.draw(grid, center_area(area, s.content.size()), context);
             }
         }
+        if !self.mode.is_edit_attachments() {
+            self.draw_attachments(grid, attachment_area, context);
+        }
         self.dirty = false;
-        self.draw_attachments(grid, attachment_area, context);
         context.dirty_areas.push_back(area);
     }
 
@@ -816,6 +853,20 @@ impl Component for Composer {
         match (&mut self.mode, &mut event) {
             (ViewMode::Edit, _) => {
                 if self.pager.process_event(event, context) {
+                    return true;
+                }
+            }
+            (ViewMode::EditAttachments { ref mut widget }, _) => {
+                if (EditAttachmentsRefMut {
+                    inner: widget,
+                    draft: &mut self.draft,
+                })
+                .process_event(event, context)
+                {
+                    if widget.buttons.result() == Some(FormButtonActions::Cancel) {
+                        self.mode = ViewMode::Edit;
+                        self.set_dirty(true);
+                    }
                     return true;
                 }
             }
@@ -1354,6 +1405,18 @@ impl Component for Composer {
                 return true;
             }
             UIEvent::Input(ref key)
+                if self.mode.is_edit()
+                    && self.cursor == Cursor::Attachments
+                    && shortcut!(key == shortcuts[Self::DESCRIPTION]["edit_mail"]) =>
+            {
+                self.mode = ViewMode::EditAttachments {
+                    widget: EditAttachments::new(),
+                };
+                self.set_dirty(true);
+
+                return true;
+            }
+            UIEvent::Input(ref key)
                 if self.embed.is_some()
                     && shortcut!(key == shortcuts[Self::DESCRIPTION]["edit_mail"]) =>
             {
@@ -1681,6 +1744,7 @@ impl Component for Composer {
     fn is_dirty(&self) -> bool {
         match self.mode {
             ViewMode::Embed => true,
+            ViewMode::EditAttachments { ref widget } => widget.dirty || widget.buttons.is_dirty(),
             ViewMode::Edit => self.dirty || self.pager.is_dirty() || self.form.is_dirty(),
             ViewMode::Discard(_, ref widget) => {
                 widget.is_dirty() || self.pager.is_dirty() || self.form.is_dirty()
@@ -1705,6 +1769,13 @@ impl Component for Composer {
         self.dirty = value;
         self.pager.set_dirty(value);
         self.form.set_dirty(value);
+        if let ViewMode::EditAttachments { ref mut widget } = self.mode {
+            (EditAttachmentsRefMut {
+                inner: widget,
+                draft: &mut self.draft,
+            })
+            .set_dirty(value);
+        }
     }
 
     fn kill(&mut self, uuid: Uuid, context: &mut Context) {
