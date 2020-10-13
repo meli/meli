@@ -20,6 +20,7 @@
  */
 
 use super::*;
+use std::borrow::Cow;
 use std::collections::HashMap;
 
 type AutoCompleteFn = Box<dyn Fn(&Context, &str) -> Vec<AutoCompleteEntry> + Send + Sync>;
@@ -41,7 +42,7 @@ impl Default for FormFocus {
 
 pub enum Field {
     Text(UText, Option<(AutoCompleteFn, AutoComplete)>),
-    Choice(Vec<String>, Cursor),
+    Choice(Vec<Cow<'static, str>>, Cursor),
 }
 
 impl Debug for Field {
@@ -69,7 +70,7 @@ impl Field {
                 if v.is_empty() {
                     ""
                 } else {
-                    v[*cursor].as_str()
+                    v[*cursor].as_ref()
                 }
             }
         }
@@ -89,7 +90,7 @@ impl Field {
     pub fn into_string(self) -> String {
         match self {
             Text(s, _) => s.into_string(),
-            Choice(mut v, cursor) => v.remove(cursor),
+            Choice(mut v, cursor) => v.remove(cursor).to_string(),
         }
     }
 
@@ -288,18 +289,35 @@ impl fmt::Display for Field {
             f,
             "{}",
             match self {
-                Text(ref s, _) => s.as_str().to_string(),
-                Choice(ref v, ref cursor) => v[*cursor].clone(),
+                Text(ref s, _) => s.as_str(),
+                Choice(ref v, ref cursor) => v[*cursor].as_ref(),
             }
         )
     }
 }
 
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum FormButtonActions {
+    Accept,
+    Reset,
+    Cancel,
+    Other(&'static str),
+}
+
+impl Default for FormButtonActions {
+    fn default() -> Self {
+        FormButtonActions::Cancel
+    }
+}
+
 #[derive(Debug, Default)]
-pub struct FormWidget {
-    fields: HashMap<String, Field>,
-    layout: Vec<String>,
-    buttons: ButtonWidget<bool>,
+pub struct FormWidget<T>
+where
+    T: 'static + std::fmt::Debug + Copy + Default + Send + Sync,
+{
+    fields: HashMap<Cow<'static, str>, Field>,
+    layout: Vec<Cow<'static, str>>,
+    buttons: ButtonWidget<T>,
 
     field_name_max_length: usize,
     cursor: usize,
@@ -309,16 +327,16 @@ pub struct FormWidget {
     id: ComponentId,
 }
 
-impl fmt::Display for FormWidget {
+impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> fmt::Display for FormWidget<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Display::fmt("", f)
     }
 }
 
-impl FormWidget {
-    pub fn new(action: String) -> FormWidget {
+impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> FormWidget<T> {
+    pub fn new(action: (Cow<'static, str>, T)) -> FormWidget<T> {
         FormWidget {
-            buttons: ButtonWidget::new((action, true)),
+            buttons: ButtonWidget::new(action),
             focus: FormFocus::Fields,
             hide_buttons: false,
             id: ComponentId::new_v4(),
@@ -344,16 +362,16 @@ impl FormWidget {
         self.layout.len()
     }
 
-    pub fn add_button(&mut self, val: (String, bool)) {
+    pub fn add_button(&mut self, val: (Cow<'static, str>, T)) {
         self.buttons.push(val);
     }
 
-    pub fn push_choices(&mut self, value: (String, Vec<String>)) {
+    pub fn push_choices(&mut self, value: (Cow<'static, str>, Vec<Cow<'static, str>>)) {
         self.field_name_max_length = std::cmp::max(self.field_name_max_length, value.0.len());
         self.layout.push(value.0.clone());
         self.fields.insert(value.0, Choice(value.1, 0));
     }
-    pub fn push_cl(&mut self, value: (String, String, AutoCompleteFn)) {
+    pub fn push_cl(&mut self, value: (Cow<'static, str>, String, AutoCompleteFn)) {
         self.field_name_max_length = std::cmp::max(self.field_name_max_length, value.0.len());
         self.layout.push(value.0.clone());
         self.fields.insert(
@@ -364,43 +382,43 @@ impl FormWidget {
             ),
         );
     }
-    pub fn push(&mut self, value: (String, String)) {
+    pub fn push(&mut self, value: (Cow<'static, str>, String)) {
         self.field_name_max_length = std::cmp::max(self.field_name_max_length, value.0.len());
         self.layout.push(value.0.clone());
         self.fields.insert(value.0, Text(UText::new(value.1), None));
     }
 
-    pub fn insert(&mut self, index: usize, value: (String, Field)) {
+    pub fn insert(&mut self, index: usize, value: (Cow<'static, str>, Field)) {
         self.layout.insert(index, value.0.clone());
         self.fields.insert(value.0, value.1);
     }
 
-    pub fn values(&self) -> &HashMap<String, Field> {
+    pub fn values(&self) -> &HashMap<Cow<'static, str>, Field> {
         &self.fields
     }
 
-    pub fn values_mut(&mut self) -> &mut HashMap<String, Field> {
+    pub fn values_mut(&mut self) -> &mut HashMap<Cow<'static, str>, Field> {
         &mut self.fields
     }
 
-    pub fn collect(self) -> Option<HashMap<String, Field>> {
-        if let Some(true) = self.buttons_result() {
+    pub fn collect(self) -> Option<HashMap<Cow<'static, str>, Field>> {
+        if self.buttons_result().is_some() {
             Some(self.fields)
         } else {
             None
         }
     }
-    pub fn buttons_result(&self) -> Option<bool> {
+    pub fn buttons_result(&self) -> Option<T> {
         self.buttons.result
     }
 }
 
-impl Component for FormWidget {
+impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> Component for FormWidget<T> {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
 
-        if self.dirty {
+        if self.is_dirty() {
             let theme_default = crate::conf::value(context, "theme_default");
             clear_area(
                 grid,
@@ -416,7 +434,7 @@ impl Component for FormWidget {
                 let v = self.fields.get_mut(k).unwrap();
                 /* Write field label */
                 write_string_to_grid(
-                    k.as_str(),
+                    k.as_ref(),
                     grid,
                     label_attrs.fg,
                     label_attrs.bg,
@@ -621,10 +639,10 @@ impl Component for FormWidget {
 #[derive(Debug, Default)]
 pub struct ButtonWidget<T>
 where
-    T: 'static + std::fmt::Debug + Default + Send + Sync,
+    T: 'static + std::fmt::Debug + Copy + Default + Send + Sync,
 {
-    buttons: HashMap<String, T>,
-    layout: Vec<String>,
+    buttons: HashMap<Cow<'static, str>, T>,
+    layout: Vec<Cow<'static, str>>,
 
     result: Option<T>,
     cursor: usize,
@@ -636,7 +654,7 @@ where
 
 impl<T> fmt::Display for ButtonWidget<T>
 where
-    T: 'static + std::fmt::Debug + Default + Send + Sync,
+    T: 'static + std::fmt::Debug + Copy + Default + Send + Sync,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Display::fmt("", f)
@@ -645,9 +663,9 @@ where
 
 impl<T> ButtonWidget<T>
 where
-    T: 'static + std::fmt::Debug + Default + Send + Sync,
+    T: 'static + std::fmt::Debug + Copy + Default + Send + Sync,
 {
-    pub fn new(init_val: (String, T)) -> ButtonWidget<T> {
+    pub fn new(init_val: (Cow<'static, str>, T)) -> ButtonWidget<T> {
         ButtonWidget {
             layout: vec![init_val.0.clone()],
             buttons: vec![init_val].into_iter().collect(),
@@ -659,7 +677,7 @@ where
         }
     }
 
-    pub fn push(&mut self, value: (String, T)) {
+    pub fn push(&mut self, value: (Cow<'static, str>, T)) {
         self.layout.push(value.0.clone());
         self.buttons.insert(value.0, value.1);
     }
@@ -668,14 +686,25 @@ where
         self.result.is_some()
     }
 
+    pub fn result(&self) -> Option<T> {
+        self.result
+    }
+
     pub fn set_focus(&mut self, new_val: bool) {
         self.focus = new_val;
+    }
+
+    pub fn set_cursor(&mut self, new_val: usize) {
+        if self.buttons.is_empty() {
+            return;
+        }
+        self.cursor = new_val % self.buttons.len();
     }
 }
 
 impl<T> Component for ButtonWidget<T>
 where
-    T: 'static + std::fmt::Debug + Default + Send + Sync,
+    T: 'static + std::fmt::Debug + Copy + Default + Send + Sync,
 {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if self.dirty {
@@ -687,7 +716,7 @@ where
             for (i, k) in self.layout.iter().enumerate() {
                 let cur_len = k.len();
                 write_string_to_grid(
-                    k.as_str(),
+                    k.as_ref(),
                     grid,
                     theme_default.fg,
                     if i == self.cursor && self.focus {

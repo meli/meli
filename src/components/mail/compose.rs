@@ -78,7 +78,7 @@ pub struct Composer {
 
     pager: Pager,
     draft: Draft,
-    form: FormWidget,
+    form: FormWidget<bool>,
 
     mode: ViewMode,
 
@@ -403,7 +403,7 @@ impl Composer {
 
     fn update_form(&mut self) {
         let old_cursor = self.form.cursor();
-        self.form = FormWidget::new("Save".into());
+        self.form = FormWidget::new(("Save".into(), true));
         self.form.hide_buttons();
         self.form.set_cursor(old_cursor);
         let headers = self.draft.headers();
@@ -412,7 +412,7 @@ impl Composer {
             if k == "To" || k == "Cc" || k == "Bcc" {
                 self.form.push_cl((
                     k.into(),
-                    headers[k].to_string(),
+                    headers[k].to_string().into(),
                     Box::new(move |c, term| {
                         let book: &AddressBook = &c.accounts[&account_hash].address_book;
                         let results: Vec<String> = book.search(term);
@@ -423,7 +423,7 @@ impl Composer {
                     }),
                 ));
             } else {
-                self.form.push((k.into(), headers[k].to_string()));
+                self.form.push((k.into(), headers[k].to_string().into()));
             }
         }
     }

@@ -40,7 +40,7 @@ pub struct ContactManager {
     parent_id: ComponentId,
     pub card: Card,
     mode: ViewMode,
-    form: FormWidget,
+    form: FormWidget<bool>,
     account_pos: usize,
     content: CellBuffer,
     theme_default: ThemeAttribute,
@@ -118,24 +118,30 @@ impl ContactManager {
             );
         }
 
-        self.form = FormWidget::new("Save".into());
+        self.form = FormWidget::new(("Save".into(), true));
         self.form.add_button(("Cancel(Esc)".into(), false));
         self.form
-            .push(("NAME".into(), self.card.name().to_string()));
+            .push(("NAME".into(), self.card.name().to_string().into()));
         self.form.push((
             "ADDITIONAL NAME".into(),
-            self.card.additionalname().to_string(),
+            self.card.additionalname().to_string().into(),
+        ));
+        self.form.push((
+            "NAME PREFIX".into(),
+            self.card.name_prefix().to_string().into(),
+        ));
+        self.form.push((
+            "NAME SUFFIX".into(),
+            self.card.name_suffix().to_string().into(),
         ));
         self.form
-            .push(("NAME PREFIX".into(), self.card.name_prefix().to_string()));
+            .push(("E-MAIL".into(), self.card.email().to_string().into()));
         self.form
-            .push(("NAME SUFFIX".into(), self.card.name_suffix().to_string()));
+            .push(("URL".into(), self.card.url().to_string().into()));
         self.form
-            .push(("E-MAIL".into(), self.card.email().to_string()));
-        self.form.push(("URL".into(), self.card.url().to_string()));
-        self.form.push(("KEY".into(), self.card.key().to_string()));
+            .push(("KEY".into(), self.card.key().to_string().into()));
         for (k, v) in self.card.extra_properties() {
-            self.form.push((k.to_string(), v.to_string()));
+            self.form.push((k.to_string().into(), v.to_string().into()));
         }
     }
 
@@ -209,10 +215,10 @@ impl Component for ContactManager {
                                 .into_iter()
                                 .map(|(s, v)| {
                                     (
-                                        s,
+                                        s.to_string(),
                                         match v {
                                             Field::Text(v, _) => v.as_str().to_string(),
-                                            Field::Choice(mut v, c) => v.remove(c),
+                                            Field::Choice(mut v, c) => v.remove(c).to_string(),
                                         },
                                     )
                                 })
