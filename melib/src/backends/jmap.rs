@@ -788,6 +788,14 @@ impl MailBackend for JmapType {
             Ok(())
         }))
     }
+
+    fn delete_messages(
+        &mut self,
+        _env_hashes: EnvelopeHashBatch,
+        _mailbox_hash: MailboxHash,
+    ) -> ResultFuture<()> {
+        Err(MeliError::new("Unimplemented."))
+    }
 }
 
 impl JmapType {

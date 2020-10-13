@@ -1378,20 +1378,6 @@ impl Account {
         }
     }
 
-    pub fn delete(
-        &mut self,
-        env_hash: EnvelopeHash,
-        mailbox_hash: MailboxHash,
-    ) -> ResultFuture<()> {
-        if self.settings.account.read_only() {
-            return Err(MeliError::new(format!(
-                "Account {} is read-only.",
-                self.name.as_str()
-            )));
-        }
-        self.backend.write().unwrap().delete(env_hash, mailbox_hash)
-    }
-
     pub fn contains_key(&self, h: EnvelopeHash) -> bool {
         self.collection.contains_key(&h)
     }

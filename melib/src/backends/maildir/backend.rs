@@ -913,6 +913,37 @@ impl MailBackend for MaildirType {
         }))
     }
 
+    fn delete_messages(
+        &mut self,
+        env_hashes: EnvelopeHashBatch,
+        mailbox_hash: MailboxHash,
+    ) -> ResultFuture<()> {
+        let hash_index = self.hash_indexes.clone();
+        Ok(Box::pin(async move {
+            let mut hash_indexes_lck = hash_index.lock().unwrap();
+            let hash_index = hash_indexes_lck.entry(mailbox_hash).or_default();
+
+            for env_hash in env_hashes.iter() {
+                let _path = {
+                    if !hash_index.contains_key(&env_hash) {
+                        continue;
+                    }
+                    if let Some(modif) = &hash_index[&env_hash].modified {
+                        match modif {
+                            PathMod::Path(ref path) => path.clone(),
+                            PathMod::Hash(hash) => hash_index[&hash].to_path_buf(),
+                        }
+                    } else {
+                        hash_index[&env_hash].to_path_buf()
+                    }
+                };
+
+                fs::remove_file(&_path)?;
+            }
+            Ok(())
+        }))
+    }
+
     fn copy_messages(
         &mut self,
         env_hashes: EnvelopeHashBatch,

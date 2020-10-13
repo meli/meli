@@ -335,15 +335,11 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
     ) -> ResultFuture<()>;
 
     fn delete_messages(
-        &self,
-        _env_hashes: EnvelopeHashBatch,
-        _mailbox_hash: MailboxHash,
-    ) -> ResultFuture<()> {
-        Err(MeliError::new("Unimplemented."))
-    }
-    fn delete(&self, _env_hash: EnvelopeHash, _mailbox_hash: MailboxHash) -> ResultFuture<()> {
-        Err(MeliError::new("Unimplemented."))
-    }
+        &mut self,
+        env_hashes: EnvelopeHashBatch,
+        mailbox_hash: MailboxHash,
+    ) -> ResultFuture<()>;
+
     fn tags(&self) -> Option<Arc<RwLock<BTreeMap<u64, String>>>> {
         None
     }

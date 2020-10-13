@@ -278,7 +278,7 @@ impl MailBackend for NntpType {
         _mailbox_hash: MailboxHash,
         _flags: Option<Flag>,
     ) -> ResultFuture<()> {
-        Err(MeliError::new("Unimplemented."))
+        Err(MeliError::new("NNTP doesn't support saving."))
     }
 
     fn copy_messages(
@@ -288,7 +288,7 @@ impl MailBackend for NntpType {
         _destination_mailbox_hash: MailboxHash,
         _move_: bool,
     ) -> ResultFuture<()> {
-        Err(MeliError::new("Unimplemented."))
+        Err(MeliError::new("NNTP doesn't support copying/moving."))
     }
 
     fn set_flags(
@@ -297,7 +297,15 @@ impl MailBackend for NntpType {
         _mailbox_hash: MailboxHash,
         _flags: SmallVec<[(std::result::Result<Flag, String>, bool); 8]>,
     ) -> ResultFuture<()> {
-        Err(MeliError::new("Unimplemented."))
+        Err(MeliError::new("NNTP doesn't support flags."))
+    }
+
+    fn delete_messages(
+        &mut self,
+        _env_hashes: EnvelopeHashBatch,
+        _mailbox_hash: MailboxHash,
+    ) -> ResultFuture<()> {
+        Err(MeliError::new("NNTP doesn't support deletion."))
     }
 
     fn tags(&self) -> Option<Arc<RwLock<BTreeMap<u64, String>>>> {

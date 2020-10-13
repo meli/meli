@@ -807,6 +807,29 @@ impl MailBackend for ImapType {
         }))
     }
 
+    fn delete_messages(
+        &mut self,
+        env_hashes: EnvelopeHashBatch,
+        mailbox_hash: MailboxHash,
+    ) -> ResultFuture<()> {
+        let flag_future = self.set_flags(
+            env_hashes,
+            mailbox_hash,
+            smallvec::smallvec![(Ok(Flag::TRASHED), true)],
+        )?;
+        let connection = self.connection.clone();
+        Ok(Box::pin(async move {
+            flag_future.await?;
+            let mut response = Vec::with_capacity(8 * 1024);
+            let mut conn = connection.lock().await;
+            conn.send_command("EXPUNGE".as_bytes()).await?;
+            conn.read_response(&mut response, RequiredResponses::empty())
+                .await?;
+            debug!("EXPUNGE response: {}", &String::from_utf8_lossy(&response));
+            Ok(())
+        }))
+    }
+
     fn tags(&self) -> Option<Arc<RwLock<BTreeMap<u64, String>>>> {
         Some(self.uid_store.tag_index.clone())
     }

@@ -1012,6 +1012,14 @@ impl MailBackend for MboxType {
         Err(MeliError::new("Unimplemented."))
     }
 
+    fn delete_messages(
+        &mut self,
+        _env_hashes: EnvelopeHashBatch,
+        _mailbox_hash: MailboxHash,
+    ) -> ResultFuture<()> {
+        Err(MeliError::new("Unimplemented."))
+    }
+
     fn save(
         &self,
         _bytes: Vec<u8>,
