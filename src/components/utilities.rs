@@ -629,10 +629,12 @@ impl Component for Pager {
 pub struct StatusBar {
     container: Box<dyn Component>,
     status: String,
+    status_message: String,
     ex_buffer: Field,
     ex_buffer_cmd_history_pos: Option<usize>,
     display_buffer: String,
     mode: UIMode,
+    mouse: bool,
     height: usize,
     dirty: bool,
     id: ComponentId,
@@ -651,15 +653,17 @@ impl fmt::Display for StatusBar {
 }
 
 impl StatusBar {
-    pub fn new(container: Box<dyn Component>) -> Self {
+    pub fn new(context: &Context, container: Box<dyn Component>) -> Self {
         StatusBar {
             container,
             status: String::with_capacity(256),
+            status_message: String::with_capacity(256),
             ex_buffer: Field::Text(UText::new(String::with_capacity(256)), None),
             ex_buffer_cmd_history_pos: None,
             display_buffer: String::with_capacity(8),
             dirty: true,
             mode: UIMode::Normal,
+            mouse: context.settings.terminal.use_mouse.is_true(),
             height: 1,
             id: ComponentId::new_v4(),
             auto_complete: AutoComplete::new(Vec::new()),
@@ -1016,7 +1020,19 @@ impl Component for StatusBar {
         match event {
             UIEvent::ChangeMode(m) => {
                 let offset = self.status.find('|').unwrap_or_else(|| self.status.len());
-                self.status.replace_range(..offset, &format!("{} ", m));
+                self.status.replace_range(..offset, &format!("{} {}", m,
+                        if self.mouse {
+                            context
+                                .settings
+                                .terminal
+                                .mouse_flag
+                                .as_ref()
+                                .map(|s| s.as_str())
+                                .unwrap_or("🖱️ ")
+                        } else {
+                            ""
+                        },
+                        ));
                 self.set_dirty(true);
                 self.container.set_dirty(true);
                 self.mode = *m;
@@ -1175,7 +1191,44 @@ impl Component for StatusBar {
                 self.dirty = true;
             }
             UIEvent::StatusEvent(StatusEvent::UpdateStatus(ref mut s)) => {
-                self.status = format!("{} | {}", self.mode, std::mem::replace(s, String::new()));
+                self.status_message.clear();
+                self.status_message.push_str(s.as_str());
+                self.status = format!(
+                    "{} {}| {}",
+                    self.mode,
+                    if self.mouse {
+                        context
+                            .settings
+                            .terminal
+                            .mouse_flag
+                            .as_ref()
+                            .map(|s| s.as_str())
+                            .unwrap_or("🖱️ ")
+                    } else {
+                        ""
+                    },
+                    &self.status_message,
+                );
+                self.dirty = true;
+            }
+            UIEvent::StatusEvent(StatusEvent::SetMouse(val)) => {
+                self.mouse = *val;
+                self.status = format!(
+                    "{} {}| {}",
+                    self.mode,
+                    if self.mouse {
+                        context
+                            .settings
+                            .terminal
+                            .mouse_flag
+                            .as_ref()
+                            .map(|s| s.as_str())
+                            .unwrap_or("🖱️ ")
+                    } else {
+                        ""
+                    },
+                    &self.status_message,
+                );
                 self.dirty = true;
             }
             UIEvent::StatusEvent(StatusEvent::JobCanceled(ref job_id))

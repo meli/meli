@@ -332,7 +332,7 @@ fn run_app(opt: Opt) -> Result<()> {
             &state.context,
         ));
 
-        let status_bar = Box::new(StatusBar::new(window));
+        let status_bar = Box::new(StatusBar::new(&state.context, window));
         state.register_component(status_bar);
 
         #[cfg(feature = "dbus-notifications")]

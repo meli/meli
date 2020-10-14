@@ -78,16 +78,25 @@ macro_rules! derive_csi_sequence {
     };
 }
 
-/*
 derive_csi_sequence!(
-    #[doc = ""]
-    (DisableMouse, "?1000l")
+    ///Ps = 1 0 0 2  ⇒  Don't use Cell Motion Mouse Tracking, xterm
+    (DisableMouse, "?1002l")
 );
+
 derive_csi_sequence!(
-    #[doc = ""]
-    (EnableMouse, "?1000h")
+    ///Ps = 1 0 0 2  ⇒  Use Cell Motion Mouse Tracking, xterm
+    (EnableMouse, "?1002h")
 );
-*/
+
+derive_csi_sequence!(
+    ///Ps = 1 0 0 6  Enable SGR Mouse Mode, xterm.
+    (EnableSGRMouse, "?1006h")
+);
+
+derive_csi_sequence!(
+    ///Ps = 1 0 0 6  Disable SGR Mouse Mode, xterm.
+    (DisableSGRMouse, "?1006l")
+);
 
 derive_csi_sequence!(
     #[doc = "`CSI Ps ; Ps ; Ps t`, where `Ps = 2 2 ; 0`  -> Save xterm icon and window title on stack."]

@@ -178,6 +178,7 @@ pub struct State {
     overlay_grid: CellBuffer,
     draw_rate_limit: RateLimit,
     stdout: Option<StateStdout>,
+    mouse: bool,
     child: Option<ForkType>,
     draw_horizontal_segment_fn: fn(&mut CellBuffer, &mut StateStdout, usize, usize, usize) -> (),
     pub mode: UIMode,
@@ -318,6 +319,7 @@ impl State {
             grid: CellBuffer::new(cols, rows, Cell::with_char(' ')),
             overlay_grid: CellBuffer::new(cols, rows, Cell::with_char(' ')),
             stdout: None,
+            mouse: settings.terminal.use_mouse.is_true(),
             child: None,
             mode: UIMode::Normal,
             components: Vec::with_capacity(8),
@@ -419,13 +421,16 @@ impl State {
     /// Switch back to the terminal's main screen (The command line the user sees before opening
     /// the application)
     pub fn switch_to_main_screen(&mut self) {
+        let mouse = self.mouse;
         write!(
             self.stdout(),
-            "{}{}{}{}",
+            "{}{}{}{}{disable_sgr_mouse}{disable_mouse}",
             termion::screen::ToMainScreen,
             cursor::Show,
             RestoreWindowTitleIconFromStack,
             BracketModeEnd,
+            disable_sgr_mouse = if mouse { DisableSGRMouse.as_ref() } else { "" },
+            disable_mouse = if mouse { DisableMouse.as_ref() } else { "" },
         )
         .unwrap();
         self.flush();
@@ -439,7 +444,7 @@ impl State {
 
         write!(
             &mut stdout,
-            "{save_title_to_stack}{}{}{}{window_title}{}{}",
+            "{save_title_to_stack}{}{}{}{window_title}{}{}{enable_mouse}{enable_sgr_mouse}",
             termion::screen::ToAlternateScreen,
             cursor::Hide,
             clear::All,
@@ -451,10 +456,37 @@ impl State {
             } else {
                 String::new()
             },
+            enable_mouse = if self.mouse { EnableMouse.as_ref() } else { "" },
+            enable_sgr_mouse = if self.mouse {
+                EnableSGRMouse.as_ref()
+            } else {
+                ""
+            },
         )
         .unwrap();
 
         self.stdout = Some(stdout);
+        self.flush();
+    }
+
+    pub fn set_mouse(&mut self, value: bool) {
+        if let Some(stdout) = self.stdout.as_mut() {
+            write!(
+                stdout,
+                "{mouse}{sgr_mouse}",
+                mouse = if value {
+                    AsRef::<str>::as_ref(&EnableMouse)
+                } else {
+                    AsRef::<str>::as_ref(&DisableMouse)
+                },
+                sgr_mouse = if value {
+                    AsRef::<str>::as_ref(&EnableSGRMouse)
+                } else {
+                    AsRef::<str>::as_ref(&DisableSGRMouse)
+                },
+            )
+            .unwrap();
+        }
         self.flush();
     }
 
@@ -944,6 +976,11 @@ impl State {
                             .lookup("settings", &path)
                             .unwrap_or_else(|err| err.to_string())
                     ))));
+            }
+            ToggleMouse => {
+                self.mouse = !self.mouse;
+                self.set_mouse(self.mouse);
+                self.rcv_event(UIEvent::StatusEvent(StatusEvent::SetMouse(self.mouse)));
             }
             v => {
                 self.rcv_event(UIEvent::Action(v));

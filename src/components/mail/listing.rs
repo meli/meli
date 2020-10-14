@@ -466,6 +466,7 @@ pub struct Listing {
     cmd_buf: String,
     /// This is the width of the right container to the entire width.
     ratio: usize, // right/(container width) * 100
+    menu_width: WidgetWidth,
     focus: ListingFocus,
 }
 
@@ -494,7 +495,25 @@ impl Component for Listing {
         let total_cols = get_x(bottom_right) - get_x(upper_left);
 
         let right_component_width = if self.menu_visibility {
-            (self.ratio * total_cols) / 100
+            if self.focus == ListingFocus::Menu {
+                (self.ratio * total_cols) / 100
+            } else {
+                match self.menu_width {
+                    WidgetWidth::Set(ref mut v) | WidgetWidth::Hold(ref mut v) => {
+                        if *v == 0 {
+                            *v = 1;
+                        } else if *v >= total_cols {
+                            *v = total_cols.saturating_sub(2);
+                        }
+                        total_cols.saturating_sub(*v)
+                    }
+                    WidgetWidth::Unset => {
+                        self.menu_width =
+                            WidgetWidth::Set(total_cols - ((self.ratio * total_cols) / 100));
+                        (self.ratio * total_cols) / 100
+                    }
+                }
+            }
         } else {
             total_cols
         };
@@ -570,7 +589,7 @@ impl Component for Listing {
                 }
             }
             UIEvent::AccountStatusChange(account_hash) => {
-                let account_index = context
+                let account_index: usize = context
                     .accounts
                     .get_index_of(account_hash)
                     .expect("Invalid account_hash in UIEventMailbox{Delete,Create}");
@@ -631,6 +650,44 @@ impl Component for Listing {
         let shortcuts = self.get_shortcuts(context);
         if self.focus == ListingFocus::Mailbox {
             match *event {
+                UIEvent::Input(Key::Mouse(MouseEvent::Press(MouseButton::Left, x, _y)))
+                    if self.menu_visibility =>
+                {
+                    match self.menu_width {
+                        WidgetWidth::Hold(wx) | WidgetWidth::Set(wx)
+                            if wx + 1 == usize::from(x) =>
+                        {
+                            self.menu_width = WidgetWidth::Hold(wx - 1);
+                        }
+                        WidgetWidth::Set(_) => return false,
+                        WidgetWidth::Hold(x) => {
+                            self.menu_width = WidgetWidth::Set(x);
+                        }
+                        WidgetWidth::Unset => return false,
+                    }
+                    self.set_dirty(true);
+                    return true;
+                }
+                UIEvent::Input(Key::Mouse(MouseEvent::Hold(x, _y))) if self.menu_visibility => {
+                    match self.menu_width {
+                        WidgetWidth::Hold(ref mut hx) => {
+                            *hx = usize::from(x).saturating_sub(1);
+                        }
+                        _ => return false,
+                    }
+                    self.set_dirty(true);
+                    return true;
+                }
+                UIEvent::Input(Key::Mouse(MouseEvent::Release(x, _y))) if self.menu_visibility => {
+                    match self.menu_width {
+                        WidgetWidth::Hold(_) => {
+                            self.menu_width = WidgetWidth::Set(usize::from(x).saturating_sub(1));
+                        }
+                        _ => return false,
+                    }
+                    self.set_dirty(true);
+                    return true;
+                }
                 UIEvent::Input(Key::Left) if self.menu_visibility => {
                     self.focus = ListingFocus::Menu;
                     self.ratio = 50;
@@ -1281,6 +1338,7 @@ impl Listing {
             show_divider: false,
             menu_visibility: true,
             ratio: 90,
+            menu_width: WidgetWidth::Unset,
             focus: ListingFocus::Mailbox,
             cmd_buf: String::with_capacity(4),
         };

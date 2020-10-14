@@ -79,6 +79,11 @@ pub struct PagerSettings {
     #[serde(default = "eighty_val", alias = "minimum-width")]
     pub minimum_width: usize,
 
+    /// Maximum text width in columns.
+    /// Default: None
+    #[serde(default = "none", alias = "minimum-width")]
+    pub max_width: Option<usize>,
+
     /// Choose `text/html` alternative if `text/plain` is empty in `multipart/alternative`
     /// attachments.
     /// Default: true
@@ -101,6 +106,7 @@ impl Default for PagerSettings {
             format_flowed: true,
             split_long_lines: true,
             minimum_width: 80,
+            max_width: None,
             auto_choose_multipart_alternative: ToggleFlag::InternalVal(true),
         }
     }
@@ -121,6 +127,7 @@ impl DotAddressable for PagerSettings {
                     "format_flowed" => self.format_flowed.lookup(field, tail),
                     "split_long_lines" => self.split_long_lines.lookup(field, tail),
                     "minimum_width" => self.minimum_width.lookup(field, tail),
+                    "max_width" => self.max_width.lookup(field, tail),
                     "auto_choose_multipart_alternative" => {
                         self.auto_choose_multipart_alternative.lookup(field, tail)
                     }

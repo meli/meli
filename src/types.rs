@@ -55,6 +55,7 @@ pub enum StatusEvent {
     NewJob(JobId),
     JobFinished(JobId),
     JobCanceled(JobId),
+    SetMouse(bool),
 }
 
 /// `ThreadEvent` encapsulates all of the possible values we need to transfer between our threads

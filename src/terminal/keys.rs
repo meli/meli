@@ -65,8 +65,12 @@ pub enum Key {
     Null,
     /// Esc key.
     Esc,
+    Mouse(termion::event::MouseEvent),
     Paste(String),
 }
+
+pub use termion::event::MouseButton;
+pub use termion::event::MouseEvent;
 
 impl fmt::Display for Key {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -93,6 +97,7 @@ impl fmt::Display for Key {
             PageDown => write!(f, "PageDown"),
             Delete => write!(f, "Delete"),
             Insert => write!(f, "Insert"),
+            Mouse(_) => write!(f, "Mouse"),
         }
     }
 }
@@ -204,6 +209,10 @@ pub fn get_events(
                                     paste_buf.clear();
                                     closure((ret, buf));
                                     continue 'poll_while;
+                                }
+                            (Ok((TermionEvent::Mouse(mev), bytes)), InputMode::Normal) => {
+                                closure((Key::Mouse(mev), bytes));
+                                continue 'poll_while;
                                 }
                             _ => {
                                 continue 'poll_while;
@@ -342,6 +351,7 @@ impl Serialize for Key {
             Key::Alt(c) => serializer.serialize_str(&format!("M-{}", c)),
             Key::Ctrl(c) => serializer.serialize_str(&format!("C-{}", c)),
             Key::Null => serializer.serialize_str("Null"),
+            Key::Mouse(_) => unreachable!(),
             Key::Paste(s) => serializer.serialize_str(s),
         }
     }

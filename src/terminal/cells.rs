@@ -2826,3 +2826,10 @@ impl core::cmp::PartialOrd for FormatTag {
         Some(self.cmp(&other))
     }
 }
+
+#[derive(Debug, Copy, Hash, Clone, PartialEq, Eq)]
+pub enum WidgetWidth {
+    Unset,
+    Hold(usize),
+    Set(usize),
+}

@@ -751,6 +751,19 @@ Alternatives(&[to_stream!(One(Literal("add-attachment")), One(Filepath)), to_str
                           Ok((input, PrintSetting(setting.to_string())))
                       }
                   )
+                },
+                { tags: ["toggle mouse"],
+                  desc: "toggle mouse support",
+                  tokens: &[One(Literal("toggle")), One(Literal("mouse"))],
+                  parser:(
+                      fn toggle_mouse(input: &[u8]) -> IResult<&[u8], Action> {
+                          let (input, _) = tag("toggle")(input)?;
+                          let (input, _) = is_a(" ")(input)?;
+                          let (input, _) = tag("mouse")(input)?;
+                          let (input, _) = eof(input)?;
+                          Ok((input, ToggleMouse))
+                      }
+                  )
                 }
 ]);
 
@@ -843,6 +856,7 @@ pub fn parse_command(input: &[u8]) -> Result<Action, MeliError> {
         rename_mailbox,
         account_action,
         print_setting,
+        toggle_mouse,
     ))(input)
     .map(|(_, v)| v)
     .map_err(|err| err.into())

@@ -35,6 +35,14 @@ pub struct TerminalSettings {
     pub themes: Themes,
     pub ascii_drawing: bool,
     pub use_color: ToggleFlag,
+    /// Use mouse events. This will disable text selection, but you will be able to resize some
+    /// widgets.
+    /// Default: False
+    pub use_mouse: ToggleFlag,
+    /// String to show in status bar if mouse is active.
+    /// Default: "🖱️ "
+    #[serde(deserialize_with = "non_empty_string")]
+    pub mouse_flag: Option<String>,
     #[serde(deserialize_with = "non_empty_string")]
     pub window_title: Option<String>,
     #[serde(deserialize_with = "non_empty_string")]
@@ -48,6 +56,8 @@ impl Default for TerminalSettings {
             themes: Themes::default(),
             ascii_drawing: false,
             use_color: ToggleFlag::InternalVal(true),
+            use_mouse: ToggleFlag::InternalVal(false),
+            mouse_flag: Some("🖱️ ".to_string()),
             window_title: Some("meli".to_string()),
             file_picker_command: None,
         }
@@ -76,6 +86,8 @@ impl DotAddressable for TerminalSettings {
                     "themes" => Err(MeliError::new("unimplemented")),
                     "ascii_drawing" => self.ascii_drawing.lookup(field, tail),
                     "use_color" => self.use_color.lookup(field, tail),
+                    "use_mouse" => self.use_mouse.lookup(field, tail),
+                    "mouse_flag" => self.mouse_flag.lookup(field, tail),
                     "window_title" => self.window_title.lookup(field, tail),
                     "file_picker_command" => self.file_picker_command.lookup(field, tail),
                     other => Err(MeliError::new(format!(

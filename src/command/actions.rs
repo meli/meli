@@ -120,6 +120,7 @@ pub enum Action {
     Mailbox(AccountName, MailboxOperation),
     AccountAction(AccountName, AccountAction),
     PrintSetting(String),
+    ToggleMouse,
 }
 
 impl Action {
@@ -139,6 +140,7 @@ impl Action {
             Action::Mailbox(_, _) => true,
             Action::AccountAction(_, _) => false,
             Action::PrintSetting(_) => false,
+            Action::ToggleMouse => false,
         }
     }
 }
