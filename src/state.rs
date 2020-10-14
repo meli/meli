@@ -982,6 +982,12 @@ impl State {
                 self.set_mouse(self.mouse);
                 self.rcv_event(UIEvent::StatusEvent(StatusEvent::SetMouse(self.mouse)));
             }
+            Quit => {
+                self.context
+                    .sender
+                    .send(ThreadEvent::Input((Key::Char('q'), vec![b'q'])))
+                    .unwrap();
+            }
             v => {
                 self.rcv_event(UIEvent::Action(v));
             }

@@ -122,6 +122,7 @@ pub enum Action {
     AccountAction(AccountName, AccountAction),
     PrintSetting(String),
     ToggleMouse,
+    Quit,
 }
 
 impl Action {
@@ -141,6 +142,7 @@ impl Action {
             Action::AccountAction(_, _) => false,
             Action::PrintSetting(_) => false,
             Action::ToggleMouse => false,
+            Action::Quit => true,
         }
     }
 }

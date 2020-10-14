@@ -779,6 +779,17 @@ Alternatives(&[to_stream!(One(Literal("add-attachment")), One(Filepath)), to_str
                           Ok((input, ToggleMouse))
                       }
                   )
+                },
+                { tags: ["quit"],
+                  desc: "quit meli",
+                  tokens: &[One(Literal("quit"))],
+                  parser:(
+                      fn quit(input: &[u8]) -> IResult<&[u8], Action> {
+                          let (input, _) = tag("quit")(input.trim())?;
+                          let (input, _) = eof(input.trim())?;
+                          Ok((input, Quit))
+                      }
+                  )
                 }
 ]);
 
@@ -872,6 +883,7 @@ pub fn parse_command(input: &[u8]) -> Result<Action, MeliError> {
         account_action,
         print_setting,
         toggle_mouse,
+        quit,
     ))(input)
     .map(|(_, v)| v)
     .map_err(|err| err.into())
