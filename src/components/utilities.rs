@@ -654,6 +654,17 @@ impl fmt::Display for StatusBar {
 
 impl StatusBar {
     pub fn new(context: &Context, container: Box<dyn Component>) -> Self {
+        let mut progress_spinner = ProgressSpinner::new(0);
+        match context.settings.terminal.progress_spinner_sequence.as_ref() {
+            Some(conf::terminal::ProgressSpinnerSequence::Integer(k)) => {
+                progress_spinner.set_kind(*k);
+            }
+            Some(conf::terminal::ProgressSpinnerSequence::Custom(ref s)) => {
+                progress_spinner.set_custom_kind(s.clone());
+            }
+            None => {}
+        }
+
         StatusBar {
             container,
             status: String::with_capacity(256),
@@ -667,12 +678,13 @@ impl StatusBar {
             height: 1,
             id: ComponentId::new_v4(),
             auto_complete: AutoComplete::new(Vec::new()),
-            progress_spinner: ProgressSpinner::new(1),
+            progress_spinner,
             in_progress_jobs: HashSet::default(),
             done_jobs: HashSet::default(),
             cmd_history: crate::command::history::old_cmd_history(),
         }
     }
+
     fn draw_status_bar(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         let mut attribute = crate::conf::value(context, "status.bar");
         if !context.settings.terminal.use_color() {
@@ -706,13 +718,26 @@ impl StatusBar {
             }
         }
 
-        let (x, y) = bottom_right!(area);
+        let (mut x, y) = bottom_right!(area);
+        if self.progress_spinner.is_active() {
+            x = x.saturating_sub(1 + self.progress_spinner.width);
+        }
         for (idx, c) in self.display_buffer.chars().rev().enumerate() {
             if let Some(cell) = grid.get_mut(x.saturating_sub(idx).saturating_sub(1), y) {
                 cell.set_ch(c);
             } else {
                 break;
             }
+        }
+        if self.progress_spinner.is_dirty() {
+            self.progress_spinner.draw(
+                grid,
+                (
+                    pos_dec(bottom_right!(area), (self.progress_spinner.width, 0)),
+                    bottom_right!(area),
+                ),
+                context,
+            );
         }
 
         context.dirty_areas.push_back(area);
@@ -763,26 +788,16 @@ impl Component for StatusBar {
             context,
         );
 
-        if self.progress_spinner.is_dirty() {
-            self.progress_spinner.draw(
-                grid,
-                (
-                    (get_x(bottom_right).saturating_sub(1), get_y(bottom_right)),
-                    bottom_right,
-                ),
-                context,
-            );
-        }
-
-        if self.mode != UIMode::Command && !self.is_dirty() {
-            return;
-        }
         self.dirty = false;
         self.draw_status_bar(
             grid,
             (set_y(upper_left, get_y(bottom_right)), bottom_right),
             context,
         );
+
+        if self.mode != UIMode::Command && !self.is_dirty() {
+            return;
+        }
         match self.mode {
             UIMode::Normal => {}
             UIMode::Command => {
@@ -1020,7 +1035,11 @@ impl Component for StatusBar {
         match event {
             UIEvent::ChangeMode(m) => {
                 let offset = self.status.find('|').unwrap_or_else(|| self.status.len());
-                self.status.replace_range(..offset, &format!("{} {}", m,
+                self.status.replace_range(
+                    ..offset,
+                    &format!(
+                        "{} {}",
+                        m,
                         if self.mouse {
                             context
                                 .settings
@@ -1032,7 +1051,8 @@ impl Component for StatusBar {
                         } else {
                             ""
                         },
-                        ));
+                    ),
+                );
                 self.set_dirty(true);
                 self.container.set_dirty(true);
                 self.mode = *m;

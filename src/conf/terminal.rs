@@ -47,6 +47,11 @@ pub struct TerminalSettings {
     pub window_title: Option<String>,
     #[serde(deserialize_with = "non_empty_string")]
     pub file_picker_command: Option<String>,
+    /// Choose between 30-something built in sequences (integers between 0-30) or define your own
+    /// list of strings for the progress spinner animation.
+    /// Default: 0
+    #[serde(default)]
+    pub progress_spinner_sequence: Option<ProgressSpinnerSequence>,
 }
 
 impl Default for TerminalSettings {
@@ -60,6 +65,7 @@ impl Default for TerminalSettings {
             mouse_flag: Some("🖱️ ".to_string()),
             window_title: Some("meli".to_string()),
             file_picker_command: None,
+            progress_spinner_sequence: None,
         }
     }
 }
@@ -100,3 +106,12 @@ impl DotAddressable for TerminalSettings {
         }
     }
 }
+
+#[derive(Debug, Deserialize, Clone, Serialize)]
+#[serde(untagged)]
+pub enum ProgressSpinnerSequence {
+    Integer(usize),
+    Custom(Vec<String>),
+}
+
+impl DotAddressable for ProgressSpinnerSequence {}

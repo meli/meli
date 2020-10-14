@@ -1049,18 +1049,17 @@ impl ScrollBar {
 
 #[derive(Debug)]
 pub struct ProgressSpinner {
-    //total_work: usize,
-    //finished: usize,
     timer: crate::timer::PosixTimer,
     stage: usize,
-    kind: usize,
+    pub kind: std::result::Result<usize, Vec<String>>,
+    pub width: usize,
     active: bool,
     dirty: bool,
     id: ComponentId,
 }
 
 impl ProgressSpinner {
-    const KINDS: [&'static [&'static str]; 15] = [
+    pub const KINDS: [&'static [&'static str]; 30] = [
         &["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"],
         &["⣀", "⣄", "⣤", "⣦", "⣶", "⣷", "⣿"],
         &["⣀", "⣄", "⣆", "⣇", "⣧", "⣷", "⣿"],
@@ -1076,10 +1075,26 @@ impl ProgressSpinner {
         &["▯", "▮"],
         &["◯", "⬤"],
         &["⚪", "⚫"],
+        &["▖", "▗", "▘", "▝", "▞", "▚", "▙", "▟", "▜", "▛"],
+        &["|", "/", "-", "\\"],
+        &[".", "o", "O", "@", "*"],
+        &["◡◡", "⊙⊙", "◠◠", "⊙⊙"],
+        &["◜ ", " ◝", " ◞", "◟ "],
+        &["←", "↖", "↑", "↗", "→", "↘", "↓", "↙"],
+        &["▁", "▃", "▄", "▅", "▆", "▇", "█", "▇", "▆", "▅", "▄", "▃"],
+        &[
+            "▉", "▊", "▋", "▌", "▍", "▎", "▏", "▎", "▍", "▌", "▋", "▊", "▉",
+        ],
+        &["▖", "▘", "▝", "▗"],
+        &["▌", "▀", "▐", "▄"],
+        &["┤", "┘", "┴", "└", "├", "┌", "┬", "┐"],
+        &["◢", "◣", "◤", "◥"],
+        &["⠁", "⠂", "⠄", "⡀", "⢀", "⠠", "⠐", "⠈"],
+        &["⢎⡰", "⢎⡡", "⢎⡑", "⢎⠱", "⠎⡱", "⢊⡱", "⢌⡱", "⢆⡱"],
+        &[".", "o", "O", "°", "O", "o", "."],
     ];
 
     const INTERVAL: std::time::Duration = std::time::Duration::from_millis(50);
-    const VALUE: std::time::Duration = std::time::Duration::from_millis(500);
 
     pub fn new(kind: usize) -> Self {
         let timer = crate::timer::PosixTimer::new_with_signal(
@@ -1088,22 +1103,50 @@ impl ProgressSpinner {
             nix::sys::signal::Signal::SIGALRM,
         )
         .unwrap();
-        debug!("Requested timer {:?} for ProgressSpinner", timer.si_value);
+        let kind = kind % Self::KINDS.len();
+        let width = Self::KINDS[kind]
+            .iter()
+            .map(|f| f.grapheme_len())
+            .max()
+            .unwrap_or(0);
         ProgressSpinner {
             timer,
             stage: 0,
-            kind: kind % Self::KINDS.len(),
+            kind: Ok(kind),
+            width,
             dirty: true,
             active: false,
             id: ComponentId::new_v4(),
         }
     }
 
+    pub fn is_active(&self) -> bool {
+        self.active
+    }
+
+    pub fn set_kind(&mut self, kind: usize) {
+        self.stage = 0;
+        self.width = Self::KINDS[kind % Self::KINDS.len()]
+            .iter()
+            .map(|f| f.grapheme_len())
+            .max()
+            .unwrap_or(0);
+        self.kind = Ok(kind % Self::KINDS.len());
+        self.dirty = true;
+    }
+
+    pub fn set_custom_kind(&mut self, custom: Vec<String>) {
+        self.stage = 0;
+        self.width = custom.iter().map(|f| f.grapheme_len()).max().unwrap_or(0);
+        self.kind = Err(custom);
+        self.dirty = true;
+    }
+
     pub fn start(&mut self) {
         self.active = true;
         self.timer
             .set_interval(Self::INTERVAL)
-            .set_value(Self::VALUE)
+            .set_value(Self::INTERVAL)
             .rearm()
     }
 
@@ -1114,6 +1157,12 @@ impl ProgressSpinner {
             .set_interval(std::time::Duration::from_millis(0))
             .set_value(std::time::Duration::from_millis(0))
             .rearm()
+    }
+}
+
+impl Drop for ProgressSpinner {
+    fn drop(&mut self) {
+        self.stop();
     }
 }
 
@@ -1129,10 +1178,19 @@ impl Component for ProgressSpinner {
             let theme_attr = crate::conf::value(context, "status.bar");
             clear_area(grid, area, theme_attr);
             if self.active {
-                let stage = self.stage;
-                self.stage = (self.stage + 1).wrapping_rem(Self::KINDS[self.kind].len());
                 write_string_to_grid(
-                    Self::KINDS[self.kind][stage],
+                    match self.kind.as_ref() {
+                        Ok(kind) => {
+                            let stage = self.stage;
+                            self.stage = (self.stage + 1).wrapping_rem(Self::KINDS[*kind].len());
+                            Self::KINDS[*kind][stage].as_ref()
+                        }
+                        Err(custom) => {
+                            let stage = self.stage;
+                            self.stage = (self.stage + 1).wrapping_rem(custom.len());
+                            custom[stage].as_ref()
+                        }
+                    },
                     grid,
                     theme_attr.fg,
                     theme_attr.bg,
