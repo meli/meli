@@ -380,14 +380,16 @@ define_commands!([
                       }
                   )
                 },
-                { tags: ["toggle_thread_snooze"],
+                { tags: ["toggle thread_snooze"],
                   desc: "turn off new notifications for this thread",
-                  tokens: &[One(Literal("toggle_thread_snooze"))],
+                  tokens: &[One(Literal("toggle thread_snooze"))],
                   parser: (
                       fn toggle_thread_snooze(input: &[u8]) -> IResult<&[u8], Action> {
-                          let (input, _) = tag("toggle_thread_snooze")(input.trim())?;
+                          let (input, _) = tag("toggle")(input)?;
+                          let (input, _) = is_a(" ")(input)?;
+                          let (input, _) = tag("thread_snooze")(input)?;
                           let (input, _) = eof(input)?;
-                          Ok((input, ToggleThreadSnooze))
+                          Ok((input, Listing(ToggleThreadSnooze)))
                       }
                   )
                 },

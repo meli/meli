@@ -1111,8 +1111,8 @@ impl State {
             UIEvent::FinishedUIDialog(ref id, ref mut results)
                 if self.overlay.iter().any(|c| c.id() == *id) =>
             {
-                if let Some(Some(ref mut action)) = results.downcast_mut::<Option<Action>>() {
-                    self.exec_command(std::mem::replace(action, Action::ToggleThreadSnooze));
+                if let Some(ref mut action @ Some(_)) = results.downcast_mut::<Option<Action>>() {
+                    self.exec_command(action.take().unwrap());
 
                     let pos = self.overlay.iter().position(|c| c.id() == *id).unwrap();
                     self.overlay.remove(pos);

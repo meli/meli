@@ -54,6 +54,7 @@ pub enum ListingAction {
     Delete,
     OpenInNewTab,
     Tag(TagAction),
+    ToggleThreadSnooze,
 }
 
 #[derive(Debug)]
@@ -111,7 +112,6 @@ pub enum Action {
     Sort(SortField, SortOrder),
     SubSort(SortField, SortOrder),
     Tab(TabAction),
-    ToggleThreadSnooze,
     MailingListAction(MailingListAction),
     View(ViewAction),
     SetEnv(String, String),
@@ -131,7 +131,6 @@ impl Action {
             Action::Sort(_, _) => false,
             Action::SubSort(_, _) => false,
             Action::Tab(_) => false,
-            Action::ToggleThreadSnooze => false,
             Action::MailingListAction(_) => true,
             Action::View(_) => false,
             Action::SetEnv(_, _) => false,

@@ -1504,7 +1504,7 @@ impl Component for ConversationsListing {
                             */
                         return true;
                     }
-                    Action::ToggleThreadSnooze if !self.unfocused => {
+                    Action::Listing(ToggleThreadSnooze) if !self.unfocused => {
                         let thread = self.get_thread_under_cursor(self.cursor_pos.2);
                         let account = &mut context.accounts[&self.cursor_pos.0];
                         account
