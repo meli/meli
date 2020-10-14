@@ -334,6 +334,9 @@ impl MailView {
                                 pending_action: pending_action.take(),
                             };
                             self.active_jobs.insert(job_id);
+                            context
+                                .replies
+                                .push_back(UIEvent::StatusEvent(StatusEvent::NewJob(job_id)));
                         }
                     }
                     Err(err) => {
@@ -666,6 +669,9 @@ impl MailView {
                                 let verify_fut = crate::components::mail::pgp::verify(a.clone());
                                 let handle = context.job_executor.spawn_specialized(verify_fut);
                                 active_jobs.insert(handle.job_id);
+                                context.replies.push_back(UIEvent::StatusEvent(
+                                    StatusEvent::NewJob(handle.job_id),
+                                ));
                                 acc.push(AttachmentDisplay::SignedPending {
                                     inner: a.clone(),
                                     job_id: handle.job_id,
@@ -708,6 +714,9 @@ impl MailView {
                                         let handle =
                                             context.job_executor.spawn_specialized(decrypt_fut);
                                         active_jobs.insert(handle.job_id);
+                                        context.replies.push_back(UIEvent::StatusEvent(
+                                            StatusEvent::NewJob(handle.job_id),
+                                        ));
                                         acc.push(AttachmentDisplay::EncryptedPending {
                                             inner: a.clone(),
                                             handle,
