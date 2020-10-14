@@ -75,6 +75,7 @@ pub enum MailingListAction {
 pub enum ViewAction {
     Pipe(String, Vec<String>),
     SaveAttachment(usize, String),
+    ExportMail(String),
 }
 
 #[derive(Debug)]

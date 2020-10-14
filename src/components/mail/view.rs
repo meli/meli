@@ -751,9 +751,6 @@ impl MailView {
         lidx: usize,
         context: &mut Context,
     ) -> Option<&'_ melib::Attachment> {
-        if lidx == 0 {
-            return None;
-        }
         let display = if let MailViewState::Loaded { ref display, .. } = self.state {
             display
         } else {
@@ -821,7 +818,18 @@ impl MailView {
                 None
             }
 
-            return find_attachment(root_attachment, &path[1..]);
+            let ret = find_attachment(root_attachment, &path[1..]);
+            if lidx == 0 {
+                return ret.and_then(|a| {
+                    if a.content_disposition.kind.is_attachment() {
+                        Some(a)
+                    } else {
+                        None
+                    }
+                });
+            } else {
+                return ret;
+            }
         }
         context
             .replies
@@ -1941,7 +1949,8 @@ impl Component for MailView {
             UIEvent::EnvelopeRename(old_hash, new_hash) if self.coordinates.2 == old_hash => {
                 self.coordinates.2 = new_hash;
             }
-            UIEvent::Action(View(ViewAction::SaveAttachment(a_i, ref path))) => {
+            UIEvent::Action(View(ViewAction::ExportMail(ref path))) => {
+                // Save entire message as eml
                 let account = &context.accounts[&self.coordinates.0];
                 if !account.contains_key(self.coordinates.2) {
                     /* The envelope has been renamed or removed, so wait for the appropriate event to
@@ -1967,40 +1976,67 @@ impl Component for MailView {
                 };
 
                 let mut path = std::path::Path::new(path).to_path_buf();
-                if a_i == 0 {
-                    // Save entire message as eml
-                    if path.is_dir() {
-                        let envelope: EnvelopeRef = account.collection.get_env(self.coordinates.2);
-                        path.push(format!("{}.eml", envelope.message_id_display()));
-                    }
-                    match save_attachment(&path, bytes) {
-                        Err(err) => {
-                            context.replies.push_back(UIEvent::Notification(
-                                Some(format!("Failed to create file at {}", path.display())),
-                                err.to_string(),
-                                Some(NotificationType::Error(melib::ErrorKind::External)),
-                            ));
-                            log(
-                                format!(
-                                    "Failed to create file at {}: {}",
-                                    path.display(),
-                                    err.to_string()
-                                ),
-                                ERROR,
-                            );
-                            return true;
-                        }
-                        Ok(()) => {
-                            context.replies.push_back(UIEvent::Notification(
-                                None,
-                                format!("Saved at {}", &path.display()),
-                                Some(NotificationType::Info),
-                            ));
-                        }
-                    }
 
-                    return true;
+                if path.is_dir() {
+                    let envelope: EnvelopeRef = account.collection.get_env(self.coordinates.2);
+                    path.push(format!("{}.eml", envelope.message_id_raw()));
                 }
+                match save_attachment(&path, bytes) {
+                    Err(err) => {
+                        context.replies.push_back(UIEvent::Notification(
+                            Some(format!("Failed to create file at {}", path.display())),
+                            err.to_string(),
+                            Some(NotificationType::Error(melib::ErrorKind::External)),
+                        ));
+                        log(
+                            format!(
+                                "Failed to create file at {}: {}",
+                                path.display(),
+                                err.to_string()
+                            ),
+                            ERROR,
+                        );
+                        return true;
+                    }
+                    Ok(()) => {
+                        context.replies.push_back(UIEvent::Notification(
+                            None,
+                            format!("Saved at {}", &path.display()),
+                            Some(NotificationType::Info),
+                        ));
+                    }
+                }
+
+                return true;
+            }
+            UIEvent::Action(View(ViewAction::SaveAttachment(a_i, ref path))) => {
+                {
+                    let account = &context.accounts[&self.coordinates.0];
+                    if !account.contains_key(self.coordinates.2) {
+                        /* The envelope has been renamed or removed, so wait for the appropriate event to
+                         * arrive */
+                        return true;
+                    }
+                }
+                let bytes = if let MailViewState::Loaded { ref bytes, .. } = self.state {
+                    bytes
+                } else if let MailViewState::Error { ref err } = self.state {
+                    context.replies.push_back(UIEvent::Notification(
+                        Some("Failed to open e-mail".to_string()),
+                        err.to_string(),
+                        Some(NotificationType::Error(err.kind)),
+                    ));
+                    log(
+                        format!("Failed to open envelope: {}", err.to_string()),
+                        ERROR,
+                    );
+                    self.init_futures(context);
+                    return true;
+                } else {
+                    return true;
+                };
+
+                let mut path = std::path::Path::new(path).to_path_buf();
 
                 if let Some(u) = self.open_attachment(a_i, context) {
                     if path.is_dir() {
@@ -2035,6 +2071,40 @@ impl Component for MailView {
                             ));
                         }
                     }
+                } else if a_i == 0 {
+                    let account = &context.accounts[&self.coordinates.0];
+                    // Save entire message as eml
+                    if path.is_dir() {
+                        let envelope: EnvelopeRef = account.collection.get_env(self.coordinates.2);
+                        path.push(format!("{}.eml", envelope.message_id_raw()));
+                    }
+                    match save_attachment(&path, bytes) {
+                        Err(err) => {
+                            context.replies.push_back(UIEvent::Notification(
+                                Some(format!("Failed to create file at {}", path.display())),
+                                err.to_string(),
+                                Some(NotificationType::Error(melib::ErrorKind::External)),
+                            ));
+                            log(
+                                format!(
+                                    "Failed to create file at {}: {}",
+                                    path.display(),
+                                    err.to_string()
+                                ),
+                                ERROR,
+                            );
+                            return true;
+                        }
+                        Ok(()) => {
+                            context.replies.push_back(UIEvent::Notification(
+                                None,
+                                format!("Saved at {}", &path.display()),
+                                Some(NotificationType::Info),
+                            ));
+                        }
+                    }
+
+                    return true;
                 } else {
                     context
                         .replies

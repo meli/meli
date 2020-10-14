@@ -701,6 +701,19 @@ Alternatives(&[to_stream!(One(Literal("add-attachment")), One(Filepath)), to_str
                       }
                   )
                 },
+                { tags: ["export-mail "],
+                  desc: "export-mail PATH",
+                  tokens: &[One(Literal("export-mail")), One(Filepath)],
+                  parser:(
+                      fn export_mail(input: &[u8]) -> IResult<&[u8], Action> {
+                          let (input, _) = tag("export-mail")(input.trim())?;
+                          let (input, _) = is_a(" ")(input)?;
+                          let (input, path) = quoted_argument(input.trim())?;
+                          let (input, _) = eof(input)?;
+                          Ok((input, View(ExportMail(path.to_string()))))
+                      }
+                  )
+                },
                 { tags: ["tag", "tag add", "tag remove"],
                    desc: "tag [add/remove], edits message's tags.",
                    tokens: &[One(Literal("tag")), One(Alternatives(&[to_stream!(One(Literal("add"))), to_stream!(One(Literal("remove")))]))],
@@ -836,7 +849,7 @@ fn account_action(input: &[u8]) -> IResult<&[u8], Action> {
 }
 
 fn view(input: &[u8]) -> IResult<&[u8], Action> {
-    alt((pipe, save_attachment))(input)
+    alt((pipe, save_attachment, export_mail))(input)
 }
 
 pub fn parse_command(input: &[u8]) -> Result<Action, MeliError> {
