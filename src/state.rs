@@ -190,7 +190,10 @@ pub struct State {
     display_messages: SmallVec<[DisplayMessage; 8]>,
     display_messages_expiration_start: Option<UnixTimestamp>,
     display_messages_active: bool,
+    display_messages_dirty: bool,
+    display_messages_initialised: bool,
     display_messages_pos: usize,
+    display_messages_area: Area,
 }
 
 #[derive(Debug)]
@@ -335,7 +338,9 @@ impl State {
             display_messages_expiration_start: None,
             display_messages_pos: 0,
             display_messages_active: false,
-
+            display_messages_dirty: false,
+            display_messages_initialised: false,
+            display_messages_area: ((0, 0), (0, 0)),
             context: Context {
                 accounts,
                 settings: settings.clone(),
@@ -522,6 +527,9 @@ impl State {
             .resize(self.cols, self.rows, Cell::with_char(' '));
 
         self.rcv_event(UIEvent::Resize);
+        self.display_messages_dirty = true;
+        self.display_messages_initialised = false;
+        self.display_messages_area = ((0, 0), (0, 0));
 
         // Invalidate dirty areas.
         self.context.dirty_areas.clear();
@@ -546,6 +554,8 @@ impl State {
                 .unwrap_or(false)
             {
                 self.display_messages_active = false;
+                self.display_messages_dirty = true;
+                self.display_messages_initialised = false;
                 self.display_messages_expiration_start = None;
                 areas.push((
                     (0, 0),
@@ -556,6 +566,18 @@ impl State {
 
         /* Sort by x_start, ie upper_left corner's x coordinate */
         areas.sort_by(|a, b| (a.0).0.partial_cmp(&(b.0).0).unwrap());
+
+        if self.display_messages_active {
+            /* Check if any dirty area intersects with the area occupied by floating notification
+             * box */
+            let (displ_top, displ_bot) = self.display_messages_area;
+            for &((top_x, top_y), (bottom_x, bottom_y)) in &areas {
+                self.display_messages_dirty |= !(bottom_y < displ_top.1
+                    || displ_bot.1 < top_y
+                    || bottom_x < displ_top.0
+                    || displ_bot.0 < top_x);
+            }
+        }
         /* draw each dirty area */
         let rows = self.rows;
         for y in 0..rows {
@@ -613,87 +635,119 @@ impl State {
             }
         }
 
-        if self.display_messages_active {
+        if self.display_messages_dirty && self.display_messages_active {
             if let Some(DisplayMessage {
                 ref timestamp,
                 ref msg,
                 ..
             }) = self.display_messages.get(self.display_messages_pos)
             {
-                let noto_colors = crate::conf::value(&self.context, "status.notification");
-                use crate::melib::text_processing::{Reflow, TextProcessing};
-
-                let msg_lines = msg.split_lines_reflow(Reflow::All, Some(self.cols / 3));
-                let width = msg_lines
-                    .iter()
-                    .map(|line| line.grapheme_len() + 4)
-                    .max()
-                    .unwrap_or(0);
-
-                let displ_area = place_in_area(
-                    (
-                        (0, 0),
-                        (self.cols.saturating_sub(1), self.rows.saturating_sub(1)),
-                    ),
-                    (width, std::cmp::min(self.rows, msg_lines.len() + 4)),
-                    false,
-                    false,
-                );
-                for row in self.overlay_grid.bounds_iter(displ_area) {
-                    for c in row {
-                        self.overlay_grid[c]
-                            .set_ch(' ')
-                            .set_fg(noto_colors.fg)
-                            .set_bg(noto_colors.bg)
-                            .set_attrs(noto_colors.attrs);
+                if !self.display_messages_initialised {
+                    {
+                        /* Clear area previously occupied by floating notification box */
+                        let displ_area = self.display_messages_area;
+                        for y in get_y(upper_left!(displ_area))..=get_y(bottom_right!(displ_area)) {
+                            (self.draw_horizontal_segment_fn)(
+                                &mut self.grid,
+                                self.stdout.as_mut().unwrap(),
+                                get_x(upper_left!(displ_area)),
+                                get_x(bottom_right!(displ_area)),
+                                y,
+                            );
+                        }
                     }
-                }
-                let ((x, mut y), box_displ_area_bottom_right) =
-                    create_box(&mut self.overlay_grid, displ_area);
-                for line in msg_lines
-                    .into_iter()
-                    .chain(Some(String::new()))
-                    .chain(Some(melib::datetime::timestamp_to_string(*timestamp, None)))
-                {
-                    write_string_to_grid(
-                        &line,
-                        &mut self.overlay_grid,
-                        noto_colors.fg,
-                        noto_colors.bg,
-                        noto_colors.attrs,
-                        ((x, y), box_displ_area_bottom_right),
-                        Some(x),
-                    );
-                    y += 1;
-                }
+                    let noto_colors = crate::conf::value(&self.context, "status.notification");
+                    use crate::melib::text_processing::{Reflow, TextProcessing};
 
-                if self.display_messages.len() > 1 {
-                    write_string_to_grid(
-                        if self.display_messages_pos == 0 {
-                            "Next: >"
-                        } else if self.display_messages_pos + 1 == self.display_messages.len() {
-                            "Prev: <"
-                        } else {
-                            "Prev: <, Next: >"
-                        },
-                        &mut self.overlay_grid,
-                        noto_colors.fg,
-                        noto_colors.bg,
-                        noto_colors.attrs,
-                        ((x, y), box_displ_area_bottom_right),
-                        Some(x),
+                    let msg_lines = msg.split_lines_reflow(Reflow::All, Some(self.cols / 3));
+                    let width = msg_lines
+                        .iter()
+                        .map(|line| line.grapheme_len() + 4)
+                        .max()
+                        .unwrap_or(0);
+
+                    let displ_area = place_in_area(
+                        (
+                            (0, 0),
+                            (self.cols.saturating_sub(1), self.rows.saturating_sub(1)),
+                        ),
+                        (width, std::cmp::min(self.rows, msg_lines.len() + 4)),
+                        false,
+                        false,
                     );
+                    for row in self.overlay_grid.bounds_iter(displ_area) {
+                        for c in row {
+                            self.overlay_grid[c]
+                                .set_ch(' ')
+                                .set_fg(noto_colors.fg)
+                                .set_bg(noto_colors.bg)
+                                .set_attrs(noto_colors.attrs);
+                        }
+                    }
+                    let ((x, mut y), box_displ_area_bottom_right) =
+                        create_box(&mut self.overlay_grid, displ_area);
+                    for line in msg_lines
+                        .into_iter()
+                        .chain(Some(String::new()))
+                        .chain(Some(melib::datetime::timestamp_to_string(*timestamp, None)))
+                    {
+                        write_string_to_grid(
+                            &line,
+                            &mut self.overlay_grid,
+                            noto_colors.fg,
+                            noto_colors.bg,
+                            noto_colors.attrs,
+                            ((x, y), box_displ_area_bottom_right),
+                            Some(x),
+                        );
+                        y += 1;
+                    }
+
+                    if self.display_messages.len() > 1 {
+                        write_string_to_grid(
+                            if self.display_messages_pos == 0 {
+                                "Next: >"
+                            } else if self.display_messages_pos + 1 == self.display_messages.len() {
+                                "Prev: <"
+                            } else {
+                                "Prev: <, Next: >"
+                            },
+                            &mut self.overlay_grid,
+                            noto_colors.fg,
+                            noto_colors.bg,
+                            noto_colors.attrs,
+                            ((x, y), box_displ_area_bottom_right),
+                            Some(x),
+                        );
+                    }
+                    self.display_messages_area = displ_area;
                 }
-                for y in get_y(upper_left!(displ_area))..=get_y(bottom_right!(displ_area)) {
+                for y in get_y(upper_left!(self.display_messages_area))
+                    ..=get_y(bottom_right!(self.display_messages_area))
+                {
                     (self.draw_horizontal_segment_fn)(
                         &mut self.overlay_grid,
                         self.stdout.as_mut().unwrap(),
-                        get_x(upper_left!(displ_area)),
-                        get_x(bottom_right!(displ_area)),
+                        get_x(upper_left!(self.display_messages_area)),
+                        get_x(bottom_right!(self.display_messages_area)),
                         y,
                     );
                 }
             }
+            self.display_messages_dirty = false;
+        } else if self.display_messages_dirty {
+            /* Clear area previously occupied by floating notification box */
+            let displ_area = self.display_messages_area;
+            for y in get_y(upper_left!(displ_area))..=get_y(bottom_right!(displ_area)) {
+                (self.draw_horizontal_segment_fn)(
+                    &mut self.grid,
+                    self.stdout.as_mut().unwrap(),
+                    get_x(upper_left!(displ_area)),
+                    get_x(bottom_right!(displ_area)),
+                    y,
+                );
+            }
+            self.display_messages_dirty = false;
         }
         if !self.overlay.is_empty() {
             let area = center_area(
@@ -1092,12 +1146,16 @@ impl State {
             UIEvent::Input(Key::Alt('<')) => {
                 self.display_messages_expiration_start = Some(melib::datetime::now());
                 self.display_messages_active = true;
+                self.display_messages_initialised = false;
+                self.display_messages_dirty = true;
                 self.display_messages_pos = self.display_messages_pos.saturating_sub(1);
                 return;
             }
             UIEvent::Input(Key::Alt('>')) => {
                 self.display_messages_expiration_start = Some(melib::datetime::now());
                 self.display_messages_active = true;
+                self.display_messages_initialised = false;
+                self.display_messages_dirty = true;
                 self.display_messages_pos = std::cmp::min(
                     self.display_messages.len().saturating_sub(1),
                     self.display_messages_pos + 1,
@@ -1110,6 +1168,8 @@ impl State {
                     msg: msg.clone(),
                 });
                 self.display_messages_active = true;
+                self.display_messages_initialised = false;
+                self.display_messages_dirty = true;
                 self.display_messages_expiration_start = None;
                 self.display_messages_pos = self.display_messages.len() - 1;
                 self.redraw();
