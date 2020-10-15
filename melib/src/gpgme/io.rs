@@ -82,7 +82,7 @@ pub unsafe extern "C" fn gpgme_event_io_cb(
     if type_ == gpgme_event_io_t_GPGME_EVENT_DONE {
         let err = type_data as gpgme_io_event_done_data_t;
         let io_state: Arc<Mutex<IoState>> = Arc::from_raw(data as *const _);
-        let mut io_state_lck = io_state.lock().unwrap();
+        let io_state_lck = io_state.lock().unwrap();
         io_state_lck.sender.try_send(()).unwrap();
         *io_state_lck.done.lock().unwrap() = Some(gpgme_error_try(&io_state_lck.lib, (*err).err));
         drop(io_state_lck);

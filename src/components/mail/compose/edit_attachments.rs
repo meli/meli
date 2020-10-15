@@ -298,7 +298,7 @@ impl Component for EditAttachmentsRefMut<'_, '_> {
 
     fn kill(&mut self, _uuid: Uuid, _context: &mut Context) {}
 
-    fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
+    fn get_shortcuts(&self, _context: &Context) -> ShortcutMaps {
         ShortcutMaps::default()
     }
 
