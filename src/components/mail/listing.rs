@@ -607,6 +607,11 @@ impl Component for Listing {
                         .map(|f| (f.depth, f.indentation, f.has_sibling, f.hash))
                         .collect::<_>();
                     self.set_dirty(true);
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
+                            self.get_status(context),
+                        )));
                 }
                 return true;
             }
@@ -637,6 +642,11 @@ impl Component for Listing {
                     ));
                     self.component.refresh_mailbox(context, true);
                 }
+                context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
+                        self.get_status(context),
+                    )));
                 self.set_dirty(true);
                 return true;
             }
@@ -1207,15 +1217,11 @@ impl Component for Listing {
                     .push_back(UIEvent::Action(Tab(New(Some(Box::new(composer))))));
                 return true;
             }
-            UIEvent::StartupCheck(_) => {
-                self.dirty = true;
-                context
-                    .replies
-                    .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
-                        self.get_status(context),
-                    )));
-            }
-            UIEvent::MailboxUpdate(_) => {
+            UIEvent::StartupCheck(_)
+            | UIEvent::MailboxUpdate(_)
+            | UIEvent::EnvelopeUpdate(_)
+            | UIEvent::EnvelopeRename(_, _)
+            | UIEvent::EnvelopeRemove(_, _) => {
                 self.dirty = true;
                 context
                     .replies
