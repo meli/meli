@@ -1180,16 +1180,8 @@ impl Component for ProgressSpinner {
             if self.active {
                 write_string_to_grid(
                     match self.kind.as_ref() {
-                        Ok(kind) => {
-                            let stage = self.stage;
-                            self.stage = (self.stage + 1).wrapping_rem(Self::KINDS[*kind].len());
-                            Self::KINDS[*kind][stage].as_ref()
-                        }
-                        Err(custom) => {
-                            let stage = self.stage;
-                            self.stage = (self.stage + 1).wrapping_rem(custom.len());
-                            custom[stage].as_ref()
-                        }
+                        Ok(kind) => Self::KINDS[*kind][self.stage].as_ref(),
+                        Err(custom) => custom[self.stage].as_ref(),
                     },
                     grid,
                     theme_attr.fg,
@@ -1207,6 +1199,14 @@ impl Component for ProgressSpinner {
     fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {
         match event {
             UIEvent::Timer(id) if *id == self.timer.si_value => {
+                match self.kind.as_ref() {
+                    Ok(kind) => {
+                        self.stage = (self.stage + 1).wrapping_rem(Self::KINDS[*kind].len());
+                    }
+                    Err(custom) => {
+                        self.stage = (self.stage + 1).wrapping_rem(custom.len());
+                    }
+                }
                 self.dirty = true;
                 true
             }

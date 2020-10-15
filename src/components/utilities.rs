@@ -654,7 +654,7 @@ impl fmt::Display for StatusBar {
 
 impl StatusBar {
     pub fn new(context: &Context, container: Box<dyn Component>) -> Self {
-        let mut progress_spinner = ProgressSpinner::new(0);
+        let mut progress_spinner = ProgressSpinner::new(19);
         match context.settings.terminal.progress_spinner_sequence.as_ref() {
             Some(conf::terminal::ProgressSpinnerSequence::Integer(k)) => {
                 progress_spinner.set_kind(*k);
