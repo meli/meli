@@ -555,7 +555,7 @@ impl Component for Listing {
         } else if right_component_width == 0 {
             self.draw_menu(grid, area, context);
         } else {
-            self.draw_menu(grid, (upper_left, (mid, get_y(bottom_right))), context);
+            self.draw_menu(grid, (upper_left, (mid + 1, get_y(bottom_right))), context);
             if context.is_online(account_hash).is_err() {
                 match self.component {
                     ListingComponent::Offline(_) => {}
