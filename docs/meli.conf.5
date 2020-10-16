@@ -790,16 +790,16 @@ Sets the string to print in the mailbox tree for a leaf level where its root has
 .El
 .Ss Examples of sidebar mailbox tree customization
 The default values
-
-.Bd
+.sp
+.Bd -literal
  has_sibling = " "
  no_sibling = " ";
  has_sibling_leaf = " "
  no_sibling_leaf = " "
 .Ed
-
+.sp
 render a mailbox tree like the following:
-
+.sp
 .Bd -literal
 0  Inbox 3
 1   Archive
@@ -807,20 +807,20 @@ render a mailbox tree like the following:
 3   Lists
 4    example-list-a
 5    example-list-b
-6   Sent 
+6   Sent
 7   Spam
 8   Trash
 .Ed
-
+.sp
 Other possible trees:
-
+.sp
 .Bd -literal
 has_sibling = " ┃"
 no_sibling = "  "
 has_sibling_leaf = " ┣━"
 no_sibling_leaf = " ┗━"
 .Ed
-
+.sp
 .Bd -literal
 0  Inbox 3
 1   ┣━Archive
@@ -828,20 +828,20 @@ no_sibling_leaf = " ┗━"
 3   ┣━Lists
 4   ┃ ┣━example-list-a
 5   ┃ ┗━example-list-b
-6   ┣━Sent 
+6   ┣━Sent
 7   ┣━Spam
 8   ┗━Trash
 .Ed
-
+.sp
 A completely ASCII one:
-
+.sp
 .Bd -literal
 has_sibling = " |"
 no_sibling = "  "
 has_sibling_leaf = " |\\_"
 no_sibling_leaf = " \\_"
 .Ed
-
+.sp
 .Bd -literal
 0  Inbox 3
 1   |\\_Archive
@@ -849,11 +849,11 @@ no_sibling_leaf = " \\_"
 3   |\\_Lists
 4   | |\\_example-list-a
 5   |  \\_example-list-b
-6   |\\_Sent 
+6   |\\_Sent
 7   |\\_Spam
 8    \\_Trash
 .Ed
-
+.sp
 .Sh TAGS
 .Bl -tag -width 36n
 .It Ic colours Ar hash table String[Color]
@@ -941,6 +941,18 @@ theme = "themeB"
 [terminal.themes.themeC]
 \&...
 .Ed
+.It Ic use_mouse Ar bool
+Use mouse events.
+This will disable text selection, but you will be able to resize some widgets.
+This setting can be toggled with
+.Cm toggle mouse Ns
+\&.
+.\" default value
+.Pq Em false
+.It Ic mouse_flag Ar String
+String to show in status bar if mouse is active.
+.\" default value
+.Pq Em 🖱️
 .It Ic progress_spinner_sequence Ar Either \&< Integer, [String] \&>
 Choose between 30-something built in sequences (integers between 0-30) or define your own list of strings for the progress spinner animation.
 Set to an empty array to disable the progress spinner.

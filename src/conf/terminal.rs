@@ -96,6 +96,9 @@ impl DotAddressable for TerminalSettings {
                     "mouse_flag" => self.mouse_flag.lookup(field, tail),
                     "window_title" => self.window_title.lookup(field, tail),
                     "file_picker_command" => self.file_picker_command.lookup(field, tail),
+                    "progress_spinner_sequence" => {
+                        self.progress_spinner_sequence.lookup(field, tail)
+                    }
                     other => Err(MeliError::new(format!(
                         "{} has no field named {}",
                         parent_field, other
