@@ -120,17 +120,17 @@ impl EmbedGrid {
         };
 
         let master_fd = self.stdin.as_raw_fd();
-        unsafe { set_window_size(master_fd, &winsize).unwrap() };
-        nix::sys::signal::kill(self.child_pid, nix::sys::signal::SIGWINCH).unwrap();
+        let _ = unsafe { set_window_size(master_fd, &winsize) };
+        let _ = nix::sys::signal::kill(self.child_pid, nix::sys::signal::SIGWINCH);
     }
 
     pub fn wake_up(&self) {
-        nix::sys::signal::kill(self.child_pid, nix::sys::signal::SIGCONT).unwrap();
+        let _ = nix::sys::signal::kill(self.child_pid, nix::sys::signal::SIGCONT);
     }
 
     pub fn stop(&self) {
         debug!("stopping");
-        nix::sys::signal::kill(debug!(self.child_pid), nix::sys::signal::SIGSTOP).unwrap();
+        let _ = nix::sys::signal::kill(debug!(self.child_pid), nix::sys::signal::SIGSTOP);
     }
 
     pub fn is_active(&self) -> Result<WaitStatus> {
