@@ -202,6 +202,10 @@ impl AttachmentBuilder {
                     && cst.eq_ignore_ascii_case(b"pgp-signature")
                 {
                     self.content_type = ContentType::PGPSignature;
+                } else if ct.eq_ignore_ascii_case(b"application")
+                    && cst.eq_ignore_ascii_case(b"pkcs7-signature")
+                {
+                    self.content_type = ContentType::CMSSignature;
                 } else {
                     let mut name: Option<String> = None;
                     for (n, v) in params {
@@ -384,6 +388,7 @@ impl fmt::Display for Attachment {
                 }
             }
             ContentType::PGPSignature => write!(f, "pgp signature [{}]", self.mime_type()),
+            ContentType::CMSSignature => write!(f, "S/MIME signature [{}]", self.mime_type()),
             ContentType::OctetStream { .. } | ContentType::Other { .. } => {
                 if let Some(name) = self.filename() {
                     write!(
@@ -548,7 +553,7 @@ impl Attachment {
 
     fn get_text_recursive(&self, text: &mut Vec<u8>) {
         match self.content_type {
-            ContentType::Text { .. } | ContentType::PGPSignature => {
+            ContentType::Text { .. } | ContentType::PGPSignature | ContentType::CMSSignature => {
                 text.extend(decode(self, None));
             }
             ContentType::Multipart {
@@ -720,7 +725,7 @@ impl Attachment {
                     ret.push_str(&format!("Content-Type: {}\r\n\r\n", a.content_type));
                     ret.push_str(&String::from_utf8_lossy(a.body()));
                 }
-                ContentType::PGPSignature => {
+                ContentType::CMSSignature | ContentType::PGPSignature => {
                     ret.push_str(&format!("Content-Type: {}\r\n\r\n", a.content_type));
                     ret.push_str(&String::from_utf8_lossy(a.body()));
                 }
@@ -808,7 +813,7 @@ fn decode_rec_helper<'a, 'b>(a: &'a Attachment, filter: &mut Option<Filter<'b>>)
         ContentType::OctetStream { ref name } => {
             name.clone().unwrap_or_else(|| a.mime_type()).into_bytes()
         }
-        ContentType::PGPSignature => Vec::new(),
+        ContentType::CMSSignature | ContentType::PGPSignature => Vec::new(),
         ContentType::MessageRfc822 => {
             if a.content_disposition.kind.is_inline() {
                 let b = AttachmentBuilder::new(a.body()).build();

@@ -25,6 +25,7 @@ use melib::email::{
 };
 use melib::error::*;
 use melib::gpgme::*;
+use melib::parser::BytesExt;
 use std::future::Future;
 use std::pin::Pin;
 
@@ -38,7 +39,7 @@ pub async fn verify(a: Attachment) -> Result<()> {
     let (data, sig) =
         melib_pgp::verify_signature(&a).chain_err_summary(|| "Could not verify signature.")?;
     let mut ctx = Context::new()?;
-    let sig = ctx.new_data_mem(&sig)?;
+    let sig = ctx.new_data_mem(&sig.body().trim())?;
     let data = ctx.new_data_mem(&data)?;
     ctx.verify(sig, data)?.await
 }

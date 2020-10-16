@@ -20,7 +20,6 @@
  */
 
 /*! Verification of OpenPGP signatures */
-use crate::email::parser::BytesExt;
 use crate::email::{
     attachment_types::{ContentType, MultipartType},
     attachments::Attachment,
@@ -88,7 +87,7 @@ pub fn convert_attachment_to_rfc_spec(input: &[u8]) -> Vec<u8> {
     ret
 }
 
-pub fn verify_signature(a: &Attachment) -> Result<(Vec<u8>, &[u8])> {
+pub fn verify_signature(a: &Attachment) -> Result<(Vec<u8>, &Attachment)> {
     match a.content_type {
         ContentType::Multipart {
             kind: MultipartType::Signed,
@@ -107,7 +106,10 @@ pub fn verify_signature(a: &Attachment) -> Result<(Vec<u8>, &[u8])> {
             let signed_part: Vec<u8> = if let Some(v) = parts
                 .iter()
                 .zip(part_boundaries.iter())
-                .find(|(p, _)| p.content_type != ContentType::PGPSignature)
+                .find(|(p, _)| {
+                    p.content_type != ContentType::PGPSignature
+                        && p.content_type != ContentType::CMSSignature
+                })
                 .map(|(_, s)| convert_attachment_to_rfc_spec(s.display_bytes(a.body())))
             {
                 v
@@ -116,12 +118,11 @@ pub fn verify_signature(a: &Attachment) -> Result<(Vec<u8>, &[u8])> {
                     "multipart/signed attachment without a signed part".to_string(),
                 ));
             };
-            let signature = if let Some(sig) = parts
-                .iter()
-                .find(|s| s.content_type == ContentType::PGPSignature)
-                .map(|a| a.body())
-            {
-                sig.trim()
+            let signature = if let Some(sig) = parts.iter().find(|s| {
+                s.content_type == ContentType::PGPSignature
+                    || s.content_type == ContentType::CMSSignature
+            }) {
+                sig
             } else {
                 return Err(MeliError::new(
                     "multipart/signed attachment without a signature part".to_string(),

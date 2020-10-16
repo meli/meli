@@ -419,7 +419,9 @@ impl Component for EnvelopeView {
                                 )));
                             }
 
-                            ContentType::Text { .. } => {
+                            ContentType::Text { .. }
+                            | ContentType::PGPSignature
+                            | ContentType::CMSSignature => {
                                 self.mode = ViewMode::Attachment(lidx);
                                 self.dirty = true;
                             }
@@ -475,14 +477,6 @@ impl Component for EnvelopeView {
                                 context.replies.push_back(UIEvent::StatusEvent(
                                     StatusEvent::DisplayMessage(
                                         "application/octet-stream isn't supported yet".to_string(),
-                                    ),
-                                ));
-                                return true;
-                            }
-                            ContentType::PGPSignature => {
-                                context.replies.push_back(UIEvent::StatusEvent(
-                                    StatusEvent::DisplayMessage(
-                                        "Signatures aren't supported yet".to_string(),
                                     ),
                                 ));
                                 return true;

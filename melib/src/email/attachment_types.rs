@@ -198,6 +198,7 @@ pub enum ContentType {
     },
     MessageRfc822,
     PGPSignature,
+    CMSSignature,
     Other {
         tag: Vec<u8>,
         name: Option<String>,
@@ -275,6 +276,7 @@ impl PartialEq<&str> for ContentType {
                 "multipart/signed",
             ) => true,
             (ContentType::PGPSignature, "application/pgp-signature") => true,
+            (ContentType::CMSSignature, "application/pkcs7-signature") => true,
             (ContentType::MessageRfc822, "message/rfc822") => true,
             (ContentType::Other { tag, .. }, _) => {
                 other.eq_ignore_ascii_case(&String::from_utf8_lossy(&tag))
@@ -292,6 +294,7 @@ impl Display for ContentType {
             ContentType::Multipart { kind: k, .. } => k.fmt(f),
             ContentType::Other { ref tag, .. } => write!(f, "{}", String::from_utf8_lossy(tag)),
             ContentType::PGPSignature => write!(f, "application/pgp-signature"),
+            ContentType::CMSSignature => write!(f, "application/pkcs7-signature"),
             ContentType::MessageRfc822 => write!(f, "message/rfc822"),
             ContentType::OctetStream { .. } => write!(f, "application/octet-stream"),
         }

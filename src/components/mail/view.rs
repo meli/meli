@@ -1797,7 +1797,9 @@ impl Component for MailView {
                                     }
                                 }
 
-                                ContentType::Text { .. } | ContentType::PGPSignature => {
+                                ContentType::Text { .. }
+                                | ContentType::PGPSignature
+                                | ContentType::CMSSignature => {
                                     self.mode = ViewMode::Attachment(lidx);
                                     self.initialised = false;
                                     self.dirty = true;
