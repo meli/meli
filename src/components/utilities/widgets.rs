@@ -1189,11 +1189,17 @@ impl ProgressSpinner {
     pub fn set_custom_kind(&mut self, custom: Vec<String>) {
         self.stage = 0;
         self.width = custom.iter().map(|f| f.grapheme_len()).max().unwrap_or(0);
+        if self.width == 0 {
+            self.stop();
+        }
         self.kind = Err(custom);
         self.dirty = true;
     }
 
     pub fn start(&mut self) {
+        if self.width == 0 {
+            return;
+        }
         self.active = true;
         self.timer
             .set_interval(Self::INTERVAL)
