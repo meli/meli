@@ -980,19 +980,17 @@ impl AutoComplete {
 
 #[derive(Default)]
 pub struct ScrollBar {
-    show_arrows: bool,
-    block_character: Option<char>,
+    pub show_arrows: bool,
 }
 
 impl ScrollBar {
-    pub fn set_show_arrows(&mut self, flag: bool) {
-        self.show_arrows = flag;
+    pub fn set_show_arrows(&mut self, new_val: bool) -> &mut Self {
+        self.show_arrows = new_val;
+        self
     }
-    pub fn set_block_character(&mut self, val: Option<char>) {
-        self.block_character = val;
-    }
+
     pub fn draw(
-        self,
+        &mut self,
         grid: &mut CellBuffer,
         area: Area,
         context: &Context,
@@ -1007,17 +1005,17 @@ impl ScrollBar {
         if height < 3 {
             return;
         }
-        if self.show_arrows {
-            height -= height;
-        }
         clear_area(grid, area, crate::conf::value(context, "theme_default"));
 
         let visible_ratio: f32 = (std::cmp::min(visible_rows, length) as f32) / (length as f32);
         let scrollbar_height = std::cmp::max((visible_ratio * (height as f32)) as usize, 1);
+        if self.show_arrows {
+            height -= 3;
+        }
         let scrollbar_offset = {
             let temp = (((pos as f32) / (length as f32)) * (height as f32)) as usize;
-            if temp + scrollbar_height >= height {
-                height - scrollbar_height
+            if scrollbar_height + temp > height {
+                height.saturating_sub(scrollbar_height)
             } else {
                 temp
             }
@@ -1025,24 +1023,77 @@ impl ScrollBar {
         let (mut upper_left, bottom_right) = area;
 
         if self.show_arrows {
-            grid[upper_left].set_ch('▴');
-            upper_left = (upper_left.0, upper_left.1 + 1);
+            grid[upper_left]
+                .set_ch('▄')
+                .set_fg(crate::conf::value(context, "widgets.options.highlighted").bg);
+            upper_left = pos_inc(upper_left, (0, 1));
         }
 
-        for y in get_y(upper_left)..(get_y(upper_left) + scrollbar_offset) {
-            grid[set_y(upper_left, y)].set_ch(' ');
-        }
-        for y in (get_y(upper_left) + scrollbar_offset)
-            ..=(get_y(upper_left) + scrollbar_offset + scrollbar_height)
-        {
-            grid[set_y(upper_left, y)].set_ch(self.block_character.unwrap_or('█'));
-        }
-        for y in (get_y(upper_left) + scrollbar_offset + scrollbar_height + 1)..get_y(bottom_right)
-        {
-            grid[set_y(upper_left, y)].set_ch(' ');
+        upper_left = pos_inc(upper_left, (0, scrollbar_offset));
+        for _ in 0..=scrollbar_height {
+            grid[upper_left].set_bg(crate::conf::value(context, "widgets.options.highlighted").bg);
+            upper_left = pos_inc(upper_left, (0, 1));
         }
         if self.show_arrows {
-            grid[set_x(bottom_right, get_x(upper_left))].set_ch('▾');
+            grid[pos_dec(bottom_right, (0, 1))]
+                .set_ch('▀')
+                .set_fg(crate::conf::value(context, "widgets.options.highlighted").bg)
+                .set_bg(crate::conf::value(context, "theme_default").bg);
+        }
+    }
+
+    pub fn draw_horizontal(
+        &mut self,
+        grid: &mut CellBuffer,
+        area: Area,
+        context: &Context,
+        pos: usize,
+        visible_cols: usize,
+        length: usize,
+    ) {
+        if length == 0 {
+            return;
+        }
+        let mut width = width!(area);
+        if width < 3 {
+            return;
+        }
+        clear_area(grid, area, crate::conf::value(context, "theme_default"));
+
+        let visible_ratio: f32 = (std::cmp::min(visible_cols, length) as f32) / (length as f32);
+        let scrollbar_width = std::cmp::max((visible_ratio * (width as f32)) as usize, 1);
+        if self.show_arrows {
+            width -= 3;
+        }
+        let scrollbar_offset = {
+            let temp = (((pos as f32) / (length as f32)) * (width as f32)) as usize;
+            if scrollbar_width + temp > width {
+                width.saturating_sub(scrollbar_width)
+            } else {
+                temp
+            }
+        };
+        let (mut upper_left, bottom_right) = area;
+
+        if self.show_arrows {
+            grid[upper_left]
+                .set_ch('▐')
+                .set_fg(crate::conf::value(context, "widgets.options.highlighted").bg);
+            upper_left = pos_inc(upper_left, (1, 0));
+        }
+
+        upper_left = pos_inc(upper_left, (scrollbar_offset, 0));
+        for _ in 0..=scrollbar_width {
+            grid[upper_left]
+                .set_ch('█')
+                .set_fg(crate::conf::value(context, "widgets.options.highlighted").bg);
+            upper_left = pos_inc(upper_left, (1, 0));
+        }
+        if self.show_arrows {
+            grid[pos_dec(bottom_right, (1, 0))]
+                .set_ch('▌')
+                .set_fg(crate::conf::value(context, "widgets.options.highlighted").bg)
+                .set_bg(crate::conf::value(context, "theme_default").bg);
         }
     }
 }

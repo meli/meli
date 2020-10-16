@@ -37,6 +37,7 @@ pub struct Pager {
 
     colors: ThemeAttribute,
     initialised: bool,
+    show_scrollbar: bool,
     content: CellBuffer,
     text_lines: (usize, Vec<String>),
     movement: Option<PageMovement>,
@@ -51,6 +52,23 @@ impl fmt::Display for Pager {
 
 impl Pager {
     pub const DESCRIPTION: &'static str = "pager";
+    pub fn new(context: &Context) -> Self {
+        let mut ret = Pager::default();
+        ret.minimum_width = context.settings.pager.minimum_width;
+        ret.set_colors(crate::conf::value(context, "theme_default"))
+            .set_reflow(if context.settings.pager.split_long_lines {
+                Reflow::All
+            } else {
+                Reflow::No
+            });
+        ret
+    }
+
+    pub fn set_show_scrollbar(&mut self, new_val: bool) -> &mut Self {
+        self.show_scrollbar = new_val;
+        self
+    }
+
     pub fn set_colors(&mut self, new_val: ThemeAttribute) -> &mut Self {
         self.colors = new_val;
         self
@@ -58,6 +76,11 @@ impl Pager {
 
     pub fn set_reflow(&mut self, new_val: Reflow) -> &mut Self {
         self.reflow = new_val;
+        self
+    }
+
+    pub fn set_initialised(&mut self, new_val: bool) -> &mut Self {
+        self.initialised = new_val;
         self
     }
 
@@ -264,13 +287,13 @@ impl Component for Pager {
                 width = self.minimum_width;
             }
 
-            let lines: &[String] = if self.text_lines.0 == width.saturating_sub(2) {
+            let lines: &[String] = if self.text_lines.0 == width.saturating_sub(4) {
                 &self.text_lines.1
             } else {
                 let lines = self
                     .text
-                    .split_lines_reflow(self.reflow, Some(width.saturating_sub(2)));
-                self.text_lines = (width.saturating_sub(2), lines);
+                    .split_lines_reflow(self.reflow, Some(width.saturating_sub(4)));
+                self.text_lines = (width.saturating_sub(4), lines);
                 &self.text_lines.1
             };
             let height = lines.len() + 2;
@@ -344,30 +367,36 @@ impl Component for Pager {
                     self.cursor.1 = self.cursor.1.saturating_sub(height * multiplier);
                 }
                 PageMovement::Down(amount) => {
-                    if self.cursor.1 + amount < self.height {
+                    if self.cursor.1 + amount + 1 < self.height {
                         self.cursor.1 += amount;
+                    } else {
+                        self.cursor.1 = self.height.saturating_sub(1);
                     }
                 }
                 PageMovement::PageDown(multiplier) => {
-                    if self.cursor.1 + height * multiplier < self.height {
+                    if self.cursor.1 + height * multiplier + 1 < self.height {
                         self.cursor.1 += height * multiplier;
+                    } else if self.cursor.1 + height * multiplier > self.height {
+                        self.cursor.1 = self.height - 1;
+                    } else {
+                        self.cursor.1 = (self.height / height) * height;
                     }
                 }
-                PageMovement::Right(multiplier) => {
-                    let offset = width!(area) / 3;
-                    if self.cursor.0 + offset * multiplier < self.content.size().0 {
-                        self.cursor.0 += offset * multiplier;
+                PageMovement::Right(amount) => {
+                    if self.cursor.0 + amount + 1 < self.width {
+                        self.cursor.0 += amount;
+                    } else {
+                        self.cursor.0 = self.width.saturating_sub(1);
                     }
                 }
-                PageMovement::Left(multiplier) => {
-                    let offset = width!(area) / 3;
-                    self.cursor.0 = self.cursor.0.saturating_sub(offset * multiplier);
+                PageMovement::Left(amount) => {
+                    self.cursor.0 = self.cursor.0.saturating_sub(amount);
                 }
                 PageMovement::Home => {
                     self.cursor.1 = 0;
                 }
                 PageMovement::End => {
-                    self.cursor.1 = (self.height / height) * height;
+                    self.cursor.1 = self.height.saturating_sub(1);
                 }
             }
         }
@@ -397,7 +426,13 @@ impl Component for Pager {
 
         clear_area(grid, area, crate::conf::value(context, "theme_default"));
         let (width, height) = self.content.size();
-        let (cols, rows) = (width!(area), height!(area));
+        let (mut cols, mut rows) = (width!(area), height!(area));
+        if self.show_scrollbar && rows < height {
+            cols -= 1;
+        }
+        if self.show_scrollbar && cols < width {
+            rows -= 1;
+        }
         self.cursor = (
             std::cmp::min(width.saturating_sub(cols), self.cursor.0),
             std::cmp::min(height.saturating_sub(rows), self.cursor.1),
@@ -417,6 +452,32 @@ impl Component for Pager {
                 ),
             ),
         );
+        if self.show_scrollbar && rows + 1 < height {
+            ScrollBar::default().set_show_arrows(true).draw(
+                grid,
+                (
+                    set_x(upper_left!(area), get_x(bottom_right!(area))),
+                    bottom_right!(area),
+                ),
+                context,
+                self.cursor.1,
+                rows,
+                height,
+            );
+        }
+        if self.show_scrollbar && cols + 1 < width {
+            ScrollBar::default().set_show_arrows(true).draw_horizontal(
+                grid,
+                (
+                    set_y(upper_left!(area), get_y(bottom_right!(area))),
+                    bottom_right!(area),
+                ),
+                context,
+                self.cursor.0,
+                cols,
+                width,
+            );
+        }
         context.dirty_areas.push_back(area);
     }
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {

@@ -2143,7 +2143,8 @@ impl Component for MailView {
                             {
                                 if let Ok(mailto) = Mailto::try_from(list_post_addr) {
                                     let draft: Draft = mailto.into();
-                                    let mut composer = Composer::new(self.coordinates.0, context);
+                                    let mut composer =
+                                        Composer::with_account(self.coordinates.0, context);
                                     composer.set_draft(draft);
                                     context.replies.push_back(UIEvent::Action(Tab(New(Some(
                                         Box::new(composer),

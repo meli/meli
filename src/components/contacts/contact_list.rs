@@ -642,7 +642,7 @@ impl Component for ContactList {
                     let mut draft: Draft = Draft::default();
                     *draft.headers_mut().get_mut("To").unwrap() =
                         format!("{} <{}>", &card.name(), &card.email());
-                    let mut composer = Composer::new(account_hash, context);
+                    let mut composer = Composer::with_account(account_hash, context);
                     composer.set_draft(draft);
                     context
                         .replies

@@ -1211,7 +1211,7 @@ impl Component for Listing {
                 if shortcut!(k == shortcuts[Listing::DESCRIPTION]["new_mail"]) =>
             {
                 let account_hash = context.accounts[self.cursor_pos.0].hash();
-                let composer = Composer::new(account_hash, context);
+                let composer = Composer::with_account(account_hash, context);
                 context
                     .replies
                     .push_back(UIEvent::Action(Tab(New(Some(Box::new(composer))))));

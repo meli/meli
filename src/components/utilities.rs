@@ -316,10 +316,7 @@ impl Component for StatusBar {
                 }
                 let hist_height = std::cmp::min(15, self.auto_complete.suggestions().len());
                 let hist_area = if height < self.auto_complete.suggestions().len() {
-                    let mut scrollbar = ScrollBar::default();
-                    scrollbar.set_show_arrows(false);
-                    scrollbar.set_block_character(Some('▌'));
-                    scrollbar.draw(
+                    ScrollBar::default().set_show_arrows(false).draw(
                         grid,
                         (
                             (

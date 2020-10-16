@@ -98,33 +98,6 @@ pub struct Composer {
     id: ComponentId,
 }
 
-impl Default for Composer {
-    fn default() -> Self {
-        let mut pager = Pager::default();
-        pager.set_reflow(text_processing::Reflow::FormatFlowed);
-        Composer {
-            reply_context: None,
-            account_hash: 0,
-
-            cursor: Cursor::Headers,
-
-            pager,
-            draft: Draft::default(),
-            form: FormWidget::default(),
-
-            mode: ViewMode::Edit,
-            #[cfg(feature = "gpgme")]
-            gpg_state: gpg::GpgComposeState::new(),
-            dirty: true,
-            has_changes: false,
-            embed_area: ((0, 0), (0, 0)),
-            embed: None,
-            initialized: false,
-            id: ComponentId::new_v4(),
-        }
-    }
-}
-
 #[derive(Debug)]
 enum ViewMode {
     Discard(Uuid, UIDialog<char>),
@@ -174,11 +147,32 @@ impl fmt::Display for Composer {
 
 impl Composer {
     const DESCRIPTION: &'static str = "composing";
-    pub fn new(account_hash: AccountHash, context: &Context) -> Self {
+    pub fn new(context: &Context) -> Self {
+        let mut pager = Pager::new(context);
+        pager.set_show_scrollbar(true);
+        Composer {
+            reply_context: None,
+            account_hash: 0,
+            cursor: Cursor::Headers,
+            pager,
+            draft: Draft::default(),
+            form: FormWidget::default(),
+            mode: ViewMode::Edit,
+            #[cfg(feature = "gpgme")]
+            gpg_state: gpg::GpgComposeState::new(),
+            dirty: true,
+            has_changes: false,
+            embed_area: ((0, 0), (0, 0)),
+            embed: None,
+            initialized: false,
+            id: ComponentId::new_v4(),
+        }
+    }
+
+    pub fn with_account(account_hash: AccountHash, context: &Context) -> Self {
         let mut ret = Composer {
             account_hash,
-            id: ComponentId::new_v4(),
-            ..Default::default()
+            ..Composer::new(context)
         };
         for (h, v) in
             account_settings!(context[account_hash].composing.default_header_values).iter()
@@ -194,8 +188,6 @@ impl Composer {
                 format!("meli {}", option_env!("CARGO_PKG_VERSION").unwrap_or("0.0")),
             );
         }
-        ret.pager
-            .set_colors(crate::conf::value(context, "theme_default"));
         ret
     }
 
@@ -205,7 +197,7 @@ impl Composer {
         bytes: &[u8],
         context: &Context,
     ) -> Result<Self> {
-        let mut ret = Composer::default();
+        let mut ret = Composer::with_account(account_hash, context);
         let envelope: EnvelopeRef = context.accounts[&account_hash].collection.get_env(env_hash);
 
         ret.draft = Draft::edit(&envelope, bytes)?;
@@ -220,7 +212,7 @@ impl Composer {
         context: &mut Context,
         reply_to_all: bool,
     ) -> Self {
-        let mut ret = Composer::new(coordinates.0, context);
+        let mut ret = Composer::with_account(coordinates.0, context);
         let account = &context.accounts[&coordinates.0];
         let envelope = account.collection.get_env(coordinates.2);
         let subject = envelope.subject();
@@ -676,8 +668,8 @@ impl Component for Composer {
         );
 
         let body_area = (
-            pos_inc(upper_left, (mid + 1, header_height + 1)),
-            pos_dec(bottom_right, (mid, 4 + attachments_no)),
+            pos_inc(upper_left, (mid, header_height + 1)),
+            pos_dec(bottom_right, (mid, 5 + attachments_no)),
         );
 
         let (x, y) = write_string_to_grid(
@@ -763,13 +755,24 @@ impl Component for Composer {
             self.embed_area = (upper_left!(header_area), bottom_right!(body_area));
         }
 
+        if !self.mode.is_edit_attachments() {
+            self.pager.set_dirty(true);
+            if self.pager.size().0 > width!(body_area) {
+                self.pager.set_initialised(false);
+            }
+            self.pager.draw(grid, body_area, context);
+        }
+
         match self.cursor {
             Cursor::Headers => {
                 change_colors(
                     grid,
                     (
-                        set_y(upper_left!(body_area), get_y(bottom_right!(body_area))),
-                        bottom_right!(body_area),
+                        pos_dec(upper_left!(body_area), (1, 0)),
+                        pos_dec(
+                            set_y(upper_left!(body_area), get_y(bottom_right!(body_area))),
+                            (1, 0),
+                        ),
                     ),
                     theme_default.fg,
                     theme_default.bg,
@@ -779,19 +782,17 @@ impl Component for Composer {
                 change_colors(
                     grid,
                     (
-                        set_y(upper_left!(body_area), get_y(bottom_right!(body_area))),
-                        bottom_right!(body_area),
+                        pos_dec(upper_left!(body_area), (1, 0)),
+                        pos_dec(
+                            set_y(upper_left!(body_area), get_y(bottom_right!(body_area))),
+                            (1, 0),
+                        ),
                     ),
                     theme_default.fg,
                     Color::Byte(237),
                 );
             }
             Cursor::Sign | Cursor::Encrypt | Cursor::Attachments => {}
-        }
-
-        if !self.mode.is_edit_attachments() {
-            self.pager.set_dirty(true);
-            self.pager.draw(grid, body_area, context);
         }
 
         match self.mode {
