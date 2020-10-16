@@ -70,11 +70,6 @@ pub struct PagerSettingsOverride {
     #[serde(alias = "minimum-width")]
     #[serde(default)]
     pub minimum_width: Option<usize>,
-    #[doc = " Maximum text width in columns."]
-    #[doc = " Default: None"]
-    #[serde(alias = "minimum-width")]
-    #[serde(default)]
-    pub max_width: Option<Option<usize>>,
     #[doc = " Choose `text/html` alternative if `text/plain` is empty in `multipart/alternative`"]
     #[doc = " attachments."]
     #[doc = " Default: true"]
@@ -94,7 +89,6 @@ impl Default for PagerSettingsOverride {
             format_flowed: None,
             split_long_lines: None,
             minimum_width: None,
-            max_width: None,
             auto_choose_multipart_alternative: None,
         }
     }
