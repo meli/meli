@@ -887,6 +887,11 @@ impl Component for Composer {
                     ) {
                         Ok(job) => {
                             let handle = context.job_executor.spawn_blocking(job);
+                            context
+                                .replies
+                                .push_back(UIEvent::StatusEvent(StatusEvent::NewJob(
+                                    handle.job_id,
+                                )));
                             self.mode = ViewMode::WaitingForSendResult(
                                 UIDialog::new(
                                     "Waiting for confirmation.. The tab will close automatically on successful submission.",
