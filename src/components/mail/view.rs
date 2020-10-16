@@ -1876,7 +1876,10 @@ impl Component for MailView {
                 return true;
             }
             UIEvent::Input(ref key)
-                if shortcut!(key == shortcuts[MailView::DESCRIPTION]["toggle_expand_headers"]) =>
+                if (self.mode == ViewMode::Normal || self.mode == ViewMode::Url)
+                    && shortcut!(
+                        key == shortcuts[MailView::DESCRIPTION]["toggle_expand_headers"]
+                    ) =>
             {
                 self.expand_headers = !self.expand_headers;
                 self.set_dirty(true);
@@ -2276,15 +2279,18 @@ impl Component for MailView {
     fn set_dirty(&mut self, value: bool) {
         self.dirty = value;
         match self.mode {
-            ViewMode::Normal => {
+            ViewMode::Normal | ViewMode::Url | ViewMode::Source(_) | ViewMode::Attachment(_) => {
                 self.pager.set_dirty(value);
+            }
+            ViewMode::ContactSelector(ref mut s) => {
+                self.pager.set_dirty(value);
+                s.set_dirty(value);
             }
             ViewMode::Subview => {
                 if let Some(s) = self.subview.as_mut() {
                     s.set_dirty(value);
                 }
             }
-            _ => {}
         }
     }
 
