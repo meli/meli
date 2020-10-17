@@ -1061,6 +1061,7 @@ dependencies = [
  "bincode",
  "bitflags 1.2.1",
  "crossbeam",
+ "flate2",
  "futures",
  "indexmap",
  "libc",

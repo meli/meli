@@ -150,7 +150,7 @@ fn parse_manpage(src: &str) -> Result<ManPages> {
 
 use structopt::StructOpt;
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 /// Choose manpage
 enum ManPages {
     /// meli(1)
@@ -206,6 +206,9 @@ enum SubCommand {
 struct ManOpt {
     #[structopt(default_value = "meli", possible_values=&["meli", "conf", "themes"], value_name="PAGE", parse(try_from_str = parse_manpage))]
     page: ManPages,
+    /// If true, output text in stdout instead of spawning $PAGER.
+    #[structopt(long = "no-raw", alias = "no-raw", value_name = "bool")]
+    no_raw: Option<Option<bool>>,
 }
 
 fn main() {
@@ -251,13 +254,51 @@ fn run_app(opt: Opt) -> Result<()> {
         }
         #[cfg(feature = "cli-docs")]
         Some(SubCommand::Man(manopt)) => {
-            let _page = manopt.page;
-            const MANPAGES: [&'static str; 3] = [
-                include_str!(concat!(env!("OUT_DIR"), "/meli.txt")),
-                include_str!(concat!(env!("OUT_DIR"), "/meli.conf.txt")),
-                include_str!(concat!(env!("OUT_DIR"), "/meli-themes.txt")),
+            let ManOpt { page, no_raw } = manopt;
+            const MANPAGES: [&'static [u8]; 3] = [
+                include_bytes!(concat!(env!("OUT_DIR"), "/meli.txt.gz")),
+                include_bytes!(concat!(env!("OUT_DIR"), "/meli.conf.txt.gz")),
+                include_bytes!(concat!(env!("OUT_DIR"), "/meli-themes.txt.gz")),
             ];
-            println!("{}", MANPAGES[_page as usize]);
+            use flate2::bufread::GzDecoder;
+            use std::io::prelude::*;
+            let mut gz = GzDecoder::new(MANPAGES[page as usize]);
+            let mut v = String::with_capacity(
+                str::parse::<usize>(unsafe {
+                    std::str::from_utf8_unchecked(gz.header().unwrap().comment().unwrap())
+                })
+                .expect(&format!(
+                    "{:?} was not compressed with size comment header",
+                    page
+                )),
+            );
+            gz.read_to_string(&mut v)?;
+
+            if let Some(no_raw) = no_raw {
+                match no_raw {
+                    Some(true) => {}
+                    None if (unsafe { libc::isatty(libc::STDOUT_FILENO) == 1 }) => {}
+                    Some(false) | None => {
+                        println!("{}", &v);
+                        return Ok(());
+                    }
+                }
+            } else {
+                if unsafe { libc::isatty(libc::STDOUT_FILENO) != 1 } {
+                    println!("{}", &v);
+                    return Ok(());
+                }
+            }
+
+            use std::process::{Command, Stdio};
+            let mut handle = Command::new(std::env::var("PAGER").unwrap_or("more".to_string()))
+                .stdin(Stdio::piped())
+                .stdout(Stdio::inherit())
+                .stderr(Stdio::inherit())
+                .spawn()?;
+            handle.stdin.take().unwrap().write_all(v.as_bytes())?;
+            handle.wait()?;
+
             return Ok(());
         }
         #[cfg(not(feature = "cli-docs"))]
