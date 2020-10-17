@@ -676,7 +676,7 @@ pub fn create_config_file(p: &Path) -> Result<()> {
         .create_new(true)
         .open(p)
         .expect("Could not create config file.");
-    file.write_all(include_bytes!("../samples/sample-config.toml"))
+    file.write_all(include_bytes!("../docs/samples/sample-config.toml"))
         .expect("Could not write to config file.");
     println!("Written example configuration to {}", p.display());
     let metadata = file.metadata()?;
