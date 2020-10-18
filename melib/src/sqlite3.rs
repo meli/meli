@@ -50,50 +50,65 @@ pub fn open_or_create_db(
     description: &DatabaseDescription,
     identifier: Option<&str>,
 ) -> Result<Connection> {
-    let db_path = if let Some(id) = identifier {
-        db_path(&format!("{}_{}", id, description.name))
-    } else {
-        db_path(description.name)
-    }?;
-    let mut set_mode = false;
-    if !db_path.exists() {
-        log(
-            format!(
-                "Creating {} database in {}",
-                description.name,
-                db_path.display()
-            ),
-            crate::INFO,
-        );
-        set_mode = true;
-    }
-    let conn = Connection::open(&db_path).map_err(|e| MeliError::new(e.to_string()))?;
-    if set_mode {
-        use std::os::unix::fs::PermissionsExt;
-        let file = std::fs::File::open(&db_path)?;
-        let metadata = file.metadata()?;
-        let mut permissions = metadata.permissions();
+    let mut second_try: bool = false;
+    loop {
+        let db_path = if let Some(id) = identifier {
+            db_path(&format!("{}_{}", id, description.name))
+        } else {
+            db_path(description.name)
+        }?;
+        let mut set_mode = false;
+        if !db_path.exists() {
+            log(
+                format!(
+                    "Creating {} database in {}",
+                    description.name,
+                    db_path.display()
+                ),
+                crate::INFO,
+            );
+            set_mode = true;
+        }
+        let conn = Connection::open(&db_path).map_err(|e| MeliError::new(e.to_string()))?;
+        if set_mode {
+            use std::os::unix::fs::PermissionsExt;
+            let file = std::fs::File::open(&db_path)?;
+            let metadata = file.metadata()?;
+            let mut permissions = metadata.permissions();
 
-        permissions.set_mode(0o600); // Read/write for owner only.
-        file.set_permissions(permissions)?;
-    }
-    let version: i32 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    if version != 0_i32 && version as u32 != description.version {
-        return Err(MeliError::new(format!(
-            "Database version mismatch, is {} but expected {}",
-            version, description.version
-        )));
-    }
+            permissions.set_mode(0o600); // Read/write for owner only.
+            file.set_permissions(permissions)?;
+        }
+        let version: i32 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
+        if version != 0_i32 && version as u32 != description.version {
+            log(
+                format!(
+                    "Database version mismatch, is {} but expected {}",
+                    version, description.version
+                ),
+                crate::INFO,
+            );
+            if second_try {
+                return Err(MeliError::new(format!(
+                            "Database version mismatch, is {} but expected {}. Could not recreate database.",
+                            version, description.version
+                )));
+            }
+            reset_db(description, identifier)?;
+            second_try = true;
+            continue;
+        }
 
-    if version == 0 {
-        conn.pragma_update(None, "user_version", &description.version)?;
-    }
-    if let Some(s) = description.init_script {
-        conn.execute_batch(s)
-            .map_err(|e| MeliError::new(e.to_string()))?;
-    }
+        if version == 0 {
+            conn.pragma_update(None, "user_version", &description.version)?;
+        }
+        if let Some(s) = description.init_script {
+            conn.execute_batch(s)
+                .map_err(|e| MeliError::new(e.to_string()))?;
+        }
 
-    Ok(conn)
+        return Ok(conn);
+    }
 }
 
 /// Return database to a clean slate.

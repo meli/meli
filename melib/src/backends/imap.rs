@@ -321,7 +321,7 @@ impl MailBackend for ImapType {
             None
         };
         let mut state = FetchState {
-            stage: if self.uid_store.keep_offline_cache {
+            stage: if self.uid_store.keep_offline_cache && cache_handle.is_some() {
                 FetchStage::InitialCache
             } else {
                 FetchStage::InitialFresh
