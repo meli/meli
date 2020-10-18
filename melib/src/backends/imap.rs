@@ -1668,10 +1668,10 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
                     let mut envelopes = vec![];
                     debug!("{} max_uid_left= {}", mailbox_hash, max_uid_left);
                     let command = if max_uid_left == 1 {
-                        "UID FETCH 1 (UID FLAGS ENVELOPE BODYSTRUCTURE)".to_string()
+                        "UID FETCH 1 (UID FLAGS ENVELOPE BODY.PEEK[HEADER.FIELDS (REFERENCES)] BODYSTRUCTURE)".to_string()
                     } else {
                         format!(
-                            "UID FETCH {}:{} (UID FLAGS ENVELOPE BODYSTRUCTURE)",
+                            "UID FETCH {}:{} (UID FLAGS ENVELOPE BODY.PEEK[HEADER.FIELDS (REFERENCES)] BODYSTRUCTURE)",
                             std::cmp::max(
                                 std::cmp::max(max_uid_left.saturating_sub(chunk_size), 1),
                                 1
@@ -1701,6 +1701,7 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
                         ref mut envelope,
                         ref mut flags,
                         ref raw_fetch_value,
+                        ref references,
                         ..
                     } in v.iter_mut()
                     {
@@ -1716,6 +1717,21 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
                         let uid = uid.unwrap();
                         let env = envelope.as_mut().unwrap();
                         env.set_hash(generate_envelope_hash(&mailbox_path, &uid));
+                        if let Some(value) = references {
+                            let parse_result = crate::email::parser::address::msg_id_list(value);
+                            if let Ok((_, value)) = parse_result {
+                                let prev_val = env.references.take();
+                                for v in value {
+                                    env.push_references(v);
+                                }
+                                if let Some(prev) = prev_val {
+                                    for v in prev.refs {
+                                        env.push_references(v);
+                                    }
+                                }
+                            }
+                            env.set_references(value);
+                        }
                         let mut tag_lck = uid_store.tag_index.write().unwrap();
                         if let Some((flags, keywords)) = flags {
                             if !flags.intersects(Flag::SEEN) {

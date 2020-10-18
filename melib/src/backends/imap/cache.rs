@@ -140,7 +140,7 @@ mod sqlite3_m {
     CREATE INDEX IF NOT EXISTS envelope_idx ON envelopes(hash);
     CREATE INDEX IF NOT EXISTS mailbox_idx ON mailbox(mailbox_hash);",
         ),
-        version: 1,
+        version: 2,
     };
 
     impl ToSql for ModSequence {
@@ -445,6 +445,7 @@ mod sqlite3_m {
                     modseq,
                     flags: _,
                     body: _,
+                    references: _,
                     envelope: Some(envelope),
                     raw_fetch_value: _,
                 } = item

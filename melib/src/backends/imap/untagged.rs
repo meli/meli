@@ -416,6 +416,7 @@ impl ImapConnection {
                 modseq,
                 flags,
                 body: _,
+                references: _,
                 envelope: _,
                 raw_fetch_value: _,
             }) => {

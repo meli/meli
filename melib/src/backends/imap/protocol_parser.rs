@@ -464,6 +464,7 @@ pub struct FetchResponse<'a> {
     pub modseq: Option<ModSequence>,
     pub flags: Option<(Flag, Vec<String>)>,
     pub body: Option<&'a [u8]>,
+    pub references: Option<&'a [u8]>,
     pub envelope: Option<Envelope>,
     pub raw_fetch_value: &'a [u8],
 }
@@ -520,6 +521,7 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
         modseq: None,
         flags: None,
         body: None,
+        references: None,
         envelope: None,
         raw_fetch_value: &[],
     };
@@ -617,6 +619,22 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
             let (rest, _has_attachments) = bodystructure_has_attachments(&input[i..])?;
             has_attachments = _has_attachments;
             i += input[i..].len() - rest.len();
+        } else if input[i..].starts_with(b"BODY[HEADER.FIELDS (REFERENCES)] ") {
+            i += b"BODY[HEADER.FIELDS (REFERENCES)] ".len();
+            if let Ok((rest, mut references)) = astring_token(&input[i..]) {
+                if !references.trim().is_empty() {
+                    if let Ok((_, (_, v))) = crate::email::parser::headers::header(&references) {
+                        references = v;
+                    }
+                    ret.references = Some(references);
+                }
+                i += input.len() - i - rest.len();
+            } else {
+                return debug!(Err(MeliError::new(format!(
+                    "Unexpected input while parsing UID FETCH response. Got: `{:.40}`",
+                    String::from_utf8_lossy(&input[i..])
+                ))));
+            }
         } else if input[i..].starts_with(b")\r\n") {
             i += b")\r\n".len();
             break;
@@ -860,7 +878,6 @@ pub fn untagged_responses(input: &[u8]) -> ImapParseResult<Option<UntaggedRespon
 
 #[test]
 fn test_untagged_responses() {
-    use std::convert::TryInto;
     use UntaggedResponse::*;
     assert_eq!(
         untagged_responses(b"* 2 EXISTS\r\n")
@@ -880,6 +897,7 @@ fn test_untagged_responses() {
             modseq: Some(ModSequence(std::num::NonZeroU64::new(1365_u64).unwrap())),
             flags: Some((Flag::SEEN, vec![])),
             body: None,
+            references: None,
             envelope: None,
             raw_fetch_value: &b"* 1079 FETCH (UID 1103 MODSEQ (1365) FLAGS (\\Seen))\r\n"[..],
         })
@@ -895,6 +913,7 @@ fn test_untagged_responses() {
             modseq: None,
             flags: Some((Flag::SEEN, vec![])),
             body: None,
+            references: None,
             envelope: None,
             raw_fetch_value: &b"* 1 FETCH (FLAGS (\\Seen))\r\n"[..],
         })
@@ -1052,7 +1071,6 @@ pub fn select_response(input: &[u8]) -> Result<SelectResponse> {
 
 #[test]
 fn test_select_response() {
-    use std::convert::TryInto;
     let r = b"* FLAGS (\\Answered \\Flagged \\Deleted \\Seen \\Draft)\r\n* OK [PERMANENTFLAGS (\\Answered \\Flagged \\Deleted \\Seen \\Draft \\*)] Flags permitted.\r\n* 45 EXISTS\r\n* 0 RECENT\r\n* OK [UNSEEN 16] First unseen.\r\n* OK [UIDVALIDITY 1554422056] UIDs valid\r\n* OK [UIDNEXT 50] Predicted next UID\r\n";
 
     assert_eq!(

@@ -77,40 +77,6 @@ impl ImapConnection {
         }
     }
 
-    pub async fn build_cache(
-        &mut self,
-        cache_handle: &mut Box<dyn ImapCache>,
-        mailbox_hash: MailboxHash,
-    ) -> Result<()> {
-        debug!("build_cache {}", mailbox_hash);
-        let mut response = Vec::with_capacity(8 * 1024);
-        // 1 get uidvalidity, highestmodseq
-        let select_response = self
-            .select_mailbox(mailbox_hash, &mut response, true)
-            .await?
-            .unwrap();
-        self.uid_store
-            .uidvalidity
-            .lock()
-            .unwrap()
-            .insert(mailbox_hash, select_response.uidvalidity);
-        if let Some(v) = select_response.highestmodseq {
-            self.uid_store
-                .highestmodseqs
-                .lock()
-                .unwrap()
-                .insert(mailbox_hash, v);
-        }
-        cache_handle.clear(mailbox_hash, &select_response)?;
-        self.send_command(b"UID FETCH 1:* (UID FLAGS ENVELOPE BODYSTRUCTURE)")
-            .await?;
-        self.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)
-            .await?;
-        let fetches = protocol_parser::fetch_responses(&response)?.1;
-        cache_handle.insert_envelopes(mailbox_hash, &fetches)?;
-        Ok(())
-    }
-
     //rfc4549_Synchronization_Operations_for_Disconnected_IMAP4_Clients
     pub async fn resync_basic(
         &mut self,
@@ -170,7 +136,7 @@ impl ImapConnection {
         // 2.  tag1 UID FETCH <lastseenuid+1>:* <descriptors>
         self.send_command(
             format!(
-                "UID FETCH {}:* (UID FLAGS ENVELOPE BODYSTRUCTURE)",
+                "UID FETCH {}:* (UID FLAGS ENVELOPE BODY.PEEK[HEADER.FIELDS (REFERENCES)] BODYSTRUCTURE)",
                 max_uid + 1
             )
             .as_bytes(),
@@ -189,12 +155,28 @@ impl ImapConnection {
             ref uid,
             ref mut envelope,
             ref mut flags,
+            ref references,
             ..
         } in v.iter_mut()
         {
             let uid = uid.unwrap();
             let env = envelope.as_mut().unwrap();
             env.set_hash(generate_envelope_hash(&mailbox_path, &uid));
+            if let Some(value) = references {
+                let parse_result = crate::email::parser::address::msg_id_list(value);
+                if let Ok((_, value)) = parse_result {
+                    let prev_val = env.references.take();
+                    for v in value {
+                        env.push_references(v);
+                    }
+                    if let Some(prev) = prev_val {
+                        for v in prev.refs {
+                            env.push_references(v);
+                        }
+                    }
+                }
+                env.set_references(value);
+            }
             let mut tag_lck = self.uid_store.tag_index.write().unwrap();
             if let Some((flags, keywords)) = flags {
                 env.set_flags(*flags);
@@ -457,7 +439,7 @@ impl ImapConnection {
             // 2.  tag1 UID FETCH <lastseenuid+1>:* <descriptors>
             self.send_command(
                 format!(
-                    "UID FETCH {}:* (UID FLAGS ENVELOPE BODYSTRUCTURE) (CHANGEDSINCE {})",
+                    "UID FETCH {}:* (UID FLAGS ENVELOPE BODY.PEEK[HEADER.FIELDS (REFERENCES)] BODYSTRUCTURE) (CHANGEDSINCE {})",
                     cached_max_uid + 1,
                     cached_highestmodseq,
                 )
@@ -477,12 +459,28 @@ impl ImapConnection {
                 ref uid,
                 ref mut envelope,
                 ref mut flags,
+                ref references,
                 ..
             } in v.iter_mut()
             {
                 let uid = uid.unwrap();
                 let env = envelope.as_mut().unwrap();
                 env.set_hash(generate_envelope_hash(&mailbox_path, &uid));
+                if let Some(value) = references {
+                    let parse_result = crate::email::parser::address::msg_id_list(value);
+                    if let Ok((_, value)) = parse_result {
+                        let prev_val = env.references.take();
+                        for v in value {
+                            env.push_references(v);
+                        }
+                        if let Some(prev) = prev_val {
+                            for v in prev.refs {
+                                env.push_references(v);
+                            }
+                        }
+                    }
+                    env.set_references(value);
+                }
                 let mut tag_lck = self.uid_store.tag_index.write().unwrap();
                 if let Some((flags, keywords)) = flags {
                     env.set_flags(*flags);
