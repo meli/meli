@@ -67,9 +67,9 @@ pub struct EmbedGrid {
 #[derive(Debug, PartialEq)]
 enum CodepointBuf {
     None,
-    TwoCodepoints(Vec<u8>),
-    ThreeCodepoints(Vec<u8>),
-    FourCodepoints(Vec<u8>),
+    TwoCodepoints(u8),
+    ThreeCodepoints(u8, Option<u8>),
+    FourCodepoints(u8, Option<u8>, Option<u8>),
 }
 
 impl EmbedGrid {
@@ -103,7 +103,7 @@ impl EmbedGrid {
         if new_val == self.terminal_size {
             return;
         }
-        debug!("resizing to {:?}", new_val);
+        //debug!("resizing to {:?}", new_val);
         self.scroll_region.top = 0;
         self.scroll_region.bottom = new_val.1.saturating_sub(1);
 
@@ -129,7 +129,7 @@ impl EmbedGrid {
     }
 
     pub fn stop(&self) {
-        debug!("stopping");
+        //debug!("stopping");
         let _ = nix::sys::signal::kill(debug!(self.child_pid), nix::sys::signal::SIGSTOP);
     }
 
@@ -196,7 +196,7 @@ impl EmbedGrid {
                 *state = State::ExpectingControlChar;
             }
             (b']', State::ExpectingControlChar) => {
-                let buf1 = Vec::new();
+                let buf1 = SmallVec::new();
                 *state = State::Osc1(buf1);
             }
             (b'[', State::ExpectingControlChar) => {
@@ -207,7 +207,7 @@ impl EmbedGrid {
             }
             (b'D', State::ExpectingControlChar) => {
                 // ESCD Linefeed
-                debug!("{}", EscCode::from((&(*state), byte)));
+                //debug!("{}", EscCode::from((&(*state), byte)));
                 if cursor.1 == scroll_region.bottom {
                     grid.scroll_up(scroll_region, scroll_region.top, 1);
                 } else {
@@ -218,8 +218,8 @@ impl EmbedGrid {
             }
             (b'J', State::ExpectingControlChar) => {
                 // ESCJ Erase from the cursor to the end of the screen
-                debug!("sending {}", EscCode::from((&(*state), byte)));
-                debug!("erasing from {:?} to {:?}", cursor, terminal_size);
+                //debug!("sending {}", EscCode::from((&(*state), byte)));
+                //debug!("erasing from {:?} to {:?}", cursor, terminal_size);
                 for y in cursor.1..terminal_size.1 {
                     for x in cursor.0..terminal_size.0 {
                         grid[(x, y)] = Cell::default();
@@ -229,21 +229,21 @@ impl EmbedGrid {
             }
             (b'K', State::ExpectingControlChar) => {
                 // ESCK Erase from the cursor to the end of the line
-                debug!("sending {}", EscCode::from((&(*state), byte)));
+                //debug!("sending {}", EscCode::from((&(*state), byte)));
                 for x in cursor.0..terminal_size.0 {
                     grid[(x, cursor.1)] = Cell::default();
                 }
                 *state = State::Normal;
             }
             (_, State::ExpectingControlChar) => {
-                debug!(
-                    "unrecognised: byte is {} and state is {:?}",
-                    byte as char, state
-                );
+                //debug!(
+                //    "unrecognised: byte is {} and state is {:?}",
+                //    byte as char, state
+                //);
                 *state = State::Normal;
             }
             (b'?', State::Csi) => {
-                let buf1 = Vec::new();
+                let buf1 = SmallVec::new();
                 *state = State::CsiQ(buf1);
             }
             /* OSC stuff */
@@ -251,8 +251,8 @@ impl EmbedGrid {
                 buf.push(c);
             }
             (b';', State::Osc1(ref mut buf1_p)) => {
-                let buf1 = std::mem::replace(buf1_p, Vec::new());
-                let buf2 = Vec::new();
+                let buf1 = std::mem::replace(buf1_p, SmallVec::new());
+                let buf2 = SmallVec::new();
                 *state = State::Osc2(buf1, buf2);
             }
             (c, State::Osc2(_, ref mut buf)) if (c >= b'0' && c <= b'9') || c == b'?' => {
@@ -260,14 +260,14 @@ impl EmbedGrid {
             }
             /* Normal */
             (b'\r', State::Normal) => {
-                debug!("carriage return x-> 0, cursor was: {:?}", cursor);
+                //debug!("carriage return x-> 0, cursor was: {:?}", cursor);
                 cursor.0 = 0;
                 *wrap_next = false;
-                debug!("cursor became: {:?}", cursor);
+                //debug!("cursor became: {:?}", cursor);
             }
             (b'\n', State::Normal) => {
                 //debug!("setting cell {:?} char '{}'", cursor, c as char);
-                debug!("newline y-> y+1, cursor was: {:?}", cursor);
+                //debug!("newline y-> y+1, cursor was: {:?}", cursor);
 
                 if cursor.1 + 1 < terminal_size.1 {
                     if cursor.1 == scroll_region.bottom {
@@ -277,18 +277,18 @@ impl EmbedGrid {
                     }
                 }
                 *wrap_next = false;
-                debug!("cursor became: {:?}", cursor);
+                //debug!("cursor became: {:?}", cursor);
             }
             (b'', State::Normal) => {
-                debug!("Visual bell ^G, ignoring {:?}", cursor);
+                //debug!("Visual bell ^G, ignoring {:?}", cursor);
             }
             (0x08, State::Normal) => {
                 /* Backspace */
-                debug!("backspace x-> x-1, cursor was: {:?}", cursor);
+                //debug!("backspace x-> x-1, cursor was: {:?}", cursor);
                 if cursor.0 > 0 {
                     cursor.0 -= 1;
                 }
-                debug!("cursor became: {:?}", cursor);
+                //debug!("cursor became: {:?}", cursor);
             }
             (c, State::Normal) => {
                 /* Character to be printed. */
@@ -298,57 +298,61 @@ impl EmbedGrid {
                 } else {
                     match codepoints {
                         CodepointBuf::None if c & 0b1110_0000 == 0b1100_0000 => {
-                            *codepoints = CodepointBuf::TwoCodepoints(vec![c]);
+                            *codepoints = CodepointBuf::TwoCodepoints(c);
                             return;
                         }
                         CodepointBuf::None if c & 0b1111_0000 == 0b1110_0000 => {
-                            *codepoints = CodepointBuf::ThreeCodepoints(vec![c]);
+                            *codepoints = CodepointBuf::ThreeCodepoints(c, None);
                             return;
                         }
                         CodepointBuf::None if c & 0b1111_1000 == 0b1111_0000 => {
-                            *codepoints = CodepointBuf::FourCodepoints(vec![c]);
+                            *codepoints = CodepointBuf::FourCodepoints(c, None, None);
                             return;
                         }
-                        CodepointBuf::TwoCodepoints(buf) => {
-                            debug!("two byte char = ");
-                            unsafe { std::str::from_utf8_unchecked(&[buf[0], c]) }
+                        CodepointBuf::TwoCodepoints(b) => {
+                            //debug!("two byte char = ");
+                            unsafe { std::str::from_utf8_unchecked(&[*b, c]) }
                                 .chars()
                                 .next()
                                 .unwrap()
                         }
-                        CodepointBuf::ThreeCodepoints(buf) if buf.len() == 2 => {
-                            debug!("three byte char = ",);
-                            unsafe { std::str::from_utf8_unchecked(&[buf[0], buf[1], c]) }
+                        CodepointBuf::ThreeCodepoints(b, Some(b1)) => {
+                            //debug!("three byte char = ",);
+                            unsafe { std::str::from_utf8_unchecked(&[*b, *b1, c]) }
                                 .chars()
                                 .next()
                                 .unwrap()
                         }
-                        CodepointBuf::ThreeCodepoints(buf) => {
-                            buf.push(c);
+                        CodepointBuf::ThreeCodepoints(_, ref mut b @ None) => {
+                            *b = Some(c);
                             return;
                         }
-                        CodepointBuf::FourCodepoints(buf) if buf.len() == 3 => {
-                            debug!("four byte char = ",);
-                            unsafe { std::str::from_utf8_unchecked(&[buf[0], buf[1], buf[2], c]) }
+                        CodepointBuf::FourCodepoints(b, Some(b1), Some(b2)) => {
+                            //debug!("four byte char = ",);
+                            unsafe { std::str::from_utf8_unchecked(&[*b, *b1, *b2, c]) }
                                 .chars()
                                 .next()
                                 .unwrap()
                         }
-                        CodepointBuf::FourCodepoints(buf) => {
-                            buf.push(c);
+                        CodepointBuf::FourCodepoints(_, ref mut b1 @ None, None) => {
+                            *b1 = Some(c);
+                            return;
+                        }
+                        CodepointBuf::FourCodepoints(_, _, ref mut b2 @ None) => {
+                            *b2 = Some(c);
                             return;
                         }
                         _ => {
-                            debug!(
-                                "invalid utf8 sequence: codepoints = {:?} and c={}",
-                                codepoints, c
-                            );
+                            //debug!(
+                            //    "invalid utf8 sequence: codepoints = {:?} and c={}",
+                            //    codepoints, c
+                            //);
                             *codepoints = CodepointBuf::None;
                             return;
                         }
                     }
                 };
-                debug!("c = {:?}\tcursor={:?}", c, cursor);
+                //debug!("c = {:?}\tcursor={:?}", c, cursor);
                 *codepoints = CodepointBuf::None;
                 if *auto_wrap_mode && *wrap_next {
                     *wrap_next = false;
@@ -360,9 +364,9 @@ impl EmbedGrid {
                     cursor.0 = 0;
                 }
 
-                if c == '↪' {
-                    debug!("↪ cursor is {:?}", cursor_val!());
-                }
+                //if c == '↪' {
+                //debug!("↪ cursor is {:?}", cursor_val!());
+                //}
                 grid[cursor_val!()].set_ch(c);
                 grid[cursor_val!()].set_fg(*fg_color);
                 grid[cursor_val!()].set_bg(*bg_color);
@@ -387,13 +391,13 @@ impl EmbedGrid {
             }
             (b'u', State::Csi) => {
                 /* restore cursor */
-                debug!("restore cursor {}", EscCode::from((&(*state), byte)));
+                //debug!("restore cursor {}", EscCode::from((&(*state), byte)));
                 *show_cursor = true;
                 *state = State::Normal;
             }
             (b'm', State::Csi) => {
                 /* Reset character Attributes (SGR).  Ps = 0  -> Normal (default), VT100 */
-                debug!("{}", EscCode::from((&(*state), byte)));
+                //debug!("{}", EscCode::from((&(*state), byte)));
                 *fg_color = Color::Default;
                 *bg_color = Color::Default;
                 grid[cursor_val!()].set_fg(Color::Default);
@@ -402,10 +406,10 @@ impl EmbedGrid {
             }
             (b'C', State::Csi) => {
                 // ESC[C    CSI Cursor Forward one Time
-                debug!("cursor forward one time, cursor was: {:?}", cursor);
+                //debug!("cursor forward one time, cursor was: {:?}", cursor);
                 cursor.0 = std::cmp::min(cursor.0 + 1, terminal_size.0.saturating_sub(1));
                 *wrap_next = false;
-                debug!("cursor became: {:?}", cursor);
+                //debug!("cursor became: {:?}", cursor);
                 *state = State::Normal;
             }
             /* CSI ? stuff */
@@ -430,7 +434,7 @@ impl EmbedGrid {
                     _ => {}
                 }
 
-                debug!("{}", EscCode::from((&(*state), byte)));
+                //debug!("{}", EscCode::from((&(*state), byte)));
                 *state = State::Normal;
             }
             (b'l', State::CsiQ(ref mut buf)) => {
@@ -456,12 +460,12 @@ impl EmbedGrid {
                     }
                     _ => {}
                 }
-                debug!("{}", EscCode::from((&(*state), byte)));
+                //debug!("{}", EscCode::from((&(*state), byte)));
                 *state = State::Normal;
             }
             /* END OF CSI ? stuff */
             (c, State::Csi) if c >= b'0' && c <= b'9' => {
-                let mut buf1 = Vec::new();
+                let mut buf1 = SmallVec::new();
                 buf1.push(c);
                 *state = State::Csi1(buf1);
             }
@@ -485,13 +489,13 @@ impl EmbedGrid {
                     ),
                     Default::default(),
                 );
-                debug!("{}", EscCode::from((&(*state), byte)));
+                //debug!("{}", EscCode::from((&(*state), byte)));
                 *state = State::Normal;
             }
             (b'K', State::Csi) => {
                 /* Erase in Line (ED), VT100.*/
                 /* Erase to right (Default) */
-                debug!("{}", EscCode::from((&(*state), byte)));
+                //debug!("{}", EscCode::from((&(*state), byte)));
                 for x in cursor.0..terminal_size.0 {
                     grid[(x, cursor.1)] = Cell::default();
                 }
@@ -509,7 +513,7 @@ impl EmbedGrid {
 
                 grid.scroll_down(scroll_region, cursor.1, n);
 
-                debug!("{}", EscCode::from((&(*state), byte)));
+                //debug!("{}", EscCode::from((&(*state), byte)));
                 *state = State::Normal;
             }
             (b'M', State::Csi) | (b'M', State::Csi1(_)) => {
@@ -524,40 +528,40 @@ impl EmbedGrid {
 
                 grid.scroll_up(scroll_region, cursor.1, n);
 
-                debug!("{}", EscCode::from((&(*state), byte)));
+                //debug!("{}", EscCode::from((&(*state), byte)));
                 *state = State::Normal;
             }
             (b'A', State::Csi) => {
                 // Move cursor up 1 line
-                debug!("cursor up 1 times, cursor was: {:?}", cursor);
+                //debug!("cursor up 1 times, cursor was: {:?}", cursor);
                 if cursor.1 > 0 {
                     cursor.1 -= 1;
                 } else {
-                    debug!("cursor.1 == 0");
+                    //debug!("cursor.1 == 0");
                 }
                 *wrap_next = false;
-                debug!("cursor became: {:?}", cursor);
+                //debug!("cursor became: {:?}", cursor);
                 *state = State::Normal;
             }
-            (b'K', State::Csi1(buf)) if buf == b"0" => {
+            (b'K', State::Csi1(buf)) if buf.as_ref() == b"0" => {
                 /* Erase in Line (ED), VT100.*/
                 /* Erase to right (Default) */
-                debug!("{}", EscCode::from((&(*state), byte)));
+                //debug!("{}", EscCode::from((&(*state), byte)));
                 for x in cursor.0..terminal_size.0 {
                     grid[(x, cursor.1)] = Cell::default();
                 }
                 *state = State::Normal;
             }
-            (b'K', State::Csi1(buf)) if buf == b"1" => {
+            (b'K', State::Csi1(buf)) if buf.as_ref() == b"1" => {
                 /* Erase in Line (ED), VT100.*/
                 /* Erase to left (Default) */
                 for x in 0..=cursor.0 {
                     grid[(x, cursor.1)] = Cell::default();
                 }
-                debug!("{}", EscCode::from((&(*state), byte)));
+                //debug!("{}", EscCode::from((&(*state), byte)));
                 *state = State::Normal;
             }
-            (b'K', State::Csi1(buf)) if buf == b"2" => {
+            (b'K', State::Csi1(buf)) if buf.as_ref() == b"2" => {
                 /* Erase in Line (ED), VT100.*/
                 /* Erase all */
                 for y in 0..terminal_size.1 {
@@ -565,7 +569,7 @@ impl EmbedGrid {
                         grid[(x, y)] = Cell::default();
                     }
                 }
-                debug!("{}", EscCode::from((&(*state), byte)));
+                //debug!("{}", EscCode::from((&(*state), byte)));
                 clear_area(
                     grid,
                     ((0, 0), pos_dec(*terminal_size, (1, 1))),
@@ -573,7 +577,7 @@ impl EmbedGrid {
                 );
                 *state = State::Normal;
             }
-            (b'J', State::Csi1(ref buf)) if buf == b"0" => {
+            (b'J', State::Csi1(ref buf)) if buf.as_ref() == b"0" => {
                 /* Erase in Display (ED), VT100.*/
                 /* Erase Below (default). */
                 clear_area(
@@ -593,10 +597,10 @@ impl EmbedGrid {
                     ),
                     Default::default(),
                 );
-                debug!("{}", EscCode::from((&(*state), byte)));
+                //debug!("{}", EscCode::from((&(*state), byte)));
                 *state = State::Normal;
             }
-            (b'J', State::Csi1(ref buf)) if buf == b"1" => {
+            (b'J', State::Csi1(ref buf)) if buf.as_ref() == b"1" => {
                 /* Erase in Display (ED), VT100.*/
                 /* Erase Above */
                 clear_area(
@@ -610,10 +614,10 @@ impl EmbedGrid {
                     ),
                     Default::default(),
                 );
-                debug!("{}", EscCode::from((&(*state), byte)));
+                //debug!("{}", EscCode::from((&(*state), byte)));
                 *state = State::Normal;
             }
-            (b'J', State::Csi1(ref buf)) if buf == b"2" => {
+            (b'J', State::Csi1(ref buf)) if buf.as_ref() == b"2" => {
                 /* Erase in Display (ED), VT100.*/
                 /* Erase All */
                 clear_area(
@@ -621,7 +625,7 @@ impl EmbedGrid {
                     ((0, 0), pos_dec(*terminal_size, (1, 1))),
                     Default::default(),
                 );
-                debug!("{}", EscCode::from((&(*state), byte)));
+                //debug!("{}", EscCode::from((&(*state), byte)));
                 *state = State::Normal;
             }
             (b'X', State::Csi1(ref buf)) => {
@@ -644,15 +648,15 @@ impl EmbedGrid {
                     cur_x += 1;
                     ctr += 1;
                 }
-                debug!("Erased {} Character(s)", ps);
+                //debug!("Erased {} Character(s)", ps);
                 *state = State::Normal;
             }
             (b't', State::Csi1(buf)) => {
                 /* Window manipulation */
-                if buf == b"18" || buf == b"19" {
+                if buf.as_ref() == b"18" || buf.as_ref() == b"19" {
                     // Ps = 18 → Report the size of the text area in characters as CSI 8 ; height ; width t
-                    debug!("report size of the text area");
-                    debug!("got {}", EscCode::from((&(*state), byte)));
+                    //debug!("report size of the text area");
+                    //debug!("got {}", EscCode::from((&(*state), byte)));
                     stdin.write_all(b"\x1b[8;").unwrap();
                     stdin
                         .write_all((terminal_size.1).to_string().as_bytes())
@@ -664,15 +668,15 @@ impl EmbedGrid {
                     stdin.write_all(&[b't']).unwrap();
                     stdin.flush().unwrap();
                 } else {
-                    debug!("ignoring unknown code {}", EscCode::from((&(*state), byte)));
+                    //debug!("ignoring unknown code {}", EscCode::from((&(*state), byte)));
                 }
                 *state = State::Normal;
             }
             (b'n', State::Csi1(_)) => {
                 // Ps = 6  ⇒  Report Cursor Position (CPR) [row;column].
                 // Result is CSI r ; c R
-                debug!("report cursor position");
-                debug!("got {}", EscCode::from((&(*state), byte)));
+                //debug!("report cursor position");
+                //debug!("got {}", EscCode::from((&(*state), byte)));
                 stdin.write_all(&[b'\x1b', b'[']).unwrap();
                 stdin
                     .write_all((cursor.1 + 1).to_string().as_bytes())
@@ -690,13 +694,13 @@ impl EmbedGrid {
                 let offset = unsafe { std::str::from_utf8_unchecked(buf) }
                     .parse::<usize>()
                     .unwrap();
-                debug!("cursor up {} times, cursor was: {:?}", offset, cursor);
+                //debug!("cursor up {} times, cursor was: {:?}", offset, cursor);
                 if cursor.1 >= offset {
                     cursor.1 -= offset;
                 } else {
-                    debug!("offset > cursor.1");
+                    //debug!("offset > cursor.1");
                 }
-                debug!("cursor became: {:?}", cursor);
+                //debug!("cursor became: {:?}", cursor);
                 *state = State::Normal;
             }
             (b'B', State::Csi1(buf)) => {
@@ -704,7 +708,7 @@ impl EmbedGrid {
                 let offset = unsafe { std::str::from_utf8_unchecked(buf) }
                     .parse::<usize>()
                     .unwrap();
-                debug!("cursor down {} times, cursor was: {:?}", offset, cursor);
+                //debug!("cursor down {} times, cursor was: {:?}", offset, cursor);
                 if cursor.1 == scroll_region.bottom {
                     /* scroll down */
                     for y in scroll_region.top..scroll_region.bottom {
@@ -722,7 +726,7 @@ impl EmbedGrid {
                     cursor.1 = terminal_size.1.saturating_sub(1);
                 }
                 *wrap_next = false;
-                debug!("cursor became: {:?}", cursor);
+                //debug!("cursor became: {:?}", cursor);
                 *state = State::Normal;
             }
             (b'D', State::Csi1(buf)) => {
@@ -733,10 +737,10 @@ impl EmbedGrid {
                 if cursor.0 >= offset {
                     cursor.0 -= offset;
                 }
-                debug!(
-                    "ESC[ {} D cursor backwards cursor became: {:?}",
-                    offset, cursor
-                );
+                //debug!(
+                //   "ESC[ {} D cursor backwards cursor became: {:?}",
+                //    offset, cursor
+                // );
                 *state = State::Normal;
             }
             (b'E', State::Csi1(buf)) => {
@@ -744,10 +748,10 @@ impl EmbedGrid {
                 let offset = unsafe { std::str::from_utf8_unchecked(buf) }
                     .parse::<usize>()
                     .unwrap();
-                debug!(
-                    "cursor next line {} times, cursor was: {:?}",
-                    offset, cursor
-                );
+                //debug!(
+                //    "cursor next line {} times, cursor was: {:?}",
+                //    offset, cursor
+                //);
                 if offset + cursor.1 < terminal_size.1 {
                     cursor.1 += offset;
                 }
@@ -756,7 +760,7 @@ impl EmbedGrid {
                 }
                 cursor.0 = 0;
                 *wrap_next = false;
-                debug!("cursor became: {:?}", cursor);
+                //debug!("cursor became: {:?}", cursor);
                 *state = State::Normal;
             }
             (b'F', State::Csi1(buf)) => {
@@ -764,14 +768,14 @@ impl EmbedGrid {
                 let offset = unsafe { std::str::from_utf8_unchecked(buf) }
                     .parse::<usize>()
                     .unwrap();
-                debug!(
-                    "cursor previous line {} times, cursor was: {:?}",
-                    offset, cursor
-                );
+                //debug!(
+                //    "cursor previous line {} times, cursor was: {:?}",
+                //    offset, cursor
+                //);
                 cursor.1 = cursor.1.saturating_sub(offset);
                 cursor.0 = 0;
                 *wrap_next = false;
-                debug!("cursor became: {:?}", cursor);
+                //debug!("cursor became: {:?}", cursor);
                 *state = State::Normal;
             }
             (b'G', State::Csi1(_)) | (b'G', State::Csi) => {
@@ -783,17 +787,17 @@ impl EmbedGrid {
                 } else {
                     1
                 };
-                debug!("cursor absolute {}, cursor was: {:?}", new_col, cursor);
+                //debug!("cursor absolute {}, cursor was: {:?}", new_col, cursor);
                 if new_col < terminal_size.0 {
                     cursor.0 = new_col.saturating_sub(1);
                 } else {
-                    debug!(
-                        "error: new_cal = {} > terminal.size.0 = {}\nterminal_size = {:?}",
-                        new_col, terminal_size.0, terminal_size
-                    );
+                    //debug!(
+                    //    "error: new_cal = {} > terminal.size.0 = {}\nterminal_size = {:?}",
+                    //    new_col, terminal_size.0, terminal_size
+                    //);
                 }
                 *wrap_next = false;
-                debug!("cursor became: {:?}", cursor);
+                //debug!("cursor became: {:?}", cursor);
                 *state = State::Normal;
             }
             (b'C', State::Csi1(buf)) => {
@@ -801,11 +805,11 @@ impl EmbedGrid {
                 let offset = unsafe { std::str::from_utf8_unchecked(buf) }
                     .parse::<usize>()
                     .unwrap();
-                debug!("cursor forward {} times, cursor was: {:?}", offset, cursor);
+                //debug!("cursor forward {} times, cursor was: {:?}", offset, cursor);
                 if cursor.0 + offset < terminal_size.0 {
                     cursor.0 += offset;
                 }
-                debug!("cursor became: {:?}", cursor);
+                //debug!("cursor became: {:?}", cursor);
                 *state = State::Normal;
             }
             (b'P', State::Csi1(_)) | (b'P', State::Csi) => {
@@ -824,10 +828,10 @@ impl EmbedGrid {
                 for x in (terminal_size.0 - offset)..terminal_size.0 {
                     grid[(x, cursor.1)].set_ch(' ');
                 }
-                debug!(
-                    "Delete {} Character(s) with cursor at {:?}  ",
-                    offset, cursor
-                );
+                //debug!(
+                //    "Delete {} Character(s) with cursor at {:?}  ",
+                //    offset, cursor
+                //);
                 *state = State::Normal;
             }
             (b'd', State::Csi1(_)) | (b'd', State::Csi) => {
@@ -839,21 +843,21 @@ impl EmbedGrid {
                 } else {
                     1
                 };
-                debug!(
-                    "Line position absolute row {} with cursor at {:?}",
-                    row, cursor
-                );
+                //debug!(
+                //    "Line position absolute row {} with cursor at {:?}",
+                //    row, cursor
+                //);
                 cursor.1 = row.saturating_sub(1);
                 if scroll_region.top + cursor.1 >= terminal_size.1 {
                     cursor.1 = terminal_size.1.saturating_sub(1);
                 }
                 *wrap_next = false;
-                debug!("cursor became: {:?}", cursor);
+                //debug!("cursor became: {:?}", cursor);
                 *state = State::Normal;
             }
             (b';', State::Csi1(ref mut buf1_p)) => {
-                let buf1 = std::mem::replace(buf1_p, Vec::new());
-                let buf2 = Vec::new();
+                let buf1 = std::mem::replace(buf1_p, SmallVec::new());
+                let buf2 = SmallVec::new();
                 *state = State::Csi2(buf1, buf2);
             }
             (b'm', State::Csi1(ref buf1)) => {
@@ -989,13 +993,13 @@ impl EmbedGrid {
                 buf.push(c);
             }
             (b';', State::Csi2(ref mut buf1_p, ref mut buf2_p)) => {
-                let buf1 = std::mem::replace(buf1_p, Vec::new());
-                let buf2 = std::mem::replace(buf2_p, Vec::new());
-                let buf3 = Vec::new();
+                let buf1 = std::mem::replace(buf1_p, SmallVec::new());
+                let buf2 = std::mem::replace(buf2_p, SmallVec::new());
+                let buf3 = SmallVec::new();
                 *state = State::Csi3(buf1, buf2, buf3);
             }
             (b't', State::Csi2(_, _)) => {
-                debug!("ignoring {}", EscCode::from((&(*state), byte)));
+                //debug!("ignoring {}", EscCode::from((&(*state), byte)));
                 // Window manipulation, skip it
                 *state = State::Normal;
             }
@@ -1015,7 +1019,7 @@ impl EmbedGrid {
                 };
 
                 let (min_y, max_y) = if *origin_mode {
-                    debug!(*origin_mode);
+                    //debug!(*origin_mode);
                     orig_y += scroll_region.top;
                     (scroll_region.top, scroll_region.bottom)
                 } else {
@@ -1026,13 +1030,13 @@ impl EmbedGrid {
                 cursor.1 = std::cmp::max(min_y, std::cmp::min(max_y, orig_y - 1));
                 *wrap_next = false;
 
-                debug!("{}", EscCode::from((&(*state), byte)),);
-                debug!(
-                    "cursor set to ({},{}), cursor was: {:?}",
-                    orig_x, orig_y, cursor
-                );
+                //debug!("{}", EscCode::from((&(*state), byte)),);
+                //debug!(
+                //    "cursor set to ({},{}), cursor was: {:?}",
+                //    orig_x, orig_y, cursor
+                //);
 
-                debug!("cursor became: {:?}", cursor);
+                //debug!("cursor became: {:?}", cursor);
                 *state = State::Normal;
             }
             (c, State::Csi2(_, ref mut buf)) if c >= b'0' && c <= b'9' => {
@@ -1059,11 +1063,11 @@ impl EmbedGrid {
                     *cursor = (0, 0);
                     *wrap_next = false;
                 }
-                debug!("set scrolling region to {:?}", scroll_region);
+                //debug!("set scrolling region to {:?}", scroll_region);
                 *state = State::Normal;
             }
             (b't', State::Csi3(_, _, _)) => {
-                debug!("ignoring {}", EscCode::from((&(*state), byte)));
+                //debug!("ignoring {}", EscCode::from((&(*state), byte)));
                 // Window manipulation, skip it
                 *state = State::Normal;
             }
@@ -1071,32 +1075,34 @@ impl EmbedGrid {
             (c, State::Csi3(_, _, ref mut buf)) if c >= b'0' && c <= b'9' => {
                 buf.push(c);
             }
-            (b'm', State::Csi3(ref buf1, ref buf2, ref buf3)) if buf1 == b"38" && buf2 == b"5" => {
+            (b'm', State::Csi3(ref buf1, ref buf2, ref buf3))
+                if buf1.as_ref() == b"38" && buf2.as_ref() == b"5" =>
+            {
                 /* Set character attributes | foreground color */
                 *fg_color = if let Ok(byte) =
                     u8::from_str_radix(unsafe { std::str::from_utf8_unchecked(buf3) }, 10)
                 {
-                    debug!("parsed buf as {}", byte);
+                    //debug!("parsed buf as {}", byte);
                     Color::Byte(byte)
                 } else {
                     Color::Default
                 };
                 grid[cursor_val!()].set_fg(*fg_color);
-                debug!("{}", EscCode::from((&(*state), byte)));
                 *state = State::Normal;
             }
-            (b'm', State::Csi3(ref buf1, ref buf2, ref buf3)) if buf1 == b"48" && buf2 == b"5" => {
+            (b'm', State::Csi3(ref buf1, ref buf2, ref buf3))
+                if buf1.as_ref() == b"48" && buf2.as_ref() == b"5" =>
+            {
                 /* Set character attributes | background color */
                 *bg_color = if let Ok(byte) =
                     u8::from_str_radix(unsafe { std::str::from_utf8_unchecked(buf3) }, 10)
                 {
-                    debug!("parsed buf as {}", byte);
+                    //debug!("parsed buf as {}", byte);
                     Color::Byte(byte)
                 } else {
                     Color::Default
                 };
                 grid[cursor_val!()].set_bg(*bg_color);
-                debug!("{}", EscCode::from((&(*state), byte)));
                 *state = State::Normal;
             }
             (_, State::Csi) => {

@@ -20,7 +20,8 @@
  */
 
 use crate::terminal::position::*;
-use melib::{log, ERROR, error::*};
+use melib::{error::*, log, ERROR};
+use smallvec::SmallVec;
 
 use nix::fcntl::{open, OFlag};
 use nix::libc::{STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
@@ -29,7 +30,10 @@ use nix::sys::stat;
 use nix::unistd::{dup2, fork, ForkResult};
 use nix::{ioctl_none_bad, ioctl_write_ptr_bad};
 use std::ffi::{CString, OsStr};
-use std::os::unix::{ffi::OsStrExt, io::{AsRawFd, FromRawFd, IntoRawFd}};
+use std::os::unix::{
+    ffi::OsStrExt,
+    io::{AsRawFd, FromRawFd, IntoRawFd},
+};
 
 mod grid;
 
@@ -51,11 +55,7 @@ ioctl_write_ptr_bad!(set_window_size, TIOCSWINSZ, Winsize);
 
 ioctl_none_bad!(set_controlling_terminal, TIOCSCTTY);
 
-pub fn create_pty(
-    width: usize,
-    height: usize,
-    command: String,
-) -> Result<Arc<Mutex<EmbedGrid>>> {
+pub fn create_pty(width: usize, height: usize, command: String) -> Result<Arc<Mutex<EmbedGrid>>> {
     // Open a new PTY master
     let master_fd = posix_openpt(OFlag::O_RDWR)?;
 
@@ -77,11 +77,11 @@ pub fn create_pty(
         };
 
         let master_fd = master_fd.clone().into_raw_fd();
-        unsafe { set_window_size(master_fd, &winsize).unwrap() };
+        unsafe { set_window_size(master_fd, &winsize)? };
     }
 
-    let child_pid = match fork() {
-        Ok(ForkResult::Child) => {
+    let child_pid = match fork()? {
+        ForkResult::Child => {
             /* Open slave end for pseudoterminal */
             let slave_fd = open(Path::new(&slave_name), OFlag::O_RDWR, stat::Mode::empty())?;
 
@@ -115,16 +115,19 @@ pub fn create_pty(
                 }
             }
             /* Find posix sh location, because POSIX shell is not always at /bin/sh */
-            let path_var = std::process::Command::new("getconf").args(&["PATH"]).output()?.stdout;
+            let path_var = std::process::Command::new("getconf")
+                .args(&["PATH"])
+                .output()?
+                .stdout;
             for mut p in std::env::split_paths(&OsStr::from_bytes(&path_var[..])) {
                 p.push("sh");
                 if p.exists() {
                     if let Err(e) = nix::unistd::execv(
                         &CString::new(p.as_os_str().as_bytes()).unwrap(),
                         &[
-                        &CString::new("sh").unwrap(),
-                        &CString::new("-c").unwrap(),
-                        &CString::new(command.as_bytes()).unwrap(),
+                            &CString::new("sh").unwrap(),
+                            &CString::new("-c").unwrap(),
+                            &CString::new(command.as_bytes()).unwrap(),
                         ],
                     ) {
                         log(format!("Could not execute `{}`: {}", command, e,), ERROR);
@@ -135,14 +138,14 @@ pub fn create_pty(
             log(
                 format!(
                     "Could not execute `{}`: did not find the standard POSIX sh shell in PATH = {}",
-                    command, String::from_utf8_lossy(&path_var),
+                    command,
+                    String::from_utf8_lossy(&path_var),
                 ),
                 ERROR,
             );
             std::process::exit(-1);
         }
-        Ok(ForkResult::Parent { child }) => child,
-        Err(e) => panic!(e),
+        ForkResult::Parent { child } => child,
     };
 
     let stdin = unsafe { std::fs::File::from_raw_fd(master_fd.clone().into_raw_fd()) };
@@ -163,9 +166,9 @@ pub fn create_pty(
 
 fn forward_pty_translate_escape_codes(pty_fd: std::fs::File, grid: Arc<Mutex<EmbedGrid>>) {
     let mut bytes_iter = pty_fd.bytes();
-    debug!("waiting for bytes");
+    //debug!("waiting for bytes");
     while let Some(Ok(byte)) = bytes_iter.next() {
-        debug!("got a byte? {:?}", byte as char);
+        //debug!("got a byte? {:?}", byte as char);
         /* Drink deep, and descend. */
         grid.lock().unwrap().process_byte(byte);
     }
@@ -174,14 +177,14 @@ fn forward_pty_translate_escape_codes(pty_fd: std::fs::File, grid: Arc<Mutex<Emb
 #[derive(Debug)]
 pub enum State {
     ExpectingControlChar,
-    G0,            // Designate G0 Character Set
-    Osc1(Vec<u8>), //ESC ] Operating System Command (OSC  is 0x9d).
-    Osc2(Vec<u8>, Vec<u8>),
+    G0,                      // Designate G0 Character Set
+    Osc1(SmallVec<[u8; 8]>), //ESC ] Operating System Command (OSC  is 0x9d).
+    Osc2(SmallVec<[u8; 8]>, SmallVec<[u8; 8]>),
     Csi, // ESC [ Control Sequence Introducer (CSI  is 0x9b).
-    Csi1(Vec<u8>),
-    Csi2(Vec<u8>, Vec<u8>),
-    Csi3(Vec<u8>, Vec<u8>, Vec<u8>),
-    CsiQ(Vec<u8>),
+    Csi1(SmallVec<[u8; 8]>),
+    Csi2(SmallVec<[u8; 8]>, SmallVec<[u8; 8]>),
+    Csi3(SmallVec<[u8; 8]>, SmallVec<[u8; 8]>, SmallVec<[u8; 8]>),
+    CsiQ(SmallVec<[u8; 8]>),
     Normal,
 }
 
@@ -264,7 +267,7 @@ impl std::fmt::Display for EscCode<'_> {
                 "ESC[{}n\t\tCSI Device Status Report (DSR)| Report Cursor Position",
                 unsafestr!(buf)
             ),
-            EscCode(Csi1(ref buf), b't') if buf == b"18" => write!(
+            EscCode(Csi1(ref buf), b't') if buf.as_ref() == b"18" => write!(
                 f,
                 "ESC[18t\t\tReport the size of the text area in characters",
             ),
@@ -364,11 +367,11 @@ impl std::fmt::Display for EscCode<'_> {
                 "ESC[?{}r\t\tCSI Restore DEC Private Mode Values",
                 unsafestr!(buf)
             ),
-            EscCode(CsiQ(ref buf), b'h') if buf == b"25" => write!(
+            EscCode(CsiQ(ref buf), b'h') if buf.as_ref() == b"25" => write!(
                 f,
                 "ESC[?25h\t\tCSI DEC Private Mode Set (DECSET) show cursor",
             ),
-            EscCode(CsiQ(ref buf), b'h') if buf == b"12" => write!(
+            EscCode(CsiQ(ref buf), b'h') if buf.as_ref() == b"12" => write!(
                 f,
                 "ESC[?12h\t\tCSI DEC Private Mode Set (DECSET) Start Blinking Cursor.",
             ),
@@ -377,11 +380,11 @@ impl std::fmt::Display for EscCode<'_> {
                 "ESC[?{}h\t\tCSI DEC Private Mode Set (DECSET). [UNKNOWN]",
                 unsafestr!(buf)
             ),
-            EscCode(CsiQ(ref buf), b'l') if buf == b"12" => write!(
+            EscCode(CsiQ(ref buf), b'l') if buf.as_ref() == b"12" => write!(
                 f,
                 "ESC[?12l\t\tCSI DEC Private Mode Set (DECSET) Stop Blinking Cursor",
             ),
-            EscCode(CsiQ(ref buf), b'l') if buf == b"25" => write!(
+            EscCode(CsiQ(ref buf), b'l') if buf.as_ref() == b"25" => write!(
                 f,
                 "ESC[?25l\t\tCSI DEC Private Mode Set (DECSET) hide cursor",
             ),
