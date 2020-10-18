@@ -25,11 +25,12 @@ include!("src/text_processing/types.rs");
 fn main() -> Result<(), std::io::Error> {
     #[cfg(feature = "unicode_algorithms")]
     {
+        /* Line break tables */
         use std::fs::File;
         use std::io::prelude::*;
         use std::io::BufReader;
-        use std::path::{Path, PathBuf};
-        use std::process::Command;
+        use std::path::Path;
+        use std::process::{Command, Stdio};
         const LINE_BREAK_TABLE_URL: &str =
             "http://www.unicode.org/Public/UCD/latest/ucd/LineBreak.txt";
 
@@ -41,18 +42,14 @@ fn main() -> Result<(), std::io::Error> {
             );
             std::process::exit(0);
         }
-        let mut tmpdir_path = PathBuf::from(
-            std::str::from_utf8(&Command::new("mktemp").arg("-d").output()?.stdout)
-                .unwrap()
-                .trim(),
-        );
-        tmpdir_path.push("LineBreak.txt");
-        Command::new("curl")
-            .args(&["-o", tmpdir_path.to_str().unwrap(), LINE_BREAK_TABLE_URL])
-            .output()?;
+        let mut child = Command::new("curl")
+            .args(&["-o", "-", LINE_BREAK_TABLE_URL])
+            .stdout(Stdio::piped())
+            .stdin(Stdio::null())
+            .stderr(Stdio::inherit())
+            .spawn()?;
 
-        let file = File::open(&tmpdir_path)?;
-        let buf_reader = BufReader::new(file);
+        let buf_reader = BufReader::new(child.stdout.take().unwrap());
 
         let mut line_break_table: Vec<(u32, u32, LineBreakClass)> = Vec::with_capacity(3800);
         for line in buf_reader.lines() {
@@ -78,22 +75,42 @@ fn main() -> Result<(), std::io::Error> {
             let class = &tokens[semicolon_idx + 1..semicolon_idx + 1 + 2];
             line_break_table.push((first_codepoint, sec_codepoint, LineBreakClass::from(class)));
         }
+        child.wait()?;
 
         let mut file = File::create(&mod_path)?;
-        file.write_all(b"use crate::types::LineBreakClass::*;\n")
-            .unwrap();
-        file.write_all(b"use crate::types::LineBreakClass;\n\n")
-            .unwrap();
-        file.write_all(b"const LINE_BREAK_RULES: &[(u32, u32, LineBreakClass)] = &[\n")
-            .unwrap();
+        file.write_all(
+            br#"/*
+ * meli - text_processing crate.
+ *
+ * Copyright 2017-2020 Manos Pitsidianakis
+ *
+ * This file is part of meli.
+ *
+ * meli is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * meli is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with meli. If not, see <http://www.gnu.org/licenses/>.
+ */
+
+use super::types::LineBreakClass::{self, *};
+
+pub const LINE_BREAK_RULES: &[(u32, u32, LineBreakClass)] = &[
+"#,
+        )
+        .unwrap();
         for l in &line_break_table {
             file.write_all(format!("    (0x{:X}, 0x{:X}, {:?}),\n", l.0, l.1, l.2).as_bytes())
                 .unwrap();
         }
         file.write_all(b"];").unwrap();
-        std::fs::remove_file(&tmpdir_path).unwrap();
-        tmpdir_path.pop();
-        std::fs::remove_dir(&tmpdir_path).unwrap();
     }
     Ok(())
 }
