@@ -1174,14 +1174,16 @@ impl State {
                 self.display_messages_pos = self.display_messages.len() - 1;
                 self.redraw();
             }
+            UIEvent::ComponentKill(ref id) if self.overlay.iter().any(|c| c.id() == *id) => {
+                let pos = self.overlay.iter().position(|c| c.id() == *id).unwrap();
+                self.overlay.remove(pos);
+            }
             UIEvent::FinishedUIDialog(ref id, ref mut results)
                 if self.overlay.iter().any(|c| c.id() == *id) =>
             {
                 if let Some(ref mut action @ Some(_)) = results.downcast_mut::<Option<Action>>() {
                     self.exec_command(action.take().unwrap());
 
-                    let pos = self.overlay.iter().position(|c| c.id() == *id).unwrap();
-                    self.overlay.remove(pos);
                     return;
                 }
             }
