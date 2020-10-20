@@ -648,7 +648,8 @@ impl Account {
             }
             mailbox_entries.entry(*h).and_modify(|entry| {
                 if entry.conf.mailbox_conf.autoload
-                    || entry.ref_mailbox.special_usage() == SpecialUsageMailbox::Inbox
+                    || (entry.ref_mailbox.special_usage() == SpecialUsageMailbox::Inbox
+                        || entry.ref_mailbox.special_usage() == SpecialUsageMailbox::Sent)
                 {
                     let total = entry.ref_mailbox.count().ok().unwrap_or((0, 0)).1;
                     entry.status = MailboxStatus::Parsing(0, total);
