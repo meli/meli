@@ -31,11 +31,10 @@ use crate::email::Flag;
 use crate::error::{MeliError, Result};
 use crate::shellexpand::ShellExpandTrait;
 pub use futures::stream::Stream;
-
-use memmap::{Mmap, Protection};
 use std::collections::hash_map::DefaultHasher;
 use std::fs;
 use std::hash::{Hash, Hasher};
+use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -45,7 +44,7 @@ pub struct MaildirOp {
     hash_index: HashIndexes,
     mailbox_hash: MailboxHash,
     hash: EnvelopeHash,
-    slice: Option<Mmap>,
+    slice: Option<Vec<u8>>,
 }
 
 impl Clone for MaildirOp {
@@ -92,10 +91,16 @@ impl MaildirOp {
 impl<'a> BackendOp for MaildirOp {
     fn as_bytes(&mut self) -> ResultFuture<Vec<u8>> {
         if self.slice.is_none() {
-            self.slice = Some(Mmap::open_path(self.path(), Protection::Read)?);
+            let file = std::fs::OpenOptions::new()
+                .read(true)
+                .write(false)
+                .open(&self.path())?;
+            let mut buf_reader = BufReader::new(file);
+            let mut contents = Vec::new();
+            buf_reader.read_to_end(&mut contents)?;
+            self.slice = Some(contents);
         }
-        /* Unwrap is safe since we use ? above. */
-        let ret = Ok((unsafe { self.slice.as_ref().unwrap().as_slice() }).to_vec());
+        let ret = Ok(self.slice.as_ref().unwrap().as_slice().to_vec());
         Ok(Box::pin(async move { ret }))
     }
 

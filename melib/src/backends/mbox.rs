@@ -30,7 +30,6 @@ use crate::email::*;
 use crate::error::{MeliError, Result};
 use crate::get_path_hash;
 use crate::shellexpand::ShellExpandTrait;
-use memmap::{Mmap, Protection};
 use nom::bytes::complete::tag;
 use nom::character::complete::digit1;
 use nom::combinator::map_res;
@@ -41,8 +40,7 @@ use self::notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
 use std::collections::hash_map::{DefaultHasher, HashMap};
 use std::fs::File;
 use std::hash::Hasher;
-use std::io::BufReader;
-use std::io::Read;
+use std::io::{BufReader, Read};
 use std::os::unix::io::AsRawFd;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -164,7 +162,7 @@ pub struct MboxOp {
     path: PathBuf,
     offset: Offset,
     length: Length,
-    slice: Option<Mmap>,
+    slice: std::cell::RefCell<Option<Vec<u8>>>,
 }
 
 impl MboxOp {
@@ -172,7 +170,7 @@ impl MboxOp {
         MboxOp {
             hash,
             path: path.to_path_buf(),
-            slice: None,
+            slice: std::cell::RefCell::new(None),
             offset,
             length,
         }
@@ -181,28 +179,38 @@ impl MboxOp {
 
 impl BackendOp for MboxOp {
     fn as_bytes(&mut self) -> ResultFuture<Vec<u8>> {
-        if self.slice.is_none() {
-            self.slice = Some(Mmap::open_path(&self.path, Protection::Read)?);
+        if self.slice.get_mut().is_none() {
+            let file = std::fs::OpenOptions::new()
+                .read(true)
+                .write(false)
+                .open(&self.path)?;
+            get_rw_lock_blocking(&file);
+            let mut buf_reader = BufReader::new(file);
+            let mut contents = Vec::new();
+            buf_reader.read_to_end(&mut contents)?;
+            *self.slice.get_mut() = Some(contents);
         }
-        /* Unwrap is safe since we use ? above. */
-        let ret = Ok((unsafe {
-            &self.slice.as_ref().unwrap().as_slice()[self.offset..self.offset + self.length]
-        })
-        .to_vec());
+        let ret = Ok(self.slice.get_mut().as_ref().unwrap().as_slice()
+            [self.offset..self.offset + self.length]
+            .to_vec());
         Ok(Box::pin(async move { ret }))
     }
 
     fn fetch_flags(&self) -> ResultFuture<Flag> {
         let mut flags = Flag::empty();
-        let file = std::fs::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(&self.path)?;
-        get_rw_lock_blocking(&file);
-        let mut buf_reader = BufReader::new(file);
-        let mut contents = Vec::new();
-        buf_reader.read_to_end(&mut contents)?;
-        let (_, headers) = parser::headers::headers_raw(contents.as_slice())?;
+        if self.slice.borrow().is_none() {
+            let file = std::fs::OpenOptions::new()
+                .read(true)
+                .write(false)
+                .open(&self.path)?;
+            get_rw_lock_blocking(&file);
+            let mut buf_reader = BufReader::new(file);
+            let mut contents = Vec::new();
+            buf_reader.read_to_end(&mut contents)?;
+            *self.slice.borrow_mut() = Some(contents);
+        }
+        let slice_ref = self.slice.borrow();
+        let (_, headers) = parser::headers::headers_raw(slice_ref.as_ref().unwrap().as_slice())?;
         if let Some(start) = headers.find(b"Status:") {
             if let Some(end) = headers[start..].find(b"\n") {
                 let start = start + b"Status:".len();
@@ -780,7 +788,7 @@ impl MailBackend for MboxType {
         let mailbox_path = mailboxes.lock().unwrap()[&mailbox_hash].fs_path.clone();
         let file = std::fs::OpenOptions::new()
             .read(true)
-            .write(true)
+            .write(false)
             .open(&mailbox_path)?;
         get_rw_lock_blocking(&file);
         let mut buf_reader = BufReader::new(file);
@@ -852,7 +860,7 @@ impl MailBackend for MboxType {
                             let mailbox_hash = get_path_hash!(&pathbuf);
                             let file = match std::fs::OpenOptions::new()
                                 .read(true)
-                                .write(true)
+                                .write(false)
                                 .open(&pathbuf)
                             {
                                 Ok(f) => f,

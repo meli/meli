@@ -619,16 +619,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "00b0228411908ca8685dba7fc2cdd70ec9990a6e753e89b6ac91a84c40fbaf4b"
 
 [[package]]
-name = "fs2"
-version = "0.4.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9564fc758e15025b46aa6643b1b77d047d1a56a1aea6e01002ac0c7026876213"
-dependencies = [
- "libc",
- "winapi 0.3.9",
-]
-
-[[package]]
 name = "fsevent"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1110,7 +1100,6 @@ dependencies = [
  "isahc",
  "libc",
  "libloading",
- "memmap",
  "native-tls",
  "nix",
  "nom",
@@ -1132,18 +1121,6 @@ name = "memchr"
 version = "2.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3728d817d99e5ac407411fa471ff9800a778d88a24685968b36824eaf4bee400"
-
-[[package]]
-name = "memmap"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46f3c7359028b31999287dae4e5047ddfe90a23b7dca2282ce759b491080c99b"
-dependencies = [
- "fs2",
- "kernel32-sys",
- "libc",
- "winapi 0.2.8",
-]
 
 [[package]]
 name = "memoffset"

@@ -23,7 +23,6 @@ bitflags = "1.0"
 crossbeam = "0.7.2"
 data-encoding = "2.1.1"
 encoding = "0.2.33"
-memmap = { version = "0.5.2", optional = true }
 nom = { version = "5.1.1" }
 
 indexmap = { version = "^1.5", features = ["serde-1", ] }
@@ -61,8 +60,8 @@ http = ["isahc"]
 http-static = ["isahc", "isahc/static-curl"]
 imap_backend = ["tls"]
 jmap_backend = ["http", "serde_json"]
-maildir_backend = ["notify", "memmap"]
-mbox_backend = ["notify", "memmap"]
+maildir_backend = ["notify"]
+mbox_backend = ["notify"]
 notmuch_backend = []
 smtp = ["tls", "base64"]
 sqlite3 = ["rusqlite", ]

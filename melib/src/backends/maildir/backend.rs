@@ -27,7 +27,6 @@ use crate::error::{ErrorKind, MeliError, Result};
 use crate::shellexpand::ShellExpandTrait;
 use futures::prelude::Stream;
 
-use memmap::{Mmap, Protection};
 extern crate notify;
 use self::notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
 use std::time::Duration;
@@ -241,6 +240,7 @@ impl MailBackend for MaildirType {
         Ok(Box::pin(async move {
             let thunk = move |sender: &BackendEventConsumer| {
                 debug!("refreshing");
+                let mut buf = Vec::with_capacity(4096);
                 let mut path = path.clone();
                 path.push("new");
                 for d in path.read_dir()? {
@@ -278,10 +278,10 @@ impl MailBackend for MaildirType {
                         }
                         (*map).insert(hash, PathBuf::from(&file).into());
                     }
-                    if let Ok(mut env) = Envelope::from_bytes(
-                        unsafe { &Mmap::open_path(&file, Protection::Read)?.as_slice() },
-                        Some(file.flags()),
-                    ) {
+                    let mut reader = io::BufReader::new(fs::File::open(&file)?);
+                    buf.clear();
+                    reader.read_to_end(&mut buf)?;
+                    if let Ok(mut env) = Envelope::from_bytes(buf.as_slice(), Some(file.flags())) {
                         env.set_hash(hash);
                         mailbox_index
                             .lock()
@@ -371,6 +371,7 @@ impl MailBackend for MaildirType {
         Ok(Box::pin(async move {
             // Move `watcher` in the closure's scope so that it doesn't get dropped.
             let _watcher = watcher;
+            let mut buf = Vec::with_capacity(4096);
             loop {
                 match rx.recv() {
                     /*
@@ -410,6 +411,7 @@ impl MailBackend for MaildirType {
                                 pathbuf.as_path(),
                                 &cache_dir,
                                 file_name,
+                                &mut buf,
                             ) {
                                 mailbox_index
                                     .lock()
@@ -464,6 +466,7 @@ impl MailBackend for MaildirType {
                                         pathbuf.as_path(),
                                         &cache_dir,
                                         file_name,
+                                        &mut buf,
                                     ) {
                                         mailbox_index
                                             .lock()
@@ -482,14 +485,14 @@ impl MailBackend for MaildirType {
                                 }
                             };
                             let new_hash: EnvelopeHash = get_file_hash(pathbuf.as_path());
+                            let mut reader = io::BufReader::new(fs::File::open(&pathbuf)?);
+                            buf.clear();
+                            reader.read_to_end(&mut buf)?;
                             if index_lock.get_mut(&new_hash).is_none() {
                                 debug!("write notice");
-                                if let Ok(mut env) = Envelope::from_bytes(
-                                    unsafe {
-                                        &Mmap::open_path(&pathbuf, Protection::Read)?.as_slice()
-                                    },
-                                    Some(pathbuf.flags()),
-                                ) {
+                                if let Ok(mut env) =
+                                    Envelope::from_bytes(buf.as_slice(), Some(pathbuf.flags()))
+                                {
                                     env.set_hash(new_hash);
                                     debug!("{}\t{:?}", new_hash, &pathbuf);
                                     debug!(
@@ -611,6 +614,7 @@ impl MailBackend for MaildirType {
                                         dest.as_path(),
                                         &cache_dir,
                                         file_name,
+                                        &mut buf,
                                     ) {
                                         mailbox_index
                                             .lock()
@@ -701,6 +705,7 @@ impl MailBackend for MaildirType {
                                     dest.as_path(),
                                     &cache_dir,
                                     file_name,
+                                    &mut buf,
                                 ) {
                                     mailbox_index
                                         .lock()
@@ -747,6 +752,7 @@ impl MailBackend for MaildirType {
                                     dest.as_path(),
                                     &cache_dir,
                                     file_name,
+                                    &mut buf,
                                 ) {
                                     mailbox_index
                                         .lock()
@@ -1330,6 +1336,7 @@ fn add_path_to_index(
     path: &Path,
     cache_dir: &xdg::BaseDirectories,
     file_name: PathBuf,
+    buf: &mut Vec<u8>,
 ) -> Result<Envelope> {
     debug!("add_path_to_index path {:?} filename{:?}", path, file_name);
     let env_hash = get_file_hash(path);
@@ -1344,11 +1351,10 @@ fn add_path_to_index(
             map.len()
         );
     }
-    //Mmap::open_path(self.path(), Protection::Read)?
-    let mut env = Envelope::from_bytes(
-        unsafe { &Mmap::open_path(path, Protection::Read)?.as_slice() },
-        Some(path.flags()),
-    )?;
+    let mut reader = io::BufReader::new(fs::File::open(&path)?);
+    buf.clear();
+    reader.read_to_end(buf)?;
+    let mut env = Envelope::from_bytes(buf.as_slice(), Some(path.flags()))?;
     env.set_hash(env_hash);
     debug!(
         "add_path_to_index gen {}\t{}",

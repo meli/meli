@@ -25,8 +25,7 @@ use core::future::Future;
 use core::pin::Pin;
 use futures::stream::{FuturesUnordered, StreamExt};
 use futures::task::{Context, Poll};
-use memmap::{Mmap, Protection};
-use std::io::{self};
+use std::io::{self, Read};
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::result;
@@ -113,6 +112,7 @@ impl MaildirStream {
         let len = chunk.len();
         let size = if len <= 100 { 100 } else { (len / 100) * 100 };
         let mut local_r: Vec<Envelope> = Vec::with_capacity(chunk.len());
+        let mut buf = Vec::with_capacity(4096);
         for c in chunk.chunks(size) {
             let map = map.clone();
             for file in c {
@@ -146,10 +146,10 @@ impl MaildirStream {
                     let map = map.entry(mailbox_hash).or_default();
                     (*map).insert(env_hash, PathBuf::from(file).into());
                 }
-                match Envelope::from_bytes(
-                    unsafe { &Mmap::open_path(&file, Protection::Read)?.as_slice() },
-                    Some(file.flags()),
-                ) {
+                let mut reader = io::BufReader::new(fs::File::open(&file)?);
+                buf.clear();
+                reader.read_to_end(&mut buf)?;
+                match Envelope::from_bytes(buf.as_slice(), Some(file.flags())) {
                     Ok(mut env) => {
                         env.set_hash(env_hash);
                         mailbox_index.lock().unwrap().insert(env_hash, mailbox_hash);
