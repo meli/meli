@@ -11,8 +11,13 @@ Library for handling mail.
 | `imap_backend`         | `native-tls`                        |                          |
 | `deflate_compression`  | `flate2`                            | for use with IMAP        |
 | `jmap_backend`         | `isahc`, `native-tls`, `serde_json` |                          |
-| `maildir_backend`      | `notify`, `memmap`                  |                          |
-| `mbox_backend`         | `notify`, `memmap`                  |                          |
+| `maildir_backend`      | `notify`                            |                          |
+| `mbox_backend`         | `notify`                            |                          |
+| `notmuch_backend`      | `notify`                            |                          |
+| `sqlite`               | `rusqlite`                          | used in IMAP cache       |
+| `unicode_algorithms`   | `unicode-segmentation`              | linebreaking algo etc    |
+| `vcard`                |                                     | vcard parsing            |
+| `gpgme`                |                                     | GPG use with libgpgme    |
 | `smtp`                 | `native-tls`, `base64`              | async SMTP communication |
 
 ## Example: Parsing bytes into an `Envelope`
