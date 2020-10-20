@@ -146,26 +146,37 @@ impl ImapStream {
             ))
             .chain_err_kind(crate::error::ErrorKind::Network)?;
             if server_conf.use_starttls {
+                let err_fn = || {
+                    if server_conf.server_port == 993 {
+                        "STARTTLS failed. Server port is set to 993, which normally uses TLS. Maybe try disabling use_starttls."
+                    } else {
+                        "STARTTLS failed. Is the connection already encrypted?"
+                    }
+                };
                 let mut buf = vec![0; Connection::IO_BUF_SIZE];
                 match server_conf.protocol {
                     ImapProtocol::IMAP { .. } => socket
                         .write_all(format!("M{} STARTTLS\r\n", cmd_id).as_bytes())
                         .await
+                        .chain_err_summary(err_fn)
                         .chain_err_kind(crate::error::ErrorKind::Network)?,
                     ImapProtocol::ManageSieve => {
                         socket
                             .read(&mut buf)
                             .await
+                            .chain_err_summary(err_fn)
                             .chain_err_kind(crate::error::ErrorKind::Network)?;
                         socket
                             .write_all(b"STARTTLS\r\n")
                             .await
+                            .chain_err_summary(err_fn)
                             .chain_err_kind(crate::error::ErrorKind::Network)?;
                     }
                 }
                 socket
                     .flush()
                     .await
+                    .chain_err_summary(err_fn)
                     .chain_err_kind(crate::error::ErrorKind::Network)?;
                 let mut response = Vec::with_capacity(1024);
                 let mut broken = false;
@@ -175,6 +186,7 @@ impl ImapStream {
                     let len = socket
                         .read(&mut buf)
                         .await
+                        .chain_err_summary(err_fn)
                         .chain_err_kind(crate::error::ErrorKind::Network)?;
                     response.extend_from_slice(&buf[0..len]);
                     match server_conf.protocol {
@@ -200,7 +212,7 @@ impl ImapStream {
                 }
                 if !broken {
                     return Err(MeliError::new(format!(
-                        "Could not initiate TLS negotiation to {}.",
+                        "Could not initiate STARTTLS negotiation to {}.",
                         path
                     )));
                 }
@@ -232,8 +244,13 @@ impl ImapStream {
                     }
                 }
                 AsyncWrapper::new(Connection::Tls(
-                    conn_result.chain_err_kind(crate::error::ErrorKind::Network)?,
+                    conn_result
+                        .chain_err_summary(|| {
+                            format!("Could not initiate TLS negotiation to {}.", path)
+                        })
+                        .chain_err_kind(crate::error::ErrorKind::Network)?,
                 ))
+                .chain_err_summary(|| format!("Could not initiate TLS negotiation to {}.", path))
                 .chain_err_kind(crate::error::ErrorKind::Network)?
             }
         } else {
