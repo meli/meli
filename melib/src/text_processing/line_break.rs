@@ -1102,12 +1102,23 @@ pub fn split_lines_reflow(text: &str, reflow: Reflow, width: Option<usize>) -> V
                         split(&mut ret, line, width);
                         continue;
                     }
+                    let segment_tree = {
+                        use std::iter::FromIterator;
+                        let mut t: smallvec::SmallVec<[usize; 1024]> =
+                            smallvec::SmallVec::from_iter(std::iter::repeat(0).take(line.len()));
+                        for (idx, _g) in UnicodeSegmentation::grapheme_indices(line, true) {
+                            t[idx] = 1;
+                        }
+                        segment_tree::SegmentTree::new(t)
+                    };
 
                     let mut prev = 0;
                     let mut prev_line_offset = 0;
                     while prev < breaks.len() {
                         let new_off = match breaks[prev..].binary_search_by(|(offset, _)| {
-                            line[prev_line_offset..*offset].grapheme_len().cmp(&width)
+                            segment_tree
+                                .get_sum(prev_line_offset, offset.saturating_sub(1))
+                                .cmp(&width)
                         }) {
                             Ok(v) => v,
                             Err(v) => v,
@@ -1231,5 +1242,88 @@ easy to take MORE than nothing.'"#;
     use super::_ALICE_CHAPTER_1;
     for l in split_lines_reflow(_ALICE_CHAPTER_1, Reflow::FormatFlowed, Some(72)) {
         println!("{}", l);
+    }
+}
+
+
+mod segment_tree {
+    /*! Simple segment tree implementation for maximum in range queries. This is useful if given an
+     *  array of numbers you want to get the maximum value inside an interval quickly.
+     */
+    use smallvec::SmallVec;
+    use std::convert::TryFrom;
+    use std::iter::FromIterator;
+
+    #[derive(Default, Debug, Clone)]
+    pub(super) struct SegmentTree {
+        array: SmallVec<[usize; 1024]>,
+        tree: SmallVec<[usize; 1024]>,
+    }
+
+    impl SegmentTree {
+        pub(super) fn new(val: SmallVec<[usize; 1024]>) -> SegmentTree {
+            if val.is_empty() {
+                return SegmentTree {
+                    array: val.clone(),
+                    tree: val,
+                };
+            }
+
+            let height = (f64::from(u32::try_from(val.len()).unwrap_or(0)))
+                .log2()
+                .ceil() as u32;
+            let max_size = 2 * (2_usize.pow(height));
+
+            let mut segment_tree: SmallVec<[usize; 1024]> =
+                SmallVec::from_iter(core::iter::repeat(0).take(max_size));
+            for i in 0..val.len() {
+                segment_tree[val.len() + i] = val[i];
+            }
+
+            for i in (1..val.len()).rev() {
+                segment_tree[i] = segment_tree[2 * i] + segment_tree[2 * i + 1];
+            }
+
+            SegmentTree {
+                array: val,
+                tree: segment_tree,
+            }
+        }
+
+        /// (left, right) is inclusive
+        pub(super) fn get_sum(&self, mut left: usize, mut right: usize) -> usize {
+            if self.array.is_empty() {
+                return 0;
+            }
+
+            let len = self.array.len();
+            if left > right {
+                return 0;
+            }
+            if right >= len {
+                right = len.saturating_sub(1);
+            }
+
+            left += len;
+            right += len + 1;
+
+            let mut sum = 0;
+
+            while left < right {
+                if (left & 1) > 0 {
+                    sum += self.tree[left];
+                    left += 1;
+                }
+
+                if (right & 1) > 0 {
+                    right -= 1;
+                    sum += self.tree[right];
+                }
+
+                left /= 2;
+                right /= 2;
+            }
+            sum
+        }
     }
 }
