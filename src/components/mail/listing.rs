@@ -1229,6 +1229,15 @@ impl Component for Listing {
                         self.get_status(context),
                     )));
             }
+            UIEvent::Input(Key::Backspace) if !self.cmd_buf.is_empty() => {
+                self.cmd_buf.pop();
+                context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::BufSet(
+                        self.cmd_buf.clone(),
+                    )));
+                return true;
+            }
             UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Alt('')) if !self.cmd_buf.is_empty() => {
                 self.cmd_buf.clear();
                 self.component.set_command_modifier(false);
