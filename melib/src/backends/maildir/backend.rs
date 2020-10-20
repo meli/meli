@@ -141,15 +141,6 @@ macro_rules! get_path_hash {
 }
 
 pub(super) fn get_file_hash(file: &Path) -> EnvelopeHash {
-    /*
-    let mut buf = Vec::with_capacity(2048);
-    let mut f = fs::File::open(&file).unwrap_or_else(|_| panic!("Can't open {}", file.display()));
-    f.read_to_end(&mut buf)
-        .unwrap_or_else(|_| panic!("Can't read {}", file.display()));
-    let mut hasher = DefaultHasher::default();
-    hasher.write(&buf);
-    hasher.finish()
-        */
     let mut hasher = DefaultHasher::default();
     file.hash(&mut hasher);
     hasher.finish()
@@ -546,9 +537,13 @@ impl MailBackend for MaildirType {
                                 });
                                 continue;
                             }
-                            *mailbox_counts[&mailbox_hash].1.lock().unwrap() -= 1;
+                            {
+                                let mut lck = mailbox_counts[&mailbox_hash].1.lock().unwrap();
+                                *lck = lck.saturating_sub(1);
+                            }
                             if !pathbuf.flags().contains(Flag::SEEN) {
-                                *mailbox_counts[&mailbox_hash].0.lock().unwrap() -= 1;
+                                let mut lck = mailbox_counts[&mailbox_hash].0.lock().unwrap();
+                                *lck = lck.saturating_sub(1);
                             }
 
                             index_lock.entry(hash).and_modify(|e| {
