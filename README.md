@@ -7,7 +7,7 @@ Community links:
 
 | | | |
 :---:|:---:|:---:
-![Main view screenshot](./docs/screenshots/main.svg "mail meli view screenshot")  |  ![Compact main view screenshot](./docs/screenshots/compact.svg "compact main view screenshot") | ![Compose with embed terminal editor screenshot](./docs/screenshots/compose.svg "composing view screenshot")
+![Main view screenshot](./docs/screenshots/main.webp "mail meli view screenshot")  |  ![Compact main view screenshot](./docs/screenshots/compact.webp "compact main view screenshot") | ![Compose with embed terminal editor screenshot](./docs/screenshots/compose.webp "composing view screenshot")
 Main view             |  Compact main view | Compose with embed terminal editor
 
 ## Install
