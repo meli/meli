@@ -154,13 +154,6 @@ impl StatusBar {
         if self.progress_spinner.is_active() {
             x = x.saturating_sub(1 + self.progress_spinner.width);
         }
-        for (idx, c) in self.display_buffer.chars().rev().enumerate() {
-            if let Some(cell) = grid.get_mut(x.saturating_sub(idx).saturating_sub(1), y) {
-                cell.set_ch(c);
-            } else {
-                break;
-            }
-        }
         if self.progress_spinner.is_dirty() {
             self.progress_spinner.draw(
                 grid,
@@ -170,6 +163,13 @@ impl StatusBar {
                 ),
                 context,
             );
+        }
+        for (idx, c) in self.display_buffer.chars().rev().enumerate() {
+            if let Some(cell) = grid.get_mut(x.saturating_sub(idx).saturating_sub(1), y) {
+                cell.set_ch(c);
+            } else {
+                break;
+            }
         }
 
         context.dirty_areas.push_back(area);
