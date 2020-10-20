@@ -20,7 +20,6 @@ path = "src/lib.rs"
 
 [dependencies]
 bitflags = "1.0"
-crossbeam = "0.7.2"
 data-encoding = "2.1.1"
 encoding = "0.2.33"
 nom = { version = "5.1.1" }

@@ -1091,7 +1091,6 @@ dependencies = [
  "base64",
  "bincode",
  "bitflags 1.2.1",
- "crossbeam",
  "data-encoding",
  "encoding",
  "flate2",
