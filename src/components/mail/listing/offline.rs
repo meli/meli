@@ -79,6 +79,10 @@ impl ListingTrait for OfflineListing {
 
     fn draw_list(&mut self, _: &mut CellBuffer, _: Area, _: &mut Context) {}
 
+    fn unfocused(&self) -> bool {
+        false
+    }
+
     fn set_movement(&mut self, _: PageMovement) {}
 }
 

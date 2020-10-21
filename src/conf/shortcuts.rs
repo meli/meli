@@ -160,8 +160,7 @@ shortcut_key_values! { "compact-listing",
     /// Shortcut listing for a mail listing in compact mode.
     pub struct CompactListingShortcuts {
         exit_thread |> "Exit thread view." |> Key::Char('i'),
-        open_thread |> "Open thread." |> Key::Char('\n'),
-        select_entry |> "Select thread entry." |> Key::Char('v')
+        open_thread |> "Open thread." |> Key::Char('\n')
     }
 }
 
@@ -181,6 +180,10 @@ shortcut_key_values! { "listing",
         search |> "Search within list of e-mails." |> Key::Char('/'),
         refresh |> "Manually request a mailbox refresh." |> Key::F(5),
         set_seen |> "Set thread as seen." |> Key::Char('n'),
+        union_modifier |> "Union modifier." |> Key::Ctrl('u'),
+        diff_modifier |> "Difference modifier." |> Key::Ctrl('d'),
+        intersection_modifier |> "Intersection modifier." |> Key::Ctrl('i'),
+        select_entry |> "Select thread entry." |> Key::Char('v'),
         toggle_menu_visibility |> "Toggle visibility of side menu in mail list." |> Key::Char('`')
     }
 }

@@ -734,6 +734,10 @@ impl ListingTrait for ThreadListing {
         }
     }
 
+    fn unfocused(&self) -> bool {
+        self.unfocused
+    }
+
     fn set_movement(&mut self, mvm: PageMovement) {
         self.movement = Some(mvm);
         self.set_dirty(true);

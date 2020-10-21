@@ -703,6 +703,10 @@ impl ListingTrait for PlainListing {
         }
     }
 
+    fn unfocused(&self) -> bool {
+        self.unfocused
+    }
+
     fn set_movement(&mut self, mvm: PageMovement) {
         self.movement = Some(mvm);
         self.set_dirty(true);
@@ -1182,9 +1186,7 @@ impl Component for PlainListing {
                 }
                 UIEvent::Input(ref key)
                     if !self.unfocused
-                        && shortcut!(
-                            key == shortcuts[PlainListing::DESCRIPTION]["select_entry"]
-                        ) =>
+                        && shortcut!(key == shortcuts[Listing::DESCRIPTION]["select_entry"]) =>
                 {
                     let env_hash = self.get_env_under_cursor(self.cursor_pos.2, context);
                     self.selection.entry(env_hash).and_modify(|e| *e = !*e);
@@ -1388,6 +1390,8 @@ impl Component for PlainListing {
 
         let config_map = context.settings.shortcuts.compact_listing.key_values();
         map.insert(PlainListing::DESCRIPTION, config_map);
+        let config_map = context.settings.shortcuts.listing.key_values();
+        map.insert(Listing::DESCRIPTION, config_map);
 
         map
     }

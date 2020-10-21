@@ -43,6 +43,20 @@ pub use self::plain::*;
 mod offline;
 pub use self::offline::*;
 
+#[derive(Debug, Copy, PartialEq, Clone)]
+pub enum Modifier {
+    SymmetricDifference,
+    Union,
+    Difference,
+    Intersection,
+}
+
+impl Default for Modifier {
+    fn default() -> Self {
+        Modifier::SymmetricDifference
+    }
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct DataColumns {
     pub columns: [CellBuffer; 12],
@@ -372,7 +386,12 @@ pub trait ListingTrait: Component {
         _context: &Context,
     ) {
     }
-    fn set_command_modifier(&mut self, _is_active: bool) {}
+    fn unfocused(&self) -> bool;
+    fn set_modifier_active(&mut self, _new_val: bool) {}
+    fn set_modifier_command(&mut self, _new_val: Option<Modifier>) {}
+    fn modifier_command(&self) -> Option<Modifier> {
+        None
+    }
     fn set_movement(&mut self, mvm: PageMovement);
 }
 
@@ -711,14 +730,14 @@ impl Component for Listing {
                         1
                     } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
                         self.cmd_buf.clear();
-                        self.component.set_command_modifier(false);
+                        self.component.set_modifier_active(false);
                         context
                             .replies
                             .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
                         amount
                     } else {
                         self.cmd_buf.clear();
-                        self.component.set_command_modifier(false);
+                        self.component.set_modifier_active(false);
                         context
                             .replies
                             .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
@@ -764,14 +783,14 @@ impl Component for Listing {
                         1
                     } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
                         self.cmd_buf.clear();
-                        self.component.set_command_modifier(false);
+                        self.component.set_modifier_active(false);
                         context
                             .replies
                             .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
                         amount
                     } else {
                         self.cmd_buf.clear();
-                        self.component.set_command_modifier(false);
+                        self.component.set_modifier_active(false);
                         context
                             .replies
                             .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
@@ -887,14 +906,14 @@ impl Component for Listing {
                         1
                     } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
                         self.cmd_buf.clear();
-                        self.component.set_command_modifier(false);
+                        self.component.set_modifier_active(false);
                         context
                             .replies
                             .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
                         amount
                     } else {
                         self.cmd_buf.clear();
-                        self.component.set_command_modifier(false);
+                        self.component.set_modifier_active(false);
                         context
                             .replies
                             .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
@@ -910,14 +929,14 @@ impl Component for Listing {
                         1
                     } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
                         self.cmd_buf.clear();
-                        self.component.set_command_modifier(false);
+                        self.component.set_modifier_active(false);
                         context
                             .replies
                             .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
                         amount
                     } else {
                         self.cmd_buf.clear();
-                        self.component.set_command_modifier(false);
+                        self.component.set_modifier_active(false);
                         context
                             .replies
                             .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
@@ -933,14 +952,14 @@ impl Component for Listing {
                         1
                     } else if let Ok(mult) = self.cmd_buf.parse::<usize>() {
                         self.cmd_buf.clear();
-                        self.component.set_command_modifier(false);
+                        self.component.set_modifier_active(false);
                         context
                             .replies
                             .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
                         mult
                     } else {
                         self.cmd_buf.clear();
-                        self.component.set_command_modifier(false);
+                        self.component.set_modifier_active(false);
                         context
                             .replies
                             .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
@@ -956,14 +975,14 @@ impl Component for Listing {
                         1
                     } else if let Ok(mult) = self.cmd_buf.parse::<usize>() {
                         self.cmd_buf.clear();
-                        self.component.set_command_modifier(false);
+                        self.component.set_modifier_active(false);
                         context
                             .replies
                             .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
                         mult
                     } else {
                         self.cmd_buf.clear();
-                        self.component.set_command_modifier(false);
+                        self.component.set_modifier_active(false);
                         context
                             .replies
                             .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
@@ -1022,6 +1041,31 @@ impl Component for Listing {
                     }
                     return true;
                 }
+                UIEvent::Input(ref key)
+                    if !self.component.unfocused()
+                        && shortcut!(key == shortcuts[Listing::DESCRIPTION]["union_modifier"])
+                        && self.component.modifier_command().is_some() =>
+                {
+                    self.component.set_modifier_command(Some(Modifier::Union));
+                }
+                UIEvent::Input(ref key)
+                    if !self.component.unfocused()
+                        && shortcut!(key == shortcuts[Listing::DESCRIPTION]["diff_modifier"])
+                        && self.component.modifier_command().is_some() =>
+                {
+                    self.component
+                        .set_modifier_command(Some(Modifier::Difference));
+                }
+                UIEvent::Input(ref key)
+                    if !self.component.unfocused()
+                        && shortcut!(
+                            key == shortcuts[Listing::DESCRIPTION]["intersection_modifier"]
+                        )
+                        && self.component.modifier_command().is_some() =>
+                {
+                    self.component
+                        .set_modifier_command(Some(Modifier::Intersection));
+                }
                 _ => {}
             }
         } else if self.focus == ListingFocus::Menu {
@@ -1055,14 +1099,14 @@ impl Component for Listing {
                         1
                     } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
                         self.cmd_buf.clear();
-                        self.component.set_command_modifier(false);
+                        self.component.set_modifier_active(false);
                         context
                             .replies
                             .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
                         amount
                     } else {
                         self.cmd_buf.clear();
-                        self.component.set_command_modifier(false);
+                        self.component.set_modifier_active(false);
                         context
                             .replies
                             .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
@@ -1109,14 +1153,14 @@ impl Component for Listing {
                         1
                     } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
                         self.cmd_buf.clear();
-                        self.component.set_command_modifier(false);
+                        self.component.set_modifier_active(false);
                         context
                             .replies
                             .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
                         amount
                     } else {
                         self.cmd_buf.clear();
-                        self.component.set_command_modifier(false);
+                        self.component.set_modifier_active(false);
                         context
                             .replies
                             .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
@@ -1165,14 +1209,14 @@ impl Component for Listing {
                         1
                     } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
                         self.cmd_buf.clear();
-                        self.component.set_command_modifier(false);
+                        self.component.set_modifier_active(false);
                         context
                             .replies
                             .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
                         amount
                     } else {
                         self.cmd_buf.clear();
-                        self.component.set_command_modifier(false);
+                        self.component.set_modifier_active(false);
                         context
                             .replies
                             .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
@@ -1240,7 +1284,7 @@ impl Component for Listing {
             }
             UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Alt('')) if !self.cmd_buf.is_empty() => {
                 self.cmd_buf.clear();
-                self.component.set_command_modifier(false);
+                self.component.set_modifier_active(false);
                 context
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
@@ -1248,7 +1292,7 @@ impl Component for Listing {
             }
             UIEvent::Input(Key::Char(c)) if c >= '0' && c <= '9' => {
                 self.cmd_buf.push(c);
-                self.component.set_command_modifier(true);
+                self.component.set_modifier_active(true);
                 context
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::BufSet(

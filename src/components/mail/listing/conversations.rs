@@ -120,7 +120,7 @@ pub struct ConversationsListing {
 
     movement: Option<PageMovement>,
     modifier_active: bool,
-    modifier_command: Option<char>,
+    modifier_command: Option<Modifier>,
     id: ComponentId,
 }
 
@@ -868,8 +868,20 @@ impl ListingTrait for ConversationsListing {
         }
     }
 
-    fn set_command_modifier(&mut self, is_active: bool) {
-        self.modifier_active = is_active;
+    fn unfocused(&self) -> bool {
+        self.unfocused
+    }
+
+    fn set_modifier_active(&mut self, new_val: bool) {
+        self.modifier_active = new_val;
+    }
+
+    fn set_modifier_command(&mut self, new_val: Option<Modifier>) {
+        self.modifier_command = new_val;
+    }
+
+    fn modifier_command(&self) -> Option<Modifier> {
+        self.modifier_command
     }
 
     fn set_movement(&mut self, mvm: PageMovement) {
@@ -1260,8 +1272,7 @@ impl Component for ConversationsListing {
             }
             let (upper_left, bottom_right) = area;
             let rows = (get_y(bottom_right) - get_y(upper_left) + 1) / 3;
-            if let Some('s') = self.modifier_command.take() {
-                self.set_command_modifier(false);
+            if let Some(modifier) = self.modifier_command.take() {
                 if let Some(mvm) = self.movement.as_ref() {
                     match mvm {
                         PageMovement::Up(amount) => {
@@ -1269,8 +1280,28 @@ impl Component for ConversationsListing {
                                 ..=self.new_cursor_pos.2
                             {
                                 let thread = self.get_thread_under_cursor(c);
-                                self.selection.entry(thread).and_modify(|e| *e = !*e);
+                                match modifier {
+                                    Modifier::SymmetricDifference => {
+                                        self.selection.entry(thread).and_modify(|e| *e = !*e);
+                                    }
+                                    Modifier::Union => {
+                                        self.selection.entry(thread).and_modify(|e| *e = true);
+                                    }
+                                    Modifier::Difference => {
+                                        self.selection.entry(thread).and_modify(|e| *e = false);
+                                    }
+                                    Modifier::Intersection => {}
+                                }
                                 self.row_updates.push(thread);
+                            }
+                            if modifier == Modifier::Intersection {
+                                for c in (0..self.new_cursor_pos.2.saturating_sub(*amount))
+                                    .chain((self.new_cursor_pos.2 + 2)..self.length)
+                                {
+                                    let thread = self.get_thread_under_cursor(c);
+                                    self.selection.entry(thread).and_modify(|e| *e = false);
+                                    self.row_updates.push(thread);
+                                }
                             }
                         }
                         PageMovement::PageUp(multiplier) => {
@@ -1278,7 +1309,18 @@ impl Component for ConversationsListing {
                                 ..=self.new_cursor_pos.2
                             {
                                 let thread = self.get_thread_under_cursor(c);
-                                self.selection.entry(thread).and_modify(|e| *e = !*e);
+                                match modifier {
+                                    Modifier::SymmetricDifference => {
+                                        self.selection.entry(thread).and_modify(|e| *e = !*e);
+                                    }
+                                    Modifier::Union => {
+                                        self.selection.entry(thread).and_modify(|e| *e = true);
+                                    }
+                                    Modifier::Difference => {
+                                        self.selection.entry(thread).and_modify(|e| *e = false);
+                                    }
+                                    Modifier::Intersection => {}
+                                }
                                 self.row_updates.push(thread);
                             }
                         }
@@ -1287,8 +1329,29 @@ impl Component for ConversationsListing {
                                 ..std::cmp::min(self.length, self.new_cursor_pos.2 + amount + 1)
                             {
                                 let thread = self.get_thread_under_cursor(c);
-                                self.selection.entry(thread).and_modify(|e| *e = !*e);
+                                match modifier {
+                                    Modifier::SymmetricDifference => {
+                                        self.selection.entry(thread).and_modify(|e| *e = !*e);
+                                    }
+                                    Modifier::Union => {
+                                        self.selection.entry(thread).and_modify(|e| *e = true);
+                                    }
+                                    Modifier::Difference => {
+                                        self.selection.entry(thread).and_modify(|e| *e = false);
+                                    }
+                                    Modifier::Intersection => {}
+                                }
                                 self.row_updates.push(thread);
+                            }
+                            if modifier == Modifier::Intersection {
+                                for c in (0..self.new_cursor_pos.2).chain(
+                                    (std::cmp::min(self.length, self.new_cursor_pos.2 + amount + 1)
+                                        + 1)..self.length,
+                                ) {
+                                    let thread = self.get_thread_under_cursor(c);
+                                    self.selection.entry(thread).and_modify(|e| *e = false);
+                                    self.row_updates.push(thread);
+                                }
                             }
                         }
                         PageMovement::PageDown(multiplier) => {
@@ -1299,23 +1362,82 @@ impl Component for ConversationsListing {
                                 )
                             {
                                 let thread = self.get_thread_under_cursor(c);
-                                self.selection.entry(thread).and_modify(|e| *e = !*e);
+                                match modifier {
+                                    Modifier::SymmetricDifference => {
+                                        self.selection.entry(thread).and_modify(|e| *e = !*e);
+                                    }
+                                    Modifier::Union => {
+                                        self.selection.entry(thread).and_modify(|e| *e = true);
+                                    }
+                                    Modifier::Difference => {
+                                        self.selection.entry(thread).and_modify(|e| *e = false);
+                                    }
+                                    Modifier::Intersection => {}
+                                }
                                 self.row_updates.push(thread);
+                            }
+                            if modifier == Modifier::Intersection {
+                                for c in (0..self.new_cursor_pos.2).chain(
+                                    (std::cmp::min(
+                                        self.new_cursor_pos.2 + rows * multiplier + 1,
+                                        self.length,
+                                    ) + 1)..self.length,
+                                ) {
+                                    let thread = self.get_thread_under_cursor(c);
+                                    self.selection.entry(thread).and_modify(|e| *e = false);
+                                    self.row_updates.push(thread);
+                                }
                             }
                         }
                         PageMovement::Right(_) | PageMovement::Left(_) => {}
                         PageMovement::Home => {
                             for c in 0..=self.new_cursor_pos.2 {
                                 let thread = self.get_thread_under_cursor(c);
-                                self.selection.entry(thread).and_modify(|e| *e = !*e);
+                                match modifier {
+                                    Modifier::SymmetricDifference => {
+                                        self.selection.entry(thread).and_modify(|e| *e = !*e);
+                                    }
+                                    Modifier::Union => {
+                                        self.selection.entry(thread).and_modify(|e| *e = true);
+                                    }
+                                    Modifier::Difference => {
+                                        self.selection.entry(thread).and_modify(|e| *e = false);
+                                    }
+                                    Modifier::Intersection => {}
+                                }
                                 self.row_updates.push(thread);
+                            }
+                            if modifier == Modifier::Intersection {
+                                for c in (self.new_cursor_pos.2 + 1)..self.length {
+                                    let thread = self.get_thread_under_cursor(c);
+                                    self.selection.entry(thread).and_modify(|e| *e = false);
+                                    self.row_updates.push(thread);
+                                }
                             }
                         }
                         PageMovement::End => {
                             for c in self.new_cursor_pos.2..self.length {
                                 let thread = self.get_thread_under_cursor(c);
-                                self.selection.entry(thread).and_modify(|e| *e = !*e);
+                                match modifier {
+                                    Modifier::SymmetricDifference => {
+                                        self.selection.entry(thread).and_modify(|e| *e = !*e);
+                                    }
+                                    Modifier::Union => {
+                                        self.selection.entry(thread).and_modify(|e| *e = true);
+                                    }
+                                    Modifier::Difference => {
+                                        self.selection.entry(thread).and_modify(|e| *e = false);
+                                    }
+                                    Modifier::Intersection => {}
+                                }
                                 self.row_updates.push(thread);
+                            }
+                            if modifier == Modifier::Intersection {
+                                for c in 0..self.new_cursor_pos.2 {
+                                    let thread = self.get_thread_under_cursor(c);
+                                    self.selection.entry(thread).and_modify(|e| *e = false);
+                                    self.row_updates.push(thread);
+                                }
                             }
                         }
                     }
@@ -1402,12 +1524,10 @@ impl Component for ConversationsListing {
                 }
                 UIEvent::Input(ref key)
                     if !self.unfocused
-                        && shortcut!(
-                            key == shortcuts[ConversationsListing::DESCRIPTION]["select_entry"]
-                        ) =>
+                        && shortcut!(key == shortcuts[Listing::DESCRIPTION]["select_entry"]) =>
                 {
-                    if self.modifier_active {
-                        self.modifier_command = Some('s');
+                    if self.modifier_active && self.modifier_command.is_none() {
+                        self.modifier_command = Some(Modifier::default());
                     } else {
                         let thread_hash = self.get_thread_under_cursor(self.cursor_pos.2);
                         self.selection.entry(thread_hash).and_modify(|e| *e = !*e);
@@ -1631,6 +1751,8 @@ impl Component for ConversationsListing {
 
         let config_map = context.settings.shortcuts.compact_listing.key_values();
         map.insert(ConversationsListing::DESCRIPTION, config_map);
+        let config_map = context.settings.shortcuts.listing.key_values();
+        map.insert(Listing::DESCRIPTION, config_map);
 
         map
     }
