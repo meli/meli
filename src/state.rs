@@ -29,7 +29,7 @@ Input is received in the main loop from threads which listen on the stdin for us
 */
 
 use super::*;
-use crate::plugins::PluginManager;
+//use crate::plugins::PluginManager;
 use melib::backends::{AccountHash, BackendEventConsumer};
 
 use crate::jobs::JobExecutor;
@@ -115,7 +115,6 @@ pub struct Context {
     input_thread: InputHandler,
     pub job_executor: Arc<JobExecutor>,
     pub children: Vec<std::process::Child>,
-    pub plugin_manager: PluginManager,
 
     pub temp_files: Vec<File>,
 }
@@ -243,9 +242,9 @@ impl State {
         } else {
             Settings::new()?
         };
+        /*
         let mut plugin_manager = PluginManager::new();
         for (_, p) in settings.plugins.clone() {
-            /*
             if crate::plugins::PluginKind::Backend == p.kind() {
                 debug!("registering {:?}", &p);
                 crate::plugins::backend::PluginBackend::register(
@@ -254,9 +253,9 @@ impl State {
                     &mut backends,
                 );
             }
-            */
             plugin_manager.register(p)?;
         }
+        */
 
         let termsize = termion::terminal_size()?;
         let cols = termsize.0 as usize;
@@ -350,7 +349,6 @@ impl State {
                 temp_files: Vec::new(),
                 job_executor,
                 children: vec![],
-                plugin_manager,
 
                 input_thread: InputHandler {
                     pipe: input_thread_pipe,

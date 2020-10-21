@@ -46,9 +46,6 @@ bincode = "1.2.0"
 uuid = { version = "0.8.1", features = ["serde", "v4"] }
 unicode-segmentation = "1.2.1" # >:c
 libc = {version = "0.2.59", features = ["extra_traits",]}
-rmp = "^0.8"
-rmpv = { version = "^0.4.2", features=["with-serde",] }
-rmp-serde = "^0.14.0"
 smallvec = { version = "^1.4.0", features = ["serde", ] }
 bitflags = "1.0"
 pcre2 = { version = "0.2.3", optional = true }

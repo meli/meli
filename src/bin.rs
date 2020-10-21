@@ -79,7 +79,6 @@ pub mod sqlite3;
 
 pub mod jobs;
 pub mod mailcap;
-pub mod plugins;
 
 use std::os::raw::c_int;
 

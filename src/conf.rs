@@ -56,7 +56,6 @@ use self::listing::ListingSettings;
 use self::notifications::NotificationsSettings;
 use self::terminal::TerminalSettings;
 use crate::pager::PagerSettings;
-use crate::plugins::Plugin;
 use melib::conf::{AccountSettings, MailboxConf, ToggleFlag};
 use melib::error::*;
 
@@ -211,8 +210,6 @@ pub struct FileSettings {
     pub pgp: PGPSettings,
     #[serde(default)]
     pub terminal: TerminalSettings,
-    #[serde(default)]
-    pub plugins: IndexMap<String, Plugin>,
     #[serde(default)]
     pub log: LogSettings,
 }
@@ -432,7 +429,6 @@ pub struct Settings {
     pub composing: ComposingSettings,
     pub pgp: PGPSettings,
     pub terminal: TerminalSettings,
-    pub plugins: IndexMap<String, Plugin>,
     pub log: LogSettings,
 }
 
@@ -465,7 +461,6 @@ impl Settings {
             composing: fs.composing,
             pgp: fs.pgp,
             terminal: fs.terminal,
-            plugins: fs.plugins,
             log: fs.log,
         })
     }
@@ -489,7 +484,6 @@ impl Settings {
             composing: fs.composing,
             pgp: fs.pgp,
             terminal: fs.terminal,
-            plugins: fs.plugins,
             log: fs.log,
         })
     }
@@ -901,7 +895,6 @@ mod dotaddressable {
                         "composing" => Err(MeliError::new("unimplemented")),
                         "pgp" => Err(MeliError::new("unimplemented")),
                         "terminal" => self.terminal.lookup(field, tail),
-                        "plugins" => Err(MeliError::new("unimplemented")),
                         "log" => self.log.lookup(field, tail),
 
                         other => Err(MeliError::new(format!(
