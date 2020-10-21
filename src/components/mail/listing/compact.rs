@@ -21,7 +21,7 @@
 
 use super::EntryStrings;
 use super::*;
-use crate::components::utilities::PageMovement;
+use crate::components::PageMovement;
 use crate::jobs::JoinHandle;
 use std::cmp;
 use std::convert::TryInto;

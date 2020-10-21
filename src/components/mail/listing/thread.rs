@@ -20,7 +20,7 @@
  */
 
 use super::*;
-use crate::components::utilities::PageMovement;
+use crate::components::PageMovement;
 use std::cmp;
 use std::convert::TryInto;
 

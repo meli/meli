@@ -20,7 +20,7 @@
  */
 
 use super::*;
-use crate::components::utilities::PageMovement;
+use crate::components::PageMovement;
 use crate::jobs::JoinHandle;
 use std::iter::FromIterator;
 

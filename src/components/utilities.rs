@@ -36,18 +36,6 @@ pub use self::layouts::*;
 use crate::jobs::JobId;
 use std::collections::HashSet;
 
-#[derive(Debug, Clone, Copy)]
-pub enum PageMovement {
-    Up(usize),
-    Right(usize),
-    Left(usize),
-    Down(usize),
-    PageUp(usize),
-    PageDown(usize),
-    Home,
-    End,
-}
-
 #[derive(Default, Debug, Clone)]
 pub struct SearchPattern {
     pattern: String,

@@ -54,6 +54,18 @@ pub type ComponentId = Uuid;
 pub type ShortcutMap = IndexMap<&'static str, Key>;
 pub type ShortcutMaps = IndexMap<&'static str, ShortcutMap>;
 
+#[derive(Debug, Clone, Copy)]
+pub enum PageMovement {
+    Up(usize),
+    Right(usize),
+    Left(usize),
+    Down(usize),
+    PageUp(usize),
+    PageDown(usize),
+    Home,
+    End,
+}
+
 /// Types implementing this Trait can draw on the terminal and receive events.
 /// If a type wants to skip drawing if it has not changed anything, it can hold some flag in its
 /// fields (eg self.dirty = false) and act upon that in their `draw` implementation.
