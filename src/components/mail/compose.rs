@@ -431,6 +431,50 @@ impl Composer {
                             .collect::<Vec<AutoCompleteEntry>>()
                     }),
                 ));
+            } else if k == "From" {
+                self.form.push_cl((
+                    k.into(),
+                    headers[k].to_string().into(),
+                    Box::new(move |c, _term| {
+                        let results: Vec<(String, String)> = c
+                            .accounts
+                            .values()
+                            .map(|acc| {
+                                let addr = if let Some(display_name) =
+                                    acc.settings.account.display_name()
+                                {
+                                    format!(
+                                        "{} <{}>",
+                                        display_name,
+                                        acc.settings.account.identity()
+                                    )
+                                } else {
+                                    acc.settings.account.identity().to_string()
+                                };
+                                let desc =
+                                    match account_settings!(c[acc.hash()].composing.send_mail) {
+                                        crate::conf::composing::SendMail::ShellCommand(ref cmd) => {
+                                            let mut cmd = cmd.as_str();
+                                            cmd.truncate_at_boundary(10);
+                                            format!("{} [exec: {}]", acc.name(), cmd)
+                                        }
+                                        #[cfg(feature = "smtp")]
+                                        crate::conf::composing::SendMail::Smtp(ref inner) => {
+                                            let mut hostname = inner.hostname.as_str();
+                                            hostname.truncate_at_boundary(10);
+                                            format!("{} [smtp: {}]", acc.name(), hostname)
+                                        }
+                                    };
+
+                                (addr, desc)
+                            })
+                            .collect::<Vec<_>>();
+                        results
+                            .into_iter()
+                            .map(|r| AutoCompleteEntry::from(r))
+                            .collect::<Vec<AutoCompleteEntry>>()
+                    }),
+                ));
             } else {
                 self.form.push((k.into(), headers[k].to_string().into()));
             }
