@@ -458,8 +458,7 @@ fn run_app(opt: Opt) -> Result<()> {
                                 },
                                 UIMode::Insert => {
                                     match k {
-                                        Key::Char('\n') | Key::Esc => {
-                                            state.mode = UIMode::Normal;
+                                        Key::Esc => {
                                             state.rcv_event(UIEvent::ChangeMode(UIMode::Normal));
                                             state.redraw();
                                         },

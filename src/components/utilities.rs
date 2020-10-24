@@ -500,7 +500,16 @@ impl Component for StatusBar {
                 };
             }
             UIEvent::CmdInput(Key::Char('\t')) => {
-                if let Some(suggestion) = self.auto_complete.get_suggestion() {
+                if let Some(suggestion) = self.auto_complete.get_suggestion().or_else(|| {
+                    if self.auto_complete.cursor() == 0 {
+                        self.auto_complete
+                            .suggestions()
+                            .last()
+                            .map(|e| e.entry.clone())
+                    } else {
+                        None
+                    }
+                }) {
                     let mut utext = UText::new(suggestion);
                     let len = utext.as_str().len();
                     utext.set_cursor(len);

@@ -147,19 +147,35 @@ impl Component for Field {
             None,
         );
     }
-    fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {
-        if let Text(ref mut s, Some((_, auto_complete))) = self {
-            if let UIEvent::InsertInput(Key::Char('\t')) = event {
-                if let Some(suggestion) = auto_complete.get_suggestion() {
-                    *s = UText::new(suggestion);
-                    let len = s.as_str().len();
-                    s.set_cursor(len);
-                    return true;
-                }
-            }
-        }
-
+    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         match *event {
+            UIEvent::InsertInput(Key::Char('\t')) => {
+                if let Text(ref mut s, Some((_, auto_complete))) = self {
+                    if let Some(suggestion) = auto_complete.get_suggestion() {
+                        *s = UText::new(suggestion);
+                        let len = s.as_str().len();
+                        s.set_cursor(len);
+                        return true;
+                    }
+                }
+                if let Text(ref mut s, _) = self {
+                    s.insert_char(' ');
+                }
+                return true;
+            }
+            UIEvent::InsertInput(Key::Char('\n')) => {
+                if let Text(ref mut s, Some((_, auto_complete))) = self {
+                    if let Some(suggestion) = auto_complete.get_suggestion() {
+                        *s = UText::new(suggestion);
+                        let len = s.as_str().len();
+                        s.set_cursor(len);
+                    }
+                }
+                context
+                    .replies
+                    .push_back(UIEvent::ChangeMode(UIMode::Normal));
+                return true;
+            }
             UIEvent::InsertInput(Key::Up) => {
                 if let Text(_, Some((_, auto_complete))) = self {
                     auto_complete.dec_cursor();
@@ -838,26 +854,60 @@ impl Component for AutoComplete {
         if self.entries.is_empty() {
             return;
         };
-
-        let upper_left = upper_left!(area);
         self.dirty = false;
+
+        let (upper_left, bottom_right) = area;
+        let rows = get_y(bottom_right) - get_y(upper_left);
+        if rows == 0 {
+            return;
+        }
+        let page_no = (self.cursor.saturating_sub(1)).wrapping_div(rows);
+        let top_idx = page_no * rows;
+        let x_offset = if rows < self.entries.len() { 1 } else { 0 };
+
         let (width, height) = self.content.size();
+        clear_area(grid, area, crate::conf::value(context, "theme_default"));
         copy_area(
             grid,
             &self.content,
-            area,
-            ((0, 0), (width.saturating_sub(1), height.saturating_sub(1))),
+            (upper_left, pos_dec(bottom_right, (x_offset, 0))),
+            (
+                (0, top_idx),
+                (width.saturating_sub(1), height.saturating_sub(1)),
+            ),
         );
         /* Highlight cursor */
-        change_colors(
-            grid,
-            (
-                pos_inc(upper_left, (0, self.cursor)),
-                pos_inc(upper_left, (width.saturating_sub(1), self.cursor)),
-            ),
-            Color::Default,
-            Color::Byte(246),
-        );
+        if self.cursor > 0 {
+            change_colors(
+                grid,
+                (
+                    pos_inc(upper_left, (0, (self.cursor - 1) % rows)),
+                    (
+                        std::cmp::min(
+                            get_x(upper_left) + width.saturating_sub(1),
+                            get_x(bottom_right),
+                        )
+                        .saturating_sub(x_offset),
+                        get_y(pos_inc(upper_left, (0, (self.cursor - 1) % rows))),
+                    ),
+                ),
+                Color::Default,
+                Color::Byte(246),
+            );
+        }
+        if rows < self.entries.len() {
+            ScrollBar { show_arrows: false }.draw(
+                grid,
+                (
+                    set_y(pos_dec(bottom_right, (x_offset, 0)), get_y(upper_left)),
+                    pos_dec(bottom_right, (x_offset, 0)),
+                ),
+                context,
+                self.cursor.saturating_sub(1),
+                rows,
+                self.entries.len(),
+            );
+        }
         context.dirty_areas.push_back(area);
     }
     fn process_event(&mut self, _event: &mut UIEvent, _context: &mut Context) -> bool {
@@ -922,7 +972,7 @@ impl AutoComplete {
                 &mut content,
                 Color::Byte(23),
                 Color::Byte(7),
-                Attr::DEFAULT,
+                Attr::ITALICS,
                 ((x + 2, i), (width - 1, i)),
                 None,
             );
@@ -943,7 +993,7 @@ impl AutoComplete {
     }
 
     pub fn inc_cursor(&mut self) {
-        if self.cursor < self.entries.len().saturating_sub(1) {
+        if self.cursor < self.entries.len() {
             self.cursor += 1;
             self.set_dirty(true);
         }
@@ -958,15 +1008,15 @@ impl AutoComplete {
     }
 
     pub fn set_cursor(&mut self, val: usize) {
-        debug_assert!(val < self.entries.len());
+        debug_assert!(val <= self.entries.len());
         self.cursor = val;
     }
 
     pub fn get_suggestion(&mut self) -> Option<String> {
-        if self.entries.is_empty() {
+        if self.entries.is_empty() || self.cursor == 0 {
             return None;
         }
-        let ret = self.entries.remove(self.cursor);
+        let ret = self.entries.remove(self.cursor - 1);
         self.entries.clear();
         self.cursor = 0;
         self.content.empty();
@@ -1007,13 +1057,17 @@ impl ScrollBar {
         }
         clear_area(grid, area, crate::conf::value(context, "theme_default"));
 
-        let visible_ratio: f32 = (std::cmp::min(visible_rows, length) as f32) / (length as f32);
-        let scrollbar_height = std::cmp::max((visible_ratio * (height as f32)) as usize, 1);
+        let visible_ratio: f64 = (std::cmp::min(visible_rows, length) as f64) / (length as f64);
+        let scrollbar_height = std::cmp::min(
+            height.saturating_sub(1),
+            std::cmp::max((visible_ratio * (height as f64)) as usize, 1),
+        );
         if self.show_arrows {
             height -= 3;
         }
+
         let scrollbar_offset = {
-            let temp = (((pos as f32) / (length as f32)) * (height as f32)) as usize;
+            let temp = (((pos as f64) / (length as f64)) * (height as f64)) as usize;
             if scrollbar_height + temp > height {
                 height.saturating_sub(scrollbar_height)
             } else {
@@ -1030,7 +1084,7 @@ impl ScrollBar {
         }
 
         upper_left = pos_inc(upper_left, (0, scrollbar_offset));
-        for _ in 0..=scrollbar_height {
+        for _ in 0..scrollbar_height {
             grid[upper_left].set_bg(crate::conf::value(context, "widgets.options.highlighted").bg);
             upper_left = pos_inc(upper_left, (0, 1));
         }
@@ -1060,13 +1114,13 @@ impl ScrollBar {
         }
         clear_area(grid, area, crate::conf::value(context, "theme_default"));
 
-        let visible_ratio: f32 = (std::cmp::min(visible_cols, length) as f32) / (length as f32);
-        let scrollbar_width = std::cmp::max((visible_ratio * (width as f32)) as usize, 1);
+        let visible_ratio: f64 = (std::cmp::min(visible_cols, length) as f64) / (length as f64);
+        let scrollbar_width = std::cmp::max((visible_ratio * (width as f64)) as usize, 1);
         if self.show_arrows {
             width -= 3;
         }
         let scrollbar_offset = {
-            let temp = (((pos as f32) / (length as f32)) * (width as f32)) as usize;
+            let temp = (((pos as f64) / (length as f64)) * (width as f64)) as usize;
             if scrollbar_width + temp > width {
                 width.saturating_sub(scrollbar_width)
             } else {
