@@ -1877,18 +1877,33 @@ pub mod encodings {
             Charset::UTF8 | Charset::Ascii => Ok(String::from_utf8_lossy(s).to_string()),
             Charset::ISO8859_1 => Ok(ISO_8859_1.decode(s, DecoderTrap::Strict)?),
             Charset::ISO8859_2 => Ok(ISO_8859_2.decode(s, DecoderTrap::Strict)?),
+            Charset::ISO8859_3 => Ok(ISO_8859_3.decode(s, DecoderTrap::Strict)?),
+            Charset::ISO8859_4 => Ok(ISO_8859_4.decode(s, DecoderTrap::Strict)?),
+            Charset::ISO8859_5 => Ok(ISO_8859_5.decode(s, DecoderTrap::Strict)?),
+            Charset::ISO8859_6 => Ok(ISO_8859_6.decode(s, DecoderTrap::Strict)?),
             Charset::ISO8859_7 => Ok(ISO_8859_7.decode(s, DecoderTrap::Strict)?),
+            Charset::ISO8859_8 => Ok(ISO_8859_8.decode(s, DecoderTrap::Strict)?),
+            Charset::ISO8859_10 => Ok(ISO_8859_10.decode(s, DecoderTrap::Strict)?),
+            Charset::ISO8859_13 => Ok(ISO_8859_13.decode(s, DecoderTrap::Strict)?),
+            Charset::ISO8859_14 => Ok(ISO_8859_14.decode(s, DecoderTrap::Strict)?),
             Charset::ISO8859_15 => Ok(ISO_8859_15.decode(s, DecoderTrap::Strict)?),
+            Charset::ISO8859_16 => Ok(ISO_8859_16.decode(s, DecoderTrap::Strict)?),
             Charset::GBK => Ok(GBK.decode(s, DecoderTrap::Strict)?),
             Charset::Windows1250 => Ok(WINDOWS_1250.decode(s, DecoderTrap::Strict)?),
             Charset::Windows1251 => Ok(WINDOWS_1251.decode(s, DecoderTrap::Strict)?),
             Charset::Windows1252 => Ok(WINDOWS_1252.decode(s, DecoderTrap::Strict)?),
             Charset::Windows1253 => Ok(WINDOWS_1253.decode(s, DecoderTrap::Strict)?),
-            // Unimplemented:
-            Charset::GB2312 => Ok(String::from_utf8_lossy(s).to_string()),
-            Charset::UTF16 => Ok(String::from_utf8_lossy(s).to_string()),
-            Charset::BIG5 => Ok(String::from_utf8_lossy(s).to_string()),
-            Charset::ISO2022JP => Ok(String::from_utf8_lossy(s).to_string()),
+            Charset::KOI8R => Ok(KOI8_R.decode(s, DecoderTrap::Strict)?),
+            Charset::KOI8U => Ok(KOI8_U.decode(s, DecoderTrap::Strict)?),
+            Charset::BIG5 => Ok(BIG5_2003.decode(s, DecoderTrap::Strict)?),
+            Charset::GB2312 => {
+                Ok(encoding::codec::simpchinese::GBK_ENCODING.decode(s, DecoderTrap::Strict)?)
+            }
+            Charset::UTF16 => {
+                Ok(encoding::codec::utf_16::UTF_16LE_ENCODING.decode(s, DecoderTrap::Strict)?)
+            }
+            Charset::ISO2022JP => Ok(ISO_2022_JP.decode(s, DecoderTrap::Strict)?),
+            Charset::EUCJP => Ok(EUC_JP.decode(s, DecoderTrap::Strict)?),
         }
     }
 

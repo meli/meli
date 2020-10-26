@@ -31,8 +31,17 @@ pub enum Charset {
     UTF16,
     ISO8859_1,
     ISO8859_2,
+    ISO8859_3,
+    ISO8859_4,
+    ISO8859_5,
+    ISO8859_6,
     ISO8859_7,
+    ISO8859_8,
+    ISO8859_10,
+    ISO8859_13,
+    ISO8859_14,
     ISO8859_15,
+    ISO8859_16,
     Windows1250,
     Windows1251,
     Windows1252,
@@ -41,6 +50,9 @@ pub enum Charset {
     GB2312,
     BIG5,
     ISO2022JP,
+    EUCJP,
+    KOI8R,
+    KOI8U,
 }
 
 impl Default for Charset {
@@ -67,13 +79,48 @@ impl<'a> From<&'a [u8]> for Charset {
             b if b.eq_ignore_ascii_case(b"iso-8859-2") || b.eq_ignore_ascii_case(b"iso8859-2") => {
                 Charset::ISO8859_2
             }
+            b if b.eq_ignore_ascii_case(b"iso-8859-3") || b.eq_ignore_ascii_case(b"iso8859-3") => {
+                Charset::ISO8859_3
+            }
+            b if b.eq_ignore_ascii_case(b"iso-8859-4") || b.eq_ignore_ascii_case(b"iso8859-4") => {
+                Charset::ISO8859_4
+            }
+            b if b.eq_ignore_ascii_case(b"iso-8859-5") || b.eq_ignore_ascii_case(b"iso8859-5") => {
+                Charset::ISO8859_5
+            }
+            b if b.eq_ignore_ascii_case(b"iso-8859-6") || b.eq_ignore_ascii_case(b"iso8859-6") => {
+                Charset::ISO8859_6
+            }
             b if b.eq_ignore_ascii_case(b"iso-8859-7") || b.eq_ignore_ascii_case(b"iso8859-7") => {
                 Charset::ISO8859_7
+            }
+            b if b.eq_ignore_ascii_case(b"iso-8859-8") || b.eq_ignore_ascii_case(b"iso8859-8") => {
+                Charset::ISO8859_8
+            }
+            b if b.eq_ignore_ascii_case(b"iso-8859-10")
+                || b.eq_ignore_ascii_case(b"iso8859-10") =>
+            {
+                Charset::ISO8859_10
+            }
+            b if b.eq_ignore_ascii_case(b"iso-8859-13")
+                || b.eq_ignore_ascii_case(b"iso8859-13") =>
+            {
+                Charset::ISO8859_13
+            }
+            b if b.eq_ignore_ascii_case(b"iso-8859-14")
+                || b.eq_ignore_ascii_case(b"iso8859-14") =>
+            {
+                Charset::ISO8859_14
             }
             b if b.eq_ignore_ascii_case(b"iso-8859-15")
                 || b.eq_ignore_ascii_case(b"iso8859-15") =>
             {
                 Charset::ISO8859_15
+            }
+            b if b.eq_ignore_ascii_case(b"iso-8859-16")
+                || b.eq_ignore_ascii_case(b"iso8859-16") =>
+            {
+                Charset::ISO8859_16
             }
             b if b.eq_ignore_ascii_case(b"windows-1250")
                 || b.eq_ignore_ascii_case(b"windows1250") =>
@@ -101,6 +148,9 @@ impl<'a> From<&'a [u8]> for Charset {
             }
             b if b.eq_ignore_ascii_case(b"big5") => Charset::BIG5,
             b if b.eq_ignore_ascii_case(b"iso-2022-jp") => Charset::ISO2022JP,
+            b if b.eq_ignore_ascii_case(b"euc-jp") => Charset::EUCJP,
+            b if b.eq_ignore_ascii_case(b"koi8-r") => Charset::KOI8R,
+            b if b.eq_ignore_ascii_case(b"koi8-u") => Charset::KOI8U,
             _ => {
                 debug!("unknown tag is {:?}", str::from_utf8(b));
                 Charset::Ascii
@@ -117,16 +167,28 @@ impl Display for Charset {
             Charset::UTF16 => write!(f, "utf-16"),
             Charset::ISO8859_1 => write!(f, "iso-8859-1"),
             Charset::ISO8859_2 => write!(f, "iso-8859-2"),
+            Charset::ISO8859_3 => write!(f, "iso-8859-3"),
+            Charset::ISO8859_4 => write!(f, "iso-8859-4"),
+            Charset::ISO8859_5 => write!(f, "iso-8859-5"),
+            Charset::ISO8859_6 => write!(f, "iso-8859-6"),
             Charset::ISO8859_7 => write!(f, "iso-8859-7"),
+            Charset::ISO8859_8 => write!(f, "iso-8859-8"),
+            Charset::ISO8859_10 => write!(f, "iso-8859-10"),
+            Charset::ISO8859_13 => write!(f, "iso-8859-13"),
+            Charset::ISO8859_14 => write!(f, "iso-8859-14"),
             Charset::ISO8859_15 => write!(f, "iso-8859-15"),
+            Charset::ISO8859_16 => write!(f, "iso-8859-16"),
             Charset::Windows1250 => write!(f, "windows-1250"),
             Charset::Windows1251 => write!(f, "windows-1251"),
             Charset::Windows1252 => write!(f, "windows-1252"),
             Charset::Windows1253 => write!(f, "windows-1253"),
-            Charset::GBK => write!(f, "GBK"),
+            Charset::GBK => write!(f, "gbk"),
             Charset::GB2312 => write!(f, "gb2312"),
-            Charset::BIG5 => write!(f, "BIG5"),
-            Charset::ISO2022JP => write!(f, "ISO-2022-JP"),
+            Charset::BIG5 => write!(f, "big5"),
+            Charset::ISO2022JP => write!(f, "iso-2022-jp"),
+            Charset::EUCJP => write!(f, "euc-jp"),
+            Charset::KOI8R => write!(f, "koi8-r"),
+            Charset::KOI8U => write!(f, "koi8-u"),
         }
     }
 }
