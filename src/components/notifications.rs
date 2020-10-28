@@ -26,10 +26,10 @@ use std::process::{Command, Stdio};
 
 use super::*;
 
-#[cfg(feature = "dbus-notifications")]
+#[cfg(all(target_os = "linux", feature = "dbus-notifications"))]
 pub use dbus::*;
 
-#[cfg(feature = "dbus-notifications")]
+#[cfg(all(target_os = "linux", feature = "dbus-notifications"))]
 mod dbus {
     use super::*;
     use crate::types::RateLimit;

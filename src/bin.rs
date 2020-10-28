@@ -375,7 +375,7 @@ fn run_app(opt: Opt) -> Result<()> {
         let status_bar = Box::new(StatusBar::new(&state.context, window));
         state.register_component(status_bar);
 
-        #[cfg(feature = "dbus-notifications")]
+        #[cfg(all(target_os = "linux", feature = "dbus-notifications"))]
         {
             let dbus_notifications = Box::new(components::notifications::DbusNotifications::new());
             state.register_component(dbus_notifications);
