@@ -36,9 +36,10 @@ mod helpers;
 pub use self::helpers::*;
 
 use super::command::Action;
-use super::jobs::JobId;
+use super::jobs::{JobExecutor, JobId};
 use super::terminal::*;
 use crate::components::{Component, ComponentId};
+use std::sync::Arc;
 
 use melib::backends::{AccountHash, BackendEvent, MailboxHash};
 use melib::{EnvelopeHash, RefreshEvent, ThreadHash};
@@ -144,7 +145,7 @@ pub enum UIEvent {
     FinishedUIDialog(ComponentId, UIMessage),
     Callback(CallbackFn),
     GlobalUIDialog(Box<dyn Component>),
-    Timer(u8),
+    Timer(Uuid),
 }
 
 pub struct CallbackFn(pub Box<dyn FnOnce(&mut crate::Context) -> () + Send + 'static>);
@@ -313,7 +314,7 @@ pub mod segment_tree {
 #[derive(Debug)]
 pub struct RateLimit {
     last_tick: std::time::Instant,
-    pub timer: crate::timer::PosixTimer,
+    pub timer: crate::jobs::Timer,
     rate: std::time::Duration,
     reqs: u64,
     millis: std::time::Duration,
@@ -322,16 +323,13 @@ pub struct RateLimit {
 
 //FIXME: tests.
 impl RateLimit {
-    pub fn new(reqs: u64, millis: u64) -> Self {
+    pub fn new(reqs: u64, millis: u64, job_executor: Arc<JobExecutor>) -> Self {
         RateLimit {
             last_tick: std::time::Instant::now(),
-            timer: crate::timer::PosixTimer::new_with_signal(
+            timer: job_executor.create_timer(
                 std::time::Duration::from_secs(0),
                 std::time::Duration::from_millis(millis),
-                nix::sys::signal::Signal::SIGALRM,
-            )
-            .unwrap(),
-
+            ),
             rate: std::time::Duration::from_millis(millis / reqs),
             reqs,
             millis: std::time::Duration::from_millis(millis),
@@ -357,8 +355,8 @@ impl RateLimit {
     }
 
     #[inline(always)]
-    pub fn id(&self) -> u8 {
-        self.timer.si_value
+    pub fn id(&self) -> Uuid {
+        self.timer.id()
     }
 }
 #[test]

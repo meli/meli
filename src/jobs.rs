@@ -28,14 +28,15 @@
 
 use melib::error::Result;
 use melib::smol;
+use std::collections::HashMap;
 use std::future::Future;
 use std::panic::catch_unwind;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 use uuid::Uuid;
 
-use crate::types::ThreadEvent;
+use crate::types::{ThreadEvent, UIEvent};
 use crossbeam::deque::{Injector, Stealer, Worker};
 use crossbeam::sync::{Parker, Unparker};
 use crossbeam::Sender;
@@ -97,6 +98,7 @@ uuid_hash_type!(JobId);
 pub struct MeliTask {
     task: AsyncTask,
     id: JobId,
+    timer: bool,
 }
 
 #[derive(Debug)]
@@ -105,6 +107,37 @@ pub struct JobExecutor {
     workers: Vec<Stealer<MeliTask>>,
     sender: Sender<ThreadEvent>,
     parkers: Vec<Unparker>,
+    timers: Arc<Mutex<HashMap<Uuid, TimerPrivate>>>,
+}
+
+#[derive(Debug, Default)]
+struct TimerPrivate {
+    /// Interval for periodic timer.
+    interval: Duration,
+    /// Time until next expiration.
+    value: Duration,
+    active: bool,
+    handle: Option<async_task::JoinHandle<(), ()>>,
+}
+
+#[derive(Debug)]
+pub struct Timer {
+    id: Uuid,
+    job_executor: Arc<JobExecutor>,
+}
+
+impl Timer {
+    pub fn id(&self) -> Uuid {
+        self.id
+    }
+
+    pub fn rearm(&self) {
+        self.job_executor.rearm(self.id);
+    }
+
+    pub fn disable(&self) {
+        self.job_executor.disable_timer(self.id);
+    }
 }
 
 impl JobExecutor {
@@ -116,6 +149,7 @@ impl JobExecutor {
             workers: vec![],
             parkers: vec![],
             sender,
+            timers: Arc::new(Mutex::new(HashMap::default())),
         };
         let mut workers = vec![];
         for _ in 0..num_cpus::get().max(1) {
@@ -146,10 +180,14 @@ impl JobExecutor {
                     parker.park_timeout(Duration::from_millis(100));
                     let task = find_task(&local, &global, stealers.as_slice());
                     if let Some(meli_task) = task {
-                        let MeliTask { task, id } = meli_task;
-                        debug!("Worker {} got task {:?}", i, id);
+                        let MeliTask { task, id, timer } = meli_task;
+                        if !timer {
+                            debug!("Worker {} got task {:?}", i, id);
+                        }
                         let _ = catch_unwind(|| task.run());
-                        debug!("Worker {} returned after {:?}", i, id);
+                        if !timer {
+                            debug!("Worker {} returned after {:?}", i, id);
+                        }
                     }
                 })
                 .unwrap();
@@ -177,7 +215,13 @@ impl JobExecutor {
                     .unwrap();
                 Ok(())
             },
-            move |task| injector.push(MeliTask { task, id: job_id }),
+            move |task| {
+                injector.push(MeliTask {
+                    task,
+                    id: job_id,
+                    timer: false,
+                })
+            },
             (),
         );
         task.schedule();
@@ -199,6 +243,91 @@ impl JobExecutor {
         R: Send + 'static,
     {
         self.spawn_specialized(smol::unblock(move || futures::executor::block_on(future)))
+    }
+
+    pub fn create_timer(self: Arc<JobExecutor>, interval: Duration, value: Duration) -> Timer {
+        let id = Uuid::new_v4();
+        let timer = TimerPrivate {
+            interval,
+            value,
+            active: true,
+            handle: None,
+        };
+        self.timers.lock().unwrap().insert(id, timer);
+        self.arm_timer(id, value);
+        Timer {
+            id,
+            job_executor: self,
+        }
+    }
+
+    pub fn rearm(&self, timer_id: Uuid) {
+        let mut timers_lck = self.timers.lock().unwrap();
+        if let Some(timer) = timers_lck.get_mut(&timer_id) {
+            if let Some(handle) = timer.handle.take() {
+                handle.cancel();
+            }
+            let value = timer.value;
+            drop(timers_lck);
+            self.arm_timer(timer_id, value);
+        }
+    }
+
+    fn arm_timer(&self, id: Uuid, value: Duration) {
+        let job_id = JobId::new();
+        let sender = self.sender.clone();
+        let injector = self.global_queue.clone();
+        let timers = self.timers.clone();
+        let (task, handle) = async_task::spawn(
+            async move {
+                let mut value = value;
+                loop {
+                    smol::Timer::after(value).await;
+                    sender
+                        .send(ThreadEvent::UIEvent(UIEvent::Timer(id)))
+                        .unwrap();
+                    if let Some(interval) = timers.lock().unwrap().get(&id).and_then(|timer| {
+                        if timer.interval.as_millis() == 0 && timer.interval.as_secs() == 0 {
+                            None
+                        } else if timer.active {
+                            Some(timer.interval)
+                        } else {
+                            None
+                        }
+                    }) {
+                        value = interval;
+                    } else {
+                        break;
+                    }
+                }
+            },
+            move |task| {
+                injector.push(MeliTask {
+                    task,
+                    id: job_id,
+                    timer: true,
+                })
+            },
+            (),
+        );
+        self.timers.lock().unwrap().entry(id).and_modify(|timer| {
+            timer.handle = Some(handle);
+            timer.active = true;
+        });
+        task.schedule();
+        for unparker in self.parkers.iter() {
+            unparker.unpark();
+        }
+    }
+
+    fn disable_timer(&self, id: Uuid) {
+        let mut timers_lck = self.timers.lock().unwrap();
+        if let Some(timer) = timers_lck.get_mut(&id) {
+            if let Some(handle) = timer.handle.take() {
+                handle.cancel();
+            }
+            timer.active = false;
+        }
     }
 }
 

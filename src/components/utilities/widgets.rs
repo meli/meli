@@ -1154,7 +1154,7 @@ impl ScrollBar {
 
 #[derive(Debug)]
 pub struct ProgressSpinner {
-    timer: crate::timer::PosixTimer,
+    timer: crate::jobs::Timer,
     stage: usize,
     pub kind: std::result::Result<usize, Vec<String>>,
     pub width: usize,
@@ -1201,13 +1201,11 @@ impl ProgressSpinner {
 
     const INTERVAL: std::time::Duration = std::time::Duration::from_millis(50);
 
-    pub fn new(kind: usize) -> Self {
-        let timer = crate::timer::PosixTimer::new_with_signal(
-            std::time::Duration::from_millis(0),
-            std::time::Duration::from_millis(0),
-            nix::sys::signal::Signal::SIGALRM,
-        )
-        .unwrap();
+    pub fn new(kind: usize, context: &Context) -> Self {
+        let timer = context
+            .job_executor
+            .clone()
+            .create_timer(Self::INTERVAL, Self::INTERVAL);
         let kind = kind % Self::KINDS.len();
         let width = Self::KINDS[kind]
             .iter()
@@ -1255,19 +1253,13 @@ impl ProgressSpinner {
             return;
         }
         self.active = true;
-        self.timer
-            .set_interval(Self::INTERVAL)
-            .set_value(Self::INTERVAL)
-            .rearm()
+        self.timer.rearm();
     }
 
     pub fn stop(&mut self) {
         self.active = false;
         self.stage = 0;
-        self.timer
-            .set_interval(std::time::Duration::from_millis(0))
-            .set_value(std::time::Duration::from_millis(0))
-            .rearm()
+        self.timer.disable();
     }
 }
 
@@ -1309,7 +1301,7 @@ impl Component for ProgressSpinner {
 
     fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {
         match event {
-            UIEvent::Timer(id) if *id == self.timer.si_value => {
+            UIEvent::Timer(id) if *id == self.timer.id() => {
                 match self.kind.as_ref() {
                     Ok(kind) => {
                         self.stage = (self.stage + 1).wrapping_rem(Self::KINDS[*kind].len());

@@ -1391,7 +1391,7 @@ impl Listing {
             dirty: true,
             cursor_pos: (0, 0),
             menu_cursor_pos: (0, 0),
-            startup_checks_rate: RateLimit::new(2, 1000),
+            startup_checks_rate: RateLimit::new(2, 1000, context.job_executor.clone()),
             theme_default: conf::value(context, "theme_default"),
             id: ComponentId::new_v4(),
             show_divider: false,

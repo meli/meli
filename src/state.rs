@@ -327,7 +327,7 @@ impl State {
             components: Vec::with_capacity(8),
             overlay: Vec::new(),
             timer,
-            draw_rate_limit: RateLimit::new(1, 3),
+            draw_rate_limit: RateLimit::new(1, 3, job_executor.clone()),
             draw_horizontal_segment_fn: if settings.terminal.use_color() {
                 State::draw_horizontal_segment
             } else {
@@ -361,9 +361,6 @@ impl State {
                 receiver,
             },
         };
-        s.draw_rate_limit
-            .timer
-            .set_value(std::time::Duration::from_millis(3));
         if s.context.settings.terminal.ascii_drawing {
             s.grid.set_ascii_drawing(true);
             s.overlay_grid.set_ascii_drawing(true);

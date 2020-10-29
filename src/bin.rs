@@ -49,9 +49,6 @@ static GLOBAL: System = System;
 extern crate melib;
 use melib::*;
 
-mod unix;
-use unix::*;
-
 #[macro_use]
 pub mod types;
 use crate::types::*;
@@ -104,7 +101,6 @@ fn notify(
         nix::fcntl::FcntlArg::F_SETFL(nix::fcntl::OFlag::O_NONBLOCK),
     );
     std::thread::spawn(move || {
-        let mut buf = [0; 1];
         let mut ctr = 0;
         loop {
             ctr %= 3;
@@ -116,16 +112,6 @@ fn notify(
 
             for signal in signals.pending() {
                 let _ = s.send_timeout(signal, Duration::from_millis(500)).ok();
-            }
-            while nix::unistd::read(alarm_pipe_r, buf.as_mut())
-                .map(|s| s > 0)
-                .unwrap_or(false)
-            {
-                let value = buf[0];
-                let _ = sender.send_timeout(
-                    ThreadEvent::UIEvent(UIEvent::Timer(value)),
-                    Duration::from_millis(2000),
-                );
             }
 
             std::thread::sleep(std::time::Duration::from_millis(100));
@@ -377,7 +363,9 @@ fn run_app(opt: Opt) -> Result<()> {
 
         #[cfg(all(target_os = "linux", feature = "dbus-notifications"))]
         {
-            let dbus_notifications = Box::new(components::notifications::DbusNotifications::new());
+            let dbus_notifications = Box::new(components::notifications::DbusNotifications::new(
+                &state.context,
+            ));
             state.register_component(dbus_notifications);
         }
         state.register_component(Box::new(

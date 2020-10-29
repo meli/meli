@@ -47,9 +47,9 @@ mod dbus {
     }
 
     impl DbusNotifications {
-        pub fn new() -> Self {
+        pub fn new(context: &Context) -> Self {
             DbusNotifications {
-                rate_limit: RateLimit::new(1000, 1000),
+                rate_limit: RateLimit::new(1000, 1000, context.job_executor.clone()),
             }
         }
     }

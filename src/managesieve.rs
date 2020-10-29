@@ -37,9 +37,6 @@ extern crate termion;
 use melib::backends::imap::managesieve::new_managesieve_connection;
 use melib::Result;
 
-mod unix;
-use unix::*;
-
 #[macro_use]
 pub mod types;
 use crate::types::*;
