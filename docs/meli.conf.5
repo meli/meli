@@ -1077,19 +1077,38 @@ subsection
 For type "auto":
 .Bl -tag -width 36n
 .It Ic username Ar String
-.It Ic password Ar String|SmtpPassword
+.It Ic password Ar SmtpPassword
 .It Ic require_auth Ar bool
 .Pq Em optional
 require authentication in every case
 .\" default value
 .Pq Em true
 .El
+.sp
+Examples:
+.Bd -literal
+auth = { type = "auto", username = "user", password = { type = "raw", value = "hunter2" } }
+.Ed
+.Bd -literal
+auth = { type = "auto", username = "user", password = "hunter2" }
+.Ed
+.Bd -literal
+auth = { type = "none" }
+.Ed
 .Ss SmtpPassword
 .Bl -tag -width 36n
 .It Ic type Ar "raw" | "command_evaluation"
 .It Ic value Ar String
 Either a raw password string, or command to execute.
 .El
+.sp
+Examples:
+.Bd -literal
+password = { type = "raw", value = "hunter2" }
+.Ed
+.Bd -literal
+password = { type = "command_eval", value = "gpg2 --no-tty -q -d ~/.passwords/user.gpg" }
+.Ed
 .Ss SmtpSecurity
 Default security type is
 .Em auto Ns
