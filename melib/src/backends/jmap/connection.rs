@@ -35,6 +35,7 @@ impl JmapConnection {
     pub fn new(server_conf: &JmapServerConf, store: Arc<Store>) -> Result<Self> {
         let client = HttpClient::builder()
             .timeout(std::time::Duration::from_secs(10))
+            .redirect_policy(RedirectPolicy::Limit(10))
             .authentication(isahc::auth::Authentication::basic())
             .credentials(isahc::auth::Credentials::new(
                 &server_conf.server_username,

@@ -24,6 +24,7 @@ use crate::conf::AccountSettings;
 use crate::email::*;
 use crate::error::{MeliError, Result};
 use futures::lock::Mutex as FutureMutex;
+use isahc::config::RedirectPolicy;
 use isahc::prelude::HttpClient;
 use isahc::ResponseExt;
 use serde_json::Value;
