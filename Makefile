@@ -137,7 +137,10 @@ install-bin: meli
   *:${DESTDIR}${BINDIR}:*) echo -n "";; \
 	*) echo "\n${RED}${BOLD}WARNING${ANSI_RESET}: ${UNDERLINE}Path ${DESTDIR}${BINDIR} is not contained in your PATH variable.${ANSI_RESET} Consider adding it if necessary.\nPATH variable: ${PATH}";; \
 	esac
-	@install -D ./${CARGO_TARGET_DIR}/release/meli $(DESTDIR)${BINDIR}/meli
+	@mkdir -p $(DESTDIR)${BINDIR}
+	@rm -f  $(DESTDIR)${BINDIR}/meli
+	@cp ./${CARGO_TARGET_DIR}/release/meli $(DESTDIR)${BINDIR}/meli
+	@chmod 755 $(DESTDIR)${BINDIR}/meli
 
 
 .PHONY: install
