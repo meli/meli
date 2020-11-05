@@ -26,6 +26,7 @@ MANDIR ?= ${EXPANDED_PREFIX}/share/man
 CARGO_TARGET_DIR ?= target
 MIN_RUSTC ?= 1.39.0
 CARGO_BIN ?= cargo
+CARGO_ARGS ?=
 
 # Installation parameters
 DOCS_SUBDIR ?= docs/
@@ -48,7 +49,7 @@ GREEN ?= `[ -z $${NO_COLOR+x} ] && ([ -z $${TERM} ] && echo "" || tput setaf 2) 
 .POSIX:
 .SUFFIXES:
 meli: check-deps
-	@${CARGO_BIN} build ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" ${FEATURES} --release
+	@${CARGO_BIN} build ${CARGO_ARGS} ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" ${FEATURES} --release
 
 help:
 	@echo "For a quick start, build and install locally:\n ${BOLD}${GREEN}PREFIX=~/.local make install${ANSI_RESET}\n"
@@ -84,15 +85,18 @@ help:
 	@echo -n "* NO_COLOR ${UNDERLINE}"
 	@[ $${NO_COLOR+x} ] && echo -n "set" || echo -n "unset"
 	@echo ${ANSI_RESET}
+	@echo "* CARGO_BIN = ${UNDERLINE}${CARGO_BIN}${ANSI_RESET}"
+	@echo "* CARGO_ARGS = ${UNDERLINE}${CARGO_ARGS}${ANSI_RESET}"
+	@echo "* MIN_RUSTC = ${UNDERLINE}${MIN_RUSTC}${ANSI_RESET}"
 	@#@echo "* CARGO_COLOR = ${CARGO_COLOR}"
 
 .PHONY: check
 check:
-	@${CARGO_BIN} test ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" --workspace
+	@${CARGO_BIN} test ${CARGO_ARGS} ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" --workspace
 
 .PHONY: check-deps
 check-deps:
-	@(if ! echo ${MIN_RUSTC}\\n`${CARGO_BIN} --version | cut -d ' ' -f 2` | sort -CV; then echo "rust version >= ${RED}${MIN_RUSTC}${ANSI_RESET} required, found: `which ${CARGO_BIN}` `${CARGO_BIN} --version | cut -d ' ' -f 2`" \
+	@(if ! echo ${MIN_RUSTC}\\n`${CARGO_BIN} --version | grep ^cargo | cut -d ' ' -f 2` | sort -CV; then echo "rust version >= ${RED}${MIN_RUSTC}${ANSI_RESET} required, found: `which ${CARGO_BIN}` `${CARGO_BIN} --version | cut -d ' ' -f 2`" \
 		"\nYour options:\n - Set CARGO_BIN to a supported version\n - Install a supported version from your distribution's package manager\n - Install a supported version from ${UNDERLINE}https://rustup.rs/${ANSI_RESET}" ; exit 1; fi)
 
 
@@ -164,4 +168,4 @@ deb-dist:
 
 .PHONY: build-rustdoc
 build-rustdoc:
-	@RUSTDOCFLAGS="--crate-version ${VERSION}_${GIT_COMMIT}_${DATE}" ${CARGO_BIN} doc ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" --all-features --no-deps --workspace --document-private-items --open
+	@RUSTDOCFLAGS="--crate-version ${VERSION}_${GIT_COMMIT}_${DATE}" ${CARGO_BIN} doc ${CARGO_ARGS} ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" --all-features --no-deps --workspace --document-private-items --open
