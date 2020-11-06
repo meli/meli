@@ -144,8 +144,17 @@ impl ToSql for Envelope {
 
 impl FromSql for Envelope {
     fn column_result(value: rusqlite::types::ValueRef) -> FromSqlResult<Self> {
+        use std::convert::TryFrom;
+
         let b: Vec<u8> = FromSql::column_result(value)?;
-        Ok(bincode::deserialize(&b)
-            .map_err(|e| FromSqlError::Other(Box::new(MeliError::new(e.to_string()))))?)
+
+        Ok(bincode::Options::deserialize(
+            bincode::Options::with_limit(
+                bincode::config::DefaultOptions::new(),
+                2 * u64::try_from(b.len()).map_err(|e| FromSqlError::Other(Box::new(e)))?,
+            ),
+            &b,
+        )
+        .map_err(|e| FromSqlError::Other(Box::new(e)))?)
     }
 }

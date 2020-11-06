@@ -114,8 +114,16 @@ impl MaildirStream {
                 .to_path_buf();
             if let Some(cached) = cache_dir.find_cache_file(&file_name) {
                 /* Cached struct exists, try to load it */
-                let reader = io::BufReader::new(fs::File::open(&cached)?);
-                let result: result::Result<Envelope, _> = bincode::deserialize_from(reader);
+                let cached_file = fs::File::open(&cached)?;
+                let filesize = cached_file.metadata()?.len();
+                let reader = io::BufReader::new(cached_file);
+                let result: result::Result<Envelope, _> = bincode::Options::deserialize_from(
+                    bincode::Options::with_limit(
+                        bincode::config::DefaultOptions::new(),
+                        2 * filesize,
+                    ),
+                    reader,
+                );
                 if let Ok(env) = result {
                     let mut map = map.lock().unwrap();
                     let map = map.entry(mailbox_hash).or_default();
@@ -128,6 +136,8 @@ impl MaildirStream {
                     local_r.push(env);
                     continue;
                 }
+                /* Try delete invalid file */
+                let _ = fs::remove_file(&cached);
             };
             let env_hash = get_file_hash(&file);
             {
