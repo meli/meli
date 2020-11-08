@@ -162,7 +162,11 @@ impl MaildirStream {
                         f.set_permissions(permissions)?;
 
                         let writer = io::BufWriter::new(f);
-                        bincode::serialize_into(writer, &env)?;
+                        bincode::Options::serialize_into(
+                            bincode::config::DefaultOptions::new(),
+                            writer,
+                            &env,
+                        )?;
                     }
                     if !env.is_seen() {
                         unseen_total += 1;

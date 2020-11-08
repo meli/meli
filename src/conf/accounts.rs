@@ -406,7 +406,11 @@ impl Drop for Account {
                 permissions.set_mode(0o600); // Read/write for owner only.
                 f.set_permissions(permissions).unwrap();
                 let writer = io::BufWriter::new(f);
-                if let Err(err) = bincode::serialize_into(writer, &self.collection) {
+                if let Err(err) = bincode::Options::serialize_into(
+                    bincode::config::DefaultOptions::new(),
+                    writer,
+                    &self.collection,
+                ) {
                     eprintln!("{}", err);
                 };
             };

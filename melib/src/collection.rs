@@ -88,7 +88,11 @@ impl Drop for Collection {
                     }
                 };
                 let writer = io::BufWriter::new(f);
-                bincode::serialize_into(writer, &self.threads).unwrap();
+                let _ = bincode::Options::serialize_into(
+                    bincode::config::DefaultOptions::new(),
+                    writer,
+                    &self.thread,
+                );
             }
     }
 }

@@ -135,9 +135,10 @@ pub fn reset_db(description: &DatabaseDescription, identifier: Option<&str>) -> 
 
 impl ToSql for Envelope {
     fn to_sql(&self) -> rusqlite::Result<ToSqlOutput> {
-        let v: Vec<u8> = bincode::serialize(self).map_err(|e| {
-            rusqlite::Error::ToSqlConversionFailure(Box::new(MeliError::new(e.to_string())))
-        })?;
+        let v: Vec<u8> = bincode::Options::serialize(bincode::config::DefaultOptions::new(), self)
+            .map_err(|e| {
+                rusqlite::Error::ToSqlConversionFailure(Box::new(MeliError::new(e.to_string())))
+            })?;
         Ok(ToSqlOutput::from(v))
     }
 }
