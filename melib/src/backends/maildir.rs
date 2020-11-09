@@ -67,7 +67,7 @@ impl MaildirOp {
             slice: None,
         }
     }
-    fn path(&self) -> PathBuf {
+    fn path(&self) -> Result<PathBuf> {
         let map = self.hash_index.lock().unwrap();
         let map = &map[&self.mailbox_hash];
         debug!("looking for {} in {} map", self.hash, self.mailbox_hash);
@@ -76,15 +76,17 @@ impl MaildirOp {
             for e in map.iter() {
                 debug!("{:#?}", e);
             }
+            return Err(MeliError::new("File not found"));
         }
-        if let Some(modif) = &map[&self.hash].modified {
+
+        Ok(if let Some(modif) = &map[&self.hash].modified {
             match modif {
                 PathMod::Path(ref path) => path.clone(),
                 PathMod::Hash(hash) => map[&hash].to_path_buf(),
             }
         } else {
             map.get(&self.hash).unwrap().to_path_buf()
-        }
+        })
     }
 }
 
@@ -94,7 +96,7 @@ impl<'a> BackendOp for MaildirOp {
             let file = std::fs::OpenOptions::new()
                 .read(true)
                 .write(false)
-                .open(&self.path())?;
+                .open(&self.path()?)?;
             let mut buf_reader = BufReader::new(file);
             let mut contents = Vec::new();
             buf_reader.read_to_end(&mut contents)?;
@@ -105,7 +107,7 @@ impl<'a> BackendOp for MaildirOp {
     }
 
     fn fetch_flags(&self) -> ResultFuture<Flag> {
-        let path = self.path();
+        let path = self.path()?;
         let ret = Ok(path.flags());
         Ok(Box::pin(async move { ret }))
     }
