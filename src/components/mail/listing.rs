@@ -472,6 +472,7 @@ enum ListingFocus {
 pub struct Listing {
     component: ListingComponent,
     accounts: Vec<AccountMenuEntry>,
+    status: Option<AccountStatus>,
     dirty: bool,
     visible: bool,
     cursor_pos: (usize, usize),
@@ -570,7 +571,11 @@ impl Component for Listing {
                 }
             }
 
-            self.component.draw(grid, area, context);
+            if let Some(s) = self.status.as_mut() {
+                s.draw(grid, area, context);
+            } else {
+                self.component.draw(grid, area, context);
+            }
         } else if right_component_width == 0 {
             self.draw_menu(grid, area, context);
         } else {
@@ -583,8 +588,12 @@ impl Component for Listing {
                     }
                 }
             }
-            self.component
-                .draw(grid, (set_x(upper_left, mid + 1), bottom_right), context);
+            if let Some(s) = self.status.as_mut() {
+                s.draw(grid, (set_x(upper_left, mid + 1), bottom_right), context);
+            } else {
+                self.component
+                    .draw(grid, (set_x(upper_left, mid + 1), bottom_right), context);
+            }
         }
         self.dirty = false;
     }
@@ -672,7 +681,17 @@ impl Component for Listing {
             _ => {}
         }
 
-        if self.focus == ListingFocus::Mailbox && self.component.process_event(event, context) {
+        if self.focus == ListingFocus::Mailbox && self.status.is_some() {
+            if let Some(s) = self.status.as_mut() {
+                if s.process_event(event, context) {
+                    return true;
+                }
+            }
+        }
+        if self.focus == ListingFocus::Mailbox
+            && self.status.is_none()
+            && self.component.process_event(event, context)
+        {
             return true;
         }
 
@@ -817,188 +836,6 @@ impl Component for Listing {
 
                     return true;
                 }
-                UIEvent::Action(ref action) => match action {
-                    Action::Listing(ListingAction::SetPlain) => {
-                        self.component.set_style(IndexStyle::Plain);
-                        return true;
-                    }
-                    Action::Listing(ListingAction::SetThreaded) => {
-                        self.component.set_style(IndexStyle::Threaded);
-                        return true;
-                    }
-                    Action::Listing(ListingAction::SetCompact) => {
-                        self.component.set_style(IndexStyle::Compact);
-                        return true;
-                    }
-                    Action::Listing(ListingAction::SetConversations) => {
-                        self.component.set_style(IndexStyle::Conversations);
-                        return true;
-                    }
-                    Action::Listing(ListingAction::Import(file_path, mailbox_path)) => {
-                        let account = &mut context.accounts[self.cursor_pos.0];
-                        if let Err(err) = account
-                            .mailbox_by_path(&mailbox_path)
-                            .and_then(|mailbox_hash| {
-                                Ok((
-                                    std::fs::read(&file_path).chain_err_summary(|| {
-                                        format!("Could not read {}", file_path.display())
-                                    })?,
-                                    mailbox_hash,
-                                ))
-                            })
-                            .and_then(|(bytes, mailbox_hash)| {
-                                account.save(&bytes, mailbox_hash, None)
-                            })
-                        {
-                            context.replies.push_back(UIEvent::StatusEvent(
-                                StatusEvent::DisplayMessage(err.to_string()),
-                            ));
-                        }
-                        return true;
-                    }
-                    Action::Listing(a @ ListingAction::SetSeen)
-                    | Action::Listing(a @ ListingAction::SetUnseen)
-                    | Action::Listing(a @ ListingAction::Delete)
-                    | Action::Listing(a @ ListingAction::CopyTo(_))
-                    | Action::Listing(a @ ListingAction::MoveTo(_))
-                    | Action::Listing(a @ ListingAction::CopyToOtherAccount(_, _))
-                    | Action::Listing(a @ ListingAction::MoveToOtherAccount(_, _))
-                    | Action::Listing(a @ ListingAction::Tag(_)) => {
-                        let focused = self.component.get_focused_items(context);
-                        self.component.perform_action(context, focused, a);
-                        let mut row_updates: SmallVec<[ThreadHash; 8]> = SmallVec::new();
-                        for (k, v) in self.component.selection().iter_mut() {
-                            if *v {
-                                *v = false;
-                                row_updates.push(*k);
-                            }
-                        }
-                        self.component.row_updates().extend(row_updates.drain(..));
-                        self.component.set_dirty(true);
-                        return true;
-                    }
-                    Action::ViewMailbox(idx) => {
-                        if let Some((_, _, _, mailbox_hash)) =
-                            self.accounts[self.cursor_pos.0].entries.get(*idx)
-                        {
-                            let account_hash = self.accounts[self.cursor_pos.0].hash;
-                            self.cursor_pos.1 = *idx;
-                            self.component
-                                .set_coordinates((account_hash, *mailbox_hash));
-                            self.set_dirty(true);
-                        } else {
-                            return true;
-                        }
-                        return true;
-                    }
-                    _ => {}
-                },
-                UIEvent::ChangeMode(UIMode::Normal) => {
-                    self.dirty = true;
-                }
-                UIEvent::Resize => {
-                    self.set_dirty(true);
-                }
-                UIEvent::Input(ref key)
-                    if shortcut!(key == shortcuts[Listing::DESCRIPTION]["scroll_up"]) =>
-                {
-                    let amount = if self.cmd_buf.is_empty() {
-                        1
-                    } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
-                        self.cmd_buf.clear();
-                        self.component.set_modifier_active(false);
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                        amount
-                    } else {
-                        self.cmd_buf.clear();
-                        self.component.set_modifier_active(false);
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                        return true;
-                    };
-                    self.component.set_movement(PageMovement::Up(amount));
-                    return true;
-                }
-                UIEvent::Input(ref key)
-                    if shortcut!(key == shortcuts[Listing::DESCRIPTION]["scroll_down"]) =>
-                {
-                    let amount = if self.cmd_buf.is_empty() {
-                        1
-                    } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
-                        self.cmd_buf.clear();
-                        self.component.set_modifier_active(false);
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                        amount
-                    } else {
-                        self.cmd_buf.clear();
-                        self.component.set_modifier_active(false);
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                        return true;
-                    };
-                    self.component.set_movement(PageMovement::Down(amount));
-                    return true;
-                }
-                UIEvent::Input(ref key)
-                    if shortcut!(key == shortcuts[Listing::DESCRIPTION]["prev_page"]) =>
-                {
-                    let mult = if self.cmd_buf.is_empty() {
-                        1
-                    } else if let Ok(mult) = self.cmd_buf.parse::<usize>() {
-                        self.cmd_buf.clear();
-                        self.component.set_modifier_active(false);
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                        mult
-                    } else {
-                        self.cmd_buf.clear();
-                        self.component.set_modifier_active(false);
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                        return true;
-                    };
-                    self.component.set_movement(PageMovement::PageUp(mult));
-                    return true;
-                }
-                UIEvent::Input(ref key)
-                    if shortcut!(key == shortcuts[Listing::DESCRIPTION]["next_page"]) =>
-                {
-                    let mult = if self.cmd_buf.is_empty() {
-                        1
-                    } else if let Ok(mult) = self.cmd_buf.parse::<usize>() {
-                        self.cmd_buf.clear();
-                        self.component.set_modifier_active(false);
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                        mult
-                    } else {
-                        self.cmd_buf.clear();
-                        self.component.set_modifier_active(false);
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                        return true;
-                    };
-                    self.component.set_movement(PageMovement::PageDown(mult));
-                    return true;
-                }
-                UIEvent::Input(ref key) if *key == Key::Home => {
-                    self.component.set_movement(PageMovement::Home);
-                    return true;
-                }
-                UIEvent::Input(ref key) if *key == Key::End => {
-                    self.component.set_movement(PageMovement::End);
-                    return true;
-                }
                 UIEvent::Input(ref k)
                     if shortcut!(
                         k == shortcuts[Listing::DESCRIPTION]["toggle_menu_visibility"]
@@ -1007,66 +844,255 @@ impl Component for Listing {
                     self.menu_visibility = !self.menu_visibility;
                     self.set_dirty(true);
                 }
-                UIEvent::Input(ref key)
-                    if shortcut!(key == shortcuts[Listing::DESCRIPTION]["search"]) =>
-                {
-                    context
-                        .replies
-                        .push_back(UIEvent::CmdInput(Key::Paste("search ".to_string())));
-                    context
-                        .replies
-                        .push_back(UIEvent::ChangeMode(UIMode::Command));
-                    return true;
+                UIEvent::ChangeMode(UIMode::Normal) => {
+                    self.dirty = true;
                 }
-                UIEvent::Input(ref key)
-                    if shortcut!(key == shortcuts[Listing::DESCRIPTION]["set_seen"]) =>
-                {
-                    let mut event = UIEvent::Action(Action::Listing(ListingAction::SetSeen));
-                    if self.process_event(&mut event, context) {
-                        return true;
-                    }
+                UIEvent::Resize => {
+                    self.set_dirty(true);
                 }
-                UIEvent::Input(ref key)
-                    if shortcut!(key == shortcuts[Listing::DESCRIPTION]["refresh"]) =>
-                {
-                    let account = &mut context.accounts[self.cursor_pos.0];
-                    if let Some(&mailbox_hash) = account.mailboxes_order.get(self.cursor_pos.1) {
-                        if let Err(err) = account.refresh(mailbox_hash) {
-                            context.replies.push_back(UIEvent::Notification(
-                                Some("Could not refresh.".to_string()),
-                                err.to_string(),
-                                Some(NotificationType::Error(err.kind)),
-                            ));
-                        }
+                UIEvent::Action(Action::ViewMailbox(ref idx)) => {
+                    if let Some((_, _, _, mailbox_hash)) =
+                        self.accounts[self.cursor_pos.0].entries.get(*idx)
+                    {
+                        let account_hash = self.accounts[self.cursor_pos.0].hash;
+                        self.cursor_pos.1 = *idx;
+                        self.status = None;
+                        self.component
+                            .set_coordinates((account_hash, *mailbox_hash));
+                        self.set_dirty(true);
                     }
                     return true;
-                }
-                UIEvent::Input(ref key)
-                    if !self.component.unfocused()
-                        && shortcut!(key == shortcuts[Listing::DESCRIPTION]["union_modifier"])
-                        && self.component.modifier_command().is_some() =>
-                {
-                    self.component.set_modifier_command(Some(Modifier::Union));
-                }
-                UIEvent::Input(ref key)
-                    if !self.component.unfocused()
-                        && shortcut!(key == shortcuts[Listing::DESCRIPTION]["diff_modifier"])
-                        && self.component.modifier_command().is_some() =>
-                {
-                    self.component
-                        .set_modifier_command(Some(Modifier::Difference));
-                }
-                UIEvent::Input(ref key)
-                    if !self.component.unfocused()
-                        && shortcut!(
-                            key == shortcuts[Listing::DESCRIPTION]["intersection_modifier"]
-                        )
-                        && self.component.modifier_command().is_some() =>
-                {
-                    self.component
-                        .set_modifier_command(Some(Modifier::Intersection));
                 }
                 _ => {}
+            }
+
+            if self.status.is_none() {
+                match event {
+                    UIEvent::Action(ref action) => match action {
+                        Action::Listing(ListingAction::SetPlain) => {
+                            self.component.set_style(IndexStyle::Plain);
+                            return true;
+                        }
+                        Action::Listing(ListingAction::SetThreaded) => {
+                            self.component.set_style(IndexStyle::Threaded);
+                            return true;
+                        }
+                        Action::Listing(ListingAction::SetCompact) => {
+                            self.component.set_style(IndexStyle::Compact);
+                            return true;
+                        }
+                        Action::Listing(ListingAction::SetConversations) => {
+                            self.component.set_style(IndexStyle::Conversations);
+                            return true;
+                        }
+                        Action::Listing(ListingAction::Import(file_path, mailbox_path)) => {
+                            let account = &mut context.accounts[self.cursor_pos.0];
+                            if let Err(err) = account
+                                .mailbox_by_path(&mailbox_path)
+                                .and_then(|mailbox_hash| {
+                                    Ok((
+                                        std::fs::read(&file_path).chain_err_summary(|| {
+                                            format!("Could not read {}", file_path.display())
+                                        })?,
+                                        mailbox_hash,
+                                    ))
+                                })
+                                .and_then(|(bytes, mailbox_hash)| {
+                                    account.save(&bytes, mailbox_hash, None)
+                                })
+                            {
+                                context.replies.push_back(UIEvent::StatusEvent(
+                                    StatusEvent::DisplayMessage(err.to_string()),
+                                ));
+                            }
+                            return true;
+                        }
+                        Action::Listing(a @ ListingAction::SetSeen)
+                        | Action::Listing(a @ ListingAction::SetUnseen)
+                        | Action::Listing(a @ ListingAction::Delete)
+                        | Action::Listing(a @ ListingAction::CopyTo(_))
+                        | Action::Listing(a @ ListingAction::MoveTo(_))
+                        | Action::Listing(a @ ListingAction::CopyToOtherAccount(_, _))
+                        | Action::Listing(a @ ListingAction::MoveToOtherAccount(_, _))
+                        | Action::Listing(a @ ListingAction::Tag(_)) => {
+                            let focused = self.component.get_focused_items(context);
+                            self.component.perform_action(context, focused, a);
+                            let mut row_updates: SmallVec<[ThreadHash; 8]> = SmallVec::new();
+                            for (k, v) in self.component.selection().iter_mut() {
+                                if *v {
+                                    *v = false;
+                                    row_updates.push(*k);
+                                }
+                            }
+                        }
+                        _ => {}
+                    },
+                    UIEvent::Input(ref key)
+                        if shortcut!(key == shortcuts[Listing::DESCRIPTION]["scroll_up"]) =>
+                    {
+                        let amount = if self.cmd_buf.is_empty() {
+                            1
+                        } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
+                            self.cmd_buf.clear();
+                            self.component.set_modifier_active(false);
+                            context
+                                .replies
+                                .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                            amount
+                        } else {
+                            self.cmd_buf.clear();
+                            self.component.set_modifier_active(false);
+                            context
+                                .replies
+                                .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                            return true;
+                        };
+                        self.component.set_movement(PageMovement::Up(amount));
+                        return true;
+                    }
+                    UIEvent::Input(ref key)
+                        if shortcut!(key == shortcuts[Listing::DESCRIPTION]["scroll_down"]) =>
+                    {
+                        let amount = if self.cmd_buf.is_empty() {
+                            1
+                        } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
+                            self.cmd_buf.clear();
+                            self.component.set_modifier_active(false);
+                            context
+                                .replies
+                                .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                            amount
+                        } else {
+                            self.cmd_buf.clear();
+                            self.component.set_modifier_active(false);
+                            context
+                                .replies
+                                .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                            return true;
+                        };
+                        self.component.set_movement(PageMovement::Down(amount));
+                        return true;
+                    }
+                    UIEvent::Input(ref key)
+                        if shortcut!(key == shortcuts[Listing::DESCRIPTION]["prev_page"]) =>
+                    {
+                        let mult = if self.cmd_buf.is_empty() {
+                            1
+                        } else if let Ok(mult) = self.cmd_buf.parse::<usize>() {
+                            self.cmd_buf.clear();
+                            self.component.set_modifier_active(false);
+                            context
+                                .replies
+                                .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                            mult
+                        } else {
+                            self.cmd_buf.clear();
+                            self.component.set_modifier_active(false);
+                            context
+                                .replies
+                                .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                            return true;
+                        };
+                        self.component.set_movement(PageMovement::PageUp(mult));
+                        return true;
+                    }
+                    UIEvent::Input(ref key)
+                        if shortcut!(key == shortcuts[Listing::DESCRIPTION]["next_page"]) =>
+                    {
+                        let mult = if self.cmd_buf.is_empty() {
+                            1
+                        } else if let Ok(mult) = self.cmd_buf.parse::<usize>() {
+                            self.cmd_buf.clear();
+                            self.component.set_modifier_active(false);
+                            context
+                                .replies
+                                .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                            mult
+                        } else {
+                            self.cmd_buf.clear();
+                            self.component.set_modifier_active(false);
+                            context
+                                .replies
+                                .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                            return true;
+                        };
+                        self.component.set_movement(PageMovement::PageDown(mult));
+                        return true;
+                    }
+                    UIEvent::Input(ref key) if *key == Key::Home => {
+                        self.component.set_movement(PageMovement::Home);
+                        return true;
+                    }
+                    UIEvent::Input(ref key) if *key == Key::End => {
+                        self.component.set_movement(PageMovement::End);
+                        return true;
+                    }
+                    UIEvent::Input(ref key)
+                        if shortcut!(key == shortcuts[Listing::DESCRIPTION]["search"]) =>
+                    {
+                        context
+                            .replies
+                            .push_back(UIEvent::CmdInput(Key::Paste("search ".to_string())));
+                        context
+                            .replies
+                            .push_back(UIEvent::ChangeMode(UIMode::Command));
+                        return true;
+                    }
+                    UIEvent::Input(ref key)
+                        if shortcut!(key == shortcuts[Listing::DESCRIPTION]["set_seen"]) =>
+                    {
+                        let mut event = UIEvent::Action(Action::Listing(ListingAction::SetSeen));
+                        if self.process_event(&mut event, context) {
+                            return true;
+                        }
+                    }
+                    UIEvent::Input(ref key)
+                        if shortcut!(key == shortcuts[Listing::DESCRIPTION]["refresh"]) =>
+                    {
+                        let account = &mut context.accounts[self.cursor_pos.0];
+                        if let Some(&mailbox_hash) = account.mailboxes_order.get(self.cursor_pos.1)
+                        {
+                            if let Err(err) = account.refresh(mailbox_hash) {
+                                context.replies.push_back(UIEvent::Notification(
+                                    Some("Could not refresh.".to_string()),
+                                    err.to_string(),
+                                    Some(NotificationType::Error(err.kind)),
+                                ));
+                            }
+                        }
+                        return true;
+                    }
+                    UIEvent::Input(ref key)
+                        if !self.component.unfocused()
+                            && shortcut!(
+                                key == shortcuts[Listing::DESCRIPTION]["union_modifier"]
+                            )
+                            && self.component.modifier_command().is_some() =>
+                    {
+                        self.component.set_modifier_command(Some(Modifier::Union));
+                    }
+                    UIEvent::Input(ref key)
+                        if !self.component.unfocused()
+                            && shortcut!(
+                                key == shortcuts[Listing::DESCRIPTION]["diff_modifier"]
+                            )
+                            && self.component.modifier_command().is_some() =>
+                    {
+                        self.component
+                            .set_modifier_command(Some(Modifier::Difference));
+                    }
+                    UIEvent::Input(ref key)
+                        if !self.component.unfocused()
+                            && shortcut!(
+                                key == shortcuts[Listing::DESCRIPTION]["intersection_modifier"]
+                            )
+                            && self.component.modifier_command().is_some() =>
+                    {
+                        self.component
+                            .set_modifier_command(Some(Modifier::Intersection));
+                    }
+                    _ => {}
+                }
             }
         } else if self.focus == ListingFocus::Menu {
             match *event {
@@ -1077,9 +1103,23 @@ impl Component for Listing {
                     return true;
                 }
                 UIEvent::Input(ref k)
+                    if shortcut!(k == shortcuts[Listing::DESCRIPTION]["open_mailbox"])
+                        && self.menu_cursor_pos.1 == 0 =>
+                {
+                    self.status = Some(AccountStatus::new(
+                        self.menu_cursor_pos.0,
+                        self.theme_default,
+                    ));
+                    self.focus = ListingFocus::Mailbox;
+                    self.ratio = 90;
+                    return true;
+                }
+                UIEvent::Input(ref k)
                     if shortcut!(k == shortcuts[Listing::DESCRIPTION]["open_mailbox"]) =>
                 {
                     self.cursor_pos = self.menu_cursor_pos;
+                    self.cursor_pos.1 = self.cursor_pos.1.saturating_sub(1);
+                    self.status = None;
                     self.change_account(context);
                     self.focus = ListingFocus::Mailbox;
                     self.ratio = 90;
@@ -1118,10 +1158,8 @@ impl Component for Listing {
                                 self.menu_cursor_pos.1 -= 1;
                             } else if self.menu_cursor_pos.0 > 0 {
                                 self.menu_cursor_pos.0 -= 1;
-                                self.menu_cursor_pos.1 = self.accounts[self.menu_cursor_pos.0]
-                                    .entries
-                                    .len()
-                                    .saturating_sub(1);
+                                self.menu_cursor_pos.1 =
+                                    self.accounts[self.menu_cursor_pos.0].entries.len();
                             } else {
                                 return true;
                             }
@@ -1129,7 +1167,7 @@ impl Component for Listing {
                         }
                     } else if shortcut!(k == shortcuts[Listing::DESCRIPTION]["scroll_down"]) {
                         while amount > 0 {
-                            if self.menu_cursor_pos.1 + 1
+                            if self.menu_cursor_pos.1
                                 < self.accounts[self.menu_cursor_pos.0].entries.len()
                             {
                                 self.menu_cursor_pos.1 += 1;
@@ -1170,7 +1208,7 @@ impl Component for Listing {
                         k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["next_mailbox"]) => {
                             if self.accounts[self.menu_cursor_pos.0]
                                 .entries
-                                .get(self.menu_cursor_pos.1 + amount)
+                                .get(self.menu_cursor_pos.1.saturating_sub(1) + amount)
                                 .is_some()
                             {
                                 self.menu_cursor_pos.1 += amount;
@@ -1180,10 +1218,10 @@ impl Component for Listing {
                             }
                         }
                         k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_mailbox"]) => {
-                            if self.cursor_pos.1 >= amount {
+                            if self.cursor_pos.1 >= amount + 1 {
                                 if self.accounts[self.menu_cursor_pos.0]
                                     .entries
-                                    .get(self.menu_cursor_pos.1 - amount)
+                                    .get(self.menu_cursor_pos.1.saturating_sub(1) - amount)
                                     .is_some()
                                 {
                                     self.menu_cursor_pos.1 -= amount;
@@ -1305,11 +1343,20 @@ impl Component for Listing {
         false
     }
     fn is_dirty(&self) -> bool {
-        self.dirty || self.component.is_dirty()
+        self.dirty
+            || self
+                .status
+                .as_ref()
+                .map(Component::is_dirty)
+                .unwrap_or_else(|| self.component.is_dirty())
     }
     fn set_dirty(&mut self, value: bool) {
         self.dirty = value;
-        self.component.set_dirty(value);
+        if let Some(s) = self.status.as_mut() {
+            s.set_dirty(value);
+        } else {
+            self.component.set_dirty(value);
+        }
     }
 
     fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
@@ -1387,6 +1434,7 @@ impl Listing {
         let mut ret = Listing {
             component: Offline(OfflineListing::new((account_entries[0].hash, 0))),
             accounts: account_entries,
+            status: None,
             visible: true,
             dirty: true,
             cursor_pos: (0, 0),
@@ -1481,7 +1529,11 @@ impl Listing {
         }
 
         let account_attrs = if must_highlight_account {
-            crate::conf::value(context, "mail.sidebar_highlighted_account_name")
+            if self.focus == ListingFocus::Menu && self.menu_cursor_pos.1 == 0 {
+                crate::conf::value(context, "mail.sidebar_highlighted")
+            } else {
+                crate::conf::value(context, "mail.sidebar_highlighted_account_name")
+            }
         } else {
             crate::conf::value(context, "mail.sidebar_account_name")
         };
@@ -1519,7 +1571,7 @@ impl Listing {
             }
             let (att, index_att, unread_count_att) = if must_highlight_account {
                 if (self.focus == ListingFocus::Mailbox && self.cursor_pos.1 == idx)
-                    || (self.focus == ListingFocus::Menu && self.menu_cursor_pos.1 == idx)
+                    || (self.focus == ListingFocus::Menu && self.menu_cursor_pos.1 == idx + 1)
                 {
                     let mut ret = (
                         crate::conf::value(context, "mail.sidebar_highlighted"),
@@ -1724,5 +1776,6 @@ impl Listing {
                 self.get_status(context),
             )));
         self.menu_cursor_pos = self.cursor_pos;
+        self.menu_cursor_pos.1 += 1;
     }
 }

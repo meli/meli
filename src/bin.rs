@@ -350,10 +350,6 @@ fn run_app(opt: Opt) -> Result<()> {
             vec![
                 Box::new(listing::Listing::new(&mut state.context)),
                 Box::new(ContactList::new(&state.context)),
-                Box::new(StatusPanel::new(crate::conf::value(
-                    &state.context,
-                    "theme_default",
-                ))),
             ],
             &state.context,
         ));
