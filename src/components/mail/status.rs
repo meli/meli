@@ -314,13 +314,52 @@ impl StatusPanel {
     }
 }
 
+#[derive(Debug)]
+pub struct AccountStatus {
+    cursor: (usize, usize),
+    account_pos: usize,
+    content: CellBuffer,
+    dirty: bool,
+    theme_default: ThemeAttribute,
+    id: ComponentId,
+}
+
+impl fmt::Display for AccountStatus {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "status")
+    }
+}
+
+impl AccountStatus {
+    pub fn new(account_pos: usize, theme_default: ThemeAttribute) -> AccountStatus {
+        let default_cell = {
+            let mut ret = Cell::with_char(' ');
+            ret.set_fg(theme_default.fg)
+                .set_bg(theme_default.bg)
+                .set_attrs(theme_default.attrs);
+            ret
+        };
+        let mut content = CellBuffer::new(120, 5, default_cell);
+        content.set_growable(true);
+
+        AccountStatus {
+            cursor: (0, 0),
+            account_pos,
+            content,
+            dirty: true,
+            theme_default,
+            id: ComponentId::new_v4(),
+        }
+    }
+}
+
 impl Component for AccountStatus {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if !self.dirty {
             return;
         }
         self.dirty = false;
-        let (width, height) = self.content.size();
+        let (mut width, height) = self.content.size();
         let a = &context.accounts[self.account_pos];
         let (_x, _y) = write_string_to_grid(
             "(Press Esc to return)",
@@ -328,9 +367,10 @@ impl Component for AccountStatus {
             self.theme_default.fg,
             self.theme_default.bg,
             Attr::BOLD,
-            ((1, 0), (width - 1, height - 1)),
+            ((1, 0), (width - 1, 0)),
             None,
         );
+        width = self.content.size().0;
         let mut line = 2;
 
         let (_x, _y) = write_string_to_grid(
@@ -339,9 +379,10 @@ impl Component for AccountStatus {
             self.theme_default.fg,
             self.theme_default.bg,
             Attr::BOLD,
-            ((1, line), (width - 1, height - 1)),
+            ((1, line), (width - 1, line)),
             None,
         );
+        width = self.content.size().0;
         write_string_to_grid(
             if a.backend_capabilities.supports_tags {
                 "yes"
@@ -352,9 +393,10 @@ impl Component for AccountStatus {
             self.theme_default.fg,
             self.theme_default.bg,
             self.theme_default.attrs,
-            ((_x, _y), (width - 1, height - 1)),
+            ((_x, _y), (width - 1, line)),
             None,
         );
+        width = self.content.size().0;
         line += 1;
         let (_x, _y) = write_string_to_grid(
             "Search backend: ",
@@ -362,9 +404,10 @@ impl Component for AccountStatus {
             self.theme_default.fg,
             self.theme_default.bg,
             Attr::BOLD,
-            ((1, line), (width - 1, height - 1)),
+            ((1, line), (width - 1, line)),
             None,
         );
+        width = self.content.size().0;
         write_string_to_grid(
             &match (
                 a.settings.conf.search_backend(),
@@ -389,9 +432,10 @@ impl Component for AccountStatus {
             self.theme_default.fg,
             self.theme_default.bg,
             self.theme_default.attrs,
-            ((_x, _y), (width - 1, height - 1)),
+            ((_x, _y), (width - 1, _y)),
             None,
         );
+        width = self.content.size().0;
         line += 1;
 
         write_string_to_grid(
@@ -400,15 +444,17 @@ impl Component for AccountStatus {
             self.theme_default.fg,
             self.theme_default.bg,
             Attr::BOLD,
-            ((1, line), (width - 1, height - 1)),
+            ((1, line), (width - 1, line)),
             None,
         );
+        width = self.content.size().0;
         for f in a
             .mailbox_entries
             .values()
             .map(|entry| &entry.ref_mailbox)
             .filter(|f| f.special_usage() != SpecialUsageMailbox::Normal)
         {
+            width = self.content.size().0;
             line += 1;
             write_string_to_grid(
                 &format!("{}: {}", f.path(), f.special_usage()),
@@ -416,22 +462,25 @@ impl Component for AccountStatus {
                 self.theme_default.fg,
                 self.theme_default.bg,
                 self.theme_default.attrs,
-                ((1, line), (width - 1, height - 1)),
+                ((1, line), (width - 1, line)),
                 None,
             );
         }
         line += 2;
+        width = self.content.size().0;
         write_string_to_grid(
             "Subscribed mailboxes:",
             &mut self.content,
             self.theme_default.fg,
             self.theme_default.bg,
             Attr::BOLD,
-            ((1, line), (width - 1, height - 1)),
+            ((1, line), (width - 1, line)),
             None,
         );
+        width = self.content.size().0;
         line += 2;
         for mailbox_node in a.list_mailboxes() {
+            width = self.content.size().0;
             let f: &Mailbox = &a[&mailbox_node.hash].ref_mailbox;
             if f.is_subscribed() {
                 write_string_to_grid(
@@ -440,7 +489,7 @@ impl Component for AccountStatus {
                     self.theme_default.fg,
                     self.theme_default.bg,
                     self.theme_default.attrs,
-                    ((1, line), (width - 1, height - 1)),
+                    ((1, line), (width - 1, line)),
                     None,
                 );
                 line += 1;
@@ -448,6 +497,7 @@ impl Component for AccountStatus {
         }
 
         line += 1;
+        width = self.content.size().0;
         if let Some(ref extensions) = a.backend_capabilities.extensions {
             write_string_to_grid(
                 "Server Extensions:",
@@ -455,9 +505,10 @@ impl Component for AccountStatus {
                 self.theme_default.fg,
                 self.theme_default.bg,
                 Attr::BOLD,
-                ((1, line), (width - 1, height - 1)),
+                ((1, line), (width - 1, line)),
                 None,
             );
+            width = self.content.size().0;
             let max_name_width = std::cmp::max(
                 "Server Extensions:".len(),
                 extensions
@@ -466,15 +517,17 @@ impl Component for AccountStatus {
                     .max()
                     .unwrap_or(0),
             );
+            width = self.content.size().0;
             write_string_to_grid(
                 "meli support:",
                 &mut self.content,
                 self.theme_default.fg,
                 self.theme_default.bg,
                 self.theme_default.attrs,
-                ((max_name_width + 6, line), (width - 1, height - 1)),
+                ((max_name_width + 6, line), (width - 1, line)),
                 None,
             );
+            width = self.content.size().0;
             line += 1;
             for (name, status) in extensions.into_iter() {
                 let (width, height) = self.content.size();
@@ -484,7 +537,7 @@ impl Component for AccountStatus {
                     self.theme_default.fg,
                     self.theme_default.bg,
                     self.theme_default.attrs,
-                    ((1, line), (width - 1, height - 1)),
+                    ((1, line), (width - 1, line)),
                     None,
                 );
 
@@ -496,7 +549,7 @@ impl Component for AccountStatus {
                         Color::Red,
                         self.theme_default.bg,
                         self.theme_default.attrs,
-                        ((max_name_width + 6, line), (width - 1, height - 1)),
+                        ((max_name_width + 6, line), (width - 1, line)),
                         None,
                     ),
                     MailBackendExtensionStatus::Supported { comment: _ } => write_string_to_grid(
@@ -505,7 +558,7 @@ impl Component for AccountStatus {
                         Color::Green,
                         self.theme_default.bg,
                         self.theme_default.attrs,
-                        ((max_name_width + 6, line), (width - 1, height - 1)),
+                        ((max_name_width + 6, line), (width - 1, line)),
                         None,
                     ),
                     MailBackendExtensionStatus::Enabled { comment: _ } => write_string_to_grid(
@@ -514,7 +567,7 @@ impl Component for AccountStatus {
                         Color::Green,
                         self.theme_default.bg,
                         self.theme_default.attrs,
-                        ((max_name_width + 6, line), (width - 1, height - 1)),
+                        ((max_name_width + 6, line), (width - 1, line)),
                         None,
                     ),
                 };
@@ -529,7 +582,7 @@ impl Component for AccountStatus {
                                 self.theme_default.fg,
                                 self.theme_default.bg,
                                 self.theme_default.attrs,
-                                ((x, y), (width - 1, height - 1)),
+                                ((x, y), (width - 1, y)),
                                 None,
                             );
                             let (x, y) = write_string_to_grid(
@@ -538,7 +591,7 @@ impl Component for AccountStatus {
                                 self.theme_default.fg,
                                 self.theme_default.bg,
                                 self.theme_default.attrs,
-                                ((x, y), (width - 1, height - 1)),
+                                ((x, y), (width - 1, y)),
                                 None,
                             );
                             write_string_to_grid(
@@ -547,7 +600,7 @@ impl Component for AccountStatus {
                                 self.theme_default.fg,
                                 self.theme_default.bg,
                                 self.theme_default.attrs,
-                                ((x, y), (width - 1, height - 1)),
+                                ((x, y), (width - 1, y)),
                                 None,
                             );
                         }
@@ -558,17 +611,19 @@ impl Component for AccountStatus {
         }
         line += 2;
 
+        width = self.content.size().0;
         write_string_to_grid(
             "In-progress jobs:",
             &mut self.content,
             self.theme_default.fg,
             self.theme_default.bg,
             Attr::BOLD,
-            ((1, line), (width - 1, height - 1)),
+            ((1, line), (width - 1, line)),
             None,
         );
 
         for (job_id, req) in a.active_jobs.iter() {
+            width = self.content.size().0;
             use crate::conf::accounts::JobRequest;
             let (x, y) = write_string_to_grid(
                 &format!("{} {}", req, job_id),
@@ -576,7 +631,7 @@ impl Component for AccountStatus {
                 self.theme_default.fg,
                 self.theme_default.bg,
                 self.theme_default.attrs,
-                ((1, line), (width - 1, height - 1)),
+                ((1, line), (width - 1, line)),
                 None,
             );
             if let JobRequest::DeleteMailbox { mailbox_hash, .. }
@@ -595,7 +650,7 @@ impl Component for AccountStatus {
                     self.theme_default.fg,
                     self.theme_default.bg,
                     self.theme_default.attrs,
-                    ((x + 1, y), (width - 1, height - 1)),
+                    ((x + 1, y), (width - 1, y)),
                     None,
                 );
             }
@@ -670,44 +725,5 @@ impl Component for AccountStatus {
     }
     fn set_id(&mut self, id: ComponentId) {
         self.id = id;
-    }
-}
-
-impl AccountStatus {
-    pub fn new(account_pos: usize, theme_default: ThemeAttribute) -> AccountStatus {
-        let default_cell = {
-            let mut ret = Cell::with_char(' ');
-            ret.set_fg(theme_default.fg)
-                .set_bg(theme_default.bg)
-                .set_attrs(theme_default.attrs);
-            ret
-        };
-        let mut content = CellBuffer::new(120, 5, default_cell);
-        content.set_growable(true);
-
-        AccountStatus {
-            cursor: (0, 0),
-            account_pos,
-            content,
-            dirty: true,
-            theme_default,
-            id: ComponentId::new_v4(),
-        }
-    }
-}
-
-#[derive(Debug)]
-struct AccountStatus {
-    cursor: (usize, usize),
-    account_pos: usize,
-    content: CellBuffer,
-    dirty: bool,
-    theme_default: ThemeAttribute,
-    id: ComponentId,
-}
-
-impl fmt::Display for AccountStatus {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "status")
     }
 }
