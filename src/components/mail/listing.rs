@@ -1457,15 +1457,7 @@ impl Listing {
         if !self.is_dirty() {
             return;
         }
-        for row in grid.bounds_iter(area) {
-            for c in row {
-                grid[c]
-                    .set_ch(' ')
-                    .set_fg(self.theme_default.fg)
-                    .set_bg(self.theme_default.bg)
-                    .set_attrs(self.theme_default.attrs);
-            }
-        }
+        clear_area(grid, area, self.theme_default);
         /* visually divide menu and listing */
         area = (area.0, pos_dec(area.1, (1, 0)));
         let upper_left = upper_left!(area);
