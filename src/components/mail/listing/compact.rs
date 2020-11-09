@@ -118,6 +118,12 @@ macro_rules! row_attr {
     }};
 }
 
+macro_rules! emoji_text_presentation_selector {
+    () => {
+        "\u{FE0E}"
+    };
+}
+
 /// A list of all mail (`Envelope`s) in a `Mailbox`. On `\n` it opens the `Envelope` content in a
 /// `ThreadView`.
 #[derive(Debug)]
@@ -932,30 +938,66 @@ impl CompactListing {
         }
         let mut subject = e.subject().to_string();
         subject.truncate_at_boundary(150);
-        if thread.len() > 1 {
-            EntryStrings {
-                date: DateString(ConversationsListing::format_date(context, thread.date())),
-                subject: SubjectString(format!("{} ({})", subject, thread.len(),)),
-                flag: FlagString(format!(
-                    "{}{}",
-                    if thread.has_attachments() { "📎" } else { "" },
-                    if thread.snoozed() { "💤" } else { "" }
-                )),
-                from: FromString(address_list!((e.from()) as comma_sep_list)),
-                tags: TagString(tags, colors),
-            }
-        } else {
-            EntryStrings {
-                date: DateString(ConversationsListing::format_date(context, thread.date())),
-                subject: SubjectString(subject),
-                flag: FlagString(format!(
-                    "{}{}",
-                    if thread.has_attachments() { "📎" } else { "" },
-                    if thread.snoozed() { "💤" } else { "" }
-                )),
-                from: FromString(address_list!((e.from()) as comma_sep_list)),
-                tags: TagString(tags, colors),
-            }
+        EntryStrings {
+            date: DateString(ConversationsListing::format_date(context, thread.date())),
+            subject: if thread.len() > 1 {
+                SubjectString(format!("{} ({})", subject, thread.len(),))
+            } else {
+                SubjectString(subject)
+            },
+            flag: FlagString(format!(
+                "{}{}{}{}",
+                if thread.has_attachments() {
+                    mailbox_settings!(
+                        context[self.cursor_pos.0][&self.cursor_pos.1]
+                            .listing
+                            .attachment_flag
+                    )
+                    .as_ref()
+                    .map(|s| s.as_str())
+                    .unwrap_or(concat!("📎", emoji_text_presentation_selector!()))
+                } else {
+                    ""
+                },
+                if thread.snoozed() {
+                    mailbox_settings!(
+                        context[self.cursor_pos.0][&self.cursor_pos.1]
+                            .listing
+                            .thread_snoozed_flag
+                    )
+                    .as_ref()
+                    .map(|s| s.as_str())
+                    .unwrap_or(concat!("💤", emoji_text_presentation_selector!()))
+                } else {
+                    ""
+                },
+                if thread.unseen() > 0 {
+                    mailbox_settings!(
+                        context[self.cursor_pos.0][&self.cursor_pos.1]
+                            .listing
+                            .unseen_flag
+                    )
+                    .as_ref()
+                    .map(|s| s.as_str())
+                    .unwrap_or("●")
+                } else {
+                    ""
+                },
+                if self.selection.get(&hash).cloned().unwrap_or(false) {
+                    mailbox_settings!(
+                        context[self.cursor_pos.0][&self.cursor_pos.1]
+                            .listing
+                            .selected_flag
+                    )
+                    .as_ref()
+                    .map(|s| s.as_str())
+                    .unwrap_or(concat!("☑️", emoji_text_presentation_selector!()))
+                } else {
+                    ""
+                },
+            )),
+            from: FromString(address_list!((e.from()) as comma_sep_list)),
+            tags: TagString(tags, colors),
         }
     }
 

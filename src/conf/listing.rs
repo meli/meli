@@ -99,6 +99,26 @@ pub struct ListingSettings {
     ///Default: ' '
     #[serde(default = "default_divider")]
     pub sidebar_divider: char,
+
+    /// Flag to show if thread entry contains unseen mail.
+    /// Default: "●"
+    #[serde(default)]
+    pub unseen_flag: Option<String>,
+
+    /// Flag to show if thread has been snoozed.
+    /// Default: "💤"
+    #[serde(default)]
+    pub thread_snoozed_flag: Option<String>,
+
+    /// Flag to show if thread entry has been selected.
+    /// Default: "☑️"
+    #[serde(default)]
+    pub selected_flag: Option<String>,
+
+    /// Flag to show if thread entry contains attachments.
+    /// Default: "📎"
+    #[serde(default)]
+    pub attachment_flag: Option<String>,
 }
 
 const fn default_divider() -> char {
@@ -119,6 +139,10 @@ impl Default for ListingSettings {
             sidebar_mailbox_tree_has_sibling_leaf: None,
             sidebar_mailbox_tree_no_sibling_leaf: None,
             sidebar_divider: default_divider(),
+            unseen_flag: None,
+            thread_snoozed_flag: None,
+            selected_flag: None,
+            attachment_flag: None,
         }
     }
 }
@@ -148,6 +172,10 @@ impl DotAddressable for ListingSettings {
                         .sidebar_mailbox_tree_no_sibling_leaf
                         .lookup(field, tail),
                     "sidebar_divider" => self.sidebar_divider.lookup(field, tail),
+                    "unseen_flag" => self.unseen_flag.lookup(field, tail),
+                    "thread_snoozed_flag" => self.thread_snoozed_flag.lookup(field, tail),
+                    "selected_flag" => self.selected_flag.lookup(field, tail),
+                    "attachment_flag" => self.attachment_flag.lookup(field, tail),
                     other => Err(MeliError::new(format!(
                         "{} has no field named {}",
                         parent_field, other

@@ -138,6 +138,22 @@ pub struct ListingSettingsOverride {
     #[doc = "Default: ' '"]
     #[serde(default)]
     pub sidebar_divider: Option<char>,
+    #[doc = " Flag to show if thread entry contains unseen mail."]
+    #[doc = " Default: \"●\""]
+    #[serde(default)]
+    pub unseen_flag: Option<Option<String>>,
+    #[doc = " Flag to show if thread has been snoozed."]
+    #[doc = " Default: \"💤\""]
+    #[serde(default)]
+    pub thread_snoozed_flag: Option<Option<String>>,
+    #[doc = " Flag to show if thread entry has been selected."]
+    #[doc = " Default: \"☑\u{fe0f}\""]
+    #[serde(default)]
+    pub selected_flag: Option<Option<String>>,
+    #[doc = " Flag to show if thread entry contains attachments."]
+    #[doc = " Default: \"📎\""]
+    #[serde(default)]
+    pub attachment_flag: Option<Option<String>>,
 }
 impl Default for ListingSettingsOverride {
     fn default() -> Self {
@@ -153,6 +169,10 @@ impl Default for ListingSettingsOverride {
             sidebar_mailbox_tree_has_sibling_leaf: None,
             sidebar_mailbox_tree_no_sibling_leaf: None,
             sidebar_divider: None,
+            unseen_flag: None,
+            thread_snoozed_flag: None,
+            selected_flag: None,
+            attachment_flag: None,
         }
     }
 }
