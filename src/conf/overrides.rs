@@ -252,6 +252,11 @@ pub struct ComposingSettingsOverride {
     #[serde(alias = "default-header-values")]
     #[serde(default)]
     pub default_header_values: Option<HashMap<String, String>>,
+    #[doc = " Store sent mail after successful submission. This setting is meant to be disabled for"]
+    #[doc = " non-standard behaviour in gmail, which auto-saves sent mail on its own."]
+    #[doc = " Default: true"]
+    #[serde(default)]
+    pub store_sent_mail: Option<bool>,
 }
 impl Default for ComposingSettingsOverride {
     fn default() -> Self {
@@ -262,6 +267,7 @@ impl Default for ComposingSettingsOverride {
             format_flowed: None,
             insert_user_agent: None,
             default_header_values: None,
+            store_sent_mail: None,
         }
     }
 }

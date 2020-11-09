@@ -397,6 +397,12 @@ Add meli User-Agent header in new drafts
 .Pq Em true
 .It Ic default_header_values Ar hash table String[String]
 Default header values used when creating a new draft.
+.It Ic store_sent_mail Ar boolean
+.Pq Em optional
+Store sent mail after successful submission.
+This setting is meant to be disabled for non-standard behaviour in gmail, which auto-saves sent mail on its own.
+.\" default value
+.Pq Em true
 .El
 .Sh SHORTCUTS
 Shortcuts can take the following values:

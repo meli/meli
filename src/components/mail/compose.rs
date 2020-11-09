@@ -2058,6 +2058,7 @@ pub fn send_draft_async(
     mailbox_type: SpecialUsageMailbox,
     flags: Flag,
 ) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send>>> {
+    let store_sent_mail = *account_settings!(context[account_hash].composing.store_sent_mail);
     let format_flowed = *account_settings!(context[account_hash].composing.format_flowed);
     let event_sender = context.sender.clone();
     #[cfg(feature = "gpgme")]
@@ -2127,27 +2128,38 @@ pub fn send_draft_async(
         let message = Arc::new(draft.finalise()?);
         let ret = send_cb(message.clone()).await;
         let is_ok = ret.is_ok();
-        event_sender
-            .send(ThreadEvent::UIEvent(UIEvent::Callback(CallbackFn(
-                Box::new(move |context| {
-                    save_draft(
-                        message.as_bytes(),
-                        context,
-                        if is_ok {
-                            mailbox_type
-                        } else {
-                            SpecialUsageMailbox::Drafts
-                        },
-                        if is_ok {
-                            flags
-                        } else {
-                            Flag::SEEN | Flag::DRAFT
-                        },
-                        account_hash,
-                    );
-                }),
-            ))))
-            .unwrap();
+        if !is_ok || (store_sent_mail && is_ok) {
+            event_sender
+                .send(ThreadEvent::UIEvent(UIEvent::Callback(CallbackFn(
+                    Box::new(move |context| {
+                        save_draft(
+                            message.as_bytes(),
+                            context,
+                            if is_ok {
+                                mailbox_type
+                            } else {
+                                SpecialUsageMailbox::Drafts
+                            },
+                            if is_ok {
+                                flags
+                            } else {
+                                Flag::SEEN | Flag::DRAFT
+                            },
+                            account_hash,
+                        );
+                    }),
+                ))))
+                .unwrap();
+        } else if !store_sent_mail && is_ok {
+            let f = create_temp_file(message.as_bytes(), None, None, false);
+            log(
+                format!(
+                    "store_sent_mail is false; stored sent mail to {}",
+                    f.path().display()
+                ),
+                INFO,
+            );
+        }
         ret
     }))
 }

@@ -53,6 +53,11 @@ pub struct ComposingSettings {
     /// Default: empty
     #[serde(default, alias = "default-header-values")]
     pub default_header_values: HashMap<String, String>,
+    /// Store sent mail after successful submission. This setting is meant to be disabled for
+    /// non-standard behaviour in gmail, which auto-saves sent mail on its own.
+    /// Default: true
+    #[serde(default = "true_val")]
+    pub store_sent_mail: bool,
 }
 
 impl Default for ComposingSettings {
@@ -64,6 +69,7 @@ impl Default for ComposingSettings {
             format_flowed: true,
             insert_user_agent: true,
             default_header_values: HashMap::default(),
+            store_sent_mail: true,
         }
     }
 }
