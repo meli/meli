@@ -221,7 +221,7 @@ impl Draft {
         let mut ret = String::new();
 
         for (k, v) in self.headers.deref() {
-            ret.extend(format!("{}: {}\n", k, v).chars());
+            ret.push_str(&format!("{}: {}\n", k, v));
         }
 
         ret.push('\n');
@@ -246,9 +246,9 @@ impl Draft {
         }
         for (k, v) in self.headers.deref() {
             if v.is_ascii() {
-                ret.extend(format!("{}: {}\r\n", k, v).chars());
+                ret.push_str(&format!("{}: {}\r\n", k, v));
             } else {
-                ret.extend(format!("{}: {}\r\n", k, mime::encode_header(v)).chars());
+                ret.push_str(&format!("{}: {}\r\n", k, mime::encode_header(v)));
             }
         }
         ret.push_str("MIME-Version: 1.0\r\n");
@@ -256,16 +256,19 @@ impl Draft {
         if self.attachments.is_empty() {
             let content_type: ContentType = Default::default();
             let content_transfer_encoding: ContentTransferEncoding = ContentTransferEncoding::_8Bit;
-            ret.extend(format!("Content-Type: {}; charset=\"utf-8\"\r\n", content_type).chars());
-            ret.extend(
-                format!(
-                    "Content-Transfer-Encoding: {}\r\n",
-                    content_transfer_encoding
-                )
-                .chars(),
-            );
+            ret.push_str(&format!(
+                "Content-Type: {}; charset=\"utf-8\"\r\n",
+                content_type
+            ));
+            ret.push_str(&format!(
+                "Content-Transfer-Encoding: {}\r\n",
+                content_transfer_encoding
+            ));
             ret.push_str("\r\n");
-            ret.push_str(&self.body);
+            for line in self.body.lines() {
+                ret.push_str(line);
+                ret.push_str("\r\n");
+            }
         } else if self.body.is_empty() && self.attachments.len() == 1 {
             let attachment = std::mem::replace(&mut self.attachments, Vec::new()).remove(0);
             print_attachment(&mut ret, attachment);
@@ -305,7 +308,7 @@ fn build_multipart(ret: &mut String, kind: MultipartType, parts: Vec<AttachmentB
     }
     ret.push_str("--");
     ret.push_str(&boundary);
-    ret.push_str("--\n");
+    ret.push_str("--\r\n");
 }
 
 fn print_attachment(ret: &mut String, a: AttachmentBuilder) {
@@ -317,11 +320,17 @@ fn print_attachment(ret: &mut String, a: AttachmentBuilder) {
             parameters: ref v,
         } if v.is_empty() => {
             ret.push_str("\r\n");
-            ret.push_str(&String::from_utf8_lossy(a.raw()));
+            for line in String::from_utf8_lossy(a.raw()).lines() {
+                ret.push_str(line);
+                ret.push_str("\r\n");
+            }
             ret.push_str("\r\n");
         }
         Text { .. } => {
-            ret.push_str(&a.build().into_raw());
+            for line in a.build().into_raw().lines() {
+                ret.push_str(line);
+                ret.push_str("\r\n");
+            }
             ret.push_str("\r\n");
         }
         Multipart {
@@ -346,7 +355,10 @@ fn print_attachment(ret: &mut String, a: AttachmentBuilder) {
             ));
             ret.push_str("Content-Disposition: attachment\r\n");
             ret.push_str("\r\n");
-            ret.push_str(&String::from_utf8_lossy(a.raw()));
+            for line in String::from_utf8_lossy(a.raw()).lines() {
+                ret.push_str(line);
+                ret.push_str("\r\n");
+            }
             ret.push_str("\r\n");
         }
         PGPSignature => {
@@ -357,7 +369,10 @@ fn print_attachment(ret: &mut String, a: AttachmentBuilder) {
             ret.push_str("Content-Description: Digital signature\r\n");
             ret.push_str("Content-Disposition: inline\r\n");
             ret.push_str("\r\n");
-            ret.push_str(&String::from_utf8_lossy(a.raw()));
+            for line in String::from_utf8_lossy(a.raw()).lines() {
+                ret.push_str(line);
+                ret.push_str("\r\n");
+            }
             ret.push_str("\r\n");
         }
         _ => {
@@ -367,33 +382,31 @@ fn print_attachment(ret: &mut String, a: AttachmentBuilder) {
                 ContentTransferEncoding::Base64
             };
             if let Some(name) = a.content_type().name() {
-                ret.extend(
-                    format!(
-                        "Content-Type: {}; name=\"{}\"; charset=\"utf-8\"\r\n",
-                        a.content_type(),
-                        name
-                    )
-                    .chars(),
-                );
+                ret.push_str(&format!(
+                    "Content-Type: {}; name=\"{}\"; charset=\"utf-8\"\r\n",
+                    a.content_type(),
+                    name
+                ));
             } else {
-                ret.extend(
-                    format!("Content-Type: {}; charset=\"utf-8\"\r\n", a.content_type()).chars(),
-                );
+                ret.push_str(&format!(
+                    "Content-Type: {}; charset=\"utf-8\"\r\n",
+                    a.content_type()
+                ));
             }
             ret.push_str("Content-Disposition: attachment\r\n");
-            ret.extend(
-                format!(
-                    "Content-Transfer-Encoding: {}\r\n",
-                    content_transfer_encoding
-                )
-                .chars(),
-            );
+            ret.push_str(&format!(
+                "Content-Transfer-Encoding: {}\r\n",
+                content_transfer_encoding
+            ));
             ret.push_str("\r\n");
             if content_transfer_encoding == ContentTransferEncoding::Base64 {
-                ret.push_str(&BASE64_MIME.encode(a.raw()).trim());
+                for line in BASE64_MIME.encode(a.raw()).trim().lines() {
+                    ret.push_str(line);
+                    ret.push_str("\r\n");
+                }
             } else {
-                for l in unsafe { std::str::from_utf8_unchecked(a.raw()) }.lines() {
-                    ret.push_str(l);
+                for line in String::from_utf8_lossy(a.raw()).lines() {
+                    ret.push_str(line);
                     ret.push_str("\r\n");
                 }
             }
