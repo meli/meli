@@ -572,7 +572,7 @@ impl SmtpConnection {
             current_command.push(b"RCPT TO:<");
             current_command.push(addr.address_spec_raw().trim());
             if let Some(dsn_notify) = dsn_notify.as_ref() {
-                current_command.push(b" NOTIFY=");
+                current_command.push(b"> NOTIFY=");
                 current_command.push(dsn_notify.as_bytes());
             } else {
                 current_command.push(b">");
