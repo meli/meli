@@ -1652,15 +1652,15 @@ impl Listing {
             {
                 branches.clear();
                 branches.push_str(no_sibling_str);
-                let mut o = 1;
                 let leading_zeros = indentation.leading_zeros();
-                for _ in 0..(30_u32.saturating_sub(leading_zeros)) {
+                let mut o = 1_u32.wrapping_shl(31_u32.saturating_sub(leading_zeros));
+                for _ in 0..(32_u32.saturating_sub(leading_zeros)) {
                     if indentation & o > 0 {
                         branches.push_str(has_sibling_str);
                     } else {
                         branches.push_str(no_sibling_str);
                     }
-                    o <<= 1;
+                    o >>= 1;
                 }
                 if depth > 0 {
                     if has_sibling {

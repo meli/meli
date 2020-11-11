@@ -2310,6 +2310,6 @@ fn build_mailboxes_order(
             }
         };
 
-        rec(node, &mailbox_entries, 0, 1, false);
+        rec(node, &mailbox_entries, 0, 0, false);
     }
 }
