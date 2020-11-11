@@ -1360,7 +1360,11 @@ impl Component for Listing {
     }
 
     fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
-        let mut map = self.component.get_shortcuts(context);
+        let mut map = if let Some(s) = self.status.as_ref() {
+            s.get_shortcuts(context)
+        } else {
+            self.component.get_shortcuts(context)
+        };
         let mut config_map = context.settings.shortcuts.listing.key_values();
         if self.focus != ListingFocus::Menu {
             config_map.remove("open_mailbox");
@@ -1761,6 +1765,7 @@ impl Listing {
             /* Set to dummy */
             self.component = Offline(OfflineListing::new((account_hash, 0)));
         }
+        self.status = None;
         self.set_dirty(true);
         context
             .replies

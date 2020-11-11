@@ -33,11 +33,12 @@ pub struct AccountStatus {
 
 impl fmt::Display for AccountStatus {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "status")
+        write!(f, "{}", AccountStatus::DESCRIPTION)
     }
 }
 
 impl AccountStatus {
+    pub const DESCRIPTION: &'static str = "status";
     pub fn new(account_pos: usize, theme_default: ThemeAttribute) -> AccountStatus {
         let default_cell = {
             let mut ret = Cell::with_char(' ');
@@ -397,27 +398,30 @@ impl Component for AccountStatus {
         context.dirty_areas.push_back(area);
     }
 
-    fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {
+    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+        let shortcuts = self.get_shortcuts(context);
         match *event {
             UIEvent::Resize => {
                 self.dirty = true;
             }
-            UIEvent::Input(Key::Left) if self.cursor.0 != 0 => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts["general"]["scroll_left"]) && self.cursor.0 != 0 =>
+            {
                 self.cursor.0 -= 1;
                 self.dirty = true;
                 return true;
             }
-            UIEvent::Input(Key::Right) => {
+            UIEvent::Input(ref key) if shortcut!(key == shortcuts["general"]["scroll_right"]) => {
                 self.cursor.0 = self.cursor.0 + 1;
                 self.dirty = true;
                 return true;
             }
-            UIEvent::Input(Key::Up) => {
+            UIEvent::Input(ref key) if shortcut!(key == shortcuts["general"]["scroll_up"]) => {
                 self.cursor.1 = self.cursor.1.saturating_sub(1);
                 self.dirty = true;
                 return true;
             }
-            UIEvent::Input(Key::Down) => {
+            UIEvent::Input(ref key) if shortcut!(key == shortcuts["general"]["scroll_down"]) => {
                 self.cursor.1 = self.cursor.1 + 1;
                 self.dirty = true;
                 return true;
@@ -431,6 +435,14 @@ impl Component for AccountStatus {
             _ => {}
         }
         false
+    }
+
+    fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
+        let config_map: IndexMap<&'static str, Key> =
+            context.settings.shortcuts.general.key_values();
+        let mut ret: ShortcutMaps = Default::default();
+        ret.insert("general", config_map);
+        ret
     }
 
     fn is_dirty(&self) -> bool {
