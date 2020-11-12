@@ -1526,13 +1526,18 @@ impl Listing {
 
         let account_attrs = if must_highlight_account {
             if self.focus == ListingFocus::Menu && self.menu_cursor_pos.1 == 0 {
-                crate::conf::value(context, "mail.sidebar_highlighted")
+                let mut v = crate::conf::value(context, "mail.sidebar_highlighted");
+                if !context.settings.terminal.use_color() {
+                    v.attrs |= Attr::REVERSE;
+                }
+                v
             } else {
                 crate::conf::value(context, "mail.sidebar_highlighted_account_name")
             }
         } else {
             crate::conf::value(context, "mail.sidebar_account_name")
         };
+
         /* Print account name first */
         write_string_to_grid(
             &a.name,
@@ -1549,8 +1554,8 @@ impl Listing {
                 "offline",
                 grid,
                 Color::Byte(243),
-                self.theme_default.bg,
-                self.theme_default.attrs,
+                account_attrs.bg,
+                account_attrs.attrs,
                 (pos_inc(upper_left, (0, 1)), bottom_right),
                 None,
             );

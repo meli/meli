@@ -1158,6 +1158,7 @@ pub struct ProgressSpinner {
     stage: usize,
     pub kind: std::result::Result<usize, Vec<String>>,
     pub width: usize,
+    theme_attr: ThemeAttribute,
     active: bool,
     dirty: bool,
     id: ComponentId,
@@ -1212,11 +1213,17 @@ impl ProgressSpinner {
             .map(|f| f.grapheme_len())
             .max()
             .unwrap_or(0);
+        let mut theme_attr = crate::conf::value(context, "status.bar");
+        if !context.settings.terminal.use_color() {
+            theme_attr.attrs |= Attr::REVERSE;
+        }
+        theme_attr.attrs |= Attr::BOLD;
         ProgressSpinner {
             timer,
             stage: 0,
             kind: Ok(kind),
             width,
+            theme_attr,
             dirty: true,
             active: false,
             id: ComponentId::new_v4(),
@@ -1278,8 +1285,7 @@ impl fmt::Display for ProgressSpinner {
 impl Component for ProgressSpinner {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if self.dirty {
-            let theme_attr = crate::conf::value(context, "status.bar");
-            clear_area(grid, area, theme_attr);
+            clear_area(grid, area, self.theme_attr);
             if self.active {
                 write_string_to_grid(
                     match self.kind.as_ref() {
@@ -1287,9 +1293,9 @@ impl Component for ProgressSpinner {
                         Err(custom) => custom[self.stage].as_ref(),
                     },
                     grid,
-                    theme_attr.fg,
-                    theme_attr.bg,
-                    theme_attr.attrs,
+                    self.theme_attr.fg,
+                    self.theme_attr.bg,
+                    self.theme_attr.attrs,
                     area,
                     None,
                 );

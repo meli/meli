@@ -273,28 +273,35 @@ impl ContactList {
 
         let width = width!(area);
         let must_highlight_account: bool = self.account_pos == a.index;
-        let (fg_color, bg_color) = if must_highlight_account {
-            if self.account_pos == a.index {
-                (Color::Byte(233), Color::Byte(15))
-            } else {
-                (Color::Byte(15), Color::Byte(233))
+        let account_attrs = if must_highlight_account {
+            let mut v = crate::conf::value(context, "mail.sidebar_highlighted");
+            if !context.settings.terminal.use_color() {
+                v.attrs |= Attr::REVERSE;
             }
+            v
         } else {
-            (self.theme_default.fg, self.theme_default.bg)
+            crate::conf::value(context, "mail.sidebar_account_name")
         };
 
         let s = format!(" [{}]", context.accounts[a.index].address_book.len());
 
         if a.name.grapheme_len() + s.len() > width + 1 {
             /* Print account name */
-            let (x, y) =
-                write_string_to_grid(&a.name, grid, fg_color, bg_color, Attr::BOLD, area, None);
+            let (x, y) = write_string_to_grid(
+                &a.name,
+                grid,
+                account_attrs.fg,
+                account_attrs.bg,
+                account_attrs.attrs,
+                area,
+                None,
+            );
             write_string_to_grid(
                 &s,
                 grid,
-                fg_color,
-                bg_color,
-                Attr::BOLD,
+                account_attrs.fg,
+                account_attrs.bg,
+                account_attrs.attrs,
                 (
                     pos_dec(
                         (get_x(bottom_right!(area)), get_y(upper_left!(area))),
@@ -307,9 +314,9 @@ impl ContactList {
             write_string_to_grid(
                 "…",
                 grid,
-                fg_color,
-                bg_color,
-                Attr::BOLD,
+                account_attrs.fg,
+                account_attrs.bg,
+                account_attrs.attrs,
                 (
                     pos_dec(
                         (get_x(bottom_right!(area)), get_y(upper_left!(area))),
@@ -321,20 +328,29 @@ impl ContactList {
             );
 
             for x in x..=get_x(bottom_right!(area)) {
-                grid[(x, y)].set_fg(fg_color);
-                grid[(x, y)].set_bg(bg_color);
+                grid[(x, y)]
+                    .set_fg(account_attrs.fg)
+                    .set_bg(account_attrs.bg)
+                    .set_attrs(account_attrs.attrs);
             }
         } else {
             /* Print account name */
 
-            let (x, y) =
-                write_string_to_grid(&a.name, grid, fg_color, bg_color, Attr::BOLD, area, None);
+            let (x, y) = write_string_to_grid(
+                &a.name,
+                grid,
+                account_attrs.fg,
+                account_attrs.bg,
+                account_attrs.attrs,
+                area,
+                None,
+            );
             write_string_to_grid(
                 &s,
                 grid,
-                fg_color,
-                bg_color,
-                Attr::BOLD,
+                account_attrs.fg,
+                account_attrs.bg,
+                account_attrs.attrs,
                 (
                     pos_dec(
                         (get_x(bottom_right!(area)), get_y(upper_left!(area))),
@@ -345,8 +361,10 @@ impl ContactList {
                 None,
             );
             for x in x..=get_x(bottom_right!(area)) {
-                grid[(x, y)].set_fg(fg_color);
-                grid[(x, y)].set_bg(bg_color);
+                grid[(x, y)]
+                    .set_fg(account_attrs.fg)
+                    .set_bg(account_attrs.bg)
+                    .set_attrs(account_attrs.attrs);
             }
         }
     }
