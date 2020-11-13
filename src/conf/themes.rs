@@ -286,9 +286,7 @@ const DEFAULT_KEYS: &[&str] = &[
     "mail.listing.conversations.subject",
     "mail.listing.conversations.from",
     "mail.listing.conversations.date",
-    "mail.listing.conversations.padding",
     "mail.listing.conversations.unseen",
-    "mail.listing.conversations.unseen_padding",
     "mail.listing.conversations.highlighted",
     "mail.listing.conversations.selected",
     "mail.view.headers",
@@ -1515,28 +1513,6 @@ impl Default for Themes {
             },
             light = {
                 fg: Color::Magenta,
-            }
-        );
-        add!(
-            "mail.listing.conversations.padding",
-            dark = {
-                fg: Color::Byte(235),
-                bg: Color::Byte(235),
-            },
-            light = {
-                fg: Color::Byte(254),
-                bg: Color::Byte(254),
-            }
-        );
-        add!(
-            "mail.listing.conversations.unseen_padding",
-            dark = {
-                fg: Color::Byte(235),
-                bg: Color::Byte(235),
-            },
-            light = {
-                fg: Color::Byte(254),
-                bg: Color::Byte(254),
             }
         );
         add!(

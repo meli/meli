@@ -13,11 +13,9 @@
 "mail.listing.conversations" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
 "mail.listing.conversations.from" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
 "mail.listing.conversations.highlighted" = { fg = "theme_default", bg = "Grey58", attrs = "theme_default" }
-"mail.listing.conversations.padding" = { fg = "Grey15", bg = "Grey15", attrs = "theme_default" }
 "mail.listing.conversations.selected" = { fg = "theme_default", bg = "LightCoral", attrs = "theme_default" }
 "mail.listing.conversations.subject" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
 "mail.listing.conversations.unseen" = { fg = "Black", bg = "Grey78", attrs = "theme_default" }
-"mail.listing.conversations.unseen_padding" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
 "mail.listing.plain.even" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
 "mail.listing.plain.odd" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
 "mail.listing.plain.even_unseen" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }

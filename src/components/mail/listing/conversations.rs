@@ -172,13 +172,8 @@ impl MailListingTrait for ConversationsListing {
             subject: crate::conf::value(context, "mail.listing.conversations.subject"),
             from: crate::conf::value(context, "mail.listing.conversations.from"),
             date: crate::conf::value(context, "mail.listing.conversations.date"),
-            padding: crate::conf::value(context, "mail.listing.conversations.padding"),
             selected: crate::conf::value(context, "mail.listing.conversations.selected"),
             unseen: crate::conf::value(context, "mail.listing.conversations.unseen"),
-            unseen_padding: crate::conf::value(
-                context,
-                "mail.listing.conversations.unseen_padding",
-            ),
             highlighted: crate::conf::value(context, "mail.listing.conversations.highlighted"),
             attachment_flag: crate::conf::value(context, "mail.listing.attachment_flag"),
             thread_snooze_flag: crate::conf::value(context, "mail.listing.thread_snooze_flag"),
@@ -350,8 +345,6 @@ impl MailListingTrait for ConversationsListing {
         let width = max_entry_columns;
         self.content = CellBuffer::new_with_context(width, 4 * rows.len(), None, context);
 
-        let padding_fg = self.color_cache.padding.fg;
-
         for ((idx, (thread_hash, root_env_hash)), strings) in rows {
             if !context.accounts[&self.cursor_pos.0].contains_key(root_env_hash) {
                 panic!();
@@ -472,8 +465,8 @@ impl MailListingTrait for ConversationsListing {
             }
             for x in 0..width {
                 self.content[(x, 3 * idx + 2)]
-                    .set_ch('▓')
-                    .set_fg(padding_fg)
+                    .set_ch(Self::PADDING_CHAR)
+                    .set_fg(row_attr.fg)
                     .set_bg(row_attr.bg);
             }
         }
@@ -525,12 +518,6 @@ impl ListingTrait for ConversationsListing {
             self.selection[&thread_hash]
         );
 
-        let padding_fg = if thread.unseen() > 0 {
-            self.color_cache.unseen_padding.fg
-        } else {
-            self.color_cache.padding.fg
-        };
-
         copy_area(
             grid,
             &self.content,
@@ -553,7 +540,7 @@ impl ListingTrait for ConversationsListing {
                     .set_attrs(row_attr.attrs);
 
                 grid[(x, y + 2)]
-                    .set_fg(padding_fg)
+                    .set_fg(row_attr.fg)
                     .set_bg(row_attr.bg)
                     .set_attrs(row_attr.attrs);
             }
@@ -572,7 +559,7 @@ impl ListingTrait for ConversationsListing {
                     .set_attrs(row_attr.attrs);
 
                 grid[(x, y + 2)]
-                    .set_fg(padding_fg)
+                    .set_fg(row_attr.fg)
                     .set_bg(row_attr.bg)
                     .set_attrs(row_attr.attrs);
             }
@@ -716,35 +703,35 @@ impl ListingTrait for ConversationsListing {
 
         /* fill any remaining columns, if our view is wider than self.content */
         let width = self.content.size().0;
-        let padding_fg = self.color_cache.padding.fg;
 
         if width < width!(area) {
             let y_offset = get_y(upper_left);
             for y in 0..rows {
+                let fg_color = grid[(get_x(upper_left) + width - 1, y_offset + 3 * y)].fg();
                 let bg_color = grid[(get_x(upper_left) + width - 1, y_offset + 3 * y)].bg();
                 for x in (get_x(upper_left) + width)..=get_x(bottom_right) {
                     grid[(x, y_offset + 3 * y)].set_bg(bg_color);
                     grid[(x, y_offset + 3 * y + 1)]
                         .set_ch('▁')
-                        .set_fg(self.color_cache.theme_default.fg)
+                        .set_fg(fg_color)
                         .set_bg(bg_color);
                     grid[(x, y_offset + 3 * y + 2)]
-                        .set_ch('▓')
-                        .set_fg(padding_fg)
+                        .set_ch(Self::PADDING_CHAR)
+                        .set_fg(fg_color)
                         .set_bg(bg_color);
                 }
             }
             if pad > 0 {
                 let y = 3 * rows;
+                let fg_color = grid[(get_x(upper_left) + width - 1, y_offset + y)].fg();
                 let bg_color = grid[(get_x(upper_left) + width - 1, y_offset + y)].bg();
                 for x in (get_x(upper_left) + width)..=get_x(bottom_right) {
                     grid[(x, y_offset + y)].set_bg(bg_color);
-                    grid[(x, y_offset + y + 1)].set_ch('▁');
-                    grid[(x, y_offset + y + 1)].set_bg(bg_color);
+                    grid[(x, y_offset + y + 1)].set_ch('▁').set_bg(bg_color);
                     if pad == 2 {
                         grid[(x, y_offset + y + 2)]
-                            .set_ch('▓')
-                            .set_fg(padding_fg)
+                            .set_ch(Self::PADDING_CHAR)
+                            .set_fg(fg_color)
                             .set_bg(bg_color);
                     }
                 }
@@ -870,6 +857,8 @@ impl fmt::Display for ConversationsListing {
 
 impl ConversationsListing {
     const DESCRIPTION: &'static str = "conversations listing";
+    const PADDING_CHAR: char = ' '; //░';
+
     pub fn new(coordinates: (AccountHash, MailboxHash)) -> Self {
         ConversationsListing {
             cursor_pos: (coordinates.0, 1, 0),
@@ -1040,12 +1029,6 @@ impl ConversationsListing {
             self.selection[&thread_hash]
         );
 
-        let padding_fg = if thread.unseen() > 0 {
-            self.color_cache.unseen_padding.fg
-        } else {
-            self.color_cache.padding.fg
-        };
-
         let mut from_address_list = Vec::new();
         let mut from_address_set: std::collections::HashSet<Vec<u8>> =
             std::collections::HashSet::new();
@@ -1183,8 +1166,8 @@ impl ConversationsListing {
         }
         for c in self.content.row_iter(0..width, 3 * idx + 2) {
             self.content[c]
-                .set_ch('▓')
-                .set_fg(padding_fg)
+                .set_ch(Self::PADDING_CHAR)
+                .set_fg(row_attr.fg)
                 .set_bg(row_attr.bg);
         }
     }

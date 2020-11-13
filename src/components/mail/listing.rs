@@ -88,8 +88,6 @@ struct ColorCache {
     subject: ThemeAttribute,
     from: ThemeAttribute,
     date: ThemeAttribute,
-    padding: ThemeAttribute,
-    unseen_padding: ThemeAttribute,
 }
 
 #[derive(Debug)]

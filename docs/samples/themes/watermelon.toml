@@ -16,11 +16,9 @@ color_aliases = { "JewelGreen" = "#157241", "PinkLace" = "#FFD5FD", "TorchRed" =
 "mail.listing.conversations" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
 "mail.listing.conversations.from" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
 "mail.listing.conversations.highlighted" = { fg = "$JewelGreen", bg = "$SunsetOrange", attrs = "theme_default" }
-"mail.listing.conversations.padding" = { fg = "$TorchRed", bg = "Grey15", attrs = "theme_default" }
 "mail.listing.conversations.selected" = { fg = "theme_default", bg = "LightCoral", attrs = "theme_default" }
 "mail.listing.conversations.subject" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
 "mail.listing.conversations.unseen" = { fg = "Black", bg = "mail.listing.compact.even_unseen", attrs = "theme_default" }
-"mail.listing.conversations.unseen_padding" = { fg = "$BlueStone", bg = "mail.listing.conversations.unseen", attrs = "theme_default" }
 "mail.listing.plain.even" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
 "mail.listing.plain.odd" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
 "mail.listing.plain.even_unseen" = { fg = "theme_default", bg = "mail.listing.compact.even_unseen", attrs = "theme_default" }

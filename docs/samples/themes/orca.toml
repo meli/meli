@@ -14,11 +14,9 @@ color_aliases = { "neon_green" = "#6ef9d4",  "darkgrey" = "#4a4a4a",  "neon_purp
 "mail.listing.conversations.date" = { fg = "$neon_purple", bg = "theme_default", attrs = "theme_default" }
 "mail.listing.conversations.from" = { fg = "$darkgrey", bg = "theme_default", attrs = "theme_default" }
 "mail.listing.conversations.highlighted" = { fg = "theme_default", bg = "Grey58", attrs = "theme_default" }
-"mail.listing.conversations.padding" = { fg = "Black", bg = "Black", attrs = "theme_default" }
 "mail.listing.conversations.selected" = { fg = "theme_default", bg = "LightCoral", attrs = "theme_default" }
 "mail.listing.conversations.subject" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
 "mail.listing.conversations.unseen" = { fg = "Black", bg = "Grey78", attrs = "theme_default" }
-"mail.listing.conversations.unseen_padding" = { fg = "Black", bg = "Black", attrs = "theme_default" }
 "mail.listing.plain.even" = { fg = "theme_default", bg = "Grey19", attrs = "theme_default" }
 "mail.listing.plain.even_highlighted" = { fg = "theme_default", bg = "Grey58", attrs = "theme_default" }
 "mail.listing.plain.even_selected" = { fg = "theme_default", bg = "LightCoral", attrs = "theme_default" }
