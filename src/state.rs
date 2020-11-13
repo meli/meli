@@ -670,7 +670,8 @@ impl State {
                         false,
                         false,
                     );
-                    for row in self.overlay_grid.bounds_iter(displ_area) {
+                    let box_displ_area = create_box(&mut self.overlay_grid, displ_area);
+                    for row in self.overlay_grid.bounds_iter(box_displ_area) {
                         for c in row {
                             self.overlay_grid[c]
                                 .set_ch(' ')
@@ -679,8 +680,7 @@ impl State {
                                 .set_attrs(noto_colors.attrs);
                         }
                     }
-                    let ((x, mut y), box_displ_area_bottom_right) =
-                        create_box(&mut self.overlay_grid, displ_area);
+                    let ((x, mut y), box_displ_area_bottom_right) = box_displ_area;
                     for line in msg_lines
                         .into_iter()
                         .chain(Some(String::new()))

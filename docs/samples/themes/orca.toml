@@ -51,7 +51,7 @@ color_aliases = { "neon_green" = "#6ef9d4",  "darkgrey" = "#4a4a4a",  "neon_purp
 "pager.highlight_search" = { fg = "White", bg = "Teal", attrs = "Bold" }
 "pager.highlight_search_current" = { fg = "White", bg = "NavyBlue", attrs = "Bold" }
 "status.bar" = { fg = "White", bg = "Black", attrs = "theme_default" }
-"status.notification" = { fg = "Plum1", bg = "DarkRed", attrs = "theme_default" }
+"status.notification" = { fg = "Plum1", bg = "theme_default", attrs = "theme_default" }
 "tab.bar" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
 "tab.focused" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
 "tab.unfocused" = { fg = "$darkgrey", bg = "Black", attrs = "theme_default" }
