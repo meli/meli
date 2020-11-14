@@ -384,7 +384,7 @@ impl ListingTrait for PlainListing {
                 pos_dec(self.data_columns.columns[3].size(), (1, 1)),
             ),
         );
-        for c in grid.row_iter(x..(x + self.data_columns.widths[3]), get_y(upper_left)) {
+        for c in grid.row_iter(x..get_x(bottom_right), get_y(upper_left)) {
             grid[c].set_bg(row_attr.bg).set_attrs(row_attr.attrs);
         }
     }
@@ -482,31 +482,25 @@ impl ListingTrait for PlainListing {
         self.data_columns.widths[0] = self.data_columns.columns[0].size().0;
         self.data_columns.widths[1] = self.data_columns.columns[1].size().0; /* date*/
         self.data_columns.widths[2] = self.data_columns.columns[2].size().0; /* from */
-        self.data_columns.widths[3] = self.data_columns.columns[3].size().0; /* flags */
-        self.data_columns.widths[4] = self.data_columns.columns[4].size().0; /* subject */
+        self.data_columns.widths[3] = self.data_columns.columns[3].size().0; /* subject */
 
         let min_col_width = std::cmp::min(
             15,
-            std::cmp::min(self.data_columns.widths[4], self.data_columns.widths[2]),
+            std::cmp::min(self.data_columns.widths[3], self.data_columns.widths[2]),
         );
-        if self.data_columns.widths[0] + self.data_columns.widths[1] + 3 * min_col_width + 8 > width
+        if self.data_columns.widths[0] + self.data_columns.widths[1] + 2 * min_col_width + 4 > width
         {
             let remainder = width
                 .saturating_sub(self.data_columns.widths[0])
                 .saturating_sub(self.data_columns.widths[1])
-                .saturating_sub(4);
+                .saturating_sub(2 * 2);
             self.data_columns.widths[2] = remainder / 6;
-            self.data_columns.widths[4] =
-                ((2 * remainder) / 3).saturating_sub(self.data_columns.widths[3]);
         } else {
             let remainder = width
                 .saturating_sub(self.data_columns.widths[0])
                 .saturating_sub(self.data_columns.widths[1])
-                .saturating_sub(8);
-            if min_col_width + self.data_columns.widths[4] > remainder {
-                self.data_columns.widths[4] = remainder
-                    .saturating_sub(min_col_width)
-                    .saturating_sub(self.data_columns.widths[3]);
+                .saturating_sub(3 * 2);
+            if min_col_width + self.data_columns.widths[3] > remainder {
                 self.data_columns.widths[2] = min_col_width;
             }
         }
@@ -514,30 +508,24 @@ impl ListingTrait for PlainListing {
         /* Page_no has changed, so draw new page */
         let mut x = get_x(upper_left);
         let mut flag_x = 0;
-        for i in 0..self.data_columns.columns.len() {
-            let column_width = self.data_columns.columns[i].size().0;
+        for i in 0..4 {
+            let column_width = self.data_columns.widths[i];
             if i == 3 {
                 flag_x = x;
             }
-            if self.data_columns.widths[i] == 0 {
+            if column_width == 0 {
                 continue;
             }
             copy_area(
                 grid,
                 &self.data_columns.columns[i],
-                (
-                    set_x(upper_left, x),
-                    set_x(
-                        bottom_right,
-                        std::cmp::min(get_x(bottom_right), x + (self.data_columns.widths[i])),
-                    ),
-                ),
+                (set_x(upper_left, x), bottom_right),
                 (
                     (0, top_idx),
                     (column_width.saturating_sub(1), self.length - 1),
                 ),
             );
-            x += self.data_columns.widths[i] + 2; // + SEPARATOR
+            x += column_width + 2; // + SEPARATOR
             if x > get_x(bottom_right) {
                 break;
             }
@@ -772,7 +760,53 @@ impl PlainListing {
         EntryStrings {
             date: DateString(PlainListing::format_date(&e)),
             subject: SubjectString(subject),
-            flag: FlagString(format!("{}", if e.has_attachments() { "📎" } else { "" },)),
+            flag: FlagString(format!(
+                "{selected}{unseen}{attachments}{whitespace}",
+                selected = if self.selection.get(&e.hash()).cloned().unwrap_or(false) {
+                    mailbox_settings!(
+                        context[self.cursor_pos.0][&self.cursor_pos.1]
+                            .listing
+                            .selected_flag
+                    )
+                    .as_ref()
+                    .map(|s| s.as_str())
+                    .unwrap_or(super::DEFAULT_SELECTED_FLAG)
+                } else {
+                    ""
+                },
+                unseen = if !e.is_seen() {
+                    mailbox_settings!(
+                        context[self.cursor_pos.0][&self.cursor_pos.1]
+                            .listing
+                            .unseen_flag
+                    )
+                    .as_ref()
+                    .map(|s| s.as_str())
+                    .unwrap_or(super::DEFAULT_UNSEEN_FLAG)
+                } else {
+                    ""
+                },
+                attachments = if e.has_attachments() {
+                    mailbox_settings!(
+                        context[self.cursor_pos.0][&self.cursor_pos.1]
+                            .listing
+                            .attachment_flag
+                    )
+                    .as_ref()
+                    .map(|s| s.as_str())
+                    .unwrap_or(super::DEFAULT_ATTACHMENT_FLAG)
+                } else {
+                    ""
+                },
+                whitespace = if self.selection.get(&e.hash()).cloned().unwrap_or(false)
+                    || !e.is_seen()
+                    || e.has_attachments()
+                {
+                    " "
+                } else {
+                    ""
+                },
+            )),
             from: FromString(address_list!((e.from()) as comma_sep_list)),
             tags: TagString(tags, colors),
         }
@@ -817,10 +851,12 @@ impl PlainListing {
             let entry_strings = self.make_entry_string(envelope, context);
             min_width.1 = cmp::max(min_width.1, entry_strings.date.grapheme_width()); /* date */
             min_width.2 = cmp::max(min_width.2, entry_strings.from.grapheme_width()); /* from */
-            min_width.3 = cmp::max(min_width.3, entry_strings.flag.grapheme_width()); /* flags */
-            min_width.4 = cmp::max(
-                min_width.4,
-                entry_strings.subject.grapheme_width() + 1 + entry_strings.tags.grapheme_width(),
+            min_width.3 = cmp::max(
+                min_width.3,
+                entry_strings.flag.grapheme_width()
+                    + entry_strings.subject.grapheme_width()
+                    + 1
+                    + entry_strings.tags.grapheme_width(),
             ); /* tags + subject */
             rows.push(entry_strings);
 
@@ -840,12 +876,9 @@ impl PlainListing {
         /* from column */
         self.data_columns.columns[2] =
             CellBuffer::new_with_context(min_width.2, rows.len(), None, context);
-        /* flags column */
+        /* subject column */
         self.data_columns.columns[3] =
             CellBuffer::new_with_context(min_width.3, rows.len(), None, context);
-        /* subject column */
-        self.data_columns.columns[4] =
-            CellBuffer::new_with_context(min_width.4, rows.len(), None, context);
 
         let iter = if self.filter_term.is_empty() {
             Box::new(self.local_collection.iter().cloned())
@@ -923,16 +956,13 @@ impl PlainListing {
                 ((0, idx), (min_width.3, idx)),
                 None,
             );
-            for c in columns[3].row_iter(x..min_width.3, idx) {
-                columns[3][c].set_bg(row_attr.bg).set_attrs(row_attr.attrs);
-            }
             let (x, _) = write_string_to_grid(
                 &strings.subject,
-                &mut columns[4],
+                &mut columns[3],
                 row_attr.fg,
                 row_attr.bg,
                 row_attr.attrs,
-                ((0, idx), (min_width.4, idx)),
+                ((x, idx), (min_width.3, idx)),
                 None,
             );
             let x = {
@@ -941,38 +971,42 @@ impl PlainListing {
                     let color = color.unwrap_or(self.color_cache.tag_default.bg);
                     let (_x, _) = write_string_to_grid(
                         t,
-                        &mut columns[4],
+                        &mut columns[3],
                         self.color_cache.tag_default.fg,
                         color,
                         self.color_cache.tag_default.attrs,
-                        ((x + 1, idx), (min_width.4, idx)),
+                        ((x + 1, idx), (min_width.3, idx)),
                         None,
                     );
-                    for c in columns[4].row_iter(x..(x + 1), idx) {
-                        columns[4][c].set_bg(color);
+                    for c in columns[3].row_iter(x..(x + 1), idx) {
+                        columns[3][c].set_bg(color);
                     }
-                    for c in columns[4].row_iter(_x..(_x + 1), idx) {
-                        columns[4][c].set_bg(color).set_keep_bg(true);
+                    for c in columns[3].row_iter(_x..(_x + 1), idx) {
+                        columns[3][c].set_bg(color).set_keep_bg(true);
                     }
-                    for c in columns[4].row_iter((x + 1)..(_x + 1), idx) {
-                        columns[4][c].set_keep_fg(true).set_keep_bg(true);
+                    for c in columns[3].row_iter((x + 1)..(_x + 1), idx) {
+                        columns[3][c].set_keep_fg(true).set_keep_bg(true);
                     }
-                    for c in columns[4].row_iter(x..(x + 1), idx) {
-                        columns[4][c].set_keep_bg(true);
+                    for c in columns[3].row_iter(x..(x + 1), idx) {
+                        columns[3][c].set_keep_bg(true);
                     }
                     x = _x + 1;
                 }
                 x
             };
-            for c in columns[4].row_iter(x..min_width.4, idx) {
-                columns[4][c].set_bg(row_attr.bg).set_attrs(row_attr.attrs);
+            for c in columns[3].row_iter(x..min_width.3, idx) {
+                columns[3][c].set_bg(row_attr.bg).set_attrs(row_attr.attrs);
             }
-            if context.accounts[&self.cursor_pos.0]
-                .collection
-                .get_env(i)
-                .has_attachments()
-            {
-                columns[3][(0, idx)].set_fg(Color::Byte(103));
+            /* Set fg color for flags */
+            let mut x = 0;
+            if self.selection.get(&i).cloned().unwrap_or(false) {
+                x += 1;
+            }
+            if !envelope.is_seen() {
+                x += 1;
+            }
+            if envelope.has_attachments() {
+                columns[3][(x, idx)].set_fg(self.color_cache.attachment_flag.fg);
             }
         }
         if self.length == 0 && self.filter_term.is_empty() {
