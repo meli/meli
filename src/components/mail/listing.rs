@@ -28,6 +28,24 @@ use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::ops::{Deref, DerefMut};
 
+// TODO: emoji_text_presentation_selector should be printed along with the chars before it but not
+// as a separate Cell
+//macro_rules! emoji_text_presentation_selector {
+//    () => {
+//        "\u{FE0E}"
+//    };
+//}
+//
+//pub const DEFAULT_ATTACHMENT_FLAG: &str = concat!("📎", emoji_text_presentation_selector!());
+//pub const DEFAULT_SELECTED_FLAG: &str = concat!("☑️", emoji_text_presentation_selector!());
+//pub const DEFAULT_UNSEEN_FLAG: &str = concat!("●", emoji_text_presentation_selector!());
+//pub const DEFAULT_SNOOZED_FLAG: &str = concat!("💤", emoji_text_presentation_selector!());
+
+pub const DEFAULT_ATTACHMENT_FLAG: &str = "📎";
+pub const DEFAULT_SELECTED_FLAG: &str = "☑️";
+pub const DEFAULT_UNSEEN_FLAG: &str = "●";
+pub const DEFAULT_SNOOZED_FLAG: &str = "💤";
+
 mod conversations;
 pub use self::conversations::*;
 
