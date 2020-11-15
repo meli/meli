@@ -334,6 +334,7 @@ impl Component for AccountStatus {
             ((1, line), (width - 1, line)),
             None,
         );
+        line += 2;
 
         for (job_id, req) in a.active_jobs.iter() {
             width = self.content.size().0;
