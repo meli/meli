@@ -1098,7 +1098,7 @@ impl Component for Composer {
                         .replies
                         .push_back(UIEvent::Action(Tab(Kill(self.id))));
                 }
-                return true;
+                return false;
             }
             (ViewMode::WaitingForSendResult(ref mut selector, _), _) => {
                 if selector.process_event(event, context) {

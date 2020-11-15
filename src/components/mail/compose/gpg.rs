@@ -164,7 +164,7 @@ impl Component for KeySelection {
                                         .replies
                                         .push_back(UIEvent::FinishedUIDialog(id, Box::new(res)));
                                 }
-                                return true;
+                                return false;
                             }
                             let mut widget = UIDialog::new(
                                 "select key",
@@ -201,7 +201,7 @@ impl Component for KeySelection {
                             };
                         }
                     }
-                    true
+                    false
                 }
                 _ => progress_spinner.process_event(event, context),
             },
