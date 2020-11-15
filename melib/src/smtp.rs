@@ -137,8 +137,16 @@ pub enum SmtpAuth {
         password: Password,
         #[serde(default = "true_val")]
         require_auth: bool,
+        #[serde(skip_serializing, skip_deserializing, default)]
+        auth_type: SmtpAuthType,
     },
     // md5, sasl, etc
+}
+
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, Default)]
+pub struct SmtpAuthType {
+    plain: bool,
+    login: bool,
 }
 
 fn true_val() -> bool {
@@ -396,29 +404,44 @@ impl SmtpConnection {
                 return Err(MeliError::new(format!(
                         "SMTP Server doesn't advertise Authentication support. Server response was: {:?}",
                         pre_auth_extensions_reply
-                    )));
+                    )).set_kind(crate::error::ErrorKind::Authentication));
             }
             no_auth_needed =
                 ret.server_conf.auth == SmtpAuth::None || !ret.server_conf.auth.require_auth();
             if no_auth_needed {
                 ret.set_extension_support(pre_auth_extensions_reply);
+            } else if let SmtpAuth::Auto {
+                ref mut auth_type, ..
+            } = ret.server_conf.auth
+            {
+                for l in pre_auth_extensions_reply
+                    .lines
+                    .iter()
+                    .filter(|l| l.starts_with("AUTH"))
+                {
+                    let l = l["AUTH ".len()..].trim();
+                    for _type in l.split_whitespace() {
+                        if _type == "PLAIN" {
+                            auth_type.plain = true;
+                        } else if _type == "LOGIN" {
+                            auth_type.login = true;
+                        }
+                    }
+                    break;
+                }
             }
         }
         if !no_auth_needed {
             match &ret.server_conf.auth {
                 SmtpAuth::None => {}
                 SmtpAuth::Auto {
-                    username, password, ..
+                    username,
+                    password,
+                    auth_type,
+                    ..
                 } => {
-                    // # RFC 4616 The PLAIN SASL Mechanism
-                    // # https://www.ietf.org/rfc/rfc4616.txt
-                    // message   = [authzid] UTF8NUL authcid UTF8NUL passwd
-                    // authcid   = 1*SAFE ; MUST accept up to 255 octets
-                    // authzid   = 1*SAFE ; MUST accept up to 255 octets
-                    // passwd    = 1*SAFE ; MUST accept up to 255 octets
-                    // UTF8NUL   = %x00 ; UTF-8 encoded NUL character
-                    let username_password = match password {
-                        Password::Raw(p) => base64::encode(format!("\0{}\0{}", username, p)),
+                    let password = match password {
+                        Password::Raw(p) => p.as_bytes().to_vec(),
                         Password::CommandEval(command) => {
                             let _command = command.clone();
 
@@ -439,22 +462,44 @@ impl SmtpConnection {
                                     String::from_utf8_lossy(&output.stderr)
                                 )));
                             }
-                            let mut buf =
-                                Vec::with_capacity(2 + username.len() + output.stdout.len());
-                            buf.push(b'\0');
-                            buf.extend(username.as_bytes().to_vec());
-                            buf.push(b'\0');
                             if output.stdout.ends_with(b"\n") {
                                 output.stdout.pop();
                             }
-                            buf.extend(output.stdout);
-                            base64::encode(buf)
+                            output.stdout
                         }
                     };
-                    let mut auth_command: SmallVec<[&[u8]; 16]> = SmallVec::new();
-                    auth_command.push(b"AUTH PLAIN ");
-                    auth_command.push(username_password.as_bytes());
-                    ret.send_command(&auth_command).await?;
+                    if auth_type.login {
+                        let username = username.to_string();
+                        ret.send_command(&[b"AUTH LOGIN"]).await?;
+                        ret.read_lines(&mut res, Some((ReplyCode::_334, &[])))
+                            .await
+                            .chain_err_kind(crate::error::ErrorKind::Authentication)?;
+                        let buf = base64::encode(&username);
+                        ret.send_command(&[buf.as_bytes()]).await?;
+                        ret.read_lines(&mut res, Some((ReplyCode::_334, &[])))
+                            .await
+                            .chain_err_kind(crate::error::ErrorKind::Authentication)?;
+                        let buf = base64::encode(&password);
+                        ret.send_command(&[buf.as_bytes()]).await?;
+                    } else {
+                        // # RFC 4616 The PLAIN SASL Mechanism
+                        // # https://www.ietf.org/rfc/rfc4616.txt
+                        // message   = [authzid] UTF8NUL authcid UTF8NUL passwd
+                        // authcid   = 1*SAFE ; MUST accept up to 255 octets
+                        // authzid   = 1*SAFE ; MUST accept up to 255 octets
+                        // passwd    = 1*SAFE ; MUST accept up to 255 octets
+                        // UTF8NUL   = %x00 ; UTF-8 encoded NUL character
+                        let username_password = {
+                            let mut buf = Vec::with_capacity(2 + username.len() + password.len());
+                            buf.push(b'\0');
+                            buf.extend(username.as_bytes().to_vec());
+                            buf.push(b'\0');
+                            buf.extend(password);
+                            base64::encode(buf)
+                        };
+                        ret.send_command(&[b"AUTH PLAIN ", username_password.as_bytes()])
+                            .await?;
+                    }
                     ret.read_lines(&mut res, Some((ReplyCode::_235, &[])))
                         .await
                         .chain_err_kind(crate::error::ErrorKind::Authentication)?;
@@ -711,6 +756,8 @@ pub enum ReplyCode {
     _251,
     ///Cannot VRFY user, but will accept message and attempt delivery (See Section 3.5.3)
     _252,
+    ///rfc4954 AUTH continuation request
+    _334,
     ///PRDR specific, eg "content analysis has started|
     _353,
     ///Start mail input; end with <CRLF>.<CRLF>
@@ -765,6 +812,7 @@ impl ReplyCode {
             _235 => "Authentication successful",
             _251 => "User not local; will forward",
             _252 => "Cannot VRFY user, but will accept message and attempt delivery",
+            _334 => "Intermediate response to the AUTH command",
             _353 => "PRDR specific notice",
             _354 => "Start mail input; end with <CRLF>.<CRLF>",
             _421 => "Service not available, closing transmission channel",
@@ -815,6 +863,7 @@ impl TryFrom<&'_ str> for ReplyCode {
             "250" => Ok(_250),
             "251" => Ok(_251),
             "252" => Ok(_252),
+            "334" => Ok(_334),
             "354" => Ok(_354),
             "421" => Ok(_421),
             "450" => Ok(_450),
