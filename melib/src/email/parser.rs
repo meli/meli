@@ -1200,8 +1200,8 @@ List-Archive: <http://www.host.com/list/archive/> (Web Archive)
 "#;
         let (rest, headers) = headers::headers(s.as_bytes()).unwrap();
         assert!(rest.is_empty());
-        for (h, v) in headers {
-            let (rest, action_list) = rfc_2369_list_headers_action_list(v).unwrap();
+        for (_h, v) in headers {
+            let (rest, _action_list) = rfc_2369_list_headers_action_list(v).unwrap();
             assert!(rest.is_empty());
         }
     }
@@ -2486,7 +2486,7 @@ pub mod address {
 
 #[cfg(test)]
 mod tests {
-    use super::{address::*, encodings::*, generic::*, *};
+    use super::{address::*, encodings::*, *};
     use crate::email::address::*;
     use crate::make_address;
 

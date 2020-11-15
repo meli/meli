@@ -324,14 +324,12 @@ fn print_attachment(ret: &mut String, a: AttachmentBuilder) {
                 ret.push_str(line);
                 ret.push_str("\r\n");
             }
-            ret.push_str("\r\n");
         }
         Text { .. } => {
             for line in a.build().into_raw().lines() {
                 ret.push_str(line);
                 ret.push_str("\r\n");
             }
-            ret.push_str("\r\n");
         }
         Multipart {
             boundary: _,
@@ -346,7 +344,6 @@ fn print_attachment(ret: &mut String, a: AttachmentBuilder) {
                     .map(|s| s.into())
                     .collect::<Vec<AttachmentBuilder>>(),
             );
-            ret.push_str("\r\n");
         }
         MessageRfc822 => {
             ret.push_str(&format!(
@@ -359,7 +356,6 @@ fn print_attachment(ret: &mut String, a: AttachmentBuilder) {
                 ret.push_str(line);
                 ret.push_str("\r\n");
             }
-            ret.push_str("\r\n");
         }
         PGPSignature => {
             ret.push_str(&format!(
@@ -373,7 +369,6 @@ fn print_attachment(ret: &mut String, a: AttachmentBuilder) {
                 ret.push_str(line);
                 ret.push_str("\r\n");
             }
-            ret.push_str("\r\n");
         }
         _ => {
             let content_transfer_encoding: ContentTransferEncoding = if a.raw().is_ascii() {
@@ -410,7 +405,6 @@ fn print_attachment(ret: &mut String, a: AttachmentBuilder) {
                     ret.push_str("\r\n");
                 }
             }
-            ret.push_str("\r\n");
         }
     }
 }

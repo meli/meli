@@ -17,6 +17,7 @@ fn main() -> Result<()> {
             username: "username".into(),
             password: Password::CommandEval("gpg2 --no-tty -q -d ~/.passwords/password.gpg".into()),
             require_auth: true,
+            auth_type: Default::default(),
         },
         envelope_from: String::new(),
     };
