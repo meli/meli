@@ -375,6 +375,7 @@ fn run_app(opt: Opt) -> Result<()> {
         .general
         .enter_command_mode
         .clone();
+    let quit_key: Key = state.context.settings.shortcuts.general.quit.clone();
 
     /* Keep track of the input mode. See UIMode for details */
     'main: loop {
@@ -421,7 +422,7 @@ fn run_app(opt: Opt) -> Result<()> {
                             match state.mode {
                                 UIMode::Normal => {
                                     match k {
-                                        Key::Char('q') | Key::Char('Q') => {
+                                        _ if k == quit_key => {
                                             if state.can_quit_cleanly() {
                                                 drop(state);
                                                 break 'main;

@@ -1034,7 +1034,10 @@ impl State {
             Quit => {
                 self.context
                     .sender
-                    .send(ThreadEvent::Input((Key::Char('q'), vec![b'q'])))
+                    .send(ThreadEvent::Input((
+                        self.context.settings.shortcuts.general.quit.clone(),
+                        vec![],
+                    )))
                     .unwrap();
             }
             v => {
