@@ -44,7 +44,7 @@ type WChar = u32;
 type Interval = (WChar, WChar);
 
 pub struct CodePointsIterator<'a> {
-    rest: &'a [u8],
+    rest: std::str::Chars<'a>,
 }
 
 /*
@@ -61,36 +61,7 @@ impl<'a> Iterator for CodePointsIterator<'a> {
     type Item = WChar;
 
     fn next(&mut self) -> Option<WChar> {
-        if self.rest.is_empty() {
-            return None;
-        }
-        /* Input is UTF-8 valid strings, guaranteed by Rust's std */
-        if self.rest[0] & 0b1000_0000 == 0x0 {
-            let ret: WChar = WChar::from(self.rest[0]);
-            self.rest = &self.rest[1..];
-            return Some(ret);
-        }
-        if self.rest[0] & 0b1110_0000 == 0b1100_0000 {
-            let ret: WChar = (WChar::from(self.rest[0]) & 0b0001_1111).rotate_left(6)
-                + (WChar::from(self.rest[1]) & 0b0111_1111);
-            self.rest = &self.rest[2..];
-            return Some(ret);
-        }
-
-        if self.rest[0] & 0b1111_0000 == 0b1110_0000 {
-            let ret: WChar = (WChar::from(self.rest[0]) & 0b0000_0111).rotate_left(12)
-                + (WChar::from(self.rest[1]) & 0b0011_1111).rotate_left(6)
-                + (WChar::from(self.rest[2]) & 0b0011_1111);
-            self.rest = &self.rest[3..];
-            return Some(ret);
-        }
-
-        let ret: WChar = (WChar::from(self.rest[0]) & 0b0000_0111).rotate_left(18)
-            + (WChar::from(self.rest[1]) & 0b0011_1111).rotate_left(12)
-            + (WChar::from(self.rest[2]) & 0b0011_1111).rotate_left(6)
-            + (WChar::from(self.rest[3]) & 0b0011_1111);
-        self.rest = &self.rest[4..];
-        Some(ret)
+        self.rest.next().map(|c| c as WChar)
     }
 }
 pub trait CodePointsIter {
@@ -99,16 +70,12 @@ pub trait CodePointsIter {
 
 impl CodePointsIter for str {
     fn code_points(&self) -> CodePointsIterator {
-        CodePointsIterator {
-            rest: self.as_bytes(),
-        }
+        CodePointsIterator { rest: self.chars() }
     }
 }
 impl CodePointsIter for &str {
     fn code_points(&self) -> CodePointsIterator {
-        CodePointsIterator {
-            rest: self.as_bytes(),
-        }
+        CodePointsIterator { rest: self.chars() }
     }
 }
 
@@ -160,6 +127,24 @@ pub fn wcwidth(ucs: WChar) -> Option<usize> {
 
 #[test]
 fn test_wcwidth() {
+    assert_eq!(
+        &"abc\0".code_points().collect::<Vec<_>>(),
+        &[0x61, 0x62, 0x63, 0x0]
+    );
+    assert_eq!(&"●".code_points().collect::<Vec<_>>(), &[0x25cf]);
+    assert_eq!(&"📎".code_points().collect::<Vec<_>>(), &[0x1f4ce]);
+    assert_eq!(
+        &"𐼹𐼺𐼻𐼼𐼽".code_points().collect::<Vec<_>>(),
+        &[0x10F39, 0x10F3A, 0x10F3B, 0x10F3C, 0x10F3D]
+    ); // Sogdian alphabet
+    assert_eq!(
+        &"𐼹a𐼽b".code_points().collect::<Vec<_>>(),
+        &[0x10F39, 0x61, 0x10F3D, 0x62]
+    ); // Sogdian alphabet
+    assert_eq!(
+        &"📎\u{FE0E}".code_points().collect::<Vec<_>>(),
+        &[0x1f4ce, 0xfe0e]
+    );
     use crate::text_processing::grapheme_clusters::TextProcessing;
     assert_eq!("●".grapheme_width(), 1);
     assert_eq!("●📎".grapheme_width(), 3);
