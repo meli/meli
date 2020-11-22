@@ -20,7 +20,7 @@
  */
 
 use super::*;
-use crate::terminal::cells::*;
+use crate::terminal::{cells::*, Color};
 use melib::error::{MeliError, Result};
 use melib::text_processing::wcwidth;
 use nix::sys::wait::WaitStatus;
