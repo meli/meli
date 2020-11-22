@@ -233,6 +233,7 @@ impl ThreadView {
             e.heading = string;
             width = cmp::max(width, e.index.0 * 4 + e.heading.grapheme_width() + 2);
         }
+        let theme_default = crate::conf::value(context, "theme_default");
         let mut content = CellBuffer::new_with_context(width, height, None, context);
         if self.reversed {
             for (y, e) in self.entries.iter().rev().enumerate() {
@@ -259,16 +260,16 @@ impl ThreadView {
                     &e.heading,
                     &mut content,
                     if e.seen {
-                        Color::Default
+                        theme_default.fg
                     } else {
                         Color::Byte(0)
                     },
                     if e.seen {
-                        Color::Default
+                        theme_default.bg
                     } else {
                         Color::Byte(251)
                     },
-                    Attr::DEFAULT,
+                    theme_default.attrs,
                     (
                         (e.index.0 * 4 + 1, 2 * y),
                         (e.index.0 * 4 + e.heading.grapheme_width() + 1, height - 1),
@@ -287,9 +288,7 @@ impl ThreadView {
                 if let Some(len) = highlight_reply_subjects[y] {
                     let index = e.index.0 * 4 + 1 + e.heading.grapheme_width() - len;
                     let area = ((index, 2 * y), (width - 2, 2 * y));
-                    let fg_color = Color::Byte(33);
-                    let bg_color = Color::Default;
-                    change_colors(&mut content, area, fg_color, bg_color);
+                    change_colors(&mut content, area, Color::Byte(33), theme_default.bg);
                 }
                 set_and_join_box(&mut content, (e.index.0 * 4, 2 * y), BoxBoundary::Vertical);
                 set_and_join_box(
@@ -322,9 +321,9 @@ impl ThreadView {
                     let index = (e.index.0 * 4, 2 * y - 1);
                     if content[index].ch() == ' ' {
                         let mut ctr = 1;
-                        content[(e.index.0 * 4, 2 * y - 1)].set_bg(Color::Default);
+                        content[(e.index.0 * 4, 2 * y - 1)].set_bg(theme_default.bg);
                         while content.get(e.index.0 * 4 + ctr, 2 * y - 1).is_some() {
-                            content[(e.index.0 * 4 + ctr, 2 * y - 1)].set_bg(Color::Default);
+                            content[(e.index.0 * 4 + ctr, 2 * y - 1)].set_bg(theme_default.bg);
                             if content[(e.index.0 * 4 + ctr, 2 * y - 1)].ch() != ' ' {
                                 break;
                             }
@@ -342,16 +341,16 @@ impl ThreadView {
                     &e.heading,
                     &mut content,
                     if e.seen {
-                        Color::Default
+                        theme_default.fg
                     } else {
                         Color::Byte(0)
                     },
                     if e.seen {
-                        Color::Default
+                        theme_default.bg
                     } else {
                         Color::Byte(251)
                     },
-                    Attr::DEFAULT,
+                    theme_default.attrs,
                     (
                         (e.index.0 * 4 + 1, 2 * y),
                         (e.index.0 * 4 + e.heading.grapheme_width() + 1, height - 1),
@@ -370,9 +369,7 @@ impl ThreadView {
                 if let Some(_len) = highlight_reply_subjects[y] {
                     let index = e.index.0 * 4 + 1;
                     let area = ((index, 2 * y), (width - 2, 2 * y));
-                    let fg_color = Color::Byte(33);
-                    let bg_color = Color::Default;
-                    change_colors(&mut content, area, fg_color, bg_color);
+                    change_colors(&mut content, area, Color::Byte(33), theme_default.bg);
                 }
                 set_and_join_box(&mut content, (e.index.0 * 4, 2 * y), BoxBoundary::Vertical);
                 set_and_join_box(
@@ -413,26 +410,36 @@ impl ThreadView {
         }
     }
 
-    fn highlight_line(&self, grid: &mut CellBuffer, dest_area: Area, src_area: Area, idx: usize) {
+    fn highlight_line(
+        &self,
+        grid: &mut CellBuffer,
+        dest_area: Area,
+        src_area: Area,
+        idx: usize,
+        context: &Context,
+    ) {
         let visibles: Vec<&usize> = self
             .visible_entries
             .iter()
             .flat_map(|ref v| v.iter())
             .collect();
         if idx == *visibles[self.cursor_pos] {
-            let fg_color = Color::Default;
+            let theme_default = crate::conf::value(context, "theme_default");
             let bg_color = Color::Byte(246);
             let attrs = if self.use_color {
-                Attr::DEFAULT
+                theme_default.attrs
             } else {
                 Attr::REVERSE
             };
             for row in grid.bounds_iter(dest_area) {
                 for c in row {
-                    grid[c].set_fg(fg_color).set_bg(bg_color).set_attrs(attrs);
+                    grid[c]
+                        .set_fg(theme_default.fg)
+                        .set_bg(bg_color)
+                        .set_attrs(attrs);
                 }
             }
-            change_colors(grid, dest_area, fg_color, bg_color);
+            change_colors(grid, dest_area, theme_default.fg, bg_color);
             return;
         }
 
@@ -563,7 +570,7 @@ impl ThreadView {
                 ),
             );
 
-            self.highlight_line(grid, dest_area, src_area, idx);
+            self.highlight_line(grid, dest_area, src_area, idx, context);
             if rows < visibles.len() {
                 ScrollBar::default().draw(
                     grid,
@@ -623,7 +630,7 @@ impl ThreadView {
                     ),
                 );
 
-                self.highlight_line(grid, dest_area, src_area, entry_idx);
+                self.highlight_line(grid, dest_area, src_area, entry_idx, context);
                 if rows < visibles.len() {
                     ScrollBar::default().draw(
                         grid,
@@ -656,9 +663,10 @@ impl ThreadView {
         let bottom_right = bottom_right!(area);
         let mid = get_x(upper_left) + self.content.size().0;
 
+        let theme_default = crate::conf::value(context, "theme_default");
         /* First draw the thread subject on the first row */
         let y = if self.dirty {
-            clear_area(grid, area, crate::conf::value(context, "theme_default"));
+            clear_area(grid, area, theme_default);
             let account = &context.accounts[&self.coordinates.0];
             let threads = account.collection.get_threads(self.coordinates.1);
             let thread_root = threads
@@ -680,15 +688,16 @@ impl ThreadView {
                 &envelope.subject(),
                 grid,
                 Color::Byte(33),
-                Color::Default,
-                Attr::DEFAULT,
+                theme_default.bg,
+                theme_default.attrs,
                 area,
                 Some(get_x(upper_left)),
             );
             for x in x..=get_x(bottom_right) {
-                grid[(x, y)].set_ch(' ');
-                grid[(x, y)].set_bg(Color::Default);
-                grid[(x, y)].set_fg(Color::Default);
+                grid[(x, y)]
+                    .set_ch(' ')
+                    .set_fg(theme_default.fg)
+                    .set_bg(theme_default.bg);
             }
             context
                 .dirty_areas
@@ -699,7 +708,7 @@ impl ThreadView {
             clear_area(
                 grid,
                 ((mid, y + 1), set_x(bottom_right, mid)),
-                crate::conf::value(context, "theme_default"),
+                theme_default,
             );
             y + 2
         } else {
@@ -711,8 +720,9 @@ impl ThreadView {
         }
         for x in get_x(upper_left)..=get_x(bottom_right) {
             set_and_join_box(grid, (x, y - 1), BoxBoundary::Horizontal);
-            grid[(x, y - 1)].set_fg(Color::Byte(33));
-            grid[(x, y - 1)].set_bg(Color::Default);
+            grid[(x, y - 1)]
+                .set_fg(Color::Byte(33))
+                .set_bg(theme_default.bg);
         }
 
         match (self.show_mailview, self.show_thread) {
@@ -730,7 +740,7 @@ impl ThreadView {
                 clear_area(
                     grid,
                     ((mid + 1, get_y(upper_left) + y - 1), bottom_right),
-                    crate::conf::value(context, "theme_default"),
+                    theme_default,
                 );
                 self.draw_list(grid, (set_y(upper_left, y), bottom_right), context);
             }
@@ -757,9 +767,10 @@ impl ThreadView {
         }
         let mid = mid;
 
+        let theme_default = crate::conf::value(context, "theme_default");
         /* First draw the thread subject on the first row */
         let y = {
-            clear_area(grid, area, crate::conf::value(context, "theme_default"));
+            clear_area(grid, area, theme_default);
             let account = &context.accounts[&self.coordinates.0];
             let threads = account.collection.get_threads(self.coordinates.1);
             let thread_root = threads
@@ -781,15 +792,16 @@ impl ThreadView {
                 &envelope.subject(),
                 grid,
                 Color::Byte(33),
-                Color::Default,
-                Attr::DEFAULT,
+                theme_default.bg,
+                theme_default.attrs,
                 area,
                 Some(get_x(upper_left)),
             );
             for x in x..=get_x(bottom_right) {
-                grid[(x, y)].set_ch(' ');
-                grid[(x, y)].set_bg(Color::Default);
-                grid[(x, y)].set_fg(Color::Default);
+                grid[(x, y)]
+                    .set_ch(' ')
+                    .set_fg(theme_default.fg)
+                    .set_bg(theme_default.bg);
             }
             context
                 .dirty_areas
@@ -799,8 +811,9 @@ impl ThreadView {
 
         for x in get_x(upper_left)..=get_x(bottom_right) {
             set_and_join_box(grid, (x, y - 1), BoxBoundary::Horizontal);
-            grid[(x, y - 1)].set_fg(Color::Default);
-            grid[(x, y - 1)].set_bg(Color::Default);
+            grid[(x, y - 1)]
+                .set_fg(theme_default.fg)
+                .set_bg(theme_default.bg);
         }
 
         let (width, height) = self.content.size();
@@ -811,7 +824,7 @@ impl ThreadView {
         clear_area(
             grid,
             (set_y(upper_left, y), set_y(bottom_right, mid + 1)),
-            crate::conf::value(context, "theme_default"),
+            theme_default,
         );
         let (width, height) = self.content.size();
 
@@ -863,8 +876,9 @@ impl ThreadView {
                 context.dirty_areas.push_back(area);
                 for x in get_x(upper_left)..=get_x(bottom_right) {
                     set_and_join_box(grid, (x, mid), BoxBoundary::Horizontal);
-                    grid[(x, mid)].set_fg(Color::Default);
-                    grid[(x, mid)].set_bg(Color::Default);
+                    grid[(x, mid)]
+                        .set_fg(theme_default.fg)
+                        .set_bg(theme_default.bg);
                 }
                 let area = (set_y(upper_left, y), set_y(bottom_right, mid - 1));
                 self.draw_list(grid, area, context);

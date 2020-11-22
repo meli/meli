@@ -209,6 +209,7 @@ impl MailListingTrait for PlainListing {
             attachment_flag: crate::conf::value(context, "mail.listing.attachment_flag"),
             thread_snooze_flag: crate::conf::value(context, "mail.listing.thread_snooze_flag"),
             tag_default: crate::conf::value(context, "mail.listing.tag_default"),
+            theme_default: crate::conf::value(context, "theme_default"),
             ..self.color_cache
         };
         if !context.settings.terminal.use_color() {
@@ -1066,9 +1067,9 @@ impl Component for PlainListing {
                         self.filter_term
                     ),
                     grid,
-                    Color::Default,
-                    Color::Default,
-                    Attr::DEFAULT,
+                    self.color_cache.theme_default.fg,
+                    self.color_cache.theme_default.bg,
+                    self.color_cache.theme_default.attrs,
                     area,
                     Some(get_x(upper_left)),
                 );

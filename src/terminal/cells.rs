@@ -94,12 +94,12 @@ impl CellBuffer {
 
     /// Constructs a new `CellBuffer` with the given number of columns and rows, using the given
     /// `cell` as a blank.
-    pub fn new(cols: usize, rows: usize, cell: Cell) -> CellBuffer {
+    pub fn new(cols: usize, rows: usize, default_cell: Cell) -> CellBuffer {
         CellBuffer {
             cols,
             rows,
-            buf: vec![cell; cols * rows],
-            default_cell: cell,
+            buf: vec![default_cell; cols * rows],
+            default_cell,
             growable: false,
             ascii_drawing: false,
             tag_table: Default::default(),
@@ -1089,7 +1089,7 @@ macro_rules! inspect_bounds {
                 $grid.resize(
                     std::cmp::max($x + 1, $grid.cols),
                     $grid.rows,
-                    Cell::default(),
+                    $grid.default_cell,
                 );
             } else {
                 $x = get_x(upper_left);
@@ -1106,7 +1106,7 @@ macro_rules! inspect_bounds {
                 $grid.resize(
                     $grid.cols,
                     std::cmp::max($y + 1, $grid.rows),
-                    Cell::default(),
+                    $grid.default_cell,
                 );
             } else {
                 return ($x, $y - 1);
@@ -1135,7 +1135,7 @@ pub fn write_string_to_grid(
             grid.resize(
                 std::cmp::max(grid.cols, x + 1),
                 std::cmp::max(grid.rows, y + 1),
-                Cell::default(),
+                grid.default_cell,
             );
         } else {
             return (x, y);
@@ -1151,7 +1151,7 @@ pub fn write_string_to_grid(
             grid.resize(
                 std::cmp::max(grid.cols, x + 1),
                 std::cmp::max(grid.rows, y + 1),
-                Cell::default(),
+                grid.default_cell,
             );
         } else {
             debug!(" Invalid area with string {} and area {:?}", s, area);

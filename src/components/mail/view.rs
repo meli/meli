@@ -1145,9 +1145,9 @@ impl Component for MailView {
                             let (_x, _y) = write_string_to_grid(
                                 id,
                                 grid,
-                                Color::Default,
-                                Color::Default,
-                                Attr::DEFAULT,
+                                headers.fg,
+                                headers.bg,
+                                headers.attrs,
                                 ((_x, y), bottom_right),
                                 None,
                             );
@@ -1177,9 +1177,9 @@ impl Component for MailView {
                             let (_x, _y) = write_string_to_grid(
                                 "list-archive, ",
                                 grid,
-                                Color::Default,
-                                Color::Default,
-                                Attr::DEFAULT,
+                                headers.fg,
+                                headers.bg,
+                                headers.attrs,
                                 ((x, y), bottom_right),
                                 Some(get_x(upper_left)),
                             );
@@ -1190,9 +1190,9 @@ impl Component for MailView {
                             let (_x, _y) = write_string_to_grid(
                                 "list-post, ",
                                 grid,
-                                Color::Default,
-                                Color::Default,
-                                Attr::DEFAULT,
+                                headers.fg,
+                                headers.bg,
+                                headers.attrs,
                                 ((x, y), bottom_right),
                                 Some(get_x(upper_left)),
                             );
@@ -1203,9 +1203,9 @@ impl Component for MailView {
                             let (_x, _y) = write_string_to_grid(
                                 "list-unsubscribe, ",
                                 grid,
-                                Color::Default,
-                                Color::Default,
-                                Attr::DEFAULT,
+                                headers.fg,
+                                headers.bg,
+                                headers.attrs,
                                 ((x, y), bottom_right),
                                 Some(get_x(upper_left)),
                             );
@@ -1217,16 +1217,18 @@ impl Component for MailView {
                                 grid[(x - 2, y)].set_ch(' ');
                             }
                             if x > 0 {
-                                grid[(x - 1, y)].set_fg(headers.fg);
-                                grid[(x - 1, y)].set_bg(headers.bg);
-                                grid[(x - 1, y)].set_attrs(headers.attrs);
-                                grid[(x - 1, y)].set_ch(']');
+                                grid[(x - 1, y)]
+                                    .set_ch(']')
+                                    .set_fg(headers.fg)
+                                    .set_bg(headers.bg)
+                                    .set_attrs(headers.attrs);
                             }
                         }
                         for x in x..=get_x(bottom_right) {
-                            grid[(x, y)].set_ch(' ');
-                            grid[(x, y)].set_bg(Color::Default);
-                            grid[(x, y)].set_fg(Color::Default);
+                            grid[(x, y)]
+                                .set_ch(' ')
+                                .set_fg(headers.fg)
+                                .set_bg(headers.bg);
                         }
                         y += 1;
                     }
