@@ -1,0 +1,70 @@
+[terminal.themes.nord]
+"theme_default" = { fg = "$nord6", bg = "$nord0", attrs = "Default" }
+"mail.listing.compact.even" = { fg = "theme_default", bg = "$nord1", attrs = "theme_default" }
+"mail.listing.compact.odd" = { fg = "theme_default", bg = "$nord2", attrs = "theme_default" }
+"mail.listing.plain.even" = { fg = "theme_default", bg = "$nord1", attrs = "theme_default" }
+"mail.listing.plain.odd" = { fg = "theme_default", bg = "$nord2", attrs = "theme_default" }
+"mail.listing.compact.even_highlighted" = { fg = "$nord0", bg = "$focused_bg", attrs = "theme_default" }
+"mail.listing.compact.odd_highlighted" = { fg = "$nord0", bg = "$focused_bg", attrs = "theme_default" }
+"mail.listing.conversations.highlighted" = { fg = "$nord0", bg = "$focused_bg", attrs = "theme_default" }
+"mail.listing.conversations.selected" = { fg = "theme_default", bg = "LightCoral", attrs = "theme_default" }
+"mail.listing.conversations.subject" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
+"mail.listing.conversations.unseen" = { fg = "theme_default", bg = "$nord2", attrs = "theme_default" }
+"mail.listing.plain.even_highlighted" = { fg = "$nord0", bg = "$focused_bg", attrs = "theme_default" }
+"mail.listing.plain.odd_highlighted" = { fg = "$nord0", bg = "$focused_bg", attrs = "theme_default" }
+"mail.listing.tag_default" = { fg = "theme_default", bg = "$nord8", attrs = "theme_default" }
+"mail.sidebar_highlighted" = { fg = "$nord1", bg = "$focused_bg", attrs = "theme_default" }
+"mail.sidebar_highlighted_account" = { fg = "$nord5", bg = "$nord1", attrs = "theme_default" }
+"mail.sidebar_highlighted_account_name" = { fg = "mail.sidebar_highlighted_account", bg = "mail.sidebar_highlighted_account", attrs = "theme_default" }
+"mail.sidebar_highlighted_account_index" = { fg = "mail.sidebar_highlighted_account", bg = "mail.sidebar_highlighted_account", attrs = "theme_default" }
+"mail.sidebar_highlighted_account_unread_count" = { fg = "mail.sidebar_highlighted_account", bg = "mail.sidebar_highlighted_account", attrs = "theme_default" }
+"mail.sidebar_highlighted_index" = { fg = "mail.sidebar_index", bg = "mail.sidebar_highlighted", attrs = "theme_default" }
+"mail.sidebar_highlighted_unread_count" = { fg = "mail.sidebar_highlighted", bg = "mail.sidebar_highlighted", attrs = "theme_default" }
+"mail.sidebar" = { fg = "$nord5", bg = "theme_default", attrs = "theme_default" }
+"mail.sidebar_account_name" = { fg = "$nord5", bg = "theme_default", attrs = "theme_default" }
+"mail.sidebar_index" = { fg = "$nord1", bg = "theme_default", attrs = "theme_default" }
+"mail.sidebar_unread_count" = { fg = "$nord1", bg = "theme_default", attrs = "theme_default" }
+"mail.view.body" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
+"mail.view.headers" = { fg = "$nord9", bg = "theme_default", attrs = "theme_default" }
+"mail.view.thread.indentation.a" = { fg = "theme_default", bg = "$nord11", attrs = "theme_default" }
+"mail.view.thread.indentation.b" = { fg = "theme_default", bg = "$nord12", attrs = "theme_default" }
+"mail.view.thread.indentation.c" = { fg = "theme_default", bg = "$nord13", attrs = "theme_default" }
+"mail.view.thread.indentation.d" = { fg = "theme_default", bg = "$nord14", attrs = "theme_default" }
+"mail.view.thread.indentation.e" = { fg = "theme_default", bg = "$nord15", attrs = "theme_default" }
+"mail.view.thread.indentation.f" = { fg = "theme_default", bg = "$nord13", attrs = "theme_default" }
+"pager.highlight_search" = { fg = "$nord5", bg = "$nord7", attrs = "Bold" }
+"pager.highlight_search_current" = { fg = "$nord7", bg = "$nord10", attrs = "Bold" }
+"status.bar" = { fg = "$nord5", bg = "$nord3", attrs = "theme_default" }
+"status.notification" = { fg = "$nord5", bg = "$nord3", attrs = "theme_default" }
+"tab.bar" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
+"tab.focused" = { fg = "$nord1", bg = "$focused_bg", attrs = "theme_default" }
+"tab.unfocused" = { fg = "$nord4", bg = "$unfocused_bg", attrs = "theme_default" }
+"widgets.form.field" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
+"widgets.form.highlighted" = { fg = "theme_default", bg = "$nord2", attrs = "theme_default" }
+"widgets.form.label" = { fg = "theme_default", bg = "theme_default", attrs = "Bold" }
+"widgets.list.header" = { fg = "theme_default", bg = "theme_default", attrs = "Bold" }
+"widgets.options.highlighted" = { fg = "theme_default", bg = "$nord2", attrs = "theme_default" }
+
+[terminal.themes.nord.color_aliases]
+nord0 = "#2e3440"
+nord1 = "#3b4252"
+nord2 = "#434c5e"
+nord3 = "#4c566a"
+# snow storm
+nord4 = "#d8dee9"
+nord5 = "#e5e9f0"
+nord6 = "#eceff4"
+# frost
+nord7 = "#8fbcbb"
+nord8 = "#88c0d0"
+nord9 = "#81a1c1"
+nord10 = "#5e81ac"
+# aurora
+nord11 = "#bf616a"
+nord12 = "#d08770"
+nord13 = "#ebcb8b"
+nord14 = "#a3be8c"
+nord15 = "#b48ead"
+# semantics
+focused_bg = "$nord8"
+unfocused_bg = "$nord3"
