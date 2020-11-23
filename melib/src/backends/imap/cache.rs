@@ -665,33 +665,7 @@ pub(super) async fn fetch_cached_envs(state: &mut FetchState) -> Result<Option<V
         match debug!(conn.load_cache(mailbox_hash).await) {
             None => return Ok(None),
             Some(Ok(env_hashes)) => {
-                uid_store
-                    .mailboxes
-                    .lock()
-                    .await
-                    .entry(mailbox_hash)
-                    .and_modify(|entry| {
-                        entry
-                            .exists
-                            .lock()
-                            .unwrap()
-                            .insert_set(env_hashes.iter().cloned().collect());
-                        let env_lck = uid_store.envelopes.lock().unwrap();
-                        entry.unseen.lock().unwrap().insert_set(
-                            env_hashes
-                                .iter()
-                                .filter_map(|h| {
-                                    if !env_lck[h].inner.is_seen() {
-                                        Some(*h)
-                                    } else {
-                                        None
-                                    }
-                                })
-                                .collect(),
-                        );
-                    });
                 let env_lck = uid_store.envelopes.lock().unwrap();
-
                 return Ok(Some(
                     env_hashes
                         .into_iter()

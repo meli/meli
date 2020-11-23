@@ -1017,15 +1017,10 @@ impl ImapConnection {
             .await?;
         self.read_response(&mut response, RequiredResponses::SEARCH)
             .await?;
-        debug!("uid search response {:?}", &response);
         let mut msn_index_lck = self.uid_store.msn_index.lock().unwrap();
         let msn_index = msn_index_lck.entry(mailbox_hash).or_default();
         let _ = msn_index.drain(low - 1..);
-        msn_index.extend(
-            debug!(protocol_parser::search_results(&response))?
-                .1
-                .into_iter(),
-        );
+        msn_index.extend(protocol_parser::search_results(&response)?.1.into_iter());
         Ok(())
     }
 }

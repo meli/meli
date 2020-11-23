@@ -614,10 +614,20 @@ impl EnvelopeHashBatch {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Default, Clone)]
 pub struct LazyCountSet {
     not_yet_seen: usize,
     set: BTreeSet<EnvelopeHash>,
+}
+
+impl fmt::Debug for LazyCountSet {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("LazyCountSet")
+            .field("not_yet_seen", &self.not_yet_seen)
+            .field("set", &self.set.len())
+            .field("total_len", &self.len())
+            .finish()
+    }
 }
 
 impl LazyCountSet {
@@ -629,19 +639,21 @@ impl LazyCountSet {
         if self.not_yet_seen == 0 {
             false
         } else {
-            self.not_yet_seen -= 1;
+            if !self.set.contains(&new_val) {
+                self.not_yet_seen -= 1;
+            }
             self.set.insert(new_val);
             true
         }
     }
 
     pub fn insert_existing_set(&mut self, set: BTreeSet<EnvelopeHash>) -> bool {
-        debug!("insert_existing_set {:?}", &set);
         if self.not_yet_seen < set.len() {
             false
         } else {
-            self.not_yet_seen -= set.len();
+            let old_len = self.set.len();
             self.set.extend(set.into_iter());
+            self.not_yet_seen -= self.set.len() - old_len;
             true
         }
     }
@@ -662,21 +674,24 @@ impl LazyCountSet {
     }
 
     pub fn insert_set(&mut self, set: BTreeSet<EnvelopeHash>) {
-        debug!("insert__set {:?}", &set);
         self.set.extend(set.into_iter());
     }
 
-    pub fn remove(&mut self, new_val: EnvelopeHash) -> bool {
-        self.set.remove(&new_val)
+    pub fn remove(&mut self, env_hash: EnvelopeHash) -> bool {
+        self.set.remove(&env_hash)
     }
 }
 
 #[test]
 fn test_lazy_count_set() {
     let mut new = LazyCountSet::default();
+    assert_eq!(new.len(), 0);
     new.set_not_yet_seen(10);
+    assert_eq!(new.len(), 10);
     for i in 0..10 {
         assert!(new.insert_existing(i));
     }
+    assert_eq!(new.len(), 10);
     assert!(!new.insert_existing(10));
+    assert_eq!(new.len(), 10);
 }

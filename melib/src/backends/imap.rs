@@ -1602,7 +1602,7 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
                             let f = &state.uid_store.mailboxes.lock().await[&state.mailbox_hash];
                             (f.exists.clone(), f.unseen.clone())
                         };
-                        unseen.lock().unwrap().insert_existing_set(
+                        unseen.lock().unwrap().insert_set(
                             cached_payload
                                 .iter()
                                 .filter_map(|env| {
@@ -1614,9 +1614,10 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
                                 })
                                 .collect(),
                         );
-                        mailbox_exists.lock().unwrap().insert_existing_set(
-                            cached_payload.iter().map(|env| env.hash()).collect::<_>(),
-                        );
+                        mailbox_exists
+                            .lock()
+                            .unwrap()
+                            .insert_set(cached_payload.iter().map(|env| env.hash()).collect::<_>());
                         return Ok(cached_payload);
                     }
                 }
@@ -1656,26 +1657,21 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
                     return Ok(Vec::new());
                 }
                 let mut conn = connection.lock().await;
-                debug!("locked for fetch {}", mailbox_path);
                 let mut response = Vec::with_capacity(8 * 1024);
                 let max_uid_left = max_uid;
                 let chunk_size = 250;
 
-                let mut payload = vec![];
+                let mut envelopes = Vec::with_capacity(chunk_size);
                 conn.examine_mailbox(mailbox_hash, &mut response, false)
                     .await?;
                 if max_uid_left > 0 {
-                    let mut envelopes = vec![];
                     debug!("{} max_uid_left= {}", mailbox_hash, max_uid_left);
                     let command = if max_uid_left == 1 {
                         "UID FETCH 1 (UID FLAGS ENVELOPE BODY.PEEK[HEADER.FIELDS (REFERENCES)] BODYSTRUCTURE)".to_string()
                     } else {
                         format!(
                             "UID FETCH {}:{} (UID FLAGS ENVELOPE BODY.PEEK[HEADER.FIELDS (REFERENCES)] BODYSTRUCTURE)",
-                            std::cmp::max(
                                 std::cmp::max(max_uid_left.saturating_sub(chunk_size), 1),
-                                1
-                            ),
                             max_uid_left
                         )
                     };
@@ -1689,13 +1685,13 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
                                 mailbox_path
                             )
                         })?;
-                    debug!(
-                        "fetch response is {} bytes and {} lines",
-                        response.len(),
-                        String::from_utf8_lossy(&response).lines().count()
-                    );
                     let (_, mut v, _) = protocol_parser::fetch_responses(&response)?;
-                    debug!("responses len is {}", v.len());
+                    debug!(
+                        "fetch response is {} bytes and {} lines and has {} parsed Envelopes",
+                        response.len(),
+                        String::from_utf8_lossy(&response).lines().count(),
+                        v.len()
+                    );
                     for FetchResponse {
                         ref uid,
                         ref mut envelope,
@@ -1734,10 +1730,10 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
                         }
                         let mut tag_lck = uid_store.tag_index.write().unwrap();
                         if let Some((flags, keywords)) = flags {
-                            if !flags.intersects(Flag::SEEN) {
+                            env.set_flags(*flags);
+                            if !env.is_seen() {
                                 our_unseen.insert(env.hash());
                             }
-                            env.set_flags(*flags);
                             for f in keywords {
                                 let hash = tag_hash!(f);
                                 if !tag_lck.contains_key(&hash) {
@@ -1799,30 +1795,25 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
                             .lock()
                             .unwrap()
                             .insert((mailbox_hash, uid), env.hash());
-                        envelopes.push((uid, env));
+                        envelopes.push(env);
                     }
-                    debug!("sending payload for {}", mailbox_hash);
-                    unseen
+                    unseen.lock().unwrap().insert_existing_set(our_unseen);
+                    mailbox_exists
                         .lock()
                         .unwrap()
-                        .insert_existing_set(our_unseen.iter().cloned().collect());
-                    mailbox_exists.lock().unwrap().insert_existing_set(
-                        envelopes.iter().map(|(_, env)| env.hash()).collect::<_>(),
-                    );
+                        .insert_existing_set(envelopes.iter().map(|env| env.hash()).collect::<_>());
                     drop(conn);
-                    payload.extend(envelopes.into_iter().map(|(_, env)| env));
                 }
                 if max_uid_left <= 1 {
+                    unseen.lock().unwrap().set_not_yet_seen(0);
+                    mailbox_exists.lock().unwrap().set_not_yet_seen(0);
                     *stage = FetchStage::Finished;
                 } else {
                     *stage = FetchStage::FreshFetch {
-                        max_uid: std::cmp::max(
-                            std::cmp::max(max_uid_left.saturating_sub(chunk_size), 1),
-                            1,
-                        ),
+                        max_uid: std::cmp::max(max_uid_left.saturating_sub(chunk_size + 1), 1),
                     };
                 }
-                return Ok(payload);
+                return Ok(envelopes);
             }
             FetchStage::Finished => {
                 return Ok(vec![]);

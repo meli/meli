@@ -237,11 +237,11 @@ impl ImapConnection {
         unseen
             .lock()
             .unwrap()
-            .insert_existing_set(new_unseen.iter().cloned().collect());
+            .insert_set(new_unseen.iter().cloned().collect());
         mailbox_exists
             .lock()
             .unwrap()
-            .insert_existing_set(payload.iter().map(|(_, env)| env.hash()).collect::<_>());
+            .insert_set(payload.iter().map(|(_, env)| env.hash()).collect::<_>());
         // 3.  tag2 UID FETCH 1:<lastseenuid> FLAGS
         if max_uid == 0 {
             self.send_command("UID FETCH 1:* FLAGS".as_bytes()).await?;
@@ -535,11 +535,11 @@ impl ImapConnection {
             unseen
                 .lock()
                 .unwrap()
-                .insert_existing_set(new_unseen.iter().cloned().collect());
+                .insert_set(new_unseen.iter().cloned().collect());
             mailbox_exists
                 .lock()
                 .unwrap()
-                .insert_existing_set(payload.iter().map(|(_, env)| env.hash()).collect::<_>());
+                .insert_set(payload.iter().map(|(_, env)| env.hash()).collect::<_>());
             // 3.  tag2 UID FETCH 1:<lastseenuid> FLAGS
             if cached_max_uid == 0 {
                 self.send_command(
@@ -700,14 +700,16 @@ impl ImapConnection {
             permissions.set_flags = !select_response.read_only;
             permissions.rename_messages = !select_response.read_only;
             permissions.delete_messages = !select_response.read_only;
-            mailbox_exists
-                .lock()
-                .unwrap()
-                .set_not_yet_seen(select_response.exists);
-            unseen
-                .lock()
-                .unwrap()
-                .set_not_yet_seen(select_response.unseen);
+            {
+                let mut mailbox_exists_lck = mailbox_exists.lock().unwrap();
+                mailbox_exists_lck.clear();
+                mailbox_exists_lck.set_not_yet_seen(select_response.exists);
+            }
+            {
+                let mut unseen_lck = unseen.lock().unwrap();
+                unseen_lck.clear();
+                unseen_lck.set_not_yet_seen(select_response.unseen);
+            }
         }
         if select_response.exists == 0 {
             return Ok(select_response);
