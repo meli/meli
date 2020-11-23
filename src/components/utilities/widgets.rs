@@ -1028,7 +1028,7 @@ impl AutoComplete {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Copy, Clone)]
 pub struct ScrollBar {
     pub show_arrows: bool,
 }
@@ -1051,34 +1051,22 @@ impl ScrollBar {
         if length == 0 {
             return;
         }
-        let mut height = height!(area);
+        let height = height!(area);
         if height < 3 {
             return;
         }
         clear_area(grid, area, crate::conf::value(context, "theme_default"));
 
-        let visible_ratio: f64 = (std::cmp::min(visible_rows, length) as f64) / (length as f64);
-        let scrollbar_height = std::cmp::min(
-            height.saturating_sub(1),
-            std::cmp::max((visible_ratio * (height as f64)) as usize, 1),
-        );
-        if self.show_arrows {
-            height -= 3;
-        }
-
-        let scrollbar_offset = {
-            let temp = (((pos as f64) / (length as f64)) * (height as f64)) as usize;
-            if scrollbar_height + temp > height {
-                height.saturating_sub(scrollbar_height)
-            } else {
-                temp
-            }
-        };
+        let visible_rows = std::cmp::min(visible_rows, length);
+        let ascii_drawing = grid.ascii_drawing;
+        let ratio: f64 = (height as f64) / (length as f64);
+        let scrollbar_height = (ratio * (visible_rows as f64)) as usize;
+        let scrollbar_offset = (ratio * (pos as f64)) as usize;
         let (mut upper_left, bottom_right) = area;
 
         if self.show_arrows {
             grid[upper_left]
-                .set_ch('▄')
+                .set_ch(if ascii_drawing { 'o' } else { '▀' })
                 .set_fg(crate::conf::value(context, "widgets.options.highlighted").bg);
             upper_left = pos_inc(upper_left, (0, 1));
         }
@@ -1089,8 +1077,8 @@ impl ScrollBar {
             upper_left = pos_inc(upper_left, (0, 1));
         }
         if self.show_arrows {
-            grid[pos_dec(bottom_right, (0, 1))]
-                .set_ch('▀')
+            grid[bottom_right]
+                .set_ch(if ascii_drawing { 'o' } else { '▄' })
                 .set_fg(crate::conf::value(context, "widgets.options.highlighted").bg)
                 .set_bg(crate::conf::value(context, "theme_default").bg);
         }
@@ -1108,44 +1096,36 @@ impl ScrollBar {
         if length == 0 {
             return;
         }
-        let mut width = width!(area);
+        let width = width!(area);
         if width < 3 {
             return;
         }
         clear_area(grid, area, crate::conf::value(context, "theme_default"));
 
-        let visible_ratio: f64 = (std::cmp::min(visible_cols, length) as f64) / (length as f64);
-        let scrollbar_width = std::cmp::max((visible_ratio * (width as f64)) as usize, 1);
-        if self.show_arrows {
-            width -= 3;
-        }
-        let scrollbar_offset = {
-            let temp = (((pos as f64) / (length as f64)) * (width as f64)) as usize;
-            if scrollbar_width + temp > width {
-                width.saturating_sub(scrollbar_width)
-            } else {
-                temp
-            }
-        };
+        let visible_cols = std::cmp::min(visible_cols, length);
+        let ascii_drawing = grid.ascii_drawing;
+        let ratio: f64 = (width as f64) / (length as f64);
+        let scrollbar_width = (ratio * (visible_cols as f64)) as usize;
+        let scrollbar_offset = (ratio * (pos as f64)) as usize;
         let (mut upper_left, bottom_right) = area;
 
         if self.show_arrows {
             grid[upper_left]
-                .set_ch('▐')
+                .set_ch(if ascii_drawing { 'I' } else { '▐' })
                 .set_fg(crate::conf::value(context, "widgets.options.highlighted").bg);
             upper_left = pos_inc(upper_left, (1, 0));
         }
 
         upper_left = pos_inc(upper_left, (scrollbar_offset, 0));
-        for _ in 0..=scrollbar_width {
+        for _ in 0..scrollbar_width {
             grid[upper_left]
-                .set_ch('█')
+                .set_ch(if ascii_drawing { 'H' } else { '█' })
                 .set_fg(crate::conf::value(context, "widgets.options.highlighted").bg);
             upper_left = pos_inc(upper_left, (1, 0));
         }
         if self.show_arrows {
-            grid[pos_dec(bottom_right, (1, 0))]
-                .set_ch('▌')
+            grid[bottom_right]
+                .set_ch(if ascii_drawing { 'I' } else { '▌' })
                 .set_fg(crate::conf::value(context, "widgets.options.highlighted").bg)
                 .set_bg(crate::conf::value(context, "theme_default").bg);
         }
