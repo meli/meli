@@ -555,7 +555,7 @@ impl ListingTrait for CompactListing {
                     } else if self.new_cursor_pos.2 + rows * multiplier > self.length {
                         self.new_cursor_pos.2 = self.length - 1;
                     } else {
-                        self.new_cursor_pos.2 = (self.length / rows) * rows;
+                        self.new_cursor_pos.2 = (self.length.saturating_sub(1) / rows) * rows;
                     }
                 }
                 PageMovement::Right(_) | PageMovement::Left(_) => {}
