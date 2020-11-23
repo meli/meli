@@ -577,6 +577,16 @@ impl ThreadView {
                     visibles.len(),
                 );
             }
+            if top_idx + rows > visibles.len() {
+                clear_area(
+                    grid,
+                    (
+                        pos_inc(upper_left, (0, 2 * (visibles.len() - top_idx))),
+                        bottom_right,
+                    ),
+                    crate::conf::value(context, "theme_default"),
+                );
+            }
             self.dirty = false;
             context.dirty_areas.push_back(area);
         } else {
