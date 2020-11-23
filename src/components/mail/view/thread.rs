@@ -441,9 +441,7 @@ impl ThreadView {
 
     /// draw the list
     fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        /* Make space on the left for the scrollbar */
-        let mut upper_left = pos_inc(upper_left!(area), (1, 0));
-        let bottom_right = bottom_right!(area);
+        let (upper_left, bottom_right) = area;
         let (width, height) = self.content.size();
         if height == 0 {
             context.dirty_areas.push_back(area);
@@ -517,9 +515,6 @@ impl ThreadView {
                 .iter()
                 .flat_map(|ref v| v.iter())
                 .collect();
-            if rows >= visibles.len() {
-                upper_left = pos_dec(upper_left!(area), (1, 0));
-            }
 
             for (visible_entry_counter, v) in visibles.iter().skip(top_idx).take(rows).enumerate() {
                 if visible_entry_counter >= rows {
@@ -594,9 +589,6 @@ impl ThreadView {
                 .iter()
                 .flat_map(|ref v| v.iter())
                 .collect();
-            if rows >= visibles.len() {
-                upper_left = pos_dec(upper_left!(area), (1, 0));
-            }
             for &idx in &[old_cursor_pos, self.cursor_pos] {
                 let entry_idx = *visibles[idx];
                 let src_area = { get_entry_area(entry_idx, &self.entries) };
