@@ -786,17 +786,41 @@ impl Component for Composer {
                     return;
                 }
                 EmbedStatus::Stopped(_, _) => {
-                    clear_area(grid, body_area, theme_default);
+                    let guard = embed_pty.lock().unwrap();
+                    copy_area(
+                        grid,
+                        &guard.grid,
+                        embed_area,
+                        ((0, 0), pos_dec(guard.terminal_size, (1, 1))),
+                    );
+                    change_colors(grid, embed_area, Color::Byte(8), theme_default.bg);
+                    const STOPPED_MESSAGE: &str = "process has stopped, press 'e' to re-activate";
+                    let inner_area = create_box(
+                        grid,
+                        (
+                            pos_inc(upper_left!(body_area), (1, 0)),
+                            pos_inc(
+                                upper_left!(body_area),
+                                (
+                                    std::cmp::min(STOPPED_MESSAGE.len() + 5, width!(body_area)),
+                                    std::cmp::min(5, height!(body_area)),
+                                ),
+                            ),
+                        ),
+                    );
+                    clear_area(grid, inner_area, theme_default);
                     write_string_to_grid(
-                        "process has stopped, press 'e' to re-activate",
+                        STOPPED_MESSAGE,
                         grid,
                         theme_default.fg,
                         theme_default.bg,
                         theme_default.attrs,
-                        body_area,
-                        None,
+                        inner_area,
+                        Some(get_x(upper_left!(inner_area))),
                     );
                     context.dirty_areas.push_back(area);
+                    self.dirty = false;
+                    return;
                 }
             }
         } else {
