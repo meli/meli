@@ -1179,7 +1179,7 @@ impl MailBackend for ImapType {
             let mut conn = connection.lock().await;
             conn.examine_mailbox(mailbox_hash, &mut response, false)
                 .await?;
-            conn.send_command(format!("UID SEARCH CHARSET UTF-8 {}", query_str).as_bytes())
+            conn.send_command(format!("UID SEARCH CHARSET UTF-8 {}", query_str.trim()).as_bytes())
                 .await?;
             conn.read_response(&mut response, RequiredResponses::SEARCH)
                 .await?;
