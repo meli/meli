@@ -212,7 +212,7 @@ impl Composer {
 
     pub fn reply_to(
         coordinates: (AccountHash, MailboxHash, EnvelopeHash),
-        bytes: &[u8],
+        reply_body: String,
         context: &mut Context,
         reply_to_all: bool,
     ) -> Self {
@@ -313,10 +313,7 @@ impl Composer {
                 ret.draft.set_header("To", envelope.field_from_to_string());
             }
         }
-        let body = envelope.body_bytes(bytes);
         ret.draft.body = {
-            let reply_body_bytes = decode_rec(&body, None);
-            let reply_body = String::from_utf8_lossy(&reply_body_bytes);
             let mut ret = format!(
                 "On {} {} wrote:\n",
                 envelope.date_as_str(),
@@ -337,10 +334,10 @@ impl Composer {
 
     pub fn reply_to_select(
         coordinates: (AccountHash, MailboxHash, EnvelopeHash),
-        bytes: &[u8],
+        reply_body: String,
         context: &mut Context,
     ) -> Self {
-        let mut ret = Composer::reply_to(coordinates, bytes, context, false);
+        let mut ret = Composer::reply_to(coordinates, reply_body, context, false);
         let account = &context.accounts[&coordinates.0];
         let parent_message = account.collection.get_env(coordinates.2);
         /* If message is from a mailing list and we detect a List-Post header, ask user if they
@@ -385,18 +382,18 @@ impl Composer {
 
     pub fn reply_to_author(
         coordinates: (AccountHash, MailboxHash, EnvelopeHash),
-        bytes: &[u8],
+        reply_body: String,
         context: &mut Context,
     ) -> Self {
-        Composer::reply_to(coordinates, bytes, context, false)
+        Composer::reply_to(coordinates, reply_body, context, false)
     }
 
     pub fn reply_to_all(
         coordinates: (AccountHash, MailboxHash, EnvelopeHash),
-        bytes: &[u8],
+        reply_body: String,
         context: &mut Context,
     ) -> Self {
-        Composer::reply_to(coordinates, bytes, context, true)
+        Composer::reply_to(coordinates, reply_body, context, true)
     }
 
     pub fn set_draft(&mut self, draft: Draft) {

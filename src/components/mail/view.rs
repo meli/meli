@@ -382,7 +382,7 @@ impl MailView {
     }
 
     fn perform_action(&mut self, action: PendingReplyAction, context: &mut Context) {
-        let bytes = match self.state {
+        let reply_body = match self.state {
             MailViewState::Init {
                 ref mut pending_action,
                 ..
@@ -396,21 +396,29 @@ impl MailView {
                 }
                 return;
             }
-            MailViewState::Loaded { ref bytes, .. } => bytes,
+            MailViewState::Loaded { ref display, .. } => {
+                self.attachment_displays_to_text(&display, context, false)
+            }
             MailViewState::Error { .. } => {
                 return;
             }
         };
         let composer = match action {
-            PendingReplyAction::Reply => {
-                Box::new(Composer::reply_to_select(self.coordinates, bytes, context))
-            }
-            PendingReplyAction::ReplyToAuthor => {
-                Box::new(Composer::reply_to_author(self.coordinates, bytes, context))
-            }
-            PendingReplyAction::ReplyToAll => {
-                Box::new(Composer::reply_to_all(self.coordinates, bytes, context))
-            }
+            PendingReplyAction::Reply => Box::new(Composer::reply_to_select(
+                self.coordinates,
+                reply_body,
+                context,
+            )),
+            PendingReplyAction::ReplyToAuthor => Box::new(Composer::reply_to_author(
+                self.coordinates,
+                reply_body,
+                context,
+            )),
+            PendingReplyAction::ReplyToAll => Box::new(Composer::reply_to_all(
+                self.coordinates,
+                reply_body,
+                context,
+            )),
         };
 
         context
