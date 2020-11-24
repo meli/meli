@@ -94,6 +94,7 @@ impl ViewMode {
 pub enum AttachmentDisplay {
     InlineText {
         inner: Attachment,
+        comment: Option<String>,
         text: String,
     },
     InlineOther {
@@ -315,7 +316,7 @@ impl MailView {
                                     self.attachment_tree = attachment_tree_s;
                                     self.attachment_paths = paths;
                                     let body_text =
-                                        self.attachment_displays_to_text(&display, context);
+                                        self.attachment_displays_to_text(&display, context, true);
                                     self.state = MailViewState::Loaded {
                                         display,
                                         body,
@@ -421,12 +422,28 @@ impl MailView {
         &self,
         displays: &[AttachmentDisplay],
         context: &mut Context,
+        show_comments: bool,
     ) -> String {
         let mut acc = String::new();
         for d in displays {
             use AttachmentDisplay::*;
             match d {
-                InlineText { inner: _, text } => acc.push_str(&text),
+                InlineText {
+                    inner: _,
+                    text,
+                    comment: Some(comment),
+                } if show_comments => {
+                    acc.push_str(comment);
+                    if !acc.ends_with("\n\n") {
+                        acc.push_str("\n\n");
+                    }
+                    acc.push_str(&text);
+                }
+                InlineText {
+                    inner: _,
+                    text,
+                    comment: _,
+                } => acc.push_str(&text),
                 InlineOther { inner } => {
                     if !acc.ends_with("\n\n") {
                         acc.push_str("\n\n");
@@ -443,33 +460,53 @@ impl MailView {
                     handle: _,
                     job_id: _,
                 } => {
-                    acc.push_str("Waiting for signature verification.\n\n");
-                    acc.push_str(&self.attachment_displays_to_text(display, context));
+                    if show_comments {
+                        acc.push_str("Waiting for signature verification.\n\n");
+                    }
+                    acc.push_str(&self.attachment_displays_to_text(
+                        display,
+                        context,
+                        show_comments,
+                    ));
                 }
                 SignedUnverified { inner: _, display } => {
-                    acc.push_str("Unverified signature.\n\n");
-                    acc.push_str(&self.attachment_displays_to_text(display, context))
+                    if show_comments {
+                        acc.push_str("Unverified signature.\n\n");
+                    }
+                    acc.push_str(&self.attachment_displays_to_text(display, context, show_comments))
                 }
                 SignedFailed {
                     inner: _,
                     display,
                     error,
                 } => {
-                    acc.push_str(&format!("Failed to verify signature: {}.\n\n", error));
-                    acc.push_str(&self.attachment_displays_to_text(display, context));
+                    if show_comments {
+                        acc.push_str(&format!("Failed to verify signature: {}.\n\n", error));
+                    }
+                    acc.push_str(&self.attachment_displays_to_text(
+                        display,
+                        context,
+                        show_comments,
+                    ));
                 }
                 SignedVerified {
                     inner: _,
                     display,
                     description,
                 } => {
-                    if description.is_empty() {
-                        acc.push_str("Verified signature.\n\n");
-                    } else {
-                        acc.push_str(&description);
-                        acc.push_str("\n\n");
+                    if show_comments {
+                        if description.is_empty() {
+                            acc.push_str("Verified signature.\n\n");
+                        } else {
+                            acc.push_str(&description);
+                            acc.push_str("\n\n");
+                        }
                     }
-                    acc.push_str(&self.attachment_displays_to_text(display, context));
+                    acc.push_str(&self.attachment_displays_to_text(
+                        display,
+                        context,
+                        show_comments,
+                    ));
                 }
                 EncryptedPending { .. } => acc.push_str("Waiting for decryption result."),
                 EncryptedFailed { inner: _, error } => {
@@ -481,13 +518,19 @@ impl MailView {
                     plaintext_display,
                     description,
                 } => {
-                    if description.is_empty() {
-                        acc.push_str("Succesfully decrypted.\n\n");
-                    } else {
-                        acc.push_str(&description);
-                        acc.push_str("\n\n");
+                    if show_comments {
+                        if description.is_empty() {
+                            acc.push_str("Succesfully decrypted.\n\n");
+                        } else {
+                            acc.push_str(&description);
+                            acc.push_str("\n\n");
+                        }
                     }
-                    acc.push_str(&self.attachment_displays_to_text(plaintext_display, context));
+                    acc.push_str(&self.attachment_displays_to_text(
+                        plaintext_display,
+                        context,
+                        show_comments,
+                    ));
                 }
             }
         }
@@ -507,7 +550,11 @@ impl MailView {
             use AttachmentDisplay::*;
             cur_path.push(i);
             match d {
-                InlineText { inner, text: _ }
+                InlineText {
+                    inner,
+                    text: _,
+                    comment: _,
+                }
                 | InlineOther { inner }
                 | Attachment { inner }
                 | SignedPending {
@@ -589,14 +636,15 @@ impl MailView {
                             err.to_string(),
                             Some(NotificationType::Error(melib::ErrorKind::External)),
                         ));
-                        let mut s = format!(
+                        let comment = Some(format!(
                                 "Failed to start html filter process: `{}`. Press `v` to open in web browser. \n\n",
                                 filter_invocation
-                            );
-                        s.push_str(&String::from_utf8_lossy(&bytes));
+                            ));
+                        let text = String::from_utf8_lossy(&bytes).to_string();
                         acc.push(AttachmentDisplay::InlineText {
                             inner: a.clone(),
-                            text: s,
+                            comment,
+                            text,
                         });
                     }
                     Ok(mut html_filter) => {
@@ -606,16 +654,18 @@ impl MailView {
                             .unwrap()
                             .write_all(&bytes)
                             .expect("Failed to write to stdin");
-                        let mut s = format!(
+                        let comment = Some(format!(
                             "Text piped through `{}`. Press `v` to open in web browser. \n\n",
                             filter_invocation
-                        );
-                        s.push_str(&String::from_utf8_lossy(
-                            &html_filter.wait_with_output().unwrap().stdout,
                         ));
+                        let text = String::from_utf8_lossy(
+                            &html_filter.wait_with_output().unwrap().stdout,
+                        )
+                        .to_string();
                         acc.push(AttachmentDisplay::InlineText {
                             inner: a.clone(),
-                            text: s,
+                            comment,
+                            text,
                         });
                     }
                 }
@@ -623,6 +673,7 @@ impl MailView {
                 let bytes = decode(a, None);
                 acc.push(AttachmentDisplay::InlineText {
                     inner: a.clone(),
+                    comment: None,
                     text: String::from_utf8_lossy(&bytes).to_string(),
                 });
             } else if let ContentType::Multipart {
@@ -639,6 +690,7 @@ impl MailView {
                             let bytes = decode(&parts[text_attachment_pos], None);
                             acc.push(AttachmentDisplay::InlineText {
                                 inner: a.clone(),
+                                comment: None,
                                 text: String::from_utf8_lossy(&bytes).to_string(),
                             });
                         } else {
@@ -779,7 +831,11 @@ impl MailView {
             let first = path[0];
             use AttachmentDisplay::*;
             let root_attachment = match &display[first] {
-                InlineText { inner, text: _ }
+                InlineText {
+                    inner,
+                    text: _,
+                    comment: _,
+                }
                 | InlineOther { inner }
                 | Attachment { inner }
                 | SignedPending {
@@ -1428,7 +1484,7 @@ impl Component for MailView {
                                     self.attachment_tree = attachment_tree_s;
                                     self.attachment_paths = paths;
                                     let body_text =
-                                        self.attachment_displays_to_text(&display, context);
+                                        self.attachment_displays_to_text(&display, context, true);
                                     self.state = MailViewState::Loaded {
                                         bytes,
                                         body,
@@ -1526,7 +1582,7 @@ impl Component for MailView {
                                 let mut new_body_text = String::new();
                                 if let MailViewState::Loaded { ref display, .. } = self.state {
                                     new_body_text =
-                                        self.attachment_displays_to_text(&display, context);
+                                        self.attachment_displays_to_text(&display, context, true);
                                     let (paths, attachment_tree_s) =
                                         self.attachment_displays_to_tree(&display);
                                     self.attachment_tree = attachment_tree_s;
