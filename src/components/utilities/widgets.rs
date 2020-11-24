@@ -530,14 +530,13 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> Component for 
                     context,
                 );
             }
-            clear_area(
-                grid,
-                (
-                    set_y(upper_left, length + 4 + get_y(upper_left)),
-                    bottom_right,
-                ),
-                theme_default,
-            );
+            if length + 4 < height!(area) {
+                clear_area(
+                    grid,
+                    (pos_inc(upper_left, (0, length + 4)), bottom_right),
+                    theme_default,
+                );
+            }
             self.set_dirty(false);
             context.dirty_areas.push_back(area);
         }
@@ -1073,6 +1072,9 @@ impl ScrollBar {
 
         upper_left = pos_inc(upper_left, (0, scrollbar_offset));
         for _ in 0..scrollbar_height {
+            if get_y(upper_left) >= get_y(bottom_right) {
+                break;
+            }
             grid[upper_left].set_bg(crate::conf::value(context, "widgets.options.highlighted").bg);
             upper_left = pos_inc(upper_left, (0, 1));
         }
@@ -1118,6 +1120,9 @@ impl ScrollBar {
 
         upper_left = pos_inc(upper_left, (scrollbar_offset, 0));
         for _ in 0..scrollbar_width {
+            if get_x(upper_left) >= get_x(bottom_right) {
+                break;
+            }
             grid[upper_left]
                 .set_ch(if ascii_drawing { 'H' } else { '█' })
                 .set_fg(crate::conf::value(context, "widgets.options.highlighted").bg);

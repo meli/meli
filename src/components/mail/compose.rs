@@ -716,8 +716,14 @@ impl Component for Composer {
         );
 
         let body_area = (
-            pos_inc(upper_left, (mid, header_height + 1)),
-            pos_dec(bottom_right, (mid, 5 + attachments_no)),
+            (
+                get_x(upper_left!(header_area)),
+                get_y(bottom_right!(header_area)) + 1,
+            ),
+            (
+                get_x(bottom_right!(header_area)),
+                get_y(upper_left!(attachment_area)) - 1,
+            ),
         );
 
         let (x, y) = write_string_to_grid(
@@ -1274,7 +1280,7 @@ impl Component for Composer {
                 context
                     .replies
                     .push_back(UIEvent::ChangeMode(UIMode::Normal));
-                self.dirty = true;
+                self.set_dirty(true);
             }
             UIEvent::EmbedInput((ref k, ref b)) => {
                 use std::io::Write;
@@ -1318,10 +1324,11 @@ impl Component for Composer {
                                             self.has_changes = true;
                                         }
                                     }
-                                    self.initialized = false;
                                 }
                                 self.embed = None;
+                                self.initialized = false;
                                 self.mode = ViewMode::Edit;
+                                self.set_dirty(true);
                                 context
                                     .replies
                                     .push_back(UIEvent::ChangeMode(UIMode::Normal));
@@ -1341,7 +1348,7 @@ impl Component for Composer {
                                 context
                                     .replies
                                     .push_back(UIEvent::ChangeMode(UIMode::Normal));
-                                self.dirty = true;
+                                self.set_dirty(true);
                                 return true;
                             }
                             Ok(WaitStatus::Stopped(_, _)) => {
@@ -1357,7 +1364,7 @@ impl Component for Composer {
                                 context
                                     .replies
                                     .push_back(UIEvent::ChangeMode(UIMode::Normal));
-                                self.dirty = true;
+                                self.set_dirty(true);
                                 return true;
                             }
                             Ok(WaitStatus::Continued(_)) | Ok(WaitStatus::StillAlive) => {
@@ -1375,6 +1382,7 @@ impl Component for Composer {
                                         melib::error::ErrorKind::External,
                                     )),
                                 ));
+                                self.initialized = false;
                                 self.embed = None;
                                 self.mode = ViewMode::Edit;
                                 context
@@ -1390,6 +1398,7 @@ impl Component for Composer {
                                     )),
                                 ));
                                 drop(embed_guard);
+                                self.initialized = false;
                                 self.embed = None;
                                 self.mode = ViewMode::Edit;
                                 context
@@ -1553,7 +1562,7 @@ impl Component for Composer {
                         .unwrap(),
                         f,
                     ));
-                    self.dirty = true;
+                    self.set_dirty(true);
                     context
                         .replies
                         .push_back(UIEvent::ChangeMode(UIMode::Embed));
@@ -1620,7 +1629,7 @@ impl Component for Composer {
                     }
                 }
                 self.initialized = false;
-                self.dirty = true;
+                self.set_dirty(true);
                 return true;
             }
             UIEvent::Action(ref a) => match a {
@@ -1661,13 +1670,13 @@ impl Component for Composer {
                                                 melib::error::ErrorKind::None,
                                             )),
                                         ));
-                                        self.dirty = true;
+                                        self.set_dirty(true);
                                         return true;
                                     }
                                 };
                             self.draft.attachments_mut().push(attachment);
                             self.has_changes = true;
-                            self.dirty = true;
+                            self.set_dirty(true);
                             return true;
                         }
                         Err(err) => {
@@ -1689,13 +1698,13 @@ impl Component for Composer {
                                 err.to_string(),
                                 Some(NotificationType::Error(melib::error::ErrorKind::None)),
                             ));
-                            self.dirty = true;
+                            self.set_dirty(true);
                             return true;
                         }
                     };
                     self.draft.attachments_mut().push(attachment);
                     self.has_changes = true;
-                    self.dirty = true;
+                    self.set_dirty(true);
                     return true;
                 }
                 Action::Compose(ComposeAction::AddAttachmentFilePicker(ref command)) => {
@@ -1766,7 +1775,7 @@ impl Component for Composer {
                         }
                     }
                     context.replies.push_back(UIEvent::Fork(ForkType::Finished));
-                    self.dirty = true;
+                    self.set_dirty(true);
                     return true;
                 }
                 Action::Compose(ComposeAction::RemoveAttachment(idx)) => {
@@ -1776,7 +1785,7 @@ impl Component for Composer {
                                 "attachment with given index does not exist".to_string(),
                             ),
                         ));
-                        self.dirty = true;
+                        self.set_dirty(true);
                         return true;
                     }
                     self.draft.attachments_mut().remove(*idx);
@@ -1785,7 +1794,7 @@ impl Component for Composer {
                         .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
                             "attachment removed".to_string(),
                         )));
-                    self.dirty = true;
+                    self.set_dirty(true);
                     return true;
                 }
                 Action::Compose(ComposeAction::SaveDraft) => {
@@ -1802,14 +1811,14 @@ impl Component for Composer {
                 Action::Compose(ComposeAction::ToggleSign) => {
                     let is_true = self.gpg_state.sign_mail.is_true();
                     self.gpg_state.sign_mail = ToggleFlag::from(!is_true);
-                    self.dirty = true;
+                    self.set_dirty(true);
                     return true;
                 }
                 #[cfg(feature = "gpgme")]
                 Action::Compose(ComposeAction::ToggleEncrypt) => {
                     let is_true = self.gpg_state.encrypt_mail.is_true();
                     self.gpg_state.encrypt_mail = ToggleFlag::from(!is_true);
-                    self.dirty = true;
+                    self.set_dirty(true);
                     return true;
                 }
                 _ => {}
