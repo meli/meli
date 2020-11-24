@@ -688,11 +688,40 @@ impl MailView {
                             parts.iter().position(|a| a.content_type == "text/plain")
                         {
                             let bytes = decode(&parts[text_attachment_pos], None);
-                            acc.push(AttachmentDisplay::InlineText {
-                                inner: a.clone(),
-                                comment: None,
-                                text: String::from_utf8_lossy(&bytes).to_string(),
-                            });
+                            if bytes.trim().is_empty()
+                                && mailbox_settings!(
+                                    context[coordinates.0][&coordinates.1]
+                                        .pager
+                                        .auto_choose_multipart_alternative
+                                )
+                                .is_true()
+                            {
+                                if let Some(text_attachment_pos) =
+                                    parts.iter().position(|a| a.content_type == "text/html")
+                                {
+                                    /* Select html alternative since text/plain is empty */
+                                    rec(
+                                        &parts[text_attachment_pos],
+                                        context,
+                                        coordinates,
+                                        acc,
+                                        active_jobs,
+                                    );
+                                } else {
+                                    for a in parts {
+                                        rec(a, context, coordinates, acc, active_jobs);
+                                    }
+                                }
+                            } else {
+                                /* Select text/plain alternative */
+                                rec(
+                                    &parts[text_attachment_pos],
+                                    context,
+                                    coordinates,
+                                    acc,
+                                    active_jobs,
+                                );
+                            }
                         } else {
                             for a in parts {
                                 rec(a, context, coordinates, acc, active_jobs);
