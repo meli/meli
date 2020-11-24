@@ -523,7 +523,7 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> Component for 
             );
             let label_attrs = crate::conf::value(context, "widgets.form.label");
 
-            for (i, k) in self.layout.iter().enumerate() {
+            for (i, k) in self.layout.iter().enumerate().rev() {
                 let v = self.fields.get_mut(k).unwrap();
                 /* Write field label */
                 write_string_to_grid(
