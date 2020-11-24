@@ -33,6 +33,8 @@ pub use wcwidth::*;
 pub trait Truncate {
     fn truncate_at_boundary(&mut self, new_len: usize);
     fn trim_at_boundary(&self, new_len: usize) -> &str;
+    fn trim_left_at_boundary(&self, new_len: usize) -> &str;
+    fn truncate_left_at_boundary(&mut self, new_len: usize);
 }
 
 impl Truncate for &str {
@@ -67,6 +69,39 @@ impl Truncate for &str {
             self
         }
     }
+
+    fn trim_left_at_boundary(&self, skip_len: usize) -> &str {
+        if skip_len >= self.len() {
+            return "";
+        }
+
+        extern crate unicode_segmentation;
+        use unicode_segmentation::UnicodeSegmentation;
+        if let Some((first, _)) = UnicodeSegmentation::grapheme_indices(*self, true)
+            .skip(skip_len)
+            .next()
+        {
+            &self[first..]
+        } else {
+            self
+        }
+    }
+
+    fn truncate_left_at_boundary(&mut self, skip_len: usize) {
+        if skip_len >= self.len() {
+            *self = "";
+            return;
+        }
+
+        extern crate unicode_segmentation;
+        use unicode_segmentation::UnicodeSegmentation;
+        if let Some((first, _)) = UnicodeSegmentation::grapheme_indices(*self, true)
+            .skip(skip_len)
+            .next()
+        {
+            *self = &self[first..];
+        }
+    }
 }
 
 impl Truncate for String {
@@ -99,6 +134,39 @@ impl Truncate for String {
             &self[..last]
         } else {
             self.as_str()
+        }
+    }
+
+    fn trim_left_at_boundary(&self, skip_len: usize) -> &str {
+        if skip_len >= self.len() {
+            return "";
+        }
+
+        extern crate unicode_segmentation;
+        use unicode_segmentation::UnicodeSegmentation;
+        if let Some((first, _)) = UnicodeSegmentation::grapheme_indices(self.as_str(), true)
+            .skip(skip_len)
+            .next()
+        {
+            &self[first..]
+        } else {
+            self.as_str()
+        }
+    }
+
+    fn truncate_left_at_boundary(&mut self, skip_len: usize) {
+        if skip_len >= self.len() {
+            self.clear();
+            return;
+        }
+
+        extern crate unicode_segmentation;
+        use unicode_segmentation::UnicodeSegmentation;
+        if let Some((first, _)) = UnicodeSegmentation::grapheme_indices(self.as_str(), true)
+            .skip(skip_len)
+            .next()
+        {
+            *self = self[first..].to_string();
         }
     }
 }

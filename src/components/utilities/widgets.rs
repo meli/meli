@@ -111,12 +111,15 @@ impl Field {
         let upper_left = upper_left!(area);
         match self {
             Text(ref term, auto_complete_fn) => {
+                let width = width!(area);
+                let pos = if width < term.grapheme_pos() {
+                    width
+                } else {
+                    term.grapheme_pos()
+                };
                 change_colors(
                     grid,
-                    (
-                        pos_inc(upper_left, (term.grapheme_pos(), 0)),
-                        (pos_inc(upper_left, (term.grapheme_pos(), 0))),
-                    ),
+                    (pos_inc(upper_left, (pos, 0)), pos_inc(upper_left, (pos, 0))),
                     Color::Default,
                     Color::Byte(248),
                 );
@@ -137,15 +140,89 @@ impl Field {
 impl Component for Field {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         let theme_attr = crate::conf::value(context, "widgets.form.field");
-        write_string_to_grid(
-            self.as_str(),
-            grid,
-            theme_attr.fg,
-            theme_attr.bg,
-            theme_attr.attrs,
-            area,
-            None,
-        );
+        let width = width!(area);
+        let str = self.as_str();
+        match self {
+            Text(ref term, _) => {
+                /* Calculate which part of the str is visible
+                 * ##########################################
+                 *
+                 * Example:
+                 * For the string "The quick brown fox jumps over the lazy dog" with visible width
+                 * of field of 10 columns
+                 *
+                 *
+                 * Cursor <= width
+                 * =================
+                 * Cursor at:
+                 * ⇩
+                 * The quick brown fox jumps over the lazy dog
+                 *
+                 * cursor
+                 * ⇩
+                 * ┌──────────┐
+                 * │The quick │ brown fox jumps over the lazy dog
+                 * └──────────┘
+                 *
+                 * No skip.
+                 *
+                 * Cursor at the end
+                 * =================
+                 * Cursor at:
+                 *                                           ⇩
+                 * The quick brown fox jumps over the lazy dog
+                 *
+                 * remainder                                        cursor
+                 * ⇩⇩⇩⇩⇩                                              ⇩
+                 * +╌╌╌+╭┅┅┅┅┅┅┅┅┅┅╮╭┅┅┅┅┅┅┅┅┅┅╮╭┅┅┅┅┅┅┅┅┅┅╮┌──────────┐
+                 * |The|┊ quick bro┊┊wn fox jum┊┊ps over th┊│e lazy dog│
+                 * +╌╌╌+╰┅┅┅┅┅┅┅┅┅┅╯╰┅┅┅┅┅┅┅┅┅┅╯╰┅┅┅┅┅┅┅┅┅┅╯└──────────┘
+                 *  ⇧⇧⇧++⇧⇧⇧⇧⇧⇧⇧⇧⇧⇧++⇧⇧⇧⇧⇧⇧⇧⇧⇧⇧++⇧⇧⇧⇧⇧⇧⇧⇧⇧⇧
+                 *              skip offset
+                 *
+                 * Intermediate cursor
+                 * ===================
+                 * Cursor at:
+                 *                               ⇩
+                 * The quick brown fox jumps over the lazy dog
+                 *
+                 * remainder                        cursor
+                 * ⇩                                  ⇩
+                 * +╭┅┅┅┅┅┅┅┅┅┅╮╭┅┅┅┅┅┅┅┅┅┅╮┌──────────┐
+                 * T|he quick b┊┊rown fox j┊│umps over │ the lazy dog
+                 * +╰┅┅┅┅┅┅┅┅┅┅╯╰┅┅┅┅┅┅┅┅┅┅╯└──────────┘
+                 * ⇧+⇧⇧⇧⇧⇧⇧⇧⇧⇧⇧++⇧⇧⇧⇧⇧⇧⇧⇧⇧⇧
+                 *              skip offset
+                 */
+                write_string_to_grid(
+                    if width < term.grapheme_pos() {
+                        str.trim_left_at_boundary(
+                            width * term.grapheme_pos().wrapping_div(width).saturating_sub(1)
+                                + term.grapheme_pos().wrapping_rem(width),
+                        )
+                    } else {
+                        str
+                    },
+                    grid,
+                    theme_attr.fg,
+                    theme_attr.bg,
+                    theme_attr.attrs,
+                    area,
+                    None,
+                );
+            }
+            Choice(_, _) => {
+                write_string_to_grid(
+                    str,
+                    grid,
+                    theme_attr.fg,
+                    theme_attr.bg,
+                    theme_attr.attrs,
+                    area,
+                    None,
+                );
+            }
+        }
     }
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         match *event {
@@ -496,10 +573,7 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> Component for 
                             grid,
                             (
                                 pos_inc(upper_left, (self.field_name_max_length + 3, i)),
-                                (
-                                    get_x(upper_left) + self.field_name_max_length + 3,
-                                    i + get_y(upper_left),
-                                ),
+                                (get_x(bottom_right), i + get_y(upper_left)),
                             ),
                             (
                                 pos_inc(upper_left, (self.field_name_max_length + 3, i + 1)),
