@@ -753,7 +753,7 @@ impl ListingTrait for CompactListing {
         if top_idx + rows > self.length {
             clear_area(
                 grid,
-                (pos_inc(upper_left, (0, rows)), bottom_right),
+                (pos_inc(upper_left, (0, rows - 1)), bottom_right),
                 self.color_cache.theme_default,
             );
         }
