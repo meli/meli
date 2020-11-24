@@ -620,7 +620,7 @@ impl MailView {
             acc: &mut Vec<AttachmentDisplay>,
             active_jobs: &mut HashSet<JobId>,
         ) {
-            if a.content_disposition.kind.is_attachment() {
+            if a.content_disposition.kind.is_attachment() || a.content_type == "message/rfc822" {
                 acc.push(AttachmentDisplay::Attachment { inner: a.clone() });
             } else if a.content_type().is_text_html() {
                 let bytes = decode(a, None);
@@ -923,7 +923,9 @@ impl MailView {
             let ret = find_attachment(root_attachment, &path[1..]);
             if lidx == 0 {
                 return ret.and_then(|a| {
-                    if a.content_disposition.kind.is_attachment() {
+                    if a.content_disposition.kind.is_attachment()
+                        || a.content_type == "message/rfc822"
+                    {
                         Some(a)
                     } else {
                         None
