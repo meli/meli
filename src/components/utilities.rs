@@ -304,15 +304,19 @@ impl Component for StatusBar {
                 }
                 let hist_height = std::cmp::min(15, self.auto_complete.suggestions().len());
                 let hist_area = if height < self.auto_complete.suggestions().len() {
+                    let hist_area = (
+                        (
+                            get_x(upper_left),
+                            std::cmp::min(
+                                get_y(bottom_right) - height - hist_height + 1,
+                                get_y(bottom_right),
+                            ),
+                        ),
+                        pos_dec(bottom_right, (0, height)),
+                    );
                     ScrollBar::default().set_show_arrows(false).draw(
                         grid,
-                        (
-                            (
-                                get_x(upper_left),
-                                get_y(bottom_right) - height - hist_height + 1,
-                            ),
-                            set_y(bottom_right, get_y(bottom_right) - height),
-                        ),
+                        hist_area,
                         context,
                         self.auto_complete.cursor(),
                         hist_height,
@@ -320,37 +324,22 @@ impl Component for StatusBar {
                     );
                     change_colors(
                         grid,
-                        (
-                            (
-                                get_x(upper_left),
-                                get_y(bottom_right) - height - hist_height + 1,
-                            ),
-                            set_y(bottom_right, get_y(bottom_right) - height),
-                        ),
+                        hist_area,
                         Color::Byte(197), // DeepPink2,
                         Color::Byte(174), //LightPink3
                     );
-                    context.dirty_areas.push_back((
-                        (
-                            get_x(upper_left),
-                            get_y(bottom_right) - height - hist_height + 1,
-                        ),
-                        set_y(bottom_right, get_y(bottom_right) - height),
-                    ));
-                    (
-                        (
-                            get_x(upper_left) + 1,
-                            get_y(bottom_right) - height - hist_height + 1,
-                        ),
-                        set_y(bottom_right, get_y(bottom_right) - height),
-                    )
+                    context.dirty_areas.push_back(hist_area);
+                    hist_area
                 } else {
                     (
                         (
                             get_x(upper_left),
-                            get_y(bottom_right) - height - hist_height + 1,
+                            std::cmp::min(
+                                get_y(bottom_right) - height - hist_height + 1,
+                                get_y(bottom_right),
+                            ),
                         ),
-                        set_y(bottom_right, get_y(bottom_right) - height),
+                        pos_dec(bottom_right, (0, height)),
                     )
                 };
                 let offset = if hist_height
