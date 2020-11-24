@@ -255,6 +255,7 @@ const DEFAULT_KEYS: &[&str] = &[
     "widgets.form.highlighted",
     "widgets.options.highlighted",
     "mail.sidebar",
+    "mail.sidebar_divider",
     "mail.sidebar_account_name",
     "mail.sidebar_unread_count",
     "mail.sidebar_index",
@@ -1334,6 +1335,7 @@ impl Default for Themes {
         /* Mail Sidebar */
 
         add!("mail.sidebar");
+        add!("mail.sidebar_divider");
         add!(
             "mail.sidebar_account_name",
             dark = {

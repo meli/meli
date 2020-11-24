@@ -481,7 +481,9 @@ pub struct Listing {
     id: ComponentId,
     theme_default: ThemeAttribute,
 
-    show_divider: bool,
+    sidebar_divider: char,
+    sidebar_divider_theme: ThemeAttribute,
+
     menu_visibility: bool,
     cmd_buf: String,
     /// This is the width of the right container to the entire width.
@@ -539,21 +541,12 @@ impl Component for Listing {
         };
         let mid = get_x(bottom_right) - right_component_width;
         if self.dirty && mid != get_x(upper_left) {
-            if self.show_divider {
-                for i in get_y(upper_left)..=get_y(bottom_right) {
-                    grid[(mid, i)]
-                        .set_ch(VERT_BOUNDARY)
-                        .set_fg(self.theme_default.fg)
-                        .set_bg(self.theme_default.bg)
-                        .set_attrs(self.theme_default.attrs);
-                }
-            } else {
-                for i in get_y(upper_left)..=get_y(bottom_right) {
-                    grid[(mid, i)]
-                        .set_fg(self.theme_default.fg)
-                        .set_bg(self.theme_default.bg)
-                        .set_attrs(self.theme_default.attrs);
-                }
+            for i in get_y(upper_left)..=get_y(bottom_right) {
+                grid[(mid, i)]
+                    .set_ch(self.sidebar_divider)
+                    .set_fg(self.sidebar_divider_theme.fg)
+                    .set_bg(self.sidebar_divider_theme.bg)
+                    .set_attrs(self.sidebar_divider_theme.attrs);
             }
             context
                 .dirty_areas
@@ -579,7 +572,11 @@ impl Component for Listing {
         } else if right_component_width == 0 {
             self.draw_menu(grid, area, context);
         } else {
-            self.draw_menu(grid, (upper_left, (mid, get_y(bottom_right))), context);
+            self.draw_menu(
+                grid,
+                (upper_left, (mid.saturating_sub(1), get_y(bottom_right))),
+                context,
+            );
             if context.is_online(account_hash).is_err() {
                 match self.component {
                     ListingComponent::Offline(_) => {}
@@ -1435,8 +1432,9 @@ impl Listing {
                 }
             })
             .collect();
+        let first_account_hash = account_entries[0].hash;
         let mut ret = Listing {
-            component: Offline(OfflineListing::new((account_entries[0].hash, 0))),
+            component: Offline(OfflineListing::new((first_account_hash, 0))),
             accounts: account_entries,
             status: None,
             visible: true,
@@ -1446,7 +1444,10 @@ impl Listing {
             startup_checks_rate: RateLimit::new(2, 1000, context.job_executor.clone()),
             theme_default: conf::value(context, "theme_default"),
             id: ComponentId::new_v4(),
-            show_divider: false,
+            sidebar_divider: *account_settings!(
+                context[first_account_hash].listing.sidebar_divider
+            ),
+            sidebar_divider_theme: conf::value(context, "mail.sidebar_divider"),
             menu_visibility: true,
             ratio: 90,
             menu_width: WidgetWidth::Unset,
@@ -1457,13 +1458,11 @@ impl Listing {
         ret
     }
 
-    fn draw_menu(&mut self, grid: &mut CellBuffer, mut area: Area, context: &mut Context) {
+    fn draw_menu(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if !self.is_dirty() {
             return;
         }
         clear_area(grid, area, self.theme_default);
-        /* visually divide menu and listing */
-        area = (area.0, pos_dec(area.1, (1, 0)));
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
         self.dirty = false;
@@ -1770,6 +1769,7 @@ impl Listing {
             /* Set to dummy */
             self.component = Offline(OfflineListing::new((account_hash, 0)));
         }
+        self.sidebar_divider = *account_settings!(context[account_hash].listing.sidebar_divider);
         self.status = None;
         self.set_dirty(true);
         context

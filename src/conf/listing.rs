@@ -90,6 +90,14 @@ pub struct ListingSettings {
     ///Default: " "
     #[serde(default)]
     pub sidebar_mailbox_tree_no_sibling_leaf: Option<String>,
+
+    ///Default: ' '
+    #[serde(default = "default_divider")]
+    pub sidebar_divider: char,
+}
+
+const fn default_divider() -> char {
+    ' '
 }
 
 impl Default for ListingSettings {
@@ -104,6 +112,7 @@ impl Default for ListingSettings {
             sidebar_mailbox_tree_no_sibling: None,
             sidebar_mailbox_tree_has_sibling_leaf: None,
             sidebar_mailbox_tree_no_sibling_leaf: None,
+            sidebar_divider: default_divider(),
         }
     }
 }
@@ -131,6 +140,7 @@ impl DotAddressable for ListingSettings {
                     "sidebar_mailbox_tree_no_sibling_leaf" => self
                         .sidebar_mailbox_tree_no_sibling_leaf
                         .lookup(field, tail),
+                    "sidebar_divider" => self.sidebar_divider.lookup(field, tail),
                     other => Err(MeliError::new(format!(
                         "{} has no field named {}",
                         parent_field, other

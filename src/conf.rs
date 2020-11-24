@@ -836,6 +836,7 @@ mod dotaddressable {
     impl DotAddressable for bool {}
 
     impl DotAddressable for String {}
+    impl DotAddressable for char {}
     impl DotAddressable for IndexStyle {}
     impl DotAddressable for u64 {}
     impl DotAddressable for crate::terminal::Color {}

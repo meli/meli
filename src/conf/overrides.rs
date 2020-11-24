@@ -131,6 +131,9 @@ pub struct ListingSettingsOverride {
     #[doc = "Default: \" \""]
     #[serde(default)]
     pub sidebar_mailbox_tree_no_sibling_leaf: Option<Option<String>>,
+    #[doc = "Default: ' '"]
+    #[serde(default)]
+    pub sidebar_divider: Option<char>,
 }
 impl Default for ListingSettingsOverride {
     fn default() -> Self {
@@ -144,6 +147,7 @@ impl Default for ListingSettingsOverride {
             sidebar_mailbox_tree_no_sibling: None,
             sidebar_mailbox_tree_has_sibling_leaf: None,
             sidebar_mailbox_tree_no_sibling_leaf: None,
+            sidebar_divider: None,
         }
     }
 }

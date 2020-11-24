@@ -54,7 +54,10 @@ pub struct ContactList {
 
     mode: ViewMode,
     dirty: bool,
-    show_divider: bool,
+
+    sidebar_divider: char,
+    sidebar_divider_theme: ThemeAttribute,
+
     menu_visibility: bool,
     movement: Option<PageMovement>,
     cmd_buf: String,
@@ -98,7 +101,8 @@ impl ContactList {
             cmd_buf: String::with_capacity(8),
             view: None,
             ratio: 90,
-            show_divider: false,
+            sidebar_divider: context.settings.listing.sidebar_divider,
+            sidebar_divider_theme: conf::value(context, "mail.sidebar_divider"),
             menu_visibility: true,
             id: ComponentId::new_v4(),
         }
@@ -239,13 +243,11 @@ impl ContactList {
         change_colors(grid, area, fg_color, bg_color);
     }
 
-    fn draw_menu(&mut self, grid: &mut CellBuffer, mut area: Area, context: &mut Context) {
+    fn draw_menu(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if !self.is_dirty() {
             return;
         }
         clear_area(grid, area, self.theme_default);
-        /* visually divide menu and listing */
-        area = (area.0, pos_dec(area.1, (1, 0)));
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
         self.dirty = false;
@@ -580,19 +582,12 @@ impl Component for ContactList {
         };
         let mid = get_x(bottom_right) - right_component_width;
         if self.dirty && mid != get_x(upper_left) {
-            if self.show_divider {
-                for i in get_y(upper_left)..=get_y(bottom_right) {
-                    grid[(mid, i)]
-                        .set_ch(VERT_BOUNDARY)
-                        .set_fg(self.theme_default.fg)
-                        .set_bg(self.theme_default.bg);
-                }
-            } else {
-                for i in get_y(upper_left)..=get_y(bottom_right) {
-                    grid[(mid, i)]
-                        .set_fg(self.theme_default.fg)
-                        .set_bg(self.theme_default.bg);
-                }
+            for i in get_y(upper_left)..=get_y(bottom_right) {
+                grid[(mid, i)]
+                    .set_ch(self.sidebar_divider)
+                    .set_fg(self.sidebar_divider_theme.fg)
+                    .set_bg(self.sidebar_divider_theme.bg)
+                    .set_attrs(self.sidebar_divider_theme.attrs);
             }
             context
                 .dirty_areas
@@ -604,7 +599,11 @@ impl Component for ContactList {
         } else if right_component_width == 0 {
             self.draw_menu(grid, area, context);
         } else {
-            self.draw_menu(grid, (upper_left, (mid, get_y(bottom_right))), context);
+            self.draw_menu(
+                grid,
+                (upper_left, (mid.saturating_sub(1), get_y(bottom_right))),
+                context,
+            );
             self.draw_list(grid, (set_x(upper_left, mid + 1), bottom_right), context);
         }
         self.dirty = false;
