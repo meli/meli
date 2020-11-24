@@ -235,17 +235,60 @@ Do not validate TLS certificates.
 Use IDLE extension.
 .\" default value
 .Pq Em true
+.It Ic use_condstore Ar boolean
+.Pq Em optional
+Use CONDSTORE extension.
+.\" default value
+.Pq Em true
 .It Ic use_deflate Ar boolean
 .Pq Em optional
 Use COMPRESS=DEFLATE extension (if built with DEFLATE support).
 .\" default value
 .Pq Em true
+.It Ic use_oauth2 Ar boolean
+.Pq Em optional
+Use OAUTH2 authentication.
+Can only be used with
+.Ic server_password_command
+which should return a base64-encoded OAUTH2 token ready to be passed to IMAP.
+For help on setup with Gmail, see Gmail section below.
+.\" default value
+.Pq Em false
 .It Ic timeout Ar integer
 .Pq Em optional
 Timeout to use for server connections in seconds.
 A timeout of 0 seconds means there's no timeout.
 .\" default value
 .Pq Em 16
+.El
+.Ss Gmail
+Gmail has non-standard IMAP behaviors that need to be worked around.
+.Ss Gmail - sending mail
+Option
+.Ic store_sent_mail
+should be disabled since Gmail auto-saves sent mail by its own.
+.Ss Gmail OAUTH2
+To use OAUTH2, you must go through a process to register your own private "application" with Google that can use OAUTH2 tokens.
+For convenience in the meli repository under the
+.Pa contrib/
+directory you can find a python3 file named oauth2.py to generate and request the appropriate data to perform OAUTH2 authentication.
+Steps:
+.Bl -bullet -compact
+.It
+In Google APIs, create a custom OAuth client ID and note down the Client ID and Client Secret.
+You may need to create a consent screen; follow the steps described in the website.
+.It
+Run the oauth2.py script as follows (after adjusting binary paths and credentials):
+.Cm python3 oauth2.py --user=xxx@gmail.com --client_id=1038[...].apps.googleusercontent.com --client_secret=VWFn8LIKAMC-MsjBMhJeOplZ --generate_oauth2_token
+and follow the instructions.
+Note down the refresh token.
+.It
+In
+.Ic server_password_command
+enter a command like this (after adjusting binary paths and credentials):
+.Cm TOKEN=$(python3 oauth2.py --user=xxx@gmail.com --quiet --client_id=1038[...].apps.googleusercontent.com --client_secret=VWFn8LIKAMC-MsjBMhJeOplZ --refresh_token=1/Yzm6MRy4q1xi7Dx2DuWXNgT6s37OrP_DW_IoyTum4YA) && python3 oauth2.py --user=xxx@gmail.com --generate_oauth2_string --quiet --access_token=$TOKEN
+.It
+On startup, meli should evaluate this command which if successful must only return a base64-encoded token ready to be passed to IMAP.
 .El
 .Ss JMAP only
 JMAP specific options

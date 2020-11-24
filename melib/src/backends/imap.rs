@@ -64,6 +64,7 @@ pub type UIDVALIDITY = UID;
 pub type MessageSequenceNumber = ImapNum;
 
 pub static SUPPORTED_CAPABILITIES: &[&str] = &[
+    "AUTH=OAUTH2",
     #[cfg(feature = "deflate_compression")]
     "COMPRESS=DEFLATE",
     "CONDSTORE",
@@ -232,6 +233,7 @@ impl MailBackend for ImapType {
                     #[cfg(feature = "deflate_compression")]
                     deflate,
                     condstore,
+                    oauth2,
                 },
         } = self.server_conf.protocol
         {
@@ -266,6 +268,15 @@ impl MailBackend for ImapType {
                     }
                     "CONDSTORE" => {
                         if condstore {
+                            *status = MailBackendExtensionStatus::Enabled { comment: None };
+                        } else {
+                            *status = MailBackendExtensionStatus::Supported {
+                                comment: Some("Disabled by user configuration"),
+                            };
+                        }
+                    }
+                    "AUTH=OAUTH2" => {
+                        if oauth2 {
                             *status = MailBackendExtensionStatus::Enabled { comment: None };
                         } else {
                             *status = MailBackendExtensionStatus::Supported {
@@ -1218,7 +1229,14 @@ impl ImapType {
     ) -> Result<Box<dyn MailBackend>> {
         let server_hostname = get_conf_val!(s["server_hostname"])?;
         let server_username = get_conf_val!(s["server_username"])?;
+        let use_oauth2: bool = get_conf_val!(s["use_oauth2"], false)?;
         let server_password = if !s.extra.contains_key("server_password_command") {
+            if use_oauth2 {
+                return Err(MeliError::new(format!(
+                    "({}) `use_oauth2` use requires `server_password_command` set with a command that returns an OAUTH2 token. Consult documentation for guidance.",
+                    s.name,
+                )));
+            }
             get_conf_val!(s["server_password"])?.to_string()
         } else {
             let invocation = get_conf_val!(s["server_password_command"])?;
@@ -1275,6 +1293,7 @@ impl ImapType {
                     condstore: get_conf_val!(s["use_condstore"], true)?,
                     #[cfg(feature = "deflate_compression")]
                     deflate: get_conf_val!(s["use_deflate"], true)?,
+                    oauth2: use_oauth2,
                 },
             },
             timeout,
@@ -1463,7 +1482,14 @@ impl ImapType {
     pub fn validate_config(s: &AccountSettings) -> Result<()> {
         get_conf_val!(s["server_hostname"])?;
         get_conf_val!(s["server_username"])?;
+        let use_oauth2: bool = get_conf_val!(s["use_oauth2"], false)?;
         if !s.extra.contains_key("server_password_command") {
+            if use_oauth2 {
+                return Err(MeliError::new(format!(
+                    "({}) `use_oauth2` use requires `server_password_command` set with a command that returns an OAUTH2 token. Consult documentation for guidance.",
+                    s.name,
+                )));
+            }
             get_conf_val!(s["server_password"])?;
         } else if s.extra.contains_key("server_password") {
             return Err(MeliError::new(format!(

@@ -63,6 +63,7 @@ pub struct ImapExtensionUse {
     pub idle: bool,
     #[cfg(feature = "deflate_compression")]
     pub deflate: bool,
+    pub oauth2: bool,
 }
 
 impl Default for ImapExtensionUse {
@@ -72,6 +73,7 @@ impl Default for ImapExtensionUse {
             idle: true,
             #[cfg(feature = "deflate_compression")]
             deflate: true,
+            oauth2: false,
         }
     }
 }
@@ -351,16 +353,39 @@ impl ImapStream {
             .set_err_kind(crate::error::ErrorKind::Authentication));
         }
 
-        let mut capabilities = None;
-        ret.send_command(
-            format!(
-                "LOGIN \"{}\" \"{}\"",
-                &server_conf.server_username, &server_conf.server_password
-            )
-            .as_bytes(),
-        )
-        .await?;
+        match server_conf.protocol {
+            ImapProtocol::IMAP {
+                extension_use: ImapExtensionUse { oauth2, .. },
+            } if oauth2 => {
+                if !capabilities
+                    .iter()
+                    .any(|cap| cap.eq_ignore_ascii_case(b"AUTH=XOAUTH2"))
+                {
+                    return Err(MeliError::new(format!(
+                                "Could not connect to {}: OAUTH2 is enabled but server did not return AUTH=XOAUTH2 capability. Returned capabilities were: {}",
+                                &server_conf.server_hostname,
+                                capabilities.iter().map(|capability|
+                                    String::from_utf8_lossy(capability).to_string()).collect::<Vec<String>>().join(" ")
+                    )));
+                }
+                ret.send_command(
+                    format!("AUTHENTICATE XOAUTH2 {}", &server_conf.server_password).as_bytes(),
+                )
+                .await?;
+            }
+            _ => {
+                ret.send_command(
+                    format!(
+                        "LOGIN \"{}\" \"{}\"",
+                        &server_conf.server_username, &server_conf.server_password
+                    )
+                    .as_bytes(),
+                )
+                .await?;
+            }
+        }
         let tag_start = format!("M{} ", (ret.cmd_id - 1));
+        let mut capabilities = None;
 
         loop {
             ret.read_lines(&mut res, &[], false).await?;
@@ -604,6 +629,7 @@ impl ImapConnection {
                             #[cfg(feature = "deflate_compression")]
                             deflate,
                             idle: _idle,
+                            oauth2: _,
                         },
                 } => {
                     if capabilities.contains(&b"CONDSTORE"[..]) && condstore {
