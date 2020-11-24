@@ -188,6 +188,10 @@ impl Composer {
                 format!("meli {}", option_env!("CARGO_PKG_VERSION").unwrap_or("0.0")),
             );
         }
+        if *account_settings!(context[account_hash].composing.format_flowed) {
+            ret.pager
+                .set_reflow(melib::text_processing::Reflow::FormatFlowed);
+        }
         ret
     }
 
