@@ -43,6 +43,7 @@ pub struct Selector<T: 'static + PartialEq + Debug + Clone + Sync + Send, F: 'st
     single_only: bool,
     entries: Vec<(T, bool)>,
     pub content: CellBuffer,
+    theme_default: ThemeAttribute,
 
     cursor: SelectorCursor,
 
@@ -118,9 +119,9 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                     write_string_to_grid(
                         "x",
                         &mut self.content,
-                        Color::Default,
-                        Color::Default,
-                        Attr::DEFAULT,
+                        highlighted_attrs.fg,
+                        highlighted_attrs.bg,
+                        highlighted_attrs.attrs,
                         ((3, c + 2), (width - 2, c + 2)),
                         None,
                     );
@@ -128,9 +129,9 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                     write_string_to_grid(
                         " ",
                         &mut self.content,
-                        Color::Default,
-                        Color::Default,
-                        Attr::DEFAULT,
+                        highlighted_attrs.fg,
+                        highlighted_attrs.bg,
+                        highlighted_attrs.attrs,
                         ((3, c + 2), (width - 2, c + 2)),
                         None,
                     );
@@ -173,9 +174,9 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                     // Redraw selection
                     for c in self.content.row_iter(2..(width - 2), c + 2) {
                         self.content[c]
-                            .set_fg(Color::Default)
-                            .set_bg(Color::Default)
-                            .set_attrs(Attr::DEFAULT);
+                            .set_fg(self.theme_default.fg)
+                            .set_bg(self.theme_default.bg)
+                            .set_attrs(self.theme_default.attrs);
                     }
                     for c in self.content.row_iter(2..(width - 2), c + 1) {
                         self.content[c]
@@ -189,9 +190,9 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                     // Redraw cursor
                     for c in self.content.row_iter(2..4, c + 2) {
                         self.content[c]
-                            .set_fg(Color::Default)
-                            .set_bg(Color::Default)
-                            .set_attrs(Attr::DEFAULT);
+                            .set_fg(self.theme_default.fg)
+                            .set_bg(self.theme_default.bg)
+                            .set_attrs(self.theme_default.attrs);
                     }
                     for c in self.content.row_iter(2..4, c + 1) {
                         self.content[c]
@@ -213,17 +214,12 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                     height - 3,
                 ) {
                     self.content[c]
-                        .set_fg(Color::Default)
-                        .set_bg(Color::Default)
-                        .set_attrs(Attr::DEFAULT);
+                        .set_fg(self.theme_default.fg)
+                        .set_bg(self.theme_default.bg)
+                        .set_attrs(self.theme_default.attrs);
                 }
                 let c = self.entries.len().saturating_sub(1);
                 self.cursor = SelectorCursor::Entry(c);
-                let mut highlighted_attrs =
-                    crate::conf::value(context, "widgets.options.highlighted");
-                if !context.settings.terminal.use_color() {
-                    highlighted_attrs.attrs |= Attr::REVERSE;
-                }
                 for c in self.content.row_iter(2..4, c + 2) {
                     self.content[c]
                         .set_fg(highlighted_attrs.fg)
@@ -241,9 +237,9 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                     // Redraw selection
                     for c in self.content.row_iter(2..(width - 2), c + 2) {
                         self.content[c]
-                            .set_fg(Color::Default)
-                            .set_bg(Color::Default)
-                            .set_attrs(Attr::DEFAULT);
+                            .set_fg(self.theme_default.fg)
+                            .set_bg(self.theme_default.bg)
+                            .set_attrs(self.theme_default.attrs);
                     }
                     for c in self.content.row_iter(2..(width - 2), c + 3) {
                         self.content[c]
@@ -257,9 +253,9 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                     // Redraw cursor
                     for c in self.content.row_iter(2..4, c + 2) {
                         self.content[c]
-                            .set_fg(Color::Default)
-                            .set_bg(Color::Default)
-                            .set_attrs(Attr::DEFAULT);
+                            .set_fg(self.theme_default.fg)
+                            .set_bg(self.theme_default.bg)
+                            .set_attrs(self.theme_default.attrs);
                     }
                     for c in self.content.row_iter(2..4, c + 3) {
                         self.content[c]
@@ -278,9 +274,9 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                 self.cursor = SelectorCursor::Ok;
                 for c in self.content.row_iter(2..4, c + 2) {
                     self.content[c]
-                        .set_fg(Color::Default)
-                        .set_bg(Color::Default)
-                        .set_attrs(Attr::DEFAULT);
+                        .set_fg(self.theme_default.fg)
+                        .set_bg(self.theme_default.bg)
+                        .set_attrs(self.theme_default.attrs);
                 }
                 for c in self.content.row_iter(
                     ((width - "OK    Cancel".len()) / 2)..((width - "OK    Cancel".len()) / 2 + 1),
@@ -303,9 +299,9 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                     height - 3,
                 ) {
                     self.content[c]
-                        .set_fg(Color::Default)
-                        .set_bg(Color::Default)
-                        .set_attrs(Attr::DEFAULT);
+                        .set_fg(self.theme_default.fg)
+                        .set_bg(self.theme_default.bg)
+                        .set_attrs(self.theme_default.attrs);
                 }
                 for c in self.content.row_iter(
                     ((width - "OK    Cancel".len()) / 2 + 6)
@@ -339,8 +335,8 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                         ((width - "OK    Cancel".len()) / 2 + 6, height - 3),
                         ((width - "OK    Cancel".len()) / 2 + 11, height - 3),
                     ),
-                    Color::Default,
-                    Color::Default,
+                    self.theme_default.fg,
+                    self.theme_default.bg,
                 );
                 self.dirty = true;
                 return true;
@@ -410,9 +406,9 @@ impl Component for UIConfirmationDialog {
                     write_string_to_grid(
                         "x",
                         &mut self.content,
-                        Color::Default,
-                        Color::Default,
-                        Attr::DEFAULT,
+                        highlighted_attrs.fg,
+                        highlighted_attrs.bg,
+                        highlighted_attrs.attrs,
                         ((3, c + 2), (width - 2, c + 2)),
                         None,
                     );
@@ -420,9 +416,9 @@ impl Component for UIConfirmationDialog {
                     write_string_to_grid(
                         " ",
                         &mut self.content,
-                        Color::Default,
-                        Color::Default,
-                        Attr::DEFAULT,
+                        highlighted_attrs.fg,
+                        highlighted_attrs.bg,
+                        highlighted_attrs.attrs,
                         ((3, c + 2), (width - 2, c + 2)),
                         None,
                     );
@@ -465,9 +461,9 @@ impl Component for UIConfirmationDialog {
                     // Redraw selection
                     for c in self.content.row_iter(2..(width - 2), c + 2) {
                         self.content[c]
-                            .set_fg(Color::Default)
-                            .set_bg(Color::Default)
-                            .set_attrs(Attr::DEFAULT);
+                            .set_fg(self.theme_default.fg)
+                            .set_bg(self.theme_default.bg)
+                            .set_attrs(self.theme_default.attrs);
                     }
                     for c in self.content.row_iter(2..(width - 2), c + 1) {
                         self.content[c]
@@ -481,9 +477,9 @@ impl Component for UIConfirmationDialog {
                     // Redraw cursor
                     for c in self.content.row_iter(2..4, c + 2) {
                         self.content[c]
-                            .set_fg(Color::Default)
-                            .set_bg(Color::Default)
-                            .set_attrs(Attr::DEFAULT);
+                            .set_fg(self.theme_default.fg)
+                            .set_bg(self.theme_default.bg)
+                            .set_attrs(self.theme_default.attrs);
                     }
                     for c in self.content.row_iter(2..4, c + 1) {
                         self.content[c]
@@ -505,17 +501,12 @@ impl Component for UIConfirmationDialog {
                     height - 3,
                 ) {
                     self.content[c]
-                        .set_fg(Color::Default)
-                        .set_bg(Color::Default)
-                        .set_attrs(Attr::DEFAULT);
+                        .set_fg(self.theme_default.fg)
+                        .set_bg(self.theme_default.bg)
+                        .set_attrs(self.theme_default.attrs);
                 }
                 let c = self.entries.len().saturating_sub(1);
                 self.cursor = SelectorCursor::Entry(c);
-                let mut highlighted_attrs =
-                    crate::conf::value(context, "widgets.options.highlighted");
-                if !context.settings.terminal.use_color() {
-                    highlighted_attrs.attrs |= Attr::REVERSE;
-                }
                 for c in self.content.row_iter(2..4, c + 2) {
                     self.content[c]
                         .set_fg(highlighted_attrs.fg)
@@ -533,9 +524,9 @@ impl Component for UIConfirmationDialog {
                     // Redraw selection
                     for c in self.content.row_iter(2..(width - 2), c + 2) {
                         self.content[c]
-                            .set_fg(Color::Default)
-                            .set_bg(Color::Default)
-                            .set_attrs(Attr::DEFAULT);
+                            .set_fg(self.theme_default.fg)
+                            .set_bg(self.theme_default.bg)
+                            .set_attrs(self.theme_default.attrs);
                     }
                     for c in self.content.row_iter(2..(width - 2), c + 3) {
                         self.content[c]
@@ -549,9 +540,9 @@ impl Component for UIConfirmationDialog {
                     // Redraw cursor
                     for c in self.content.row_iter(2..4, c + 2) {
                         self.content[c]
-                            .set_fg(Color::Default)
-                            .set_bg(Color::Default)
-                            .set_attrs(Attr::DEFAULT);
+                            .set_fg(self.theme_default.fg)
+                            .set_bg(self.theme_default.bg)
+                            .set_attrs(self.theme_default.attrs);
                     }
                     for c in self.content.row_iter(2..4, c + 3) {
                         self.content[c]
@@ -570,9 +561,9 @@ impl Component for UIConfirmationDialog {
                 self.cursor = SelectorCursor::Ok;
                 for c in self.content.row_iter(2..4, c + 2) {
                     self.content[c]
-                        .set_fg(Color::Default)
-                        .set_bg(Color::Default)
-                        .set_attrs(Attr::DEFAULT);
+                        .set_fg(self.theme_default.fg)
+                        .set_bg(self.theme_default.bg)
+                        .set_attrs(self.theme_default.attrs);
                 }
                 for c in self.content.row_iter(
                     ((width - "OK    Cancel".len()) / 2)..((width - "OK    Cancel".len()) / 2 + 1),
@@ -595,9 +586,9 @@ impl Component for UIConfirmationDialog {
                     height - 3,
                 ) {
                     self.content[c]
-                        .set_fg(Color::Default)
-                        .set_bg(Color::Default)
-                        .set_attrs(Attr::DEFAULT);
+                        .set_fg(self.theme_default.fg)
+                        .set_bg(self.theme_default.bg)
+                        .set_attrs(self.theme_default.attrs);
                 }
                 for c in self.content.row_iter(
                     ((width - "OK    Cancel".len()) / 2 + 6)
@@ -631,8 +622,8 @@ impl Component for UIConfirmationDialog {
                         ((width - "OK    Cancel".len()) / 2 + 6, height - 3),
                         ((width - "OK    Cancel".len()) / 2 + 11, height - 3),
                     ),
-                    Color::Default,
-                    Color::Default,
+                    self.theme_default.fg,
+                    self.theme_default.bg,
                 );
                 self.dirty = true;
                 return true;
@@ -679,6 +670,12 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selec
         done_fn: F,
         context: &Context,
     ) -> Selector<T, F> {
+        let theme_default = crate::conf::value(context, "theme_default");
+        let mut empty_cell = Cell::with_char(' ');
+        empty_cell
+            .set_fg(theme_default.fg)
+            .set_bg(theme_default.bg)
+            .set_attrs(theme_default.attrs);
         let width = std::cmp::max(
             "OK    Cancel".len(),
             std::cmp::max(
@@ -698,24 +695,23 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selec
                 /* Extra room for buttons Okay/Cancel */
                 3
             };
-        let mut content =
-            CellBuffer::new_with_context(width, height, Cell::with_char(' '), context);
+        let mut content = CellBuffer::new_with_context(width, height, empty_cell, context);
         let ascii_drawing = context.settings.terminal.ascii_drawing;
         write_string_to_grid(
             if ascii_drawing { "+-" } else { "┏━" },
             &mut content,
             Color::Byte(8),
-            Color::Default,
-            Attr::DEFAULT,
+            theme_default.bg,
+            theme_default.attrs,
             ((0, 0), (width - 1, 0)),
             None,
         );
         let (x, _) = write_string_to_grid(
             title,
             &mut content,
-            Color::Default,
-            Color::Default,
-            Attr::DEFAULT,
+            theme_default.fg,
+            theme_default.bg,
+            theme_default.attrs,
             ((2, 0), (width - 1, 0)),
             None,
         );
@@ -724,8 +720,8 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selec
                 if ascii_drawing { "-" } else { "━" },
                 &mut content,
                 Color::Byte(8),
-                Color::Default,
-                Attr::DEFAULT,
+                theme_default.bg,
+                theme_default.attrs,
                 ((x + i, 0), (width - 1, 0)),
                 None,
             );
@@ -734,8 +730,8 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selec
             if ascii_drawing { "+" } else { "┓" },
             &mut content,
             Color::Byte(8),
-            Color::Default,
-            Attr::DEFAULT,
+            theme_default.bg,
+            theme_default.attrs,
             ((width - 1, 0), (width - 1, 0)),
             None,
         );
@@ -743,8 +739,8 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selec
             if ascii_drawing { "+" } else { "┗" },
             &mut content,
             Color::Byte(8),
-            Color::Default,
-            Attr::DEFAULT,
+            theme_default.bg,
+            theme_default.attrs,
             ((0, height - 1), (width - 1, height - 1)),
             None,
         );
@@ -756,8 +752,8 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selec
             },
             &mut content,
             Color::Byte(8),
-            Color::Default,
-            Attr::DEFAULT,
+            theme_default.bg,
+            theme_default.attrs,
             ((1, height - 1), (width - 2, height - 1)),
             None,
         );
@@ -765,8 +761,8 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selec
             if ascii_drawing { "+" } else { "┛" },
             &mut content,
             Color::Byte(8),
-            Color::Default,
-            Attr::DEFAULT,
+            theme_default.bg,
+            theme_default.attrs,
             ((width - 1, height - 1), (width - 1, height - 1)),
             None,
         );
@@ -775,8 +771,8 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selec
                 if ascii_drawing { "|" } else { "┃" },
                 &mut content,
                 Color::Byte(8),
-                Color::Default,
-                Attr::DEFAULT,
+                theme_default.bg,
+                theme_default.attrs,
                 ((0, i), (width - 1, i)),
                 None,
             );
@@ -784,8 +780,8 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selec
                 if ascii_drawing { "|" } else { "┃" },
                 &mut content,
                 Color::Byte(8),
-                Color::Default,
-                Attr::DEFAULT,
+                theme_default.bg,
+                theme_default.attrs,
                 ((width - 1, i), (width - 1, i)),
                 None,
             );
@@ -799,16 +795,16 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selec
                 write_string_to_grid(
                     &e.1,
                     &mut content,
-                    Color::Default,
+                    theme_default.fg,
                     if i == 0 {
                         highlighted_attrs.bg
                     } else {
-                        Color::Default
+                        theme_default.bg
                     },
                     if i == 0 {
                         highlighted_attrs.attrs
                     } else {
-                        Attr::DEFAULT
+                        theme_default.attrs
                     },
                     ((2, i + 2), (width - 1, i + 2)),
                     None,
@@ -819,9 +815,9 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selec
                 write_string_to_grid(
                     &format!("[ ] {}", e.1),
                     &mut content,
-                    Color::Default,
-                    Color::Default,
-                    Attr::DEFAULT,
+                    theme_default.fg,
+                    theme_default.bg,
+                    theme_default.attrs,
                     ((2, i + 2), (width - 1, i + 2)),
                     None,
                 );
@@ -840,9 +836,9 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selec
             write_string_to_grid(
                 "OK    Cancel",
                 &mut content,
-                Color::Default,
-                Color::Default,
-                Attr::BOLD,
+                theme_default.fg,
+                theme_default.bg,
+                theme_default.attrs | Attr::BOLD,
                 (
                     ((width - "OK    Cancel".len()) / 2, height - 3),
                     (width - 1, height - 3),
@@ -865,6 +861,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selec
             done: false,
             done_fn,
             dirty: true,
+            theme_default,
             id: ComponentId::new_v4(),
         }
     }
