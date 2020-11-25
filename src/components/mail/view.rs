@@ -1444,6 +1444,7 @@ impl Component for MailView {
                 }
                 self.mode = ViewMode::Normal;
                 self.initialised = false;
+                self.set_dirty(true);
                 return true;
             }
             (ViewMode::ContactSelector(ref mut s), _) => {
