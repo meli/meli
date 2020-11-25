@@ -157,6 +157,64 @@ pub fn center_area(area: Area, (width, height): (usize, usize)) -> Area {
     )
 }
 
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum Alignment {
+    /// Stretch to fill all space if possible, center if no meaningful way to stretch.
+    Fill,
+    /// Snap to left or top side, leaving space on right or bottom.
+    Start,
+    /// Snap to right or bottom side, leaving space on left or top.
+    End,
+    /// Center natural width of widget inside the allocation.
+    Center,
+}
+
+impl Default for Alignment {
+    fn default() -> Self {
+        Alignment::Center
+    }
+}
+
+/// Place given area of dimensions `(width, height)` inside `area` according to given alignment
+pub fn align_area(
+    area: Area,
+    (width, height): (usize, usize),
+    vertical_alignment: Alignment,
+    horizontal_alignment: Alignment,
+) -> Area {
+    let (top_x, width) = match horizontal_alignment {
+        Alignment::Center => (
+            { std::cmp::max(width!(area) / 2, width / 2) - width / 2 },
+            width,
+        ),
+        Alignment::Start => (0, width),
+        Alignment::End => (width!(area).saturating_sub(width), width!(area)),
+        Alignment::Fill => (0, width!(area)),
+    };
+    let (top_y, height) = match vertical_alignment {
+        Alignment::Center => (
+            { std::cmp::max(height!(area) / 2, height / 2) - height / 2 },
+            height,
+        ),
+        Alignment::Start => (0, height),
+        Alignment::End => (height!(area).saturating_sub(height), height!(area)),
+        Alignment::Fill => (0, height!(area)),
+    };
+
+    let (upper_x, upper_y) = upper_left!(area);
+    let (max_x, max_y) = bottom_right!(area);
+    (
+        (
+            std::cmp::min(max_x, upper_x + top_x),
+            std::cmp::min(max_y, upper_y + top_y),
+        ),
+        (
+            std::cmp::min(max_x, upper_x + top_x + width),
+            std::cmp::min(max_y, upper_y + top_y + height),
+        ),
+    )
+}
+
 /// Place box given by `(width, height)` in corner of `area`
 pub fn place_in_area(area: Area, (width, height): (usize, usize), upper: bool, left: bool) -> Area {
     let (upper_x, upper_y) = upper_left!(area);
