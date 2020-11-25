@@ -733,6 +733,7 @@ pub struct Tabbed {
     help_content: CellBuffer,
     help_curr_views: ShortcutMaps,
     help_search: Option<SearchPattern>,
+    theme_default: ThemeAttribute,
 
     dirty: bool,
     id: ComponentId,
@@ -749,6 +750,7 @@ impl Tabbed {
             help_content: CellBuffer::default(),
             help_screen_cursor: (0, 0),
             help_search: None,
+            theme_default: crate::conf::value(context, "theme_default"),
             pinned,
             children,
             cursor_pos: 0,
@@ -951,8 +953,13 @@ impl Component for Tabbed {
                     ),
                 );
             }
+            let mut empty_cell = Cell::default();
+            empty_cell
+                .set_fg(self.theme_default.fg)
+                .set_bg(self.theme_default.bg)
+                .set_attrs(self.theme_default.attrs);
             self.help_content =
-                CellBuffer::new_with_context(max_width, max_length + 2, Cell::default(), context);
+                CellBuffer::new_with_context(max_width, max_length + 2, empty_cell, context);
             self.help_content.set_growable(true);
             let (width, height) = self.help_content.size();
             let (cols, rows) = (width!(area), height!(area));
@@ -968,27 +975,27 @@ impl Component for Tabbed {
             let (x, y) = write_string_to_grid(
                 "shortcut maps",
                 &mut self.help_content,
-                Color::Default,
-                Color::Default,
-                Attr::BOLD,
+                self.theme_default.fg,
+                self.theme_default.bg,
+                self.theme_default.attrs,
                 ((2, 0), (max_width.saturating_sub(2), max_length - 1)),
                 None,
             );
             write_string_to_grid(
                 "Press ? to close",
                 &mut self.help_content,
-                Color::Default,
-                Color::Default,
-                Attr::DEFAULT,
+                self.theme_default.fg,
+                self.theme_default.bg,
+                self.theme_default.attrs,
                 ((x + 1, y), (max_width.saturating_sub(2), max_length - 1)),
                 None,
             );
             write_string_to_grid(
                 "use COMMAND \"search\" to find shortcuts",
                 &mut self.help_content,
-                Color::Default,
-                Color::Default,
-                Attr::DEFAULT,
+                self.theme_default.fg,
+                self.theme_default.bg,
+                self.theme_default.attrs,
                 ((2, 1), (max_width.saturating_sub(2), max_length - 1)),
                 None,
             );
@@ -997,9 +1004,9 @@ impl Component for Tabbed {
                 write_string_to_grid(
                     "Use Up, Down, Left, Right to scroll.",
                     &mut self.help_content,
-                    Color::Default,
-                    Color::Default,
-                    Attr::DEFAULT,
+                    self.theme_default.fg,
+                    self.theme_default.bg,
+                    self.theme_default.attrs,
                     ((2, 2), (max_width.saturating_sub(2), max_length - 1)),
                     None,
                 );
@@ -1009,9 +1016,9 @@ impl Component for Tabbed {
                 write_string_to_grid(
                     desc,
                     &mut self.help_content,
-                    Color::Default,
-                    Color::Default,
-                    Attr::DEFAULT,
+                    self.theme_default.fg,
+                    self.theme_default.bg,
+                    self.theme_default.attrs,
                     ((2, 2 + idx), (max_width.saturating_sub(2), max_length - 1)),
                     None,
                 );
@@ -1021,18 +1028,18 @@ impl Component for Tabbed {
                     let (x, y) = write_string_to_grid(
                         &format!("{:1$}", v, max_width),
                         &mut self.help_content,
-                        Color::Default,
-                        Color::Default,
-                        Attr::BOLD,
+                        self.theme_default.fg,
+                        self.theme_default.bg,
+                        self.theme_default.attrs | Attr::BOLD,
                         ((2, 2 + idx), (max_width.saturating_sub(2), max_length - 1)),
                         None,
                     );
                     write_string_to_grid(
                         &k,
                         &mut self.help_content,
-                        Color::Default,
-                        Color::Default,
-                        Attr::DEFAULT,
+                        self.theme_default.fg,
+                        self.theme_default.bg,
+                        self.theme_default.attrs,
                         ((x + 2, y), (max_width.saturating_sub(2), max_length - 1)),
                         None,
                     );
