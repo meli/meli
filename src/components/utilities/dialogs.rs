@@ -29,6 +29,7 @@ const CANCEL_LENGTH: usize = "Cancel".len();
 
 #[derive(Debug, Copy, PartialEq, Clone)]
 enum SelectorCursor {
+    Unfocused,
     /// Cursor is at an entry
     Entry(usize),
     /// Cursor is located on the Ok button
@@ -175,6 +176,27 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                     context.replies.push_back(event);
                     context.replies.push_back(UIEvent::ComponentKill(self.id));
                 }
+                return true;
+            }
+            (UIEvent::Input(Key::Down), SelectorCursor::Unfocused) => {
+                if self.single_only {
+                    for c in self.content.row_iter(0..(width - 1), 0) {
+                        self.content[c]
+                            .set_fg(highlighted_attrs.fg)
+                            .set_bg(highlighted_attrs.bg)
+                            .set_attrs(highlighted_attrs.attrs);
+                    }
+                    self.entries[0].1 = true;
+                } else {
+                    for c in self.content.row_iter(0..3, 0) {
+                        self.content[c]
+                            .set_fg(highlighted_attrs.fg)
+                            .set_bg(highlighted_attrs.bg)
+                            .set_attrs(highlighted_attrs.attrs);
+                    }
+                }
+                self.cursor = SelectorCursor::Entry(0);
+                self.dirty = true;
                 return true;
             }
             (UIEvent::Input(Key::Up), SelectorCursor::Entry(c)) if c > 0 => {
@@ -531,6 +553,29 @@ impl Component for UIConfirmationDialog {
                 self.dirty = true;
                 return true;
             }
+            (UIEvent::Input(ref key), SelectorCursor::Unfocused)
+                if shortcut!(key == shortcuts["general"]["scroll_down"]) =>
+            {
+                if self.single_only {
+                    for c in self.content.row_iter(0..(width - 1), 0) {
+                        self.content[c]
+                            .set_fg(highlighted_attrs.fg)
+                            .set_bg(highlighted_attrs.bg)
+                            .set_attrs(highlighted_attrs.attrs);
+                    }
+                    self.entries[0].1 = true;
+                } else {
+                    for c in self.content.row_iter(0..3, 0) {
+                        self.content[c]
+                            .set_fg(highlighted_attrs.fg)
+                            .set_bg(highlighted_attrs.bg)
+                            .set_attrs(highlighted_attrs.attrs);
+                    }
+                }
+                self.cursor = SelectorCursor::Entry(0);
+                self.dirty = true;
+                return true;
+            }
             (UIEvent::Input(ref key), SelectorCursor::Entry(c))
                 if c < self.entries.len().saturating_sub(1)
                     && shortcut!(key == shortcuts["general"]["scroll_down"]) =>
@@ -767,7 +812,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selec
             single_only,
             entries: identifiers,
             content,
-            cursor: SelectorCursor::Entry(0),
+            cursor: SelectorCursor::Unfocused,
             vertical_alignment: Alignment::Center,
             horizontal_alignment: Alignment::Center,
             title: title.to_string(),
