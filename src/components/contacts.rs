@@ -179,7 +179,7 @@ impl Component for ContactManager {
         match self.mode {
             ViewMode::Discard(ref mut selector) => {
                 /* Let user choose whether to quit with/without saving or cancel */
-                selector.draw(grid, center_area(area, selector.content.size()), context);
+                selector.draw(grid, area, context);
             }
             _ => {}
         }

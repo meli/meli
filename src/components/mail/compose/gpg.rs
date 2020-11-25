@@ -101,9 +101,7 @@ impl Component for KeySelection {
                     Some(0),
                 );
             }
-            KeySelection::Loaded { ref mut widget, .. } => {
-                widget.draw(grid, center_area(area, widget.content.size()), context)
-            }
+            KeySelection::Loaded { ref mut widget, .. } => widget.draw(grid, area, context),
         }
     }
 

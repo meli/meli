@@ -21,6 +21,12 @@
 
 use super::*;
 
+const OK_CANCEL: &str = "OK    Cancel";
+const OK_OFFSET: usize = 0;
+const OK_LENGTH: usize = "OK".len();
+const CANCEL_OFFSET: usize = "OK    ".len();
+const CANCEL_LENGTH: usize = "Cancel".len();
+
 #[derive(Debug, Copy, PartialEq, Clone)]
 enum SelectorCursor {
     /// Cursor is at an entry
@@ -46,6 +52,9 @@ pub struct Selector<T: 'static + PartialEq + Debug + Clone + Sync + Send, F: 'st
     theme_default: ThemeAttribute,
 
     cursor: SelectorCursor,
+    vertical_alignment: Alignment,
+    horizontal_alignment: Alignment,
+    title: String,
 
     /// If true, user has finished their selection
     done: bool,
@@ -90,10 +99,9 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + S
 
 impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialog<T> {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        let (width, height) = self.content.size();
-        copy_area_with_break(grid, &self.content, area, ((0, 0), (width, height)));
-        context.dirty_areas.push_back(area);
+        Selector::draw(self, grid, area, context);
     }
+
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         let (width, height) = self.content.size();
         let shortcuts = self.get_shortcuts(context);
@@ -122,7 +130,7 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                         highlighted_attrs.fg,
                         highlighted_attrs.bg,
                         highlighted_attrs.attrs,
-                        ((3, c + 2), (width - 2, c + 2)),
+                        ((1, c), (width - 1, c)),
                         None,
                     );
                 } else {
@@ -132,7 +140,7 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                         highlighted_attrs.fg,
                         highlighted_attrs.bg,
                         highlighted_attrs.attrs,
-                        ((3, c + 2), (width - 2, c + 2)),
+                        ((1, c), (width - 1, c)),
                         None,
                     );
                 }
@@ -172,13 +180,13 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
             (UIEvent::Input(Key::Up), SelectorCursor::Entry(c)) if c > 0 => {
                 if self.single_only {
                     // Redraw selection
-                    for c in self.content.row_iter(2..(width - 2), c + 2) {
+                    for c in self.content.row_iter(0..(width - 1), c) {
                         self.content[c]
                             .set_fg(self.theme_default.fg)
                             .set_bg(self.theme_default.bg)
                             .set_attrs(self.theme_default.attrs);
                     }
-                    for c in self.content.row_iter(2..(width - 2), c + 1) {
+                    for c in self.content.row_iter(0..(width - 1), c - 1) {
                         self.content[c]
                             .set_fg(highlighted_attrs.fg)
                             .set_bg(highlighted_attrs.bg)
@@ -188,13 +196,13 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                     self.entries[c - 1].1 = true;
                 } else {
                     // Redraw cursor
-                    for c in self.content.row_iter(2..4, c + 2) {
+                    for c in self.content.row_iter(0..3, c) {
                         self.content[c]
                             .set_fg(self.theme_default.fg)
                             .set_bg(self.theme_default.bg)
                             .set_attrs(self.theme_default.attrs);
                     }
-                    for c in self.content.row_iter(2..4, c + 1) {
+                    for c in self.content.row_iter(0..3, c - 1) {
                         self.content[c]
                             .set_fg(highlighted_attrs.fg)
                             .set_bg(highlighted_attrs.bg)
@@ -209,10 +217,10 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
             | (UIEvent::Input(ref key), SelectorCursor::Cancel)
                 if shortcut!(key == shortcuts["general"]["scroll_up"]) =>
             {
-                for c in self.content.row_iter(
-                    ((width - "OK    Cancel".len()) / 2)..(width - 1),
-                    height - 3,
-                ) {
+                for c in self
+                    .content
+                    .row_iter(((width - OK_CANCEL.len()) / 2)..(width - 1), height - 1)
+                {
                     self.content[c]
                         .set_fg(self.theme_default.fg)
                         .set_bg(self.theme_default.bg)
@@ -220,7 +228,7 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                 }
                 let c = self.entries.len().saturating_sub(1);
                 self.cursor = SelectorCursor::Entry(c);
-                for c in self.content.row_iter(2..4, c + 2) {
+                for c in self.content.row_iter(0..3, c) {
                     self.content[c]
                         .set_fg(highlighted_attrs.fg)
                         .set_bg(highlighted_attrs.bg)
@@ -235,13 +243,13 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
             {
                 if self.single_only {
                     // Redraw selection
-                    for c in self.content.row_iter(2..(width - 2), c + 2) {
+                    for c in self.content.row_iter(0..(width - 1), c) {
                         self.content[c]
                             .set_fg(self.theme_default.fg)
                             .set_bg(self.theme_default.bg)
                             .set_attrs(self.theme_default.attrs);
                     }
-                    for c in self.content.row_iter(2..(width - 2), c + 3) {
+                    for c in self.content.row_iter(0..(width - 1), c + 1) {
                         self.content[c]
                             .set_fg(highlighted_attrs.fg)
                             .set_bg(highlighted_attrs.bg)
@@ -251,13 +259,13 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                     self.entries[c + 1].1 = true;
                 } else {
                     // Redraw cursor
-                    for c in self.content.row_iter(2..4, c + 2) {
+                    for c in self.content.row_iter(0..3, c) {
                         self.content[c]
                             .set_fg(self.theme_default.fg)
                             .set_bg(self.theme_default.bg)
                             .set_attrs(self.theme_default.attrs);
                     }
-                    for c in self.content.row_iter(2..4, c + 3) {
+                    for c in self.content.row_iter(0..3, c + 1) {
                         self.content[c]
                             .set_fg(highlighted_attrs.fg)
                             .set_bg(highlighted_attrs.bg)
@@ -272,15 +280,16 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                 if !self.single_only && shortcut!(key == shortcuts["general"]["scroll_down"]) =>
             {
                 self.cursor = SelectorCursor::Ok;
-                for c in self.content.row_iter(2..4, c + 2) {
+                for c in self.content.row_iter(0..3, c) {
                     self.content[c]
                         .set_fg(self.theme_default.fg)
                         .set_bg(self.theme_default.bg)
                         .set_attrs(self.theme_default.attrs);
                 }
                 for c in self.content.row_iter(
-                    ((width - "OK    Cancel".len()) / 2)..((width - "OK    Cancel".len()) / 2 + 1),
-                    height - 3,
+                    ((width - OK_CANCEL.len()) / 2 + OK_OFFSET)
+                        ..((width - OK_CANCEL.len()) / 2 + OK_OFFSET + OK_LENGTH),
+                    height - 1,
                 ) {
                     self.content[c]
                         .set_fg(highlighted_attrs.fg)
@@ -295,8 +304,9 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
             {
                 self.cursor = SelectorCursor::Cancel;
                 for c in self.content.row_iter(
-                    ((width - "OK    Cancel".len()) / 2)..((width - "OK    Cancel".len()) / 2 + 1),
-                    height - 3,
+                    ((width - OK_CANCEL.len()) / 2 + OK_OFFSET)
+                        ..((width - OK_CANCEL.len()) / 2 + OK_OFFSET + OK_LENGTH),
+                    height - 1,
                 ) {
                     self.content[c]
                         .set_fg(self.theme_default.fg)
@@ -304,9 +314,9 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                         .set_attrs(self.theme_default.attrs);
                 }
                 for c in self.content.row_iter(
-                    ((width - "OK    Cancel".len()) / 2 + 6)
-                        ..((width - "OK    Cancel".len()) / 2 + 11),
-                    height - 3,
+                    ((width - OK_CANCEL.len()) / 2 + CANCEL_OFFSET)
+                        ..((width - OK_CANCEL.len()) / 2 + CANCEL_OFFSET + CANCEL_LENGTH),
+                    height - 1,
                 ) {
                     self.content[c]
                         .set_fg(highlighted_attrs.fg)
@@ -321,8 +331,9 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
             {
                 self.cursor = SelectorCursor::Ok;
                 for c in self.content.row_iter(
-                    ((width - "OK    Cancel".len()) / 2)..((width - "OK    Cancel".len()) / 2 + 1),
-                    height - 3,
+                    ((width - OK_CANCEL.len()) / 2 + OK_OFFSET)
+                        ..((width - OK_CANCEL.len()) / 2 + OK_OFFSET + OK_LENGTH),
+                    height - 1,
                 ) {
                     self.content[c]
                         .set_fg(highlighted_attrs.fg)
@@ -332,8 +343,11 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                 change_colors(
                     &mut self.content,
                     (
-                        ((width - "OK    Cancel".len()) / 2 + 6, height - 3),
-                        ((width - "OK    Cancel".len()) / 2 + 11, height - 3),
+                        ((width - OK_CANCEL.len()) / 2 + CANCEL_OFFSET, height - 1),
+                        (
+                            (width - OK_CANCEL.len()) / 2 + CANCEL_OFFSET + CANCEL_LENGTH,
+                            height - 1,
+                        ),
                     ),
                     self.theme_default.fg,
                     self.theme_default.bg,
@@ -354,6 +368,7 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
 
         false
     }
+
     fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut map = ShortcutMaps::default();
         map.insert("general", context.settings.shortcuts.general.key_values());
@@ -363,6 +378,7 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
     fn is_dirty(&self) -> bool {
         self.dirty
     }
+
     fn set_dirty(&mut self, value: bool) {
         self.dirty = value;
     }
@@ -377,10 +393,9 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
 
 impl Component for UIConfirmationDialog {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        let (width, height) = self.content.size();
-        copy_area_with_break(grid, &self.content, area, ((0, 0), (width, height)));
-        context.dirty_areas.push_back(area);
+        Selector::draw(self, grid, area, context);
     }
+
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         let (width, height) = self.content.size();
         let shortcuts = self.get_shortcuts(context);
@@ -409,7 +424,7 @@ impl Component for UIConfirmationDialog {
                         highlighted_attrs.fg,
                         highlighted_attrs.bg,
                         highlighted_attrs.attrs,
-                        ((3, c + 2), (width - 2, c + 2)),
+                        ((1, c), (width - 1, c)),
                         None,
                     );
                 } else {
@@ -419,7 +434,7 @@ impl Component for UIConfirmationDialog {
                         highlighted_attrs.fg,
                         highlighted_attrs.bg,
                         highlighted_attrs.attrs,
-                        ((3, c + 2), (width - 2, c + 2)),
+                        ((1, c), (width - 1, c)),
                         None,
                     );
                 }
@@ -459,13 +474,13 @@ impl Component for UIConfirmationDialog {
             (UIEvent::Input(Key::Up), SelectorCursor::Entry(c)) if c > 0 => {
                 if self.single_only {
                     // Redraw selection
-                    for c in self.content.row_iter(2..(width - 2), c + 2) {
+                    for c in self.content.row_iter(0..(width - 1), c) {
                         self.content[c]
                             .set_fg(self.theme_default.fg)
                             .set_bg(self.theme_default.bg)
                             .set_attrs(self.theme_default.attrs);
                     }
-                    for c in self.content.row_iter(2..(width - 2), c + 1) {
+                    for c in self.content.row_iter(0..(width - 1), c - 1) {
                         self.content[c]
                             .set_fg(highlighted_attrs.fg)
                             .set_bg(highlighted_attrs.bg)
@@ -475,13 +490,13 @@ impl Component for UIConfirmationDialog {
                     self.entries[c - 1].1 = true;
                 } else {
                     // Redraw cursor
-                    for c in self.content.row_iter(2..4, c + 2) {
+                    for c in self.content.row_iter(0..3, c) {
                         self.content[c]
                             .set_fg(self.theme_default.fg)
                             .set_bg(self.theme_default.bg)
                             .set_attrs(self.theme_default.attrs);
                     }
-                    for c in self.content.row_iter(2..4, c + 1) {
+                    for c in self.content.row_iter(0..3, c - 1) {
                         self.content[c]
                             .set_fg(highlighted_attrs.fg)
                             .set_bg(highlighted_attrs.bg)
@@ -496,10 +511,10 @@ impl Component for UIConfirmationDialog {
             | (UIEvent::Input(ref key), SelectorCursor::Cancel)
                 if shortcut!(key == shortcuts["general"]["scroll_up"]) =>
             {
-                for c in self.content.row_iter(
-                    ((width - "OK    Cancel".len()) / 2)..(width - 1),
-                    height - 3,
-                ) {
+                for c in self
+                    .content
+                    .row_iter(((width - OK_CANCEL.len()) / 2)..(width - 1), height - 1)
+                {
                     self.content[c]
                         .set_fg(self.theme_default.fg)
                         .set_bg(self.theme_default.bg)
@@ -507,7 +522,7 @@ impl Component for UIConfirmationDialog {
                 }
                 let c = self.entries.len().saturating_sub(1);
                 self.cursor = SelectorCursor::Entry(c);
-                for c in self.content.row_iter(2..4, c + 2) {
+                for c in self.content.row_iter(0..3, c) {
                     self.content[c]
                         .set_fg(highlighted_attrs.fg)
                         .set_bg(highlighted_attrs.bg)
@@ -522,13 +537,13 @@ impl Component for UIConfirmationDialog {
             {
                 if self.single_only {
                     // Redraw selection
-                    for c in self.content.row_iter(2..(width - 2), c + 2) {
+                    for c in self.content.row_iter(0..(width - 1), c) {
                         self.content[c]
                             .set_fg(self.theme_default.fg)
                             .set_bg(self.theme_default.bg)
                             .set_attrs(self.theme_default.attrs);
                     }
-                    for c in self.content.row_iter(2..(width - 2), c + 3) {
+                    for c in self.content.row_iter(0..(width - 1), c + 1) {
                         self.content[c]
                             .set_fg(highlighted_attrs.fg)
                             .set_bg(highlighted_attrs.bg)
@@ -538,13 +553,13 @@ impl Component for UIConfirmationDialog {
                     self.entries[c + 1].1 = true;
                 } else {
                     // Redraw cursor
-                    for c in self.content.row_iter(2..4, c + 2) {
+                    for c in self.content.row_iter(0..3, c) {
                         self.content[c]
                             .set_fg(self.theme_default.fg)
                             .set_bg(self.theme_default.bg)
                             .set_attrs(self.theme_default.attrs);
                     }
-                    for c in self.content.row_iter(2..4, c + 3) {
+                    for c in self.content.row_iter(0..3, c + 1) {
                         self.content[c]
                             .set_fg(highlighted_attrs.fg)
                             .set_bg(highlighted_attrs.bg)
@@ -559,15 +574,16 @@ impl Component for UIConfirmationDialog {
                 if !self.single_only && shortcut!(key == shortcuts["general"]["scroll_down"]) =>
             {
                 self.cursor = SelectorCursor::Ok;
-                for c in self.content.row_iter(2..4, c + 2) {
+                for c in self.content.row_iter(0..3, c) {
                     self.content[c]
                         .set_fg(self.theme_default.fg)
                         .set_bg(self.theme_default.bg)
                         .set_attrs(self.theme_default.attrs);
                 }
                 for c in self.content.row_iter(
-                    ((width - "OK    Cancel".len()) / 2)..((width - "OK    Cancel".len()) / 2 + 1),
-                    height - 3,
+                    ((width - OK_CANCEL.len()) / 2 + OK_OFFSET)
+                        ..((width - OK_CANCEL.len()) / 2 + OK_OFFSET + OK_LENGTH),
+                    height - 1,
                 ) {
                     self.content[c]
                         .set_fg(highlighted_attrs.fg)
@@ -582,8 +598,9 @@ impl Component for UIConfirmationDialog {
             {
                 self.cursor = SelectorCursor::Cancel;
                 for c in self.content.row_iter(
-                    ((width - "OK    Cancel".len()) / 2)..((width - "OK    Cancel".len()) / 2 + 1),
-                    height - 3,
+                    ((width - OK_CANCEL.len()) / 2 + OK_OFFSET)
+                        ..((width - OK_CANCEL.len()) / 2 + OK_OFFSET + OK_LENGTH),
+                    height - 1,
                 ) {
                     self.content[c]
                         .set_fg(self.theme_default.fg)
@@ -591,9 +608,9 @@ impl Component for UIConfirmationDialog {
                         .set_attrs(self.theme_default.attrs);
                 }
                 for c in self.content.row_iter(
-                    ((width - "OK    Cancel".len()) / 2 + 6)
-                        ..((width - "OK    Cancel".len()) / 2 + 11),
-                    height - 3,
+                    ((width - OK_CANCEL.len()) / 2 + CANCEL_OFFSET)
+                        ..((width - OK_CANCEL.len()) / 2 + CANCEL_OFFSET + CANCEL_LENGTH),
+                    height - 1,
                 ) {
                     self.content[c]
                         .set_fg(highlighted_attrs.fg)
@@ -608,8 +625,9 @@ impl Component for UIConfirmationDialog {
             {
                 self.cursor = SelectorCursor::Ok;
                 for c in self.content.row_iter(
-                    ((width - "OK    Cancel".len()) / 2)..((width - "OK    Cancel".len()) / 2 + 1),
-                    height - 3,
+                    ((width - OK_CANCEL.len()) / 2 + OK_OFFSET)
+                        ..((width - OK_CANCEL.len()) / 2 + OK_OFFSET + OK_LENGTH),
+                    height - 1,
                 ) {
                     self.content[c]
                         .set_fg(highlighted_attrs.fg)
@@ -619,8 +637,11 @@ impl Component for UIConfirmationDialog {
                 change_colors(
                     &mut self.content,
                     (
-                        ((width - "OK    Cancel".len()) / 2 + 6, height - 3),
-                        ((width - "OK    Cancel".len()) / 2 + 11, height - 3),
+                        ((width - OK_CANCEL.len()) / 2 + CANCEL_OFFSET, height - 1),
+                        (
+                            (width - OK_CANCEL.len()) / 2 + CANCEL_OFFSET + CANCEL_LENGTH,
+                            height - 1,
+                        ),
                     ),
                     self.theme_default.fg,
                     self.theme_default.bg,
@@ -641,6 +662,7 @@ impl Component for UIConfirmationDialog {
 
         false
     }
+
     fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut map = ShortcutMaps::default();
         map.insert("general", context.settings.shortcuts.general.key_values());
@@ -650,6 +672,7 @@ impl Component for UIConfirmationDialog {
     fn is_dirty(&self) -> bool {
         self.dirty
     }
+
     fn set_dirty(&mut self, value: bool) {
         self.dirty = value;
     }
@@ -657,6 +680,7 @@ impl Component for UIConfirmationDialog {
     fn id(&self) -> ComponentId {
         self.id
     }
+
     fn set_id(&mut self, id: ComponentId) {
         self.id = id;
     }
@@ -677,7 +701,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selec
             .set_bg(theme_default.bg)
             .set_attrs(theme_default.attrs);
         let width = std::cmp::max(
-            "OK    Cancel".len(),
+            OK_CANCEL.len(),
             std::cmp::max(
                 entries
                     .iter()
@@ -686,127 +710,24 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selec
                     .unwrap_or(0),
                 title.len(),
             ),
-        ) + 7;
+        ) + 5;
         let height = entries.len()
-            + 4
             + if single_only {
                 0
             } else {
                 /* Extra room for buttons Okay/Cancel */
-                3
+                2
             };
         let mut content = CellBuffer::new_with_context(width, height, empty_cell, context);
-        let ascii_drawing = context.settings.terminal.ascii_drawing;
-        write_string_to_grid(
-            if ascii_drawing { "+-" } else { "┏━" },
-            &mut content,
-            Color::Byte(8),
-            theme_default.bg,
-            theme_default.attrs,
-            ((0, 0), (width - 1, 0)),
-            None,
-        );
-        let (x, _) = write_string_to_grid(
-            title,
-            &mut content,
-            theme_default.fg,
-            theme_default.bg,
-            theme_default.attrs,
-            ((2, 0), (width - 1, 0)),
-            None,
-        );
-        for i in 1..(width - title.len() - 1) {
-            write_string_to_grid(
-                if ascii_drawing { "-" } else { "━" },
-                &mut content,
-                Color::Byte(8),
-                theme_default.bg,
-                theme_default.attrs,
-                ((x + i, 0), (width - 1, 0)),
-                None,
-            );
-        }
-        write_string_to_grid(
-            if ascii_drawing { "+" } else { "┓" },
-            &mut content,
-            Color::Byte(8),
-            theme_default.bg,
-            theme_default.attrs,
-            ((width - 1, 0), (width - 1, 0)),
-            None,
-        );
-        write_string_to_grid(
-            if ascii_drawing { "+" } else { "┗" },
-            &mut content,
-            Color::Byte(8),
-            theme_default.bg,
-            theme_default.attrs,
-            ((0, height - 1), (width - 1, height - 1)),
-            None,
-        );
-        write_string_to_grid(
-            &if ascii_drawing {
-                "-".repeat(width - 2)
-            } else {
-                "━".repeat(width - 2)
-            },
-            &mut content,
-            Color::Byte(8),
-            theme_default.bg,
-            theme_default.attrs,
-            ((1, height - 1), (width - 2, height - 1)),
-            None,
-        );
-        write_string_to_grid(
-            if ascii_drawing { "+" } else { "┛" },
-            &mut content,
-            Color::Byte(8),
-            theme_default.bg,
-            theme_default.attrs,
-            ((width - 1, height - 1), (width - 1, height - 1)),
-            None,
-        );
-        for i in 1..height - 1 {
-            write_string_to_grid(
-                if ascii_drawing { "|" } else { "┃" },
-                &mut content,
-                Color::Byte(8),
-                theme_default.bg,
-                theme_default.attrs,
-                ((0, i), (width - 1, i)),
-                None,
-            );
-            write_string_to_grid(
-                if ascii_drawing { "|" } else { "┃" },
-                &mut content,
-                Color::Byte(8),
-                theme_default.bg,
-                theme_default.attrs,
-                ((width - 1, i), (width - 1, i)),
-                None,
-            );
-        }
-        let mut highlighted_attrs = crate::conf::value(context, "widgets.options.highlighted");
-        if !context.settings.terminal.use_color() {
-            highlighted_attrs.attrs |= Attr::REVERSE;
-        }
         if single_only {
             for (i, e) in entries.iter().enumerate() {
                 write_string_to_grid(
                     &e.1,
                     &mut content,
                     theme_default.fg,
-                    if i == 0 {
-                        highlighted_attrs.bg
-                    } else {
-                        theme_default.bg
-                    },
-                    if i == 0 {
-                        highlighted_attrs.attrs
-                    } else {
-                        theme_default.attrs
-                    },
-                    ((2, i + 2), (width - 1, i + 2)),
+                    theme_default.bg,
+                    theme_default.attrs,
+                    ((0, i), (width - 1, i)),
                     None,
                 );
             }
@@ -818,30 +739,19 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selec
                     theme_default.fg,
                     theme_default.bg,
                     theme_default.attrs,
-                    ((2, i + 2), (width - 1, i + 2)),
+                    ((0, i), (width - 1, i)),
                     None,
                 );
-                if i == 0 {
-                    content[(2, i + 2)]
-                        .set_bg(highlighted_attrs.bg)
-                        .set_attrs(highlighted_attrs.attrs);
-                    content[(3, i + 2)]
-                        .set_bg(highlighted_attrs.bg)
-                        .set_attrs(highlighted_attrs.attrs);
-                    content[(4, i + 2)]
-                        .set_bg(highlighted_attrs.bg)
-                        .set_attrs(highlighted_attrs.attrs);
-                }
             }
             write_string_to_grid(
-                "OK    Cancel",
+                OK_CANCEL,
                 &mut content,
                 theme_default.fg,
                 theme_default.bg,
                 theme_default.attrs | Attr::BOLD,
                 (
-                    ((width - "OK    Cancel".len()) / 2, height - 3),
-                    (width - 1, height - 3),
+                    ((width - OK_CANCEL.len()) / 2, height - 1),
+                    (width - 1, height - 1),
                 ),
                 None,
             );
@@ -858,6 +768,9 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selec
             entries: identifiers,
             content,
             cursor: SelectorCursor::Entry(0),
+            vertical_alignment: Alignment::Center,
+            horizontal_alignment: Alignment::Center,
+            title: title.to_string(),
             done: false,
             done_fn,
             dirty: true,
@@ -876,6 +789,68 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selec
             .filter(|v| v.1)
             .map(|(id, _)| id)
             .collect()
+    }
+
+    fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        let navigate_help_string = format!(
+            "Navigate options with {}, {}, select with {}",
+            Key::Up,
+            Key::Down,
+            Key::Char('\n')
+        );
+        let width = std::cmp::max(
+            self.content.size().0 + 1,
+            std::cmp::max(self.title.len(), navigate_help_string.len()) + 3,
+        ) + 3;
+        let height = self.content.size().1 + {
+            /* padding */
+            3
+        };
+        let dialog_area = align_area(
+            area,
+            (width, height),
+            self.vertical_alignment,
+            self.horizontal_alignment,
+        );
+        clear_area(grid, dialog_area, self.theme_default);
+        let inner_area = create_box(grid, dialog_area);
+        write_string_to_grid(
+            &self.title,
+            grid,
+            self.theme_default.fg,
+            self.theme_default.bg,
+            self.theme_default.attrs | Attr::BOLD,
+            (
+                pos_inc(upper_left!(dialog_area), (2, 0)),
+                bottom_right!(dialog_area),
+            ),
+            None,
+        );
+        write_string_to_grid(
+            &navigate_help_string,
+            grid,
+            self.theme_default.fg,
+            self.theme_default.bg,
+            self.theme_default.attrs | Attr::ITALICS,
+            (
+                pos_inc(upper_left!(dialog_area), (2, height)),
+                bottom_right!(dialog_area),
+            ),
+            None,
+        );
+        let inner_area = (
+            pos_inc(upper_left!(inner_area), (1, 1)),
+            bottom_right!(inner_area),
+        );
+        let (width, height) = self.content.size();
+        copy_area(
+            grid,
+            &self.content,
+            inner_area,
+            ((0, 0), (width - 1, height - 1)),
+        );
+        context.dirty_areas.push_back(dialog_area);
+        self.dirty = false;
     }
 }
 

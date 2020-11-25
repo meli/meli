@@ -1409,7 +1409,7 @@ impl Component for MailView {
             }
         }
         if let ViewMode::ContactSelector(ref mut s) = self.mode {
-            s.draw(grid, center_area(area, s.content.size()), context);
+            s.draw(grid, area, context);
         }
     }
 

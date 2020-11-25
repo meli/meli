@@ -891,7 +891,7 @@ impl Component for Composer {
                 );
             }
             ViewMode::Send(ref mut s) => {
-                s.draw(grid, center_area(area, s.content.size()), context);
+                s.draw(grid, area, context);
             }
             #[cfg(feature = "gpgme")]
             ViewMode::SelectEncryptKey(
@@ -901,20 +901,20 @@ impl Component for Composer {
                     keys: _,
                 },
             ) => {
-                widget.draw(grid, center_area(area, widget.content.size()), context);
+                widget.draw(grid, area, context);
             }
             #[cfg(feature = "gpgme")]
             ViewMode::SelectEncryptKey(_, _) => {}
             ViewMode::SelectRecipients(ref mut s) => {
-                s.draw(grid, center_area(area, s.content.size()), context);
+                s.draw(grid, area, context);
             }
             ViewMode::Discard(_, ref mut s) => {
                 /* Let user choose whether to quit with/without saving or cancel */
-                s.draw(grid, center_area(area, s.content.size()), context);
+                s.draw(grid, area, context);
             }
             ViewMode::WaitingForSendResult(ref mut s, _) => {
                 /* Let user choose whether to wait for success or cancel */
-                s.draw(grid, center_area(area, s.content.size()), context);
+                s.draw(grid, area, context);
             }
         }
         if !self.mode.is_edit_attachments() {
