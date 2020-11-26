@@ -1468,6 +1468,9 @@ impl Listing {
         self.dirty = false;
         let mut y = get_y(upper_left);
         for a in &self.accounts {
+            if y > get_y(bottom_right) {
+                break;
+            }
             y += self.print_account(grid, (set_y(upper_left, y), bottom_right), &a, context);
             y += 3;
         }
@@ -1484,9 +1487,7 @@ impl Listing {
         a: &AccountMenuEntry,
         context: &mut Context,
     ) -> usize {
-        if !is_valid_area!(area) {
-            debug!("BUG: invalid area in print_account");
-        }
+        debug_assert!(is_valid_area!(area));
         // Each entry and its index in the account
         let mailboxes: HashMap<MailboxHash, Mailbox> = context.accounts[a.index]
             .mailbox_entries
