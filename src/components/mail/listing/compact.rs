@@ -227,17 +227,10 @@ impl MailListingTrait for CompactListing {
         match context.accounts[&self.cursor_pos.0].load(self.cursor_pos.1) {
             Ok(()) => {}
             Err(_) => {
-                let default_cell = {
-                    let mut ret = Cell::with_char(' ');
-                    ret.set_fg(self.color_cache.theme_default.fg)
-                        .set_bg(self.color_cache.theme_default.bg)
-                        .set_attrs(self.color_cache.theme_default.attrs);
-                    ret
-                };
                 let message: String =
                     context.accounts[&self.cursor_pos.0][&self.cursor_pos.1].status();
                 self.data_columns.columns[0] =
-                    CellBuffer::new_with_context(message.len(), 1, default_cell, context);
+                    CellBuffer::new_with_context(message.len(), 1, None, context);
                 self.length = 0;
                 write_string_to_grid(
                     message.as_str(),
@@ -392,30 +385,23 @@ impl MailListingTrait for CompactListing {
 
         min_width.0 = self.length.saturating_sub(1).to_string().len();
 
-        let default_cell = {
-            let mut ret = Cell::with_char(' ');
-            ret.set_fg(self.color_cache.theme_default.fg)
-                .set_bg(self.color_cache.theme_default.bg)
-                .set_attrs(self.color_cache.theme_default.attrs);
-            ret
-        };
         /* index column */
         self.data_columns.columns[0] =
-            CellBuffer::new_with_context(min_width.0, rows.len(), default_cell, context);
+            CellBuffer::new_with_context(min_width.0, rows.len(), None, context);
 
         /* date column */
         self.data_columns.columns[1] =
-            CellBuffer::new_with_context(min_width.1, rows.len(), default_cell, context);
+            CellBuffer::new_with_context(min_width.1, rows.len(), None, context);
         /* from column */
         self.data_columns.columns[2] =
-            CellBuffer::new_with_context(min_width.2, rows.len(), default_cell, context);
+            CellBuffer::new_with_context(min_width.2, rows.len(), None, context);
         self.data_columns.segment_tree[2] = row_widths.2.into();
         /* flags column */
         self.data_columns.columns[3] =
-            CellBuffer::new_with_context(min_width.3, rows.len(), default_cell, context);
+            CellBuffer::new_with_context(min_width.3, rows.len(), None, context);
         /* subject column */
         self.data_columns.columns[4] =
-            CellBuffer::new_with_context(min_width.4, rows.len(), default_cell, context);
+            CellBuffer::new_with_context(min_width.4, rows.len(), None, context);
         self.data_columns.segment_tree[4] = row_widths.4.into();
 
         self.rows = rows;
@@ -433,7 +419,7 @@ impl MailListingTrait for CompactListing {
         if self.length == 0 && self.filter_term.is_empty() {
             let message: String = account[&self.cursor_pos.1].status();
             self.data_columns.columns[0] =
-                CellBuffer::new_with_context(message.len(), self.length + 1, default_cell, context);
+                CellBuffer::new_with_context(message.len(), self.length + 1, None, context);
             write_string_to_grid(
                 &message,
                 &mut self.data_columns.columns[0],
@@ -804,15 +790,8 @@ impl ListingTrait for CompactListing {
                     self.new_cursor_pos.2 =
                         std::cmp::min(self.filtered_selection.len() - 1, self.cursor_pos.2);
                 } else {
-                    let default_cell = {
-                        let mut ret = Cell::with_char(' ');
-                        ret.set_fg(self.color_cache.theme_default.fg)
-                            .set_bg(self.color_cache.theme_default.bg)
-                            .set_attrs(self.color_cache.theme_default.attrs);
-                        ret
-                    };
                     self.data_columns.columns[0] =
-                        CellBuffer::new_with_context(0, 0, default_cell, context);
+                        CellBuffer::new_with_context(0, 0, None, context);
                 }
                 self.redraw_threads_list(
                     context,
@@ -831,15 +810,8 @@ impl ListingTrait for CompactListing {
                     format!("Failed to search for term {}: {}", &self.filter_term, e),
                     ERROR,
                 );
-                let default_cell = {
-                    let mut ret = Cell::with_char(' ');
-                    ret.set_fg(self.color_cache.theme_default.fg)
-                        .set_bg(self.color_cache.theme_default.bg)
-                        .set_attrs(self.color_cache.theme_default.attrs);
-                    ret
-                };
                 self.data_columns.columns[0] =
-                    CellBuffer::new_with_context(message.len(), 1, default_cell, context);
+                    CellBuffer::new_with_context(message.len(), 1, None, context);
                 write_string_to_grid(
                     &message,
                     &mut self.data_columns.columns[0],

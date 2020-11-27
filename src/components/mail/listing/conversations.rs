@@ -195,17 +195,9 @@ impl MailListingTrait for ConversationsListing {
         match context.accounts[&self.cursor_pos.0].load(self.cursor_pos.1) {
             Ok(()) => {}
             Err(_) => {
-                let default_cell = {
-                    let mut ret = Cell::with_char(' ');
-                    ret.set_fg(self.color_cache.theme_default.fg)
-                        .set_bg(self.color_cache.theme_default.bg)
-                        .set_attrs(self.color_cache.theme_default.attrs);
-                    ret
-                };
                 let message: String =
                     context.accounts[&self.cursor_pos.0][&self.cursor_pos.1].status();
-                self.content =
-                    CellBuffer::new_with_context(message.len(), 1, default_cell, context);
+                self.content = CellBuffer::new_with_context(message.len(), 1, None, context);
                 self.length = 0;
                 write_string_to_grid(
                     message.as_str(),
@@ -353,8 +345,7 @@ impl MailListingTrait for ConversationsListing {
         }
 
         let width = max_entry_columns;
-        self.content =
-            CellBuffer::new_with_context(width, 4 * rows.len(), Cell::with_char(' '), context);
+        self.content = CellBuffer::new_with_context(width, 4 * rows.len(), None, context);
 
         let padding_fg = self.color_cache.padding.fg;
 
@@ -484,15 +475,8 @@ impl MailListingTrait for ConversationsListing {
             }
         }
         if self.length == 0 && self.filter_term.is_empty() {
-            let default_cell = {
-                let mut ret = Cell::with_char(' ');
-                ret.set_fg(self.color_cache.theme_default.fg)
-                    .set_bg(self.color_cache.theme_default.bg)
-                    .set_attrs(self.color_cache.theme_default.attrs);
-                ret
-            };
             let message: String = account[&self.cursor_pos.1].status();
-            self.content = CellBuffer::new_with_context(message.len(), 1, default_cell, context);
+            self.content = CellBuffer::new_with_context(message.len(), 1, None, context);
             write_string_to_grid(
                 &message,
                 &mut self.content,
@@ -820,14 +804,7 @@ impl ListingTrait for ConversationsListing {
                     self.new_cursor_pos.2 =
                         std::cmp::min(self.filtered_selection.len() - 1, self.cursor_pos.2);
                 } else {
-                    let default_cell = {
-                        let mut ret = Cell::with_char(' ');
-                        ret.set_fg(self.color_cache.theme_default.fg)
-                            .set_bg(self.color_cache.theme_default.bg)
-                            .set_attrs(self.color_cache.theme_default.attrs);
-                        ret
-                    };
-                    self.content = CellBuffer::new_with_context(0, 0, default_cell, context);
+                    self.content = CellBuffer::new_with_context(0, 0, None, context);
                 }
                 self.redraw_threads_list(
                     context,
@@ -846,15 +823,7 @@ impl ListingTrait for ConversationsListing {
                     format!("Failed to search for term {}: {}", self.filter_term, e),
                     ERROR,
                 );
-                let default_cell = {
-                    let mut ret = Cell::with_char(' ');
-                    ret.set_fg(self.color_cache.theme_default.fg)
-                        .set_bg(self.color_cache.theme_default.bg)
-                        .set_attrs(self.color_cache.theme_default.attrs);
-                    ret
-                };
-                self.content =
-                    CellBuffer::new_with_context(message.len(), 1, default_cell, context);
+                self.content = CellBuffer::new_with_context(message.len(), 1, None, context);
                 write_string_to_grid(
                     &message,
                     &mut self.content,

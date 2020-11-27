@@ -61,6 +61,7 @@ pub struct CellBuffer {
     cols: usize,
     rows: usize,
     buf: Vec<Cell>,
+    pub default_cell: Cell,
     /// ASCII-only flag.
     pub ascii_drawing: bool,
     /// If printing to this buffer and we run out of space, expand it.
@@ -99,6 +100,7 @@ impl CellBuffer {
             cols,
             rows,
             buf: vec![cell; cols * rows],
+            default_cell: cell,
             growable: false,
             ascii_drawing: false,
             tag_table: Default::default(),
@@ -106,11 +108,25 @@ impl CellBuffer {
         }
     }
 
-    pub fn new_with_context(cols: usize, rows: usize, cell: Cell, context: &Context) -> CellBuffer {
+    pub fn new_with_context(
+        cols: usize,
+        rows: usize,
+        default_cell: Option<Cell>,
+        context: &Context,
+    ) -> CellBuffer {
+        let default_cell = default_cell.unwrap_or_else(|| {
+            let mut ret = Cell::default();
+            let theme_default = crate::conf::value(context, "theme_default");
+            ret.set_fg(theme_default.fg)
+                .set_bg(theme_default.bg)
+                .set_attrs(theme_default.attrs);
+            ret
+        });
         CellBuffer {
             cols,
             rows,
-            buf: vec![cell; cols * rows],
+            buf: vec![default_cell; cols * rows],
+            default_cell,
             growable: false,
             ascii_drawing: context.settings.terminal.ascii_drawing,
             tag_table: Default::default(),
@@ -2301,6 +2317,7 @@ pub mod ansi {
             buf,
             rows,
             cols: max_cols,
+            default_cell: Cell::default(),
             growable: false,
             ascii_drawing: false,
             tag_table: Default::default(),

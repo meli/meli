@@ -179,12 +179,12 @@ impl Pager {
             return Pager::from_buf(content, cursor_pos);
         }
         let content = {
-            let mut empty_cell = Cell::with_char(' ');
-            empty_cell.set_fg(colors.fg);
-            empty_cell.set_bg(colors.bg);
             if let Some(context) = context {
-                CellBuffer::new_with_context(1, 1, empty_cell, context)
+                CellBuffer::new_with_context(1, 1, None, context)
             } else {
+                let mut empty_cell = Cell::with_char(' ');
+                empty_cell.set_fg(colors.fg);
+                empty_cell.set_bg(colors.bg);
                 CellBuffer::new(1, 1, empty_cell)
             }
         };

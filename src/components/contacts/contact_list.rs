@@ -136,25 +136,18 @@ impl ContactList {
             min_width.2 = cmp::max(min_width.2, c.url().split_graphemes().len());
         }
 
-        let default_cell = {
-            let mut ret = Cell::with_char(' ');
-            ret.set_fg(self.theme_default.fg)
-                .set_bg(self.theme_default.bg)
-                .set_attrs(self.theme_default.attrs);
-            ret
-        };
         /* name column */
         self.data_columns.columns[0] =
-            CellBuffer::new_with_context(min_width.0, self.length, default_cell, context);
+            CellBuffer::new_with_context(min_width.0, self.length, None, context);
         /* email column */
         self.data_columns.columns[1] =
-            CellBuffer::new_with_context(min_width.1, self.length, default_cell, context);
+            CellBuffer::new_with_context(min_width.1, self.length, None, context);
         /* url column */
         self.data_columns.columns[2] =
-            CellBuffer::new_with_context(min_width.2, self.length, default_cell, context);
+            CellBuffer::new_with_context(min_width.2, self.length, None, context);
         /* source column */
         self.data_columns.columns[3] =
-            CellBuffer::new_with_context("external".len(), self.length, default_cell, context);
+            CellBuffer::new_with_context("external".len(), self.length, None, context);
 
         let account = &context.accounts[self.account_pos];
         let book = &account.address_book;
@@ -209,16 +202,9 @@ impl ContactList {
         }
 
         if self.length == 0 {
-            let default_cell = {
-                let mut ret = Cell::with_char(' ');
-                ret.set_fg(self.theme_default.fg)
-                    .set_bg(self.theme_default.bg)
-                    .set_attrs(self.theme_default.attrs);
-                ret
-            };
             let message = "Address book is empty.".to_string();
             self.data_columns.columns[0] =
-                CellBuffer::new_with_context(message.len(), self.length, default_cell, context);
+                CellBuffer::new_with_context(message.len(), self.length, None, context);
             write_string_to_grid(
                 &message,
                 &mut self.data_columns.columns[0],

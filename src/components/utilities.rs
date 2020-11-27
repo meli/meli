@@ -953,13 +953,8 @@ impl Component for Tabbed {
                     ),
                 );
             }
-            let mut empty_cell = Cell::default();
-            empty_cell
-                .set_fg(self.theme_default.fg)
-                .set_bg(self.theme_default.bg)
-                .set_attrs(self.theme_default.attrs);
             self.help_content =
-                CellBuffer::new_with_context(max_width, max_length + 2, empty_cell, context);
+                CellBuffer::new_with_context(max_width, max_length + 2, None, context);
             self.help_content.set_growable(true);
             let (width, height) = self.help_content.size();
             let (cols, rows) = (width!(area), height!(area));

@@ -740,11 +740,6 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selec
         context: &Context,
     ) -> Selector<T, F> {
         let theme_default = crate::conf::value(context, "theme_default");
-        let mut empty_cell = Cell::with_char(' ');
-        empty_cell
-            .set_fg(theme_default.fg)
-            .set_bg(theme_default.bg)
-            .set_attrs(theme_default.attrs);
         let width = std::cmp::max(
             OK_CANCEL.len(),
             std::cmp::max(
@@ -763,7 +758,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selec
                 /* Extra room for buttons Okay/Cancel */
                 2
             };
-        let mut content = CellBuffer::new_with_context(width, height, empty_cell, context);
+        let mut content = CellBuffer::new_with_context(width, height, None, context);
         if single_only {
             for (i, e) in entries.iter().enumerate() {
                 write_string_to_grid(
