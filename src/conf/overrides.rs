@@ -102,6 +102,10 @@ pub struct ListingSettingsOverride {
     #[serde(alias = "context-lines")]
     #[serde(default)]
     pub context_lines: Option<usize>,
+    #[doc = "Show auto-hiding scrollbar in accounts sidebar menu."]
+    #[doc = "Default: True"]
+    #[serde(default)]
+    pub show_menu_scrollbar: Option<bool>,
     #[doc = " Datetime formatting passed verbatim to strftime(3)."]
     #[doc = " Default: %Y-%m-%d %T"]
     #[serde(alias = "datetime-fmt")]
@@ -139,6 +143,7 @@ impl Default for ListingSettingsOverride {
     fn default() -> Self {
         ListingSettingsOverride {
             context_lines: None,
+            show_menu_scrollbar: None,
             datetime_fmt: None,
             recent_dates: None,
             filter: None,

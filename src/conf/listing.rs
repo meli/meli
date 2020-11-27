@@ -57,6 +57,11 @@ pub struct ListingSettings {
     #[serde(default = "zero_val", alias = "context-lines")]
     pub context_lines: usize,
 
+    ///Show auto-hiding scrollbar in accounts sidebar menu.
+    ///Default: True
+    #[serde(default = "true_val")]
+    pub show_menu_scrollbar: bool,
+
     /// Datetime formatting passed verbatim to strftime(3).
     /// Default: %Y-%m-%d %T
     #[serde(default = "none", alias = "datetime-fmt")]
@@ -104,6 +109,7 @@ impl Default for ListingSettings {
     fn default() -> Self {
         Self {
             context_lines: 0,
+            show_menu_scrollbar: true,
             datetime_fmt: None,
             recent_dates: true,
             filter: None,
@@ -124,6 +130,7 @@ impl DotAddressable for ListingSettings {
                 let tail = &path[1..];
                 match *field {
                     "context_lines" => self.context_lines.lookup(field, tail),
+                    "show_menu_scrollbar" => self.show_menu_scrollbar.lookup(field, tail),
                     "datetime_fmt" => self.datetime_fmt.lookup(field, tail),
                     "recent_dates" => self.recent_dates.lookup(field, tail),
                     "filter" => self.filter.lookup(field, tail),

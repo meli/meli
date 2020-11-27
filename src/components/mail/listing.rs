@@ -474,6 +474,13 @@ enum MenuEntryCursor {
     Mailbox(usize),
 }
 
+#[derive(PartialEq, Copy, Clone, Debug)]
+enum ShowMenuScrollbar {
+    Never,
+    True,
+    False,
+}
+
 #[derive(Debug)]
 pub struct Listing {
     component: ListingComponent,
@@ -484,6 +491,8 @@ pub struct Listing {
     cursor_pos: (usize, MenuEntryCursor),
     menu_cursor_pos: (usize, MenuEntryCursor),
     menu_content: CellBuffer,
+    menu_scrollbar_show_timer: crate::jobs::Timer,
+    show_menu_scrollbar: ShowMenuScrollbar,
     startup_checks_rate: RateLimit,
     id: ComponentId,
     theme_default: ThemeAttribute,
@@ -604,6 +613,14 @@ impl Component for Listing {
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         match event {
+            UIEvent::Timer(n) if *n == self.menu_scrollbar_show_timer.id() => {
+                if self.show_menu_scrollbar == ShowMenuScrollbar::True {
+                    self.show_menu_scrollbar = ShowMenuScrollbar::False;
+                    self.set_dirty(true);
+                    self.menu_content.empty();
+                }
+                return true;
+            }
             UIEvent::StartupCheck(ref f) => {
                 if self.component.coordinates().1 == *f {
                     if !self.startup_checks_rate.tick() {
@@ -771,6 +788,10 @@ impl Component for Listing {
                 }
                 UIEvent::Input(Key::Left) if self.menu_visibility => {
                     self.focus = ListingFocus::Menu;
+                    if self.show_menu_scrollbar != ShowMenuScrollbar::Never {
+                        self.menu_scrollbar_show_timer.rearm();
+                        self.show_menu_scrollbar = ShowMenuScrollbar::True;
+                    }
                     self.ratio = 50;
                     self.set_dirty(true);
                 }
@@ -1241,6 +1262,10 @@ impl Component for Listing {
                             amount -= 1;
                         }
                     }
+                    if self.show_menu_scrollbar != ShowMenuScrollbar::Never {
+                        self.menu_scrollbar_show_timer.rearm();
+                        self.show_menu_scrollbar = ShowMenuScrollbar::True;
+                    }
                     self.menu_content.empty();
                     self.set_dirty(true);
                     return true;
@@ -1298,6 +1323,10 @@ impl Component for Listing {
                     } else {
                         return true;
                     }
+                    if self.show_menu_scrollbar != ShowMenuScrollbar::Never {
+                        self.menu_scrollbar_show_timer.rearm();
+                        self.show_menu_scrollbar = ShowMenuScrollbar::True;
+                    }
                     self.menu_content.empty();
                     return true;
                 }
@@ -1346,6 +1375,10 @@ impl Component for Listing {
                             }
                         }
                         _ => return false,
+                    }
+                    if self.show_menu_scrollbar != ShowMenuScrollbar::Never {
+                        self.menu_scrollbar_show_timer.rearm();
+                        self.show_menu_scrollbar = ShowMenuScrollbar::True;
                     }
                     self.menu_content.empty();
                     self.set_dirty(true);
@@ -1518,6 +1551,11 @@ impl Listing {
             cursor_pos: (0, MenuEntryCursor::Mailbox(0)),
             menu_cursor_pos: (0, MenuEntryCursor::Mailbox(0)),
             menu_content: CellBuffer::new_with_context(0, 0, None, context),
+            menu_scrollbar_show_timer: context.job_executor.clone().create_timer(
+                std::time::Duration::from_secs(0),
+                std::time::Duration::from_millis(1200),
+            ),
+            show_menu_scrollbar: ShowMenuScrollbar::Never,
             startup_checks_rate: RateLimit::new(2, 1000, context.job_executor.clone()),
             theme_default: conf::value(context, "theme_default"),
             id: ComponentId::new_v4(),
@@ -1599,6 +1637,22 @@ impl Listing {
                 (width - 1, std::cmp::min(skip_offset + rows, height - 1)),
             ),
         );
+        if self.show_menu_scrollbar == ShowMenuScrollbar::True && total_height > rows {
+            ScrollBar::default().set_show_arrows(true).draw(
+                grid,
+                (
+                    pos_inc(upper_left!(area), (width!(area), 0)),
+                    bottom_right!(area),
+                ),
+                context,
+                /* position */
+                skip_offset,
+                /* visible_rows */
+                rows,
+                /* length */
+                total_height,
+            );
+        }
 
         context.dirty_areas.push_back(area);
     }
@@ -1925,6 +1979,12 @@ impl Listing {
         self.menu_cursor_pos = self.cursor_pos;
         /* clear menu to force redraw */
         self.menu_content.empty();
+        if *account_settings!(context[account_hash].listing.show_menu_scrollbar) {
+            self.show_menu_scrollbar = ShowMenuScrollbar::True;
+            self.menu_scrollbar_show_timer.rearm();
+        } else {
+            self.show_menu_scrollbar = ShowMenuScrollbar::Never;
+        }
     }
 
     fn open_status(&mut self, account_idx: usize, context: &mut Context) {
