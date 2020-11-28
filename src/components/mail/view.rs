@@ -276,6 +276,7 @@ impl MailView {
 
     fn init_futures(&mut self, context: &mut Context) {
         debug!("init_futures");
+        self.theme_default = crate::conf::value(context, "mail.view.body");
         let mut pending_action = None;
         let account = &mut context.accounts[&self.coordinates.0];
         if debug!(account.contains_key(self.coordinates.2)) {
