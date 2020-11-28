@@ -92,6 +92,11 @@ impl ViewMode {
 
 #[derive(Debug)]
 pub enum AttachmentDisplay {
+    Alternative {
+        inner: Attachment,
+        shown_display: usize,
+        display: Vec<AttachmentDisplay>,
+    },
     InlineText {
         inner: Attachment,
         comment: Option<String>,
@@ -436,6 +441,17 @@ impl MailView {
         for d in displays {
             use AttachmentDisplay::*;
             match d {
+                Alternative {
+                    inner: _,
+                    shown_display,
+                    display,
+                } => {
+                    acc.push_str(&self.attachment_displays_to_text(
+                        &display[*shown_display..(*shown_display + 1)],
+                        context,
+                        show_comments,
+                    ));
+                }
                 InlineText {
                     inner: _,
                     text,
@@ -554,10 +570,26 @@ impl MailView {
         let mut paths = Vec::with_capacity(displays.len());
         let mut cur_path = vec![];
         let mut idx = 0;
-        for (i, d) in displays.iter().enumerate() {
+
+        fn append_entry(
+            (idx, (depth, att_display)): (&mut usize, (usize, &AttachmentDisplay)),
+            branches: &mut SmallVec<[bool; 8]>,
+            paths: &mut Vec<Vec<usize>>,
+            cur_path: &mut Vec<usize>,
+            has_sibling: bool,
+            s: &mut String,
+        ) {
             use AttachmentDisplay::*;
-            cur_path.push(i);
-            match d {
+            let mut default_alternative: Option<usize> = None;
+            let (att, sub_att_display_vec) = match att_display {
+                Alternative {
+                    inner,
+                    shown_display,
+                    display,
+                } => {
+                    default_alternative = Some(*shown_display);
+                    (inner, display.as_slice())
+                }
                 InlineText {
                     inner,
                     text: _,
@@ -565,41 +597,95 @@ impl MailView {
                 }
                 | InlineOther { inner }
                 | Attachment { inner }
-                | SignedPending {
+                | EncryptedPending { inner, handle: _ }
+                | EncryptedFailed { inner, error: _ } => (inner, &[][..]),
+                SignedPending {
                     inner,
-                    display: _,
+                    display,
                     handle: _,
                     job_id: _,
                 }
-                | SignedUnverified { inner, display: _ }
+                | SignedUnverified { inner, display }
                 | SignedFailed {
                     inner,
-                    display: _,
+                    display,
                     error: _,
                 }
                 | SignedVerified {
                     inner,
-                    display: _,
+                    display,
                     description: _,
                 }
-                | EncryptedPending { inner, handle: _ }
-                | EncryptedFailed { inner, error: _ }
                 | EncryptedSuccess {
                     inner: _,
                     plaintext: inner,
-                    plaintext_display: _,
+                    plaintext_display: display,
                     description: _,
-                } => {
-                    attachment_tree(
-                        (&mut idx, (0, inner)),
-                        &mut branches,
-                        &mut paths,
-                        &mut cur_path,
-                        i + 1 < displays.len(),
-                        &mut acc,
-                    );
+                } => (inner, display.as_slice()),
+            };
+            s.extend(format!("\n[{}]", idx).chars());
+            for &b in branches.iter() {
+                if b {
+                    s.push('|');
+                } else {
+                    s.push(' ');
                 }
+                s.push(' ');
             }
+            if depth > 0 {
+                if has_sibling {
+                    s.push('|');
+                } else {
+                    s.push(' ');
+                }
+                s.push_str("\\_ ");
+            } else {
+                s.push(' ');
+                s.push(' ');
+            }
+
+            s.extend(att.to_string().chars());
+            paths.push(cur_path.clone());
+            match att.content_type {
+                ContentType::Multipart { .. } => {
+                    let mut iter = (0..sub_att_display_vec.len()).peekable();
+                    if has_sibling {
+                        branches.push(true);
+                    } else {
+                        branches.push(false);
+                    }
+                    while let Some(i) = iter.next() {
+                        *idx += 1;
+                        cur_path.push(i);
+                        append_entry(
+                            (idx, (depth + 1, &sub_att_display_vec[i])),
+                            branches,
+                            paths,
+                            cur_path,
+                            iter.peek() != None,
+                            s,
+                        );
+                        if Some(i) == default_alternative {
+                            s.push_str(" (displayed by default)");
+                        }
+                        cur_path.pop();
+                    }
+                    branches.pop();
+                }
+                _ => {}
+            }
+        }
+
+        for (i, d) in displays.iter().enumerate() {
+            cur_path.push(i);
+            append_entry(
+                (&mut idx, (0, d)),
+                &mut branches,
+                &mut paths,
+                &mut cur_path,
+                i + 1 < displays.len(),
+                &mut acc,
+            );
             cur_path.pop();
             idx += 1;
         }
@@ -692,6 +778,11 @@ impl MailView {
             {
                 match kind {
                     MultipartType::Alternative => {
+                        if parts.is_empty() {
+                            return;
+                        }
+                        let mut display = vec![];
+                        let mut chosen_attachment_idx = 0;
                         if let Some(text_attachment_pos) =
                             parts.iter().position(|a| a.content_type == "text/plain")
                         {
@@ -708,33 +799,21 @@ impl MailView {
                                     parts.iter().position(|a| a.content_type == "text/html")
                                 {
                                     /* Select html alternative since text/plain is empty */
-                                    rec(
-                                        &parts[text_attachment_pos],
-                                        context,
-                                        coordinates,
-                                        acc,
-                                        active_jobs,
-                                    );
-                                } else {
-                                    for a in parts {
-                                        rec(a, context, coordinates, acc, active_jobs);
-                                    }
+                                    chosen_attachment_idx = text_attachment_pos;
                                 }
                             } else {
                                 /* Select text/plain alternative */
-                                rec(
-                                    &parts[text_attachment_pos],
-                                    context,
-                                    coordinates,
-                                    acc,
-                                    active_jobs,
-                                );
-                            }
-                        } else {
-                            for a in parts {
-                                rec(a, context, coordinates, acc, active_jobs);
+                                chosen_attachment_idx = text_attachment_pos;
                             }
                         }
+                        for a in parts {
+                            rec(a, context, coordinates, &mut display, active_jobs);
+                        }
+                        acc.push(AttachmentDisplay::Alternative {
+                            inner: a.clone(),
+                            shown_display: chosen_attachment_idx,
+                            display,
+                        });
                     }
                     MultipartType::Signed => {
                         #[cfg(not(feature = "gpgme"))]
@@ -868,7 +947,12 @@ impl MailView {
             let first = path[0];
             use AttachmentDisplay::*;
             let root_attachment = match &display[first] {
-                InlineText {
+                Alternative {
+                    inner,
+                    shown_display: _,
+                    display: _,
+                }
+                | InlineText {
                     inner,
                     text: _,
                     comment: _,
@@ -2438,67 +2522,6 @@ impl Component for MailView {
                 .replies
                 .push_back(UIEvent::Action(Tab(Kill(self.id))));
         }
-    }
-}
-
-fn attachment_tree(
-    (idx, (depth, att)): (&mut usize, (usize, &Attachment)),
-    branches: &mut SmallVec<[bool; 8]>,
-    paths: &mut Vec<Vec<usize>>,
-    cur_path: &mut Vec<usize>,
-    has_sibling: bool,
-    s: &mut String,
-) {
-    s.extend(format!("\n[{}]", idx).chars());
-    for &b in branches.iter() {
-        if b {
-            s.push('|');
-        } else {
-            s.push(' ');
-        }
-        s.push(' ');
-    }
-    if depth > 0 {
-        if has_sibling {
-            s.push('|');
-        } else {
-            s.push(' ');
-        }
-        s.push_str("\\_ ");
-    } else {
-        s.push(' ');
-        s.push(' ');
-    }
-
-    s.extend(att.to_string().chars());
-    paths.push(cur_path.clone());
-    match att.content_type {
-        ContentType::Multipart {
-            parts: ref sub_att_vec,
-            ..
-        } => {
-            let mut iter = (0..sub_att_vec.len()).peekable();
-            if has_sibling {
-                branches.push(true);
-            } else {
-                branches.push(false);
-            }
-            while let Some(i) = iter.next() {
-                *idx += 1;
-                cur_path.push(i);
-                attachment_tree(
-                    (idx, (depth + 1, &sub_att_vec[i])),
-                    branches,
-                    paths,
-                    cur_path,
-                    iter.peek() != None,
-                    s,
-                );
-                cur_path.pop();
-            }
-            branches.pop();
-        }
-        _ => {}
     }
 }
 
