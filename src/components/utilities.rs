@@ -312,7 +312,7 @@ impl Component for StatusBar {
                             get_x(upper_left),
                             std::cmp::min(
                                 get_y(bottom_right) - height - hist_height + 1,
-                                get_y(bottom_right),
+                                get_y(pos_dec(bottom_right, (0, height))),
                             ),
                         ),
                         pos_dec(bottom_right, (0, height)),
@@ -339,7 +339,7 @@ impl Component for StatusBar {
                             get_x(upper_left),
                             std::cmp::min(
                                 get_y(bottom_right) - height - hist_height + 1,
-                                get_y(bottom_right),
+                                get_y(pos_dec(bottom_right, (0, height))),
                             ),
                         ),
                         pos_dec(bottom_right, (0, height)),

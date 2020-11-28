@@ -1070,6 +1070,7 @@ impl Component for MailView {
                     ($($string:expr)+) => {
                         $({
                             if sticky || skip_header_ctr == 0 {
+                                if y <= get_y(bottom_right) {
                                 let (_x, _y) = write_string_to_grid(
                                     &$string,
                                     grid,
@@ -1079,8 +1080,9 @@ impl Component for MailView {
                                     (set_y(upper_left, y), bottom_right),
                                     Some(get_x(upper_left)),
                                 );
-                            clear_area(grid, ((_x, _y), (get_x(bottom_right), _y)), headers);
+                            clear_area(grid, ((std::cmp::min(_x, get_x(bottom_right)), _y), (get_x(bottom_right), _y)), headers);
                             y = _y + 1;
+                                }
                         } else {
                             skip_header_ctr -= 1;
                         }
