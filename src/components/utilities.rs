@@ -892,48 +892,46 @@ impl Component for Tabbed {
         }
 
         if (self.show_shortcuts && self.dirty) || must_redraw_shortcuts {
-            let dialog_area = (
-                pos_inc(upper_left!(area), (2, 1)),
-                set_x(
-                    bottom_right!(area),
-                    get_x(bottom_right!(area)).saturating_sub(2),
-                ),
-            );
-            context.dirty_areas.push_back(dialog_area);
-            clear_area(
-                grid,
-                dialog_area,
-                crate::conf::value(context, "theme_default"),
-            );
-            let inner_area = create_box(grid, dialog_area);
             let mut children_maps = self.children[self.cursor_pos].get_shortcuts(context);
             let our_map = self.get_shortcuts(context);
             children_maps.extend(our_map.into_iter());
             if children_maps.is_empty() {
                 return;
             }
-            let (x, y) = write_string_to_grid(
-                "shortcuts",
-                grid,
-                self.theme_default.fg,
-                self.theme_default.bg,
-                self.theme_default.attrs | Attr::BOLD,
-                (
-                    pos_inc(upper_left!(dialog_area), (2, 0)),
-                    bottom_right!(dialog_area),
-                ),
-                None,
-            );
-            write_string_to_grid(
-                "Press ? to close",
-                grid,
-                self.theme_default.fg,
-                self.theme_default.bg,
-                self.theme_default.attrs | Attr::ITALICS,
-                ((x + 2, y), bottom_right!(dialog_area)),
-                None,
-            );
             if (children_maps == self.help_curr_views) && must_redraw_shortcuts {
+                let dialog_area = align_area(
+                    area,
+                    /* add box perimeter padding */
+                    pos_inc(self.help_content.size(), (2, 2)),
+                    /* vertical */
+                    Alignment::Center,
+                    /* horizontal */
+                    Alignment::Center,
+                );
+                context.dirty_areas.push_back(dialog_area);
+                clear_area(grid, dialog_area, self.theme_default);
+                let inner_area = create_box(grid, dialog_area);
+                let (x, y) = write_string_to_grid(
+                    "shortcuts",
+                    grid,
+                    self.theme_default.fg,
+                    self.theme_default.bg,
+                    self.theme_default.attrs | Attr::BOLD,
+                    (
+                        pos_inc(upper_left!(dialog_area), (2, 0)),
+                        bottom_right!(dialog_area),
+                    ),
+                    None,
+                );
+                write_string_to_grid(
+                    "Press ? to close",
+                    grid,
+                    self.theme_default.fg,
+                    self.theme_default.bg,
+                    self.theme_default.attrs | Attr::ITALICS,
+                    ((x + 2, y), bottom_right!(dialog_area)),
+                    None,
+                );
                 let (width, height) = self.help_content.size();
                 let (cols, rows) = (width!(inner_area), height!(inner_area));
                 copy_area(
@@ -957,7 +955,7 @@ impl Component for Tabbed {
                         ),
                     ),
                 );
-                if height.wrapping_div(rows) > 0 || width.wrapping_div(cols) > 0 {
+                if height.wrapping_div(rows + 1) > 0 || width.wrapping_div(cols + 1) > 0 {
                     ScrollBar::default().set_show_arrows(true).draw(
                         grid,
                         (
@@ -966,7 +964,7 @@ impl Component for Tabbed {
                         ),
                         context,
                         /* position */
-                        std::cmp::min((height - 1).saturating_sub(rows), self.help_screen_cursor.1),
+                        std::cmp::min((height).saturating_sub(rows + 1), self.help_screen_cursor.1),
                         /* visible_rows */
                         rows,
                         /* length */
@@ -997,29 +995,6 @@ impl Component for Tabbed {
             self.help_content =
                 CellBuffer::new_with_context(max_width, max_length + 2, None, context);
             self.help_content.set_growable(true);
-            let (width, height) = self.help_content.size();
-            let (cols, rows) = (width!(inner_area), height!(inner_area));
-            if cols == 0 || rows == 0 {
-                return;
-            }
-            /* trim cursor if it's bigger than the help screen */
-            self.help_screen_cursor = (
-                std::cmp::min((width - 1).saturating_sub(cols), self.help_screen_cursor.0),
-                std::cmp::min((height - 1).saturating_sub(rows), self.help_screen_cursor.1),
-            );
-
-            /* In this case we will be scrolling, so show the user how to do it */
-            if height.wrapping_div(rows) > 0 || width.wrapping_div(cols) > 0 {
-                write_string_to_grid(
-                    "Use Up, Down, Left, Right to scroll.",
-                    &mut self.help_content,
-                    self.theme_default.fg,
-                    self.theme_default.bg,
-                    self.theme_default.attrs | Attr::ITALICS,
-                    ((2, 2), (max_width.saturating_sub(2), max_length - 1)),
-                    None,
-                );
-            }
             write_string_to_grid(
                 "use COMMAND \"search\" to find shortcuts",
                 &mut self.help_content,
@@ -1042,7 +1017,6 @@ impl Component for Tabbed {
                 );
                 idx += 2;
                 for (k, v) in shortcuts {
-                    debug!(&(k, v));
                     let (x, y) = write_string_to_grid(
                         &format!("{:1$}", v, max_width),
                         &mut self.help_content,
@@ -1066,6 +1040,41 @@ impl Component for Tabbed {
                 idx += 1;
             }
             self.help_curr_views = children_maps;
+            let dialog_area = align_area(
+                area,
+                /* add box perimeter padding */
+                pos_inc(self.help_content.size(), (2, 2)),
+                /* vertical */
+                Alignment::Center,
+                /* horizontal */
+                Alignment::Center,
+            );
+            context.dirty_areas.push_back(dialog_area);
+            clear_area(grid, dialog_area, self.theme_default);
+            let inner_area = create_box(grid, dialog_area);
+            let (x, y) = write_string_to_grid(
+                "shortcuts",
+                grid,
+                self.theme_default.fg,
+                self.theme_default.bg,
+                self.theme_default.attrs | Attr::BOLD,
+                (
+                    pos_inc(upper_left!(dialog_area), (2, 0)),
+                    bottom_right!(dialog_area),
+                ),
+                None,
+            );
+            write_string_to_grid(
+                "Press ? to close",
+                grid,
+                self.theme_default.fg,
+                self.theme_default.bg,
+                self.theme_default.attrs | Attr::ITALICS,
+                ((x + 2, y), bottom_right!(dialog_area)),
+                None,
+            );
+            let (width, height) = self.help_content.size();
+            let (cols, rows) = (width!(inner_area), height!(inner_area));
             if let Some(ref mut search) = self.help_search {
                 use crate::melib::text_processing::search::KMP;
                 search.positions = self
@@ -1127,6 +1136,27 @@ impl Component for Tabbed {
                     }
                 }
             }
+            /* trim cursor if it's bigger than the help screen */
+            self.help_screen_cursor = (
+                std::cmp::min((width).saturating_sub(cols), self.help_screen_cursor.0),
+                std::cmp::min((height).saturating_sub(rows), self.help_screen_cursor.1),
+            );
+            if cols == 0 || rows == 0 {
+                return;
+            }
+
+            /* In this case we will be scrolling, so show the user how to do it */
+            if height.wrapping_div(rows + 1) > 0 || width.wrapping_div(cols + 1) > 0 {
+                write_string_to_grid(
+                    "Use Up, Down, Left, Right to scroll.",
+                    &mut self.help_content,
+                    self.theme_default.fg,
+                    self.theme_default.bg,
+                    self.theme_default.attrs | Attr::ITALICS,
+                    ((2, 2), (max_width.saturating_sub(2), max_length - 1)),
+                    None,
+                );
+            }
             copy_area(
                 grid,
                 &self.help_content,
@@ -1142,7 +1172,7 @@ impl Component for Tabbed {
                     ),
                 ),
             );
-            if height.wrapping_div(rows) > 0 || width.wrapping_div(cols) > 0 {
+            if height.wrapping_div(rows + 1) > 0 || width.wrapping_div(cols + 1) > 0 {
                 ScrollBar::default().set_show_arrows(true).draw(
                     grid,
                     (
@@ -1151,7 +1181,7 @@ impl Component for Tabbed {
                     ),
                     context,
                     /* position */
-                    std::cmp::min((height - 1).saturating_sub(rows), self.help_screen_cursor.1),
+                    std::cmp::min((height).saturating_sub(rows), self.help_screen_cursor.1),
                     /* visible_rows */
                     rows,
                     /* length */
