@@ -2174,9 +2174,9 @@ checksum = "d089681aa106a86fade1b0128fb5daf07d5867a509ab036d99988dec80429a57"
 
 [[package]]
 name = "xdg-utils"
-version = "0.3.1"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d6c275db8f4249f393a5c4de777ebeba37a5859bc2209a30fb66dc566dddd3ce"
+checksum = "db9fefe62d5969721e2cfc529e6a760901cc0da422b6d67e7bfd18e69490dba6"
 
 [[package]]
 name = "xml-rs"

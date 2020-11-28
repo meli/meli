@@ -131,11 +131,12 @@ impl Component for HtmlView {
         }
 
         if let UIEvent::Input(Key::Char('v')) = event {
-            let binary = query_default_app("text/html");
-            if let Ok(binary) = binary {
+            if let Ok(command) = query_default_app("text/html") {
                 let p = create_temp_file(&self.bytes, None, None, true);
-                match Command::new(&binary)
-                    .arg(p.path())
+                let (exec_cmd, argument) =
+                    super::desktop_exec_to_command(&command, p.path.display().to_string(), false);
+                match Command::new(&exec_cmd)
+                    .arg(&argument)
                     .stdin(Stdio::piped())
                     .stdout(Stdio::piped())
                     .spawn()
@@ -147,9 +148,8 @@ impl Component for HtmlView {
                     Err(err) => {
                         context.replies.push_back(UIEvent::StatusEvent(
                             StatusEvent::DisplayMessage(format!(
-                                "Failed to start {}: {}",
-                                binary.display(),
-                                err
+                                "Failed to start `{} {}`: {}",
+                                &exec_cmd, &argument, err
                             )),
                         ));
                     }

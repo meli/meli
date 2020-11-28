@@ -1910,17 +1910,21 @@ impl Component for MailView {
                                 }
                                 ContentType::Other { .. } => {
                                     let attachment_type = attachment.mime_type();
-                                    let binary = query_default_app(&attachment_type);
                                     let filename = attachment.filename();
-                                    if let Ok(binary) = binary {
+                                    if let Ok(command) = query_default_app(&attachment_type) {
                                         let p = create_temp_file(
                                             &decode(attachment, None),
                                             filename.as_ref().map(|s| s.as_str()),
                                             None,
                                             true,
                                         );
-                                        match Command::new(&binary)
-                                            .arg(p.path())
+                                        let (exec_cmd, argument) = desktop_exec_to_command(
+                                            &command,
+                                            p.path.display().to_string(),
+                                            false,
+                                        );
+                                        match Command::new(&exec_cmd)
+                                            .arg(&argument)
                                             .stdin(Stdio::piped())
                                             .stdout(Stdio::piped())
                                             .spawn()
@@ -1932,9 +1936,8 @@ impl Component for MailView {
                                             Err(err) => {
                                                 context.replies.push_back(UIEvent::StatusEvent(
                                                     StatusEvent::DisplayMessage(format!(
-                                                        "Failed to start {}: {}",
-                                                        binary.display(),
-                                                        err
+                                                        "Failed to start `{} {}`: {}",
+                                                        &exec_cmd, &argument, err
                                                     )),
                                                 ));
                                             }
@@ -2508,3 +2511,50 @@ fn save_attachment(path: &std::path::Path, bytes: &[u8]) -> Result<()> {
     f.flush()?;
     Ok(())
 }
+
+fn desktop_exec_to_command(command: &str, path: String, is_url: bool) -> (String, String) {
+    /* Purge unused field codes */
+    let command = command
+        .replace("%i", "")
+        .replace("%c", "")
+        .replace("%k", "");
+    if let Some(pos) = command.find("%f").or_else(|| command.find("%F")) {
+        (command[0..pos].trim().to_string(), path)
+    } else if let Some(pos) = command.find("%u").or_else(|| command.find("%U")) {
+        if is_url {
+            (command[0..pos].trim().to_string(), path)
+        } else {
+            (
+                command[0..pos].trim().to_string(),
+                format!("file://{}", path),
+            )
+        }
+    } else {
+        (command, path)
+    }
+}
+
+/*
+#[test]
+fn test_desktop_exec() {
+    for cmd in [
+        "ristretto %F",
+        "/usr/lib/firefox-esr/firefox-esr %u",
+        "/usr/bin/vlc --started-from-file %U",
+        "zathura %U",
+    ]
+    .iter()
+    {
+        println!(
+            "cmd = {} output = {:?}, is_url = false",
+            cmd,
+            desktop_exec_to_command(cmd, "/tmp/file".to_string(), false)
+        );
+        println!(
+            "cmd = {} output = {:?}, is_url = true",
+            cmd,
+            desktop_exec_to_command(cmd, "www.example.com".to_string(), true)
+        );
+    }
+}
+*/

@@ -47,7 +47,7 @@ smol = "1.0.0"
 async-stream = "0.2.1"
 base64 = { version = "0.12.3", optional = true }
 flate2 = { version = "1.0.16", optional = true }
-xdg-utils = "0.3.0"
+xdg-utils = "^0.4.0"
 
 [features]
 default = ["unicode_algorithms", "imap_backend", "maildir_backend", "mbox_backend", "vcard", "sqlite3", "smtp", "deflate_compression"]

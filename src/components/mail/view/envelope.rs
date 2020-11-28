@@ -433,43 +433,55 @@ impl Component for EnvelopeView {
                                 ));
                                 return true;
                             }
-                            ContentType::Other { ref name, .. } => {
+                            ContentType::Other { .. } => {
                                 let attachment_type = u.mime_type();
-                                let binary = query_default_app(&attachment_type);
-                                if let Ok(binary) = binary {
+                                let filename = u.filename();
+                                if let Ok(command) = query_default_app(&attachment_type) {
                                     let p = create_temp_file(
                                         &decode(u, None),
-                                        name.as_ref().map(String::as_str),
+                                        filename.as_ref().map(|s| s.as_str()),
                                         None,
                                         true,
                                     );
-                                    match Command::new(&binary)
-                                        .arg(p.path())
+                                    let (exec_cmd, argument) = super::desktop_exec_to_command(
+                                        &command,
+                                        p.path.display().to_string(),
+                                        false,
+                                    );
+                                    match Command::new(&exec_cmd)
+                                        .arg(&argument)
                                         .stdin(Stdio::piped())
                                         .stdout(Stdio::piped())
                                         .spawn()
                                     {
                                         Ok(child) => {
-                                            context.children.push(child);
                                             context.temp_files.push(p);
+                                            context.children.push(child);
                                         }
                                         Err(err) => {
                                             context.replies.push_back(UIEvent::StatusEvent(
                                                 StatusEvent::DisplayMessage(format!(
-                                                    "Failed to start {}: {}",
-                                                    binary.display(),
-                                                    err
+                                                    "Failed to start `{} {}`: {}",
+                                                    &exec_cmd, &argument, err
                                                 )),
                                             ));
                                         }
                                     }
                                 } else {
                                     context.replies.push_back(UIEvent::StatusEvent(
-                                        StatusEvent::DisplayMessage(format!(
-                                            "Couldn't find a default application for type {}",
-                                            attachment_type
-                                        )),
-                                    ));
+                                        StatusEvent::DisplayMessage(if let Some(filename) = filename.as_ref() {
+                                            format!(
+                                                "Couldn't find a default application for file {} (type {})",
+                                                filename,
+                                                attachment_type
+                                            )
+                                        } else {
+                                            format!(
+                                                "Couldn't find a default application for type {}",
+                                                attachment_type
+                                            )
+                                        }),
+                                ));
                                     return true;
                                 }
                             }
