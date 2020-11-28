@@ -572,23 +572,20 @@ impl ThreadView {
 
             self.highlight_line(grid, dest_area, src_area, idx, context);
             if rows < visibles.len() {
-                ScrollBar::default().draw(
+                ScrollBar::default().set_show_arrows(true).draw(
                     grid,
-                    (
-                        upper_left!(area),
-                        set_x(bottom_right, get_x(upper_left!(area)) + 1),
-                    ),
+                    (pos_inc(upper_left!(area), (width!(area), 0)), bottom_right),
                     context,
-                    self.cursor_pos,
+                    2 * self.cursor_pos,
                     rows,
-                    visibles.len(),
+                    2 * visibles.len() + 1,
                 );
             }
-            if top_idx + rows > visibles.len() {
+            if 2 * top_idx + rows > 2 * visibles.len() + 1 {
                 clear_area(
                     grid,
                     (
-                        pos_inc(upper_left, (0, 2 * (visibles.len() - top_idx))),
+                        pos_inc(upper_left, (0, 2 * (visibles.len() - top_idx) + 1)),
                         bottom_right,
                     ),
                     crate::conf::value(context, "theme_default"),
@@ -632,16 +629,13 @@ impl ThreadView {
 
                 self.highlight_line(grid, dest_area, src_area, entry_idx, context);
                 if rows < visibles.len() {
-                    ScrollBar::default().draw(
+                    ScrollBar::default().set_show_arrows(true).draw(
                         grid,
-                        (
-                            upper_left!(area),
-                            set_x(bottom_right, get_x(upper_left!(area)) + 1),
-                        ),
+                        (pos_inc(upper_left!(area), (width!(area), 0)), bottom_right),
                         context,
-                        self.cursor_pos,
+                        2 * self.cursor_pos,
                         rows,
-                        visibles.len(),
+                        2 * visibles.len() + 1,
                     );
                     context.dirty_areas.push_back((
                         upper_left!(area),
