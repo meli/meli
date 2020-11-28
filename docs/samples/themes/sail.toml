@@ -1,0 +1,68 @@
+[terminal.themes.sail]
+color_aliases = { "unseen_fg" = "theme_default", "unseen_bg" = "theme_default", "sea" = "#91C7FF", "dimmed_text" = "#afbec5", "dimmed_bg" = "Grey78", "header" = "#edeff1" }
+"theme_default" = { fg = "#37474f", bg = "White", attrs = "Default" }
+"mail.listing.attachment_flag" = { fg = "Blue", bg = "theme_default", attrs = "theme_default" }
+
+"mail.listing.compact.even" = { fg = "$dimmed_text", bg = "theme_default", attrs = "theme_default" }
+"mail.listing.compact.even_highlighted" = { fg = "theme_default", bg = "$dimmed_bg", attrs = "theme_default" }
+"mail.listing.compact.even_selected" = { fg = "$dimmed_text", bg = "LightCoral", attrs = "theme_default" }
+"mail.listing.compact.even_unseen" = { fg = "$unseen_fg", bg = "$unseen_bg", attrs = "theme_default" }
+
+"mail.listing.compact.odd" = { fg = "$dimmed_text", bg = "theme_default", attrs = "theme_default" }
+"mail.listing.compact.odd_highlighted" = { fg = "theme_default", bg = "$dimmed_bg", attrs = "theme_default" }
+"mail.listing.compact.odd_selected" = { fg = "$dimmed_text", bg = "LightCoral", attrs = "theme_default" }
+"mail.listing.compact.odd_unseen" = { fg = "$unseen_fg", bg = "$unseen_bg", attrs = "theme_default" }
+
+"mail.listing.plain.even" = { fg = "mail.listing.compact.even", bg = "mail.listing.compact.even", attrs = "theme_default" }
+"mail.listing.plain.even_highlighted" = { fg = "mail.listing.compact.even_highlighted", bg = "mail.listing.compact.even_highlighted", attrs = "theme_default" }
+"mail.listing.plain.even_selected" = { fg = "mail.listing.compact.even_selected", bg = "mail.listing.compact.even_selected", attrs = "theme_default" }
+"mail.listing.plain.even_unseen" = { fg = "mail.listing.compact.even_unseen", bg = "mail.listing.compact.even_unseen", attrs = "theme_default" }
+"mail.listing.plain.odd" = { fg = "mail.listing.compact.odd", bg = "mail.listing.compact.odd", attrs = "theme_default" }
+"mail.listing.plain.odd_highlighted" = { fg = "mail.listing.compact.odd_highlighted", bg = "mail.listing.compact.odd_highlighted", attrs = "theme_default" }
+"mail.listing.plain.odd_selected" = { fg = "mail.listing.compact.odd_selected", bg = "mail.listing.compact.odd_selected", attrs = "theme_default" }
+"mail.listing.plain.odd_unseen" = { fg = "mail.listing.compact.odd_unseen", bg = "mail.listing.compact.odd_unseen", attrs = "theme_default" }
+
+"mail.listing.conversations" = { fg = "$dimmed_text", bg = "theme_default", attrs = "Default" }
+"mail.listing.conversations.date" = { fg = "mail.listing.conversations", bg = "mail.listing.conversations", attrs = "theme_default" }
+"mail.listing.conversations.from" = { fg = "mail.listing.conversations", bg = "mail.listing.conversations", attrs = "theme_default" }
+"mail.listing.conversations.subject" = { fg = "mail.listing.conversations", bg = "mail.listing.conversations", attrs = "theme_default" }
+"mail.listing.conversations.highlighted" = { fg = "theme_default", bg = "$dimmed_bg", attrs = "theme_default" }
+"mail.listing.conversations.selected" = { fg = "theme_default", bg = "LightCoral", attrs = "theme_default" }
+"mail.listing.conversations.unseen" = { fg = "$unseen_fg", bg = "$unseen_bg", attrs = "theme_default" }
+
+"mail.listing.tag_default" = { fg = "Black", bg = "$dimmed_text", attrs = "theme_default" }
+"mail.listing.thread_snooze_flag" = { fg = "Red", bg = "theme_default", attrs = "theme_default" }
+
+"mail.sidebar" = { fg = "$dimmed_text", bg = "theme_default", attrs = "theme_default" }
+"mail.sidebar_highlighted" = { fg = "theme_default", bg = "$dimmed_bg", attrs = "theme_default" }
+"mail.sidebar_highlighted_account" = { fg = "$dimmed_text", bg = "theme_default", attrs = "theme_default" }
+"mail.sidebar_highlighted_account_name" = { fg = "theme_default", bg = "$header", attrs = "Bold" }
+"mail.sidebar_account_name" = { fg = "mail.sidebar", bg = "mail.sidebar", attrs = "theme_default" }
+"mail.sidebar_highlighted_account_index" = { fg = "mail.sidebar_index", bg = "mail.sidebar_highlighted_account", attrs = "theme_default" }
+"mail.sidebar_highlighted_account_unread_count" = { fg = "mail.sidebar_unread_count", bg = "mail.sidebar_highlighted_account", attrs = "theme_default" }
+"mail.sidebar_highlighted_index" = { fg = "mail.sidebar_index", bg = "mail.sidebar_highlighted", attrs = "theme_default" }
+"mail.sidebar_highlighted_unread_count" = { fg = "mail.sidebar_highlighted", bg = "mail.sidebar_highlighted", attrs = "theme_default" }
+"mail.sidebar_index" = { fg = "mail.sidebar", bg = "mail.sidebar", attrs = "theme_default" }
+"mail.sidebar_unread_count" = { fg = "$dimmed_text", bg = "theme_default", attrs = "theme_default" }
+
+"mail.view.body" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
+"mail.view.headers" = { fg = "theme_default", bg = "theme_default", attrs = "Bold" }
+"mail.view.thread.indentation.a" = { fg = "theme_default", bg = "#EC633D", attrs = "theme_default" }
+"mail.view.thread.indentation.b" = { fg = "theme_default", bg = "#D347F9", attrs = "theme_default" }
+"mail.view.thread.indentation.c" = { fg = "theme_default", bg = "#317EFB", attrs = "theme_default" }
+"mail.view.thread.indentation.d" = { fg = "theme_default", bg = "#06B8CD", attrs = "theme_default" }
+"mail.view.thread.indentation.e" = { fg = "theme_default", bg = "#93DDB6", attrs = "theme_default" }
+"mail.view.thread.indentation.f" = { fg = "theme_default", bg = "#68A033", attrs = "theme_default" }
+
+"pager.highlight_search" = { fg = "White", bg = "Teal", attrs = "Bold" }
+"pager.highlight_search_current" = { fg = "White", bg = "NavyBlue", attrs = "Bold" }
+"status.bar" = { fg = "theme_default", bg = "$sea", attrs = "theme_default" }
+"status.notification" = { fg = "Plum1", bg = "theme_default", attrs = "theme_default" }
+"tab.bar" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
+"tab.focused" = { fg = "theme_default", bg = "theme_default", attrs = "Bold" }
+"tab.unfocused" = { fg = "White", bg = "$sea", attrs = "Bold" }
+"widgets.form.field" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
+"widgets.form.highlighted" = { fg = "theme_default", bg = "$dimmed_bg", attrs = "theme_default" }
+"widgets.form.label" = { fg = "theme_default", bg = "theme_default", attrs = "Bold" }
+"widgets.list.header" = { fg = "Black", bg = "White", attrs = "Bold" }
+"widgets.options.highlighted" = { fg = "theme_default", bg = "$dimmed_bg", attrs = "theme_default" }
