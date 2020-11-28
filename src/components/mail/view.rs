@@ -917,11 +917,13 @@ impl MailView {
         new_coordinates: (AccountHash, MailboxHash, EnvelopeHash),
         context: &mut Context,
     ) {
-        self.coordinates = new_coordinates;
-        self.mode = ViewMode::Normal;
-        self.initialised = false;
-        self.init_futures(context);
-        self.set_dirty(true);
+        if self.coordinates != new_coordinates {
+            self.coordinates = new_coordinates;
+            self.mode = ViewMode::Normal;
+            self.initialised = false;
+            self.init_futures(context);
+            self.set_dirty(true);
+        }
     }
 
     fn open_attachment(
