@@ -1486,10 +1486,35 @@ impl Default for Themes {
 
         /* ConversationsListing */
 
-        add!("mail.listing.conversations");
+        add!("mail.listing.conversations",
+            dark = {
+                /* Grey */
+                fg: Color::Byte(8),
+            },
+            light = {
+                /* Grey */
+                fg: Color::Byte(8),
+            }
+        );
         add!("mail.listing.conversations.subject");
-        add!("mail.listing.conversations.from");
-        add!("mail.listing.conversations.date");
+        add!("mail.listing.conversations.from",
+            dark = {
+                /* Grey */
+                fg: Color::Byte(8),
+            },
+            light = {
+                /* Grey */
+                fg: Color::Byte(8),
+            }
+        );
+        add!("mail.listing.conversations.date",
+            dark = {
+                fg: Color::Magenta,
+            },
+            light = {
+                fg: Color::Magenta,
+            }
+        );
         add!(
             "mail.listing.conversations.padding",
             dark = {
