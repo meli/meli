@@ -365,7 +365,7 @@ mod sqlite3_m {
 
         fn envelopes(&mut self, mailbox_hash: MailboxHash) -> Result<Option<Vec<EnvelopeHash>>> {
             debug!("envelopes mailbox_hash {}", mailbox_hash);
-            if debug!(self.mailbox_state(mailbox_hash)?.is_none()) {
+            if self.mailbox_state(mailbox_hash)?.is_none() {
                 return Ok(None);
             }
 
@@ -429,7 +429,6 @@ mod sqlite3_m {
                 .cloned()
                 .unwrap_or_default();
             if self.mailbox_state(mailbox_hash)?.is_none() {
-                debug!(self.mailbox_state(mailbox_hash)?.is_none());
                 return Err(MeliError::new("Mailbox is not in cache").set_kind(ErrorKind::Bug));
             }
             let Self {
@@ -471,13 +470,7 @@ mod sqlite3_m {
             mailbox_hash: MailboxHash,
             refresh_events: &[(UID, RefreshEvent)],
         ) -> Result<()> {
-            debug!(
-                "update with refresh_events mailbox_hash {} len {}",
-                mailbox_hash,
-                refresh_events.len()
-            );
             if self.mailbox_state(mailbox_hash)?.is_none() {
-                debug!(self.mailbox_state(mailbox_hash)?.is_none());
                 return Err(MeliError::new("Mailbox is not in cache").set_kind(ErrorKind::Bug));
             }
             let Self {
@@ -488,7 +481,7 @@ mod sqlite3_m {
             let tx = connection.transaction()?;
             let mut hash_index_lck = uid_store.hash_index.lock().unwrap();
             for (uid, event) in refresh_events {
-                match debug!(&event.kind) {
+                match &event.kind {
                     RefreshEventKind::Remove(env_hash) => {
                         hash_index_lck.remove(&env_hash);
                         tx.execute(
@@ -655,14 +648,13 @@ pub(super) async fn fetch_cached_envs(state: &mut FetchState) -> Result<Option<V
         ref uid_store,
         cache_handle: _,
     } = state;
-    debug!(uid_store.keep_offline_cache);
     let mailbox_hash = *mailbox_hash;
     if !uid_store.keep_offline_cache {
         return Ok(None);
     }
     {
         let mut conn = connection.lock().await;
-        match debug!(conn.load_cache(mailbox_hash).await) {
+        match conn.load_cache(mailbox_hash).await {
             None => return Ok(None),
             Some(Ok(env_hashes)) => {
                 let env_lck = uid_store.envelopes.lock().unwrap();
@@ -675,7 +667,7 @@ pub(super) async fn fetch_cached_envs(state: &mut FetchState) -> Result<Option<V
                         .collect::<Vec<Envelope>>(),
                 ));
             }
-            Some(Err(err)) => return debug!(Err(err)),
+            Some(Err(err)) => return Err(err),
         }
     }
 }

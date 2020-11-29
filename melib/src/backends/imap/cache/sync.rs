@@ -63,14 +63,14 @@ impl ImapConnection {
             Ok(v) => v,
             Err(err) => return Some(Err(err)),
         };
-        match debug!(cache_handle.mailbox_state(mailbox_hash)) {
+        match cache_handle.mailbox_state(mailbox_hash) {
             Err(err) => return Some(Err(err)),
             Ok(Some(())) => {}
             Ok(None) => {
                 return None;
             }
         };
-        match debug!(cache_handle.envelopes(mailbox_hash)) {
+        match cache_handle.envelopes(mailbox_hash) {
             Ok(Some(envs)) => Some(Ok(envs)),
             Ok(None) => None,
             Err(err) => Some(Err(err)),
@@ -116,16 +116,10 @@ impl ImapConnection {
             )
         };
         let mut new_unseen = BTreeSet::default();
-        debug!("current_uidvalidity is {}", current_uidvalidity);
-        debug!("max_uid is {}", max_uid);
         let select_response = self
             .select_mailbox(mailbox_hash, &mut response, true)
             .await?
             .unwrap();
-        debug!(
-            "select_response.uidvalidity is {}",
-            select_response.uidvalidity
-        );
         // 1. check UIDVALIDITY. If fail, discard cache and rebuild
         if select_response.uidvalidity != current_uidvalidity {
             cache_handle.clear(mailbox_hash, &select_response)?;
@@ -193,14 +187,14 @@ impl ImapConnection {
             }
         }
         {
-            debug!(cache_handle
+            cache_handle
                 .insert_envelopes(mailbox_hash, &v)
                 .chain_err_summary(|| {
                     format!(
                         "Could not save envelopes in cache for mailbox {}",
                         mailbox_path
                     )
-                }))?;
+                })?;
         }
 
         for FetchResponse {
@@ -352,9 +346,6 @@ impl ImapConnection {
             .unwrap()
             .get(&mailbox_hash)
             .cloned();
-        debug!(&cached_uidvalidity);
-        debug!(&cached_max_uid);
-        debug!(&cached_highestmodseq);
         if cached_uidvalidity.is_none()
             || cached_max_uid.is_none()
             || cached_highestmodseq.is_none()
@@ -381,17 +372,11 @@ impl ImapConnection {
             )
         };
         let mut new_unseen = BTreeSet::default();
-        debug!("current_uidvalidity is {}", cached_uidvalidity);
-        debug!("max_uid is {}", cached_max_uid);
         // 1. check UIDVALIDITY. If fail, discard cache and rebuild
         let select_response = self
             .select_mailbox(mailbox_hash, &mut response, true)
             .await?
             .unwrap();
-        debug!(
-            "select_response.uidvalidity is {}",
-            select_response.uidvalidity
-        );
         if select_response.uidvalidity != cached_uidvalidity {
             // 1a) Check the mailbox UIDVALIDITY (see section 4.1 for more
             //details) with SELECT/EXAMINE/STATUS.
@@ -497,14 +482,14 @@ impl ImapConnection {
                 }
             }
             {
-                debug!(cache_handle
+                cache_handle
                     .insert_envelopes(mailbox_hash, &v)
                     .chain_err_summary(|| {
                         format!(
                             "Could not save envelopes in cache for mailbox {}",
                             mailbox_path
                         )
-                    }))?;
+                    })?;
             }
 
             for FetchResponse { uid, envelope, .. } in v {

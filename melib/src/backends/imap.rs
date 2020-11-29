@@ -450,11 +450,11 @@ impl MailBackend for ImapType {
             match timeout(timeout_dur, connection.lock()).await {
                 Ok(mut conn) => {
                     debug!("is_online");
-                    match debug!(timeout(timeout_dur, conn.connect()).await) {
+                    match timeout(timeout_dur, conn.connect()).await {
                         Ok(Ok(())) => Ok(()),
                         Err(err) | Ok(Err(err)) => {
                             conn.stream = Err(err.clone());
-                            debug!(conn.connect().await)
+                            conn.connect().await
                         }
                     }
                 }
@@ -481,7 +481,6 @@ impl MailBackend for ImapType {
             _ => false,
         };
         Ok(Box::pin(async move {
-            debug!(has_idle);
             while let Err(err) = if has_idle {
                 idle(ImapWatchKit {
                     conn: ImapConnection::new_connection(&server_conf, uid_store.clone()),
@@ -501,16 +500,16 @@ impl MailBackend for ImapType {
                 if err.kind.is_network() {
                     uid_store.is_online.lock().unwrap().1 = Err(err.clone());
                 }
-                debug!("failure: {}", err.to_string());
+                debug!("Watch failure: {}", err.to_string());
                 match timeout(uid_store.timeout, main_conn_lck.connect())
                     .await
                     .and_then(|res| res)
                 {
                     Err(err2) => {
-                        debug!("reconnect attempt failed: {}", err2.to_string());
+                        debug!("Watch reconnect attempt failed: {}", err2.to_string());
                     }
                     Ok(()) => {
-                        debug!("reconnect attempt succesful");
+                        debug!("Watch reconnect attempt succesful");
                         continue;
                     }
                 }
@@ -1420,7 +1419,7 @@ impl ImapType {
             conn.read_response(&mut res, RequiredResponses::LIST_REQUIRED)
                 .await?;
         }
-        debug!("out: {}", String::from_utf8_lossy(&res));
+        debug!("LIST reply: {}", String::from_utf8_lossy(&res));
         let mut lines = res.split_rn();
         /* Remove "M__ OK .." line */
         lines.next_back();
@@ -1472,7 +1471,7 @@ impl ImapType {
         conn.read_response(&mut res, RequiredResponses::LSUB_REQUIRED)
             .await?;
         let mut lines = res.split_rn();
-        debug!("out: {}", String::from_utf8_lossy(&res));
+        debug!("LSUB reply: {}", String::from_utf8_lossy(&res));
         /* Remove "M__ OK .." line */
         lines.next_back();
         for l in lines {
@@ -1489,7 +1488,7 @@ impl ImapType {
                 debug!("parse error for {:?}", l);
             }
         }
-        Ok(debug!(mailboxes))
+        Ok(mailboxes)
     }
 
     pub fn validate_config(s: &AccountSettings) -> Result<()> {
@@ -1663,7 +1662,7 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
             FetchStage::ResyncCache => {
                 let mailbox_hash = state.mailbox_hash;
                 let mut conn = state.connection.lock().await;
-                let res = debug!(conn.resync(mailbox_hash).await);
+                let res = conn.resync(mailbox_hash).await;
                 if let Ok(Some(payload)) = res {
                     state.stage = FetchStage::Finished;
                     return Ok(payload);
@@ -1740,7 +1739,7 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
                     } in v.iter_mut()
                     {
                         if uid.is_none() || envelope.is_none() || flags.is_none() {
-                            debug!("in fetch is none");
+                            debug!("BUG? in fetch is none");
                             debug!(uid);
                             debug!(envelope);
                             debug!(flags);
@@ -1782,14 +1781,14 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
                         }
                     }
                     if let Some(ref mut cache_handle) = cache_handle {
-                        if let Err(err) = debug!(cache_handle
+                        if let Err(err) = cache_handle
                             .insert_envelopes(mailbox_hash, &v)
                             .chain_err_summary(|| {
                                 format!(
                                     "Could not save envelopes in cache for mailbox {}",
                                     mailbox_path
                                 )
-                            }))
+                            })
                         {
                             (state.uid_store.event_consumer)(
                                 state.uid_store.account_hash,

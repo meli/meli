@@ -486,7 +486,6 @@ impl ImapConnection {
                             self.read_response(&mut response, RequiredResponses::SEARCH)
                                 .await,
                         );
-                        debug!(to_str!(&response));
                         match super::protocol_parser::search_results(
                             response.split_rn().next().unwrap_or(b""),
                         )

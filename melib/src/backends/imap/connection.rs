@@ -467,7 +467,6 @@ impl ImapStream {
                             if !termination_string.is_empty()
                                 && ret[last_line_idx..].starts_with(termination_string)
                             {
-                                debug!(String::from_utf8_lossy(&ret[last_line_idx..]));
                                 if !keep_termination_string {
                                     ret.splice(last_line_idx.., std::iter::empty::<u8>());
                                 }
@@ -595,7 +594,7 @@ impl ImapConnection {
                     self.stream = Err(err);
                 }
             }
-            if debug!(self.stream.is_ok()) {
+            if self.stream.is_ok() {
                 let mut ret = Vec::new();
                 if let Err(err) = try_await(async {
                     self.send_command(b"NOOP").await?;
@@ -613,7 +612,7 @@ impl ImapConnection {
                     return Ok(());
                 }
             }
-            let new_stream = debug!(ImapStream::new_connection(&self.server_conf).await);
+            let new_stream = ImapStream::new_connection(&self.server_conf).await;
             if let Err(err) = new_stream.as_ref() {
                 self.uid_store.is_online.lock().unwrap().1 = Err(err.clone());
             } else {
@@ -727,7 +726,6 @@ impl ImapConnection {
                             );
                         }
                         ImapResponse::No(ref response_code) => {
-                            //FIXME return error
                             debug!(
                                 "Received NO response: {:?} {:?}",
                                 response_code,
@@ -745,7 +743,6 @@ impl ImapConnection {
                             return r.into();
                         }
                         ImapResponse::Bad(ref response_code) => {
-                            //FIXME return error
                             debug!(
                                 "Received BAD response: {:?} {:?}",
                                 response_code,
@@ -1087,7 +1084,6 @@ impl ImapBlockingConnection {
         let mut prev_failure = None;
         async move {
             if self.conn.stream.is_err() {
-                debug!(&self.conn.stream);
                 return None;
             }
             loop {
@@ -1121,7 +1117,6 @@ async fn read(
         }
         Ok(b) => {
             result.extend_from_slice(&buf[0..b]);
-            debug!(unsafe { std::str::from_utf8_unchecked(result) });
             if let Some(pos) = result.find(b"\r\n") {
                 *prev_res_length = pos + b"\r\n".len();
                 return Some(result[0..*prev_res_length].to_vec());
@@ -1129,8 +1124,6 @@ async fn read(
             *prev_failure = None;
         }
         Err(_err) => {
-            debug!(&conn.stream);
-            debug!(&_err);
             *err = Some(Into::<MeliError>::into(_err).set_kind(crate::error::ErrorKind::Network));
             *break_flag = true;
             *prev_failure = Some(SystemTime::now());

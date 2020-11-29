@@ -79,7 +79,6 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
         .examine_mailbox(mailbox_hash, &mut response, true)
         .await?
         .unwrap();
-    debug!("select response {}", String::from_utf8_lossy(&response));
     {
         let mut uidvalidities = uid_store.uidvalidity.lock().unwrap();
 
@@ -219,7 +218,6 @@ pub async fn examine_updates(
             .examine_mailbox(mailbox_hash, &mut response, true)
             .await?
             .unwrap();
-        debug!(&select_response);
         {
             let mut uidvalidities = uid_store.uidvalidity.lock().unwrap();
 
@@ -311,7 +309,7 @@ pub async fn examine_updates(
             return Ok(());
         }
 
-        if debug!(select_response.recent > 0) {
+        if select_response.recent > 0 {
             /* UID SEARCH RECENT */
             conn.send_command(b"UID SEARCH RECENT").await?;
             conn.read_response(&mut response, RequiredResponses::SEARCH)
@@ -340,7 +338,7 @@ pub async fn examine_updates(
             conn.send_command(cmd.as_bytes()).await?;
             conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)
                 .await?;
-        } else if debug!(select_response.exists > mailbox.exists.lock().unwrap().len()) {
+        } else if select_response.exists > mailbox.exists.lock().unwrap().len() {
             conn.send_command(
                 format!(
                     "FETCH {}:* (UID FLAGS ENVELOPE BODY.PEEK[HEADER.FIELDS (REFERENCES)] BODYSTRUCTURE)",
@@ -404,14 +402,14 @@ pub async fn examine_updates(
             }
         }
         if uid_store.keep_offline_cache {
-            debug!(cache_handle
+            cache_handle
                 .insert_envelopes(mailbox_hash, &v)
                 .chain_err_summary(|| {
                     format!(
                         "Could not save envelopes in cache for mailbox {}",
                         mailbox.imap_path()
                     )
-                }))?;
+                })?;
         }
 
         for FetchResponse { uid, envelope, .. } in v {

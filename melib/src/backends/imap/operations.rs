@@ -144,9 +144,9 @@ impl BackendOp for ImapOp {
                     .map_err(MeliError::from)?;
                 if v.len() != 1 {
                     debug!("responses len is {}", v.len());
-                    debug!(&response);
+                    debug!(String::from_utf8_lossy(&response));
                     /* TODO: Trigger cache invalidation here. */
-                    debug!(format!("message with UID {} was not found", uid));
+                    debug!("message with UID {} was not found", uid);
                     return Err(MeliError::new(format!(
                         "Invalid/unexpected response: {:?}",
                         response
