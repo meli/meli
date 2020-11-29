@@ -246,13 +246,66 @@ pub async fn examine_updates(
         }
         if mailbox.is_cold() {
             /* Mailbox hasn't been loaded yet */
-            if let Ok(mut exists_lck) = mailbox.exists.lock() {
-                exists_lck.clear();
-                exists_lck.set_not_yet_seen(select_response.exists);
-            }
-            if let Ok(mut unseen_lck) = mailbox.unseen.lock() {
-                unseen_lck.clear();
-                unseen_lck.set_not_yet_seen(select_response.unseen);
+            let has_list_status: bool = conn
+                .uid_store
+                .capabilities
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|cap| cap.eq_ignore_ascii_case(b"LIST-STATUS"));
+            if has_list_status {
+                conn.send_command(
+                    format!(
+                        "LIST \"{}\" \"\" RETURN (STATUS (MESSAGES UNSEEN))",
+                        mailbox.imap_path()
+                    )
+                    .as_bytes(),
+                )
+                .await?;
+                conn.read_response(
+                    &mut response,
+                    RequiredResponses::LIST_REQUIRED | RequiredResponses::STATUS,
+                )
+                .await?;
+                debug!(
+                    "list return status out: {}",
+                    String::from_utf8_lossy(&response)
+                );
+                let mut lines = response.split_rn();
+                /* Remove "M__ OK .." line */
+                lines.next_back();
+                for l in lines {
+                    if let Ok(status) = protocol_parser::status_response(&l).map(|(_, v)| v) {
+                        if Some(mailbox_hash) == status.mailbox {
+                            if let Some(total) = status.messages {
+                                if let Ok(mut exists_lck) = mailbox.exists.lock() {
+                                    exists_lck.clear();
+                                    exists_lck.set_not_yet_seen(total);
+                                }
+                            }
+                            if let Some(total) = status.unseen {
+                                if let Ok(mut unseen_lck) = mailbox.unseen.lock() {
+                                    unseen_lck.clear();
+                                    unseen_lck.set_not_yet_seen(total);
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+            } else {
+                conn.send_command(b"SEARCH UNSEEN").await?;
+                conn.read_response(&mut response, RequiredResponses::SEARCH)
+                    .await?;
+                let unseen_count = protocol_parser::search_results(&response)?.1.len();
+                if let Ok(mut exists_lck) = mailbox.exists.lock() {
+                    exists_lck.clear();
+                    exists_lck.set_not_yet_seen(select_response.exists);
+                }
+                if let Ok(mut unseen_lck) = mailbox.unseen.lock() {
+                    unseen_lck.clear();
+                    unseen_lck.set_not_yet_seen(unseen_count);
+                }
             }
             mailbox.set_warm(true);
             return Ok(());

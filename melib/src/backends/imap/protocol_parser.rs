@@ -977,7 +977,7 @@ pub struct SelectResponse {
     pub exists: ImapNum,
     pub recent: ImapNum,
     pub flags: (Flag, Vec<String>),
-    pub unseen: MessageSequenceNumber,
+    pub first_unseen: MessageSequenceNumber,
     pub uidvalidity: UIDVALIDITY,
     pub uidnext: UID,
     pub permanentflags: (Flag, Vec<String>),
@@ -1024,7 +1024,7 @@ pub fn select_response(input: &[u8]) -> Result<SelectResponse> {
             } else if l.starts_with(b"* FLAGS (") {
                 ret.flags = flags(&l[b"* FLAGS (".len()..l.len() - b")".len()]).map(|(_, v)| v)?;
             } else if l.starts_with(b"* OK [UNSEEN ") {
-                ret.unseen = MessageSequenceNumber::from_str(&String::from_utf8_lossy(
+                ret.first_unseen = MessageSequenceNumber::from_str(&String::from_utf8_lossy(
                     &l[b"* OK [UNSEEN ".len()..l.find(b"]").unwrap()],
                 ))?;
             } else if l.starts_with(b"* OK [UIDVALIDITY ") {
@@ -1082,7 +1082,7 @@ fn test_select_response() {
                 Flag::REPLIED | Flag::SEEN | Flag::TRASHED | Flag::DRAFT | Flag::FLAGGED,
                 Vec::new()
             ),
-            unseen: 16,
+            first_unseen: 16,
             uidvalidity: 1554422056,
             uidnext: 50,
             permanentflags: (
@@ -1105,7 +1105,7 @@ fn test_select_response() {
                 Flag::REPLIED | Flag::SEEN | Flag::TRASHED | Flag::DRAFT | Flag::FLAGGED,
                 Vec::new()
             ),
-            unseen: 12,
+            first_unseen: 12,
             uidvalidity: 3857529045,
             uidnext: 4392,
             permanentflags: (Flag::SEEN | Flag::TRASHED, vec!["*".into()]),
@@ -1127,7 +1127,7 @@ fn test_select_response() {
                 Flag::REPLIED | Flag::SEEN | Flag::TRASHED | Flag::DRAFT | Flag::FLAGGED,
                 Vec::new()
             ),
-            unseen: 12,
+            first_unseen: 12,
             uidvalidity: 3857529045,
             uidnext: 4392,
             permanentflags: (Flag::SEEN | Flag::TRASHED, vec!["*".into()]),

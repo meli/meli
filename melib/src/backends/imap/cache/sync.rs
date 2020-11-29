@@ -658,12 +658,11 @@ impl ImapConnection {
 
     pub async fn init_mailbox(&mut self, mailbox_hash: MailboxHash) -> Result<SelectResponse> {
         let mut response = Vec::with_capacity(8 * 1024);
-        let (mailbox_path, mailbox_exists, unseen, permissions) = {
+        let (mailbox_path, mailbox_exists, permissions) = {
             let f = &self.uid_store.mailboxes.lock().await[&mailbox_hash];
             (
                 f.imap_path().to_string(),
                 f.exists.clone(),
-                f.unseen.clone(),
                 f.permissions.clone(),
             )
         };
@@ -704,11 +703,6 @@ impl ImapConnection {
                 let mut mailbox_exists_lck = mailbox_exists.lock().unwrap();
                 mailbox_exists_lck.clear();
                 mailbox_exists_lck.set_not_yet_seen(select_response.exists);
-            }
-            {
-                let mut unseen_lck = unseen.lock().unwrap();
-                unseen_lck.clear();
-                unseen_lck.set_not_yet_seen(select_response.unseen);
             }
         }
         if select_response.exists == 0 {
