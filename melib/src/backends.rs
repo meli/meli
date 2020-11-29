@@ -647,15 +647,10 @@ impl LazyCountSet {
         }
     }
 
-    pub fn insert_existing_set(&mut self, set: BTreeSet<EnvelopeHash>) -> bool {
-        if self.not_yet_seen < set.len() {
-            false
-        } else {
-            let old_len = self.set.len();
-            self.set.extend(set.into_iter());
-            self.not_yet_seen -= self.set.len() - old_len;
-            true
-        }
+    pub fn insert_existing_set(&mut self, set: BTreeSet<EnvelopeHash>) {
+        let old_len = self.set.len();
+        self.set.extend(set.into_iter());
+        self.not_yet_seen = self.not_yet_seen.saturating_sub(self.set.len() - old_len);
     }
 
     #[inline(always)]

@@ -343,12 +343,24 @@ impl MailBackend for ImapType {
             cache_handle,
         };
 
+        /* do this in a closure to prevent recursion limit error in async_stream macro */
+        let prepare_cl = |f: &ImapMailbox| {
+            f.set_warm(true);
+            if let Ok(mut exists) = f.exists.lock() {
+                let total = exists.len();
+                exists.clear();
+                exists.set_not_yet_seen(total);
+            }
+            if let Ok(mut unseen) = f.unseen.lock() {
+                let total = unseen.len();
+                unseen.clear();
+                unseen.set_not_yet_seen(total);
+            }
+        };
         Ok(Box::pin(async_stream::try_stream! {
             {
                 let f = &state.uid_store.mailboxes.lock().await[&mailbox_hash];
-                f.exists.lock().unwrap().clear();
-                f.unseen.lock().unwrap().clear();
-                f.set_warm(true);
+                prepare_cl(f);
                 if f.no_select {
                     yield vec![];
                     return;
@@ -1629,7 +1641,7 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
                             let f = &state.uid_store.mailboxes.lock().await[&state.mailbox_hash];
                             (f.exists.clone(), f.unseen.clone())
                         };
-                        unseen.lock().unwrap().insert_set(
+                        unseen.lock().unwrap().insert_existing_set(
                             cached_payload
                                 .iter()
                                 .filter_map(|env| {
@@ -1641,10 +1653,9 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
                                 })
                                 .collect(),
                         );
-                        mailbox_exists
-                            .lock()
-                            .unwrap()
-                            .insert_set(cached_payload.iter().map(|env| env.hash()).collect::<_>());
+                        mailbox_exists.lock().unwrap().insert_existing_set(
+                            cached_payload.iter().map(|env| env.hash()).collect::<_>(),
+                        );
                         return Ok(cached_payload);
                     }
                 }
