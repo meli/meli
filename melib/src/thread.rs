@@ -338,6 +338,7 @@ impl Thread {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ThreadNode {
     pub message: Option<EnvelopeHash>,
+    pub other_mailbox: bool,
     pub parent: Option<ThreadNodeHash>,
     pub children: Vec<ThreadNodeHash>,
     pub date: UnixTimestamp,
@@ -351,6 +352,7 @@ impl Default for ThreadNode {
         ThreadNode {
             message: None,
             parent: None,
+            other_mailbox: false,
             children: Vec::new(),
             date: UnixTimestamp::default(),
             show_subject: true,
@@ -653,26 +655,36 @@ impl Threads {
         env_hash: EnvelopeHash,
         other_mailbox: bool,
     ) -> bool {
+        {
+            let envelopes_lck = envelopes.read().unwrap();
+            let message_id = envelopes_lck[&env_hash].message_id().raw();
+            if self.message_ids.contains_key(message_id)
+                && !self.missing_message_ids.contains(message_id)
+            {
+                let thread_hash = self.message_ids[message_id];
+                let node = self.thread_nodes.entry(thread_hash).or_default();
+                drop(message_id);
+                drop(envelopes_lck);
+                envelopes
+                    .write()
+                    .unwrap()
+                    .get_mut(&env_hash)
+                    .unwrap()
+                    .set_thread(thread_hash);
+
+                /* If thread node currently has a message from a foreign mailbox and env_hash is
+                 * from current mailbox we want to update it, otherwise return */
+                if !(node.other_mailbox && !other_mailbox) {
+                    return false;
+                }
+            }
+        }
         let envelopes_lck = envelopes.read().unwrap();
         let reply_to_id: Option<ThreadNodeHash> = envelopes_lck[&env_hash]
             .in_reply_to()
             .map(StrBuild::raw)
             .and_then(|r| self.message_ids.get(r).cloned());
         let message_id = envelopes_lck[&env_hash].message_id().raw();
-        if self.message_ids.contains_key(message_id)
-            && !self.missing_message_ids.contains(message_id)
-        {
-            let thread_hash = self.message_ids[message_id];
-            drop(envelopes_lck);
-            envelopes
-                .write()
-                .unwrap()
-                .get_mut(&env_hash)
-                .unwrap()
-                .set_thread(thread_hash);
-
-            return false;
-        }
 
         if other_mailbox
             && reply_to_id.is_none()
@@ -703,6 +715,7 @@ impl Threads {
             if node.parent.is_none() {
                 node.parent = reply_to_id;
             }
+            node.other_mailbox = other_mailbox;
             node.date = envelopes_lck[&env_hash].date();
             node.unseen = !envelopes_lck[&env_hash].is_seen();
         }

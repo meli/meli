@@ -137,6 +137,7 @@ impl<'m> Message<'m> {
             ThreadNode {
                 message: Some(self.env_hash()),
                 parent: None,
+                other_mailbox: false,
                 children: vec![],
                 date: self.date(),
                 show_subject: true,
