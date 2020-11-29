@@ -244,6 +244,20 @@ pub async fn examine_updates(
                 uidvalidities.insert(mailbox_hash, select_response.uidvalidity);
             }
         }
+        if mailbox.is_cold() {
+            /* Mailbox hasn't been loaded yet */
+            if let Ok(mut exists_lck) = mailbox.exists.lock() {
+                exists_lck.clear();
+                exists_lck.set_not_yet_seen(select_response.exists);
+            }
+            if let Ok(mut unseen_lck) = mailbox.unseen.lock() {
+                unseen_lck.clear();
+                unseen_lck.set_not_yet_seen(select_response.unseen);
+            }
+            mailbox.set_warm(true);
+            return Ok(());
+        }
+
         if debug!(select_response.recent > 0) {
             /* UID SEARCH RECENT */
             conn.send_command(b"UID SEARCH RECENT").await?;

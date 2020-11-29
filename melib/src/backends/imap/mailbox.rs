@@ -43,11 +43,30 @@ pub struct ImapMailbox {
     pub permissions: Arc<Mutex<MailboxPermissions>>,
     pub exists: Arc<Mutex<LazyCountSet>>,
     pub unseen: Arc<Mutex<LazyCountSet>>,
+    pub warm: Arc<Mutex<bool>>,
 }
 
 impl ImapMailbox {
     pub fn imap_path(&self) -> &str {
         &self.imap_path
+    }
+
+    /// Establish that mailbox contents have been fetched at least once during this execution
+    #[inline(always)]
+    pub fn set_warm(&self, new_value: bool) {
+        *self.warm.lock().unwrap() = new_value;
+    }
+
+    /// Mailbox contents have been fetched at least once during this execution
+    #[inline(always)]
+    pub fn is_warm(&self) -> bool {
+        *self.warm.lock().unwrap()
+    }
+
+    /// Mailbox contents have not been fetched at all during this execution
+    #[inline(always)]
+    pub fn is_cold(&self) -> bool {
+        !self.is_warm()
     }
 }
 

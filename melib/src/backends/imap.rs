@@ -348,6 +348,7 @@ impl MailBackend for ImapType {
                 let f = &state.uid_store.mailboxes.lock().await[&mailbox_hash];
                 f.exists.lock().unwrap().clear();
                 f.unseen.lock().unwrap().clear();
+                f.set_warm(true);
                 if f.no_select {
                     yield vec![];
                     return;
