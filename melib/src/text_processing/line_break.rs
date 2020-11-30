@@ -28,6 +28,7 @@ use super::types::Reflow;
 use core::cmp::Ordering;
 use core::iter::Peekable;
 use core::str::FromStr;
+use std::collections::VecDeque;
 use LineBreakClass::*;
 
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -1324,6 +1325,474 @@ mod segment_tree {
                 right /= 2;
             }
             sum
+        }
+    }
+}
+
+/// A lazy stateful iterator for line breaking text. Useful for very long text where you don't want
+/// to linebreak it completely before user requests specific lines.
+#[derive(Debug, Clone)]
+pub struct LineBreakText {
+    text: String,
+    reflow: Reflow,
+    paragraph: VecDeque<String>,
+    paragraph_start_index: usize,
+    width: Option<usize>,
+    state: ReflowState,
+}
+
+#[derive(Debug, Clone)]
+enum ReflowState {
+    ReflowNo {
+        cur_index: usize,
+    },
+    ReflowAllWidth {
+        width: usize,
+        state: LineBreakTextState,
+    },
+    ReflowAll {
+        cur_index: usize,
+    },
+    ReflowFormatFlowed {
+        cur_index: usize,
+    },
+}
+
+impl ReflowState {
+    fn new(reflow: Reflow, width: Option<usize>, cur_index: usize) -> ReflowState {
+        match reflow {
+            Reflow::All if width.is_some() => ReflowState::ReflowAllWidth {
+                width: width.unwrap(),
+                state: LineBreakTextState::AtLine { cur_index },
+            },
+            Reflow::All => ReflowState::ReflowAll { cur_index },
+            Reflow::FormatFlowed => ReflowState::ReflowFormatFlowed { cur_index },
+            Reflow::No => ReflowState::ReflowNo { cur_index },
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+enum LineBreakTextState {
+    AtLine {
+        cur_index: usize,
+    },
+    WithinLine {
+        line_index: usize,
+        line_length: usize,
+        within_line_index: usize,
+        breaks: Vec<(usize, LineBreakCandidate)>,
+        prev_break: usize,
+        segment_tree: segment_tree::SegmentTree,
+    },
+}
+
+impl Default for LineBreakText {
+    fn default() -> Self {
+        Self::new(String::new(), Reflow::default(), None)
+    }
+}
+
+impl LineBreakText {
+    pub fn new(text: String, reflow: Reflow, width: Option<usize>) -> Self {
+        LineBreakText {
+            text,
+            state: ReflowState::new(reflow, width, 0),
+            paragraph: VecDeque::new(),
+            paragraph_start_index: 0,
+            reflow,
+            width,
+        }
+    }
+
+    pub fn width(&self) -> Option<usize> {
+        self.width
+    }
+
+    pub fn set_reflow(&mut self, new_val: Reflow) -> &mut Self {
+        self.reflow = new_val;
+        self.paragraph.clear();
+        self.state = ReflowState::new(self.reflow, self.width, self.paragraph_start_index);
+        self
+    }
+
+    pub fn set_width(&mut self, new_val: Option<usize>) -> &mut Self {
+        self.width = new_val;
+        self.paragraph.clear();
+        self.state = ReflowState::new(self.reflow, self.width, self.paragraph_start_index);
+        self
+    }
+
+    pub fn set_text(&mut self, new_val: String) -> &mut Self {
+        self.text = new_val;
+        self.reset()
+    }
+
+    pub fn reset(&mut self) -> &mut Self {
+        self.paragraph.clear();
+        self.state = ReflowState::new(self.reflow, self.width, 0);
+        self.paragraph_start_index = 0;
+        self
+    }
+
+    pub fn is_finished(&self) -> bool {
+        match self.state {
+            ReflowState::ReflowNo { cur_index }
+            | ReflowState::ReflowAll { cur_index }
+            | ReflowState::ReflowFormatFlowed { cur_index }
+            | ReflowState::ReflowAllWidth {
+                width: _,
+                state: LineBreakTextState::AtLine { cur_index },
+            } => cur_index >= self.text.len(),
+            ReflowState::ReflowAllWidth {
+                width: _,
+                state: LineBreakTextState::WithinLine { .. },
+            } => false,
+        }
+    }
+}
+
+impl Iterator for LineBreakText {
+    type Item = String;
+    fn next(&mut self) -> Option<Self::Item> {
+        if !self.paragraph.is_empty() {
+            return self.paragraph.pop_front();
+        }
+        if self.is_finished() {
+            return None;
+        }
+        match self.state {
+            ReflowState::ReflowFormatFlowed { ref mut cur_index } => {
+                /* rfc3676 - The Text/Plain Format and DelSp Parameters
+                 * https://tools.ietf.org/html/rfc3676 */
+
+                /*
+                 * - Split lines with indices using str::match_indices()
+                 * - Iterate and reflow flow regions, and pass fixed regions through
+                 */
+                self.paragraph_start_index = *cur_index;
+                let line_indices_iter = self.text[*cur_index..].match_indices('\n').map(|(i, _)| i);
+                let start_offset = *cur_index;
+                let mut prev_index = *cur_index;
+                let mut in_paragraph = false;
+                let mut paragraph_start = *cur_index;
+
+                let mut prev_quote_depth = 0;
+                let mut paragraph = VecDeque::new();
+                for i in line_indices_iter {
+                    let i = i + start_offset + 1;
+                    let line = &self.text[prev_index..i];
+                    let mut trimmed = line.trim_start().lines().next().unwrap_or("");
+                    let mut quote_depth = 0;
+                    let p_str: usize = trimmed
+                        .as_bytes()
+                        .iter()
+                        .position(|&b| {
+                            if b != b'>' {
+                                /* position() is short-circuiting */
+                                true
+                            } else {
+                                quote_depth += 1;
+                                false
+                            }
+                        })
+                        .unwrap_or(0);
+                    trimmed = &trimmed[p_str..];
+                    if trimmed.starts_with(' ') {
+                        /* Remove space stuffing before checking for ending space character.
+                         * [rfc3676#section-4.4] */
+                        trimmed = &trimmed[1..];
+                    }
+
+                    if trimmed.ends_with(' ') {
+                        if !in_paragraph {
+                            in_paragraph = true;
+                            paragraph_start = prev_index;
+                        } else if prev_quote_depth == quote_depth {
+                            /* This becomes part of the paragraph we're in */
+                        } else {
+                            /*Malformed line, different quote depths can't be in the same paragraph. */
+                            let paragraph_s = &self.text[paragraph_start..prev_index];
+                            reflow_helper2(
+                                &mut paragraph,
+                                paragraph_s,
+                                prev_quote_depth,
+                                in_paragraph,
+                                self.width,
+                            );
+
+                            paragraph_start = prev_index;
+                        }
+                    } else {
+                        if prev_quote_depth == quote_depth || !in_paragraph {
+                            let paragraph_s = &self.text[paragraph_start..i];
+                            reflow_helper2(
+                                &mut paragraph,
+                                paragraph_s,
+                                quote_depth,
+                                in_paragraph,
+                                self.width,
+                            );
+                        } else {
+                            /*Malformed line, different quote depths can't be in the same paragraph. */
+                            let paragraph_s = &self.text[paragraph_start..prev_index];
+                            reflow_helper2(
+                                &mut paragraph,
+                                paragraph_s,
+                                prev_quote_depth,
+                                in_paragraph,
+                                self.width,
+                            );
+                            let paragraph_s = &self.text[prev_index..i];
+                            reflow_helper2(
+                                &mut paragraph,
+                                paragraph_s,
+                                quote_depth,
+                                false,
+                                self.width,
+                            );
+                        }
+                        *cur_index = i;
+                        std::mem::swap(&mut self.paragraph, &mut paragraph);
+                        paragraph_start = i;
+                        in_paragraph = false;
+                        break;
+                    }
+                    *cur_index = i;
+                    prev_quote_depth = quote_depth;
+                    prev_index = i;
+                }
+                if in_paragraph {
+                    let paragraph_s = &self.text[paragraph_start..self.text.len()];
+                    *cur_index = self.text.len();
+                    reflow_helper2(
+                        &mut paragraph,
+                        paragraph_s,
+                        prev_quote_depth,
+                        in_paragraph,
+                        self.width,
+                    );
+                    self.paragraph = paragraph;
+                }
+                return self.paragraph.pop_front();
+            }
+            ReflowState::ReflowAllWidth {
+                width,
+                ref mut state,
+            } => {
+                let width = width.saturating_sub(2);
+
+                loop {
+                    let line: &str;
+                    let cur_index: &mut usize;
+                    let within_line_index: &mut usize;
+                    let prev_break: &mut usize;
+                    let segment_tree: &segment_tree::SegmentTree;
+                    let breaks: &Vec<(usize, LineBreakCandidate)>;
+                    match state {
+                        LineBreakTextState::AtLine {
+                            cur_index: ref mut _cur_index,
+                        } => {
+                            line = if let Some(line) = self
+                                .text
+                                .get(*_cur_index..)
+                                .and_then(|slice| slice.split('\n').next())
+                            {
+                                line
+                            } else {
+                                *_cur_index = self.text.len();
+                                return None;
+                            };
+                            let _cur_index = *_cur_index;
+                            *state = LineBreakTextState::WithinLine {
+                                line_index: _cur_index,
+                                line_length: line.len(),
+                                within_line_index: 0,
+                                breaks: LineBreakCandidateIter::new(line).collect::<Vec<(
+                                    usize,
+                                    LineBreakCandidate,
+                                )>>(
+                                ),
+                                prev_break: 0,
+                                segment_tree: {
+                                    use std::iter::FromIterator;
+                                    let mut t: smallvec::SmallVec<[usize; 1024]> =
+                                        smallvec::SmallVec::from_iter(
+                                            std::iter::repeat(0).take(line.len()),
+                                        );
+                                    for (idx, _g) in
+                                        UnicodeSegmentation::grapheme_indices(line, true)
+                                    {
+                                        t[idx] = 1;
+                                    }
+                                    segment_tree::SegmentTree::new(t)
+                                },
+                            };
+                            if let LineBreakTextState::WithinLine {
+                                ref mut line_index,
+                                line_length: _,
+                                within_line_index: ref mut _within_line_index,
+                                breaks: ref _breaks,
+                                prev_break: ref mut _prev_break,
+                                segment_tree: ref _segment_tree,
+                            } = state
+                            {
+                                cur_index = line_index;
+                                within_line_index = _within_line_index;
+                                breaks = _breaks;
+                                prev_break = _prev_break;
+
+                                segment_tree = _segment_tree;
+                            } else {
+                                unreachable!()
+                            }
+                        }
+                        LineBreakTextState::WithinLine {
+                            ref mut line_index,
+                            ref line_length,
+                            within_line_index: ref mut _within_line_index,
+                            breaks: ref _breaks,
+                            prev_break: ref mut _prev_break,
+                            segment_tree: ref _segment_tree,
+                        } => {
+                            line = &self.text[*line_index..(*line_index + *line_length)];
+                            cur_index = line_index;
+                            within_line_index = _within_line_index;
+                            breaks = _breaks;
+                            prev_break = _prev_break;
+                            segment_tree = _segment_tree;
+                        }
+                    }
+
+                    if segment_tree.get_sum(0, line.len()) <= width {
+                        *state = LineBreakTextState::AtLine {
+                            cur_index: *cur_index + line.len() + 1,
+                        };
+                        return Some(
+                            line.trim_end_matches(|c| c == '\r' || c == '\n')
+                                .to_string(),
+                        );
+                    }
+                    if breaks.len() < 2 {
+                        let mut line = line;
+                        while !line.is_empty() {
+                            let mut chop_index = std::cmp::min(line.len().saturating_sub(1), width);
+                            while chop_index > 0 && !line.is_char_boundary(chop_index) {
+                                chop_index -= 1;
+                            }
+                            if chop_index == 0 {
+                                self.paragraph.push_back(format!("⤷{}", line));
+                                *cur_index += line.len();
+                                break;
+                            } else {
+                                self.paragraph
+                                    .push_back(format!("⤷{}", &line[..chop_index]));
+                                *cur_index += chop_index;
+                            }
+                            line = &line[chop_index..];
+                        }
+                        *state = LineBreakTextState::AtLine {
+                            cur_index: *cur_index,
+                        };
+                        if !self.paragraph.is_empty() {
+                            return self.paragraph.pop_front();
+                        }
+                        continue;
+                    }
+
+                    while *prev_break < breaks.len() {
+                        let new_off = match breaks[*prev_break..].binary_search_by(|(offset, _)| {
+                            segment_tree
+                                .get_sum(*within_line_index, offset.saturating_sub(1))
+                                .cmp(&width)
+                        }) {
+                            Ok(v) => v,
+                            Err(v) => v,
+                        } + *prev_break;
+                        let end_offset = if new_off >= breaks.len() {
+                            line.len()
+                        } else {
+                            breaks[new_off].0
+                        };
+                        if !line[*within_line_index..end_offset].is_empty() {
+                            if *within_line_index == 0 {
+                                let ret = line[*within_line_index..end_offset]
+                                    .trim_end_matches(|c| c == '\r' || c == '\n');
+                                *within_line_index = end_offset;
+                                return Some(ret.to_string());
+                            } else {
+                                let ret = format!(
+                                    "⤷{}",
+                                    &line[*within_line_index..end_offset]
+                                        .trim_end_matches(|c| c == '\r' || c == '\n')
+                                );
+                                *within_line_index = end_offset;
+                                return Some(ret);
+                            }
+                        }
+                        if *within_line_index == end_offset && *prev_break == new_off {
+                            break;
+                        }
+                        *within_line_index = end_offset + 1;
+                        *prev_break = new_off;
+                    }
+                    *state = LineBreakTextState::AtLine {
+                        cur_index: *cur_index + line.len() + 1,
+                    };
+                }
+            }
+            ReflowState::ReflowNo { ref mut cur_index }
+            | ReflowState::ReflowAll { ref mut cur_index } => {
+                for line in self.text[*cur_index..].split('\n') {
+                    let ret = line.to_string();
+                    *cur_index += line.len() + 2;
+                    return Some(ret);
+                }
+                return None;
+            }
+        }
+    }
+}
+
+fn reflow_helper2(
+    ret: &mut VecDeque<String>,
+    paragraph: &str,
+    quote_depth: usize,
+    in_paragraph: bool,
+    width: Option<usize>,
+) {
+    if quote_depth > 0 {
+        let quotes: String = ">".repeat(quote_depth);
+        let paragraph = paragraph
+            .trim_start_matches(&quotes)
+            .replace(&format!("\n{}", &quotes), "")
+            .replace("\n", "")
+            .replace("\r", "");
+        if in_paragraph {
+            if let Some(width) = width {
+                ret.extend(
+                    linear(&paragraph, width.saturating_sub(quote_depth))
+                        .into_iter()
+                        .map(|l| format!("{}{}", &quotes, l)),
+                );
+            } else {
+                ret.push_back(format!("{}{}", &quotes, &paragraph));
+            }
+        } else {
+            ret.push_back(format!("{}{}", &quotes, &paragraph));
+        }
+    } else {
+        let paragraph = paragraph.replace("\n", "").replace("\r", "");
+
+        if in_paragraph {
+            if let Some(width) = width {
+                let ex = linear(&paragraph, width);
+                ret.extend(ex.into_iter());
+            } else {
+                ret.push_back(paragraph);
+            }
+        } else {
+            ret.push_back(paragraph);
         }
     }
 }
