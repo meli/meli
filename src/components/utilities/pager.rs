@@ -20,6 +20,7 @@
  */
 
 use super::*;
+use melib::text_processing::LineBreakText;
 
 /// A pager for text.
 /// `Pager` holds its own content in its own `CellBuffer` and when `draw` is called, it draws the
@@ -39,7 +40,8 @@ pub struct Pager {
     initialised: bool,
     show_scrollbar: bool,
     content: CellBuffer,
-    text_lines: (usize, Vec<String>),
+    text_lines: Vec<String>,
+    line_breaker: LineBreakText,
     movement: Option<PageMovement>,
     id: ComponentId,
 }
@@ -95,23 +97,17 @@ impl Pager {
             }
         }
 
-        let lines: Vec<String> = text.split_lines_reflow(self.reflow, width);
-        let height = lines.len() + 2;
-        let width = width.unwrap_or_else(|| lines.iter().map(|l| l.len()).max().unwrap_or(0));
-        let mut empty_cell = Cell::with_char(' ');
-        empty_cell.set_fg(self.colors.fg);
-        empty_cell.set_bg(self.colors.bg);
-        let mut content = CellBuffer::new(1, 1, empty_cell);
-        content.set_ascii_drawing(self.content.ascii_drawing);
         self.text = text.to_string();
-        self.text_lines = (0, vec![]);
-        self.content = content;
-        self.height = height;
-        self.width = width;
+        self.text_lines.clear();
+        self.line_breaker = LineBreakText::new(self.text.clone(), self.reflow, width);
+        self.height = 0;
+        self.width = 0;
+        self.search = None;
+        self.set_dirty(true);
         self.initialised = false;
-        self.dirty = true;
         self.cursor = (0, 0);
     }
+
     pub fn from_string(
         mut text: String,
         context: Option<&Context>,
@@ -178,53 +174,18 @@ impl Pager {
         }) {
             return Pager::from_buf(content, cursor_pos);
         }
-        let content = {
-            if let Some(context) = context {
-                CellBuffer::new_with_context(1, 1, None, context)
-            } else {
-                let mut empty_cell = Cell::with_char(' ');
-                empty_cell.set_fg(colors.fg);
-                empty_cell.set_bg(colors.bg);
-                CellBuffer::new(1, 1, empty_cell)
-            }
-        };
         Pager {
             text,
-            text_lines: (0, vec![]),
+            text_lines: vec![],
             reflow,
             cursor: (0, cursor_pos.unwrap_or(0)),
-            height: content.size().1,
-            width: content.size().0,
+            height: 1,
+            width: 1,
             minimum_width: pager_minimum_width,
             initialised: false,
             dirty: true,
-            content,
             id: ComponentId::new_v4(),
             colors,
-            ..Default::default()
-        }
-    }
-    pub fn from_str(
-        text: &str,
-        cursor_pos: Option<usize>,
-        width: Option<usize>,
-        colors: ThemeAttribute,
-    ) -> Self {
-        let mut empty_cell = Cell::with_char(' ');
-        empty_cell.set_fg(colors.fg);
-        empty_cell.set_bg(colors.bg);
-
-        Pager {
-            text: text.to_string(),
-            text_lines: (0, vec![]),
-            cursor: (0, cursor_pos.unwrap_or(0)),
-            height: 1,
-            width: width.unwrap_or(1),
-            initialised: false,
-            dirty: true,
-            content: CellBuffer::new(1, 1, empty_cell),
-            colors,
-            id: ComponentId::new_v4(),
             ..Default::default()
         }
     }
@@ -243,25 +204,6 @@ impl Pager {
             ..Default::default()
         }
     }
-    pub fn print_string(content: &mut CellBuffer, lines: &[String], colors: ThemeAttribute) {
-        let width = content.size().0;
-        debug!(colors);
-        for (i, l) in lines.iter().enumerate() {
-            write_string_to_grid(
-                l,
-                content,
-                colors.fg,
-                colors.bg,
-                Attr::DEFAULT,
-                ((0, i), (width.saturating_sub(1), i)),
-                None,
-            );
-            if l.starts_with("⤷") {
-                content[(0, i)].set_fg(Color::Byte(240));
-                content[(0, i)].set_attrs(Attr::BOLD);
-            }
-        }
-    }
 
     pub fn cursor_pos(&self) -> usize {
         self.cursor.1
@@ -269,6 +211,161 @@ impl Pager {
 
     pub fn size(&self) -> (usize, usize) {
         (self.width, self.height)
+    }
+
+    pub fn initialise(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        let mut width = width!(area);
+        if width < self.minimum_width {
+            width = self.minimum_width;
+        }
+        if self.line_breaker.width() != Some(width.saturating_sub(4)) {
+            let line_breaker = LineBreakText::new(
+                self.text.clone(),
+                self.reflow,
+                Some(width.saturating_sub(4)),
+            );
+
+            self.line_breaker = line_breaker;
+            self.text_lines.clear();
+        };
+        self.height = self.text_lines.len();
+        self.width = width;
+        if let Some(ref mut search) = self.search {
+            use melib::text_processing::search::KMP;
+            search.positions.clear();
+            for (y, l) in self.text_lines.iter().enumerate() {
+                search.positions.extend(
+                    l.kmp_search(&search.pattern)
+                        .into_iter()
+                        .map(|offset| (y, offset)),
+                );
+            }
+        }
+        self.draw_lines_up_to(grid, area, context, self.cursor.1 + 2 * height!(area));
+        self.draw_page(grid, area, context);
+        self.initialised = true;
+    }
+
+    pub fn draw_lines_up_to(
+        &mut self,
+        _grid: &mut CellBuffer,
+        area: Area,
+        _context: &mut Context,
+        up_to: usize,
+    ) {
+        if self.line_breaker.is_finished() {
+            return;
+        }
+        let old_lines_no = self.text_lines.len();
+        if up_to == 0 {
+            self.text_lines.extend(self.line_breaker.by_ref());
+        } else {
+            if old_lines_no >= up_to + height!(area) {
+                return;
+            }
+            let new_lines_no = (up_to + height!(area)) - old_lines_no;
+            self.text_lines
+                .extend(self.line_breaker.by_ref().take(new_lines_no));
+        };
+        let new_lines_no = self.text_lines.len() - old_lines_no;
+        if let Some(ref mut search) = self.search {
+            use melib::text_processing::search::KMP;
+            for (y, l) in self.text_lines.iter().enumerate().skip(old_lines_no) {
+                search.positions.extend(
+                    l.kmp_search(&search.pattern)
+                        .into_iter()
+                        .map(|offset| (y, offset)),
+                );
+            }
+        }
+        self.height += new_lines_no;
+    }
+
+    fn draw_page(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        let (mut upper_left, bottom_right) = area;
+        for l in self
+            .text_lines
+            .iter()
+            .skip(self.cursor.1)
+            .take(height!(area) + 1)
+        {
+            write_string_to_grid(
+                l,
+                grid,
+                self.colors.fg,
+                self.colors.bg,
+                Attr::DEFAULT,
+                (upper_left, bottom_right),
+                None,
+            );
+            if l.starts_with("⤷") {
+                grid[upper_left]
+                    .set_fg(Color::Byte(240))
+                    .set_attrs(Attr::BOLD);
+            }
+            upper_left = pos_inc(upper_left, (0, 1));
+        }
+
+        if get_y(upper_left) <= get_y(bottom_right) {
+            clear_area(
+                grid,
+                (upper_left, bottom_right),
+                crate::conf::value(context, "theme_default"),
+            );
+        }
+
+        let (upper_left, _bottom_right) = area;
+        #[cfg(feature = "regexp")]
+        {
+            for text_formatter in crate::conf::text_format_regexps(context, "pager.envelope.body") {
+                let t = grid.insert_tag(text_formatter.tag);
+                for (i, l) in self
+                    .text_lines
+                    .iter()
+                    .skip(self.cursor.1)
+                    .enumerate()
+                    .take(height!(area) + 1)
+                {
+                    let i = i + get_y(upper_left);
+                    for (start, end) in text_formatter.regexp.find_iter(l) {
+                        let start = start + get_x(upper_left);
+                        let end = end + get_x(upper_left);
+                        grid.set_tag(t, (start, i), (end, i));
+                    }
+                }
+            }
+        }
+        let cursor_line = self.cursor.1;
+        if let Some(ref mut search) = self.search {
+            let results_attr = crate::conf::value(context, "pager.highlight_search");
+            let results_current_attr =
+                crate::conf::value(context, "pager.highlight_search_current");
+            search.cursor = std::cmp::min(search.positions.len().saturating_sub(1), search.cursor);
+            for (i, (y, x)) in search
+                .positions
+                .iter()
+                .enumerate()
+                .filter(|(_, (y, _))| *y >= cursor_line)
+                .take(height!(area) + 1)
+            {
+                let x = *x + get_x(upper_left);
+                let y = *y - cursor_line;
+                for c in grid.row_iter(x..x + search.pattern.grapheme_len(), y + get_y(upper_left))
+                {
+                    if i == search.cursor {
+                        grid[c]
+                            .set_fg(results_current_attr.fg)
+                            .set_bg(results_current_attr.bg)
+                            .set_attrs(results_current_attr.attrs);
+                    } else {
+                        grid[c]
+                            .set_fg(results_attr.fg)
+                            .set_bg(results_attr.bg)
+                            .set_attrs(results_attr.attrs);
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -281,78 +378,8 @@ impl Component for Pager {
             return;
         }
 
-        if !self.initialised && !self.text.is_empty() {
-            let mut width = width!(area);
-            if width < self.minimum_width {
-                width = self.minimum_width;
-            }
-
-            let lines: &[String] = if self.text_lines.0 == width.saturating_sub(4) {
-                &self.text_lines.1
-            } else {
-                let lines = self
-                    .text
-                    .split_lines_reflow(self.reflow, Some(width.saturating_sub(4)));
-                self.text_lines = (width.saturating_sub(4), lines);
-                &self.text_lines.1
-            };
-            let height = lines.len() + 2;
-            let mut empty_cell = Cell::with_char(' ');
-            empty_cell.set_fg(self.colors.fg);
-            empty_cell.set_bg(self.colors.bg);
-            let mut content = CellBuffer::new(width, height, empty_cell);
-            content.set_ascii_drawing(self.content.ascii_drawing);
-            if let Some(ref mut search) = self.search {
-                use melib::text_processing::search::KMP;
-                search.positions.clear();
-                for (y, l) in lines.iter().enumerate() {
-                    search.positions.extend(
-                        l.kmp_search(&search.pattern)
-                            .into_iter()
-                            .map(|offset| (y, offset)),
-                    );
-                }
-            }
-            Pager::print_string(&mut content, &lines, self.colors);
-            #[cfg(feature = "regexp")]
-            {
-                for text_formatter in
-                    crate::conf::text_format_regexps(context, "pager.envelope.body")
-                {
-                    let t = content.insert_tag(text_formatter.tag);
-                    for (i, l) in lines.iter().enumerate() {
-                        for (start, end) in text_formatter.regexp.find_iter(l) {
-                            content.set_tag(t, (start, i), (end, i));
-                        }
-                    }
-                }
-            }
-            if let Some(ref mut search) = self.search {
-                let results_attr = crate::conf::value(context, "pager.highlight_search");
-                let results_current_attr =
-                    crate::conf::value(context, "pager.highlight_search_current");
-                search.cursor =
-                    std::cmp::min(search.positions.len().saturating_sub(1), search.cursor);
-                for (i, (y, x)) in search.positions.iter().enumerate() {
-                    for c in content.row_iter(*x..*x + search.pattern.grapheme_len(), *y) {
-                        if i == search.cursor {
-                            content[c]
-                                .set_fg(results_current_attr.fg)
-                                .set_bg(results_current_attr.bg)
-                                .set_attrs(results_current_attr.attrs);
-                        } else {
-                            content[c]
-                                .set_fg(results_attr.fg)
-                                .set_bg(results_attr.bg)
-                                .set_attrs(results_attr.attrs);
-                        }
-                    }
-                }
-            }
-            self.content = content;
-            self.height = height;
-            self.width = width;
-            self.initialised = true;
+        if !self.initialised {
+            self.initialise(grid, area, context);
         }
 
         self.dirty = false;
@@ -372,15 +399,17 @@ impl Component for Pager {
                     } else {
                         self.cursor.1 = self.height.saturating_sub(1);
                     }
+                    self.draw_lines_up_to(grid, area, context, self.cursor.1 + height);
                 }
                 PageMovement::PageDown(multiplier) => {
                     if self.cursor.1 + height * multiplier + 1 < self.height {
                         self.cursor.1 += height * multiplier;
                     } else if self.cursor.1 + height * multiplier > self.height {
-                        self.cursor.1 = self.height - 1;
+                        self.cursor.1 = self.height.saturating_sub(1);
                     } else {
                         self.cursor.1 = (self.height / height) * height;
                     }
+                    self.draw_lines_up_to(grid, area, context, self.cursor.1 + height);
                 }
                 PageMovement::Right(amount) => {
                     if self.cursor.0 + amount + 1 < self.width {
@@ -397,6 +426,7 @@ impl Component for Pager {
                 }
                 PageMovement::End => {
                     self.cursor.1 = self.height.saturating_sub(1);
+                    self.draw_lines_up_to(grid, area, context, 0);
                 }
             }
         }
@@ -425,8 +455,11 @@ impl Component for Pager {
         }
 
         clear_area(grid, area, crate::conf::value(context, "theme_default"));
-        let (width, height) = self.content.size();
         let (mut cols, mut rows) = (width!(area), height!(area));
+        if cols < 2 || rows < 2 {
+            return;
+        }
+        let (width, height) = (self.line_breaker.width().unwrap_or(cols), self.height);
         if self.show_scrollbar && rows < height {
             cols -= 1;
         }
@@ -437,22 +470,8 @@ impl Component for Pager {
             std::cmp::min(width.saturating_sub(cols), self.cursor.0),
             std::cmp::min(height.saturating_sub(rows), self.cursor.1),
         );
-        copy_area(
-            grid,
-            &self.content,
-            area,
-            (
-                (
-                    std::cmp::min((width - 1).saturating_sub(cols), self.cursor.0),
-                    std::cmp::min((height - 1).saturating_sub(rows), self.cursor.1),
-                ),
-                (
-                    std::cmp::min(self.cursor.0 + cols, width - 1),
-                    std::cmp::min(self.cursor.1 + rows, height - 1),
-                ),
-            ),
-        );
-        if self.show_scrollbar && rows + 1 < height {
+        self.draw_page(grid, area, context);
+        if self.show_scrollbar && rows < height {
             ScrollBar::default().set_show_arrows(true).draw(
                 grid,
                 (
@@ -460,12 +479,15 @@ impl Component for Pager {
                     bottom_right!(area),
                 ),
                 context,
+                /* position */
                 self.cursor.1,
+                /* visible_rows */
                 rows,
+                /* length */
                 height,
             );
         }
-        if self.show_scrollbar && cols + 1 < width {
+        if self.show_scrollbar && cols < width {
             ScrollBar::default().set_show_arrows(true).draw_horizontal(
                 grid,
                 (
@@ -480,20 +502,21 @@ impl Component for Pager {
         }
         context.dirty_areas.push_back(area);
     }
+
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         let shortcuts = self.get_shortcuts(context);
         match event {
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Self::DESCRIPTION]["scroll_up"]) =>
             {
-                self.cursor.1 = self.cursor.1.saturating_sub(1);
+                self.movement = Some(PageMovement::Up(1));
                 self.dirty = true;
                 return true;
             }
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Self::DESCRIPTION]["scroll_down"]) =>
             {
-                self.cursor.1 = self.cursor.1 + 1;
+                self.movement = Some(PageMovement::Down(1));
                 self.dirty = true;
                 return true;
             }
@@ -620,6 +643,7 @@ impl Component for Pager {
         }
         false
     }
+
     fn is_dirty(&self) -> bool {
         self.dirty
     }
@@ -627,6 +651,7 @@ impl Component for Pager {
     fn set_dirty(&mut self, value: bool) {
         self.dirty = value;
     }
+
     fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
         let config_map: IndexMap<&'static str, Key> = context.settings.shortcuts.pager.key_values();
         let mut ret: ShortcutMaps = Default::default();
