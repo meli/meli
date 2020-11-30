@@ -1132,13 +1132,24 @@ subsection
 .El
 .Ss SmtpAuth
 .Bl -tag -width 36n
-.It Ic type Ar "none" | "auto"
+.It Ic type Ar "none" | "auto" | "xoauth2"
 .El
 .Pp
 For type "auto":
 .Bl -tag -width 36n
 .It Ic username Ar String
 .It Ic password Ar SmtpPassword
+.It Ic require_auth Ar bool
+.Pq Em optional
+require authentication in every case
+.\" default value
+.Pq Em true
+.El
+.sp
+For type "xoauth2":
+.Bl -tag -width 36n
+.It Ic token_command Ar String
+Command to evaluate that returns an XOAUTH2 token.
 .It Ic require_auth Ar bool
 .Pq Em optional
 require authentication in every case
@@ -1155,6 +1166,13 @@ auth = { type = "auto", username = "user", password = "hunter2" }
 .Ed
 .Bd -literal
 auth = { type = "none" }
+.Ed
+.sp
+For Gmail (see
+.Sx Gmail OAUTH2
+for details on the authentication token command):
+.Bd -literal
+auth = { type = "xoauth2", token_command = "TOKEN=$(python3 oauth2.py --user=xxx@gmail.com --quiet --client_id=1038[...].apps.googleusercontent.com --client_secret=[..] --refresh_token=[..] && python3 oauth2.py --user=xxx@gmail.com --generate_oauth2_string --quiet --access_token=$TOKEN" }
 .Ed
 .Ss SmtpPassword
 .Bl -tag -width 36n

@@ -140,6 +140,12 @@ pub enum SmtpAuth {
         #[serde(skip_serializing, skip_deserializing, default)]
         auth_type: SmtpAuthType,
     },
+    #[serde(alias = "xoauth2")]
+    XOAuth2 {
+        token_command: String,
+        #[serde(default = "true_val")]
+        require_auth: bool,
+    },
     // md5, sasl, etc
 }
 
@@ -162,7 +168,7 @@ impl SmtpAuth {
         use SmtpAuth::*;
         match self {
             None => false,
-            Auto { require_auth, .. } => *require_auth,
+            Auto { require_auth, .. } | XOAuth2 { require_auth, .. } => *require_auth,
         }
     }
 }
@@ -500,6 +506,39 @@ impl SmtpConnection {
                         ret.send_command(&[b"AUTH PLAIN ", username_password.as_bytes()])
                             .await?;
                     }
+                    ret.read_lines(&mut res, Some((ReplyCode::_235, &[])))
+                        .await
+                        .chain_err_kind(crate::error::ErrorKind::Authentication)?;
+                    ret.send_command(&[b"EHLO meli.delivery"]).await?;
+                }
+                SmtpAuth::XOAuth2 { token_command, .. } => {
+                    let password_token = {
+                        let _token_command = token_command.clone();
+                        let mut output = unblock(move || {
+                            Command::new("sh")
+                                .args(&["-c", &_token_command])
+                                .stdin(std::process::Stdio::piped())
+                                .stdout(std::process::Stdio::piped())
+                                .stderr(std::process::Stdio::piped())
+                                .output()
+                        })
+                        .await?;
+                        if !output.status.success() {
+                            return Err(MeliError::new(format!(
+                                "SMTP XOAUTH2 token evaluation command `{}` returned {}: {}",
+                                &token_command,
+                                output.status,
+                                String::from_utf8_lossy(&output.stderr)
+                            )));
+                        }
+                        if output.stdout.ends_with(b"\n") {
+                            output.stdout.pop();
+                        }
+                        output.stdout
+                    };
+                    // https://developers.google.com/gmail/imap/xoauth2-protocol#smtp_protocol_exchange
+                    ret.send_command(&[b"AUTH XOAUTH2 ", &password_token])
+                        .await?;
                     ret.read_lines(&mut res, Some((ReplyCode::_235, &[])))
                         .await
                         .chain_err_kind(crate::error::ErrorKind::Authentication)?;
@@ -965,6 +1004,9 @@ async fn read_lines<'r>(
                 return Err(MeliError::from(e).set_kind(crate::error::ErrorKind::Network));
             }
         }
+    }
+    if ret.len() < 3 {
+        return Err(MeliError::new(format!("Invalid SMTP reply: {}", ret)));
     }
     let code = ReplyCode::try_from(&ret[..3])?;
     let reply = Reply::new(ret, code);
