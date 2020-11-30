@@ -110,6 +110,12 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
         let mailboxes_lck = timeout(uid_store.timeout, uid_store.mailboxes.lock()).await?;
         mailboxes_lck.clone()
     };
+    for (h, mailbox) in mailboxes.clone() {
+        if mailbox_hash == h {
+            continue;
+        }
+        examine_updates(mailbox, &mut conn, &uid_store).await?;
+    }
     conn.send_command(b"IDLE").await?;
     let mut blockn = ImapBlockingConnection::from(conn);
     let mut watch = std::time::Instant::now();
