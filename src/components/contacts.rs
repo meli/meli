@@ -105,7 +105,8 @@ impl ContactManager {
 
         if self.card.external_resource() {
             self.mode = ViewMode::ReadOnly;
-            self.content
+            let _ = self
+                .content
                 .resize(self.content.size().0, 2, Cell::default());
             write_string_to_grid(
                 "This contact's origin is external and cannot be edited within meli.",

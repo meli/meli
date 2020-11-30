@@ -517,8 +517,14 @@ impl State {
         }
         self.cols = termcols.unwrap_or(72) as usize;
         self.rows = termrows.unwrap_or(120) as usize;
-        self.grid.resize(self.cols, self.rows, Cell::with_char(' '));
-        self.overlay_grid
+        if !self.grid.resize(self.cols, self.rows, Cell::with_char(' ')) {
+            panic!(
+                "Terminal size too big: ({} cols, {} rows)",
+                self.cols, self.rows
+            );
+        }
+        let _ = self
+            .overlay_grid
             .resize(self.cols, self.rows, Cell::with_char(' '));
 
         self.rcv_event(UIEvent::Resize);

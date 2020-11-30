@@ -82,6 +82,7 @@ impl fmt::Debug for CellBuffer {
 }
 
 impl CellBuffer {
+    pub const MAX_SIZE: usize = 300_000;
     pub fn area(&self) -> Area {
         (
             (0, 0),
@@ -143,16 +144,11 @@ impl CellBuffer {
 
     /// Resizes `CellBuffer` to the given number of rows and columns, using the given `Cell` as
     /// a blank.
-    pub fn resize(&mut self, newcols: usize, newrows: usize, blank: Cell) {
+    #[must_use]
+    pub fn resize(&mut self, newcols: usize, newrows: usize, blank: Cell) -> bool {
         let newlen = newcols * newrows;
-        if self.buf.len() == newlen {
-            self.cols = newcols;
-            self.rows = newrows;
-            return;
-        }
-
-        if newlen >= 200_000 {
-            return;
+        if (self.cols, self.rows) == (newcols, newrows) || newlen >= Self::MAX_SIZE {
+            return !(newlen >= Self::MAX_SIZE);
         }
 
         let mut newbuf: Vec<Cell> = Vec::with_capacity(newlen);
@@ -165,6 +161,7 @@ impl CellBuffer {
         self.buf = newbuf;
         self.cols = newcols;
         self.rows = newrows;
+        true
     }
 
     pub fn is_empty(&self) -> bool {
@@ -1086,28 +1083,32 @@ macro_rules! inspect_bounds {
         let (upper_left, bottom_right) = $area;
         if $x > (get_x(bottom_right)) || $x >= get_x(bounds) {
             if $grid.growable {
-                $grid.resize(
+                if !$grid.resize(
                     std::cmp::max($x + 1, $grid.cols),
                     $grid.rows,
                     $grid.default_cell,
-                );
+                ) {
+                    break;
+                };
             } else {
                 $x = get_x(upper_left);
                 $y += 1;
-                if $line_break.is_none() {
-                    break;
+                if let Some(_x) = $line_break {
+                    $x = _x;
                 } else {
-                    $x = $line_break.unwrap();
+                    break;
                 }
             }
         }
         if $y > (get_y(bottom_right)) || $y >= get_y(bounds) {
             if $grid.growable {
-                $grid.resize(
+                if !$grid.resize(
                     $grid.cols,
                     std::cmp::max($y + 1, $grid.rows),
                     $grid.default_cell,
-                );
+                ) {
+                    break;
+                };
             } else {
                 return ($x, $y - 1);
             }
@@ -1126,17 +1127,20 @@ pub fn write_string_to_grid(
     // The left-most x coordinate.
     line_break: Option<usize>,
 ) -> Pos {
-    let bounds = grid.size();
+    let mut bounds = grid.size();
     let upper_left = upper_left!(area);
     let bottom_right = bottom_right!(area);
     let (mut x, mut y) = upper_left;
     if y == get_y(bounds) || x == get_x(bounds) {
         if grid.growable {
-            grid.resize(
-                std::cmp::max(grid.cols, x + 1),
-                std::cmp::max(grid.rows, y + 1),
+            if !grid.resize(
+                std::cmp::max(grid.cols, x + 2),
+                std::cmp::max(grid.rows, y + 2),
                 grid.default_cell,
-            );
+            ) {
+                return (x, y);
+            }
+            bounds = grid.size();
         } else {
             return (x, y);
         }
@@ -1148,11 +1152,13 @@ pub fn write_string_to_grid(
         || x > get_x(bounds)
     {
         if grid.growable {
-            grid.resize(
-                std::cmp::max(grid.cols, x + 1),
-                std::cmp::max(grid.rows, y + 1),
+            if !grid.resize(
+                std::cmp::max(grid.cols, x + 2),
+                std::cmp::max(grid.rows, y + 2),
                 grid.default_cell,
-            );
+            ) {
+                return (x, y);
+            }
         } else {
             debug!(" Invalid area with string {} and area {:?}", s, area);
             return (x, y);
@@ -1165,12 +1171,12 @@ pub fn write_string_to_grid(
         }
         if c == '\n' {
             y += 1;
-            if line_break.is_none() {
-                break;
-            } else {
-                x = line_break.unwrap();
+            if let Some(_x) = line_break {
+                x = _x;
                 inspect_bounds!(grid, area, x, y, line_break);
                 continue;
+            } else {
+                break;
             }
         }
         if c == '\t' {
