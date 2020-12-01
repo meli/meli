@@ -1051,6 +1051,8 @@ impl Component for MailView {
             let envelope: EnvelopeRef = account.collection.get_env(self.coordinates.2);
 
             let headers = crate::conf::value(context, "mail.view.headers");
+            let headers_names = crate::conf::value(context, "mail.view.headers_names");
+            let headers_area = crate::conf::value(context, "mail.view.headers_area");
 
             if let ViewMode::Source(_) = self.mode {
                 clear_area(grid, area, self.theme_default);
@@ -1070,55 +1072,71 @@ impl Component for MailView {
                 ) || height_p < height;
                 let (_, mut y) = upper_left;
                 macro_rules! print_header {
-                    ($($string:expr)+) => {
+                    ($(($header:literal, $string:expr)),*$(,)?) => {
                         $({
                             if sticky || skip_header_ctr == 0 {
                                 if y <= get_y(bottom_right) {
-                                let (_x, _y) = write_string_to_grid(
-                                    &$string,
-                                    grid,
-                                    headers.fg,
-                                    headers.bg,
-                                    headers.attrs,
-                                    (set_y(upper_left, y), bottom_right),
-                                    Some(get_x(upper_left)),
-                                );
-                            clear_area(grid, ((std::cmp::min(_x, get_x(bottom_right)), _y), (get_x(bottom_right), _y)), headers);
-                            y = _y + 1;
+                                    let (_x, _y) = write_string_to_grid(
+                                        $header,
+                                        grid,
+                                        headers_names.fg,
+                                        headers_names.bg,
+                                        headers_names.attrs,
+                                        (set_y(upper_left, y), bottom_right),
+                                        Some(get_x(upper_left)),
+                                    );
+                                    if let Some(cell) = grid.get_mut(_x,_y) {
+                                        cell.set_ch(' ')
+                                            .set_fg(headers_area.fg)
+                                            .set_bg(headers_area.bg)
+                                            .set_attrs(headers_area.attrs);
+                                    }
+
+                                    let (_x, _y) = write_string_to_grid(
+                                        &$string,
+                                        grid,
+                                        headers.fg,
+                                        headers.bg,
+                                        headers.attrs,
+                                        ((_x +1, _y), bottom_right),
+                                        Some(get_x(upper_left)),
+                                    );
+                                    clear_area(grid, ((std::cmp::min(_x, get_x(bottom_right)), _y), (get_x(bottom_right), _y)), headers_area);
+                                    y = _y + 1;
                                 }
-                        } else {
-                            skip_header_ctr -= 1;
-                        }
-                        self.headers_no += 1;
+                            } else {
+                                skip_header_ctr -= 1;
+                            }
+                            self.headers_no += 1;
                         })+
                     };
                 }
                 print_header!(
-                    format!("Date: {}", envelope.date_as_str())
-                    format!("From: {}", envelope.field_from_to_string())
-                    format!("To: {}", envelope.field_to_to_string())
+                    ("Date:", envelope.date_as_str()),
+                    ("From:", envelope.field_from_to_string()),
+                    ("To:", envelope.field_to_to_string()),
                 );
                 if envelope.other_headers().contains_key("Cc")
                     && !envelope.other_headers()["Cc"].is_empty()
                 {
-                    print_header!(format!("Cc: {}", envelope.field_cc_to_string()));
+                    print_header!(("Cc:", envelope.field_cc_to_string()));
                 }
                 print_header!(
-                    format!("Subject: {}", envelope.subject())
-                    format!("Message-ID: <{}>", envelope.message_id_raw())
+                    ("Subject:", envelope.subject()),
+                    ("Message-ID:", format!("<{}>", envelope.message_id_raw()))
                 );
                 if self.expand_headers {
                     if let Some(val) = envelope.in_reply_to_display() {
                         print_header!(
-                            format!("In-Reply-To: {}", val)
-                            format!(
-                                "References: {}",
+                            ("In-Reply-To:", val),
+                            (
+                                "References:",
                                 envelope
-                                .references()
-                                .iter()
-                                .map(std::string::ToString::to_string)
-                                .collect::<Vec<String>>()
-                                .join(", ")
+                                    .references()
+                                    .iter()
+                                    .map(std::string::ToString::to_string)
+                                    .collect::<Vec<String>>()
+                                    .join(", ")
                             )
                         );
                     }
@@ -1136,14 +1154,14 @@ impl Component for MailView {
                             clear_area(
                                 grid,
                                 (set_y(upper_left, y), set_y(bottom_right, y)),
-                                headers,
+                                headers_area,
                             );
                             let (_x, _) = write_string_to_grid(
                                 "List-ID: ",
                                 grid,
-                                headers.fg,
-                                headers.bg,
-                                headers.attrs,
+                                headers_names.fg,
+                                headers_names.bg,
+                                headers_names.attrs,
                                 (set_y(upper_left, y), bottom_right),
                                 None,
                             );
@@ -1169,9 +1187,9 @@ impl Component for MailView {
                             let (_x, _y) = write_string_to_grid(
                                 " Available actions: [ ",
                                 grid,
-                                headers.fg,
-                                headers.bg,
-                                headers.attrs,
+                                headers_names.fg,
+                                headers_names.bg,
+                                headers_names.attrs,
                                 ((x, y), bottom_right),
                                 Some(get_x(upper_left)),
                             );
@@ -1224,16 +1242,16 @@ impl Component for MailView {
                             if x > 0 {
                                 grid[(x - 1, y)]
                                     .set_ch(']')
-                                    .set_fg(headers.fg)
-                                    .set_bg(headers.bg)
-                                    .set_attrs(headers.attrs);
+                                    .set_fg(headers_names.fg)
+                                    .set_bg(headers_names.bg)
+                                    .set_attrs(headers_names.attrs);
                             }
                         }
                         for x in x..=get_x(bottom_right) {
                             grid[(x, y)]
                                 .set_ch(' ')
-                                .set_fg(headers.fg)
-                                .set_bg(headers.bg);
+                                .set_fg(headers_area.fg)
+                                .set_bg(headers_area.bg);
                         }
                         y += 1;
                     }
@@ -1243,7 +1261,7 @@ impl Component for MailView {
                 clear_area(
                     grid,
                     (set_y(upper_left, y), set_y(bottom_right, y)),
-                    headers,
+                    headers_area,
                 );
                 context
                     .dirty_areas

@@ -292,6 +292,8 @@ const DEFAULT_KEYS: &[&str] = &[
     "mail.listing.conversations.highlighted",
     "mail.listing.conversations.selected",
     "mail.view.headers",
+    "mail.view.headers_names",
+    "mail.view.headers_area",
     "mail.view.body",
     "mail.view.thread.indentation.a",
     "mail.view.thread.indentation.b",
@@ -1646,6 +1648,20 @@ impl Default for Themes {
                 fg: Color::Black,
             }
         );
+        add!(
+            "mail.view.headers_names",
+            light = {
+                fg: "mail.view.headers",
+                bg: "mail.view.headers",
+                attrs: "mail.view.headers",
+            },
+            dark = {
+                fg: "mail.view.headers",
+                bg: "mail.view.headers",
+                attrs: "mail.view.headers",
+            }
+        );
+        add!("mail.view.headers_area");
         add!("mail.view.body");
         add!("mail.view.thread.indentation.a", light = { bg: Color::Byte(69) }, dark = { bg: Color::Byte(69) }); // CornflowerBlue
         add!("mail.view.thread.indentation.b", light = { bg: Color::Byte(196) }, dark = { bg: Color::Byte(196) }); // Red1
