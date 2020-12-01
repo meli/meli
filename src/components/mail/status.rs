@@ -90,6 +90,56 @@ impl Component for AccountStatus {
         width = self.content.size().0;
         let mut line = 2;
 
+        write_string_to_grid(
+            "In-progress jobs:",
+            &mut self.content,
+            self.theme_default.fg,
+            self.theme_default.bg,
+            Attr::BOLD,
+            ((1, line), (width - 1, line)),
+            None,
+        );
+        line += 2;
+
+        for (job_id, req) in a.active_jobs.iter() {
+            width = self.content.size().0;
+            use crate::conf::accounts::JobRequest;
+            let (x, y) = write_string_to_grid(
+                &format!("{} {}", req, job_id),
+                &mut self.content,
+                self.theme_default.fg,
+                self.theme_default.bg,
+                self.theme_default.attrs,
+                ((1, line), (width - 1, line)),
+                None,
+            );
+            if let JobRequest::DeleteMailbox { mailbox_hash, .. }
+            | JobRequest::SetMailboxPermissions { mailbox_hash, .. }
+            | JobRequest::SetMailboxSubscription { mailbox_hash, .. }
+            | JobRequest::CopyTo {
+                dest_mailbox_hash: mailbox_hash,
+                ..
+            }
+            | JobRequest::Refresh { mailbox_hash, .. }
+            | JobRequest::Fetch { mailbox_hash, .. } = req
+            {
+                write_string_to_grid(
+                    a.mailbox_entries[mailbox_hash].name(),
+                    &mut self.content,
+                    self.theme_default.fg,
+                    self.theme_default.bg,
+                    self.theme_default.attrs,
+                    ((x + 1, y), (width - 1, y)),
+                    None,
+                );
+            }
+
+            line += 1;
+        }
+
+        line += 2;
+        width = self.content.size().0;
+
         let (_x, _y) = write_string_to_grid(
             "Tag support: ",
             &mut self.content,
@@ -321,55 +371,6 @@ impl Component for AccountStatus {
                 };
                 line += 1;
             }
-        }
-        line += 2;
-
-        width = self.content.size().0;
-        write_string_to_grid(
-            "In-progress jobs:",
-            &mut self.content,
-            self.theme_default.fg,
-            self.theme_default.bg,
-            Attr::BOLD,
-            ((1, line), (width - 1, line)),
-            None,
-        );
-        line += 2;
-
-        for (job_id, req) in a.active_jobs.iter() {
-            width = self.content.size().0;
-            use crate::conf::accounts::JobRequest;
-            let (x, y) = write_string_to_grid(
-                &format!("{} {}", req, job_id),
-                &mut self.content,
-                self.theme_default.fg,
-                self.theme_default.bg,
-                self.theme_default.attrs,
-                ((1, line), (width - 1, line)),
-                None,
-            );
-            if let JobRequest::DeleteMailbox { mailbox_hash, .. }
-            | JobRequest::SetMailboxPermissions { mailbox_hash, .. }
-            | JobRequest::SetMailboxSubscription { mailbox_hash, .. }
-            | JobRequest::CopyTo {
-                dest_mailbox_hash: mailbox_hash,
-                ..
-            }
-            | JobRequest::Refresh { mailbox_hash, .. }
-            | JobRequest::Fetch { mailbox_hash, .. } = req
-            {
-                write_string_to_grid(
-                    a.mailbox_entries[mailbox_hash].name(),
-                    &mut self.content,
-                    self.theme_default.fg,
-                    self.theme_default.bg,
-                    self.theme_default.attrs,
-                    ((x + 1, y), (width - 1, y)),
-                    None,
-                );
-            }
-
-            line += 1;
         }
 
         /* self.content may have been resized with write_string_to_grid() calls above since it has
