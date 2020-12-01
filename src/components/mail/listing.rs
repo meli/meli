@@ -709,7 +709,7 @@ impl Component for Listing {
                 return true;
             }
             UIEvent::ChangeMode(UIMode::Normal) => {
-                self.dirty = true;
+                self.set_dirty(true);
             }
             UIEvent::Resize => {
                 self.set_dirty(true);
@@ -1405,6 +1405,8 @@ impl Component for Listing {
             | UIEvent::EnvelopeRename(_, _)
             | UIEvent::EnvelopeRemove(_, _) => {
                 self.dirty = true;
+                /* clear menu to force redraw */
+                self.menu_content.empty();
                 context
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
