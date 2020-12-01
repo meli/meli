@@ -54,6 +54,7 @@ impl fmt::Display for Pager {
 
 impl Pager {
     pub const DESCRIPTION: &'static str = "pager";
+    const PAGES_AHEAD_TO_RENDER_NO: usize = 16;
     pub fn new(context: &Context) -> Self {
         let mut ret = Pager::default();
         ret.minimum_width = context.settings.pager.minimum_width;
@@ -240,8 +241,18 @@ impl Pager {
                         .map(|offset| (y, offset)),
                 );
             }
+            if let Some(pos) = search.positions.get(search.cursor) {
+                if self.cursor.1 > pos.0 || self.cursor.1 + height!(area) < pos.0 {
+                    self.cursor.1 = pos.0.saturating_sub(3);
+                }
+            }
         }
-        self.draw_lines_up_to(grid, area, context, self.cursor.1 + 2 * height!(area));
+        self.draw_lines_up_to(
+            grid,
+            area,
+            context,
+            self.cursor.1 + Self::PAGES_AHEAD_TO_RENDER_NO * height!(area),
+        );
         self.draw_page(grid, area, context);
         self.initialised = true;
     }
@@ -350,8 +361,10 @@ impl Pager {
             {
                 let x = *x + get_x(upper_left);
                 let y = *y - cursor_line;
-                for c in grid.row_iter(x..x + search.pattern.grapheme_len(), y + get_y(upper_left))
-                {
+                for c in grid.row_iter(
+                    x..x + search.pattern.grapheme_width(),
+                    y + get_y(upper_left),
+                ) {
                     if i == search.cursor {
                         grid[c]
                             .set_fg(results_current_attr.fg)
@@ -399,7 +412,12 @@ impl Component for Pager {
                     } else {
                         self.cursor.1 = self.height.saturating_sub(1);
                     }
-                    self.draw_lines_up_to(grid, area, context, self.cursor.1 + height);
+                    self.draw_lines_up_to(
+                        grid,
+                        area,
+                        context,
+                        self.cursor.1 + Self::PAGES_AHEAD_TO_RENDER_NO * height,
+                    );
                 }
                 PageMovement::PageDown(multiplier) => {
                     if self.cursor.1 + height * multiplier + 1 < self.height {
@@ -409,7 +427,12 @@ impl Component for Pager {
                     } else {
                         self.cursor.1 = (self.height / height) * height;
                     }
-                    self.draw_lines_up_to(grid, area, context, self.cursor.1 + height);
+                    self.draw_lines_up_to(
+                        grid,
+                        area,
+                        context,
+                        self.cursor.1 + Self::PAGES_AHEAD_TO_RENDER_NO * height,
+                    );
                 }
                 PageMovement::Right(amount) => {
                     if self.cursor.0 + amount + 1 < self.width {
@@ -425,8 +448,8 @@ impl Component for Pager {
                     self.cursor.1 = 0;
                 }
                 PageMovement::End => {
-                    self.cursor.1 = self.height.saturating_sub(1);
                     self.draw_lines_up_to(grid, area, context, 0);
+                    self.cursor.1 = self.height.saturating_sub(1);
                 }
             }
         }
@@ -462,7 +485,11 @@ impl Component for Pager {
         let (width, height) = (self.line_breaker.width().unwrap_or(cols), self.height);
         if self.show_scrollbar && rows < height {
             cols -= 1;
+            rows -= 1;
+        } else if self.search.is_some() {
+            rows -= 1;
         }
+
         if self.show_scrollbar && cols < width {
             rows -= 1;
         }
@@ -470,7 +497,11 @@ impl Component for Pager {
             std::cmp::min(width.saturating_sub(cols), self.cursor.0),
             std::cmp::min(height.saturating_sub(rows), self.cursor.1),
         );
-        self.draw_page(grid, area, context);
+        self.draw_page(
+            grid,
+            (upper_left!(area), pos_inc(upper_left!(area), (cols, rows))),
+            context,
+        );
         if self.show_scrollbar && rows < height {
             ScrollBar::default().set_show_arrows(true).draw(
                 grid,
@@ -499,6 +530,78 @@ impl Component for Pager {
                 cols,
                 width,
             );
+        }
+        if (rows < height) || self.search.is_some() {
+            const RESULTS_STR: &str = "Results for ";
+            let shown_percentage =
+                ((self.cursor.1 + rows) as f32 / (height as f32) * 100.0) as usize;
+            let shown_lines = self.cursor.1 + rows;
+            let total_lines = height;
+            let scrolling = if rows < height {
+                format!(
+                    "{shown_percentage}% {line_desc}{shown_lines}/{total_lines}{has_more_lines}",
+                    line_desc = if grid.ascii_drawing { "lines:" } else { "☰ " },
+                    shown_percentage = shown_percentage,
+                    shown_lines = shown_lines,
+                    total_lines = total_lines,
+                    has_more_lines = if self.line_breaker.is_finished() {
+                        ""
+                    } else {
+                        "(+)"
+                    }
+                )
+            } else {
+                String::new()
+            };
+            let search_results = if let Some(ref search) = self.search {
+                format!(
+                    "{results_str}{search_pattern}: {current_pos}/{total_results}{has_more_lines}",
+                    results_str = RESULTS_STR,
+                    search_pattern = &search.pattern,
+                    current_pos = if search.positions.is_empty() {
+                        0
+                    } else {
+                        search.cursor + 1
+                    },
+                    total_results = search.positions.len(),
+                    has_more_lines = if self.line_breaker.is_finished() {
+                        ""
+                    } else {
+                        "(+)"
+                    }
+                )
+            } else {
+                String::new()
+            };
+            let status_message = format!(
+                "{search_results}{divider}{scrolling}",
+                search_results = search_results,
+                divider = if self.search.is_some() { " " } else { "" },
+                scrolling = scrolling,
+            );
+            let mut attribute = crate::conf::value(context, "status.bar");
+            if !context.settings.terminal.use_color() {
+                attribute.attrs |= Attr::REVERSE;
+            }
+            let (_, y) = write_string_to_grid(
+                &status_message,
+                grid,
+                attribute.fg,
+                attribute.bg,
+                attribute.attrs,
+                (
+                    set_y(upper_left!(area), get_y(bottom_right!(area))),
+                    bottom_right!(area),
+                ),
+                None,
+            );
+            /* set search pattern to italics */
+            if let Some(ref search) = self.search {
+                let start_x = get_x(upper_left!(area)) + RESULTS_STR.len();
+                for c in grid.row_iter(start_x..(start_x + search.pattern.grapheme_width()), y) {
+                    grid[c].set_attrs(attribute.attrs | Attr::ITALICS);
+                }
+            }
         }
         context.dirty_areas.push_back(area);
     }
