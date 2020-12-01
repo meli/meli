@@ -46,7 +46,8 @@ color_aliases = { "unseen_fg" = "theme_default", "unseen_bg" = "theme_default", 
 "mail.sidebar_unread_count" = { fg = "$dimmed_text", bg = "theme_default", attrs = "theme_default" }
 
 "mail.view.body" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
-"mail.view.headers" = { fg = "theme_default", bg = "theme_default", attrs = "Bold" }
+"mail.view.headers" = { fg = "theme_default", bg = "theme_default", attrs = "theme_default" }
+"mail.view.headers_names" = { fg = "theme_default", bg = "theme_default", attrs = "Bold" }
 "mail.view.thread.indentation.a" = { fg = "theme_default", bg = "#EC633D", attrs = "theme_default" }
 "mail.view.thread.indentation.b" = { fg = "theme_default", bg = "#D347F9", attrs = "theme_default" }
 "mail.view.thread.indentation.c" = { fg = "theme_default", bg = "#317EFB", attrs = "theme_default" }
