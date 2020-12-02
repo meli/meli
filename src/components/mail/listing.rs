@@ -1509,10 +1509,15 @@ impl Component for Listing {
                     .ok()
                     .unwrap_or((0, 0));
                 format!(
-                    "Mailbox: {}, Messages: {}, New: {}",
+                    "Mailbox: {}, Messages: {}, New: {}{}",
                     account[&mailbox_hash].name(),
                     total,
-                    unseen
+                    unseen,
+                    if account[&mailbox_hash].status.is_parsing() {
+                        "(Loading...)"
+                    } else {
+                        ""
+                    }
                 )
             }
             MailboxStatus::Failed(_) | MailboxStatus::None => account[&mailbox_hash].status(),
