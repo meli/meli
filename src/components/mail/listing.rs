@@ -613,6 +613,15 @@ impl Component for Listing {
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         match event {
+            UIEvent::ConfigReload { old_settings: _ } => {
+                self.theme_default = crate::conf::value(context, "theme_default");
+                let account_hash = context.accounts[self.cursor_pos.0].hash();
+                self.sidebar_divider =
+                    *account_settings!(context[account_hash].listing.sidebar_divider);
+                self.sidebar_divider_theme = conf::value(context, "mail.sidebar_divider");
+                self.menu_content = CellBuffer::new_with_context(0, 0, None, context);
+                self.set_dirty(true);
+            }
             UIEvent::Timer(n) if *n == self.menu_scrollbar_show_timer.id() => {
                 if self.show_menu_scrollbar == ShowMenuScrollbar::True {
                     self.show_menu_scrollbar = ShowMenuScrollbar::False;

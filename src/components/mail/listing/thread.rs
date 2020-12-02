@@ -1184,6 +1184,39 @@ impl Component for ThreadListing {
             }
         }
         match *event {
+            UIEvent::ConfigReload { old_settings: _ } => {
+                self.color_cache = ColorCache {
+                    even_unseen: crate::conf::value(context, "mail.listing.plain.even_unseen"),
+                    even_selected: crate::conf::value(context, "mail.listing.plain.even_selected"),
+                    even_highlighted: crate::conf::value(
+                        context,
+                        "mail.listing.plain.even_highlighted",
+                    ),
+                    odd_unseen: crate::conf::value(context, "mail.listing.plain.odd_unseen"),
+                    odd_selected: crate::conf::value(context, "mail.listing.plain.odd_selected"),
+                    odd_highlighted: crate::conf::value(
+                        context,
+                        "mail.listing.plain.odd_highlighted",
+                    ),
+                    even: crate::conf::value(context, "mail.listing.plain.even"),
+                    odd: crate::conf::value(context, "mail.listing.plain.odd"),
+                    attachment_flag: crate::conf::value(context, "mail.listing.attachment_flag"),
+                    thread_snooze_flag: crate::conf::value(
+                        context,
+                        "mail.listing.thread_snooze_flag",
+                    ),
+                    tag_default: crate::conf::value(context, "mail.listing.tag_default"),
+                    theme_default: crate::conf::value(context, "theme_default"),
+                    ..self.color_cache
+                };
+                if !context.settings.terminal.use_color() {
+                    self.color_cache.highlighted.attrs |= Attr::REVERSE;
+                    self.color_cache.tag_default.attrs |= Attr::REVERSE;
+                    self.color_cache.even_highlighted.attrs |= Attr::REVERSE;
+                    self.color_cache.odd_highlighted.attrs |= Attr::REVERSE;
+                }
+                self.set_dirty(true);
+            }
             UIEvent::Input(Key::Char('\n')) if !self.unfocused => {
                 self.unfocused = true;
                 self.dirty = true;

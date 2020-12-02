@@ -1177,6 +1177,9 @@ impl Component for Composer {
         }
 
         match *event {
+            UIEvent::ConfigReload { old_settings: _ } => {
+                self.set_dirty(true);
+            }
             UIEvent::Resize => {
                 self.set_dirty(true);
             }

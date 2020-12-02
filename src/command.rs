@@ -790,6 +790,17 @@ Alternatives(&[to_stream!(One(Literal("add-attachment")), One(Filepath)), to_str
                           Ok((input, Quit))
                       }
                   )
+                },
+                { tags: ["reload-config"],
+                  desc: "reload configuration file",
+                  tokens: &[One(Literal("reload-config"))],
+                  parser:(
+                      fn reload_config(input: &[u8]) -> IResult<&[u8], Action> {
+                          let (input, _) = tag("reload-config")(input.trim())?;
+                          let (input, _) = eof(input.trim())?;
+                          Ok((input, ReloadConfiguration))
+                      }
+                  )
                 }
 ]);
 
@@ -883,6 +894,7 @@ pub fn parse_command(input: &[u8]) -> Result<Action, MeliError> {
         account_action,
         print_setting,
         toggle_mouse,
+        reload_config,
         quit,
     ))(input)
     .map(|(_, v)| v)

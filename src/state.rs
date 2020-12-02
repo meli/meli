@@ -1075,6 +1075,39 @@ impl State {
                             })),
                             &mut self.context,
                         )));
+                    } else if let Action::ReloadConfiguration = action {
+                        match Settings::new().and_then(|new_settings| {
+                            let old_accounts = self.context.settings.accounts.keys().collect::<std::collections::HashSet<&String>>();
+                            let new_accounts = new_settings.accounts.keys().collect::<std::collections::HashSet<&String>>();
+                            if old_accounts != new_accounts {
+                                return Err("cannot reload account configuration changes; restart meli instead.".into());
+                            }
+                            for (key, acc) in new_settings.accounts.iter() {
+                                if toml::Value::try_from(&acc) != toml::Value::try_from(&self.context.settings.accounts[key]) {
+                                    return Err("cannot reload account configuration changes; restart meli instead.".into());
+                                }
+                            }
+                            if toml::Value::try_from(&new_settings) == toml::Value::try_from(&self.context.settings) {
+                                return Err("No changes detected.".into());
+                            }
+                            Ok(new_settings)
+                        }) {
+                            Ok(new_settings) => {
+                                let old_settings = std::mem::replace(&mut self.context.settings, new_settings);
+                                self.context.replies.push_back(UIEvent::ConfigReload {
+                                    old_settings
+                                });
+                                self.context.replies.push_back(UIEvent::Resize);
+                            }
+                            Err(err) => {
+                                self.context.replies.push_back(UIEvent::StatusEvent(
+                                        StatusEvent::DisplayMessage(format!(
+                                                "Could not load configuration: {}",
+                                                err
+                                        )),
+                                ));
+                            }
+                        }
                     } else {
                         self.exec_command(action);
                     }

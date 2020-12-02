@@ -59,13 +59,6 @@ impl fmt::Display for ContactManager {
 impl ContactManager {
     fn new(context: &Context) -> Self {
         let theme_default: ThemeAttribute = crate::conf::value(context, "theme_default");
-        let default_cell = {
-            let mut ret = Cell::with_char(' ');
-            ret.set_fg(theme_default.fg)
-                .set_bg(theme_default.bg)
-                .set_attrs(theme_default.attrs);
-            ret
-        };
         ContactManager {
             id: Uuid::nil(),
             parent_id: Uuid::nil(),
@@ -73,7 +66,7 @@ impl ContactManager {
             mode: ViewMode::Edit,
             form: FormWidget::default(),
             account_pos: 0,
-            content: CellBuffer::new(100, 1, default_cell),
+            content: CellBuffer::new_with_context(100, 1, None, context),
             theme_default,
             dirty: true,
             has_changes: false,
@@ -189,6 +182,15 @@ impl Component for ContactManager {
     }
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+        match event {
+            UIEvent::ConfigReload { old_settings: _ } => {
+                self.theme_default = crate::conf::value(context, "theme_default");
+                self.content = CellBuffer::new_with_context(100, 1, None, context);
+                self.initialized = false;
+                self.set_dirty(true);
+            }
+            _ => {}
+        }
         match self.mode {
             ViewMode::Discard(ref mut selector) => {
                 if selector.process_event(event, context) {

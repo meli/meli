@@ -146,6 +146,9 @@ pub enum UIEvent {
     Callback(CallbackFn),
     GlobalUIDialog(Box<dyn Component>),
     Timer(Uuid),
+    ConfigReload {
+        old_settings: crate::conf::Settings,
+    },
 }
 
 pub struct CallbackFn(pub Box<dyn FnOnce(&mut crate::Context) -> () + Send + 'static>);

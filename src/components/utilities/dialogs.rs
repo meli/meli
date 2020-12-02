@@ -49,6 +49,7 @@ pub struct Selector<T: 'static + PartialEq + Debug + Clone + Sync + Send, F: 'st
     /// allow only one selection
     single_only: bool,
     entries: Vec<(T, bool)>,
+    entry_titles: Vec<String>,
     pub content: CellBuffer,
     theme_default: ThemeAttribute,
 
@@ -104,6 +105,12 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
     }
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+        if let UIEvent::ConfigReload { old_settings: _ } = event {
+            self.initialise(context);
+            self.set_dirty(true);
+            return false;
+        }
+
         let (width, height) = self.content.size();
         let shortcuts = self.get_shortcuts(context);
         let mut highlighted_attrs = crate::conf::value(context, "widgets.options.highlighted");
@@ -419,6 +426,12 @@ impl Component for UIConfirmationDialog {
     }
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+        if let UIEvent::ConfigReload { old_settings: _ } = event {
+            self.initialise(context);
+            self.set_dirty(true);
+            return false;
+        }
+
         let (width, height) = self.content.size();
         let shortcuts = self.get_shortcuts(context);
         let mut highlighted_attrs = crate::conf::value(context, "widgets.options.highlighted");
@@ -734,68 +747,15 @@ impl Component for UIConfirmationDialog {
 impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selector<T, F> {
     pub fn new(
         title: &str,
-        entries: Vec<(T, String)>,
+        mut entries: Vec<(T, String)>,
         single_only: bool,
         done_fn: F,
         context: &Context,
     ) -> Selector<T, F> {
-        let theme_default = crate::conf::value(context, "theme_default");
-        let width = std::cmp::max(
-            OK_CANCEL.len(),
-            std::cmp::max(
-                entries
-                    .iter()
-                    .max_by_key(|e| e.1.len())
-                    .map(|v| v.1.len())
-                    .unwrap_or(0),
-                title.len(),
-            ),
-        ) + 5;
-        let height = entries.len()
-            + if single_only {
-                0
-            } else {
-                /* Extra room for buttons Okay/Cancel */
-                2
-            };
-        let mut content = CellBuffer::new_with_context(width, height, None, context);
-        if single_only {
-            for (i, e) in entries.iter().enumerate() {
-                write_string_to_grid(
-                    &e.1,
-                    &mut content,
-                    theme_default.fg,
-                    theme_default.bg,
-                    theme_default.attrs,
-                    ((0, i), (width - 1, i)),
-                    None,
-                );
-            }
-        } else {
-            for (i, e) in entries.iter().enumerate() {
-                write_string_to_grid(
-                    &format!("[ ] {}", e.1),
-                    &mut content,
-                    theme_default.fg,
-                    theme_default.bg,
-                    theme_default.attrs,
-                    ((0, i), (width - 1, i)),
-                    None,
-                );
-            }
-            write_string_to_grid(
-                OK_CANCEL,
-                &mut content,
-                theme_default.fg,
-                theme_default.bg,
-                theme_default.attrs | Attr::BOLD,
-                (
-                    ((width - OK_CANCEL.len()) / 2, height - 1),
-                    (width - 1, height - 1),
-                ),
-                None,
-            );
-        }
+        let entry_titles = entries
+            .iter_mut()
+            .map(|(_id, ref mut title)| std::mem::replace(title, String::new()))
+            .collect::<Vec<String>>();
         let mut identifiers: Vec<(T, bool)> =
             entries.into_iter().map(|(id, _)| (id, false)).collect();
         if single_only {
@@ -803,10 +763,11 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selec
             identifiers[0].1 = true;
         }
 
-        Selector {
+        let mut ret = Selector {
             single_only,
             entries: identifiers,
-            content,
+            entry_titles,
+            content: Default::default(),
             cursor: SelectorCursor::Unfocused,
             vertical_alignment: Alignment::Center,
             horizontal_alignment: Alignment::Center,
@@ -814,9 +775,72 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selec
             done: false,
             done_fn,
             dirty: true,
-            theme_default,
+            theme_default: Default::default(),
             id: ComponentId::new_v4(),
+        };
+        ret.initialise(context);
+        ret
+    }
+
+    fn initialise(&mut self, context: &Context) {
+        self.theme_default = crate::conf::value(context, "theme_default");
+        let width = std::cmp::max(
+            OK_CANCEL.len(),
+            std::cmp::max(
+                self.entry_titles
+                    .iter()
+                    .max_by_key(|e| e.len())
+                    .map(|v| v.len())
+                    .unwrap_or(0),
+                self.title.len(),
+            ),
+        ) + 5;
+        let height = self.entries.len()
+            + if self.single_only {
+                0
+            } else {
+                /* Extra room for buttons Okay/Cancel */
+                2
+            };
+        let mut content = CellBuffer::new_with_context(width, height, None, context);
+        if self.single_only {
+            for (i, e) in self.entry_titles.iter().enumerate() {
+                write_string_to_grid(
+                    &e,
+                    &mut content,
+                    self.theme_default.fg,
+                    self.theme_default.bg,
+                    self.theme_default.attrs,
+                    ((0, i), (width - 1, i)),
+                    None,
+                );
+            }
+        } else {
+            for (i, e) in self.entry_titles.iter().enumerate() {
+                write_string_to_grid(
+                    &format!("[ ] {}", &e),
+                    &mut content,
+                    self.theme_default.fg,
+                    self.theme_default.bg,
+                    self.theme_default.attrs,
+                    ((0, i), (width - 1, i)),
+                    None,
+                );
+            }
+            write_string_to_grid(
+                OK_CANCEL,
+                &mut content,
+                self.theme_default.fg,
+                self.theme_default.bg,
+                self.theme_default.attrs | Attr::BOLD,
+                (
+                    ((width - OK_CANCEL.len()) / 2, height - 1),
+                    (width - 1, height - 1),
+                ),
+                None,
+            );
         }
+        self.content = content;
     }
 
     pub fn is_done(&self) -> bool {

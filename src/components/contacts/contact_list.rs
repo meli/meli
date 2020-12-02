@@ -596,6 +596,14 @@ impl Component for ContactList {
     }
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+        if let UIEvent::ConfigReload { old_settings: _ } = event {
+            self.theme_default = crate::conf::value(context, "theme_default");
+            self.initialized = false;
+            self.sidebar_divider = context.settings.listing.sidebar_divider;
+            self.sidebar_divider_theme = conf::value(context, "mail.sidebar_divider");
+            self.set_dirty(true);
+        }
+
         if let Some(ref mut v) = self.view {
             if v.process_event(event, context) {
                 return true;

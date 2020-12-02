@@ -442,6 +442,25 @@ impl Component for StatusBar {
         }
 
         match event {
+            UIEvent::ConfigReload { old_settings: _ } => {
+                let mut progress_spinner = ProgressSpinner::new(19, context);
+                match context.settings.terminal.progress_spinner_sequence.as_ref() {
+                    Some(conf::terminal::ProgressSpinnerSequence::Integer(k)) => {
+                        progress_spinner.set_kind(*k);
+                    }
+                    Some(conf::terminal::ProgressSpinnerSequence::Custom(ref s)) => {
+                        progress_spinner.set_custom_kind(s.clone());
+                    }
+                    None => {}
+                }
+                if self.progress_spinner.is_active() {
+                    progress_spinner.start();
+                }
+                self.progress_spinner = progress_spinner;
+                self.mouse = context.settings.terminal.use_mouse.is_true();
+                self.set_dirty(true);
+                self.container.set_dirty(true);
+            }
             UIEvent::ChangeMode(m) => {
                 let offset = self.status.find('|').unwrap_or_else(|| self.status.len());
                 self.status.replace_range(
@@ -1194,6 +1213,10 @@ impl Component for Tabbed {
     fn process_event(&mut self, mut event: &mut UIEvent, context: &mut Context) -> bool {
         let shortcuts = &self.help_curr_views;
         match &mut event {
+            UIEvent::ConfigReload { old_settings: _ } => {
+                self.theme_default = crate::conf::value(context, "theme_default");
+                self.set_dirty(true);
+            }
             UIEvent::Input(Key::Alt(no)) if *no >= '1' && *no <= '9' => {
                 let no = *no as usize - '1' as usize;
                 if no < self.children.len() {

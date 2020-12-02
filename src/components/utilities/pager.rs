@@ -609,6 +609,10 @@ impl Component for Pager {
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         let shortcuts = self.get_shortcuts(context);
         match event {
+            UIEvent::ConfigReload { old_settings: _ } => {
+                self.set_colors(crate::conf::value(context, "theme_default"));
+                self.set_dirty(true);
+            }
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Self::DESCRIPTION]["scroll_up"]) =>
             {

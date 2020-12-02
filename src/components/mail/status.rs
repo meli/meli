@@ -403,6 +403,10 @@ impl Component for AccountStatus {
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         let shortcuts = self.get_shortcuts(context);
         match *event {
+            UIEvent::ConfigReload { old_settings: _ } => {
+                self.theme_default = crate::conf::value(context, "theme_default");
+                self.set_dirty(true);
+            }
             UIEvent::Resize => {
                 self.dirty = true;
             }

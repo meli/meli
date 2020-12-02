@@ -121,6 +121,7 @@ pub enum Action {
     Mailbox(AccountName, MailboxOperation),
     AccountAction(AccountName, AccountAction),
     PrintSetting(String),
+    ReloadConfiguration,
     ToggleMouse,
     Quit,
 }
@@ -143,6 +144,7 @@ impl Action {
             Action::PrintSetting(_) => false,
             Action::ToggleMouse => false,
             Action::Quit => true,
+            Action::ReloadConfiguration => false,
         }
     }
 }
