@@ -314,46 +314,30 @@ fn test_imap_response() {
     assert_eq!(ImapResponse::try_from(&b"M12 NO [CANNOT] Invalid mailbox name: Name must not have \'/\' characters (0.000 + 0.098 + 0.097 secs).\r\n"[..]).unwrap(), ImapResponse::No(ResponseCode::Alert("Invalid mailbox name: Name must not have '/' characters".to_string())));
 }
 
-impl<'a> std::iter::DoubleEndedIterator for ImapLineIterator<'a> {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        if self.slice.is_empty() {
-            None
-        } else if let Some(pos) = self.slice.rfind(b"\r\n") {
-            if self.slice.get(..pos).unwrap_or_default().is_empty() {
-                self.slice = self.slice.get(..pos).unwrap_or_default();
-                None
-            } else if let Some(prev_pos) = self.slice.get(..pos).unwrap_or_default().rfind(b"\r\n")
-            {
-                let ret = self.slice.get(prev_pos + 2..pos + 2).unwrap_or_default();
-                self.slice = self.slice.get(..prev_pos + 2).unwrap_or_default();
-                Some(ret)
-            } else {
-                let ret = self.slice;
-                self.slice = self.slice.get(ret.len()..).unwrap_or_default();
-                Some(ret)
-            }
-        } else {
-            let ret = self.slice;
-            self.slice = self.slice.get(ret.len()..).unwrap_or_default();
-            Some(ret)
-        }
-    }
-}
-
 impl<'a> Iterator for ImapLineIterator<'a> {
     type Item = &'a [u8];
 
     fn next(&mut self) -> Option<&'a [u8]> {
         if self.slice.is_empty() {
-            None
-        } else if let Some(pos) = self.slice.find(b"\r\n") {
-            let ret = self.slice.get(..pos + 2).unwrap_or_default();
-            self.slice = self.slice.get(pos + 2..).unwrap_or_default();
-            Some(ret)
-        } else {
-            let ret = self.slice;
-            self.slice = self.slice.get(ret.len()..).unwrap_or_default();
-            Some(ret)
+            return None;
+        }
+        let mut i = 0;
+        loop {
+            let cur_slice = &self.slice[i..];
+            if let Some(pos) = cur_slice.find(b"\r\n") {
+                /* Skip literal continuation line */
+                if cur_slice.get(pos.saturating_sub(1)) == Some(&b'}') {
+                    i += pos + 2;
+                    continue;
+                }
+                let ret = self.slice.get(..i + pos + 2).unwrap_or_default();
+                self.slice = self.slice.get(i + pos + 2..).unwrap_or_default();
+                return Some(ret);
+            } else {
+                let ret = self.slice;
+                self.slice = self.slice.get(ret.len()..).unwrap_or_default();
+                return Some(ret);
+            }
         }
     }
 }
@@ -371,6 +355,57 @@ impl ImapLineSplit for [u8] {
 macro_rules! to_str (
     ($v:expr) => (unsafe{ std::str::from_utf8_unchecked($v) })
 );
+
+#[test]
+fn test_imap_line_iterator() {
+    {
+        let s = b"* 1429 FETCH (UID 1505 FLAGS (\\Seen) RFC822 {26}\r\nReturn-Path: <blah blah...\r\n* 1430 FETCH (UID 1506 FLAGS (\\Seen)\r\n* 1431 FETCH (UID 1507 FLAGS (\\Seen)\r\n* 1432 FETCH (UID 1500 FLAGS (\\Seen) RFC822 {4}\r\nnull\r\n";
+        let line_a =
+            b"* 1429 FETCH (UID 1505 FLAGS (\\Seen) RFC822 {26}\r\nReturn-Path: <blah blah...\r\n";
+        let line_b = b"* 1430 FETCH (UID 1506 FLAGS (\\Seen)\r\n";
+        let line_c = b"* 1431 FETCH (UID 1507 FLAGS (\\Seen)\r\n";
+        let line_d = b"* 1432 FETCH (UID 1500 FLAGS (\\Seen) RFC822 {4}\r\nnull\r\n";
+
+        let mut iter = s.split_rn();
+
+        assert_eq!(to_str!(iter.next().unwrap()), to_str!(line_a));
+        assert_eq!(to_str!(iter.next().unwrap()), to_str!(line_b));
+        assert_eq!(to_str!(iter.next().unwrap()), to_str!(line_c));
+        assert_eq!(to_str!(iter.next().unwrap()), to_str!(line_d));
+        assert!(iter.next().is_none());
+    }
+
+    {
+        let s = b"* 23 FETCH (FLAGS (\\Seen) RFC822.SIZE 44827)\r\n";
+        let mut iter = s.split_rn();
+        assert_eq!(to_str!(iter.next().unwrap()), to_str!(s));
+        assert!(iter.next().is_none());
+    }
+
+    {
+        let s = b"";
+        let mut iter = s.split_rn();
+        assert!(iter.next().is_none());
+    }
+    {
+        let s = b"* 172 EXISTS\r\n* 1 RECENT\r\n* OK [UNSEEN 12] Message 12 is first unseen\r\n* OK [UIDVALIDITY 3857529045] UIDs valid\r\n* OK [UIDNEXT 4392] Predicted next UID\r\n* FLAGS (\\Answered \\Flagged \\Deleted \\Seen \\Draft)\r\n* OK [PERMANENTFLAGS (\\Deleted \\Seen \\*)] Limited\r\n* OK [NOMODSEQ] Sorry, this mailbox format doesn't support modsequences\r\n* A142 OK [READ-WRITE] SELECT completed\r\n";
+        let mut iter = s.split_rn();
+        for l in &[
+            &b"* 172 EXISTS\r\n"[..],
+            &b"* 1 RECENT\r\n"[..],
+            &b"* OK [UNSEEN 12] Message 12 is first unseen\r\n"[..],
+            &b"* OK [UIDVALIDITY 3857529045] UIDs valid\r\n"[..],
+            &b"* OK [UIDNEXT 4392] Predicted next UID\r\n"[..],
+            &b"* FLAGS (\\Answered \\Flagged \\Deleted \\Seen \\Draft)\r\n"[..],
+            &b"* OK [PERMANENTFLAGS (\\Deleted \\Seen \\*)] Limited\r\n"[..],
+            &b"* OK [NOMODSEQ] Sorry, this mailbox format doesn't support modsequences\r\n"[..],
+            &b"* A142 OK [READ-WRITE] SELECT completed\r\n"[..],
+        ] {
+            assert_eq!(to_str!(iter.next().unwrap()), to_str!(l));
+        }
+        assert!(iter.next().is_none());
+    }
+}
 
 /*macro_rules! dbg_dmp (
   ($i: expr, $submac:ident!( $($args:tt)* )) => (

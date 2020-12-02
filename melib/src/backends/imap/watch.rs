@@ -275,10 +275,10 @@ pub async fn examine_updates(
                     "list return status out: {}",
                     String::from_utf8_lossy(&response)
                 );
-                let mut lines = response.split_rn();
-                /* Remove "M__ OK .." line */
-                lines.next_back();
-                for l in lines {
+                for l in response.split_rn() {
+                    if !l.starts_with(b"*") {
+                        continue;
+                    }
                     if let Ok(status) = protocol_parser::status_response(&l).map(|(_, v)| v) {
                         if Some(mailbox_hash) == status.mailbox {
                             if let Some(total) = status.messages {

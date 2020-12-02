@@ -1422,10 +1422,10 @@ impl ImapType {
                 .await?;
         }
         debug!("LIST reply: {}", String::from_utf8_lossy(&res));
-        let mut lines = res.split_rn();
-        /* Remove "M__ OK .." line */
-        lines.next_back();
-        for l in lines {
+        for l in res.split_rn() {
+            if !l.starts_with(b"*") {
+                continue;
+            }
             if let Ok(mut mailbox) = protocol_parser::list_mailbox_result(&l).map(|(_, v)| v) {
                 if let Some(parent) = mailbox.parent {
                     if mailboxes.contains_key(&parent) {
@@ -1472,11 +1472,11 @@ impl ImapType {
         conn.send_command(b"LSUB \"\" \"*\"").await?;
         conn.read_response(&mut res, RequiredResponses::LSUB_REQUIRED)
             .await?;
-        let mut lines = res.split_rn();
         debug!("LSUB reply: {}", String::from_utf8_lossy(&res));
-        /* Remove "M__ OK .." line */
-        lines.next_back();
-        for l in lines {
+        for l in res.split_rn() {
+            if !l.starts_with(b"*") {
+                continue;
+            }
             if let Ok(subscription) = protocol_parser::list_mailbox_result(&l).map(|(_, v)| v) {
                 if let Some(f) = mailboxes.get_mut(&subscription.hash()) {
                     if f.special_usage() == SpecialUsageMailbox::Normal
