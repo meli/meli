@@ -748,7 +748,11 @@ impl ThreadView {
         let bottom_right = bottom_right!(area);
         let total_rows = height!(area);
 
-        let pager_ratio = context.runtime_settings.pager.pager_ratio;
+        let pager_ratio = *mailbox_settings!(
+            context[self.coordinates.0][&self.coordinates.1]
+                .pager
+                .pager_ratio
+        );
         let mut bottom_entity_rows = (pager_ratio * total_rows) / 100;
 
         if bottom_entity_rows > total_rows {

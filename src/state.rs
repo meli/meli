@@ -104,7 +104,6 @@ pub struct Context {
     pub accounts: IndexMap<AccountHash, Account>,
     pub settings: Settings,
 
-    pub runtime_settings: Settings,
     /// Areas of the screen that must be redrawn in the next render
     pub dirty_areas: VecDeque<Area>,
 
@@ -342,8 +341,7 @@ impl State {
             display_messages_area: ((0, 0), (0, 0)),
             context: Context {
                 accounts,
-                settings: settings.clone(),
-                runtime_settings: settings,
+                settings: settings,
                 dirty_areas: VecDeque::with_capacity(5),
                 replies: VecDeque::with_capacity(5),
                 temp_files: Vec::new(),

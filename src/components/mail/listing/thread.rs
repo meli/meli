@@ -1090,7 +1090,12 @@ impl Component for ThreadListing {
 
             /* Render the mail body in a pager, basically copy what HSplit does */
             let total_rows = get_y(bottom_right) - get_y(upper_left);
-            let pager_ratio = context.runtime_settings.pager.pager_ratio;
+            let pager_ratio = *mailbox_settings!(
+                context[self.cursor_pos.0][&self.cursor_pos.1]
+                    .pager
+                    .pager_ratio
+            );
+
             let bottom_entity_rows = (pager_ratio * total_rows) / 100;
 
             if bottom_entity_rows > total_rows {
