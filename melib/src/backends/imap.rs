@@ -499,6 +499,8 @@ impl MailBackend for ImapType {
                 let mut main_conn_lck = timeout(uid_store.timeout, main_conn.lock()).await?;
                 if err.kind.is_network() {
                     uid_store.is_online.lock().unwrap().1 = Err(err.clone());
+                } else {
+                    return Err(err);
                 }
                 debug!("Watch failure: {}", err.to_string());
                 match timeout(uid_store.timeout, main_conn_lck.connect())

@@ -408,14 +408,16 @@ pub async fn examine_updates(
             }
         }
         if uid_store.keep_offline_cache {
-            cache_handle
-                .insert_envelopes(mailbox_hash, &v)
-                .chain_err_summary(|| {
-                    format!(
-                        "Could not save envelopes in cache for mailbox {}",
-                        mailbox.imap_path()
-                    )
-                })?;
+            if !cache_handle.mailbox_state(mailbox_hash)?.is_none() {
+                cache_handle
+                    .insert_envelopes(mailbox_hash, &v)
+                    .chain_err_summary(|| {
+                        format!(
+                            "Could not save envelopes in cache for mailbox {}",
+                            mailbox.imap_path()
+                        )
+                    })?;
+            }
         }
 
         for FetchResponse { uid, envelope, .. } in v {
