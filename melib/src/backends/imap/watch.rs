@@ -150,10 +150,7 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
         if now.duration_since(watch) >= _5_MINS {
             /* Time to poll all inboxes */
             let mut conn = timeout(uid_store.timeout, main_conn.lock()).await?;
-            for (h, mailbox) in mailboxes.clone() {
-                if mailbox_hash == h {
-                    continue;
-                }
+            for (_h, mailbox) in mailboxes.clone() {
                 examine_updates(mailbox, &mut conn, &uid_store).await?;
             }
             watch = now;
@@ -178,7 +175,7 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
                 .conn
                 .read_response(&mut response, RequiredResponses::empty())
                 .await?;
-            for l in line.split_rn() {
+            for l in line.split_rn().chain(response.split_rn()) {
                 debug!("process_untagged {:?}", &l);
                 if l.starts_with(b"+ ")
                     || l.starts_with(b"* ok")
