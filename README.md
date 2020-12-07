@@ -10,6 +10,12 @@ Community links:
 ![Main view screenshot](./docs/screenshots/main.webp "mail meli view screenshot")  |  ![Compact main view screenshot](./docs/screenshots/compact.webp "compact main view screenshot") | ![Compose with embed terminal editor screenshot](./docs/screenshots/compose.webp "composing view screenshot")
 Main view             |  Compact main view | Compose with embed terminal editor
 
+Main repository:
+* https://git.meli.delivery/meli/meli
+
+Official mirrors:
+* https://github.com/meli/meli
+
 ## Install
 - Try an [online interactive web demo](https://meli.delivery/wasm2.html "online interactive web demo") powered by WebAssembly
 - [`cargo install meli`](https://crates.io/crates/meli "crates.io meli package")
