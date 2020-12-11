@@ -228,14 +228,17 @@ impl ImapConnection {
             payload.push((uid, env));
         }
         debug!("sending payload for {}", mailbox_hash);
-        unseen
-            .lock()
-            .unwrap()
-            .insert_set(new_unseen.iter().cloned().collect());
-        mailbox_exists
-            .lock()
-            .unwrap()
-            .insert_set(payload.iter().map(|(_, env)| env.hash()).collect::<_>());
+        let payload_hash_set: BTreeSet<_> =
+            payload.iter().map(|(_, env)| env.hash()).collect::<_>();
+        {
+            let mut unseen_lck = unseen.lock().unwrap();
+            for &seen_env_hash in payload_hash_set.difference(&new_unseen) {
+                unseen_lck.remove(seen_env_hash);
+            }
+
+            unseen_lck.insert_set(new_unseen);
+        }
+        mailbox_exists.lock().unwrap().insert_set(payload_hash_set);
         // 3.  tag2 UID FETCH 1:<lastseenuid> FLAGS
         if max_uid == 0 {
             self.send_command("UID FETCH 1:* FLAGS".as_bytes()).await?;
@@ -517,14 +520,17 @@ impl ImapConnection {
                 payload.push((uid, env));
             }
             debug!("sending payload for {}", mailbox_hash);
-            unseen
-                .lock()
-                .unwrap()
-                .insert_set(new_unseen.iter().cloned().collect());
-            mailbox_exists
-                .lock()
-                .unwrap()
-                .insert_set(payload.iter().map(|(_, env)| env.hash()).collect::<_>());
+            let payload_hash_set: BTreeSet<_> =
+                payload.iter().map(|(_, env)| env.hash()).collect::<_>();
+            {
+                let mut unseen_lck = unseen.lock().unwrap();
+                for &seen_env_hash in payload_hash_set.difference(&new_unseen) {
+                    unseen_lck.remove(seen_env_hash);
+                }
+
+                unseen_lck.insert_set(new_unseen);
+            }
+            mailbox_exists.lock().unwrap().insert_set(payload_hash_set);
             // 3.  tag2 UID FETCH 1:<lastseenuid> FLAGS
             if cached_max_uid == 0 {
                 self.send_command(
