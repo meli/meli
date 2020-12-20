@@ -450,7 +450,13 @@ pub fn list_mailbox_result(input: &[u8]) -> IResult<&[u8], ImapMailbox> {
             let separator: u8 = separator[0];
             let mut f = ImapMailbox::default();
             f.no_select = false;
-            f.is_subscribed = path.eq_ignore_ascii_case("INBOX");
+            f.is_subscribed = false;
+
+            if path.eq_ignore_ascii_case("INBOX") {
+                f.is_subscribed = true;
+                let _ = f.set_special_usage(SpecialUsageMailbox::Inbox);
+            }
+
             for p in properties.split(|&b| b == b' ') {
                 if p.eq_ignore_ascii_case(b"\\NoSelect") || p.eq_ignore_ascii_case(b"\\NonExistent")
                 {
