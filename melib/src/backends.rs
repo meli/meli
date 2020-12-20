@@ -690,3 +690,18 @@ fn test_lazy_count_set() {
     assert!(!new.insert_existing(10));
     assert_eq!(new.len(), 10);
 }
+
+pub struct IsSubscribedFn(Box<dyn Fn(&str) -> bool + Send + Sync>);
+
+impl std::fmt::Debug for IsSubscribedFn {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "IsSubscribedFn Box")
+    }
+}
+
+impl std::ops::Deref for IsSubscribedFn {
+    type Target = Box<dyn Fn(&str) -> bool + Send + Sync>;
+    fn deref(&self) -> &Box<dyn Fn(&str) -> bool + Send + Sync> {
+        &self.0
+    }
+}

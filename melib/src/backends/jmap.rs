@@ -146,20 +146,6 @@ impl JmapServerConf {
     }
 }
 
-pub struct IsSubscribedFn(Box<dyn Fn(&str) -> bool + Send + Sync>);
-
-impl std::fmt::Debug for IsSubscribedFn {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "IsSubscribedFn Box")
-    }
-}
-
-impl std::ops::Deref for IsSubscribedFn {
-    type Target = Box<dyn Fn(&str) -> bool + Send + Sync>;
-    fn deref(&self) -> &Box<dyn Fn(&str) -> bool + Send + Sync> {
-        &self.0
-    }
-}
 macro_rules! get_conf_val {
     ($s:ident[$var:literal]) => {
         $s.extra.get($var).ok_or_else(|| {
