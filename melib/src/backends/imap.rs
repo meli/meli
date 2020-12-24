@@ -708,6 +708,7 @@ impl MailBackend for ImapType {
                 .await?;
             if flags.iter().any(|(_, b)| *b) {
                 /* Set flags/tags to true */
+                let mut set_seen = false;
                 let command = {
                     let mut tag_lck = uid_store.tag_index.write().unwrap();
                     let mut cmd = format!("UID STORE {}", uids[0]);
@@ -731,6 +732,7 @@ impl MailBackend for ImapType {
                             }
                             Ok(flag) if *flag == Flag::SEEN => {
                                 cmd.push_str("\\Seen ");
+                                set_seen = true;
                             }
                             Ok(flag) if *flag == Flag::DRAFT => {
                                 cmd.push_str("\\Draft ");
@@ -757,8 +759,17 @@ impl MailBackend for ImapType {
                 conn.send_command(command.as_bytes()).await?;
                 conn.read_response(&mut response, RequiredResponses::empty())
                     .await?;
+                if set_seen {
+                    let f = &uid_store.mailboxes.lock().await[&mailbox_hash];
+                    if let Ok(mut unseen) = f.unseen.lock() {
+                        for env_hash in env_hashes.iter() {
+                            unseen.remove(env_hash);
+                        }
+                    };
+                }
             }
             if flags.iter().any(|(_, b)| !*b) {
+                let mut set_unseen = false;
                 /* Set flags/tags to false */
                 let command = {
                     let mut cmd = format!("UID STORE {}", uids[0]);
@@ -782,6 +793,7 @@ impl MailBackend for ImapType {
                             }
                             Ok(flag) if *flag == Flag::SEEN => {
                                 cmd.push_str("\\Seen ");
+                                set_unseen = true;
                             }
                             Ok(flag) if *flag == Flag::DRAFT => {
                                 cmd.push_str("\\Draft ");
@@ -811,6 +823,14 @@ impl MailBackend for ImapType {
                 conn.send_command(command.as_bytes()).await?;
                 conn.read_response(&mut response, RequiredResponses::empty())
                     .await?;
+                if set_unseen {
+                    let f = &uid_store.mailboxes.lock().await[&mailbox_hash];
+                    if let Ok(mut unseen) = f.unseen.lock() {
+                        for env_hash in env_hashes.iter() {
+                            unseen.insert_new(env_hash);
+                        }
+                    };
+                }
             }
             Ok(())
         }))
