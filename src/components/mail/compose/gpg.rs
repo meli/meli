@@ -119,8 +119,10 @@ impl Component for KeySelection {
                 ..
             } => match event {
                 UIEvent::StatusEvent(StatusEvent::JobFinished(ref id)) if *id == handle.job_id => {
-                    match handle.chan.try_recv().unwrap().unwrap() {
-                        Ok(keys) => {
+                    match handle.chan.try_recv() {
+                        Err(_) => { /* Job was canceled */ }
+                        Ok(None) => { /* something happened, perhaps a worker thread panicked */ }
+                        Ok(Some(Ok(keys))) => {
                             if keys.is_empty() {
                                 let id = progress_spinner.id();
                                 if allow_remote_lookup.is_true() {
@@ -192,7 +194,7 @@ impl Component for KeySelection {
                             widget.set_dirty(true);
                             *self = KeySelection::Loaded { widget, keys };
                         }
-                        Err(err) => {
+                        Ok(Some(Err(err))) => {
                             *self = KeySelection::Error {
                                 err,
                                 id: ComponentId::new_v4(),

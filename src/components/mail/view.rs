@@ -1607,9 +1607,11 @@ impl Component for MailView {
                             ref mut handle,
                             pending_action: _,
                         } if handle.job_id == *job_id => {
-                            let bytes_result = handle.chan.try_recv().unwrap().unwrap();
-                            match bytes_result {
-                                Ok(bytes) => {
+                            match handle.chan.try_recv() {
+                                Err(_) => { /* Job was canceled */ }
+                                Ok(None) => { /* something happened, perhaps a worker thread panicked */
+                                }
+                                Ok(Some(Ok(bytes))) => {
                                     if context.accounts[&self.coordinates.0]
                                         .collection
                                         .get_env(self.coordinates.2)
@@ -1642,7 +1644,7 @@ impl Component for MailView {
                                         body_text,
                                     };
                                 }
-                                Err(err) => {
+                                Ok(Some(Err(err))) => {
                                     self.state = MailViewState::Error { err };
                                 }
                             }
@@ -1664,8 +1666,11 @@ impl Component for MailView {
                                     } if *our_job_id == *job_id => {
                                         caught = true;
                                         self.initialised = false;
-                                        match handle.chan.try_recv().unwrap().unwrap() {
-                                            Ok(()) => {
+                                        match handle.chan.try_recv() {
+                                            Err(_) => { /* Job was canceled */ }
+                                            Ok(None) => { /* something happened, perhaps a worker thread panicked */
+                                            }
+                                            Ok(Some(Ok(()))) => {
                                                 *d = AttachmentDisplay::SignedVerified {
                                                     inner: std::mem::replace(
                                                         inner,
@@ -1675,7 +1680,7 @@ impl Component for MailView {
                                                     description: String::new(),
                                                 };
                                             }
-                                            Err(error) => {
+                                            Ok(Some(Err(error))) => {
                                                 *d = AttachmentDisplay::SignedFailed {
                                                     inner: std::mem::replace(
                                                         inner,
@@ -1692,8 +1697,11 @@ impl Component for MailView {
                                     {
                                         caught = true;
                                         self.initialised = false;
-                                        match handle.chan.try_recv().unwrap().unwrap() {
-                                            Ok((metadata, decrypted_bytes)) => {
+                                        match handle.chan.try_recv() {
+                                            Err(_) => { /* Job was canceled */ }
+                                            Ok(None) => { /* something happened, perhaps a worker thread panicked */
+                                            }
+                                            Ok(Some(Ok((metadata, decrypted_bytes)))) => {
                                                 let plaintext =
                                                     AttachmentBuilder::new(&decrypted_bytes)
                                                         .build();
@@ -1713,7 +1721,7 @@ impl Component for MailView {
                                                     description: format!("{:?}", metadata),
                                                 };
                                             }
-                                            Err(error) => {
+                                            Ok(Some(Err(error))) => {
                                                 *d = AttachmentDisplay::EncryptedFailed {
                                                     inner: std::mem::replace(
                                                         inner,
@@ -1814,34 +1822,40 @@ impl Component for MailView {
                         name: "fetch envelope".into(),
                         handle,
                         on_finish: Some(CallbackFn(Box::new(move |context: &mut Context| {
-                            let result = receiver.try_recv().unwrap().unwrap();
-                            match result.and_then(|bytes| {
-                                Composer::edit(account_hash, env_hash, &bytes, context)
-                            }) {
-                                Ok(composer) => {
-                                    context.replies.push_back(UIEvent::Action(Tab(New(Some(
-                                        Box::new(composer),
-                                    )))));
+                            match receiver.try_recv() {
+                                Err(_) => { /* Job was canceled */ }
+                                Ok(None) => { /* something happened, perhaps a worker thread panicked */
                                 }
-                                Err(err) => {
-                                    let err_string = format!(
-                                        "Failed to open envelope {}: {}",
-                                        context.accounts[&account_hash]
-                                            .collection
-                                            .envelopes
-                                            .read()
-                                            .unwrap()
-                                            .get(&env_hash)
-                                            .map(|env| env.message_id_display())
-                                            .unwrap_or_else(|| "Not found".into()),
-                                        err.to_string()
-                                    );
-                                    log(&err_string, ERROR);
-                                    context.replies.push_back(UIEvent::Notification(
-                                        Some("Failed to open e-mail".to_string()),
-                                        err_string,
-                                        Some(NotificationType::Error(err.kind)),
-                                    ));
+                                Ok(Some(result)) => {
+                                    match result.and_then(|bytes| {
+                                        Composer::edit(account_hash, env_hash, &bytes, context)
+                                    }) {
+                                        Ok(composer) => {
+                                            context.replies.push_back(UIEvent::Action(Tab(New(Some(
+                                                                Box::new(composer),
+                                            )))));
+                                        }
+                                        Err(err) => {
+                                            let err_string = format!(
+                                                "Failed to open envelope {}: {}",
+                                                context.accounts[&account_hash]
+                                                .collection
+                                                .envelopes
+                                                .read()
+                                                .unwrap()
+                                                .get(&env_hash)
+                                                .map(|env| env.message_id_display())
+                                                .unwrap_or_else(|| "Not found".into()),
+                                                err.to_string()
+                                            );
+                                            log(&err_string, ERROR);
+                                            context.replies.push_back(UIEvent::Notification(
+                                                    Some("Failed to open e-mail".to_string()),
+                                                    err_string,
+                                                    Some(NotificationType::Error(err.kind)),
+                                            ));
+                                        }
+                                    }
                                 }
                             }
                         }))),

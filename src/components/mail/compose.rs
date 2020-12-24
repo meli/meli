@@ -1115,19 +1115,26 @@ impl Component for Composer {
                 ViewMode::WaitingForSendResult(_, ref mut handle),
                 UIEvent::StatusEvent(StatusEvent::JobFinished(ref job_id)),
             ) if handle.job_id == *job_id => {
-                let result = handle.chan.try_recv().unwrap();
-                if let Some(Err(err)) = result {
-                    self.mode = ViewMode::Edit;
-                    context.replies.push_back(UIEvent::Notification(
-                        None,
-                        err.to_string(),
-                        Some(NotificationType::Error(err.kind)),
-                    ));
-                    self.set_dirty(true);
-                } else {
-                    context
-                        .replies
-                        .push_back(UIEvent::Action(Tab(Kill(self.id))));
+                match handle
+                    .chan
+                    .try_recv()
+                    .map_err(|_: futures::channel::oneshot::Canceled| {
+                        MeliError::new("Job was canceled")
+                    }) {
+                    Err(err) | Ok(Some(Err(err))) => {
+                        self.mode = ViewMode::Edit;
+                        context.replies.push_back(UIEvent::Notification(
+                            None,
+                            err.to_string(),
+                            Some(NotificationType::Error(err.kind)),
+                        ));
+                        self.set_dirty(true);
+                    }
+                    Ok(None) | Ok(Some(Ok(()))) => {
+                        context
+                            .replies
+                            .push_back(UIEvent::Action(Tab(Kill(self.id))));
+                    }
                 }
                 return false;
             }

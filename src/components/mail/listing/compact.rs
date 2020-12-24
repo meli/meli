@@ -1870,8 +1870,11 @@ impl Component for CompactListing {
                     .unwrap_or(false) =>
             {
                 let (filter_term, mut handle) = self.search_job.take().unwrap();
-                let results = handle.chan.try_recv().unwrap().unwrap();
-                self.filter(filter_term, results, context);
+                match handle.chan.try_recv() {
+                    Err(_) => { /* search was canceled */ }
+                    Ok(None) => { /* something happened, perhaps a worker thread panicked */ }
+                    Ok(Some(results)) => self.filter(filter_term, results, context),
+                }
                 self.set_dirty(true);
             }
             UIEvent::StatusEvent(StatusEvent::JobFinished(ref job_id))
@@ -1882,8 +1885,11 @@ impl Component for CompactListing {
                     .unwrap_or(false) =>
             {
                 let (search_term, mut handle) = self.select_job.take().unwrap();
-                let results = handle.chan.try_recv().unwrap().unwrap();
-                self.select(&search_term, results, context);
+                match handle.chan.try_recv() {
+                    Err(_) => { /* search was canceled */ }
+                    Ok(None) => { /* something happened, perhaps a worker thread panicked */ }
+                    Ok(Some(results)) => self.select(&search_term, results, context),
+                }
                 self.set_dirty(true);
             }
             _ => {}
