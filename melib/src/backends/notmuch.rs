@@ -25,6 +25,7 @@ use crate::error::{Error, Result};
 use crate::shellexpand::ShellExpandTrait;
 use crate::{backends::*, Collection};
 use smallvec::SmallVec;
+use std::cell::RefCell;
 use std::collections::{hash_map::HashMap, BTreeMap};
 use std::ffi::{CStr, CString, OsStr};
 use std::io::Read;
@@ -768,7 +769,7 @@ impl MailBackend for NotmuchDb {
             lib: self.lib.clone(),
             hash,
             index: self.index.clone(),
-            bytes: None,
+            bytes: RefCell::new(None),
         }))
     }
 
@@ -1029,21 +1030,26 @@ struct NotmuchOp {
     hash: EnvelopeHash,
     index: Arc<RwLock<HashMap<EnvelopeHash, CString>>>,
     database: Arc<DbConnection>,
-    bytes: Option<Vec<u8>>,
+    bytes: RefCell<Option<Vec<u8>>>,
     #[allow(dead_code)]
     lib: Arc<libloading::Library>,
 }
 
 impl BackendOp for NotmuchOp {
-    fn as_bytes(&mut self) -> ResultFuture<Vec<u8>> {
-        let index_lck = self.index.write().unwrap();
-        let message = Message::find_message(&self.database, &index_lck[&self.hash])?;
-        let mut f = std::fs::File::open(message.get_filename())?;
-        let mut response = Vec::new();
-        f.read_to_end(&mut response)?;
-        self.bytes = Some(response);
-        let ret = Ok(self.bytes.as_ref().unwrap().to_vec());
-        Ok(Box::pin(async move { ret }))
+    fn as_bytes(&self) -> ResultFuture<Vec<u8>> {
+        let ret = if let Some(bytes) = self.bytes.borrow().as_ref() {
+            bytes.to_vec()
+        } else {
+            let index_lck = self.index.write().unwrap();
+            let message = Message::find_message(&self.database, &index_lck[&self.hash])?;
+            let mut f = std::fs::File::open(message.get_filename())?;
+            let mut response = Vec::new();
+            f.read_to_end(&mut response)?;
+            *self.bytes.borrow_mut() = Some(response.clone());
+            response
+        };
+
+        Ok(Box::pin(async move { Ok(ret) }))
     }
 
     fn fetch_flags(&self) -> ResultFuture<Flag> {

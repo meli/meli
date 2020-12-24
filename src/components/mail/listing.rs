@@ -608,7 +608,7 @@ pub trait MailListingTrait: ListingTrait {
 
                 let futures: Result<Vec<_>> = envs_to_set
                     .iter()
-                    .map(|&env_hash| account.operation(env_hash).and_then(|mut op| op.as_bytes()))
+                    .map(|&env_hash| account.operation(env_hash).and_then(|op| op.as_bytes()))
                     .collect::<Result<Vec<_>>>();
                 let path_ = path.to_path_buf();
                 let format = (*format).unwrap_or_default();

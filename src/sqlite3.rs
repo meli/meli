@@ -305,9 +305,9 @@ pub fn index(context: &mut crate::state::Context, account_index: usize) -> Resul
         for chunk in env_hashes.chunks(200) {
             ctr += chunk.len();
             for env_hash in chunk {
-                let mut op = backend_mutex.read().unwrap().operation(*env_hash)?;
-                let bytes = op
-                    .as_bytes()?
+                let op = backend_mutex.read().unwrap().operation(*env_hash)?;
+                let bytes_fut = op.as_bytes()?;
+                let bytes = bytes_fut
                     .await
                     .chain_err_summary(|| format!("Failed to open envelope {}", env_hash))?;
                 let envelopes_lck = acc_mutex.read().unwrap();

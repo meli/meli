@@ -52,7 +52,7 @@ impl NntpOp {
 }
 
 impl BackendOp for NntpOp {
-    fn as_bytes(&mut self) -> ResultFuture<Vec<u8>> {
+    fn as_bytes(&self) -> ResultFuture<Vec<u8>> {
         let mailbox_hash = self.mailbox_hash;
         let uid = self.uid;
         let uid_store = self.uid_store.clone();

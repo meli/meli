@@ -31,6 +31,7 @@ use crate::email::Flag;
 use crate::error::{Error, Result};
 use crate::shellexpand::ShellExpandTrait;
 use futures::stream::Stream;
+use std::cell::RefCell;
 use std::collections::hash_map::DefaultHasher;
 use std::fs;
 use std::hash::{Hash, Hasher};
@@ -44,7 +45,7 @@ pub struct MaildirOp {
     hash_index: HashIndexes,
     mailbox_hash: MailboxHash,
     hash: EnvelopeHash,
-    slice: Option<Vec<u8>>,
+    slice: RefCell<Option<Vec<u8>>>,
 }
 
 impl Clone for MaildirOp {
@@ -53,7 +54,7 @@ impl Clone for MaildirOp {
             hash_index: self.hash_index.clone(),
             mailbox_hash: self.mailbox_hash,
             hash: self.hash,
-            slice: None,
+            slice: RefCell::new(None),
         }
     }
 }
@@ -64,7 +65,7 @@ impl MaildirOp {
             hash_index,
             mailbox_hash,
             hash,
-            slice: None,
+            slice: RefCell::new(None),
         }
     }
     fn path(&self) -> Result<PathBuf> {
@@ -91,8 +92,10 @@ impl MaildirOp {
 }
 
 impl<'a> BackendOp for MaildirOp {
-    fn as_bytes(&mut self) -> ResultFuture<Vec<u8>> {
-        if self.slice.is_none() {
+    fn as_bytes(&self) -> ResultFuture<Vec<u8>> {
+        let ret = if let Some(bytes) = self.slice.borrow().as_ref() {
+            bytes.clone()
+        } else {
             let file = std::fs::OpenOptions::new()
                 .read(true)
                 .write(false)
@@ -100,10 +103,10 @@ impl<'a> BackendOp for MaildirOp {
             let mut buf_reader = BufReader::new(file);
             let mut contents = Vec::new();
             buf_reader.read_to_end(&mut contents)?;
-            self.slice = Some(contents);
-        }
-        let ret = Ok(self.slice.as_ref().unwrap().as_slice().to_vec());
-        Ok(Box::pin(async move { ret }))
+            *self.slice.borrow_mut() = Some(contents.clone());
+            contents
+        };
+        Ok(Box::pin(async move { Ok(ret) }))
     }
 
     fn fetch_flags(&self) -> ResultFuture<Flag> {

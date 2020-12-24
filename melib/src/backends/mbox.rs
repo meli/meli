@@ -291,8 +291,8 @@ impl MboxOp {
 }
 
 impl BackendOp for MboxOp {
-    fn as_bytes(&mut self) -> ResultFuture<Vec<u8>> {
-        if self.slice.get_mut().is_none() {
+    fn as_bytes(&self) -> ResultFuture<Vec<u8>> {
+        if self.slice.borrow().is_none() {
             let file = std::fs::OpenOptions::new()
                 .read(true)
                 .write(true)
@@ -301,9 +301,9 @@ impl BackendOp for MboxOp {
             let mut buf_reader = BufReader::new(file);
             let mut contents = Vec::new();
             buf_reader.read_to_end(&mut contents)?;
-            *self.slice.get_mut() = Some(contents);
+            *self.slice.borrow_mut() = Some(contents);
         }
-        let ret = Ok(self.slice.get_mut().as_ref().unwrap().as_slice()
+        let ret = Ok(self.slice.borrow().as_ref().unwrap().as_slice()
             [self.offset..self.offset + self.length]
             .to_vec());
         Ok(Box::pin(async move { ret }))

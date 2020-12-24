@@ -282,7 +282,7 @@ impl MailView {
             {
                 match account
                     .operation(self.coordinates.2)
-                    .and_then(|mut op| op.as_bytes())
+                    .and_then(|op| op.as_bytes())
                 {
                     Ok(fut) => {
                         let mut handle = account.job_executor.spawn_specialized(fut);
@@ -1997,7 +1997,9 @@ impl Component for MailView {
                 let (sender, mut receiver) = crate::jobs::oneshot::channel();
                 let operation = context.accounts[&account_hash].operation(env_hash);
                 let bytes_job = async move {
-                    let _ = sender.send(operation?.as_bytes()?.await);
+                    let bytes_fut = operation?.as_bytes()?;
+                    let bytes = bytes_fut.await;
+                    let _ = sender.send(bytes);
                     Ok(())
                 };
                 let handle = if context.accounts[&account_hash]
