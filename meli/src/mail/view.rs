@@ -126,7 +126,7 @@ impl MailView {
             {
                 match account
                     .operation(coordinates.2)
-                    .and_then(|mut op| op.as_bytes())
+                    .and_then(|op| op.as_bytes())
                 {
                     Ok(fut) => {
                         let mut handle = account

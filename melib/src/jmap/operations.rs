@@ -52,7 +52,7 @@ impl JmapOp {
 }
 
 impl BackendOp for JmapOp {
-    fn as_bytes(&mut self) -> ResultFuture<Vec<u8>> {
+    fn as_bytes(&self) -> ResultFuture<Vec<u8>> {
         let store = self.store.clone();
         let hash = self.hash;
         let connection = self.connection.clone();

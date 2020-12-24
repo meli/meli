@@ -498,8 +498,8 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
 ///
 /// let operation = Box::new(FooOp {});
 /// ```
-pub trait BackendOp: ::std::fmt::Debug + ::std::marker::Send {
-    fn as_bytes(&mut self) -> ResultFuture<Vec<u8>>;
+pub trait BackendOp: ::std::fmt::Debug + ::std::marker::Send + ::std::marker::Sync {
+    fn as_bytes(&self) -> ResultFuture<Vec<u8>>;
 }
 
 /// Wrapper for [`BackendOp`] that are to be set read-only.
@@ -519,7 +519,7 @@ impl ReadOnlyOp {
 }
 
 impl BackendOp for ReadOnlyOp {
-    fn as_bytes(&mut self) -> ResultFuture<Vec<u8>> {
+    fn as_bytes(&self) -> ResultFuture<Vec<u8>> {
         self.op.as_bytes()
     }
 }

@@ -51,7 +51,6 @@ pub struct MaildirOp {
     hash_index: HashIndexes,
     mailbox_hash: MailboxHash,
     hash: EnvelopeHash,
-    slice: Option<Vec<u8>>,
 }
 
 impl Clone for MaildirOp {
@@ -60,7 +59,6 @@ impl Clone for MaildirOp {
             hash_index: self.hash_index.clone(),
             mailbox_hash: self.mailbox_hash,
             hash: self.hash,
-            slice: None,
         }
     }
 }
@@ -71,7 +69,6 @@ impl MaildirOp {
             hash_index,
             mailbox_hash,
             hash,
-            slice: None,
         }
     }
     fn path(&self) -> Result<PathBuf> {
@@ -98,19 +95,21 @@ impl MaildirOp {
 }
 
 impl BackendOp for MaildirOp {
-    fn as_bytes(&mut self) -> ResultFuture<Vec<u8>> {
-        if self.slice.is_none() {
-            let file = std::fs::OpenOptions::new()
-                .read(true)
-                .write(false)
-                .open(self.path()?)?;
-            let mut buf_reader = BufReader::new(file);
-            let mut contents = Vec::new();
-            buf_reader.read_to_end(&mut contents)?;
-            self.slice = Some(contents);
-        }
-        let ret = Ok(self.slice.as_ref().unwrap().as_slice().to_vec());
-        Ok(Box::pin(async move { ret }))
+    fn as_bytes(&self) -> ResultFuture<Vec<u8>> {
+        let _self = self.clone();
+        Ok(Box::pin(async move {
+            smol::unblock(move || {
+                let file = std::fs::OpenOptions::new()
+                    .read(true)
+                    .write(false)
+                    .open(_self.path()?)?;
+                let mut buf_reader = BufReader::new(file);
+                let mut contents = Vec::new();
+                buf_reader.read_to_end(&mut contents)?;
+                Ok(contents)
+            })
+            .await
+        }))
     }
 }
 

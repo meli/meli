@@ -286,13 +286,12 @@ impl BackendMailbox for MboxMailbox {
 }
 
 /// `BackendOp` implementor for Mbox
-#[derive(Debug, Default)]
+#[derive(Debug, Clone)]
 pub struct MboxOp {
     pub _hash: EnvelopeHash,
     pub path: PathBuf,
     pub offset: Offset,
     pub length: Length,
-    pub slice: std::cell::RefCell<Option<Vec<u8>>>,
 }
 
 impl MboxOp {
@@ -300,7 +299,6 @@ impl MboxOp {
         Self {
             _hash,
             path: path.to_path_buf(),
-            slice: std::cell::RefCell::new(None),
             offset,
             length,
         }
@@ -308,22 +306,28 @@ impl MboxOp {
 }
 
 impl BackendOp for MboxOp {
-    fn as_bytes(&mut self) -> ResultFuture<Vec<u8>> {
-        if self.slice.get_mut().is_none() {
-            let file = std::fs::OpenOptions::new()
-                .read(true)
-                .write(true)
-                .open(&self.path)?;
-            get_rw_lock_blocking(&file, &self.path)?;
-            let mut buf_reader = BufReader::new(file);
-            let mut contents = Vec::new();
-            buf_reader.read_to_end(&mut contents)?;
-            *self.slice.get_mut() = Some(contents);
-        }
-        let ret = self.slice.get_mut().as_ref().unwrap().as_slice()
-            [self.offset..self.offset + self.length]
-            .to_vec();
-        Ok(Box::pin(async move { Ok(ret) }))
+    fn as_bytes(&self) -> ResultFuture<Vec<u8>> {
+        use std::io::Seek;
+        let _self = self.clone();
+
+        Ok(Box::pin(async move {
+            smol::unblock(move || {
+                let file = std::fs::OpenOptions::new()
+                    .read(true)
+                    .write(true)
+                    .open(&_self.path)?;
+                get_rw_lock_blocking(&file, &_self.path)?;
+                let mut buf_reader = BufReader::new(file);
+                buf_reader.seek(std::io::SeekFrom::Start(_self.offset.try_into().unwrap()))?;
+                let mut ret = Vec::new();
+                buf_reader
+                    .take(_self.length.try_into().unwrap())
+                    .read_to_end(&mut ret)?;
+
+                Ok(ret)
+            })
+            .await
+        }))
     }
 }
 

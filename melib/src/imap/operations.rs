@@ -52,7 +52,7 @@ impl ImapOp {
 }
 
 impl BackendOp for ImapOp {
-    fn as_bytes(&mut self) -> ResultFuture<Vec<u8>> {
+    fn as_bytes(&self) -> ResultFuture<Vec<u8>> {
         let connection = self.connection.clone();
         let mailbox_hash = self.mailbox_hash;
         let uid = self.uid;

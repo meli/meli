@@ -337,7 +337,7 @@ impl AccountCache {
             ctr += chunk.len();
             let mut chunk_bytes = Vec::with_capacity(chunk.len());
             for &env_hash in chunk {
-                let mut op = backend_mutex.read().unwrap().operation(env_hash)?;
+                let op = backend_mutex.read().unwrap().operation(env_hash)?;
                 let bytes = op
                     .as_bytes()?
                     .await
