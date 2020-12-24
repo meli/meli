@@ -453,20 +453,20 @@ impl MailBackend for ImapType {
         let server_conf = self.server_conf.clone();
         let main_conn = self.connection.clone();
         let uid_store = self.uid_store.clone();
-        let has_idle: bool = match self.server_conf.protocol {
-            ImapProtocol::IMAP {
-                extension_use: ImapExtensionUse { idle, .. },
-            } => {
-                idle && uid_store
-                    .capabilities
-                    .lock()
-                    .unwrap()
-                    .iter()
-                    .any(|cap| cap.eq_ignore_ascii_case(b"IDLE"))
-            }
-            _ => false,
-        };
         Ok(Box::pin(async move {
+            let has_idle: bool = match server_conf.protocol {
+                ImapProtocol::IMAP {
+                    extension_use: ImapExtensionUse { idle, .. },
+                } => {
+                    idle && uid_store
+                        .capabilities
+                        .lock()
+                        .unwrap()
+                        .iter()
+                        .any(|cap| cap.eq_ignore_ascii_case(b"IDLE"))
+                }
+                _ => false,
+            };
             while let Err(err) = if has_idle {
                 idle(ImapWatchKit {
                     conn: ImapConnection::new_connection(&server_conf, uid_store.clone()),
