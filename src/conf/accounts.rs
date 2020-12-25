@@ -554,8 +554,8 @@ impl Account {
                     Some(f.special_usage())
                 } else {
                     let tmp = SpecialUsageMailbox::detect_usage(f.name());
-                    if tmp != Some(SpecialUsageMailbox::Normal) && tmp != None {
-                        let _ = f.set_special_usage(tmp.unwrap());
+                    if let Some(tmp) = tmp.filter(|&v| v != SpecialUsageMailbox::Normal) {
+                        let _ = f.set_special_usage(tmp);
                     }
                     tmp
                 };
@@ -585,8 +585,8 @@ impl Account {
                     Some(f.special_usage())
                 } else {
                     let tmp = SpecialUsageMailbox::detect_usage(f.name());
-                    if tmp != Some(SpecialUsageMailbox::Normal) && tmp != None {
-                        let _ = f.set_special_usage(tmp.unwrap());
+                    if let Some(tmp) = tmp.filter(|&v| v != SpecialUsageMailbox::Normal) {
+                        let _ = f.set_special_usage(tmp);
                     }
                     tmp
                 };
@@ -954,8 +954,7 @@ impl Account {
                     #[cfg(feature = "sqlite3")]
                     if self.settings.conf.search_backend == crate::conf::SearchBackend::Sqlite3 {
                         if let Err(err) = crate::sqlite3::remove(env_hash) {
-                            let envelopes = self.collection.envelopes.read();
-                            let envelopes = envelopes.unwrap();
+                            let envelopes = self.collection.envelopes.read().unwrap();
                             melib::log(
                                 format!(
                                     "Failed to remove envelope {} [{}] in cache: {}",
@@ -1178,23 +1177,23 @@ impl Account {
             self.special_use_mailbox(SpecialUsageMailbox::Inbox),
             self.special_use_mailbox(SpecialUsageMailbox::Normal),
         ] {
-            if mailbox.is_none() {
-                continue;
-            }
-            let mailbox = mailbox.unwrap();
-            if let Err(e) = self.save(bytes, mailbox, Some(flags)) {
-                debug!("{:?} could not save msg", e);
-                melib::log(
-                    format!(
-                        "Could not save in '{}' mailbox: {}.",
-                        mailbox,
-                        e.to_string()
-                    ),
-                    melib::ERROR,
-                );
+            if let Some(mailbox_hash) = mailbox {
+                if let Err(e) = self.save(bytes, *mailbox_hash, Some(flags)) {
+                    debug!("{:?} could not save msg", e);
+                    melib::log(
+                        format!(
+                            "Could not save in '{}' mailbox: {}.",
+                            *mailbox_hash,
+                            e.to_string()
+                        ),
+                        melib::ERROR,
+                    );
+                } else {
+                    saved_at = Some(*mailbox_hash);
+                    break;
+                }
             } else {
-                saved_at = Some(mailbox);
-                break;
+                continue;
             }
         }
 
@@ -1582,8 +1581,8 @@ impl Account {
             )))
             .unwrap();
 
-        if self.active_jobs.contains_key(job_id) {
-            match self.active_jobs.remove(job_id).unwrap() {
+        if let Some(mut job) = self.active_jobs.remove(job_id) {
+            match job {
                 JobRequest::Mailboxes { ref mut handle } => {
                     if let Ok(Some(mailboxes)) = handle.chan.try_recv() {
                         self.sender
@@ -1910,9 +1909,11 @@ impl Account {
                                     let tmp = SpecialUsageMailbox::detect_usage(
                                         mailboxes[&mailbox_hash].name(),
                                     );
-                                    if tmp != Some(SpecialUsageMailbox::Normal) && tmp != None {
+                                    if let Some(tmp) =
+                                        tmp.filter(|&v| v != SpecialUsageMailbox::Normal)
+                                    {
                                         mailboxes.entry(mailbox_hash).and_modify(|entry| {
-                                            let _ = entry.set_special_usage(tmp.unwrap());
+                                            let _ = entry.set_special_usage(tmp);
                                         });
                                     }
                                     tmp
