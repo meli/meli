@@ -287,17 +287,20 @@ impl MailListingTrait for ConversationsListing {
             }
             from_address_list.clear();
             from_address_set.clear();
-            for (_, h) in threads.thread_group_iter(thread) {
-                let env_hash = threads.thread_nodes()[&h].message().unwrap();
-
-                let envelope: &EnvelopeRef = &context.accounts[&self.cursor_pos.0]
-                    .collection
-                    .get_env(env_hash);
+            for envelope in threads
+                .thread_group_iter(thread)
+                .filter_map(|(_, h)| threads.thread_nodes()[&h].message())
+                .map(|env_hash| {
+                    context.accounts[&self.cursor_pos.0]
+                        .collection
+                        .get_env(env_hash)
+                })
+            {
                 for addr in envelope.from().iter() {
-                    if from_address_set.contains(addr.raw()) {
+                    if from_address_set.contains(addr.address_spec_raw()) {
                         continue;
                     }
-                    from_address_set.insert(addr.raw().to_vec());
+                    from_address_set.insert(addr.address_spec_raw().to_vec());
                     from_address_list.push(addr.clone());
                 }
             }
@@ -1045,17 +1048,20 @@ impl ConversationsListing {
         let mut from_address_list = Vec::new();
         let mut from_address_set: std::collections::HashSet<Vec<u8>> =
             std::collections::HashSet::new();
-        for (_, h) in threads.thread_group_iter(thread_hash) {
-            let env_hash = threads.thread_nodes()[&h].message().unwrap();
-
-            let envelope: &EnvelopeRef = &context.accounts[&self.cursor_pos.0]
-                .collection
-                .get_env(env_hash);
+        for envelope in threads
+            .thread_group_iter(thread_hash)
+            .filter_map(|(_, h)| threads.thread_nodes()[&h].message())
+            .map(|env_hash| {
+                context.accounts[&self.cursor_pos.0]
+                    .collection
+                    .get_env(env_hash)
+            })
+        {
             for addr in envelope.from().iter() {
-                if from_address_set.contains(addr.raw()) {
+                if from_address_set.contains(addr.address_spec_raw()) {
                     continue;
                 }
-                from_address_set.insert(addr.raw().to_vec());
+                from_address_set.insert(addr.address_spec_raw().to_vec());
                 from_address_list.push(addr.clone());
             }
         }
