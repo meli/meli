@@ -50,11 +50,12 @@ use std::sync::{Arc, Mutex, RwLock};
 type Offset = usize;
 type Length = usize;
 
+#[cfg(target_os = "linux")]
 const F_OFD_SETLKW: libc::c_int = 38;
 
 // Open file description locking
 // # man fcntl
-fn get_rw_lock_blocking(f: &File) {
+fn get_rw_lock_blocking(f: &File, path: &Path) -> Result<()> {
     let fd: libc::c_int = f.as_raw_fd();
     let mut flock: libc::flock = libc::flock {
         l_type: libc::F_WRLCK as libc::c_short,
@@ -65,9 +66,19 @@ fn get_rw_lock_blocking(f: &File) {
         l_pid: 0, /* "By contrast with traditional record locks, the l_pid field of that structure must be set to zero when using the commands described below." */
     };
     let ptr: *mut libc::flock = &mut flock;
+    #[cfg(not(target_os = "linux"))]
+    let ret_val = unsafe { libc::fcntl(fd, libc::F_SETLKW, ptr as *mut libc::c_void) };
+    #[cfg(target_os = "linux")]
     let ret_val = unsafe { libc::fcntl(fd, F_OFD_SETLKW, ptr as *mut libc::c_void) };
-    debug!(&ret_val);
-    assert!(-1 != ret_val);
+    if ret_val == -1 {
+        let err = nix::errno::Errno::from_i32(nix::errno::errno());
+        return Err(MeliError::new(format!(
+            "Could not lock {}: fcntl() returned {}",
+            path.display(),
+            err.desc()
+        )));
+    }
+    Ok(())
 }
 
 #[derive(Debug)]
@@ -182,9 +193,9 @@ impl BackendOp for MboxOp {
         if self.slice.get_mut().is_none() {
             let file = std::fs::OpenOptions::new()
                 .read(true)
-                .write(false)
+                .write(true)
                 .open(&self.path)?;
-            get_rw_lock_blocking(&file);
+            get_rw_lock_blocking(&file, &self.path)?;
             let mut buf_reader = BufReader::new(file);
             let mut contents = Vec::new();
             buf_reader.read_to_end(&mut contents)?;
@@ -201,9 +212,9 @@ impl BackendOp for MboxOp {
         if self.slice.borrow().is_none() {
             let file = std::fs::OpenOptions::new()
                 .read(true)
-                .write(false)
+                .write(true)
                 .open(&self.path)?;
-            get_rw_lock_blocking(&file);
+            get_rw_lock_blocking(&file, &self.path)?;
             let mut buf_reader = BufReader::new(file);
             let mut contents = Vec::new();
             buf_reader.read_to_end(&mut contents)?;
@@ -788,9 +799,9 @@ impl MailBackend for MboxType {
         let mailbox_path = mailboxes.lock().unwrap()[&mailbox_hash].fs_path.clone();
         let file = std::fs::OpenOptions::new()
             .read(true)
-            .write(false)
+            .write(true)
             .open(&mailbox_path)?;
-        get_rw_lock_blocking(&file);
+        get_rw_lock_blocking(&file, &mailbox_path)?;
         let mut buf_reader = BufReader::new(file);
         let mut contents = Vec::new();
         buf_reader.read_to_end(&mut contents)?;
@@ -860,7 +871,7 @@ impl MailBackend for MboxType {
                             let mailbox_hash = get_path_hash!(&pathbuf);
                             let file = match std::fs::OpenOptions::new()
                                 .read(true)
-                                .write(false)
+                                .write(true)
                                 .open(&pathbuf)
                             {
                                 Ok(f) => f,
@@ -868,7 +879,7 @@ impl MailBackend for MboxType {
                                     continue;
                                 }
                             };
-                            get_rw_lock_blocking(&file);
+                            get_rw_lock_blocking(&file, &pathbuf)?;
                             let mut mailbox_lock = mailboxes.lock().unwrap();
                             let mut buf_reader = BufReader::new(file);
                             let mut contents = Vec::new();
