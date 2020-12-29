@@ -64,6 +64,8 @@ fn get_rw_lock_blocking(f: &File, path: &Path) -> Result<()> {
         l_len: 0, /* "Specifying 0 for l_len has the special meaning: lock all bytes starting at the location
                   specified by l_whence and l_start through to the end of file, no matter how large the file grows." */
         l_pid: 0, /* "By contrast with traditional record locks, the l_pid field of that structure must be set to zero when using the commands described below." */
+        #[cfg(target_os = "freebsd")]
+        l_sysid: 0,
     };
     let ptr: *mut libc::flock = &mut flock;
     #[cfg(not(target_os = "linux"))]
