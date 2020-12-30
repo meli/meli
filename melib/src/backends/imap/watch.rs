@@ -345,7 +345,7 @@ pub async fn examine_updates(
             conn.send_command(
                 format!(
                     "FETCH {}:* (UID FLAGS ENVELOPE BODY.PEEK[HEADER.FIELDS (REFERENCES)] BODYSTRUCTURE)",
-                    mailbox.exists.lock().unwrap().len()
+                    std::cmp::max(mailbox.exists.lock().unwrap().len(), 1)
                 )
                 .as_bytes(),
             )
