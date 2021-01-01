@@ -43,7 +43,7 @@ use std::ffi::{CStr, CString};
 
 pub type UnixTimestamp = u64;
 
-use libc::{timeval, timezone};
+use libc::{timeval, timezone, uselocale};
 
 extern "C" {
     fn strptime(
@@ -214,7 +214,19 @@ where
     ] {
         unsafe {
             let fmt = CStr::from_bytes_with_nul_unchecked(fmt);
+
+            let locale = ::libc::newlocale(
+                ::libc::LC_TIME,
+                b"C\0".as_ptr() as *const i8,
+                std::ptr::null_mut(),
+            );
+
+            let old_locale = uselocale(locale);
             let ret = strptime(s.as_ptr(), fmt.as_ptr(), &mut new_tm as *mut _);
+            uselocale(old_locale);
+
+            ::libc::freelocale(locale);
+
             if ret.is_null() {
                 continue;
             }
