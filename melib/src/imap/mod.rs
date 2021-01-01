@@ -72,7 +72,7 @@ use crate::{
     collection::Collection,
     conf::AccountSettings,
     email::{parser::BytesExt, *},
-    error::{Error, Result, ResultIntoError},
+    error::{Error, ErrorKind, Result, ResultIntoError},
     utils::futures::timeout,
 };
 
@@ -1292,12 +1292,17 @@ impl ImapType {
         let server_username = get_conf_val!(s["server_username"])?;
         let use_oauth2: bool = get_conf_val!(s["use_oauth2"], false)?;
 
-        if use_oauth2 && !s.extra.contains_key("server_password_command") {
+        if use_oauth2
+            && !s.extra.contains_key("server_password_command")
+            && !s.extra.contains_key("server_password")
+        {
             return Err(Error::new(format!(
-                "({}) `use_oauth2` use requires `server_password_command` set with a command that \
-                 returns an OAUTH2 token. Consult documentation for guidance.",
+                "({}) `use_oauth2` use requires either `server_password` set or \
+                 `server_password_command` set with a command that returns an OAUTH2 token. \
+                 Consult documentation for guidance.",
                 s.name,
-            )));
+            ))
+            .set_kind(ErrorKind::Configuration));
         }
 
         let server_password = s.server_password()?;
@@ -1557,21 +1562,27 @@ impl ImapType {
         get_conf_val!(s["server_username"])?;
         let use_oauth2: bool = get_conf_val!(s["use_oauth2"], false)?;
         keys.insert("server_password_command");
+        if use_oauth2
+            && !s.extra.contains_key("server_password_command")
+            && !s.extra.contains_key("server_password")
+        {
+            return Err(Error::new(format!(
+                "({}) `use_oauth2` use requires either `server_password` set or \
+                 `server_password_command` set with a command that returns an OAUTH2 token. \
+                 Consult documentation for guidance.",
+                s.name,
+            ))
+            .set_kind(ErrorKind::Configuration));
+        }
         if !s.extra.contains_key("server_password_command") {
-            if use_oauth2 {
-                return Err(Error::new(format!(
-                    "({}) `use_oauth2` use requires `server_password_command` set with a command \
-                     that returns an OAUTH2 token. Consult documentation for guidance.",
-                    s.name,
-                )));
-            }
             get_conf_val!(s["server_password"])?;
         } else if s.extra.contains_key("server_password") {
             return Err(Error::new(format!(
                 "Configuration error ({}): both server_password and server_password_command are \
                  set, cannot choose",
                 s.name.as_str(),
-            )));
+            ))
+            .set_kind(ErrorKind::Configuration));
         }
         let _ = get_conf_val!(s["server_password_command"]);
         get_conf_val!(s["server_port"], 143)?;
