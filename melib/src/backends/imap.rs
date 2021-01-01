@@ -1260,14 +1260,45 @@ impl ImapType {
         let server_username = get_conf_val!(s["server_username"])?;
         let use_oauth2: bool = get_conf_val!(s["use_oauth2"], false)?;
 
-        if use_oauth2 && !s.extra.contains_key("server_password_command") {
-            return Err(Error::new(format!(
-                "({}) `use_oauth2` use requires `server_password_command` set with a command that returns an OAUTH2 token. Consult documentation for guidance.",
-                s.name,
-            )));
+        if use_oauth2 {
+            if !s.extra.contains_key("server_password_command")
+                && !s.extra.contains_key("server_password")
+            {
+                return Err(Error::new(format!(
+                    "({}) `use_oauth2` use requires either `server_password` set or `server_password_command` set with a command that returns an OAUTH2 token. Consult documentation for guidance.",
+                    s.name,
+                )));
+            } else if s.extra.contains_key("server_password_command")
+                && s.extra.contains_key("server_password")
+            {
+                return Err(Error::new(format!(
+                    "Configuration error ({}): both server_password and server_password_command are set, cannot choose",
+                    s.name,
+                )));
+            }
         }
 
-        let server_password = s.server_password()?;
+        let server_password = if !s.extra.contains_key("server_password_command") {
+            get_conf_val!(s["server_password"])?.to_string()
+        } else {
+            let invocation = get_conf_val!(s["server_password_command"])?;
+            let output = std::process::Command::new("sh")
+                .args(&["-c", invocation])
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .output()?;
+            if !output.status.success() {
+                return Err(Error::new(format!(
+                    "({}) server_password_command `{}` returned {}: {}",
+                    s.name,
+                    get_conf_val!(s["server_password_command"])?,
+                    output.status,
+                    String::from_utf8_lossy(&output.stderr)
+                )));
+            }
+            std::str::from_utf8(&output.stdout)?.trim_end().to_string()
+        };
         let server_port = get_conf_val!(s["server_port"], 143)?;
         let use_tls = get_conf_val!(s["use_tls"], true)?;
         let use_starttls = use_tls && get_conf_val!(s["use_starttls"], server_port != 993)?;
@@ -1521,21 +1552,31 @@ impl ImapType {
         get_conf_val!(s["server_username"])?;
         let use_oauth2: bool = get_conf_val!(s["use_oauth2"], false)?;
         keys.insert("server_password_command");
-        if !s.extra.contains_key("server_password_command") {
-            if use_oauth2 {
+        if use_oauth2 {
+            if !s.extra.contains_key("server_password_command")
+                && !s.extra.contains_key("server_password")
+            {
                 return Err(Error::new(format!(
-                    "({}) `use_oauth2` use requires `server_password_command` set with a command that returns an OAUTH2 token. Consult documentation for guidance.",
+                    "({}) `use_oauth2` use requires either `server_password` set or `server_password_command` set with a command that returns an OAUTH2 token. Consult documentation for guidance.",
                     s.name,
                 )));
-            }
-            get_conf_val!(s["server_password"])?;
-        } else if s.extra.contains_key("server_password") {
-            return Err(Error::new(format!(
+            } else if s.extra.contains_key("server_password_command")
+                && s.extra.contains_key("server_password")
+            {
+                return Err(Error::new(format!(
+                    "Configuration error ({}): both server_password and server_password_command are set, cannot choose",
+                    s.name)));
+            } else if s.extra.contains_key("server_password") {
+                return Err(Error::new(format!(
                 "Configuration error ({}): both server_password and server_password_command are set, cannot choose",
                 s.name.as_str(),
             )));
+            }
         }
+        let _ = get_conf_val!(s["server_password"]);
         let _ = get_conf_val!(s["server_password_command"]);
+        get_conf_val!(s["server_port"], 143)?;
+
         get_conf_val!(s["server_port"], 143)?;
         let use_tls = get_conf_val!(s["use_tls"], true)?;
         let use_starttls = get_conf_val!(s["use_starttls"], false)?;
