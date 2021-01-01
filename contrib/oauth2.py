@@ -55,8 +55,8 @@ option.
   oauth2 --generate_oauth2_string --user=xxx@gmail.com \
     --access_token=ya29.AGy[...]ezLg
 
-The output of this mode will be a base64-encoded string. To use it, connect to a
-IMAPFE and pass it as the second argument to the AUTHENTICATE command.
+To use the output of this mode, connect to a IMAPFE and pass the base64
+encoding of this string as the second argument to the AUTHENTICATE command.
 
   a AUTHENTICATE XOAUTH2 a9sha9sfs[...]9dfja929dk==
 """
@@ -240,7 +240,7 @@ def RefreshToken(client_id, client_secret, refresh_token):
   return json.loads(response)
 
 
-def GenerateOAuth2String(username, access_token, base64_encode=True):
+def GenerateOAuth2String(username, access_token):
   """Generates an IMAP OAuth2 authentication string.
 
   See https://developers.google.com/google-apps/gmail/oauth2_overview
@@ -248,14 +248,11 @@ def GenerateOAuth2String(username, access_token, base64_encode=True):
   Args:
     username: the username (email address) of the account to authenticate
     access_token: An OAuth2 access token.
-    base64_encode: Whether to base64-encode the output.
 
   Returns:
     The SASL argument for the OAuth2 mechanism.
   """
   auth_string = 'user=%s\1auth=Bearer %s\1\1' % (username, access_token)
-  if base64_encode:
-    auth_string = base64.b64encode(bytes(auth_string, 'utf-8'))
   return auth_string
 
 
@@ -331,13 +328,11 @@ def main(argv):
   elif options.test_imap_authentication:
     RequireOptions(options, 'user', 'access_token')
     TestImapAuthentication(options.user,
-        GenerateOAuth2String(options.user, options.access_token,
-                             base64_encode=False))
+        GenerateOAuth2String(options.user, options.access_token))
   elif options.test_smtp_authentication:
     RequireOptions(options, 'user', 'access_token')
     TestSmtpAuthentication(options.user,
-        GenerateOAuth2String(options.user, options.access_token,
-                             base64_encode=False))
+        GenerateOAuth2String(options.user, options.access_token))
   else:
     options_parser.print_help()
     print('Nothing to do, exiting.')

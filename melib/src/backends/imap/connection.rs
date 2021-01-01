@@ -36,6 +36,8 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 
+use data_encoding::BASE64;
+
 const IMAP_PROTOCOL_TIMEOUT: Duration = Duration::from_secs(60 * 28);
 
 use super::protocol_parser;
@@ -268,7 +270,6 @@ impl ImapStream {
             timeout: server_conf.timeout,
         };
         if let ImapProtocol::ManageSieve = server_conf.protocol {
-            use data_encoding::BASE64;
             ret.read_response(&mut res).await?;
             ret.send_command(
                 format!(
@@ -357,7 +358,11 @@ impl ImapStream {
                     )));
                 }
                 ret.send_command(
-                    format!("AUTHENTICATE XOAUTH2 {}", &server_conf.server_password).as_bytes(),
+                    format!(
+                        "AUTHENTICATE XOAUTH2 {}",
+                        BASE64.encode(server_conf.server_password.as_bytes())
+                    )
+                    .as_bytes(),
                 )
                 .await?;
             }
