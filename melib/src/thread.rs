@@ -708,7 +708,7 @@ impl Threads {
                     None
                 },
             )
-            .unwrap_or_else(ThreadNodeHash::new);
+            .unwrap_or_else(|| ThreadNodeHash::from(message_id));
         {
             let mut node = self.thread_nodes.entry(new_id).or_default();
             node.message = Some(env_hash);
@@ -763,7 +763,7 @@ impl Threads {
         if let Some(reply_to_id) = reply_to_id {
             make!((reply_to_id) parent of (new_id), self);
         } else if let Some(r) = envelopes_lck[&env_hash].in_reply_to().map(StrBuild::raw) {
-            let reply_to_id = ThreadNodeHash::new();
+            let reply_to_id = ThreadNodeHash::from(r);
             self.thread_nodes.insert(
                 reply_to_id,
                 ThreadNode {
@@ -807,7 +807,7 @@ impl Threads {
                     make!((id) parent of (current_descendant_id), self);
                     current_descendant_id = id;
                 } else {
-                    let id = ThreadNodeHash::new();
+                    let id = ThreadNodeHash::from(reference.raw());
                     self.thread_nodes.insert(
                         id,
                         ThreadNode {
