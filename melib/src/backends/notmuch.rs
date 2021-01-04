@@ -101,7 +101,7 @@ impl DbConnection {
             *self.revision_uuid.read().unwrap(),
             new_revision_uuid
         );
-        let query: Query = Query::new(self.lib.clone(), &self, &query_str)?;
+        let query: Query = Query::new(&self, &query_str)?;
         let iter = query.search()?;
         let mailbox_index_lck = mailbox_index.write().unwrap();
         let mailboxes_lck = mailboxes.read().unwrap();
@@ -134,7 +134,7 @@ impl DbConnection {
                     Ok(env) => {
                         for (&mailbox_hash, m) in mailboxes_lck.iter() {
                             let query_str = format!("{} id:{}", m.query_str.as_str(), &message_id);
-                            let query: Query = Query::new(self.lib.clone(), self, &query_str)?;
+                            let query: Query = Query::new(self, &query_str)?;
                             if query.count().unwrap_or(0) > 0 {
                                 let mut total_lck = m.total.lock().unwrap();
                                 let mut unseen_lck = m.unseen.lock().unwrap();
@@ -521,7 +521,7 @@ impl MailBackend for NotmuchDb {
         {
             let mailboxes_lck = mailboxes.read().unwrap();
             let mailbox = mailboxes_lck.get(&mailbox_hash).unwrap();
-            let query: Query = Query::new(self.lib.clone(), &database, mailbox.query_str.as_str())?;
+            let query: Query = Query::new(&database, mailbox.query_str.as_str())?;
             {
                 let mut total_lck = mailbox.total.lock().unwrap();
                 let mut unseen_lck = mailbox.unseen.lock().unwrap();
@@ -821,7 +821,6 @@ impl MailBackend for NotmuchDb {
             self.lib.clone(),
             false,
         )?;
-        let lib = self.lib.clone();
         let mailboxes = self.mailboxes.clone();
         Ok(Box::pin(async move {
             let mut ret = SmallVec::new();
@@ -838,7 +837,7 @@ impl MailBackend for NotmuchDb {
                 String::new()
             };
             melib_query.query_to_string(&mut query_s);
-            let query: Query = Query::new(lib.clone(), &database, &query_s)?;
+            let query: Query = Query::new(&database, &query_s)?;
             let iter = query.search()?;
             for message in iter {
                 ret.push(message.env_hash());
@@ -898,11 +897,8 @@ pub struct Query<'s> {
 }
 
 impl<'s> Query<'s> {
-    fn new(
-        lib: Arc<libloading::Library>,
-        database: &DbConnection,
-        query_str: &'s str,
-    ) -> Result<Self> {
+    fn new(database: &DbConnection, query_str: &'s str) -> Result<Self> {
+        let lib: Arc<libloading::Library> = database.lib.clone();
         let query_cstr = std::ffi::CString::new(query_str)?;
         let query: *mut notmuch_query_t = unsafe {
             call!(lib, notmuch_query_create)(*database.inner.read().unwrap(), query_cstr.as_ptr())
