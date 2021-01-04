@@ -253,8 +253,9 @@ impl Envelope {
         }
     }
 
-    pub fn set_hash(&mut self, new_hash: EnvelopeHash) {
+    pub fn set_hash(&mut self, new_hash: EnvelopeHash) -> &mut Self {
         self.hash = new_hash;
+        self
     }
 
     pub fn from_bytes(bytes: &[u8], flags: Option<Flag>) -> Result<Envelope> {
@@ -320,14 +321,6 @@ impl Envelope {
             } else if name == "message-id" {
                 self.set_message_id(value);
             } else if name == "references" {
-                {
-                    let parse_result = parser::address::msg_id_list(value);
-                    if let Ok((_, value)) = parse_result {
-                        for v in value {
-                            self.push_references(v);
-                        }
-                    }
-                }
                 self.set_references(value);
             } else if name == "in-reply-to" {
                 self.set_in_reply_to(value);
@@ -574,41 +567,51 @@ impl Envelope {
         String::from_utf8_lossy(self.message_id.raw())
     }
 
-    pub fn set_date(&mut self, new_val: &[u8]) {
+    pub fn set_date(&mut self, new_val: &[u8]) -> &mut Self {
         let new_val = new_val.trim();
         self.date = String::from_utf8_lossy(new_val).into_owned();
+        self
     }
 
-    pub fn set_bcc(&mut self, new_val: Vec<Address>) {
+    pub fn set_bcc(&mut self, new_val: Vec<Address>) -> &mut Self {
         self.bcc = new_val;
+        self
     }
 
-    pub fn set_cc(&mut self, new_val: SmallVec<[Address; 1]>) {
+    pub fn set_cc(&mut self, new_val: SmallVec<[Address; 1]>) -> &mut Self {
         self.cc = new_val;
+        self
     }
 
-    pub fn set_from(&mut self, new_val: SmallVec<[Address; 1]>) {
+    pub fn set_from(&mut self, new_val: SmallVec<[Address; 1]>) -> &mut Self {
         self.from = new_val;
+        self
     }
 
-    pub fn set_to(&mut self, new_val: SmallVec<[Address; 1]>) {
+    pub fn set_to(&mut self, new_val: SmallVec<[Address; 1]>) -> &mut Self {
         self.to = new_val;
+        self
     }
 
-    pub fn set_in_reply_to(&mut self, new_val: &[u8]) {
+    pub fn set_in_reply_to(&mut self, new_val: &[u8]) -> &mut Self {
         // FIXME msg_id_list
         let new_val = new_val.trim();
-        let val = match parser::address::msg_id(new_val) {
-            Ok(v) => v.1,
-            Err(_) => {
-                self.in_reply_to = Some(MessageID::new(new_val, new_val));
-                return;
-            }
-        };
-        self.in_reply_to = Some(val);
+        if !new_val.is_empty() {
+            let val = match parser::address::msg_id(new_val) {
+                Ok(v) => v.1,
+                Err(_) => {
+                    self.in_reply_to = Some(MessageID::new(new_val, new_val));
+                    return self;
+                }
+            };
+            self.in_reply_to = Some(val);
+        } else {
+            self.in_reply_to = None;
+        }
+        self
     }
 
-    pub fn set_subject(&mut self, new_val: Vec<u8>) {
+    pub fn set_subject(&mut self, new_val: Vec<u8>) -> &mut Self {
         let mut new_val = String::from_utf8(new_val)
             .unwrap_or_else(|err| String::from_utf8_lossy(&err.into_bytes()).into());
         while new_val
@@ -621,9 +624,10 @@ impl Envelope {
         }
 
         self.subject = Some(new_val);
+        self
     }
 
-    pub fn set_message_id(&mut self, new_val: &[u8]) {
+    pub fn set_message_id(&mut self, new_val: &[u8]) -> &mut Self {
         let new_val = new_val.trim();
         match parser::address::msg_id(new_val) {
             Ok((_, val)) => {
@@ -633,6 +637,7 @@ impl Envelope {
                 self.message_id = MessageID::new(new_val, new_val);
             }
         }
+        self
     }
 
     pub fn push_references(&mut self, new_ref: MessageID) {
@@ -661,19 +666,31 @@ impl Envelope {
         }
     }
 
-    pub fn set_references(&mut self, new_val: &[u8]) {
+    pub fn set_references(&mut self, new_val: &[u8]) -> &mut Self {
         let new_val = new_val.trim();
-        match self.references {
-            Some(ref mut s) => {
-                s.raw = new_val.into();
+        if !new_val.is_empty() {
+            self.references = None;
+            {
+                let parse_result = parser::address::msg_id_list(new_val);
+                if let Ok((_, value)) = parse_result {
+                    for v in value {
+                        self.push_references(v);
+                    }
+                }
             }
-            None => {
-                self.references = Some(References {
-                    raw: new_val.into(),
-                    refs: Vec::new(),
-                });
+            match self.references {
+                Some(ref mut s) => {
+                    s.raw = new_val.into();
+                }
+                None => {
+                    self.references = Some(References {
+                        raw: new_val.into(),
+                        refs: Vec::new(),
+                    });
+                }
             }
         }
+        self
     }
 
     pub fn references(&self) -> SmallVec<[&MessageID; 8]> {
@@ -698,40 +715,47 @@ impl Envelope {
         self.thread
     }
 
-    pub fn set_thread(&mut self, new_val: ThreadNodeHash) {
+    pub fn set_thread(&mut self, new_val: ThreadNodeHash) -> &mut Self {
         self.thread = new_val;
+        self
     }
 
-    pub fn set_datetime(&mut self, new_val: UnixTimestamp) {
+    pub fn set_datetime(&mut self, new_val: UnixTimestamp) -> &mut Self {
         self.timestamp = new_val;
+        self
     }
 
-    pub fn set_flag(&mut self, f: Flag, value: bool) {
+    pub fn set_flag(&mut self, f: Flag, value: bool) -> &mut Self {
         self.flags.set(f, value);
+        self
     }
 
-    pub fn set_flags(&mut self, f: Flag) {
+    pub fn set_flags(&mut self, f: Flag) -> &mut Self {
         self.flags = f;
+        self
     }
 
     pub fn flags(&self) -> Flag {
         self.flags
     }
 
-    pub fn set_seen(&mut self) {
-        self.set_flag(Flag::SEEN, true)
+    pub fn set_seen(&mut self) -> &mut Self {
+        self.set_flag(Flag::SEEN, true);
+        self
     }
 
-    pub fn set_unseen(&mut self) {
-        self.set_flag(Flag::SEEN, false)
+    pub fn set_unseen(&mut self) -> &mut Self {
+        self.set_flag(Flag::SEEN, false);
+        self
     }
 
     pub fn is_seen(&self) -> bool {
         self.flags.contains(Flag::SEEN)
     }
 
-    pub fn set_has_attachments(&mut self, new_val: bool) {
+    pub fn set_has_attachments(&mut self, new_val: bool) -> &mut Self {
         self.has_attachments = new_val;
+        self
     }
 
     pub fn has_attachments(&self) -> bool {
