@@ -229,6 +229,7 @@ pub struct NotmuchDb {
     tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
     path: PathBuf,
     account_name: Arc<String>,
+    account_hash: AccountHash,
     event_consumer: BackendEventConsumer,
     save_messages_to: Option<PathBuf>,
 }
@@ -352,6 +353,11 @@ impl NotmuchDb {
             }
         }
 
+        let account_hash = {
+            let mut hasher = DefaultHasher::new();
+            hasher.write(s.name().as_bytes());
+            hasher.finish()
+        };
         Ok(Box::new(NotmuchDb {
             lib,
             revision_uuid: Arc::new(RwLock::new(0)),
@@ -363,6 +369,7 @@ impl NotmuchDb {
             mailboxes: Arc::new(RwLock::new(mailboxes)),
             save_messages_to: None,
             account_name: Arc::new(s.name().to_string()),
+            account_hash,
             event_consumer,
         }))
     }
@@ -556,11 +563,7 @@ impl MailBackend for NotmuchDb {
     }
 
     fn refresh(&mut self, _mailbox_hash: MailboxHash) -> ResultFuture<()> {
-        let account_hash = {
-            let mut hasher = DefaultHasher::new();
-            hasher.write(self.account_name.as_bytes());
-            hasher.finish()
-        };
+        let account_hash = self.account_hash;
         let mut database = NotmuchDb::new_connection(
             self.path.as_path(),
             self.revision_uuid.clone(),
@@ -594,11 +597,7 @@ impl MailBackend for NotmuchDb {
         extern crate notify;
         use notify::{watcher, RecursiveMode, Watcher};
 
-        let account_hash = {
-            let mut hasher = DefaultHasher::new();
-            hasher.write(self.account_name.as_bytes());
-            hasher.finish()
-        };
+        let account_hash = self.account_hash;
         let lib = self.lib.clone();
         let path = self.path.clone();
         let revision_uuid = self.revision_uuid.clone();
