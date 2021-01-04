@@ -37,13 +37,13 @@
 //! let s = timestamp_to_string(timestamp, Some("%Y-%m-%d"));
 //! assert_eq!(s, "2020-01-08");
 //! ```
-use crate::error::Result;
+use crate::error::{Result, ResultIntoMeliError};
 use std::convert::TryInto;
 use std::ffi::{CStr, CString};
 
 pub type UnixTimestamp = u64;
 
-use libc::{timeval, timezone, uselocale};
+use libc::{locale_t, timeval, timezone};
 
 extern "C" {
     fn strptime(
@@ -64,6 +64,43 @@ extern "C" {
     fn localtime_r(timep: *const ::libc::time_t, tm: *mut ::libc::tm) -> *mut ::libc::tm;
 
     fn gettimeofday(tv: *mut timeval, tz: *mut timezone) -> i32;
+}
+
+struct Locale {
+    new_locale: locale_t,
+    old_locale: locale_t,
+}
+
+impl Drop for Locale {
+    fn drop(&mut self) {
+        unsafe {
+            let _ = libc::uselocale(self.old_locale);
+            libc::freelocale(self.new_locale);
+        }
+    }
+}
+
+// How to unit test this? Test machine is not guaranteed to have non-english locales.
+impl Locale {
+    fn new(
+        mask: ::std::os::raw::c_int,
+        locale: *const ::std::os::raw::c_char,
+        base: locale_t,
+    ) -> Result<Self> {
+        let new_locale = unsafe { libc::newlocale(mask, locale, base) };
+        if new_locale.is_null() {
+            return Err(nix::Error::last().into());
+        }
+        let old_locale = unsafe { libc::uselocale(new_locale) };
+        if old_locale.is_null() {
+            unsafe { libc::freelocale(new_locale) };
+            return Err(nix::Error::last().into());
+        }
+        Ok(Locale {
+            new_locale,
+            old_locale,
+        })
+    }
 }
 
 pub fn timestamp_to_string(timestamp: UnixTimestamp, fmt: Option<&str>) -> String {
@@ -215,17 +252,16 @@ where
         unsafe {
             let fmt = CStr::from_bytes_with_nul_unchecked(fmt);
 
-            let locale = ::libc::newlocale(
-                ::libc::LC_TIME,
-                b"C\0".as_ptr() as *const i8,
-                std::ptr::null_mut(),
-            );
-
-            let old_locale = uselocale(locale);
-            let ret = strptime(s.as_ptr(), fmt.as_ptr(), &mut new_tm as *mut _);
-            uselocale(old_locale);
-
-            ::libc::freelocale(locale);
+            let ret = {
+                let _with_locale = Locale::new(
+                    ::libc::LC_TIME,
+                    b"C\0".as_ptr() as *const i8,
+                    std::ptr::null_mut(),
+                )
+                .chain_err_summary(|| "Could not set locale for datetime conversion")
+                .chain_err_kind(crate::error::ErrorKind::External)?;
+                strptime(s.as_ptr(), fmt.as_ptr(), &mut new_tm as *mut _)
+            };
 
             if ret.is_null() {
                 continue;
@@ -278,7 +314,16 @@ where
     for fmt in &[&b"%Y-%m-%dT%H:%M:%S\0"[..], &b"%Y-%m-%d\0"[..]] {
         unsafe {
             let fmt = CStr::from_bytes_with_nul_unchecked(fmt);
-            let ret = strptime(s.as_ptr(), fmt.as_ptr(), &mut new_tm as *mut _);
+            let ret = {
+                let _with_locale = Locale::new(
+                    ::libc::LC_TIME,
+                    b"C\0".as_ptr() as *const i8,
+                    std::ptr::null_mut(),
+                )
+                .chain_err_summary(|| "Could not set locale for datetime conversion")
+                .chain_err_kind(crate::error::ErrorKind::External)?;
+                strptime(s.as_ptr(), fmt.as_ptr(), &mut new_tm as *mut _)
+            };
             if ret.is_null() {
                 continue;
             }
@@ -362,6 +407,9 @@ fn test_timestamp() {
 
 #[test]
 fn test_rfcs() {
+    if unsafe { libc::setlocale(libc::LC_ALL, b"\0".as_ptr() as _) }.is_null() {
+        println!("Unable to set locale.");
+    }
     /* Some tests were lazily stolen from https://rachelbythebay.com/w/2013/06/11/time/ */
 
     assert_eq!(
