@@ -65,6 +65,16 @@ impl<'m> Message<'m> {
         }
     }
 
+    pub fn header(&self, header: &CStr) -> Option<&[u8]> {
+        let header_val =
+            unsafe { call!(self.lib, notmuch_message_get_header)(self.message, header.as_ptr()) };
+        if header_val.is_null() {
+            None
+        } else {
+            Some(unsafe { CStr::from_ptr(header_val).to_bytes() })
+        }
+    }
+
     pub fn msg_id(&self) -> &[u8] {
         let c_str = self.msg_id_cstr();
         c_str.to_bytes()
@@ -81,19 +91,11 @@ impl<'m> Message<'m> {
 
     pub fn into_envelope(
         self,
-        index: Arc<RwLock<HashMap<EnvelopeHash, CString>>>,
-        tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
-    ) -> Result<Envelope> {
-        let mut contents = Vec::new();
-        let path = self.get_filename().to_os_string();
-        let mut f = std::fs::File::open(&path)?;
-        f.read_to_end(&mut contents)?;
+        index: &RwLock<HashMap<EnvelopeHash, CString>>,
+        tag_index: &RwLock<BTreeMap<u64, String>>,
+    ) -> Envelope {
         let env_hash = self.env_hash();
-        let mut env = Envelope::from_bytes(&contents, None).chain_err_summary(|| {
-            index.write().unwrap().remove(&env_hash);
-            format!("could not parse path {:?}", path)
-        })?;
-        env.set_hash(env_hash);
+        let mut env = Envelope::new(env_hash);
         index
             .write()
             .unwrap()
@@ -109,8 +111,63 @@ impl<'m> Message<'m> {
             }
             env.labels_mut().push(num);
         }
-        env.set_flags(flags);
-        Ok(env)
+        unsafe {
+            use crate::email::parser::address::rfc2822address_list;
+            env.set_message_id(self.msg_id())
+                .set_date(
+                    self.header(CStr::from_bytes_with_nul_unchecked(b"Date\0"))
+                        .unwrap_or_default(),
+                )
+                .set_from(
+                    rfc2822address_list(
+                        self.header(CStr::from_bytes_with_nul_unchecked(b"From\0"))
+                            .unwrap_or_default(),
+                    )
+                    .map(|(_, v)| v)
+                    .unwrap_or_default(),
+                )
+                .set_to(
+                    rfc2822address_list(
+                        self.header(CStr::from_bytes_with_nul_unchecked(b"To\0"))
+                            .unwrap_or_default(),
+                    )
+                    .map(|(_, v)| v)
+                    .unwrap_or_default(),
+                )
+                .set_cc(
+                    rfc2822address_list(
+                        self.header(CStr::from_bytes_with_nul_unchecked(b"Cc\0"))
+                            .unwrap_or_default(),
+                    )
+                    .map(|(_, v)| v)
+                    .unwrap_or_default(),
+                )
+                .set_bcc(
+                    rfc2822address_list(
+                        self.header(CStr::from_bytes_with_nul_unchecked(b"Bcc\0"))
+                            .unwrap_or_default(),
+                    )
+                    .map(|(_, v)| v)
+                    .unwrap_or_default()
+                    .to_vec(),
+                )
+                .set_subject(
+                    self.header(CStr::from_bytes_with_nul_unchecked(b"Subject\0"))
+                        .unwrap_or_default()
+                        .to_vec(),
+                )
+                .set_references(
+                    self.header(CStr::from_bytes_with_nul_unchecked(b"References\0"))
+                        .unwrap_or_default(),
+                )
+                .set_in_reply_to(
+                    self.header(CStr::from_bytes_with_nul_unchecked(b"In-Reply-To\0"))
+                        .unwrap_or_default(),
+                )
+                .set_datetime(self.date())
+                .set_flags(flags);
+        }
+        env
     }
 
     pub fn replies_iter(&self) -> Option<MessageIterator> {

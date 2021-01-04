@@ -22,7 +22,7 @@
 use crate::backends::*;
 use crate::conf::AccountSettings;
 use crate::email::{Envelope, EnvelopeHash, Flag};
-use crate::error::{MeliError, Result, ResultIntoMeliError};
+use crate::error::{MeliError, Result};
 use crate::shellexpand::ShellExpandTrait;
 use smallvec::SmallVec;
 use std::collections::{
@@ -130,31 +130,25 @@ impl DbConnection {
                 }
             } else {
                 let message_id = message.msg_id_cstr().to_string_lossy().to_string();
-                match message.into_envelope(index.clone(), tag_index.clone()) {
-                    Ok(env) => {
-                        for (&mailbox_hash, m) in mailboxes_lck.iter() {
-                            let query_str = format!("{} id:{}", m.query_str.as_str(), &message_id);
-                            let query: Query = Query::new(self, &query_str)?;
-                            if query.count().unwrap_or(0) > 0 {
-                                let mut total_lck = m.total.lock().unwrap();
-                                let mut unseen_lck = m.unseen.lock().unwrap();
-                                *total_lck += 1;
-                                if !env.is_seen() {
-                                    *unseen_lck += 1;
-                                }
-                                (event_consumer)(
-                                    account_hash,
-                                    BackendEvent::Refresh(RefreshEvent {
-                                        account_hash,
-                                        mailbox_hash,
-                                        kind: Create(Box::new(env.clone())),
-                                    }),
-                                );
-                            }
+                let env = message.into_envelope(&index, &tag_index);
+                for (&mailbox_hash, m) in mailboxes_lck.iter() {
+                    let query_str = format!("{} id:{}", m.query_str.as_str(), &message_id);
+                    let query: Query = Query::new(self, &query_str)?;
+                    if query.count().unwrap_or(0) > 0 {
+                        let mut total_lck = m.total.lock().unwrap();
+                        let mut unseen_lck = m.unseen.lock().unwrap();
+                        *total_lck += 1;
+                        if !env.is_seen() {
+                            *unseen_lck += 1;
                         }
-                    }
-                    Err(err) => {
-                        debug!("could not parse message {:?}", err);
+                        (event_consumer)(
+                            account_hash,
+                            BackendEvent::Refresh(RefreshEvent {
+                                account_hash,
+                                mailbox_hash,
+                                kind: Create(Box::new(env.clone())),
+                            }),
+                        );
                     }
                 }
             }
@@ -481,21 +475,15 @@ impl MailBackend for NotmuchDb {
                             } else {
                                 continue;
                             };
-                        match message.into_envelope(self.index.clone(), self.tag_index.clone()) {
-                            Ok(env) => {
-                                mailbox_index_lck
-                                    .entry(env.hash())
-                                    .or_default()
-                                    .push(self.mailbox_hash);
-                                if !env.is_seen() {
-                                    unseen_count += 1;
-                                }
-                                ret.push(env);
-                            }
-                            Err(err) => {
-                                debug!("could not parse message {:?}", err);
-                            }
+                        let env = message.into_envelope(&self.index, &self.tag_index);
+                        mailbox_index_lck
+                            .entry(env.hash())
+                            .or_default()
+                            .push(self.mailbox_hash);
+                        if !env.is_seen() {
+                            unseen_count += 1;
                         }
+                        ret.push(env);
                     } else {
                         done = true;
                         break;
