@@ -148,12 +148,13 @@ impl CellBuffer {
     /// Resizes `CellBuffer` to the given number of rows and columns, using the given `Cell` as
     /// a blank.
     #[must_use]
-    pub fn resize(&mut self, newcols: usize, newrows: usize, blank: Cell) -> bool {
+    pub fn resize(&mut self, newcols: usize, newrows: usize, blank: Option<Cell>) -> bool {
         let newlen = newcols * newrows;
         if (self.cols, self.rows) == (newcols, newrows) || newlen >= Self::MAX_SIZE {
             return !(newlen >= Self::MAX_SIZE);
         }
 
+        let blank = blank.unwrap_or(self.default_cell);
         let mut newbuf: Vec<Cell> = Vec::with_capacity(newlen);
         for y in 0..newrows {
             for x in 0..newcols {
@@ -178,7 +179,8 @@ impl CellBuffer {
     }
 
     /// Clears `self`, using the given `Cell` as a blank.
-    pub fn clear(&mut self, blank: Cell) {
+    pub fn clear(&mut self, blank: Option<Cell>) {
+        let blank = blank.unwrap_or(self.default_cell);
         for cell in self.cellvec_mut().iter_mut() {
             *cell = blank;
         }
@@ -1086,11 +1088,7 @@ macro_rules! inspect_bounds {
         let (upper_left, bottom_right) = $area;
         if $x > (get_x(bottom_right)) || $x >= get_x(bounds) {
             if $grid.growable {
-                if !$grid.resize(
-                    std::cmp::max($x + 1, $grid.cols),
-                    $grid.rows,
-                    $grid.default_cell,
-                ) {
+                if !$grid.resize(std::cmp::max($x + 1, $grid.cols), $grid.rows, None) {
                     break;
                 };
             } else {
@@ -1105,11 +1103,7 @@ macro_rules! inspect_bounds {
         }
         if $y > (get_y(bottom_right)) || $y >= get_y(bounds) {
             if $grid.growable {
-                if !$grid.resize(
-                    $grid.cols,
-                    std::cmp::max($y + 1, $grid.rows),
-                    $grid.default_cell,
-                ) {
+                if !$grid.resize($grid.cols, std::cmp::max($y + 1, $grid.rows), None) {
                     break;
                 };
             } else {
@@ -1139,7 +1133,7 @@ pub fn write_string_to_grid(
             if !grid.resize(
                 std::cmp::max(grid.cols, x + 2),
                 std::cmp::max(grid.rows, y + 2),
-                grid.default_cell,
+                None,
             ) {
                 return (x, y);
             }
@@ -1158,7 +1152,7 @@ pub fn write_string_to_grid(
             if !grid.resize(
                 std::cmp::max(grid.cols, x + 2),
                 std::cmp::max(grid.rows, y + 2),
-                grid.default_cell,
+                None,
             ) {
                 return (x, y);
             }

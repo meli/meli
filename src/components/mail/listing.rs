@@ -1604,11 +1604,7 @@ impl Listing {
             ListingFocus::Menu => self.menu_cursor_pos,
         };
         if min_width > width || height < total_height || self.dirty {
-            let _ = self.menu_content.resize(
-                min_width * 2,
-                total_height,
-                self.menu_content.default_cell,
-            );
+            let _ = self.menu_content.resize(min_width * 2, total_height, None);
             let bottom_right = pos_dec(self.menu_content.size(), (1, 1));
             let mut y = 0;
             for a in 0..self.accounts.len() {

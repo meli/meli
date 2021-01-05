@@ -108,13 +108,13 @@ impl EmbedGrid {
         self.scroll_region.bottom = new_val.1.saturating_sub(1);
 
         self.terminal_size = new_val;
-        if !self.grid.resize(new_val.0, new_val.1, Cell::default()) {
+        if !self.grid.resize(new_val.0, new_val.1, None) {
             panic!(
                 "Terminal size too big: ({} cols, {} rows)",
                 new_val.0, new_val.1
             );
         }
-        self.grid.clear(Cell::default());
+        self.grid.clear(Some(Cell::default()));
         self.cursor = (0, 0);
         self.wrap_next = false;
         let winsize = Winsize {
