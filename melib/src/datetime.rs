@@ -426,12 +426,12 @@ pub fn now() -> UnixTimestamp {
 }
 
 #[test]
-fn test_timestamp() {
+fn test_datetime_timestamp() {
     timestamp_to_string(0, None, false);
 }
 
 #[test]
-fn test_rfcs() {
+fn test_datetime_rfcs() {
     if unsafe { libc::setlocale(libc::LC_ALL, b"\0".as_ptr() as _) }.is_null() {
         println!("Unable to set locale.");
     }
