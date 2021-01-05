@@ -71,13 +71,16 @@ pub struct CellBuffer {
 
 impl fmt::Debug for CellBuffer {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "CellBuffer {{ cols: {}, rows: {}, buf: {} cells",
-            self.cols,
-            self.rows,
-            self.buf.len()
-        )
+        f.debug_struct("CellBuffer")
+            .field("cols", &self.cols)
+            .field("rows", &self.rows)
+            .field("buf cells", &self.buf.len())
+            .field("default_cell", &self.default_cell)
+            .field("ascii_drawing", &self.ascii_drawing)
+            .field("growable", &self.growable)
+            .field("tag_table", &self.tag_table)
+            .field("tag_associations", &self.tag_associations)
+            .finish()
     }
 }
 
