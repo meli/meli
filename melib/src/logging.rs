@@ -85,7 +85,8 @@ pub fn log<S: AsRef<str>>(val: S, level: LoggingLevel) {
         if level <= b.level {
             b.dest
                 .write_all(
-                    crate::datetime::timestamp_to_string(crate::datetime::now(), None).as_bytes(),
+                    crate::datetime::timestamp_to_string(crate::datetime::now(), None, false)
+                        .as_bytes(),
                 )
                 .unwrap();
             b.dest.write_all(b" [").unwrap();

@@ -41,7 +41,11 @@ pub mod dbg {
         () => {
             eprint!(
                 "[{}][{:?}] {}:{}_{}: ",
-                crate::datetime::timestamp_to_string(crate::datetime::now(), Some("%Y-%m-%d %T")),
+                crate::datetime::timestamp_to_string(
+                    crate::datetime::now(),
+                    Some("%Y-%m-%d %T"),
+                    false
+                ),
                 std::thread::current()
                     .name()
                     .map(std::string::ToString::to_string)

@@ -683,11 +683,9 @@ impl State {
                         }
                     }
                     let ((x, mut y), box_displ_area_bottom_right) = box_displ_area;
-                    for line in msg_lines
-                        .into_iter()
-                        .chain(Some(String::new()))
-                        .chain(Some(melib::datetime::timestamp_to_string(*timestamp, None)))
-                    {
+                    for line in msg_lines.into_iter().chain(Some(String::new())).chain(Some(
+                        melib::datetime::timestamp_to_string(*timestamp, None, false),
+                    )) {
                         write_string_to_grid(
                             &line,
                             &mut self.overlay_grid,

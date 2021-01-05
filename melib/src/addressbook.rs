@@ -192,7 +192,7 @@ impl Card {
         self.key.as_str()
     }
     pub fn last_edited(&self) -> String {
-        datetime::timestamp_to_string(self.last_edited, None)
+        datetime::timestamp_to_string(self.last_edited, None, false)
     }
 
     pub fn set_id(&mut self, new_val: CardId) {

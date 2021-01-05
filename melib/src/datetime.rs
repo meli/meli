@@ -103,7 +103,7 @@ impl Locale {
     }
 }
 
-pub fn timestamp_to_string(timestamp: UnixTimestamp, fmt: Option<&str>) -> String {
+pub fn timestamp_to_string(timestamp: UnixTimestamp, fmt: Option<&str>, posix: bool) -> String {
     let mut new_tm: ::libc::tm = unsafe { std::mem::zeroed() };
     unsafe {
         let i: i64 = timestamp.try_into().unwrap_or(0);
@@ -119,13 +119,29 @@ pub fn timestamp_to_string(timestamp: UnixTimestamp, fmt: Option<&str>) -> Strin
         unsafe { CStr::from_bytes_with_nul_unchecked(b"%a, %d %b %Y %T %z\0") }
     };
     let mut vec: [u8; 256] = [0; 256];
-    let ret = unsafe {
-        strftime(
-            vec.as_mut_ptr() as *mut _,
-            256,
-            format.as_ptr(),
-            &new_tm as *const _,
-        )
+    let ret = {
+        let _with_locale: Option<Result<Locale>> = if posix {
+            Some(
+                Locale::new(
+                    ::libc::LC_TIME,
+                    b"C\0".as_ptr() as *const i8,
+                    std::ptr::null_mut(),
+                )
+                .chain_err_summary(|| "Could not set locale for datetime conversion")
+                .chain_err_kind(crate::error::ErrorKind::External),
+            )
+        } else {
+            None
+        };
+
+        unsafe {
+            strftime(
+                vec.as_mut_ptr() as *mut _,
+                256,
+                format.as_ptr(),
+                &new_tm as *const _,
+            )
+        }
     };
 
     String::from_utf8_lossy(&vec[0..ret]).into_owned()
@@ -402,7 +418,7 @@ pub fn now() -> UnixTimestamp {
 
 #[test]
 fn test_timestamp() {
-    timestamp_to_string(0, None);
+    timestamp_to_string(0, None, false);
 }
 
 #[test]
