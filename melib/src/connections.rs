@@ -291,3 +291,7 @@ pub async fn timeout<O>(dur: Option<Duration>, f: impl Future<Output = O>) -> cr
         Ok(f.await)
     }
 }
+
+pub async fn sleep(dur: Duration) {
+    smol::Timer::after(dur).await;
+}
