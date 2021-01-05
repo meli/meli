@@ -273,58 +273,56 @@ where
     let s = CString::new(s)?;
     let mut new_tm: libc::tm = unsafe { std::mem::zeroed() };
     for fmt in &[RFC822_FMT_WITH_TIME, RFC822_FMT] {
-        unsafe {
-            let fmt = CStr::from_bytes_with_nul_unchecked(fmt.as_bytes());
+        let fmt = unsafe { CStr::from_bytes_with_nul_unchecked(fmt.as_bytes()) };
+        let ret = {
+            let _with_locale = Locale::new(
+                libc::LC_TIME,
+                b"C\0".as_ptr() as *const i8,
+                std::ptr::null_mut(),
+            )
+            .chain_err_summary(|| "Could not set locale for datetime conversion")
+            .chain_err_kind(crate::error::ErrorKind::External)?;
+            unsafe { strptime(s.as_ptr(), fmt.as_ptr(), &mut new_tm as *mut _) }
+        };
 
-            let ret = {
-                let _with_locale = Locale::new(
-                    libc::LC_TIME,
-                    b"C\0".as_ptr() as *const i8,
-                    std::ptr::null_mut(),
-                )
-                .chain_err_summary(|| "Could not set locale for datetime conversion")
-                .chain_err_kind(crate::error::ErrorKind::External)?;
-                strptime(s.as_ptr(), fmt.as_ptr(), &mut new_tm as *mut _)
-            };
-
-            if ret.is_null() {
-                continue;
-            }
-            let rest = CStr::from_ptr(ret);
-            let tm_gmtoff = if rest.to_bytes().len() > 4
-                && rest.to_bytes().is_ascii()
-                && rest.to_bytes()[1..5].iter().all(u8::is_ascii_digit)
-            {
-                let offset = std::str::from_utf8_unchecked(&rest.to_bytes()[0..5]);
-                if let (Ok(mut hr_offset), Ok(mut min_offset)) =
-                    (offset[1..3].parse::<i64>(), offset[3..5].parse::<i64>())
-                {
-                    if rest.to_bytes()[0] == b'-' {
-                        hr_offset = -hr_offset;
-                        min_offset = -min_offset;
-                    }
-                    hr_offset * 60 * 60 + min_offset * 60
-                } else {
-                    0
-                }
-            } else {
-                let rest = if rest.to_bytes().starts_with(b"(") && rest.to_bytes().ends_with(b")") {
-                    &rest.to_bytes()[1..rest.to_bytes().len() - 1]
-                } else {
-                    rest.to_bytes()
-                };
-
-                if let Ok(idx) = TIMEZONE_ABBR.binary_search_by(|probe| probe.0.cmp(rest)) {
-                    let (hr_offset, min_offset) = TIMEZONE_ABBR[idx].1;
-                    (hr_offset as i64) * 60 * 60 + (min_offset as i64) * 60
-                } else {
-                    0
-                }
-            };
-            return Ok(tm_to_secs(new_tm)
-                .map(|res| (res - tm_gmtoff) as u64)
-                .unwrap_or(0));
+        if ret.is_null() {
+            continue;
         }
+        let rest = unsafe { CStr::from_ptr(ret) };
+        let tm_gmtoff = if rest.to_bytes().len() > 4
+            && rest.to_bytes().is_ascii()
+            && rest.to_bytes()[1..5].iter().all(u8::is_ascii_digit)
+        {
+            // safe since rest.to_bytes().is_ascii()
+            let offset = unsafe { std::str::from_utf8_unchecked(&rest.to_bytes()[0..5]) };
+            if let (Ok(mut hr_offset), Ok(mut min_offset)) =
+                (offset[1..3].parse::<i64>(), offset[3..5].parse::<i64>())
+            {
+                if rest.to_bytes()[0] == b'-' {
+                    hr_offset = -hr_offset;
+                    min_offset = -min_offset;
+                }
+                hr_offset * 60 * 60 + min_offset * 60
+            } else {
+                0
+            }
+        } else {
+            let rest = if rest.to_bytes().starts_with(b"(") && rest.to_bytes().ends_with(b")") {
+                &rest.to_bytes()[1..rest.to_bytes().len() - 1]
+            } else {
+                rest.to_bytes()
+            };
+
+            if let Ok(idx) = TIMEZONE_ABBR.binary_search_by(|probe| probe.0.cmp(rest)) {
+                let (hr_offset, min_offset) = TIMEZONE_ABBR[idx].1;
+                (hr_offset as i64) * 60 * 60 + (min_offset as i64) * 60
+            } else {
+                0
+            }
+        };
+        return Ok(tm_to_secs(new_tm)
+            .map(|res| (res - tm_gmtoff) as u64)
+            .unwrap_or(0));
     }
     Ok(0)
 }
@@ -336,57 +334,56 @@ where
     let s = CString::new(s)?;
     let mut new_tm: libc::tm = unsafe { std::mem::zeroed() };
     for fmt in &[RFC3339_FMT_WITH_TIME, RFC3339_FMT] {
-        unsafe {
-            let fmt = CStr::from_bytes_with_nul_unchecked(fmt.as_bytes());
-            let ret = {
-                let _with_locale = Locale::new(
-                    libc::LC_TIME,
-                    b"C\0".as_ptr() as *const i8,
-                    std::ptr::null_mut(),
-                )
-                .chain_err_summary(|| "Could not set locale for datetime conversion")
-                .chain_err_kind(crate::error::ErrorKind::External)?;
-                strptime(s.as_ptr(), fmt.as_ptr(), &mut new_tm as *mut _)
-            };
-            if ret.is_null() {
-                continue;
-            }
-            let rest = CStr::from_ptr(ret);
-            let tm_gmtoff = if rest.to_bytes().len() > 4
-                && rest.to_bytes().is_ascii()
-                && rest.to_bytes()[1..3].iter().all(u8::is_ascii_digit)
-                && rest.to_bytes()[4..6].iter().all(u8::is_ascii_digit)
-            {
-                let offset = std::str::from_utf8_unchecked(&rest.to_bytes()[0..6]);
-                if let (Ok(mut hr_offset), Ok(mut min_offset)) =
-                    (offset[1..3].parse::<i64>(), offset[4..6].parse::<i64>())
-                {
-                    if rest.to_bytes()[0] == b'-' {
-                        hr_offset = -hr_offset;
-                        min_offset = -min_offset;
-                    }
-                    hr_offset * 60 * 60 + min_offset * 60
-                } else {
-                    0
-                }
-            } else {
-                let rest = if rest.to_bytes().starts_with(b"(") && rest.to_bytes().ends_with(b")") {
-                    &rest.to_bytes()[1..rest.to_bytes().len() - 1]
-                } else {
-                    rest.to_bytes()
-                };
-
-                if let Ok(idx) = TIMEZONE_ABBR.binary_search_by(|probe| probe.0.cmp(rest)) {
-                    let (hr_offset, min_offset) = debug!(TIMEZONE_ABBR[idx]).1;
-                    (hr_offset as i64) * 60 * 60 + (min_offset as i64) * 60
-                } else {
-                    0
-                }
-            };
-            return Ok(tm_to_secs(new_tm)
-                .map(|res| (res - tm_gmtoff) as u64)
-                .unwrap_or(0));
+        let fmt = unsafe { CStr::from_bytes_with_nul_unchecked(fmt.as_bytes()) };
+        let ret = {
+            let _with_locale = Locale::new(
+                libc::LC_TIME,
+                b"C\0".as_ptr() as *const i8,
+                std::ptr::null_mut(),
+            )
+            .chain_err_summary(|| "Could not set locale for datetime conversion")
+            .chain_err_kind(crate::error::ErrorKind::External)?;
+            unsafe { strptime(s.as_ptr(), fmt.as_ptr(), &mut new_tm as *mut _) }
+        };
+        if ret.is_null() {
+            continue;
         }
+        let rest = unsafe { CStr::from_ptr(ret) };
+        let tm_gmtoff = if rest.to_bytes().len() > 4
+            && rest.to_bytes().is_ascii()
+            && rest.to_bytes()[1..3].iter().all(u8::is_ascii_digit)
+            && rest.to_bytes()[4..6].iter().all(u8::is_ascii_digit)
+        {
+            // safe since rest.to_bytes().is_ascii()
+            let offset = unsafe { std::str::from_utf8_unchecked(&rest.to_bytes()[0..6]) };
+            if let (Ok(mut hr_offset), Ok(mut min_offset)) =
+                (offset[1..3].parse::<i64>(), offset[4..6].parse::<i64>())
+            {
+                if rest.to_bytes()[0] == b'-' {
+                    hr_offset = -hr_offset;
+                    min_offset = -min_offset;
+                }
+                hr_offset * 60 * 60 + min_offset * 60
+            } else {
+                0
+            }
+        } else {
+            let rest = if rest.to_bytes().starts_with(b"(") && rest.to_bytes().ends_with(b")") {
+                &rest.to_bytes()[1..rest.to_bytes().len() - 1]
+            } else {
+                rest.to_bytes()
+            };
+
+            if let Ok(idx) = TIMEZONE_ABBR.binary_search_by(|probe| probe.0.cmp(rest)) {
+                let (hr_offset, min_offset) = TIMEZONE_ABBR[idx].1;
+                (hr_offset as i64) * 60 * 60 + (min_offset as i64) * 60
+            } else {
+                0
+            }
+        };
+        return Ok(tm_to_secs(new_tm)
+            .map(|res| (res - tm_gmtoff) as u64)
+            .unwrap_or(0));
     }
     Ok(0)
 }
