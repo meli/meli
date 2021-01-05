@@ -38,6 +38,7 @@
 //! assert_eq!(s, "2020-01-08");
 //! ```
 use crate::error::{Result, ResultIntoMeliError};
+use std::borrow::Cow;
 use std::convert::TryInto;
 use std::ffi::{CStr, CString};
 
@@ -112,12 +113,18 @@ pub fn timestamp_to_string(timestamp: UnixTimestamp, fmt: Option<&str>, posix: b
         let i: i64 = timestamp.try_into().unwrap_or(0);
         localtime_r(&i as *const i64, &mut new_tm as *mut libc::tm);
     }
-    let fmt = fmt
+    let format: Cow<'_, CStr> = if let Some(cs) = fmt
+        .map(str::as_bytes)
+        .map(CStr::from_bytes_with_nul)
+        .and_then(|res| res.ok())
+    {
+        Cow::from(cs)
+    } else if let Some(cstring) = fmt
+        .map(str::as_bytes)
         .map(CString::new)
-        .map(|res| res.ok())
-        .and_then(|opt| opt);
-    let format: &CStr = if let Some(ref s) = fmt {
-        &s
+        .and_then(|res| res.ok())
+    {
+        Cow::from(cstring)
     } else {
         unsafe { CStr::from_bytes_with_nul_unchecked(DEFAULT_FMT.as_bytes()).into() }
     };
@@ -390,7 +397,11 @@ where
     T: Into<Vec<u8>>,
 {
     let mut new_tm: libc::tm = unsafe { std::mem::zeroed() };
-    let fmt = CString::new(fmt)?;
+    let fmt: Cow<'_, CStr> = if let Ok(cs) = CStr::from_bytes_with_nul(fmt.as_bytes()) {
+        Cow::from(cs)
+    } else {
+        Cow::from(CString::new(fmt.as_bytes())?)
+    };
     unsafe {
         let ret = strptime(
             CString::new(s)?.as_ptr(),
