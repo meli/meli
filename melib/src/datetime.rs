@@ -42,6 +42,11 @@ use std::convert::TryInto;
 use std::ffi::{CStr, CString};
 
 pub type UnixTimestamp = u64;
+pub const RFC3339_FMT_WITH_TIME: &str = "%Y-%m-%dT%H:%M:%S\0";
+pub const RFC3339_FMT: &str = "%Y-%m-%d\0";
+pub const RFC822_FMT_WITH_TIME: &str = "%a, %e %h %Y %H:%M:%S \0";
+pub const RFC822_FMT: &str = "%e %h %Y %H:%M:%S \0";
+pub const DEFAULT_FMT: &str = "%a, %d %b %Y %R\0";
 
 extern "C" {
     fn strptime(
@@ -114,8 +119,9 @@ pub fn timestamp_to_string(timestamp: UnixTimestamp, fmt: Option<&str>, posix: b
     let format: &CStr = if let Some(ref s) = fmt {
         &s
     } else {
-        unsafe { CStr::from_bytes_with_nul_unchecked(b"%a, %d %b %Y %T %z\0") }
+        unsafe { CStr::from_bytes_with_nul_unchecked(DEFAULT_FMT.as_bytes()).into() }
     };
+
     let mut vec: [u8; 256] = [0; 256];
     let ret = {
         let _with_locale: Option<Result<Locale>> = if posix {
@@ -259,12 +265,9 @@ where
 {
     let s = CString::new(s)?;
     let mut new_tm: libc::tm = unsafe { std::mem::zeroed() };
-    for fmt in &[
-        &b"%a, %e %h %Y %H:%M:%S \0"[..],
-        &b"%e %h %Y %H:%M:%S \0"[..],
-    ] {
+    for fmt in &[RFC822_FMT_WITH_TIME, RFC822_FMT] {
         unsafe {
-            let fmt = CStr::from_bytes_with_nul_unchecked(fmt);
+            let fmt = CStr::from_bytes_with_nul_unchecked(fmt.as_bytes());
 
             let ret = {
                 let _with_locale = Locale::new(
@@ -325,9 +328,9 @@ where
 {
     let s = CString::new(s)?;
     let mut new_tm: libc::tm = unsafe { std::mem::zeroed() };
-    for fmt in &[&b"%Y-%m-%dT%H:%M:%S\0"[..], &b"%Y-%m-%d\0"[..]] {
+    for fmt in &[RFC3339_FMT_WITH_TIME, RFC3339_FMT] {
         unsafe {
-            let fmt = CStr::from_bytes_with_nul_unchecked(fmt);
+            let fmt = CStr::from_bytes_with_nul_unchecked(fmt.as_bytes());
             let ret = {
                 let _with_locale = Locale::new(
                     libc::LC_TIME,
