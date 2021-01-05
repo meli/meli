@@ -43,32 +43,30 @@ use std::ffi::{CStr, CString};
 
 pub type UnixTimestamp = u64;
 
-use libc::{locale_t, timeval, timezone};
-
 extern "C" {
     fn strptime(
-        s: *const ::std::os::raw::c_char,
-        format: *const ::std::os::raw::c_char,
-        tm: *mut ::libc::tm,
-    ) -> *const ::std::os::raw::c_char;
+        s: *const std::os::raw::c_char,
+        format: *const std::os::raw::c_char,
+        tm: *mut libc::tm,
+    ) -> *const std::os::raw::c_char;
 
     fn strftime(
-        s: *mut ::std::os::raw::c_char,
-        max: ::libc::size_t,
-        format: *const ::std::os::raw::c_char,
-        tm: *const ::libc::tm,
-    ) -> ::libc::size_t;
+        s: *mut std::os::raw::c_char,
+        max: libc::size_t,
+        format: *const std::os::raw::c_char,
+        tm: *const libc::tm,
+    ) -> libc::size_t;
 
-    fn mktime(tm: *const ::libc::tm) -> ::libc::time_t;
+    fn mktime(tm: *const libc::tm) -> libc::time_t;
 
-    fn localtime_r(timep: *const ::libc::time_t, tm: *mut ::libc::tm) -> *mut ::libc::tm;
+    fn localtime_r(timep: *const libc::time_t, tm: *mut libc::tm) -> *mut libc::tm;
 
-    fn gettimeofday(tv: *mut timeval, tz: *mut timezone) -> i32;
+    fn gettimeofday(tv: *mut libc::timeval, tz: *mut libc::timezone) -> i32;
 }
 
 struct Locale {
-    new_locale: locale_t,
-    old_locale: locale_t,
+    new_locale: libc::locale_t,
+    old_locale: libc::locale_t,
 }
 
 impl Drop for Locale {
@@ -83,9 +81,9 @@ impl Drop for Locale {
 // How to unit test this? Test machine is not guaranteed to have non-english locales.
 impl Locale {
     fn new(
-        mask: ::std::os::raw::c_int,
-        locale: *const ::std::os::raw::c_char,
-        base: locale_t,
+        mask: std::os::raw::c_int,
+        locale: *const std::os::raw::c_char,
+        base: libc::locale_t,
     ) -> Result<Self> {
         let new_locale = unsafe { libc::newlocale(mask, locale, base) };
         if new_locale.is_null() {
@@ -104,10 +102,10 @@ impl Locale {
 }
 
 pub fn timestamp_to_string(timestamp: UnixTimestamp, fmt: Option<&str>, posix: bool) -> String {
-    let mut new_tm: ::libc::tm = unsafe { std::mem::zeroed() };
+    let mut new_tm: libc::tm = unsafe { std::mem::zeroed() };
     unsafe {
         let i: i64 = timestamp.try_into().unwrap_or(0);
-        localtime_r(&i as *const i64, &mut new_tm as *mut ::libc::tm);
+        localtime_r(&i as *const i64, &mut new_tm as *mut libc::tm);
     }
     let fmt = fmt
         .map(CString::new)
@@ -123,7 +121,7 @@ pub fn timestamp_to_string(timestamp: UnixTimestamp, fmt: Option<&str>, posix: b
         let _with_locale: Option<Result<Locale>> = if posix {
             Some(
                 Locale::new(
-                    ::libc::LC_TIME,
+                    libc::LC_TIME,
                     b"C\0".as_ptr() as *const i8,
                     std::ptr::null_mut(),
                 )
@@ -147,7 +145,7 @@ pub fn timestamp_to_string(timestamp: UnixTimestamp, fmt: Option<&str>, posix: b
     String::from_utf8_lossy(&vec[0..ret]).into_owned()
 }
 
-fn tm_to_secs(tm: ::libc::tm) -> std::result::Result<i64, ()> {
+fn tm_to_secs(tm: libc::tm) -> std::result::Result<i64, ()> {
     let mut is_leap = false;
     let mut year = tm.tm_year;
     let mut month = tm.tm_mon;
@@ -260,7 +258,7 @@ where
     T: Into<Vec<u8>>,
 {
     let s = CString::new(s)?;
-    let mut new_tm: ::libc::tm = unsafe { std::mem::zeroed() };
+    let mut new_tm: libc::tm = unsafe { std::mem::zeroed() };
     for fmt in &[
         &b"%a, %e %h %Y %H:%M:%S \0"[..],
         &b"%e %h %Y %H:%M:%S \0"[..],
@@ -270,7 +268,7 @@ where
 
             let ret = {
                 let _with_locale = Locale::new(
-                    ::libc::LC_TIME,
+                    libc::LC_TIME,
                     b"C\0".as_ptr() as *const i8,
                     std::ptr::null_mut(),
                 )
@@ -326,13 +324,13 @@ where
     T: Into<Vec<u8>>,
 {
     let s = CString::new(s)?;
-    let mut new_tm: ::libc::tm = unsafe { std::mem::zeroed() };
+    let mut new_tm: libc::tm = unsafe { std::mem::zeroed() };
     for fmt in &[&b"%Y-%m-%dT%H:%M:%S\0"[..], &b"%Y-%m-%d\0"[..]] {
         unsafe {
             let fmt = CStr::from_bytes_with_nul_unchecked(fmt);
             let ret = {
                 let _with_locale = Locale::new(
-                    ::libc::LC_TIME,
+                    libc::LC_TIME,
                     b"C\0".as_ptr() as *const i8,
                     std::ptr::null_mut(),
                 )
@@ -388,7 +386,7 @@ pub fn timestamp_from_string<T>(s: T, fmt: &str) -> Result<Option<UnixTimestamp>
 where
     T: Into<Vec<u8>>,
 {
-    let mut new_tm: ::libc::tm = unsafe { std::mem::zeroed() };
+    let mut new_tm: libc::tm = unsafe { std::mem::zeroed() };
     let fmt = CString::new(fmt)?;
     unsafe {
         let ret = strptime(
@@ -405,8 +403,8 @@ where
 
 pub fn now() -> UnixTimestamp {
     use std::mem::MaybeUninit;
-    let mut tv = MaybeUninit::<::libc::timeval>::uninit();
-    let mut tz = MaybeUninit::<::libc::timezone>::uninit();
+    let mut tv = MaybeUninit::<libc::timeval>::uninit();
+    let mut tz = MaybeUninit::<libc::timezone>::uninit();
     unsafe {
         let ret = gettimeofday(tv.as_mut_ptr(), tz.as_mut_ptr());
         if ret == -1 {
@@ -436,7 +434,7 @@ fn test_rfcs() {
     /*
     macro_rules! mkt {
         ($year:literal, $month:literal, $day:literal, $hour:literal, $minute:literal, $second:literal) => {
-            ::libc::tm {
+            libc::tm {
                 tm_sec: $second,
                 tm_min: $minute,
                 tm_hour: $hour,
