@@ -60,11 +60,12 @@ impl BackendOp for JmapOp {
             let blob_id = store.blob_id_store.lock().unwrap()[&hash].clone();
             let mut conn = connection.lock().await;
             conn.connect().await?;
+            let download_url = conn.session.lock().unwrap().download_url.clone();
             let mut res = conn
                 .client
                 .get_async(&download_request_format(
-                    &conn.session,
-                    conn.mail_account_id(),
+                    download_url.as_str(),
+                    &conn.mail_account_id(),
                     &blob_id,
                     None,
                 ))

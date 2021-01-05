@@ -25,6 +25,7 @@ use serde::de::DeserializeOwned;
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 use serde_json::{value::RawValue, Value};
 use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 
 mod filters;
 pub use filters::*;
@@ -208,11 +209,11 @@ pub struct JmapSession {
     pub accounts: HashMap<Id<Account>, Account>,
     pub primary_accounts: HashMap<String, Id<Account>>,
     pub username: String,
-    pub api_url: String,
-    pub download_url: String,
+    pub api_url: Arc<String>,
+    pub download_url: Arc<String>,
 
-    pub upload_url: String,
-    pub event_source_url: String,
+    pub upload_url: Arc<String>,
+    pub event_source_url: Arc<String>,
     pub state: State<JmapSession>,
     #[serde(flatten)]
     pub extra_properties: HashMap<String, Value>,
@@ -930,49 +931,49 @@ impl core::fmt::Display for SetError {
 }
 
 pub fn download_request_format(
-    session: &JmapSession,
+    download_url: &str,
     account_id: &Id<Account>,
     blob_id: &Id<BlobObject>,
     name: Option<String>,
 ) -> String {
     // https://jmap.fastmail.com/download/{accountId}/{blobId}/{name}
     let mut ret = String::with_capacity(
-        session.download_url.len()
+        download_url.len()
             + blob_id.len()
             + name.as_ref().map(|n| n.len()).unwrap_or(0)
             + account_id.len(),
     );
     let mut prev_pos = 0;
 
-    while let Some(pos) = session.download_url.as_bytes()[prev_pos..].find(b"{") {
-        ret.push_str(&session.download_url[prev_pos..prev_pos + pos]);
+    while let Some(pos) = download_url.as_bytes()[prev_pos..].find(b"{") {
+        ret.push_str(&download_url[prev_pos..prev_pos + pos]);
         prev_pos += pos;
-        if session.download_url[prev_pos..].starts_with("{accountId}") {
+        if download_url[prev_pos..].starts_with("{accountId}") {
             ret.push_str(account_id.as_str());
             prev_pos += "{accountId}".len();
-        } else if session.download_url[prev_pos..].starts_with("{blobId}") {
+        } else if download_url[prev_pos..].starts_with("{blobId}") {
             ret.push_str(blob_id.as_str());
             prev_pos += "{blobId}".len();
-        } else if session.download_url[prev_pos..].starts_with("{name}") {
+        } else if download_url[prev_pos..].starts_with("{name}") {
             ret.push_str(name.as_ref().map(String::as_str).unwrap_or(""));
             prev_pos += "{name}".len();
         }
     }
-    if prev_pos != session.download_url.len() {
-        ret.push_str(&session.download_url[prev_pos..]);
+    if prev_pos != download_url.len() {
+        ret.push_str(&download_url[prev_pos..]);
     }
     ret
 }
 
-pub fn upload_request_format(session: &JmapSession, account_id: &Id<Account>) -> String {
+pub fn upload_request_format(upload_url: &str, account_id: &Id<Account>) -> String {
     //"uploadUrl": "https://jmap.fastmail.com/upload/{accountId}/",
-    let mut ret = String::with_capacity(session.upload_url.len() + account_id.len());
+    let mut ret = String::with_capacity(upload_url.len() + account_id.len());
     let mut prev_pos = 0;
 
-    while let Some(pos) = session.upload_url.as_bytes()[prev_pos..].find(b"{") {
-        ret.push_str(&session.upload_url[prev_pos..prev_pos + pos]);
+    while let Some(pos) = upload_url.as_bytes()[prev_pos..].find(b"{") {
+        ret.push_str(&upload_url[prev_pos..prev_pos + pos]);
         prev_pos += pos;
-        if session.upload_url[prev_pos..].starts_with("{accountId}") {
+        if upload_url[prev_pos..].starts_with("{accountId}") {
             ret.push_str(account_id.as_str());
             prev_pos += "{accountId}".len();
             break;
@@ -981,8 +982,8 @@ pub fn upload_request_format(session: &JmapSession, account_id: &Id<Account>) ->
             prev_pos += 1;
         }
     }
-    if prev_pos != session.upload_url.len() {
-        ret.push_str(&session.upload_url[prev_pos..]);
+    if prev_pos != upload_url.len() {
+        ret.push_str(&upload_url[prev_pos..]);
     }
     ret
 }

@@ -24,7 +24,7 @@ use isahc::config::Configurable;
 
 #[derive(Debug)]
 pub struct JmapConnection {
-    pub session: JmapSession,
+    pub session: Arc<Mutex<JmapSession>>,
     pub request_no: Arc<Mutex<usize>>,
     pub client: Arc<HttpClient>,
     pub server_conf: JmapServerConf,
@@ -44,7 +44,7 @@ impl JmapConnection {
             .build()?;
         let server_conf = server_conf.clone();
         Ok(JmapConnection {
-            session: Default::default(),
+            session: Arc::new(Mutex::new(Default::default())),
             request_no: Arc::new(Mutex::new(0)),
             client: Arc::new(client),
             server_conf,
@@ -97,12 +97,12 @@ impl JmapConnection {
         }
 
         *self.store.online_status.lock().await = (Instant::now(), Ok(()));
-        self.session = session;
+        *self.session.lock().unwrap() = session;
         Ok(())
     }
 
-    pub fn mail_account_id(&self) -> &Id<Account> {
-        &self.session.primary_accounts["urn:ietf:params:jmap:mail"]
+    pub fn mail_account_id(&self) -> Id<Account> {
+        self.session.lock().unwrap().primary_accounts["urn:ietf:params:jmap:mail"].clone()
     }
 
     pub fn add_refresh_event(&self, event: RefreshEvent) {
@@ -123,7 +123,6 @@ impl JmapConnection {
             return Ok(());
         };
         loop {
-
             let email_changes_call: EmailChanges = EmailChanges::new(
                 Changes::<EmailObject>::new()
                     .account_id(self.mail_account_id().clone())
@@ -172,9 +171,10 @@ impl JmapConnection {
             } else {
                 return Ok(());
             }
+            let api_url = self.session.lock().unwrap().api_url.clone();
             let mut res = self
                 .client
-                .post_async(&self.session.api_url, serde_json::to_string(&req)?)
+                .post_async(api_url.as_str(), serde_json::to_string(&req)?)
                 .await?;
 
             let res_text = res.text_async().await?;

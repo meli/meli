@@ -86,10 +86,11 @@ pub struct JsonResponse<'a> {
 
 pub async fn get_mailboxes(conn: &JmapConnection) -> Result<HashMap<MailboxHash, JmapMailbox>> {
     let seq = get_request_no!(conn.request_no);
+    let api_url = conn.session.lock().unwrap().api_url.clone();
     let mut res = conn
         .client
         .post_async(
-            &conn.session.api_url,
+            api_url.as_str(),
             serde_json::to_string(&json!({
                 "using": ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"],
                 "methodCalls": [["Mailbox/get", {
@@ -178,9 +179,10 @@ pub async fn get_message_list(
     let mut req = Request::new(conn.request_no.clone());
     req.add_call(&email_call);
 
+    let api_url = conn.session.lock().unwrap().api_url.clone();
     let mut res = conn
         .client
-        .post_async(&conn.session.api_url, serde_json::to_string(&req)?)
+        .post_async(api_url.as_str(), serde_json::to_string(&req)?)
         .await?;
 
     let res_text = res.text_async().await?;
@@ -249,9 +251,10 @@ pub async fn fetch(
 
     req.add_call(&email_call);
 
+    let api_url = conn.session.lock().unwrap().api_url.clone();
     let mut res = conn
         .client
-        .post_async(&conn.session.api_url, serde_json::to_string(&req)?)
+        .post_async(api_url.as_str(), serde_json::to_string(&req)?)
         .await?;
 
     let res_text = res.text_async().await?;
