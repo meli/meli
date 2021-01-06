@@ -269,12 +269,6 @@ impl std::convert::From<EmailObject> for crate::Envelope {
             env.push_references(env.in_reply_to().unwrap().clone());
         }
         if let Some(v) = t.headers.get("References") {
-            let parse_result = crate::email::parser::address::msg_id_list(v.as_bytes());
-            if let Ok((_, v)) = parse_result {
-                for v in v {
-                    env.push_references(v);
-                }
-            }
             env.set_references(v.as_bytes());
         }
         if let Some(v) = t.headers.get("Date") {
@@ -282,6 +276,8 @@ impl std::convert::From<EmailObject> for crate::Envelope {
             if let Ok(d) = crate::email::parser::dates::rfc5322_date(v.as_bytes()) {
                 env.set_datetime(d);
             }
+        } else if let Ok(d) = crate::email::parser::dates::rfc5322_date(t.received_at.as_bytes()) {
+            env.set_datetime(d);
         }
         env.set_has_attachments(t.has_attachment);
         if let Some(ref mut subject) = t.subject {
