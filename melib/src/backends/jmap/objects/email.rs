@@ -581,6 +581,7 @@ impl From<crate::search::Query> for Filter<EmailFilterCondition, EmailObject> {
     fn from(val: crate::search::Query) -> Self {
         let mut ret = Filter::Condition(EmailFilterCondition::new().into());
         fn rec(q: &crate::search::Query, f: &mut Filter<EmailFilterCondition, EmailObject>) {
+            use crate::datetime::{timestamp_to_string, RFC3339_FMT};
             use crate::search::Query::*;
             match q {
                 Subject(t) => {
@@ -604,23 +605,48 @@ impl From<crate::search::Query> for Filter<EmailFilterCondition, EmailObject> {
                 Body(t) => {
                     *f = Filter::Condition(EmailFilterCondition::new().body(t.clone()).into());
                 }
-                Before(_) => {
-                    //TODO, convert UNIX timestamp into UtcDate
+                Before(t) => {
+                    *f = Filter::Condition(
+                        EmailFilterCondition::new()
+                            .before(timestamp_to_string(*t, Some(RFC3339_FMT), true))
+                            .into(),
+                    );
                 }
-                After(_) => {
-                    //TODO
+                After(t) => {
+                    *f = Filter::Condition(
+                        EmailFilterCondition::new()
+                            .after(timestamp_to_string(*t, Some(RFC3339_FMT), true))
+                            .into(),
+                    );
                 }
-                Between(_, _) => {
-                    //TODO
+                Between(a, b) => {
+                    *f = Filter::Condition(
+                        EmailFilterCondition::new()
+                            .after(timestamp_to_string(*a, Some(RFC3339_FMT), true))
+                            .into(),
+                    );
+                    *f &= Filter::Condition(
+                        EmailFilterCondition::new()
+                            .before(timestamp_to_string(*b, Some(RFC3339_FMT), true))
+                            .into(),
+                    );
                 }
-                On(_) => {
-                    //TODO
+                On(t) => {
+                    rec(&Between(*t, *t), f);
                 }
-                InReplyTo(_) => {
-                    //TODO, look inside Headers
+                InReplyTo(ref s) => {
+                    *f = Filter::Condition(
+                        EmailFilterCondition::new()
+                            .header(vec!["In-Reply-To".to_string().into(), s.to_string().into()])
+                            .into(),
+                    );
                 }
-                References(_) => {
-                    //TODO
+                References(ref s) => {
+                    *f = Filter::Condition(
+                        EmailFilterCondition::new()
+                            .header(vec!["References".to_string().into(), s.to_string().into()])
+                            .into(),
+                    );
                 }
                 AllAddresses(_) => {
                     //TODO
