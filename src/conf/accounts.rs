@@ -1011,6 +1011,14 @@ impl Account {
                         Some(crate::types::NotificationType::Error(err.kind)),
                     ));
                 }
+                RefreshEventKind::MailboxCreate(_new_mailbox) => {}
+                RefreshEventKind::MailboxDelete(_mailbox_hash) => {}
+                RefreshEventKind::MailboxRename {
+                    old_mailbox_hash: _,
+                    new_mailbox: _,
+                } => {}
+                RefreshEventKind::MailboxSubscribe(_mailbox_hash) => {}
+                RefreshEventKind::MailboxUnsubscribe(_mailbox_hash) => {}
             }
         }
         None

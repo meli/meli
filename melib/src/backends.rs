@@ -246,6 +246,14 @@ pub enum RefreshEventKind {
     NewFlags(EnvelopeHash, (Flag, Vec<String>)),
     Rescan,
     Failure(MeliError),
+    MailboxCreate(Mailbox),
+    MailboxDelete(MailboxHash),
+    MailboxRename {
+        old_mailbox_hash: MailboxHash,
+        new_mailbox: Mailbox,
+    },
+    MailboxSubscribe(MailboxHash),
+    MailboxUnsubscribe(MailboxHash),
 }
 
 #[derive(Debug, Clone)]
