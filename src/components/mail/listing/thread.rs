@@ -1224,6 +1224,9 @@ impl Component for ThreadListing {
             }
             UIEvent::Input(Key::Char('i')) if self.unfocused => {
                 self.unfocused = false;
+                if let Some(ref mut s) = self.view {
+                    s.process_event(&mut UIEvent::VisibilityChange(false), context);
+                }
                 self.dirty = true;
                 self.view = None;
                 return true;

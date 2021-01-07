@@ -414,6 +414,27 @@ impl ContactList {
 
         let top_idx = page_no * rows;
 
+        if self.length >= rows {
+            context
+                .replies
+                .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
+                    ScrollUpdate::Update {
+                        id: self.id,
+                        context: ScrollContext {
+                            shown_lines: top_idx + rows,
+                            total_lines: self.length,
+                            has_more_lines: false,
+                        },
+                    },
+                )));
+        } else {
+            context
+                .replies
+                .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
+                    ScrollUpdate::End(self.id),
+                )));
+        }
+
         /* If cursor position has changed, remove the highlight from the previous position and
          * apply it in the new one. */
         if self.cursor_pos != self.new_cursor_pos && prev_page_no == page_no {
@@ -621,6 +642,11 @@ impl Component for ContactList {
 
                     self.mode = ViewMode::View(manager.id());
                     self.view = Some(manager);
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
+                            ScrollUpdate::End(self.id),
+                        )));
 
                     return true;
                 }
@@ -639,6 +665,11 @@ impl Component for ContactList {
 
                     self.mode = ViewMode::View(manager.id());
                     self.view = Some(manager);
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
+                            ScrollUpdate::End(self.id),
+                        )));
 
                     return true;
                 }

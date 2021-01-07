@@ -64,6 +64,7 @@ pub struct StatusBar {
     progress_spinner: ProgressSpinner,
     in_progress_jobs: HashSet<JobId>,
     done_jobs: HashSet<JobId>,
+    scroll_contexts: IndexMap<ComponentId, ScrollContext>,
 
     auto_complete: AutoComplete,
     cmd_history: Vec<String>,
@@ -104,6 +105,7 @@ impl StatusBar {
             progress_spinner,
             in_progress_jobs: HashSet::default(),
             done_jobs: HashSet::default(),
+            scroll_contexts: IndexMap::default(),
             cmd_history: crate::command::history::old_cmd_history(),
         }
     }
@@ -139,6 +141,33 @@ impl StatusBar {
             {
                 grid[(x, y)].set_attrs(attribute.attrs | Attr::BOLD);
             }
+        }
+        if let Some((
+            _,
+            ScrollContext {
+                shown_lines,
+                total_lines,
+                has_more_lines,
+            },
+        )) = self.scroll_contexts.last()
+        {
+            let s = format!(
+                "| {shown_percentage}% {line_desc}{shown_lines}/{total_lines}{has_more_lines}",
+                line_desc = if grid.ascii_drawing { "lines:" } else { "☰ " },
+                shown_percentage = (*shown_lines as f32 / (*total_lines as f32) * 100.0) as usize,
+                shown_lines = *shown_lines,
+                total_lines = *total_lines,
+                has_more_lines = if *has_more_lines { "(+)" } else { "" }
+            );
+            write_string_to_grid(
+                &s,
+                grid,
+                attribute.fg,
+                attribute.bg,
+                attribute.attrs,
+                ((x + 1, y), bottom_right!(area)),
+                None,
+            );
         }
 
         let (mut x, y) = bottom_right!(area);
@@ -706,6 +735,21 @@ impl Component for StatusBar {
                 self.progress_spinner.set_dirty(true);
                 self.in_progress_jobs.insert(*job_id);
             }
+            UIEvent::StatusEvent(StatusEvent::ScrollUpdate(ScrollUpdate::End(component_id))) => {
+                if self.scroll_contexts.remove(component_id).is_some() {
+                    self.dirty = true;
+                }
+                return true;
+            }
+            UIEvent::StatusEvent(StatusEvent::ScrollUpdate(ScrollUpdate::Update {
+                id,
+                context,
+            })) => {
+                if self.scroll_contexts.insert(*id, *context) != Some(*context) {
+                    self.dirty = true;
+                }
+                return true;
+            }
             UIEvent::Timer(_) => {
                 if self.progress_spinner.process_event(event, context) {
                     return true;
@@ -975,6 +1019,21 @@ impl Component for Tabbed {
                     ),
                 );
                 if height.wrapping_div(rows + 1) > 0 || width.wrapping_div(cols + 1) > 0 {
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
+                            ScrollUpdate::Update {
+                                id: self.id,
+                                context: ScrollContext {
+                                    shown_lines: std::cmp::min(
+                                        (height).saturating_sub(rows + 1),
+                                        self.help_screen_cursor.1,
+                                    ) + rows,
+                                    total_lines: height,
+                                    has_more_lines: false,
+                                },
+                            },
+                        )));
                     ScrollBar::default().set_show_arrows(true).draw(
                         grid,
                         (
@@ -989,6 +1048,12 @@ impl Component for Tabbed {
                         /* length */
                         height,
                     );
+                } else {
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
+                            ScrollUpdate::End(self.id),
+                        )));
                 }
                 self.dirty = false;
                 return;
@@ -1192,6 +1257,21 @@ impl Component for Tabbed {
                 ),
             );
             if height.wrapping_div(rows + 1) > 0 || width.wrapping_div(cols + 1) > 0 {
+                context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
+                        ScrollUpdate::Update {
+                            id: self.id,
+                            context: ScrollContext {
+                                shown_lines: std::cmp::min(
+                                    (height).saturating_sub(rows),
+                                    self.help_screen_cursor.1,
+                                ) + rows,
+                                total_lines: height,
+                                has_more_lines: false,
+                            },
+                        },
+                    )));
                 ScrollBar::default().set_show_arrows(true).draw(
                     grid,
                     (
@@ -1206,6 +1286,12 @@ impl Component for Tabbed {
                     /* length */
                     height,
                 );
+            } else {
+                context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
+                        ScrollUpdate::End(self.id),
+                    )));
             }
         }
         self.dirty = false;
@@ -1250,6 +1336,11 @@ impl Component for Tabbed {
                 if self.show_shortcuts {
                     /* children below the shortcut overlay must be redrawn */
                     self.set_dirty(true);
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
+                            ScrollUpdate::End(self.id),
+                        )));
                 }
                 self.show_shortcuts = !self.show_shortcuts;
                 self.dirty = true;
@@ -1281,6 +1372,8 @@ impl Component for Tabbed {
                     return true;
                 }
                 if let Some(c_idx) = self.children.iter().position(|x| x.id() == *id) {
+                    self.children[c_idx]
+                        .process_event(&mut UIEvent::VisibilityChange(false), context);
                     self.children.remove(c_idx);
                     self.cursor_pos = 0;
                     self.set_dirty(true);

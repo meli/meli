@@ -533,28 +533,30 @@ impl Component for Pager {
         }
         if (rows < height) || self.search.is_some() {
             const RESULTS_STR: &str = "Results for ";
-            let shown_percentage =
-                ((self.cursor.1 + rows) as f32 / (height as f32) * 100.0) as usize;
             let shown_lines = self.cursor.1 + rows;
             let total_lines = height;
-            let scrolling = if rows < height {
-                format!(
-                    "{shown_percentage}% {line_desc}{shown_lines}/{total_lines}{has_more_lines}",
-                    line_desc = if grid.ascii_drawing { "lines:" } else { "☰ " },
-                    shown_percentage = shown_percentage,
-                    shown_lines = shown_lines,
-                    total_lines = total_lines,
-                    has_more_lines = if self.line_breaker.is_finished() {
-                        ""
-                    } else {
-                        "(+)"
-                    }
-                )
+            if rows < height {
+                context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
+                        ScrollUpdate::Update {
+                            id: self.id,
+                            context: ScrollContext {
+                                shown_lines,
+                                total_lines,
+                                has_more_lines: !self.line_breaker.is_finished(),
+                            },
+                        },
+                    )));
             } else {
-                String::new()
+                context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
+                        ScrollUpdate::End(self.id),
+                    )));
             };
-            let search_results = if let Some(ref search) = self.search {
-                format!(
+            if let Some(ref search) = self.search {
+                let status_message = format!(
                     "{results_str}{search_pattern}: {current_pos}/{total_results}{has_more_lines}",
                     results_str = RESULTS_STR,
                     search_pattern = &search.pattern,
@@ -569,39 +571,29 @@ impl Component for Pager {
                     } else {
                         "(+)"
                     }
-                )
-            } else {
-                String::new()
-            };
-            let status_message = format!(
-                "{search_results}{divider}{scrolling}",
-                search_results = search_results,
-                divider = if self.search.is_some() { " " } else { "" },
-                scrolling = scrolling,
-            );
-            let mut attribute = crate::conf::value(context, "status.bar");
-            if !context.settings.terminal.use_color() {
-                attribute.attrs |= Attr::REVERSE;
-            }
-            let (_, y) = write_string_to_grid(
-                &status_message,
-                grid,
-                attribute.fg,
-                attribute.bg,
-                attribute.attrs,
-                (
-                    set_y(upper_left!(area), get_y(bottom_right!(area))),
-                    bottom_right!(area),
-                ),
-                None,
-            );
-            /* set search pattern to italics */
-            if let Some(ref search) = self.search {
+                );
+                let mut attribute = crate::conf::value(context, "status.bar");
+                if !context.settings.terminal.use_color() {
+                    attribute.attrs |= Attr::REVERSE;
+                }
+                let (_, y) = write_string_to_grid(
+                    &status_message,
+                    grid,
+                    attribute.fg,
+                    attribute.bg,
+                    attribute.attrs,
+                    (
+                        set_y(upper_left!(area), get_y(bottom_right!(area))),
+                        bottom_right!(area),
+                    ),
+                    None,
+                );
+                /* set search pattern to italics */
                 let start_x = get_x(upper_left!(area)) + RESULTS_STR.len();
                 for c in grid.row_iter(start_x..(start_x + search.pattern.grapheme_width()), y) {
                     grid[c].set_attrs(attribute.attrs | Attr::ITALICS);
                 }
-            }
+            };
         }
         context.dirty_areas.push_back(area);
     }
@@ -745,6 +737,13 @@ impl Component for Pager {
             UIEvent::Resize => {
                 self.initialised = false;
                 self.dirty = true;
+            }
+            UIEvent::VisibilityChange(false) => {
+                context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
+                        ScrollUpdate::End(self.id),
+                    )));
             }
             _ => {}
         }

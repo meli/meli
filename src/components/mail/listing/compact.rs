@@ -1627,6 +1627,8 @@ impl Component for CompactListing {
                         ) =>
                 {
                     self.unfocused = false;
+                    self.view
+                        .process_event(&mut UIEvent::VisibilityChange(false), context);
                     self.dirty = true;
                     /* If self.row_updates is not empty and we exit a thread, the row_update events
                      * will be performed but the list will not be drawn. So force a draw in any case.

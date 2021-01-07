@@ -66,6 +66,22 @@ pub enum PageMovement {
     End,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ScrollContext {
+    shown_lines: usize,
+    total_lines: usize,
+    has_more_lines: bool,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum ScrollUpdate {
+    End(ComponentId),
+    Update {
+        id: ComponentId,
+        context: ScrollContext,
+    },
+}
+
 /// Types implementing this Trait can draw on the terminal and receive events.
 /// If a type wants to skip drawing if it has not changed anything, it can hold some flag in its
 /// fields (eg self.dirty = false) and act upon that in their `draw` implementation.

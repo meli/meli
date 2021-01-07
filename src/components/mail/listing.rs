@@ -703,6 +703,8 @@ impl Component for Listing {
                     fallback = *cur;
                 }
                 if self.component.coordinates() == (*account_hash, *mailbox_hash) {
+                    self.component
+                        .process_event(&mut UIEvent::VisibilityChange(false), context);
                     self.component.set_coordinates((
                         self.accounts[self.cursor_pos.0].hash,
                         self.accounts[self.cursor_pos.0].entries[fallback].3,
@@ -730,6 +732,8 @@ impl Component for Listing {
                     let account_hash = self.accounts[self.cursor_pos.0].hash;
                     self.cursor_pos.1 = MenuEntryCursor::Mailbox(*idx);
                     self.status = None;
+                    self.component
+                        .process_event(&mut UIEvent::VisibilityChange(false), context);
                     self.component
                         .set_coordinates((account_hash, *mailbox_hash));
                     self.menu_content.empty();
@@ -1148,6 +1152,11 @@ impl Component for Listing {
             match *event {
                 UIEvent::Input(Key::Right) => {
                     self.focus = ListingFocus::Mailbox;
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
+                            ScrollUpdate::End(self.id),
+                        )));
                     self.ratio = 90;
                     self.set_dirty(true);
                     return true;
@@ -1161,6 +1170,11 @@ impl Component for Listing {
                     self.set_dirty(true);
                     self.focus = ListingFocus::Mailbox;
                     self.ratio = 90;
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
+                            ScrollUpdate::End(self.id),
+                        )));
                     return true;
                 }
                 UIEvent::Input(ref k)
@@ -1171,6 +1185,11 @@ impl Component for Listing {
                     self.focus = ListingFocus::Mailbox;
                     self.ratio = 90;
                     self.set_dirty(true);
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
+                            ScrollUpdate::End(self.id),
+                        )));
                     context
                         .replies
                         .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
@@ -1650,6 +1669,20 @@ impl Listing {
             ),
         );
         if self.show_menu_scrollbar == ShowMenuScrollbar::True && total_height > rows {
+            if self.focus == ListingFocus::Menu {
+                context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
+                        ScrollUpdate::Update {
+                            id: self.id,
+                            context: ScrollContext {
+                                shown_lines: skip_offset + rows,
+                                total_lines: total_height,
+                                has_more_lines: false,
+                            },
+                        },
+                    )));
+            }
             ScrollBar::default().set_show_arrows(true).draw(
                 grid,
                 (
@@ -1664,6 +1697,12 @@ impl Listing {
                 /* length */
                 total_height,
             );
+        } else if total_height < rows {
+            context
+                .replies
+                .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
+                    ScrollUpdate::End(self.id),
+                )));
         }
 
         context.dirty_areas.push_back(area);
@@ -1964,6 +2003,8 @@ impl Listing {
                 if let Some((_, _, _, mailbox_hash)) =
                     self.accounts[self.cursor_pos.0].entries.get(idx)
                 {
+                    self.component
+                        .process_event(&mut UIEvent::VisibilityChange(false), context);
                     self.component
                         .set_coordinates((account_hash, *mailbox_hash));
                     /* Check if per-mailbox configuration overrides general configuration */

@@ -925,6 +925,9 @@ impl Component for Composer {
     }
 
     fn process_event(&mut self, mut event: &mut UIEvent, context: &mut Context) -> bool {
+        if let UIEvent::VisibilityChange(_) = event {
+            self.pager.process_event(event, context);
+        }
         let shortcuts = self.get_shortcuts(context);
         match (&mut self.mode, &mut event) {
             (ViewMode::Edit, _) => {

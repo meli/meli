@@ -38,7 +38,7 @@ pub use self::helpers::*;
 use super::command::Action;
 use super::jobs::{JobExecutor, JobId};
 use super::terminal::*;
-use crate::components::{Component, ComponentId};
+use crate::components::{Component, ComponentId, ScrollUpdate};
 use std::sync::Arc;
 
 use melib::backends::{AccountHash, BackendEvent, MailboxHash};
@@ -57,6 +57,7 @@ pub enum StatusEvent {
     JobFinished(JobId),
     JobCanceled(JobId),
     SetMouse(bool),
+    ScrollUpdate(ScrollUpdate),
 }
 
 /// `ThreadEvent` encapsulates all of the possible values we need to transfer between our threads
@@ -149,6 +150,7 @@ pub enum UIEvent {
     ConfigReload {
         old_settings: crate::conf::Settings,
     },
+    VisibilityChange(bool),
 }
 
 pub struct CallbackFn(pub Box<dyn FnOnce(&mut crate::Context) -> () + Send + 'static>);
