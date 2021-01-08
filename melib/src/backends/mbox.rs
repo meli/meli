@@ -272,14 +272,14 @@ impl BackendOp for MboxOp {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum MboxReader {
+pub enum MboxFormat {
     MboxO,
     MboxRd,
     MboxCl,
     MboxCl2,
 }
 
-impl Default for MboxReader {
+impl Default for MboxFormat {
     fn default() -> Self {
         Self::MboxCl2
     }
@@ -322,7 +322,7 @@ macro_rules! find_From__line {
     }};
 }
 
-impl MboxReader {
+impl MboxFormat {
     fn parse<'i>(&self, input: &'i [u8]) -> IResult<&'i [u8], Envelope> {
         let orig_input = input;
         let mut input = input;
@@ -606,7 +606,7 @@ pub fn mbox_parse(
     index: Arc<Mutex<HashMap<EnvelopeHash, (Offset, Length)>>>,
     input: &[u8],
     file_offset: usize,
-    reader: Option<MboxReader>,
+    format: Option<MboxFormat>,
 ) -> IResult<&[u8], Vec<Envelope>> {
     if input.is_empty() {
         return Err(nom::Err::Error((input, ErrorKind::Tag)));
@@ -615,9 +615,9 @@ pub fn mbox_parse(
     let mut index = index.lock().unwrap();
     let mut envelopes = Vec::with_capacity(32);
 
-    let reader = reader.unwrap_or(MboxReader::MboxCl2);
+    let format = format.unwrap_or(MboxFormat::MboxCl2);
     while !input[offset + file_offset..].is_empty() {
-        let (next_input, env) = match reader.parse(&input[offset + file_offset..]) {
+        let (next_input, env) = match format.parse(&input[offset + file_offset..]) {
             Ok(v) => v,
             Err(e) => {
                 // Try to recover from this error by finding a new candidate From_ line
@@ -654,7 +654,7 @@ struct MessageIterator<'a> {
     input: &'a [u8],
     file_offset: usize,
     offset: usize,
-    reader: Option<MboxReader>,
+    format: Option<MboxFormat>,
 }
 
 impl<'a> Iterator for MessageIterator<'a> {
@@ -665,10 +665,10 @@ impl<'a> Iterator for MessageIterator<'a> {
         }
         let mut index = self.index.lock().unwrap();
 
-        let reader = self.reader.unwrap_or(MboxReader::MboxCl2);
+        let format = self.format.unwrap_or(MboxFormat::MboxCl2);
         while !self.input[self.offset + self.file_offset..].is_empty() {
             let (next_input, env) =
-                match reader.parse(&self.input[self.offset + self.file_offset..]) {
+                match format.parse(&self.input[self.offset + self.file_offset..]) {
                     Ok(v) => v,
                     Err(e) => {
                         // Try to recover from this error by finding a new candidate From_ line
@@ -712,7 +712,7 @@ pub struct MboxType {
     collection: Collection,
     mailbox_index: Arc<Mutex<HashMap<EnvelopeHash, MailboxHash>>>,
     mailboxes: Arc<Mutex<HashMap<MailboxHash, MboxMailbox>>>,
-    prefer_mbox_type: Option<MboxReader>,
+    prefer_mbox_type: Option<MboxFormat>,
     event_consumer: BackendEventConsumer,
 }
 
@@ -741,7 +741,7 @@ impl MailBackend for MboxType {
             mailbox_hash: MailboxHash,
             mailbox_index: Arc<Mutex<HashMap<EnvelopeHash, MailboxHash>>>,
             mailboxes: Arc<Mutex<HashMap<MailboxHash, MboxMailbox>>>,
-            prefer_mbox_type: Option<MboxReader>,
+            prefer_mbox_type: Option<MboxFormat>,
             offset: usize,
             file_offset: usize,
             contents: Vec<u8>,
@@ -756,7 +756,7 @@ impl MailBackend for MboxType {
                     input: &self.contents.as_slice(),
                     offset: self.offset,
                     file_offset: self.file_offset,
-                    reader: self.prefer_mbox_type,
+                    format: self.prefer_mbox_type,
                 };
                 let mut payload = vec![];
                 let mut done = false;
@@ -1114,10 +1114,10 @@ impl MboxType {
             path,
             prefer_mbox_type: match prefer_mbox_type.as_str() {
                 "auto" => None,
-                "mboxo" => Some(MboxReader::MboxO),
-                "mboxrd" => Some(MboxReader::MboxRd),
-                "mboxcl" => Some(MboxReader::MboxCl),
-                "mboxcl2" => Some(MboxReader::MboxCl2),
+                "mboxo" => Some(MboxFormat::MboxO),
+                "mboxrd" => Some(MboxFormat::MboxRd),
+                "mboxcl" => Some(MboxFormat::MboxCl),
+                "mboxcl2" => Some(MboxFormat::MboxCl2),
                 _ => {
                     return Err(MeliError::new(format!(
                         "{} invalid `prefer_mbox_type` value: `{}`",
