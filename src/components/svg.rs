@@ -393,6 +393,7 @@ impl Component for SVGScreenshotFilter {
         let mut filename = melib::datetime::timestamp_to_string(
             melib::datetime::now(),
             Some("meli Screenshot - %e %h %Y %H:%M:%S.svg"),
+            true,
         );
         while std::path::Path::new(&filename).exists() {
             filename.pop();

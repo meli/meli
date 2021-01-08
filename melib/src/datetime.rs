@@ -34,7 +34,7 @@
 //! assert_eq!(timestamp, 1578509043);
 //!
 //! // Convert timestamp back to string
-//! let s = timestamp_to_string(timestamp, Some("%Y-%m-%d"));
+//! let s = timestamp_to_string(timestamp, Some("%Y-%m-%d"), true);
 //! assert_eq!(s, "2020-01-08");
 //! ```
 use crate::error::{Result, ResultIntoMeliError};
