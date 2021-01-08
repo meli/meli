@@ -109,7 +109,7 @@ pub async fn get_mailboxes(conn: &JmapConnection) -> Result<HashMap<MailboxHash,
         list, account_id, ..
     } = m;
     *conn.store.account_id.lock().unwrap() = account_id;
-    Ok(list
+    let mut ret: HashMap<MailboxHash, JmapMailbox> = list
         .into_iter()
         .map(|r| {
             let MailboxObject {
@@ -157,7 +157,13 @@ pub async fn get_mailboxes(conn: &JmapConnection) -> Result<HashMap<MailboxHash,
                 },
             )
         })
-        .collect())
+        .collect();
+    for key in ret.keys().cloned().collect::<SmallVec<[MailboxHash; 24]>>() {
+        if let Some(parent_hash) = ret[&key].parent_hash.clone() {
+            ret.entry(parent_hash).and_modify(|e| e.children.push(key));
+        }
+    }
+    Ok(ret)
 }
 
 pub async fn get_message_list(
