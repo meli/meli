@@ -314,10 +314,21 @@ impl Composer {
             }
         }
         ret.draft.body = {
-            let mut ret = format!(
-                "On {} {} wrote:\n",
-                envelope.date_as_str(),
-                envelope.from()[0],
+            let mut ret = attribution_string(
+                account_settings!(
+                    context[ret.account_hash]
+                        .composing
+                        .attribution_format_string
+                )
+                .as_ref()
+                .map(|s| s.as_str()),
+                envelope.from().get(0),
+                envelope.date(),
+                *account_settings!(
+                    context[ret.account_hash]
+                        .composing
+                        .attribution_use_posix_locale
+                ),
             );
             for l in reply_body.lines() {
                 ret.push('>');
@@ -2209,4 +2220,37 @@ pub fn send_draft_async(
         }
         ret
     }))
+}
+
+/* Sender details
+ * %+f — the sender's name and email address.
+ * %+n — the sender's name (or email address, if no name is included).
+ * %+a — the sender's email address.
+ */
+fn attribution_string(
+    fmt: Option<&str>,
+    sender: Option<&Address>,
+    date: UnixTimestamp,
+    posix: bool,
+) -> String {
+    let fmt = fmt.unwrap_or("On %a, %0e %b %Y %H:%M, %+f wrote:%n");
+    let fmt = fmt.replace(
+        "%+f",
+        &sender
+            .map(|addr| addr.to_string())
+            .unwrap_or_else(|| "\"\"".to_string()),
+    );
+    let fmt = fmt.replace(
+        "%+n",
+        &sender
+            .map(|addr| addr.get_display_name().unwrap_or_else(|| addr.get_email()))
+            .unwrap_or_else(|| "\"\"".to_string()),
+    );
+    let fmt = fmt.replace(
+        "%+a",
+        &sender
+            .map(|addr| addr.get_email())
+            .unwrap_or_else(|| "\"\"".to_string()),
+    );
+    melib::datetime::timestamp_to_string(date, Some(fmt.as_str()), posix)
 }

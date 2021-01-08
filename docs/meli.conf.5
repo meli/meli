@@ -446,6 +446,31 @@ Store sent mail after successful submission.
 This setting is meant to be disabled for non-standard behaviour in gmail, which auto-saves sent mail on its own.
 .\" default value
 .Pq Em true
+.It Ic attribution_format_string Ar String
+.Pq Em optional
+The attribution line appears above the quoted reply text.
+The format specifiers for the replied address are:
+.Bl -bullet -compact
+.It
+.Li %+f
+— the sender's name and email address.
+.It
+.Li %+n
+— the sender's name (or email address, if no name is included).
+.It
+.Li %+a
+— the sender's email address.
+.El
+The format string is passed to
+.Xr strftime 3
+with the replied envelope's date.
+.\" default value
+.Pq Em "On %a, %0e %b %Y %H:%M, %+f wrote:%n"
+.It Ic attribution_use_posix_locale Ar boolean
+.Pq Em optional
+Whether the strftime call for the attribution string uses the POSIX locale instead of the user's active locale.
+.\" default value
+.Pq Em true
 .El
 .Sh SHORTCUTS
 Shortcuts can take the following values:

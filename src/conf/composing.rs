@@ -58,6 +58,20 @@ pub struct ComposingSettings {
     /// Default: true
     #[serde(default = "true_val")]
     pub store_sent_mail: bool,
+    /// The attribution line appears above the quoted reply text.
+    /// The format specifiers for the replied address are:
+    /// - `%+f` — the sender's name and email address.
+    /// - `%+n` — the sender's name (or email address, if no name is included).
+    /// - `%+a` — the sender's email address.
+    /// The format string is passed to strftime(3) with the replied envelope's date.
+    /// Default: "On %a, %0e %b %Y %H:%M, %+f wrote:%n"
+    #[serde(default = "none")]
+    pub attribution_format_string: Option<String>,
+    /// Whether the strftime call for the attribution string uses the POSIX locale instead of
+    /// the user's active locale
+    /// Default: true
+    #[serde(default = "true_val")]
+    pub attribution_use_posix_locale: bool,
 }
 
 impl Default for ComposingSettings {
@@ -70,6 +84,8 @@ impl Default for ComposingSettings {
             insert_user_agent: true,
             default_header_values: HashMap::default(),
             store_sent_mail: true,
+            attribution_format_string: None,
+            attribution_use_posix_locale: true,
         }
     }
 }

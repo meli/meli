@@ -266,6 +266,20 @@ pub struct ComposingSettingsOverride {
     #[doc = " Default: true"]
     #[serde(default)]
     pub store_sent_mail: Option<bool>,
+    #[doc = " The attribution line appears above the quoted reply text."]
+    #[doc = " The format specifiers for the replied address are:"]
+    #[doc = " - `%+f` — the sender's name and email address."]
+    #[doc = " - `%+n` — the sender's name (or email address, if no name is included)."]
+    #[doc = " - `%+a` — the sender's email address."]
+    #[doc = " The format string is passed to strftime(3) with the replied envelope's date."]
+    #[doc = " Default: \"On %a, %0e %b %Y %H:%M, %+f wrote:%n\""]
+    #[serde(default)]
+    pub attribution_format_string: Option<Option<String>>,
+    #[doc = " Whether the strftime call for the attribution string uses the POSIX locale instead of"]
+    #[doc = " the user's active locale"]
+    #[doc = " Default: true"]
+    #[serde(default)]
+    pub attribution_use_posix_locale: Option<bool>,
 }
 impl Default for ComposingSettingsOverride {
     fn default() -> Self {
@@ -277,6 +291,8 @@ impl Default for ComposingSettingsOverride {
             insert_user_agent: None,
             default_header_values: None,
             store_sent_mail: None,
+            attribution_format_string: None,
+            attribution_use_posix_locale: None,
         }
     }
 }
