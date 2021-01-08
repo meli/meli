@@ -1305,7 +1305,9 @@ impl Component for Tabbed {
             }
             UIEvent::Input(Key::Alt(no)) if *no >= '1' && *no <= '9' => {
                 let no = *no as usize - '1' as usize;
-                if no < self.children.len() {
+                if no < self.children.len() && self.cursor_pos != no % self.children.len() {
+                    self.children[self.cursor_pos]
+                        .process_event(&mut UIEvent::VisibilityChange(false), context);
                     self.cursor_pos = no % self.children.len();
                     let mut children_maps = self.children[self.cursor_pos].get_shortcuts(context);
                     children_maps.extend(self.get_shortcuts(context));
@@ -1320,6 +1322,8 @@ impl Component for Tabbed {
                 return true;
             }
             UIEvent::Input(ref key) if shortcut!(key == shortcuts["general"]["next_tab"]) => {
+                self.children[self.cursor_pos]
+                    .process_event(&mut UIEvent::VisibilityChange(false), context);
                 self.cursor_pos = (self.cursor_pos + 1) % self.children.len();
                 let mut children_maps = self.children[self.cursor_pos].get_shortcuts(context);
                 children_maps.extend(self.get_shortcuts(context));
@@ -1348,6 +1352,8 @@ impl Component for Tabbed {
             }
             UIEvent::Action(Tab(New(ref mut e))) if e.is_some() => {
                 self.add_component(e.take().unwrap());
+                self.children[self.cursor_pos]
+                    .process_event(&mut UIEvent::VisibilityChange(false), context);
                 self.cursor_pos = self.children.len() - 1;
                 self.children[self.cursor_pos].set_dirty(true);
                 let mut children_maps = self.children[self.cursor_pos].get_shortcuts(context);
