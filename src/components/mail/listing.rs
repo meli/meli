@@ -342,6 +342,87 @@ pub trait MailListingTrait: ListingTrait {
                     }
                 }
             }
+            ListingAction::ExportMbox(format, ref path) => {
+                use futures::future::try_join_all;
+                use std::future::Future;
+                use std::io::Write;
+                use std::pin::Pin;
+
+                let futures: Result<Vec<_>> = envs_to_set
+                    .iter()
+                    .map(|&env_hash| account.operation(env_hash).and_then(|mut op| op.as_bytes()))
+                    .collect::<Result<Vec<_>>>();
+                let path_ = path.to_path_buf();
+                let format = format.clone().unwrap_or_default();
+                let collection = account.collection.clone();
+                let (sender, mut receiver) = crate::jobs::oneshot::channel();
+                let fut: Pin<Box<dyn Future<Output = Result<()>> + Send + 'static>> =
+                    Box::pin(async move {
+                        let cl = async move {
+                            let bytes: Vec<Vec<u8>> = try_join_all(futures?).await?;
+                            let envs: Vec<_> = envs_to_set
+                                .iter()
+                                .map(|&env_hash| collection.get_env(env_hash))
+                                .collect();
+                            let mut file = std::io::BufWriter::new(std::fs::File::create(&path_)?);
+                            let mut iter = envs.iter().zip(bytes.into_iter());
+                            if let Some((env, ref bytes)) = iter.next() {
+                                format.append(
+                                    &mut file,
+                                    bytes.as_slice(),
+                                    env.from().get(0),
+                                    Some(env.date()),
+                                    true,
+                                    false,
+                                )?;
+                            }
+                            for (env, bytes) in iter {
+                                format.append(
+                                    &mut file,
+                                    bytes.as_slice(),
+                                    env.from().get(0),
+                                    Some(env.date()),
+                                    false,
+                                    false,
+                                )?;
+                            }
+                            file.flush()?;
+                            Ok(())
+                        };
+                        let r: Result<()> = cl.await;
+                        let _ = sender.send(r);
+                        Ok(())
+                    });
+                let handle = account.job_executor.spawn_blocking(fut);
+                let path = path.to_path_buf();
+                account.insert_job(
+                    handle.job_id,
+                    JobRequest::Generic {
+                        name: "exporting mbox".into(),
+                        handle,
+                        on_finish: Some(CallbackFn(Box::new(move |context: &mut Context| {
+                            context.replies.push_back(match receiver.try_recv() {
+                                Err(_) | Ok(None) => UIEvent::Notification(
+                                    Some("Could not export mbox".to_string()),
+                                    "Job was canceled.".to_string(),
+                                    Some(NotificationType::Info),
+                                ),
+                                Ok(Some(Err(err))) => UIEvent::Notification(
+                                    Some("Could not export mbox".to_string()),
+                                    err.to_string(),
+                                    Some(NotificationType::Error(err.kind)),
+                                ),
+                                Ok(Some(Ok(()))) => UIEvent::Notification(
+                                    Some("Succesfully exported mbox".to_string()),
+                                    format!("Wrote to file {}", path.display()),
+                                    Some(NotificationType::Info),
+                                ),
+                            });
+                        }))),
+                        logging_level: melib::LoggingLevel::INFO,
+                    },
+                );
+            }
             ListingAction::MoveToOtherAccount(ref _account_name, ref _mailbox_path) => {
                 context
                     .replies
@@ -967,6 +1048,7 @@ impl Component for Listing {
                         | Action::Listing(a @ ListingAction::MoveTo(_))
                         | Action::Listing(a @ ListingAction::CopyToOtherAccount(_, _))
                         | Action::Listing(a @ ListingAction::MoveToOtherAccount(_, _))
+                        | Action::Listing(a @ ListingAction::ExportMbox(_, _))
                         | Action::Listing(a @ ListingAction::Tag(_)) => {
                             let focused = self.component.get_focused_items(context);
                             self.component.perform_action(context, focused, a);

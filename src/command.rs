@@ -419,6 +419,19 @@ define_commands!([
                       }
                   )
                 },
+                { tags: ["export-mbox "],
+                  desc: "export-mbox PATH",
+                  tokens: &[One(Literal("export-mbox")), One(Filepath)],
+                  parser:(
+                      fn export_mbox(input: &[u8]) -> IResult<&[u8], Action> {
+                          let (input, _) = tag("export-mbox")(input.trim())?;
+                          let (input, _) = is_a(" ")(input)?;
+                          let (input, path) = quoted_argument(input.trim())?;
+                          let (input, _) = eof(input)?;
+                          Ok((input, Listing(ExportMbox(Some(melib::backends::mbox::MboxFormat::MboxCl2), path.to_string().into()))))
+                      }
+                  )
+                },
                 { tags: ["list-archive", "list-post", "list-unsubscribe", "list-"],
                   desc: "list-[unsubscribe/post/archive]",
                   tokens: &[One(Alternatives(&[to_stream!(One(Literal("list-archive"))), to_stream!(One(Literal("list-post"))), to_stream!(One(Literal("list-unsubscribe")))]))],
@@ -852,6 +865,7 @@ fn listing_action(input: &[u8]) -> IResult<&[u8], Action> {
         select,
         toggle_thread_snooze,
         open_in_new_tab,
+        export_mbox,
         _tag,
     ))(input)
 }
