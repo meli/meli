@@ -48,6 +48,8 @@ pub const RFC3339_FMT: &str = "%Y-%m-%d\0";
 pub const RFC822_FMT_WITH_TIME: &str = "%a, %e %h %Y %H:%M:%S \0";
 pub const RFC822_FMT: &str = "%e %h %Y %H:%M:%S \0";
 pub const DEFAULT_FMT: &str = "%a, %d %b %Y %R\0";
+//"Tue May 21 13:46:22 1991\n"
+pub const ASCTIME_FMT: &str = "%a %b %d %H:%M:%S %Y\n\0";
 
 extern "C" {
     fn strptime(

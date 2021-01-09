@@ -48,6 +48,8 @@ use std::str::FromStr;
 use std::sync::mpsc::channel;
 use std::sync::{Arc, Mutex, RwLock};
 
+pub mod write;
+
 type Offset = usize;
 type Length = usize;
 
@@ -323,7 +325,7 @@ macro_rules! find_From__line {
 }
 
 impl MboxFormat {
-    fn parse<'i>(&self, input: &'i [u8]) -> IResult<&'i [u8], Envelope> {
+    pub fn parse<'i>(&self, input: &'i [u8]) -> IResult<&'i [u8], Envelope> {
         let orig_input = input;
         let mut input = input;
         match self {
@@ -649,12 +651,12 @@ pub fn mbox_parse(
     Ok((&[], envelopes))
 }
 
-struct MessageIterator<'a> {
-    index: Arc<Mutex<HashMap<EnvelopeHash, (Offset, Length)>>>,
-    input: &'a [u8],
-    file_offset: usize,
-    offset: usize,
-    format: Option<MboxFormat>,
+pub struct MessageIterator<'a> {
+    pub index: Arc<Mutex<HashMap<EnvelopeHash, (Offset, Length)>>>,
+    pub input: &'a [u8],
+    pub file_offset: usize,
+    pub offset: usize,
+    pub format: Option<MboxFormat>,
 }
 
 impl<'a> Iterator for MessageIterator<'a> {
