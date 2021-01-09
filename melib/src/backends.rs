@@ -64,9 +64,9 @@ use std::fmt::Debug;
 use std::ops::Deref;
 use std::sync::{Arc, RwLock};
 
-pub use futures::stream::Stream;
+use futures::stream::Stream;
 use std::future::Future;
-pub use std::pin::Pin;
+use std::pin::Pin;
 
 use std::collections::HashMap;
 

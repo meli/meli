@@ -30,7 +30,7 @@ use crate::backends::*;
 use crate::email::Flag;
 use crate::error::{MeliError, Result};
 use crate::shellexpand::ShellExpandTrait;
-pub use futures::stream::Stream;
+use futures::stream::Stream;
 use std::collections::hash_map::DefaultHasher;
 use std::fs;
 use std::hash::{Hash, Hasher};

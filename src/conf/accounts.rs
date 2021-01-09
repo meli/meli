@@ -40,9 +40,10 @@ use std::collections::{HashMap, HashSet};
 use crate::types::UIEvent::{self, EnvelopeRemove, EnvelopeRename, EnvelopeUpdate, Notification};
 use crate::{StatusEvent, ThreadEvent};
 use crossbeam::Sender;
-use futures::future::FutureExt;
-pub use futures::stream::Stream;
-use futures::stream::StreamExt;
+use futures::{
+    future::FutureExt,
+    stream::{Stream, StreamExt},
+};
 use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::convert::TryFrom;

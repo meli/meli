@@ -31,6 +31,7 @@ use indexmap::IndexSet;
 use nix::sys::wait::WaitStatus;
 use std::convert::TryInto;
 use std::future::Future;
+use std::pin::Pin;
 use std::process::{Command, Stdio};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
