@@ -90,7 +90,7 @@ impl NntpStream {
         let stream = {
             let addr = lookup_ipv4(path, server_conf.server_port)?;
             AsyncWrapper::new(Connection::Tcp(
-                TcpStream::connect_timeout(&addr, std::time::Duration::new(4, 0))
+                TcpStream::connect_timeout(&addr, std::time::Duration::new(16, 0))
                     .chain_err_kind(crate::error::ErrorKind::Network)?,
             ))
             .chain_err_kind(crate::error::ErrorKind::Network)?
@@ -130,7 +130,7 @@ impl NntpStream {
                     .any(|cap| cap.eq_ignore_ascii_case("VERSION 2"))
                 {
                     return Err(MeliError::new(format!(
-                        "Could not connect to {}: server is not NNTP compliant",
+                        "Could not connect to {}: server is not NNTP VERSION 2 compliant",
                         &server_conf.server_hostname
                     )));
                 }
@@ -190,8 +190,12 @@ impl NntpStream {
                 ret.stream = AsyncWrapper::new(Connection::Tls(
                     conn_result.chain_err_kind(crate::error::ErrorKind::Network)?,
                 ))
+                .chain_err_summary(|| format!("Could not initiate TLS negotiation to {}.", path))
                 .chain_err_kind(crate::error::ErrorKind::Network)?;
             }
+        } else {
+            ret.read_response(&mut res, false, &["200 ", "201 "])
+                .await?;
         }
         //ret.send_command(
         //    format!(
@@ -201,9 +205,17 @@ impl NntpStream {
         //    .as_bytes(),
         //)
         //.await?;
+        if let Err(err) = ret
+            .stream
+            .get_ref()
+            .set_keepalive(Some(std::time::Duration::new(60 * 9, 0)))
+        {
+            crate::log(
+                format!("Could not set TCP keepalive in NNTP connection: {}", err),
+                crate::LoggingLevel::WARN,
+            );
+        }
 
-        ret.read_response(&mut res, false, &["200 ", "201 "])
-            .await?;
         ret.send_command(b"CAPABILITIES").await?;
         ret.read_response(&mut res, true, command_to_replycodes("CAPABILITIES"))
             .await?;

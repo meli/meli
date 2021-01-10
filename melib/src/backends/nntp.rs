@@ -33,18 +33,18 @@ mod connection;
 pub use connection::*;
 
 use crate::conf::AccountSettings;
+use crate::connections::timeout;
 use crate::email::*;
 use crate::error::{MeliError, Result, ResultIntoMeliError};
 use crate::{backends::*, Collection};
 use futures::lock::Mutex as FutureMutex;
 use futures::stream::Stream;
 use std::collections::{hash_map::DefaultHasher, BTreeSet, HashMap, HashSet};
-use std::future::Future;
 use std::hash::Hasher;
 use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 pub type UID = usize;
 
 pub static SUPPORTED_CAPABILITIES: &[&str] = &[
@@ -222,10 +222,11 @@ impl MailBackend for NntpType {
     fn is_online(&self) -> ResultFuture<()> {
         let connection = self.connection.clone();
         Ok(Box::pin(async move {
-            match timeout(std::time::Duration::from_secs(3), connection.lock()).await {
+            match timeout(Some(Duration::from_secs(60 * 16)), connection.lock()).await {
                 Ok(mut conn) => {
                     debug!("is_online");
-                    match debug!(timeout(std::time::Duration::from_secs(3), conn.connect()).await) {
+                    match debug!(timeout(Some(Duration::from_secs(60 * 16)), conn.connect()).await)
+                    {
                         Ok(Ok(())) => Ok(()),
                         Err(err) | Ok(Err(err)) => {
                             conn.stream = Err(err.clone());
@@ -628,17 +629,5 @@ impl FetchState {
             f.unseen.lock().unwrap().insert_existing_set(hash_set);
         };
         Ok(Some(ret))
-    }
-}
-
-use futures::future::{self, Either};
-
-async fn timeout<O>(dur: std::time::Duration, f: impl Future<Output = O>) -> Result<O> {
-    futures::pin_mut!(f);
-    match future::select(f, smol::Timer::after(dur)).await {
-        Either::Left((out, _)) => Ok(out),
-        Either::Right(_) => {
-            Err(MeliError::new("Timedout").set_kind(crate::error::ErrorKind::Network))
-        }
     }
 }
