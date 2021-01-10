@@ -19,9 +19,102 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*!
- * https://wiki2.dovecot.org/MailboxFormat/mbox
- */
+//! # Mbox formats
+//!
+//! ## Resources
+//!
+//! - [0] <https://web.archive.org/web/20160812091518/https://jdebp.eu./FGA/mail-mbox-formats.html>
+//! - [1] <https://wiki2.dovecot.org/MailboxFormat/mbox>
+//! - [2] <https://manpages.debian.org/buster/mutt/mbox.5.en.html>
+//!
+//! ## `mbox` format
+//! `mbox` describes a family of incompatible legacy formats.
+//!
+//! "All of the 'mbox' formats store all of the messages in the mailbox in a single file. Delivery appends new messages to the end of the file." [0]
+//!
+//! "Each message is preceded by a From_ line and followed by a blank line. A From_ line is a line that begins with the five characters 'F', 'r', 'o', 'm', and ' '." [0]
+//!
+//! ## `From ` / postmark line
+//!
+//! "An mbox is a text file containing an arbitrary number of e-mail messages. Each message
+//! consists of a postmark, followed by an e-mail message formatted according to RFC822, RFC2822.
+//! The file format is line-oriented. Lines are separated by line feed characters (ASCII 10).
+//!
+//! "A postmark line consists of the four characters 'From', followed by a space character,
+//! followed by the message's envelope sender address, followed by whitespace, and followed by a
+//! time stamp. This line is often called From_ line.
+//!
+//! "The sender address is expected to be addr-spec as defined in RFC2822 3.4.1. The date is expected
+//! to be date-time as output by asctime(3). For compatibility reasons with legacy software,
+//! two-digit years greater than or equal to 70 should be interpreted as the years 1970+, while
+//! two-digit years less than 70 should be interpreted as the years 2000-2069. Software reading
+//! files in this format should also be prepared to accept non-numeric timezone information such as
+//! 'CET DST' for Central European Time, daylight saving time.
+//!
+//! "Example:
+//!
+//!```text
+//!From example@example.com Fri Jun 23 02:56:55 2000
+//!```
+//!
+//! "In order to avoid misinterpretation of lines in message bodies which begin with the four
+//! characters 'From', followed by a space character, the mail delivery agent must quote
+//! any occurrence of 'From ' at the start of a body line." [2]
+//!
+//! ## Metadata
+//!
+//! `melib` recognizes the CClient (a [Pine client API](https://web.archive.org/web/20050203003235/http://www.washington.edu/imap/)) convention for metadata in `mbox` format:
+//!
+//! - `Status`: R (Seen) and O (non-Recent) flags
+//! - `X-Status`: A (Answered), F (Flagged), T (Draft) and D (Deleted) flags
+//! - `X-Keywords`: Message’s keywords
+//!
+//! ## Parsing an mbox file
+//!
+//! ```
+//! # use melib::{Result, Envelope, EnvelopeHash, mbox::*};
+//! # use std::collections::HashMap;
+//! # use std::sync::{Arc, Mutex};
+//! let file_contents = vec![]; // Replace with actual mbox file contents
+//! let index: Arc<Mutex<HashMap<EnvelopeHash, (Offset, Length)>>> = Arc::new(Mutex::new(HashMap::default()));
+//! let mut message_iter = MessageIterator {
+//!     index: index.clone(),
+//!     input: &file_contents.as_slice(),
+//!     offset: 0,
+//!     file_offset: 0,
+//!     format: Some(MboxFormat::MboxCl2),
+//! };
+//! let envelopes: Result<Vec<Envelope>> = message_iter.collect();
+//! ```
+//!
+//! ## Writing / Appending an mbox file
+//!
+//! ```no_run
+//! # use melib::mbox::*;
+//! # use std::io::Write;
+//! let mbox_1: &[u8] = br#"From: <a@b.c>\n\nHello World"#;
+//! let mbox_2: &[u8] = br#"From: <d@e.f>\n\nHello World #2"#;
+//! let mut file = std::io::BufWriter::new(std::fs::File::create(&"out.mbox")?);
+//! let format = MboxFormat::MboxCl2;
+//! format.append(
+//!     &mut file,
+//!     mbox_1,
+//!     None, // Envelope From
+//!     Some(melib::datetime::now()), // Delivered date
+//!     true,
+//!     false,
+//! )?;
+//! format.append(
+//!     &mut file,
+//!     mbox_2,
+//!     None,
+//!     Some(melib::datetime::now()),
+//!     false,
+//!     false,
+//! )?;
+//! file.flush()?;
+//! # Ok::<(), melib::MeliError>(())
+//! ```
 
 use crate::backends::*;
 use crate::collection::Collection;
@@ -50,8 +143,8 @@ use std::sync::{Arc, Mutex, RwLock};
 
 pub mod write;
 
-type Offset = usize;
-type Length = usize;
+pub type Offset = usize;
+pub type Length = usize;
 
 #[cfg(target_os = "linux")]
 const F_OFD_SETLKW: libc::c_int = 38;
@@ -273,6 +366,8 @@ impl BackendOp for MboxOp {
     }
 }
 
+/// Choose between "mboxo", "mboxrd", "mboxcl", "mboxcl2". For new mailboxes, prefer "mboxcl2"
+/// which does not alter the mail body.
 #[derive(Debug, Clone, Copy)]
 pub enum MboxFormat {
     MboxO,
