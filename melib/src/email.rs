@@ -143,6 +143,23 @@ impl PartialEq<&str> for Flag {
     }
 }
 
+macro_rules! flag_impl {
+    (fn $name:ident, $val:expr) => {
+        pub const fn $name(&self) -> bool {
+            self.contains($val)
+        }
+    };
+}
+
+impl Flag {
+    flag_impl!(fn is_seen, Flag::SEEN);
+    flag_impl!(fn is_draft, Flag::DRAFT);
+    flag_impl!(fn is_trashed, Flag::TRASHED);
+    flag_impl!(fn is_passed, Flag::PASSED);
+    flag_impl!(fn is_replied, Flag::REPLIED);
+    flag_impl!(fn is_flagged, Flag::FLAGGED);
+}
+
 ///`Mail` holds both the envelope info of an email in its `envelope` field and the raw bytes that
 ///describe the email in `bytes`. Its body as an `melib::email::Attachment` can be parsed on demand
 ///with the `melib::email::Mail::body` method.
