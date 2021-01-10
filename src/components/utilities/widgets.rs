@@ -22,6 +22,7 @@
 use super::*;
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::time::Duration;
 
 type AutoCompleteFn = Box<dyn Fn(&Context, &str) -> Vec<AutoCompleteEntry> + Send + Sync>;
 
@@ -1238,54 +1239,93 @@ pub struct ProgressSpinner {
 }
 
 impl ProgressSpinner {
-    pub const KINDS: [&'static [&'static str]; 30] = [
-        &["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"],
-        &["⣀", "⣄", "⣤", "⣦", "⣶", "⣷", "⣿"],
-        &["⣀", "⣄", "⣆", "⣇", "⣧", "⣷", "⣿"],
-        &["○", "◔", "◐", "◕", "⬤"],
-        &["□", "◱", "◧", "▣", "■"],
-        &["□", "◱", "▨", "▩", "■"],
-        &["□", "◱", "▥", "▦", "■"],
-        &["░", "▒", "▓", "█"],
-        &["░", "█"],
-        &["⬜", "⬛"],
-        &["▱", "▰"],
-        &["▭", "◼"],
-        &["▯", "▮"],
-        &["◯", "⬤"],
-        &["⚪", "⚫"],
-        &["▖", "▗", "▘", "▝", "▞", "▚", "▙", "▟", "▜", "▛"],
-        &["|", "/", "-", "\\"],
-        &[".", "o", "O", "@", "*"],
-        &["◡◡", "⊙⊙", "◠◠", "⊙⊙"],
-        &["◜ ", " ◝", " ◞", "◟ "],
-        &["←", "↖", "↑", "↗", "→", "↘", "↓", "↙"],
-        &["▁", "▃", "▄", "▅", "▆", "▇", "█", "▇", "▆", "▅", "▄", "▃"],
-        &[
-            "▉", "▊", "▋", "▌", "▍", "▎", "▏", "▎", "▍", "▌", "▋", "▊", "▉",
-        ],
-        &["▖", "▘", "▝", "▗"],
-        &["▌", "▀", "▐", "▄"],
-        &["┤", "┘", "┴", "└", "├", "┌", "┬", "┐"],
-        &["◢", "◣", "◤", "◥"],
-        &["⠁", "⠂", "⠄", "⡀", "⢀", "⠠", "⠐", "⠈"],
-        &["⢎⡰", "⢎⡡", "⢎⡑", "⢎⠱", "⠎⡱", "⢊⡱", "⢌⡱", "⢆⡱"],
-        &[".", "o", "O", "°", "O", "o", "."],
+    pub const KINDS: [(Duration, &'static [&'static str]); 37] = [
+        (Duration::from_millis(130), &["-", "\\", "|", "/"]),
+        (Self::INTERVAL, &["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"]),
+        (Self::INTERVAL, &["⣀", "⣄", "⣤", "⣦", "⣶", "⣷", "⣿"]),
+        (Self::INTERVAL, &["⣀", "⣄", "⣆", "⣇", "⣧", "⣷", "⣿"]),
+        (Self::INTERVAL, &["○", "◔", "◐", "◕", "⬤"]),
+        (Self::INTERVAL, &["□", "◱", "◧", "▣", "■"]),
+        (Self::INTERVAL, &["□", "◱", "▨", "▩", "■"]),
+        (Self::INTERVAL, &["□", "◱", "▥", "▦", "■"]),
+        (Self::INTERVAL, &["░", "▒", "▓", "█"]),
+        (Self::INTERVAL, &["░", "█"]),
+        (Self::INTERVAL, &["⬜", "⬛"]),
+        (Self::INTERVAL, &["▱", "▰"]),
+        (Self::INTERVAL, &["▭", "◼"]),
+        (Self::INTERVAL, &["▯", "▮"]),
+        (Self::INTERVAL, &["◯", "⬤"]),
+        (Self::INTERVAL, &["⚪", "⚫"]),
+        (
+            Self::INTERVAL,
+            &["▖", "▗", "▘", "▝", "▞", "▚", "▙", "▟", "▜", "▛"],
+        ),
+        (Self::INTERVAL, &["|", "/", "-", "\\"]),
+        (Self::INTERVAL, &[".", "o", "O", "@", "*"]),
+        (Self::INTERVAL, &["◡◡", "⊙⊙", "◠◠", "⊙⊙"]),
+        (Self::INTERVAL, &["◜ ", " ◝", " ◞", "◟ "]),
+        (Self::INTERVAL, &["←", "↖", "↑", "↗", "→", "↘", "↓", "↙"]),
+        (
+            Self::INTERVAL,
+            &["▁", "▃", "▄", "▅", "▆", "▇", "█", "▇", "▆", "▅", "▄", "▃"],
+        ),
+        (
+            Self::INTERVAL,
+            &[
+                "▉", "▊", "▋", "▌", "▍", "▎", "▏", "▎", "▍", "▌", "▋", "▊", "▉",
+            ],
+        ),
+        (Self::INTERVAL, &["▖", "▘", "▝", "▗"]),
+        (Self::INTERVAL, &["▌", "▀", "▐", "▄"]),
+        (Self::INTERVAL, &["┤", "┘", "┴", "└", "├", "┌", "┬", "┐"]),
+        (Self::INTERVAL, &["◢", "◣", "◤", "◥"]),
+        (Self::INTERVAL, &["⠁", "⠂", "⠄", "⡀", "⢀", "⠠", "⠐", "⠈"]),
+        (
+            Self::INTERVAL,
+            &["⢎⡰", "⢎⡡", "⢎⡑", "⢎⠱", "⠎⡱", "⢊⡱", "⢌⡱", "⢆⡱"],
+        ),
+        (Self::INTERVAL, &[".", "o", "O", "°", "O", "o", "."]),
+        (Duration::from_millis(100), &["㊂", "㊀", "㊁"]),
+        (
+            Duration::from_millis(100),
+            &["💛 ", "💙 ", "💜 ", "💚 ", "❤️ "],
+        ),
+        (
+            Duration::from_millis(100),
+            &[
+                "🕛 ", "🕐 ", "🕑 ", "🕒 ", "🕓 ", "🕔 ", "🕕 ", "🕖 ", "🕗 ", "🕘 ", "🕙 ", "🕚 ",
+            ],
+        ),
+        (Duration::from_millis(100), &["🌍 ", "🌎 ", "🌏 "]),
+        (
+            Duration::from_millis(80),
+            &[
+                "[    ]", "[=   ]", "[==  ]", "[=== ]", "[ ===]", "[  ==]", "[   =]", "[    ]",
+                "[   =]", "[  ==]", "[ ===]", "[====]", "[=== ]", "[==  ]", "[=   ]",
+            ],
+        ),
+        (
+            Duration::from_millis(80),
+            &["🌑 ", "🌒 ", "🌓 ", "🌔 ", "🌕 ", "🌖 ", "🌗 ", "🌘 "],
+        ),
     ];
 
-    const INTERVAL: std::time::Duration = std::time::Duration::from_millis(50);
+    pub const INTERVAL_MS: u64 = 50;
+    const INTERVAL: std::time::Duration = std::time::Duration::from_millis(Self::INTERVAL_MS);
 
     pub fn new(kind: usize, context: &Context) -> Self {
-        let timer = context
-            .job_executor
-            .clone()
-            .create_timer(Self::INTERVAL, Self::INTERVAL);
         let kind = kind % Self::KINDS.len();
         let width = Self::KINDS[kind]
+            .1
             .iter()
             .map(|f| f.grapheme_len())
             .max()
             .unwrap_or(0);
+        let interval = Self::KINDS[kind].0;
+        let timer = context
+            .job_executor
+            .clone()
+            .create_timer(interval, interval);
         let mut theme_attr = crate::conf::value(context, "status.bar");
         if !context.settings.terminal.use_color() {
             theme_attr.attrs |= Attr::REVERSE;
@@ -1310,21 +1350,25 @@ impl ProgressSpinner {
     pub fn set_kind(&mut self, kind: usize) {
         self.stage = 0;
         self.width = Self::KINDS[kind % Self::KINDS.len()]
+            .1
             .iter()
             .map(|f| f.grapheme_len())
             .max()
             .unwrap_or(0);
         self.kind = Ok(kind % Self::KINDS.len());
+        let interval = Self::KINDS[kind % Self::KINDS.len()].0;
+        self.timer.set_interval(interval);
         self.dirty = true;
     }
 
-    pub fn set_custom_kind(&mut self, custom: Vec<String>) {
+    pub fn set_custom_kind(&mut self, frames: Vec<String>, interval: u64) {
         self.stage = 0;
-        self.width = custom.iter().map(|f| f.grapheme_len()).max().unwrap_or(0);
+        self.width = frames.iter().map(|f| f.grapheme_len()).max().unwrap_or(0);
         if self.width == 0 {
             self.stop();
         }
-        self.kind = Err(custom);
+        self.kind = Err(frames);
+        self.timer.set_interval(Duration::from_millis(interval));
         self.dirty = true;
     }
 
@@ -1356,7 +1400,7 @@ impl Component for ProgressSpinner {
             if self.active {
                 write_string_to_grid(
                     match self.kind.as_ref() {
-                        Ok(kind) => Self::KINDS[*kind][self.stage].as_ref(),
+                        Ok(kind) => (Self::KINDS[*kind].1)[self.stage].as_ref(),
                         Err(custom) => custom[self.stage].as_ref(),
                     },
                     grid,
@@ -1377,7 +1421,7 @@ impl Component for ProgressSpinner {
             UIEvent::Timer(id) if *id == self.timer.id() => {
                 match self.kind.as_ref() {
                     Ok(kind) => {
-                        self.stage = (self.stage + 1).wrapping_rem(Self::KINDS[*kind].len());
+                        self.stage = (self.stage + 1).wrapping_rem(Self::KINDS[*kind].1.len());
                     }
                     Err(custom) => {
                         self.stage = (self.stage + 1).wrapping_rem(custom.len());

@@ -114,7 +114,15 @@ impl DotAddressable for TerminalSettings {
 #[serde(untagged)]
 pub enum ProgressSpinnerSequence {
     Integer(usize),
-    Custom(Vec<String>),
+    Custom {
+        frames: Vec<String>,
+        #[serde(default = "interval_ms_val")]
+        interval_ms: u64,
+    },
+}
+
+const fn interval_ms_val() -> u64 {
+    crate::components::utilities::ProgressSpinner::INTERVAL_MS
 }
 
 impl DotAddressable for ProgressSpinnerSequence {}

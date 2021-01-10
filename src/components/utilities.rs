@@ -78,13 +78,16 @@ impl fmt::Display for StatusBar {
 
 impl StatusBar {
     pub fn new(context: &Context, container: Box<dyn Component>) -> Self {
-        let mut progress_spinner = ProgressSpinner::new(19, context);
+        let mut progress_spinner = ProgressSpinner::new(20, context);
         match context.settings.terminal.progress_spinner_sequence.as_ref() {
             Some(conf::terminal::ProgressSpinnerSequence::Integer(k)) => {
                 progress_spinner.set_kind(*k);
             }
-            Some(conf::terminal::ProgressSpinnerSequence::Custom(ref s)) => {
-                progress_spinner.set_custom_kind(s.clone());
+            Some(conf::terminal::ProgressSpinnerSequence::Custom {
+                ref frames,
+                ref interval_ms,
+            }) => {
+                progress_spinner.set_custom_kind(frames.clone(), *interval_ms);
             }
             None => {}
         }
@@ -472,13 +475,16 @@ impl Component for StatusBar {
 
         match event {
             UIEvent::ConfigReload { old_settings: _ } => {
-                let mut progress_spinner = ProgressSpinner::new(19, context);
+                let mut progress_spinner = ProgressSpinner::new(20, context);
                 match context.settings.terminal.progress_spinner_sequence.as_ref() {
                     Some(conf::terminal::ProgressSpinnerSequence::Integer(k)) => {
                         progress_spinner.set_kind(*k);
                     }
-                    Some(conf::terminal::ProgressSpinnerSequence::Custom(ref s)) => {
-                        progress_spinner.set_custom_kind(s.clone());
+                    Some(conf::terminal::ProgressSpinnerSequence::Custom {
+                        ref frames,
+                        ref interval_ms,
+                    }) => {
+                        progress_spinner.set_custom_kind(frames.clone(), *interval_ms);
                     }
                     None => {}
                 }
