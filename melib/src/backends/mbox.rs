@@ -101,6 +101,8 @@
 //!     mbox_1,
 //!     None, // Envelope From
 //!     Some(melib::datetime::now()), // Delivered date
+//!     Default::default(), // Flags and tags
+//!     MboxMetadata::None,
 //!     true,
 //!     false,
 //! )?;
@@ -109,6 +111,8 @@
 //!     mbox_2,
 //!     None,
 //!     Some(melib::datetime::now()),
+//!     Default::default(), // Flags and tags
+//!     MboxMetadata::None,
 //!     false,
 //!     false,
 //! )?;
@@ -364,6 +368,20 @@ impl BackendOp for MboxOp {
         }
         Ok(Box::pin(async move { Ok(flags) }))
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum MboxMetadata {
+    /// Dovecot uses C-Client (ie. UW-IMAP, Pine) compatible headers in mbox messages to store me
+    /// - X-IMAPbase: Contains UIDVALIDITY, last used UID and list of used keywords
+    /// - X-IMAP: Same as X-IMAPbase but also specifies that the message is a “pseudo message”
+    /// - X-UID: Message’s allocated UID
+    /// - Status: R (Seen) and O (non-Recent) flags
+    /// - X-Status: A (Answered), F (Flagged), T (Draft) and D (Deleted) flags
+    /// - X-Keywords: Message’s keywords
+    /// - Content-Length: Length of the message body in bytes
+    CClient,
+    None,
 }
 
 /// Choose between "mboxo", "mboxrd", "mboxcl", "mboxcl2". For new mailboxes, prefer "mboxcl2"

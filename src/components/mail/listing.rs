@@ -359,6 +359,7 @@ pub trait MailListingTrait: ListingTrait {
                 let fut: Pin<Box<dyn Future<Output = Result<()>> + Send + 'static>> =
                     Box::pin(async move {
                         let cl = async move {
+                            use melib::backends::mbox::MboxMetadata;
                             let bytes: Vec<Vec<u8>> = try_join_all(futures?).await?;
                             let envs: Vec<_> = envs_to_set
                                 .iter()
@@ -366,22 +367,37 @@ pub trait MailListingTrait: ListingTrait {
                                 .collect();
                             let mut file = std::io::BufWriter::new(std::fs::File::create(&path_)?);
                             let mut iter = envs.iter().zip(bytes.into_iter());
+                            let tags_lck = collection.tag_index.read().unwrap();
                             if let Some((env, ref bytes)) = iter.next() {
+                                let tags: Vec<&str> = env
+                                    .labels()
+                                    .iter()
+                                    .filter_map(|h| tags_lck.get(h).map(|s| s.as_str()))
+                                    .collect();
                                 format.append(
                                     &mut file,
                                     bytes.as_slice(),
                                     env.from().get(0),
                                     Some(env.date()),
+                                    (env.flags(), tags),
+                                    MboxMetadata::CClient,
                                     true,
                                     false,
                                 )?;
                             }
                             for (env, bytes) in iter {
+                                let tags: Vec<&str> = env
+                                    .labels()
+                                    .iter()
+                                    .filter_map(|h| tags_lck.get(h).map(|s| s.as_str()))
+                                    .collect();
                                 format.append(
                                     &mut file,
                                     bytes.as_slice(),
                                     env.from().get(0),
                                     Some(env.date()),
+                                    (env.flags(), tags),
+                                    MboxMetadata::CClient,
                                     false,
                                     false,
                                 )?;

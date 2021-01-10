@@ -28,9 +28,14 @@ impl MboxFormat {
         input: &[u8],
         envelope_from: Option<&Address>,
         delivery_date: Option<crate::UnixTimestamp>,
+        (flags, tags): (Flag, Vec<&str>),
+        metadata_format: MboxMetadata,
         is_empty: bool,
         crlf: bool,
     ) -> Result<()> {
+        if tags.iter().any(|t| t.contains(' ')) {
+            return Err(MeliError::new("mbox tags/keywords can't contain spaces"));
+        }
         let line_ending: &'static [u8] = if crlf { &b"\r\n"[..] } else { &b"\n"[..] };
         if !is_empty {
             writer.write_all(line_ending)?;
@@ -54,12 +59,60 @@ impl MboxFormat {
         )?;
         writer.write_all(line_ending)?;
         let (mut headers, body) = parser::mail(input)?;
+        headers.retain(|(header_name, _)| {
+            !header_name.eq_ignore_ascii_case(b"Status")
+                && !header_name.eq_ignore_ascii_case(b"X-Status")
+                && !header_name.eq_ignore_ascii_case(b"X-Keywords")
+                && !header_name.eq_ignore_ascii_case(b"Content-Length")
+        });
+        let write_metadata_fn = |writer: &mut dyn std::io::Write| match metadata_format {
+            MboxMetadata::CClient => {
+                for (h, v) in {
+                    if flags.is_seen() {
+                        Some((&b"Status"[..], "R".into()))
+                    } else {
+                        None
+                    }
+                    .into_iter()
+                    .chain(
+                        if !flags.is_flagged()
+                            && !flags.is_replied()
+                            && !flags.is_draft()
+                            && !flags.is_trashed()
+                        {
+                            None
+                        } else {
+                            Some((
+                                &b"X-Status"[..],
+                                format!(
+                                    "{flagged}{replied}{draft}{trashed}",
+                                    flagged = if flags.is_flagged() { "F" } else { "" },
+                                    replied = if flags.is_replied() { "A" } else { "" },
+                                    draft = if flags.is_draft() { "T" } else { "" },
+                                    trashed = if flags.is_trashed() { "D" } else { "" }
+                                ),
+                            ))
+                        },
+                    )
+                    .chain(if tags.is_empty() {
+                        None
+                    } else {
+                        Some((&b"X-Keywords"[..], tags.as_slice().join(" ")))
+                    })
+                } {
+                    writer.write_all(h)?;
+                    writer.write_all(&b": "[..])?;
+                    writer.write_all(v.as_bytes())?;
+                    writer.write_all(line_ending)?;
+                }
+                Ok::<(), MeliError>(())
+            }
+            MboxMetadata::None => Ok(()),
+        };
+
         match self {
             MboxFormat::MboxO | MboxFormat::MboxRd => Err(MeliError::new("Unimplemented.")),
             MboxFormat::MboxCl => {
-                headers.retain(|(header_name, _)| {
-                    !header_name.eq_ignore_ascii_case(b"Content-Length")
-                });
                 let len = (body.len()
                     + body
                         .windows(b"\nFrom ".len())
@@ -76,6 +129,7 @@ impl MboxFormat {
                     writer.write_all(v)?;
                     writer.write_all(line_ending)?;
                 }
+                write_metadata_fn(writer)?;
                 writer.write_all(line_ending)?;
 
                 if body.starts_with(b"From ") {
@@ -90,9 +144,6 @@ impl MboxFormat {
                 Ok(())
             }
             MboxFormat::MboxCl2 => {
-                headers.retain(|(header_name, _)| {
-                    !header_name.eq_ignore_ascii_case(b"Content-Length")
-                });
                 let len = body.len().to_string();
                 for (h, v) in headers
                     .into_iter()
@@ -103,6 +154,7 @@ impl MboxFormat {
                     writer.write_all(v)?;
                     writer.write_all(line_ending)?;
                 }
+                write_metadata_fn(writer)?;
                 writer.write_all(line_ending)?;
                 writer.write_all(body)?;
                 Ok(())
