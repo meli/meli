@@ -138,6 +138,16 @@ impl Timer {
     pub fn disable(&self) {
         self.job_executor.disable_timer(self.id);
     }
+
+    pub fn set_interval(&self, new_val: Duration) {
+        self.job_executor.set_interval(self.id, new_val);
+    }
+}
+
+impl Drop for Timer {
+    fn drop(&mut self) {
+        self.disable();
+    }
 }
 
 impl JobExecutor {
@@ -327,6 +337,13 @@ impl JobExecutor {
                 handle.cancel();
             }
             timer.active = false;
+        }
+    }
+
+    fn set_interval(&self, id: Uuid, new_val: Duration) {
+        let mut timers_lck = self.timers.lock().unwrap();
+        if let Some(timer) = timers_lck.get_mut(&id) {
+            timer.interval = new_val;
         }
     }
 }

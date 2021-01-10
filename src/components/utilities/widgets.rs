@@ -1343,12 +1343,6 @@ impl ProgressSpinner {
     }
 }
 
-impl Drop for ProgressSpinner {
-    fn drop(&mut self) {
-        self.stop();
-    }
-}
-
 impl fmt::Display for ProgressSpinner {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "progress bar")
