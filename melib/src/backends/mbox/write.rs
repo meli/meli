@@ -65,6 +65,34 @@ impl MboxFormat {
                 && !header_name.eq_ignore_ascii_case(b"X-Keywords")
                 && !header_name.eq_ignore_ascii_case(b"Content-Length")
         });
+        let write_header_val_fn = |writer: &mut dyn std::io::Write, bytes: &[u8]| {
+            let mut i = 0;
+            if crlf {
+                while i < bytes.len() {
+                    if bytes[i..].starts_with(b"\r\n") {
+                        writer.write_all(&[b'\r', b'\n'])?;
+                        i += 2;
+                        continue;
+                    } else if bytes[i] == b'\n' {
+                        writer.write_all(&[b'\r', b'\n'])?;
+                    } else {
+                        writer.write_all(&[bytes[i]])?;
+                    }
+                    i += 1;
+                }
+            } else {
+                while i < bytes.len() {
+                    if bytes[i..].starts_with(b"\r\n") {
+                        writer.write_all(&[b'\n'])?;
+                        i += 2;
+                    } else {
+                        writer.write_all(&[bytes[i]])?;
+                        i += 1;
+                    }
+                }
+            }
+            Ok::<(), MeliError>(())
+        };
         let write_metadata_fn = |writer: &mut dyn std::io::Write| match metadata_format {
             MboxMetadata::CClient => {
                 for (h, v) in {
@@ -110,10 +138,23 @@ impl MboxFormat {
             MboxMetadata::None => Ok(()),
         };
 
+        let body_len = {
+            let mut len = body.len();
+            if crlf {
+                let stray_lfs = body.iter().filter(|b| **b == b'\n').count()
+                    - body.windows(b"\r\n".len()).filter(|w| w == b"\r\n").count();
+                len += stray_lfs;
+            } else {
+                let crlfs = body.windows(b"\r\n".len()).filter(|w| w == b"\r\n").count();
+                len -= crlfs;
+            }
+            len
+        };
+
         match self {
             MboxFormat::MboxO | MboxFormat::MboxRd => Err(MeliError::new("Unimplemented.")),
             MboxFormat::MboxCl => {
-                let len = (body.len()
+                let len = (body_len
                     + body
                         .windows(b"\nFrom ".len())
                         .filter(|w| w == b"\nFrom ")
@@ -126,7 +167,7 @@ impl MboxFormat {
                 {
                     writer.write_all(h)?;
                     writer.write_all(&b": "[..])?;
-                    writer.write_all(v)?;
+                    write_header_val_fn(writer, v)?;
                     writer.write_all(line_ending)?;
                 }
                 write_metadata_fn(writer)?;
@@ -135,28 +176,83 @@ impl MboxFormat {
                 if body.starts_with(b"From ") {
                     writer.write_all(&[b'>'])?;
                 }
-                for i in 0..body.len() {
-                    writer.write_all(&[body[i]])?;
-                    if body[i..].starts_with(b"\nFrom ") {
-                        writer.write_all(&[b'>'])?;
+                let mut i = 0;
+                if crlf {
+                    while i < body.len() {
+                        if body[i..].starts_with(b"\r\n") {
+                            writer.write_all(&[b'\r', b'\n'])?;
+                            if body[i..].starts_with(b"\r\nFrom ") {
+                                writer.write_all(&[b'>'])?;
+                            }
+                            i += 2;
+                        } else if body[i] == b'\n' {
+                            writer.write_all(&[b'\r', b'\n'])?;
+                            if body[i..].starts_with(b"\nFrom ") {
+                                writer.write_all(&[b'>'])?;
+                            }
+                            i += 1;
+                        } else {
+                            writer.write_all(&[body[i]])?;
+                            i += 1;
+                        }
+                    }
+                } else {
+                    while i < body.len() {
+                        if body[i..].starts_with(b"\r\n") {
+                            writer.write_all(&[b'\n'])?;
+                            if body[i..].starts_with(b"\r\nFrom ") {
+                                writer.write_all(&[b'>'])?;
+                            }
+                            i += 2;
+                        } else {
+                            writer.write_all(&[body[i]])?;
+                            if body[i..].starts_with(b"\nFrom ") {
+                                writer.write_all(&[b'>'])?;
+                            }
+                            i += 1;
+                        }
                     }
                 }
                 Ok(())
             }
             MboxFormat::MboxCl2 => {
-                let len = body.len().to_string();
+                let len = body_len.to_string();
                 for (h, v) in headers
                     .into_iter()
                     .chain(Some((&b"Content-Length"[..], len.as_bytes())))
                 {
                     writer.write_all(h)?;
                     writer.write_all(&b": "[..])?;
-                    writer.write_all(v)?;
+                    write_header_val_fn(writer, v)?;
                     writer.write_all(line_ending)?;
                 }
                 write_metadata_fn(writer)?;
                 writer.write_all(line_ending)?;
-                writer.write_all(body)?;
+                let mut i = 0;
+                if crlf {
+                    while i < body.len() {
+                        if body[i..].starts_with(b"\r\n") {
+                            writer.write_all(&[b'\r', b'\n'])?;
+                            i += 2;
+                            continue;
+                        } else if body[i] == b'\n' {
+                            writer.write_all(&[b'\r', b'\n'])?;
+                        } else {
+                            writer.write_all(&[body[i]])?;
+                        }
+                        i += 1;
+                    }
+                } else {
+                    while i < body.len() {
+                        if body[i..].starts_with(b"\r\n") {
+                            writer.write_all(&[b'\n'])?;
+                            i += 2;
+                        } else {
+                            writer.write_all(&[body[i]])?;
+                            i += 1;
+                        }
+                    }
+                }
                 Ok(())
             }
         }
