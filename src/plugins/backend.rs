@@ -155,15 +155,6 @@ impl MailBackend for PluginBackend {
                                             env.set_subject(value);
                                         }
                                         if !references.is_empty() {
-                                            let parse_result =
-                                                melib::email::parser::address::references(
-                                                    references.as_bytes(),
-                                                );
-                                            if parse_result.is_ok() {
-                                                for v in parse_result.unwrap().1 {
-                                                    env.push_references(v);
-                                                }
-                                            }
                                             env.set_references(references.as_bytes());
                                         }
 

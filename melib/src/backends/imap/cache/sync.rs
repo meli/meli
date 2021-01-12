@@ -157,18 +157,6 @@ impl ImapConnection {
             let env = envelope.as_mut().unwrap();
             env.set_hash(generate_envelope_hash(&mailbox_path, &uid));
             if let Some(value) = references {
-                let parse_result = crate::email::parser::address::msg_id_list(value);
-                if let Ok((_, value)) = parse_result {
-                    let prev_val = env.references.take();
-                    for v in value {
-                        env.push_references(v);
-                    }
-                    if let Some(prev) = prev_val {
-                        for v in prev.refs {
-                            env.push_references(v);
-                        }
-                    }
-                }
                 env.set_references(value);
             }
             let mut tag_lck = self.uid_store.collection.tag_index.write().unwrap();
@@ -455,18 +443,6 @@ impl ImapConnection {
                 let env = envelope.as_mut().unwrap();
                 env.set_hash(generate_envelope_hash(&mailbox_path, &uid));
                 if let Some(value) = references {
-                    let parse_result = crate::email::parser::address::msg_id_list(value);
-                    if let Ok((_, value)) = parse_result {
-                        let prev_val = env.references.take();
-                        for v in value {
-                            env.push_references(v);
-                        }
-                        if let Some(prev) = prev_val {
-                            for v in prev.refs {
-                                env.push_references(v);
-                            }
-                        }
-                    }
                     env.set_references(value);
                 }
                 let mut tag_lck = self.uid_store.collection.tag_index.write().unwrap();
