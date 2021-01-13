@@ -29,11 +29,11 @@ and body structure. Addresses in `To`, `From` fields etc are parsed into
 ```rust
 use melib::{Attachment, Envelope};
 
-let raw_mail = r#"From: "some name" <some@address.com>
-To: "me" <myself@i.tld>
+let raw_mail = r#"From: "some name" <some@example.com>
+To: "me" <myself@example.com>
 Cc:
 Subject: =?utf-8?Q?gratuitously_encoded_subject?=
-Message-ID: <h2g7f.z0gy2pgaen5m@address.com>
+Message-ID: <h2g7f.z0gy2pgaen5m@example.com>
 MIME-Version: 1.0
 Content-Type: multipart/mixed; charset="utf-8";
  boundary="bzz_bzz__bzz__"
@@ -74,7 +74,7 @@ ouiijDaaCCGQRgrpH3q4QYYXWDihxBE+7KCDDjnUIEVAADs=
 
 let envelope = Envelope::from_bytes(raw_mail.as_bytes(), None).expect("Could not parse mail");
 assert_eq!(envelope.subject().as_ref(), "gratuitously encoded subject");
-assert_eq!(envelope.message_id_display().as_ref(), "<h2g7f.z0gy2pgaen5m@address.com>");
+assert_eq!(envelope.message_id_display().as_ref(), "<h2g7f.z0gy2pgaen5m@example.com>");
 
 let body = envelope.body_bytes(raw_mail.as_bytes());
 assert_eq!(body.content_type().to_string().as_str(), "multipart/mixed");

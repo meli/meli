@@ -78,7 +78,7 @@ example configuration
 root_mailbox = "/path/to/root/folder"
 format = "Maildir"
 index_style = "Compact"
-identity="email@address.tld"
+identity="email@example.com"
 subscribed_mailboxes = ["folder", "folder/Sent"] # or [ "*", ] for all mailboxes
 display_name = "Name"
 
@@ -107,7 +107,7 @@ script = "notify-send"
 [composing]
 # required for sending e-mail
 send_mail = 'msmtp --read-recipients --read-envelope-from'
-#send_mail = { hostname = "smtp.mail.tld", port = 587, auth = { type = "auto", username = "user", password = { type = "command_eval", value = "gpg2 --no-tty -q -d ~/.passwords/user.gpg" } }, security = { type = "STARTTLS" } }
+#send_mail = { hostname = "smtp.example.com", port = 587, auth = { type = "auto", username = "user", password = { type = "command_eval", value = "gpg2 --no-tty -q -d ~/.passwords/user.gpg" } }, security = { type = "STARTTLS" } }
 editor_command = 'vim +/^$'
 
 [shortcuts]
@@ -152,7 +152,7 @@ plain:shows one row per mail, regardless of threading
 .Bl -tag -width 36n
 .It Ic display_name Ar String
 .Pq Em optional
-A name which can be combined with your address: "Name <email@address.tld>".
+A name which can be combined with your address: "Name <email@example.com>".
 .It Ic read_only Ar boolean
 Attempt to not make any changes to this account.
 .Pq Em false
@@ -199,14 +199,14 @@ format = "notmuch"
   [accounts.notmuch.mailboxes]
   "INBOX" = {  query="tag:inbox", subscribe = true }
   "Drafts" = {  query="tag:draft", subscribe = true }
-  "Sent" = {  query="from:username@server.tld from:username2@server.tld", subscribe = true }
+  "Sent" = {  query="from:username@example.com from:username2@example.com", subscribe = true }
 .Ed
 .Ss IMAP only
 IMAP specific options are:
 .Bl -tag -width 36n
 .It Ic server_hostname Ar String
 example:
-.Qq mail.example.tld
+.Qq mail.example.com
 .It Ic server_username Ar String
 Server username
 .It Ic server_password Ar String
@@ -295,7 +295,7 @@ JMAP specific options
 .Bl -tag -width 36n
 .It Ic server_hostname Ar String
 example:
-.Qq mail.example.tld
+.Qq mail.example.com
 .It Ic server_username Ar String
 Server username
 .It Ic server_password Ar String
@@ -403,9 +403,9 @@ and
 \&.
 Example:
 .Bd -literal
-[accounts."imap.domain.tld".mailboxes."INBOX"]
+[accounts."imap.example.com".mailboxes."INBOX"]
   index_style = "plain"
-  [accounts."imap.domain.tld".mailboxes."INBOX".pager]
+  [accounts."imap.example.com".mailboxes."INBOX".pager]
     filter = ""
 .Ed
 .El

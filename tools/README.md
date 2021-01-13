@@ -8,7 +8,7 @@ This crate holds a collection of small binaries used for meli development. Of no
 cd tools/
 cargo build --bin imapshell
 # Usage: imap_conn server_hostname server_username server_password server_port
-rlwrap ./target/debug/imapshell "mail.domain.tld" "epilys@domain.tld" "hunter2" 143
+rlwrap ./target/debug/imapshell "mail.example.com" "epilys@example.com" "hunter2" 143
 ```
 
 Example session:
@@ -18,7 +18,7 @@ First, the IMAP connections performs its own non-interactive setup:
 ```text
 [2020-08-27 17:11:33]["main"] melib/src/backends/imap/connection.rs:459_25: sent: M1 CAPABILITY
 [2020-08-27 17:11:33]["main"] melib/src/backends/imap/connection.rs:408_33: &ret[last_line_idx..] = "M1 OK Pre-login capabilities listed, post-login capabilities have more.\r\n"
-[2020-08-27 17:11:33]["main"] melib/src/backends/imap/connection.rs:459_25: sent: M2 LOGIN "epilys@domain.tld" "hunter2"
+[2020-08-27 17:11:33]["main"] melib/src/backends/imap/connection.rs:459_25: sent: M2 LOGIN "epilys@example.com" "hunter2"
 [2020-08-27 17:11:34]["main"] melib/src/backends/imap/connection.rs:459_25: sent: M3 CAPABILITY
 [2020-08-27 17:11:34]["main"] melib/src/backends/imap/connection.rs:408_33: &ret[last_line_idx..] = "M3 OK Capability completed (0.000 + 0.120 + 0.119 secs).\r\n"
 [2020-08-27 17:11:34]["main"] melib/src/backends/imap/connection.rs:459_25: sent: M4 ENABLE CONDSTORE
