@@ -188,29 +188,27 @@ impl Component for NotificationCommand {
     fn draw(&mut self, _grid: &mut CellBuffer, _area: Area, _context: &mut Context) {}
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
-        if !context.settings.notifications.enable {
-            return false;
-        }
-
         if let UIEvent::Notification(ref title, ref body, ref kind) = event {
-            if let Some(ref bin) = context.settings.notifications.script {
-                match Command::new(bin)
-                    .arg(&kind.map(|k| k.to_string()).unwrap_or_default())
-                    .arg(title.as_ref().map(String::as_str).unwrap_or("meli"))
-                    .arg(body)
-                    .stdin(Stdio::piped())
-                    .stdout(Stdio::piped())
-                    .spawn()
-                {
-                    Ok(child) => {
-                        context.children.push(child);
-                    }
-                    Err(err) => {
-                        log(
-                            format!("Could not run notification script: {}.", err.to_string()),
-                            ERROR,
-                        );
-                        debug!("Could not run notification script: {:?}", err);
+            if context.settings.notifications.enable {
+                if let Some(ref bin) = context.settings.notifications.script {
+                    match Command::new(bin)
+                        .arg(&kind.map(|k| k.to_string()).unwrap_or_default())
+                        .arg(title.as_ref().map(String::as_str).unwrap_or("meli"))
+                        .arg(body)
+                        .stdin(Stdio::piped())
+                        .stdout(Stdio::piped())
+                        .spawn()
+                    {
+                        Ok(child) => {
+                            context.children.push(child);
+                        }
+                        Err(err) => {
+                            log(
+                                format!("Could not run notification script: {}.", err.to_string()),
+                                ERROR,
+                            );
+                            debug!("Could not run notification script: {:?}", err);
+                        }
                     }
                 }
             }
