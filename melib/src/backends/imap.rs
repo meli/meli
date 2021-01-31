@@ -51,6 +51,7 @@ use futures::stream::Stream;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::convert::TryFrom;
+use std::convert::TryInto;
 use std::hash::Hasher;
 use std::pin::Pin;
 use std::str::FromStr;
@@ -58,8 +59,9 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
 pub type ImapNum = usize;
-pub type UID = ImapNum;
-pub type UIDVALIDITY = UID;
+// Data type for UID and UIDVALIDITY defined in RFC 3501 2.3.1.1
+pub type UID = u32;
+pub type UIDVALIDITY = u32;
 pub type MessageSequenceNumber = ImapNum;
 
 pub static SUPPORTED_CAPABILITIES: &[&str] = &[
@@ -1773,9 +1775,9 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
                 let mut conn = connection.lock().await;
                 let mut response = Vec::with_capacity(8 * 1024);
                 let max_uid_left = max_uid;
-                let chunk_size = 250;
+                let chunk_size: UID = 250;
 
-                let mut envelopes = Vec::with_capacity(chunk_size);
+                let mut envelopes = Vec::with_capacity(chunk_size.try_into().unwrap_or_default());
                 conn.examine_mailbox(mailbox_hash, &mut response, false)
                     .await?;
                 if max_uid_left > 0 {

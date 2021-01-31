@@ -1008,20 +1008,20 @@ fn test_imap_fetch_response() {
     );
 }
 
-pub fn search_results<'a>(input: &'a [u8]) -> IResult<&'a [u8], Vec<ImapNum>> {
+pub fn search_results<'a>(input: &'a [u8]) -> IResult<&'a [u8], Vec<UID>> {
     alt((
-        |input: &'a [u8]| -> IResult<&'a [u8], Vec<ImapNum>> {
+        |input: &'a [u8]| -> IResult<&'a [u8], Vec<UID>> {
             let (input, _) = tag("* SEARCH ")(input)?;
             let (input, list) = separated_list1(
                 tag(b" "),
                 map_res(is_not(" \r\n"), |s: &[u8]| {
-                    ImapNum::from_str(unsafe { std::str::from_utf8_unchecked(s) })
+                    UID::from_str(unsafe { std::str::from_utf8_unchecked(s) })
                 }),
             )(input)?;
             let (input, _) = tag("\r\n")(input)?;
             Ok((input, list))
         },
-        |input: &'a [u8]| -> IResult<&'a [u8], Vec<ImapNum>> {
+        |input: &'a [u8]| -> IResult<&'a [u8], Vec<UID>> {
             let (input, _) = tag("* SEARCH\r\n")(input)?;
             Ok((input, vec![]))
         },
@@ -1759,7 +1759,7 @@ fn ctl(input: &[u8]) -> IResult<&[u8], u8> {
 
 pub fn generate_envelope_hash(mailbox_path: &str, uid: &UID) -> EnvelopeHash {
     let mut h = DefaultHasher::new();
-    h.write_usize(*uid);
+    h.write_u32(*uid);
     h.write(mailbox_path.as_bytes());
     EnvelopeHash(h.finish())
 }
