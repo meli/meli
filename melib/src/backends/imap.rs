@@ -158,7 +158,7 @@ pub struct UIDStore {
 }
 
 impl UIDStore {
-    fn new(
+    pub fn new(
         account_hash: AccountHash,
         account_name: Arc<String>,
         event_consumer: BackendEventConsumer,
