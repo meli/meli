@@ -840,6 +840,14 @@ impl ImapConnection {
         }
     }
 
+    pub fn has_capability(&self, capability: String) -> bool {
+        self.capabilities
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|cap| cap.eq_ignore_ascii_case(&capability.as_bytes()))
+    }
+
     pub async fn select_mailbox(
         &mut self,
         mailbox_hash: MailboxHash,

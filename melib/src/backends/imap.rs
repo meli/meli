@@ -469,12 +469,9 @@ impl MailBackend for ImapType {
                 ImapProtocol::IMAP {
                     extension_use: ImapExtensionUse { idle, .. },
                 } => {
-                    idle && uid_store
-                        .capabilities
-                        .lock()
-                        .unwrap()
-                        .iter()
-                        .any(|cap| cap.eq_ignore_ascii_case(b"IDLE"))
+                    let main_conn_lck = timeout(uid_store.timeout, main_conn.lock()).await?;
+
+                    idle && main_conn_lck.has_capability("IDLE".to_string())
                 }
                 _ => false,
             };
