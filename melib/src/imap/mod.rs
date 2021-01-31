@@ -50,8 +50,8 @@ use std::{
 };
 
 #[cfg(feature = "sqlite3")]
-use cache::ImapCacheReset;
-use cache::ModSequence;
+pub use cache::ImapCacheReset;
+pub use cache::ModSequence;
 use futures::{lock::Mutex as FutureMutex, stream::Stream};
 use imap_codec::imap_types::{
     command::CommandBody,
