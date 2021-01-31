@@ -32,7 +32,7 @@ pub use connection::*;
 mod watch;
 pub use watch::*;
 mod cache;
-use cache::{ImapCacheReset, ModSequence};
+pub use cache::{ImapCacheReset, ModSequence};
 pub mod managesieve;
 mod untagged;
 
