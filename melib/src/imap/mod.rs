@@ -146,31 +146,31 @@ macro_rules! get_conf_val {
 
 #[derive(Debug)]
 pub struct UIDStore {
-    account_hash: AccountHash,
-    account_name: Arc<str>,
-    keep_offline_cache: Arc<Mutex<bool>>,
-    capabilities: Arc<Mutex<Capabilities>>,
-    hash_index: Arc<Mutex<HashMap<EnvelopeHash, (UID, MailboxHash)>>>,
-    uid_index: Arc<Mutex<HashMap<(MailboxHash, UID), EnvelopeHash>>>,
-    msn_index: Arc<Mutex<HashMap<MailboxHash, Vec<UID>>>>,
+    pub account_hash: AccountHash,
+    pub account_name: Arc<str>,
+    pub keep_offline_cache: Arc<Mutex<bool>>,
+    pub capabilities: Arc<Mutex<Capabilities>>,
+    pub hash_index: Arc<Mutex<HashMap<EnvelopeHash, (UID, MailboxHash)>>>,
+    pub uid_index: Arc<Mutex<HashMap<(MailboxHash, UID), EnvelopeHash>>>,
+    pub msn_index: Arc<Mutex<HashMap<MailboxHash, Vec<UID>>>>,
 
-    byte_cache: Arc<Mutex<HashMap<UID, EnvelopeCache>>>,
-    collection: Collection,
+    pub byte_cache: Arc<Mutex<HashMap<UID, EnvelopeCache>>>,
+    pub collection: Collection,
 
-    /* Offline caching */
-    uidvalidity: Arc<Mutex<HashMap<MailboxHash, UID>>>,
-    envelopes: Arc<Mutex<HashMap<EnvelopeHash, cache::CachedEnvelope>>>,
-    max_uids: Arc<Mutex<HashMap<MailboxHash, UID>>>,
-    modseq: Arc<Mutex<HashMap<EnvelopeHash, ModSequence>>>,
-    highestmodseqs: Arc<Mutex<HashMap<MailboxHash, std::result::Result<ModSequence, ()>>>>,
-    mailboxes: Arc<FutureMutex<HashMap<MailboxHash, ImapMailbox>>>,
-    is_online: Arc<Mutex<(SystemTime, Result<()>)>>,
-    event_consumer: BackendEventConsumer,
-    timeout: Option<Duration>,
+    // Offline caching
+    pub uidvalidity: Arc<Mutex<HashMap<MailboxHash, UID>>>,
+    pub envelopes: Arc<Mutex<HashMap<EnvelopeHash, cache::CachedEnvelope>>>,
+    pub max_uids: Arc<Mutex<HashMap<MailboxHash, UID>>>,
+    pub modseq: Arc<Mutex<HashMap<EnvelopeHash, ModSequence>>>,
+    pub highestmodseqs: Arc<Mutex<HashMap<MailboxHash, std::result::Result<ModSequence, ()>>>>,
+    pub mailboxes: Arc<FutureMutex<HashMap<MailboxHash, ImapMailbox>>>,
+    pub is_online: Arc<Mutex<(SystemTime, Result<()>)>>,
+    pub event_consumer: BackendEventConsumer,
+    pub timeout: Option<Duration>,
 }
 
 impl UIDStore {
-    fn new(
+    pub fn new(
         account_hash: AccountHash,
         account_name: Arc<str>,
         event_consumer: BackendEventConsumer,
@@ -204,10 +204,10 @@ impl UIDStore {
 
 #[derive(Debug)]
 pub struct ImapType {
-    _is_subscribed: Arc<IsSubscribedFn>,
-    connection: Arc<FutureMutex<ImapConnection>>,
-    server_conf: ImapServerConf,
-    uid_store: Arc<UIDStore>,
+    pub _is_subscribed: Arc<IsSubscribedFn>,
+    pub connection: Arc<FutureMutex<ImapConnection>>,
+    pub server_conf: ImapServerConf,
+    pub uid_store: Arc<UIDStore>,
 }
 
 impl MailBackend for ImapType {
