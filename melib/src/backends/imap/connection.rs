@@ -836,87 +836,7 @@ impl ImapConnection {
         ret: &mut Vec<u8>,
         force: bool,
     ) -> Result<Option<SelectResponse>> {
-        if !force && self.stream.as_ref()?.current_mailbox == MailboxSelection::Select(mailbox_hash)
-        {
-            return Ok(None);
-        }
-        let (imap_path, no_select, permissions) = {
-            let m = &self.uid_store.mailboxes.lock().await[&mailbox_hash];
-            (
-                m.imap_path().to_string(),
-                m.no_select,
-                m.permissions.clone(),
-            )
-        };
-        if no_select {
-            return Err(Error::new(format!(
-                "Trying to select a \\NoSelect mailbox: {}",
-                &imap_path
-            ))
-            .set_kind(crate::error::ErrorKind::Bug));
-        }
-        self.send_command(format!("SELECT \"{}\"", imap_path).as_bytes())
-            .await?;
-        self.read_response(ret, RequiredResponses::SELECT_REQUIRED)
-            .await?;
-        debug!(
-            "{} select response {}",
-            imap_path,
-            String::from_utf8_lossy(ret)
-        );
-        let select_response = protocol_parser::select_response(ret).chain_err_summary(|| {
-            format!("Could not parse select response for mailbox {}", imap_path)
-        })?;
-        {
-            if self.uid_store.keep_offline_cache {
-                #[cfg(not(feature = "sqlite3"))]
-                let mut cache_handle = super::cache::DefaultCache::get(self.uid_store.clone())?;
-                #[cfg(feature = "sqlite3")]
-                let mut cache_handle = super::cache::Sqlite3Cache::get(self.uid_store.clone())?;
-                if let Err(err) = cache_handle.mailbox_state(mailbox_hash).and_then(|r| {
-                    if r.is_none() {
-                        cache_handle.clear(mailbox_hash, &select_response)
-                    } else {
-                        Ok(())
-                    }
-                }) {
-                    (self.uid_store.event_consumer)(
-                        self.uid_store.account_hash,
-                        crate::backends::BackendEvent::from(err),
-                    );
-                }
-            }
-            self.uid_store
-                .mailboxes
-                .lock()
-                .await
-                .entry(mailbox_hash)
-                .and_modify(|entry| {
-                    *entry.select.write().unwrap() = Some(select_response.clone());
-                });
-        }
-        {
-            let mut permissions = permissions.lock().unwrap();
-            permissions.create_messages = !select_response.read_only;
-            permissions.remove_messages = !select_response.read_only;
-            permissions.set_flags = !select_response.read_only;
-            permissions.rename_messages = !select_response.read_only;
-            permissions.delete_messages = !select_response.read_only;
-        }
-        self.stream.as_mut()?.current_mailbox = MailboxSelection::Select(mailbox_hash);
-        if self
-            .uid_store
-            .msn_index
-            .lock()
-            .unwrap()
-            .get(&mailbox_hash)
-            .map(|i| i.is_empty())
-            .unwrap_or(true)
-        {
-            self.create_uid_msn_cache(mailbox_hash, 1, &select_response)
-                .await?;
-        }
-        Ok(Some(select_response))
+        Ok(None)
     }
 
     pub async fn examine_mailbox(
@@ -925,44 +845,7 @@ impl ImapConnection {
         ret: &mut Vec<u8>,
         force: bool,
     ) -> Result<Option<SelectResponse>> {
-        if !force
-            && self.stream.as_ref()?.current_mailbox == MailboxSelection::Examine(mailbox_hash)
-        {
-            return Ok(None);
-        }
-        let (imap_path, no_select) = {
-            let m = &self.uid_store.mailboxes.lock().await[&mailbox_hash];
-            (m.imap_path().to_string(), m.no_select)
-        };
-        if no_select {
-            return Err(Error::new(format!(
-                "Trying to examine a \\NoSelect mailbox: {}",
-                &imap_path
-            ))
-            .set_kind(crate::error::ErrorKind::Bug));
-        }
-        self.send_command(format!("EXAMINE \"{}\"", &imap_path).as_bytes())
-            .await?;
-        self.read_response(ret, RequiredResponses::EXAMINE_REQUIRED)
-            .await?;
-        debug!("examine response {}", String::from_utf8_lossy(ret));
-        let select_response = protocol_parser::select_response(ret).chain_err_summary(|| {
-            format!("Could not parse select response for mailbox {}", imap_path)
-        })?;
-        self.stream.as_mut()?.current_mailbox = MailboxSelection::Examine(mailbox_hash);
-        if !self
-            .uid_store
-            .msn_index
-            .lock()
-            .unwrap()
-            .get(&mailbox_hash)
-            .map(|i| i.is_empty())
-            .unwrap_or(true)
-        {
-            self.create_uid_msn_cache(mailbox_hash, 1, &select_response)
-                .await?;
-        }
-        Ok(Some(select_response))
+        Ok(None)
     }
 
     pub async fn unselect(&mut self) -> Result<()> {
@@ -1016,16 +899,6 @@ impl ImapConnection {
         low: usize,
         _select_response: &SelectResponse,
     ) -> Result<()> {
-        debug_assert!(low > 0);
-        let mut response = Vec::new();
-        self.send_command(format!("UID SEARCH {}:*", low).as_bytes())
-            .await?;
-        self.read_response(&mut response, RequiredResponses::SEARCH)
-            .await?;
-        let mut msn_index_lck = self.uid_store.msn_index.lock().unwrap();
-        let msn_index = msn_index_lck.entry(mailbox_hash).or_default();
-        let _ = msn_index.drain(low - 1..);
-        msn_index.extend(protocol_parser::search_results(&response)?.1.into_iter());
         Ok(())
     }
 }
