@@ -848,6 +848,21 @@ impl ImapConnection {
             .any(|cap| cap.eq_ignore_ascii_case(&capability.as_bytes()))
     }
 
+    pub async fn select(&mut self, imap_path: String) -> Result<SelectResponse> {
+        self.send_command(format!("SELECT \"{}\"", imap_path).as_bytes())
+            .await?;
+
+        let mut ret = Vec::new();
+        self.read_response(&mut ret, RequiredResponses::SELECT_REQUIRED)
+            .await?;
+
+        let select_response = protocol_parser::select_response(&ret).chain_err_summary(|| {
+            format!("Could not parse select response for mailbox {}", imap_path)
+        })?;
+
+        Ok(select_response)
+    }
+
     pub async fn select_mailbox(
         &mut self,
         mailbox_hash: MailboxHash,
