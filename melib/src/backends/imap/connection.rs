@@ -863,6 +863,22 @@ impl ImapConnection {
         Ok(select_response)
     }
 
+    pub async fn uid_fetch<'a>(
+        &mut self,
+        range: String,
+        items_to_fetch: String,
+        response: &'a mut Vec<u8>, //@TODO ideally instead of having to pass response from the outside, it's better if FetchResponse doesn't borrow response so we can return it by from a function
+    ) -> Result<Vec<protocol_parser::FetchResponse<'a>>> {
+        self.send_command(format!("UID FETCH {} {}", range, items_to_fetch).as_bytes())
+            .await?;
+        self.read_response(response, RequiredResponses::FETCH_REQUIRED)
+            .await?;
+
+        let (_, mut envelopes_list, _) = protocol_parser::fetch_responses(response)?;
+
+        Ok(envelopes_list)
+    }
+
     pub async fn select_mailbox(
         &mut self,
         mailbox_hash: MailboxHash,
