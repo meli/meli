@@ -1899,6 +1899,9 @@ pub mod encodings {
             Charset::GB2312 => {
                 Ok(encoding::codec::simpchinese::GBK_ENCODING.decode(s, DecoderTrap::Strict)?)
             }
+            Charset::GB18030 => Ok(
+                encoding::codec::simpchinese::GB18030_ENCODING.decode(s, DecoderTrap::Strict)?
+            ),
             Charset::UTF16 => {
                 Ok(encoding::codec::utf_16::UTF_16LE_ENCODING.decode(s, DecoderTrap::Strict)?)
             }
