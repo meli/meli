@@ -1779,7 +1779,7 @@ pub mod encodings {
     /* Encoded words
      *"=?charset?encoding?encoded text?=".
      */
-    fn encoded_word(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
+    pub fn encoded_word(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
         if input.is_empty() {
             return Ok((&[], Vec::with_capacity(0)));
         }
@@ -2553,6 +2553,12 @@ mod tests {
  =?windows-1250?B?bGVy?="#;
         assert_eq!(
             "Re: Climate crisis reality check –\u{a0}EcoHustler",
+            std::str::from_utf8(&phrase(words.as_bytes(), false).unwrap().1).unwrap()
+        );
+
+        let words = r#"=?gb18030?B?zNrRtsbz0rXTys/k19S2r9eqt6LR6dak08q8/g==?="#;
+        assert_eq!(
+            "腾讯企业邮箱自动转发验证邮件",
             std::str::from_utf8(&phrase(words.as_bytes(), false).unwrap().1).unwrap()
         );
     }

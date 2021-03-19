@@ -144,6 +144,9 @@ impl<'a> From<&'a [u8]> for Charset {
                 Charset::Windows1253
             }
             b if b.eq_ignore_ascii_case(b"gbk") => Charset::GBK,
+            b if b.eq_ignore_ascii_case(b"gb18030") || b.eq_ignore_ascii_case(b"gb-18030") => {
+                Charset::GB18030
+            }
             b if b.eq_ignore_ascii_case(b"gb2312") || b.eq_ignore_ascii_case(b"gb-2312") => {
                 Charset::GB2312
             }
