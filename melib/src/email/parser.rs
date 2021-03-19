@@ -1899,6 +1899,9 @@ pub mod encodings {
             Charset::GB2312 => {
                 Ok(encoding::codec::simpchinese::GBK_ENCODING.decode(s, DecoderTrap::Strict)?)
             }
+            Charset::GB18030 => Ok(
+                encoding::codec::simpchinese::GB18030_ENCODING.decode(s, DecoderTrap::Strict)?
+            ),
             Charset::UTF16 => {
                 Ok(encoding::codec::utf_16::UTF_16LE_ENCODING.decode(s, DecoderTrap::Strict)?)
             }
@@ -2550,6 +2553,12 @@ mod tests {
  =?windows-1250?B?bGVy?="#;
         assert_eq!(
             "Re: Climate crisis reality check –\u{a0}EcoHustler",
+            std::str::from_utf8(&phrase(words.as_bytes(), false).unwrap().1).unwrap()
+        );
+
+        let words = r#"=?gb18030?B?zNrRtsbz0rXTys/k19S2r9eqt6LR6dak08q8/g==?="#;
+        assert_eq!(
+            "腾讯企业邮箱自动转发验证邮件",
             std::str::from_utf8(&phrase(words.as_bytes(), false).unwrap().1).unwrap()
         );
     }
