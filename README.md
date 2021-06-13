@@ -3,7 +3,7 @@
 **BSD/Linux terminal email client with support for multiple accounts and Maildir / mbox / notmuch / IMAP / JMAP.**
 
 Community links:
-[mailing lists](https://lists.meli.delivery/) | `#meli` on freenode IRC | Report bugs and/or feature requests in [meli's issue tracker](https://git.meli.delivery/meli/meli/issues "meli gitea issue tracker")
+[mailing lists](https://lists.meli.delivery/) | `#meli` on OFTC IRC | Report bugs and/or feature requests in [meli's issue tracker](https://git.meli.delivery/meli/meli/issues "meli gitea issue tracker")
 
 | | | |
 :---:|:---:|:---:
