@@ -307,7 +307,11 @@ impl NotmuchDb {
         _is_subscribed: Box<dyn Fn(&str) -> bool>,
         event_consumer: BackendEventConsumer,
     ) -> Result<Box<dyn MailBackend>> {
-        let lib = Arc::new(libloading::Library::new("libnotmuch.so.5")?);
+        #[cfg(not(target_os = "macos"))]
+        let dlpath = "libnotmuch.so.5";
+        #[cfg(target_os = "macos")]
+        let dlpath = "libnotmuch.5.dylib";
+        let lib = Arc::new(libloading::Library::new(dlpath)?);
         let path = Path::new(s.root_mailbox.as_str()).expand();
         if !path.exists() {
             return Err(MeliError::new(format!(

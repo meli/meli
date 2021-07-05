@@ -156,7 +156,11 @@ impl Backends {
         }
         #[cfg(feature = "notmuch_backend")]
         {
-            if libloading::Library::new("libnotmuch.so.5").is_ok() {
+            #[cfg(not(target_os = "macos"))]
+            let dlpath = "libnotmuch.so.5";
+            #[cfg(target_os = "macos")]
+            let dlpath = "libnotmuch.5.dylib";
+            if libloading::Library::new(dlpath).is_ok() {
                 b.register(
                     "notmuch".to_string(),
                     Backend {
