@@ -626,8 +626,9 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
                     String::from_utf8_lossy(input).as_ref().trim_at_boundary(40)
                 )));
             }
-        } else if input[i..].starts_with(b"RFC822 {") {
-            i += b"RFC822 ".len();
+        } else if input[i..].starts_with(b"BODY[] {") || input[i..].starts_with(b"RFC822 {") {
+            // b"BODY[] ".len() == b"RFC822 ".len()
+            i += b"BODY[] ".len();
             if let Ok((rest, body)) =
                 length_data::<_, _, (&[u8], nom::error::ErrorKind), _>(delimited(
                     tag("{"),
@@ -641,11 +642,13 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
                 i += input.len() - i - rest.len();
             } else {
                 log::debug!(
-                    "Unexpected input while parsing UID FETCH response. Could not parse RFC822: {}",
+                    "Unexpected input while parsing UID FETCH response. Could not parse \
+                     RFC822/BODY: {}",
                     String::from_utf8_lossy(&input[i..])
                 );
                 return Err(Error::new(format!(
-                    "Unexpected input while parsing UID FETCH response. Could not parse RFC822: {}",
+                    "Unexpected input while parsing UID FETCH response. Could not parse \
+                     RFC822/BODY: {}",
                     String::from_utf8_lossy(&input[i..])
                         .as_ref()
                         .trim_at_boundary(40)
