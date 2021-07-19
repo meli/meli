@@ -624,8 +624,8 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
                     String::from_utf8_lossy(input)
                 ))));
             }
-        } else if input[i..].starts_with(b"RFC822 {") {
-            i += b"RFC822 ".len();
+        } else if input[i..].starts_with(b"BODY[] {") {
+            i += b"BODY[] ".len();
             if let Ok((rest, body)) =
                 length_data::<_, _, (&[u8], nom::error::ErrorKind), _>(delimited(
                     tag("{"),
