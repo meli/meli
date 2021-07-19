@@ -45,6 +45,7 @@ use std::ffi::{CStr, CString};
 pub type UnixTimestamp = u64;
 pub const RFC3339_FMT_WITH_TIME: &str = "%Y-%m-%dT%H:%M:%S\0";
 pub const RFC3339_FMT: &str = "%Y-%m-%d\0";
+pub const RFC822_DATE: &str = "%a, %d %b %Y %H:%M:%S %z\0";
 pub const RFC822_FMT_WITH_TIME: &str = "%a, %e %h %Y %H:%M:%S \0";
 pub const RFC822_FMT: &str = "%e %h %Y %H:%M:%S \0";
 pub const DEFAULT_FMT: &str = "%a, %d %b %Y %R\0";

@@ -53,7 +53,11 @@ impl Default for Draft {
         let mut headers = HeaderMap::default();
         headers.insert(
             HeaderName::new_unchecked("Date"),
-            crate::datetime::timestamp_to_string(crate::datetime::now(), None, true),
+            crate::datetime::timestamp_to_string(
+                crate::datetime::now(),
+                Some(crate::datetime::RFC822_DATE),
+                true,
+            ),
         );
         headers.insert(HeaderName::new_unchecked("From"), "".into());
         headers.insert(HeaderName::new_unchecked("To"), "".into());
