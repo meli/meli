@@ -7,10 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [alpha-0.7.0] - 2021-09-03
+
 ### Added
-- Add import command to import email from files into accounts
-- Add add-attachment-file-picker command and `file_picker_command` setting to
+
+Notable changes:
+
+- add import command to import email from files into accounts
+- add add-attachment-file-picker command and `file_picker_command` setting to
   use external commands to choose files when composing new mail
+- ask confirm for delete
+- add export-mbox command
+- add export-mail command
+- add TLS support with nntp
+- add JMAP watch with polling
+- add reload-config command
+- add import-mail command
+- imap: implement gmail XOAUTH2 authentication method
+- imap: implement OAUTH2 authentication
+- compose: treat inline message/rfc822 as attachments
+- add gpg support via libgpgme
+
+### Fixed
+
+- Loading notmuch library on macos
+- Limit dbus dependency to target_os = "linux"
+- IMAP, notmuch, mbox backends: various performance fixes
 
 ## [alpha-0.6.2] - 2020-09-24
 
@@ -109,3 +131,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [alpha-0.6.0]: https://github.com/meli/meli/releases/tag/alpha-0.6.0
 [alpha-0.6.1]: https://github.com/meli/meli/releases/tag/alpha-0.6.1
 [alpha-0.6.2]: https://github.com/meli/meli/releases/tag/alpha-0.6.2
+[alpha-0.7.0]: https://github.com/meli/meli/releases/tag/alpha-0.7.0
