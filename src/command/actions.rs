@@ -130,6 +130,7 @@ pub enum Action {
 impl Action {
     pub fn needs_confirmation(&self) -> bool {
         match self {
+            Action::Listing(ListingAction::Delete) => true,
             Action::Listing(_) => false,
             Action::ViewMailbox(_) => false,
             Action::Sort(_, _) => false,
