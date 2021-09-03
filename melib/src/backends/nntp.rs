@@ -131,6 +131,7 @@ impl MailBackend for NntpType {
                 )
             })
             .collect::<Vec<(String, MailBackendExtensionStatus)>>();
+        let mut supports_submission = false;
         let NntpExtensionUse {
             #[cfg(feature = "deflate_compression")]
             deflate,
@@ -138,6 +139,10 @@ impl MailBackend for NntpType {
         {
             for (name, status) in extensions.iter_mut() {
                 match name.as_str() {
+                    s if s.eq_ignore_ascii_case("POST") => {
+                        supports_submission = true;
+                        *status = MailBackendExtensionStatus::Enabled { comment: None };
+                    }
                     "COMPRESS DEFLATE" => {
                         #[cfg(feature = "deflate_compression")]
                         {
@@ -171,7 +176,7 @@ impl MailBackend for NntpType {
             supports_search: false,
             extensions: Some(extensions),
             supports_tags: false,
-            supports_submission: false,
+            supports_submission,
         }
     }
 
@@ -353,6 +358,39 @@ impl MailBackend for NntpType {
         _mailbox_hash: Option<MailboxHash>,
     ) -> ResultFuture<SmallVec<[EnvelopeHash; 512]>> {
         Err(MeliError::new("Unimplemented."))
+    }
+
+    fn submit(
+        &self,
+        bytes: Vec<u8>,
+        mailbox_hash: Option<MailboxHash>,
+        flags: Option<Flag>,
+    ) -> ResultFuture<()> {
+        let connection = self.connection.clone();
+        Ok(Box::pin(async move {
+            match timeout(Some(Duration::from_secs(60 * 16)), connection.lock()).await {
+                Ok(mut conn) => {
+                    match &conn.stream {
+                        Ok(stream) => {
+                            if !stream.supports_submission {
+                                return Err(MeliError::new("Server prohibits posting."));
+                            }
+                        }
+                        Err(err) => return Err(err.clone()),
+                    }
+                    let mut res = String::with_capacity(8 * 1024);
+                    if let Some(mailbox_hash) = mailbox_hash {
+                        conn.select_group(mailbox_hash, false, &mut res).await?;
+                    }
+                    conn.send_command(b"POST").await?;
+                    conn.read_response(&mut res, false, &["340 "]).await?;
+                    conn.send_multiline_data_block(&bytes).await?;
+                    conn.read_response(&mut res, false, &["240 "]).await?;
+                    Ok(())
+                }
+                Err(err) => Err(err),
+            }
+        }))
     }
 }
 

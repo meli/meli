@@ -1326,6 +1326,25 @@ impl Account {
                 }
                 Ok(Some(handle))
             }
+            SendMail::ServerSubmission => {
+                if self.backend_capabilities.supports_submission {
+                    let job = self.backend.write().unwrap().submit(
+                        message.clone().into_bytes(),
+                        None,
+                        None,
+                    )?;
+
+                    let handle = if self.backend_capabilities.is_async {
+                        self.job_executor.spawn_specialized(job)
+                    } else {
+                        self.job_executor.spawn_blocking(job)
+                    };
+                    self.insert_job(handle.job_id, JobRequest::SendMessageBackground { handle });
+                    return Ok(None);
+                }
+                return Err(MeliError::new("Server does not support submission.")
+                    .set_summary("Message not sent."));
+            }
         }
     }
 
@@ -1333,6 +1352,8 @@ impl Account {
         &self,
         send_mail: crate::conf::composing::SendMail,
     ) -> impl FnOnce(Arc<String>) -> Pin<Box<dyn Future<Output = Result<()>> + Send>> + Send {
+        let capabilities = self.backend_capabilities.clone();
+        let backend = self.backend.clone();
         |message: Arc<String>| -> Pin<Box<dyn Future<Output = Result<()>> + Send>> {
             Box::pin(async move {
                 use crate::conf::composing::SendMail;
@@ -1385,6 +1406,19 @@ impl Account {
                         smtp_connection
                             .mail_transaction(message.as_str(), None)
                             .await
+                    }
+                    SendMail::ServerSubmission => {
+                        if capabilities.supports_submission {
+                            let fut = backend.write().unwrap().submit(
+                                message.as_bytes().to_vec(),
+                                None,
+                                None,
+                            )?;
+                            fut.await?;
+                            return Ok(());
+                        }
+                        return Err(MeliError::new("Server does not support submission.")
+                            .set_summary("Message not sent."));
                     }
                 }
             })

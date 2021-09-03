@@ -45,7 +45,7 @@ impl Default for NntpExtensionUse {
     fn default() -> Self {
         Self {
             #[cfg(feature = "deflate_compression")]
-            deflate: true,
+            deflate: false,
         }
     }
 }
@@ -55,6 +55,7 @@ pub struct NntpStream {
     pub stream: AsyncWrapper<Connection>,
     pub extension_use: NntpExtensionUse,
     pub current_mailbox: MailboxSelection,
+    pub supports_submission: bool,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -100,6 +101,7 @@ impl NntpStream {
             stream,
             extension_use: server_conf.extension_use,
             current_mailbox: MailboxSelection::None,
+            supports_submission: false,
         };
 
         if server_conf.use_tls {
@@ -114,6 +116,8 @@ impl NntpStream {
             if server_conf.use_starttls {
                 ret.read_response(&mut res, false, &["200 ", "201 "])
                     .await?;
+                ret.supports_submission = res.starts_with("200");
+
                 ret.send_command(b"CAPABILITIES").await?;
                 ret.read_response(&mut res, true, command_to_replycodes("CAPABILITIES"))
                     .await?;
@@ -193,9 +197,6 @@ impl NntpStream {
                 .chain_err_summary(|| format!("Could not initiate TLS negotiation to {}.", path))
                 .chain_err_kind(crate::error::ErrorKind::Network)?;
             }
-        } else {
-            ret.read_response(&mut res, false, &["200 ", "201 "])
-                .await?;
         }
         //ret.send_command(
         //    format!(
@@ -216,6 +217,9 @@ impl NntpStream {
             );
         }
 
+        ret.read_response(&mut res, false, &["200 ", "201 "])
+            .await?;
+        ret.supports_submission = res.starts_with("200");
         ret.send_command(b"CAPABILITIES").await?;
         ret.read_response(&mut res, true, command_to_replycodes("CAPABILITIES"))
             .await?;
@@ -225,7 +229,8 @@ impl NntpStream {
                 &server_conf.server_hostname, res
             )));
         }
-        let capabilities: HashSet<String> = res.lines().skip(1).map(|l| l.to_string()).collect();
+        let capabilities: HashSet<String> =
+            res.lines().skip(1).map(|l| l.trim().to_string()).collect();
         if !capabilities
             .iter()
             .any(|cap| cap.eq_ignore_ascii_case("VERSION 2"))
@@ -234,6 +239,12 @@ impl NntpStream {
                 "Could not connect to {}: server is not NNTP compliant",
                 &server_conf.server_hostname
             )));
+        }
+        if !capabilities
+            .iter()
+            .any(|cap| cap.eq_ignore_ascii_case("POST"))
+        {
+            ret.supports_submission = false;
         }
 
         if server_conf.require_auth {
@@ -280,6 +291,7 @@ impl NntpStream {
                 stream,
                 extension_use,
                 current_mailbox,
+                supports_submission,
             } = ret;
             let stream = stream.into_inner()?;
             return Ok((
@@ -288,6 +300,7 @@ impl NntpStream {
                     stream: AsyncWrapper::new(stream.deflate())?,
                     extension_use,
                     current_mailbox,
+                    supports_submission,
                 },
             ));
         }
@@ -364,6 +377,9 @@ impl NntpStream {
     }
 
     pub async fn send_command(&mut self, command: &[u8]) -> Result<()> {
+        debug!("sending: {}", unsafe {
+            std::str::from_utf8_unchecked(command)
+        });
         if let Err(err) = try_await(async move {
             let command = command.trim();
             self.stream.write_all(command).await?;
@@ -383,13 +399,24 @@ impl NntpStream {
         }
     }
 
-    pub async fn send_multiline_data_block(&mut self, data: &str) -> Result<()> {
+    pub async fn send_multiline_data_block(&mut self, data: &[u8]) -> Result<()> {
         if let Err(err) = try_await(async move {
-            for l in data.lines() {
-                if l.starts_with('.') {
+            let mut ptr = 0;
+            while let Some(pos) = data[ptr..].find("\n") {
+                let l = &data[ptr..ptr + pos].trim_end();
+                if l.starts_with(b".") {
                     self.stream.write_all(b".").await?;
                 }
-                self.stream.write_all(l.as_bytes()).await?;
+                self.stream.write_all(l).await?;
+                self.stream.write_all(b"\r\n").await?;
+                ptr += pos + 1;
+            }
+            let l = &data[ptr..].trim_end();
+            if !l.is_empty() {
+                if l.starts_with(b".") {
+                    self.stream.write_all(b".").await?;
+                }
+                self.stream.write_all(l).await?;
                 self.stream.write_all(b"\r\n").await?;
             }
             self.stream.write_all(b".\r\n").await?;
@@ -523,7 +550,7 @@ impl NntpConnection {
         Ok(())
     }
 
-    pub async fn send_multiline_data_block(&mut self, message: &str) -> Result<()> {
+    pub async fn send_multiline_data_block(&mut self, message: &[u8]) -> Result<()> {
         self.stream
             .as_mut()?
             .send_multiline_data_block(message)

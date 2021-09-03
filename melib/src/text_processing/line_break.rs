@@ -1246,7 +1246,6 @@ easy to take MORE than nothing.'"#;
     }
 }
 
-
 mod segment_tree {
     /*! Simple segment tree implementation for maximum in range queries. This is useful if given an
      *  array of numbers you want to get the maximum value inside an interval quickly.

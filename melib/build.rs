@@ -43,7 +43,6 @@ fn main() -> Result<(), std::io::Error> {
         const EMOJI_DATA_URL: &str =
             "https://www.unicode.org/Public/UCD/latest/ucd/emoji/emoji-data.txt";
 
-
         let mod_path = Path::new(MOD_PATH);
         if mod_path.exists() {
             eprintln!(

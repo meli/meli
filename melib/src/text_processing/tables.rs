@@ -3455,15 +3455,9 @@ pub const LINE_BREAK_RULES: &[(u32, u32, LineBreakClass)] = &[
     (0x100000, 0x10FFFD, XX),
 ];
 
-pub const ASCII: &[(u32, u32)] = &[
-    (0x20, 0x7E),
-];
+pub const ASCII: &[(u32, u32)] = &[(0x20, 0x7E)];
 
-pub const PRIVATE: &[(u32, u32)] = &[
-    (0xE000, 0xF8FF),
-    (0xF0000, 0xFFFFD),
-    (0x100000, 0x10FFFD),
-];
+pub const PRIVATE: &[(u32, u32)] = &[(0xE000, 0xF8FF), (0xF0000, 0xFFFFD), (0x100000, 0x10FFFD)];
 
 pub const NONPRINT: &[(u32, u32)] = &[
     (0x0, 0x1F),

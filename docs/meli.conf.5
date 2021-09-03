@@ -346,6 +346,56 @@ Example:
 format = "mbox"
 mailboxes."Python mailing list" = { path = "~/.mail/python.mbox", subscribe = true, autoload = true }
 .Ed
+.Ss NNTP
+NNTP specific options
+.Bl -tag -width 36n
+.It Ic server_hostname Ar String
+example:
+.Qq nntp.example.com
+.It Ic server_username Ar String
+Server username
+.It Ic server_password Ar String
+Server password
+.It Ic require_auth Ar bool
+.Pq Em optional
+require authentication in every case
+.\" default value
+.Pq Em true
+.It Ic use_tls Ar boolean
+.Pq Em optional
+Connect with TLS.
+.\" default value
+.Pq Em false
+.It Ic server_port Ar number
+.Pq Em optional
+The port to connect to
+.\" default value
+.Pq Em 119
+.It Ic danger_accept_invalid_certs Ar boolean
+.Pq Em optional
+Do not validate TLS certificates.
+.\" default value
+.Pq Em false
+.El
+.Pp
+You have to explicitly state the groups you want to see in the
+.Ic mailboxes
+field.
+Example:
+.Bd -literal
+[accounts.sicpm.mailboxes]
+  "sic.all" = {}
+.Ed
+.Pp
+To submit articles directly to the NNTP server, you must set the special value
+.Em server_submission
+in the
+.Ic send_mail
+field.
+Example:
+.Bd -literal
+composing.send_mail = "server_submission"
+.Ed
 .Ss MAILBOXES
 .Bl -tag -width 36n
 .It Ic alias Ar String

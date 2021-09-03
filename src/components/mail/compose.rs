@@ -477,6 +477,9 @@ impl Composer {
                                             hostname.truncate_at_boundary(10);
                                             format!("{} [smtp: {}]", acc.name(), hostname)
                                         }
+                                        crate::conf::composing::SendMail::ServerSubmission => {
+                                            format!("{} [server submission]", acc.name())
+                                        }
                                     };
 
                                 (addr, desc)

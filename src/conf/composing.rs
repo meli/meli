@@ -90,10 +90,50 @@ impl Default for ComposingSettings {
     }
 }
 
+macro_rules! named_unit_variant {
+    ($variant:ident) => {
+        pub mod $variant {
+            pub fn serialize<S>(serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                serializer.serialize_str(stringify!($variant))
+            }
+
+            pub fn deserialize<'de, D>(deserializer: D) -> Result<(), D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                struct V;
+                impl<'de> serde::de::Visitor<'de> for V {
+                    type Value = ();
+                    fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                        f.write_str(concat!("\"", stringify!($variant), "\""))
+                    }
+                    fn visit_str<E: serde::de::Error>(self, value: &str) -> Result<Self::Value, E> {
+                        if value == stringify!($variant) {
+                            Ok(())
+                        } else {
+                            Err(E::invalid_value(serde::de::Unexpected::Str(value), &self))
+                        }
+                    }
+                }
+                deserializer.deserialize_str(V)
+            }
+        }
+    };
+}
+
+mod strings {
+    named_unit_variant!(server_submission);
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(untagged)]
 pub enum SendMail {
     #[cfg(feature = "smtp")]
     Smtp(melib::smtp::SmtpServerConf),
+    #[serde(with = "strings::server_submission")]
+    ServerSubmission,
     ShellCommand(String),
 }

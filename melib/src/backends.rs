@@ -401,6 +401,15 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
     ) -> ResultFuture<SmallVec<[EnvelopeHash; 512]>> {
         Err(MeliError::new("Unimplemented."))
     }
+
+    fn submit(
+        &self,
+        bytes: Vec<u8>,
+        mailbox_hash: Option<MailboxHash>,
+        flags: Option<Flag>,
+    ) -> ResultFuture<()> {
+        Err(MeliError::new("Not supported in this backend."))
+    }
 }
 
 /// A `BackendOp` manages common operations for the various mail backends. They only live for the
