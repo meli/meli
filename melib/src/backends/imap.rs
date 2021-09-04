@@ -1501,9 +1501,40 @@ impl ImapType {
     }
 
     pub fn validate_config(s: &AccountSettings) -> Result<()> {
+        let mut keys: HashSet<&'static str> = Default::default();
+        macro_rules! get_conf_val {
+            ($s:ident[$var:literal]) => {{
+                keys.insert($var);
+                $s.extra.get($var).ok_or_else(|| {
+                    MeliError::new(format!(
+                        "Configuration error ({}): IMAP connection requires the field `{}` set",
+                        $s.name.as_str(),
+                        $var
+                    ))
+                })
+            }};
+            ($s:ident[$var:literal], $default:expr) => {{
+                keys.insert($var);
+                $s.extra
+                    .get($var)
+                    .map(|v| {
+                        <_>::from_str(v).map_err(|e| {
+                            MeliError::new(format!(
+                                "Configuration error ({}): Invalid value for field `{}`: {}\n{}",
+                                $s.name.as_str(),
+                                $var,
+                                v,
+                                e
+                            ))
+                        })
+                    })
+                    .unwrap_or_else(|| Ok($default))
+            }};
+        }
         get_conf_val!(s["server_hostname"])?;
         get_conf_val!(s["server_username"])?;
         let use_oauth2: bool = get_conf_val!(s["use_oauth2"], false)?;
+        keys.insert("server_password_command");
         if !s.extra.contains_key("server_password_command") {
             if use_oauth2 {
                 return Err(MeliError::new(format!(
@@ -1518,9 +1549,9 @@ impl ImapType {
                 s.name.as_str(),
             )));
         }
-        let server_port = get_conf_val!(s["server_port"], 143)?;
+        get_conf_val!(s["server_port"], 143)?;
         let use_tls = get_conf_val!(s["use_tls"], true)?;
-        let use_starttls = get_conf_val!(s["use_starttls"], !(server_port == 993))?;
+        let use_starttls = get_conf_val!(s["use_starttls"], false)?;
         if !use_tls && use_starttls {
             return Err(MeliError::new(format!(
                 "Configuration error ({}): incompatible use_tls and use_starttls values: use_tls = false, use_starttls = true",
@@ -1552,6 +1583,18 @@ impl ImapType {
             )));
         }
         let _timeout = get_conf_val!(s["timeout"], 16_u64)?;
+        let extra_keys = s
+            .extra
+            .keys()
+            .map(String::as_str)
+            .collect::<HashSet<&str>>();
+        let diff = extra_keys.difference(&keys).collect::<Vec<&&str>>();
+        if !diff.is_empty() {
+            return Err(MeliError::new(format!(
+                "Configuration error ({}): the following flags are set but are not recognized: {:?}.",
+                s.name.as_str(), diff
+            )));
+        }
         Ok(())
     }
 

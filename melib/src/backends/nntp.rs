@@ -47,6 +47,34 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 pub type UID = usize;
 
+macro_rules! get_conf_val {
+    ($s:ident[$var:literal]) => {
+        $s.extra.get($var).ok_or_else(|| {
+            MeliError::new(format!(
+                "Configuration error ({}): NNTP connection requires the field `{}` set",
+                $s.name.as_str(),
+                $var
+            ))
+        })
+    };
+    ($s:ident[$var:literal], $default:expr) => {
+        $s.extra
+            .get($var)
+            .map(|v| {
+                <_>::from_str(v).map_err(|e| {
+                    MeliError::new(format!(
+                        "Configuration error ({}) NNTP: Invalid value for field `{}`: {}\n{}",
+                        $s.name.as_str(),
+                        $var,
+                        v,
+                        e
+                    ))
+                })
+            })
+            .unwrap_or_else(|| Ok($default))
+    };
+}
+
 pub static SUPPORTED_CAPABILITIES: &[&str] = &[
     #[cfg(feature = "deflate_compression")]
     "COMPRESS DEFLATE",
@@ -426,10 +454,10 @@ impl NntpType {
         */
         let server_port = get_conf_val!(s["server_port"], 119)?;
         let use_tls = get_conf_val!(s["use_tls"], server_port == 563)?;
-        let use_starttls = use_tls && get_conf_val!(s["use_starttls"], !(server_port == 563))?;
+        let use_starttls = use_tls && get_conf_val!(s["use_starttls"], false)?;
         let danger_accept_invalid_certs: bool =
             get_conf_val!(s["danger_accept_invalid_certs"], false)?;
-        let require_auth = get_conf_val!(s["require_auth"], true)?;
+        let require_auth = get_conf_val!(s["require_auth"], false)?;
         let server_conf = NntpServerConf {
             server_hostname: server_hostname.to_string(),
             server_username: if require_auth {
@@ -449,7 +477,7 @@ impl NntpType {
             danger_accept_invalid_certs,
             extension_use: NntpExtensionUse {
                 #[cfg(feature = "deflate_compression")]
-                deflate: get_conf_val!(s["use_deflate"], true)?,
+                deflate: get_conf_val!(s["use_deflate"], false)?,
             },
         };
         let account_hash = {
@@ -536,6 +564,37 @@ impl NntpType {
     }
 
     pub fn validate_config(s: &AccountSettings) -> Result<()> {
+        let mut keys: HashSet<&'static str> = Default::default();
+        macro_rules! get_conf_val {
+    ($s:ident[$var:literal]) => {{
+        keys.insert($var);
+        $s.extra.get($var).ok_or_else(|| {
+            MeliError::new(format!(
+                "Configuration error ({}): NNTP connection requires the field `{}` set",
+                $s.name.as_str(),
+                $var
+            ))
+        })
+    }};
+    ($s:ident[$var:literal], $default:expr) => {{
+        keys.insert($var);
+        $s.extra
+            .get($var)
+            .map(|v| {
+                <_>::from_str(v).map_err(|e| {
+                    MeliError::new(format!(
+                        "Configuration error ({}) NNTP: Invalid value for field `{}`: {}\n{}",
+                        $s.name.as_str(),
+                        $var,
+                        v,
+                        e
+                    ))
+                })
+            })
+            .unwrap_or_else(|| Ok($default))
+    }};
+}
+        get_conf_val!(s["require_auth"], false)?;
         get_conf_val!(s["server_hostname"])?;
         get_conf_val!(s["server_username"], String::new())?;
         if !s.extra.contains_key("server_password_command") {
@@ -556,7 +615,7 @@ impl NntpType {
             )));
         }
         #[cfg(feature = "deflate_compression")]
-        get_conf_val!(s["use_deflate"], true)?;
+        get_conf_val!(s["use_deflate"], false)?;
         #[cfg(not(feature = "deflate_compression"))]
         if s.extra.contains_key("use_deflate") {
             return Err(MeliError::new(format!(
@@ -565,6 +624,18 @@ impl NntpType {
             )));
         }
         get_conf_val!(s["danger_accept_invalid_certs"], false)?;
+        let extra_keys = s
+            .extra
+            .keys()
+            .map(String::as_str)
+            .collect::<HashSet<&str>>();
+        let diff = extra_keys.difference(&keys).collect::<Vec<&&str>>();
+        if !diff.is_empty() {
+            return Err(MeliError::new(format!(
+                "Configuration error ({}) NNTP: the following flags are set but are not recognized: {:?}.",
+                s.name.as_str(), diff
+            )));
+        }
         Ok(())
     }
 
