@@ -630,7 +630,7 @@ impl FetchState {
         if high <= low {
             return Ok(None);
         }
-        const CHUNK_SIZE: usize = 100;
+        const CHUNK_SIZE: usize = 50000;
         let new_low = std::cmp::max(low, high.saturating_sub(CHUNK_SIZE));
         high_low_total.as_mut().unwrap().0 = new_low;
 
