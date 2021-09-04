@@ -293,6 +293,38 @@ pub fn get_config_file() -> Result<PathBuf> {
     }
 }
 
+struct Ask {
+    message: String,
+}
+
+impl Ask {
+    fn run(self) -> bool {
+        let mut buffer = String::new();
+        let stdin = io::stdin();
+        let mut handle = stdin.lock();
+
+        print!("{} [Y/n] ", &self.message);
+        loop {
+            buffer.clear();
+            handle
+                .read_line(&mut buffer)
+                .expect("Could not read from stdin.");
+
+            match buffer.trim() {
+                "" | "Y" | "y" | "yes" | "YES" | "Yes" => {
+                    return true;
+                }
+                "n" | "N" | "no" | "No" | "NO" => {
+                    return false;
+                }
+                _ => {
+                    print!("\n{} [Y/n] ", &self.message);
+                }
+            }
+        }
+    }
+}
+
 impl FileSettings {
     pub fn new() -> Result<FileSettings> {
         let config_path = get_config_file()?;
@@ -301,45 +333,71 @@ impl FileSettings {
             if path_string.is_empty() {
                 return Err(MeliError::new("No configuration found."));
             }
-            println!(
-                "No configuration found. Would you like to generate one in {}? [Y/n]",
-                path_string
-            );
-            let mut buffer = String::new();
-            let stdin = io::stdin();
-            let mut handle = stdin.lock();
-
-            loop {
-                buffer.clear();
-                handle
-                    .read_line(&mut buffer)
-                    .expect("Could not read from stdin.");
-
-                match buffer.trim() {
-                    "" | "Y" | "y" | "yes" | "YES" | "Yes" => {
-                        create_config_file(&config_path)?;
-                        return Err(MeliError::new(
-                            "Edit the sample configuration and relaunch meli.",
-                        ));
-                    }
-                    "n" | "N" | "no" | "No" | "NO" => {
-                        return Err(MeliError::new("No configuration file found."));
-                    }
-                    _ => {
-                        println!(
-                            "No configuration found. Would you like to generate one in {}? [Y/n]",
-                            path_string
-                        );
-                    }
-                }
+            let ask = Ask {
+                message: format!(
+                    "No configuration found. Would you like to generate one in {}?",
+                    path_string
+                ),
+            };
+            if ask.run() {
+                create_config_file(&config_path)?;
+                return Err(MeliError::new(
+                    "Edit the sample configuration and relaunch meli.",
+                ));
             }
+            return Err(MeliError::new("No configuration file found."));
         }
 
-        FileSettings::validate(config_path)
+        FileSettings::validate(config_path, true)
     }
 
-    pub fn validate(path: PathBuf) -> Result<Self> {
+    pub fn validate(path: PathBuf, interactive: bool) -> Result<Self> {
         let s = pp::pp(&path)?;
+        let map: toml::map::Map<String, toml::value::Value> = toml::from_str(&s).map_err(|e| {
+            MeliError::new(format!(
+                "{}:\nConfig file is invalid TOML: {}",
+                path.display(),
+                e.to_string()
+            ))
+        })?;
+        /*
+         * Check that a global composing option is set and return a user-friendly error message because the
+         * default serde one is confusing.
+         */
+        if !map.contains_key("composing") {
+            let err_msg = r#"You must set a global `composing` option. If you override `composing` in each account, you can use a dummy global like follows:
+
+[composing]
+send_mail = '/bin/false'
+
+This is required so that you don't accidentally start meli and find out later that you can't send emails."#;
+            if interactive {
+                println!("{}", err_msg);
+                let ask = Ask {
+                    message: format!(
+                                 "Would you like to append this dummy value in your configuration file {} and continue?",
+                                 path.display()
+                             )
+                };
+                if ask.run() {
+                    let mut file = OpenOptions::new().append(true).open(&path)?;
+                    file.write_all("[composing]\nsend_mail = '/bin/false'\n".as_bytes())
+                        .map_err(|err| {
+                            MeliError::new(format!(
+                                "Could not append to {}: {}",
+                                path.display(),
+                                err
+                            ))
+                        })?;
+                    return FileSettings::validate(path, interactive);
+                }
+            }
+            return Err(MeliError::new(format!(
+                "{}\n\nEdit the {} and relaunch meli.",
+                if interactive { "" } else { err_msg },
+                path.display()
+            )));
+        }
         let mut s: FileSettings = toml::from_str(&s).map_err(|e| {
             MeliError::new(format!(
                 "{}:\nConfig file contains errors: {}",
@@ -1054,4 +1112,75 @@ mod dotaddressable {
             }
         }
     }
+}
+
+#[test]
+fn test_config_parse() {
+    use std::fmt::Write;
+    use std::fs;
+    use std::io::prelude::*;
+    use std::path::PathBuf;
+
+    struct ConfigFile {
+        path: PathBuf,
+        file: fs::File,
+    }
+
+    const TEST_CONFIG: &str = r#"
+[accounts.account-name]
+root_mailbox = "/path/to/root/mailbox"
+format = "Maildir"
+index_style = "Conversations" # or [plain, threaded, compact]
+identity="email@example.com"
+display_name = "Name"
+subscribed_mailboxes = ["INBOX", "INBOX/Sent", "INBOX/Drafts", "INBOX/Junk"]
+
+# Set mailbox-specific settings
+  [accounts.account-name.mailboxes]
+  "INBOX" = { rename="Inbox" }
+  "drafts" = { rename="Drafts" }
+  "foobar-devel" = { ignore = true } # don't show notifications for this mailbox
+
+# Setting up an mbox account
+[accounts.mbox]
+root_mailbox = "/var/mail/username"
+format = "mbox"
+index_style = "Compact"
+identity="username@hostname.local"
+"#;
+    impl ConfigFile {
+        fn new() -> std::result::Result<Self, std::io::Error> {
+            let mut f = fs::File::open("/dev/urandom")?;
+            let mut buf = [0u8; 16];
+            f.read_exact(&mut buf)?;
+            let mut filename = String::with_capacity(2 * 16);
+            for byte in buf {
+                write!(&mut filename, "{:02X}", byte).unwrap();
+            }
+            let mut path = std::env::temp_dir();
+            path.push(&*filename);
+            let mut file = OpenOptions::new()
+                .create_new(true)
+                .append(true)
+                .open(&path)?;
+            file.write_all(TEST_CONFIG.as_bytes())?;
+            Ok(ConfigFile { path, file })
+        }
+    }
+
+    impl Drop for ConfigFile {
+        fn drop(&mut self) {
+            let _ = fs::remove_file(&self.path);
+        }
+    }
+
+    let mut new_file = ConfigFile::new().unwrap();
+    let err = FileSettings::validate(new_file.path.clone(), false).unwrap_err();
+    assert!(err.details.as_ref().starts_with("You must set a global `composing` option. If you override `composing` in each account, you can use a dummy global like follows"));
+    new_file
+        .file
+        .write_all("[composing]\nsend_mail = '/bin/false'\n".as_bytes())
+        .unwrap();
+    let err = FileSettings::validate(new_file.path.clone(), false).unwrap_err();
+    assert_eq!(err.details.as_ref(), "Configuration error (account-name): root_path `/path/to/root/mailbox` is not a valid directory.");
 }
