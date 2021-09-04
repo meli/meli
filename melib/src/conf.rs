@@ -122,6 +122,46 @@ pub fn none<T>() -> Option<T> {
     None
 }
 
+macro_rules! named_unit_variant {
+    ($variant:ident) => {
+        pub mod $variant {
+            /*
+            pub fn serialize<S>(serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                serializer.serialize_str(stringify!($variant))
+            }
+            */
+
+            pub fn deserialize<'de, D>(deserializer: D) -> Result<(), D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                struct V;
+                impl<'de> serde::de::Visitor<'de> for V {
+                    type Value = ();
+                    fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                        f.write_str(concat!("\"", stringify!($variant), "\""))
+                    }
+                    fn visit_str<E: serde::de::Error>(self, value: &str) -> Result<Self::Value, E> {
+                        if value == stringify!($variant) {
+                            Ok(())
+                        } else {
+                            Err(E::invalid_value(serde::de::Unexpected::Str(value), &self))
+                        }
+                    }
+                }
+                deserializer.deserialize_str(V)
+            }
+        }
+    };
+}
+
+mod strings {
+    named_unit_variant!(ask);
+}
+
 #[derive(Copy, Debug, Clone, PartialEq)]
 pub enum ToggleFlag {
     Unset,
@@ -191,17 +231,25 @@ impl<'de> Deserialize<'de> for ToggleFlag {
     where
         D: Deserializer<'de>,
     {
-        let s = <String>::deserialize(deserializer);
-        Ok(match s? {
-            s if s.eq_ignore_ascii_case("true") => ToggleFlag::True,
-            s if s.eq_ignore_ascii_case("false") => ToggleFlag::False,
-            s if s.eq_ignore_ascii_case("ask") => ToggleFlag::Ask,
-            s => {
-                return Err(serde::de::Error::custom(format!(
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        pub enum InnerToggleFlag {
+            Bool(bool),
+            #[serde(with = "strings::ask")]
+            Ask,
+        }
+        let s = <InnerToggleFlag>::deserialize(deserializer);
+        Ok(
+            match s.map_err(|err| {
+                serde::de::Error::custom(format!(
                     r#"expected one of "true", "false", "ask", found `{}`"#,
-                    s
-                )))
-            }
-        })
+                    err
+                ))
+            })? {
+                InnerToggleFlag::Bool(true) => ToggleFlag::True,
+                InnerToggleFlag::Bool(false) => ToggleFlag::False,
+                InnerToggleFlag::Ask => ToggleFlag::Ask,
+            },
+        )
     }
 }
