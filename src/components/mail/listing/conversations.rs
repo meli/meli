@@ -463,12 +463,14 @@ impl MailListingTrait for ConversationsListing {
                     .set_fg(row_attr.fg)
                     .set_bg(row_attr.bg);
             }
+            /*
             for x in 0..width {
                 self.content[(x, 3 * idx + 2)]
                     .set_ch(Self::PADDING_CHAR)
                     .set_fg(row_attr.fg)
                     .set_bg(row_attr.bg);
             }
+            */
         }
         if self.length == 0 && self.filter_term.is_empty() {
             let message: String = account[&self.cursor_pos.1].status();
@@ -539,10 +541,12 @@ impl ListingTrait for ConversationsListing {
                     .set_bg(row_attr.bg)
                     .set_attrs(row_attr.attrs);
 
+                /*
                 grid[(x, y + 2)]
                     .set_fg(row_attr.fg)
                     .set_bg(row_attr.bg)
                     .set_attrs(row_attr.attrs);
+                */
             }
         }
         if width < width!(area) {
@@ -558,10 +562,12 @@ impl ListingTrait for ConversationsListing {
                     .set_bg(row_attr.bg)
                     .set_attrs(row_attr.attrs);
 
+                /*
                 grid[(x, y + 2)]
                     .set_fg(row_attr.fg)
                     .set_bg(row_attr.bg)
                     .set_attrs(row_attr.attrs);
+                */
             }
         }
     }
@@ -641,7 +647,7 @@ impl ListingTrait for ConversationsListing {
                 }
                 let new_area = (
                     set_y(upper_left, get_y(upper_left) + 3 * (*idx % rows)),
-                    set_y(bottom_right, get_y(upper_left) + 3 * (*idx % rows) + 2),
+                    set_y(bottom_right, get_y(upper_left) + 3 * (*idx % rows) + 1),
                 );
                 self.highlight_line(grid, new_area, *idx, context);
                 context.dirty_areas.push_back(new_area);
@@ -679,7 +685,7 @@ impl ListingTrait for ConversationsListing {
                 pos_inc(upper_left, (0, 3 * (self.cursor_pos.2 % rows))),
                 set_y(
                     bottom_right,
-                    get_y(upper_left) + 3 * (self.cursor_pos.2 % rows) + 2,
+                    get_y(upper_left) + 3 * (self.cursor_pos.2 % rows) + 1,
                 ),
             ),
             self.cursor_pos.2,
@@ -715,24 +721,28 @@ impl ListingTrait for ConversationsListing {
                         .set_ch('▁')
                         .set_fg(fg_color)
                         .set_bg(bg_color);
+                    /*
                     grid[(x, y_offset + 3 * y + 2)]
                         .set_ch(Self::PADDING_CHAR)
                         .set_fg(fg_color)
                         .set_bg(bg_color);
+                    */
                 }
             }
             if pad > 0 {
                 let y = 3 * rows;
-                let fg_color = grid[(get_x(upper_left) + width - 1, y_offset + y)].fg();
+                let _fg_color = grid[(get_x(upper_left) + width - 1, y_offset + y)].fg();
                 let bg_color = grid[(get_x(upper_left) + width - 1, y_offset + y)].bg();
                 for x in (get_x(upper_left) + width)..=get_x(bottom_right) {
                     grid[(x, y_offset + y)].set_bg(bg_color);
                     grid[(x, y_offset + y + 1)].set_ch('▁').set_bg(bg_color);
                     if pad == 2 {
+                        /*
                         grid[(x, y_offset + y + 2)]
                             .set_ch(Self::PADDING_CHAR)
                             .set_fg(fg_color)
                             .set_bg(bg_color);
+                        */
                     }
                 }
             }
@@ -857,7 +867,7 @@ impl fmt::Display for ConversationsListing {
 
 impl ConversationsListing {
     const DESCRIPTION: &'static str = "conversations listing";
-    const PADDING_CHAR: char = ' '; //░';
+    //const PADDING_CHAR: char = ' '; //░';
 
     pub fn new(coordinates: (AccountHash, MailboxHash)) -> Self {
         ConversationsListing {
@@ -1164,12 +1174,14 @@ impl ConversationsListing {
                 .set_fg(row_attr.fg)
                 .set_bg(row_attr.bg);
         }
+        /*
         for c in self.content.row_iter(0..width, 3 * idx + 2) {
             self.content[c]
                 .set_ch(Self::PADDING_CHAR)
                 .set_fg(row_attr.fg)
                 .set_bg(row_attr.bg);
         }
+        */
     }
 }
 
@@ -1416,7 +1428,7 @@ impl Component for ConversationsListing {
                     if row >= top_idx && row < top_idx + rows {
                         let area = (
                             set_y(upper_left, get_y(upper_left) + (3 * (row % rows))),
-                            set_y(bottom_right, get_y(upper_left) + (3 * (row % rows) + 2)),
+                            set_y(bottom_right, get_y(upper_left) + (3 * (row % rows) + 1)),
                         );
                         self.highlight_line(grid, area, row, context);
                         context.dirty_areas.push_back(area);
