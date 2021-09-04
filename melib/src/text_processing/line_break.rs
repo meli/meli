@@ -158,7 +158,7 @@ impl<'a> Iterator for LineBreakCandidateIter<'a> {
                     }
                     $last_break = $pos;
                 };
-            };
+            }
             // After end of text, there are no breaks.
             if self.pos > self.text.len() {
                 return None;

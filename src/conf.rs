@@ -130,8 +130,8 @@ pub struct MailUIConf {
     pub pgp: PGPSettingsOverride,
 }
 
-#[serde(default)]
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct FileMailboxConf {
     #[serde(flatten)]
     pub conf_override: MailUIConf,

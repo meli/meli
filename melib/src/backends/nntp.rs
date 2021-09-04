@@ -364,7 +364,7 @@ impl MailBackend for NntpType {
         &self,
         bytes: Vec<u8>,
         mailbox_hash: Option<MailboxHash>,
-        flags: Option<Flag>,
+        _flags: Option<Flag>,
     ) -> ResultFuture<()> {
         let connection = self.connection.clone();
         Ok(Box::pin(async move {

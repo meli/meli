@@ -74,8 +74,8 @@ impl AccountSettings {
     }
 }
 
-#[serde(default)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct MailboxConf {
     #[serde(alias = "rename")]
     pub alias: Option<String>,

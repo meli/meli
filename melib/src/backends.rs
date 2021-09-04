@@ -404,9 +404,9 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
 
     fn submit(
         &self,
-        bytes: Vec<u8>,
-        mailbox_hash: Option<MailboxHash>,
-        flags: Option<Flag>,
+        _bytes: Vec<u8>,
+        _mailbox_hash: Option<MailboxHash>,
+        _flags: Option<Flag>,
     ) -> ResultFuture<()> {
         Err(MeliError::new("Not supported in this backend."))
     }

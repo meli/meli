@@ -907,7 +907,7 @@ impl MailView {
                     }
                 }
             }
-        };
+        }
         rec(body, context, coordinates, &mut ret, active_jobs);
         ret
     }

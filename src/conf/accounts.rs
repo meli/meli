@@ -2264,7 +2264,7 @@ fn build_mailboxes_order(
                     }
                 }
                 node
-            };
+            }
 
             tree.push(rec(*h, &mailbox_entries, 0));
         }
@@ -2356,7 +2356,7 @@ fn build_mailboxes_order(
                     iter.peek() != None,
                 );
             }
-        };
+        }
 
         rec(node, &mailbox_entries, 0, 0, false);
     }

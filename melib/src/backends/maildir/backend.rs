@@ -1173,7 +1173,7 @@ impl MaildirType {
                 }
             }
             Ok(children)
-        };
+        }
         let root_path = PathBuf::from(settings.root_mailbox()).expand();
         if !root_path.exists() {
             return Err(MeliError::new(format!(
