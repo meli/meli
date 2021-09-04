@@ -27,37 +27,8 @@ use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-pub struct EnvelopeRef<'g> {
-    guard: RwLockReadGuard<'g, HashMap<EnvelopeHash, Envelope>>,
-    env_hash: EnvelopeHash,
-}
-
-impl Deref for EnvelopeRef<'_> {
-    type Target = Envelope;
-
-    fn deref(&self) -> &Envelope {
-        self.guard.get(&self.env_hash).unwrap()
-    }
-}
-
-pub struct EnvelopeRefMut<'g> {
-    guard: RwLockWriteGuard<'g, HashMap<EnvelopeHash, Envelope>>,
-    env_hash: EnvelopeHash,
-}
-
-impl Deref for EnvelopeRefMut<'_> {
-    type Target = Envelope;
-
-    fn deref(&self) -> &Envelope {
-        self.guard.get(&self.env_hash).unwrap()
-    }
-}
-
-impl DerefMut for EnvelopeRefMut<'_> {
-    fn deref_mut(&mut self) -> &mut Envelope {
-        self.guard.get_mut(&self.env_hash).unwrap()
-    }
-}
+pub type EnvelopeRef<'g> = RwRef<'g, EnvelopeHash, Envelope>;
+pub type EnvelopeRefMut<'g> = RwRefMut<'g, EnvelopeHash, Envelope>;
 
 #[derive(Debug, Clone)]
 pub struct Collection {
@@ -456,14 +427,14 @@ impl Collection {
         }
     }
 
-    pub fn get_env(&'_ self, env_hash: EnvelopeHash) -> EnvelopeRef<'_> {
+    pub fn get_env(&'_ self, hash: EnvelopeHash) -> EnvelopeRef<'_> {
         let guard: RwLockReadGuard<'_, _> = self.envelopes.read().unwrap();
-        EnvelopeRef { guard, env_hash }
+        EnvelopeRef { guard, hash }
     }
 
-    pub fn get_env_mut(&'_ self, env_hash: EnvelopeHash) -> EnvelopeRefMut<'_> {
+    pub fn get_env_mut(&'_ self, hash: EnvelopeHash) -> EnvelopeRefMut<'_> {
         let guard = self.envelopes.write().unwrap();
-        EnvelopeRefMut { guard, env_hash }
+        EnvelopeRefMut { guard, hash }
     }
 
     pub fn get_threads(&'_ self, hash: MailboxHash) -> RwRef<'_, MailboxHash, Threads> {
@@ -501,6 +472,25 @@ pub struct RwRef<'g, K: std::cmp::Eq + std::hash::Hash, V> {
 }
 
 impl<K: std::cmp::Eq + std::hash::Hash, V> Deref for RwRef<'_, K, V> {
+    type Target = V;
+
+    fn deref(&self) -> &V {
+        self.guard.get(&self.hash).unwrap()
+    }
+}
+
+pub struct RwRefMut<'g, K: std::cmp::Eq + std::hash::Hash, V> {
+    guard: RwLockWriteGuard<'g, HashMap<K, V>>,
+    hash: K,
+}
+
+impl<K: std::cmp::Eq + std::hash::Hash, V> DerefMut for RwRefMut<'_, K, V> {
+    fn deref_mut(&mut self) -> &mut V {
+        self.guard.get_mut(&self.hash).unwrap()
+    }
+}
+
+impl<K: std::cmp::Eq + std::hash::Hash, V> Deref for RwRefMut<'_, K, V> {
     type Target = V;
 
     fn deref(&self) -> &V {
