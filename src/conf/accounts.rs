@@ -1081,7 +1081,10 @@ impl Account {
                 Err(e) => {
                     self.sender
                         .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(e.to_string()),
+                            StatusEvent::DisplayMessage(format!(
+                                "Account `{}` watch action returned error: {}",
+                                &self.name, e
+                            )),
                         )))
                         .unwrap();
                 }
