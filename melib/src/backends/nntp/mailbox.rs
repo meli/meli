@@ -22,6 +22,7 @@ use crate::backends::{
     BackendMailbox, LazyCountSet, Mailbox, MailboxHash, MailboxPermissions, SpecialUsageMailbox,
 };
 use crate::error::*;
+use crate::UnixTimestamp;
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Default, Clone)]
@@ -34,6 +35,8 @@ pub struct NntpMailbox {
 
     pub exists: Arc<Mutex<LazyCountSet>>,
     pub unseen: Arc<Mutex<LazyCountSet>>,
+
+    pub latest_article: Arc<Mutex<Option<UnixTimestamp>>>,
 }
 
 impl NntpMailbox {

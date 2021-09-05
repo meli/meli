@@ -79,6 +79,14 @@ pub static SUPPORTED_CAPABILITIES: &[&str] = &[
     #[cfg(feature = "deflate_compression")]
     "COMPRESS DEFLATE",
     "VERSION 2",
+    "NEWNEWS",
+    "POST",
+    "OVER",
+    "OVER MSGID",
+    "READER",
+    "STARTTLS",
+    "HDR",
+    "AUTHINFO USER",
 ];
 
 #[derive(Debug, Clone)]
@@ -102,6 +110,7 @@ pub struct UIDStore {
     account_name: Arc<String>,
     offline_cache: bool,
     capabilities: Arc<Mutex<Capabilities>>,
+    message_id_index: Arc<Mutex<HashMap<String, EnvelopeHash>>>,
     hash_index: Arc<Mutex<HashMap<EnvelopeHash, (UID, MailboxHash)>>>,
     uid_index: Arc<Mutex<HashMap<(MailboxHash, UID), EnvelopeHash>>>,
 
@@ -123,6 +132,7 @@ impl UIDStore {
             event_consumer,
             offline_cache: false,
             capabilities: Default::default(),
+            message_id_index: Default::default(),
             hash_index: Default::default(),
             uid_index: Default::default(),
             mailboxes: Arc::new(FutureMutex::new(Default::default())),
@@ -234,8 +244,77 @@ impl MailBackend for NntpType {
         }))
     }
 
-    fn refresh(&mut self, _mailbox_hash: MailboxHash) -> ResultFuture<()> {
-        Err(MeliError::new("Unimplemented."))
+    fn refresh(&mut self, mailbox_hash: MailboxHash) -> ResultFuture<()> {
+        let uid_store = self.uid_store.clone();
+        let connection = self.connection.clone();
+        Ok(Box::pin(async move {
+            /* To get updates, either issue NEWNEWS if it's supported by the server, and fallback
+             * to OVER otherwise */
+            let mbox: NntpMailbox = uid_store.mailboxes.lock().await.get(&mailbox_hash).map(std::clone::Clone::clone).ok_or_else(|| MeliError::new(format!("Mailbox with hash {} not found in NNTP connection, this could possibly be a bug or it was deleted.", mailbox_hash)))?;
+            let mut latest_article: Option<crate::UnixTimestamp> =
+                mbox.latest_article.lock().unwrap().clone();
+            let (over_msgid_support, newnews_support): (bool, bool) = {
+                let caps = uid_store.capabilities.lock().unwrap();
+
+                (
+                    caps.iter().any(|c| c.eq_ignore_ascii_case("OVER MSGID")),
+                    caps.iter().any(|c| c.eq_ignore_ascii_case("NEWNEWS")),
+                )
+            };
+            let mut res = String::with_capacity(8 * 1024);
+            let mut conn = timeout(Some(Duration::from_secs(60 * 16)), connection.lock()).await?;
+            if let Some(ref mut latest_article) = latest_article {
+                let timestamp = *latest_article - 10 * 60;
+                let datetime_str =
+                    crate::datetime::timestamp_to_string(timestamp, Some("%Y%m%d %H%M%S"), true);
+
+                if newnews_support {
+                    conn.send_command(
+                        format!("NEWNEWS {} {}", &mbox.nntp_path, datetime_str).as_bytes(),
+                    )
+                    .await?;
+                    conn.read_response(&mut res, true, &["230 "]).await?;
+                    let message_ids = {
+                        let message_id_lck = uid_store.message_id_index.lock().unwrap();
+                        res.split_rn()
+                            .skip(1)
+                            .map(|s| s.trim())
+                            .filter(|msg_id| !message_id_lck.contains_key(*msg_id))
+                            .map(str::to_string)
+                            .collect::<Vec<String>>()
+                    };
+                    if message_ids.is_empty() || !over_msgid_support {
+                        return Ok(());
+                    }
+                    for msg_id in message_ids {
+                        conn.send_command(format!("OVER {}", msg_id).as_bytes())
+                            .await?;
+                        conn.read_response(&mut res, true, &["224 "]).await?;
+                        let mut message_id_lck = uid_store.message_id_index.lock().unwrap();
+                        let mut hash_index_lck = uid_store.hash_index.lock().unwrap();
+                        let mut uid_index_lck = uid_store.uid_index.lock().unwrap();
+                        for l in res.split_rn().skip(1) {
+                            let (_, (num, env)) = protocol_parser::over_article(&l)?;
+                            message_id_lck.insert(env.message_id_display().to_string(), env.hash());
+                            hash_index_lck.insert(env.hash(), (num, mailbox_hash));
+                            uid_index_lck.insert((mailbox_hash, num), env.hash());
+                            *latest_article = std::cmp::max(*latest_article, env.timestamp);
+                            (uid_store.event_consumer)(
+                                uid_store.account_hash,
+                                crate::backends::BackendEvent::Refresh(RefreshEvent {
+                                    mailbox_hash,
+                                    account_hash: uid_store.account_hash,
+                                    kind: RefreshEventKind::Create(Box::new(env)),
+                                }),
+                            );
+                        }
+                    }
+                    return Ok(());
+                }
+            }
+            //conn.select_group(mailbox_hash, false, &mut res).await?;
+            Ok(())
+        }))
     }
 
     fn mailboxes(&self) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
@@ -496,6 +575,7 @@ impl NntpType {
                     nntp_path: k.to_string(),
                     high_watermark: Arc::new(Mutex::new(0)),
                     low_watermark: Arc::new(Mutex::new(0)),
+                    latest_article: Arc::new(Mutex::new(None)),
                     exists: Default::default(),
                     unseen: Default::default(),
                 },
@@ -705,6 +785,7 @@ impl FetchState {
         let new_low = std::cmp::max(low, high.saturating_sub(CHUNK_SIZE));
         high_low_total.as_mut().unwrap().0 = new_low;
 
+        // FIXME: server might not implement OVER capability
         conn.send_command(format!("OVER {}-{}", new_low, high).as_bytes())
             .await?;
         conn.read_response(&mut res, true, command_to_replycodes("OVER"))
@@ -718,19 +799,28 @@ impl FetchState {
         let mut ret = Vec::with_capacity(high - new_low);
         //hash_index: Arc<Mutex<HashMap<EnvelopeHash, (UID, MailboxHash)>>>,
         //uid_index: Arc<Mutex<HashMap<(MailboxHash, UID), EnvelopeHash>>>,
+        let mut latest_article: Option<crate::UnixTimestamp> = None;
         {
+            let mut message_id_lck = uid_store.message_id_index.lock().unwrap();
             let mut hash_index_lck = uid_store.hash_index.lock().unwrap();
             let mut uid_index_lck = uid_store.uid_index.lock().unwrap();
             for l in res.split_rn().skip(1) {
                 let (_, (num, env)) = protocol_parser::over_article(&l)?;
+                message_id_lck.insert(env.message_id_display().to_string(), env.hash());
                 hash_index_lck.insert(env.hash(), (num, mailbox_hash));
                 uid_index_lck.insert((mailbox_hash, num), env.hash());
+                if let Some(ref mut v) = latest_article {
+                    *v = std::cmp::max(*v, env.timestamp);
+                } else {
+                    latest_article = Some(env.timestamp);
+                }
                 ret.push(env);
             }
         }
         {
             let hash_set: BTreeSet<EnvelopeHash> = ret.iter().map(|env| env.hash()).collect();
             let f = &uid_store.mailboxes.lock().await[&mailbox_hash];
+            *f.latest_article.lock().unwrap() = latest_article;
             f.exists
                 .lock()
                 .unwrap()
