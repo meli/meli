@@ -251,7 +251,7 @@ impl MailBackend for NntpType {
             /* To get updates, either issue NEWNEWS if it's supported by the server, and fallback
              * to OVER otherwise */
             let mbox: NntpMailbox = uid_store.mailboxes.lock().await.get(&mailbox_hash).map(std::clone::Clone::clone).ok_or_else(|| MeliError::new(format!("Mailbox with hash {} not found in NNTP connection, this could possibly be a bug or it was deleted.", mailbox_hash)))?;
-            let mut latest_article: Option<crate::UnixTimestamp> =
+            let latest_article: Option<crate::UnixTimestamp> =
                 mbox.latest_article.lock().unwrap().clone();
             let (over_msgid_support, newnews_support): (bool, bool) = {
                 let caps = uid_store.capabilities.lock().unwrap();
@@ -263,8 +263,8 @@ impl MailBackend for NntpType {
             };
             let mut res = String::with_capacity(8 * 1024);
             let mut conn = timeout(Some(Duration::from_secs(60 * 16)), connection.lock()).await?;
-            if let Some(ref mut latest_article) = latest_article {
-                let timestamp = *latest_article - 10 * 60;
+            if let Some(mut latest_article) = latest_article {
+                let timestamp = latest_article - 10 * 60;
                 let datetime_str =
                     crate::datetime::timestamp_to_string(timestamp, Some("%Y%m%d %H%M%S"), true);
 
@@ -286,6 +286,7 @@ impl MailBackend for NntpType {
                     if message_ids.is_empty() || !over_msgid_support {
                         return Ok(());
                     }
+                    let mut env_hash_set: BTreeSet<EnvelopeHash> = Default::default();
                     for msg_id in message_ids {
                         conn.send_command(format!("OVER {}", msg_id).as_bytes())
                             .await?;
@@ -295,10 +296,11 @@ impl MailBackend for NntpType {
                         let mut uid_index_lck = uid_store.uid_index.lock().unwrap();
                         for l in res.split_rn().skip(1) {
                             let (_, (num, env)) = protocol_parser::over_article(&l)?;
+                            env_hash_set.insert(env.hash());
                             message_id_lck.insert(env.message_id_display().to_string(), env.hash());
                             hash_index_lck.insert(env.hash(), (num, mailbox_hash));
                             uid_index_lck.insert((mailbox_hash, num), env.hash());
-                            *latest_article = std::cmp::max(*latest_article, env.timestamp);
+                            latest_article = std::cmp::max(latest_article, env.timestamp);
                             (uid_store.event_consumer)(
                                 uid_store.account_hash,
                                 crate::backends::BackendEvent::Refresh(RefreshEvent {
@@ -308,6 +310,15 @@ impl MailBackend for NntpType {
                                 }),
                             );
                         }
+                    }
+                    {
+                        let f = &uid_store.mailboxes.lock().await[&mailbox_hash];
+                        *f.latest_article.lock().unwrap() = Some(latest_article);
+                        f.exists
+                            .lock()
+                            .unwrap()
+                            .insert_existing_set(env_hash_set.clone());
+                        f.unseen.lock().unwrap().insert_existing_set(env_hash_set);
                     }
                     return Ok(());
                 }
