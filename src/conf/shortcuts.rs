@@ -222,7 +222,9 @@ shortcut_key_values! { "general",
         scroll_right |> "Generic scroll right (catch-all setting)" |> Key::Right,
         scroll_left |> "Generic scroll left (catch-all setting)" |> Key::Left,
         scroll_up |> "Generic scroll up (catch-all setting)" |> Key::Char('k'),
-        scroll_down |> "Generic scroll down (catch-all setting)" |> Key::Char('j')
+        scroll_down |> "Generic scroll down (catch-all setting)" |> Key::Char('j'),
+        info_message_next |> "Show next info message, if any" |> Key::Alt('>'),
+        info_message_previous |> "Show previous info message, if any" |> Key::Alt('<')
     }
 }
 

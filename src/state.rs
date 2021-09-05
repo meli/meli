@@ -700,12 +700,30 @@ impl State {
 
                     if self.display_messages.len() > 1 {
                         write_string_to_grid(
-                            if self.display_messages_pos == 0 {
-                                "Next: >"
+                            &if self.display_messages_pos == 0 {
+                                format!(
+                                    "Next: {}",
+                                    self.context.settings.shortcuts.general.info_message_next
+                                )
                             } else if self.display_messages_pos + 1 == self.display_messages.len() {
-                                "Prev: <"
+                                format!(
+                                    "Prev: {}",
+                                    self.context
+                                        .settings
+                                        .shortcuts
+                                        .general
+                                        .info_message_previous
+                                )
                             } else {
-                                "Prev: <, Next: >"
+                                format!(
+                                    "Prev: {} Next: {}",
+                                    self.context
+                                        .settings
+                                        .shortcuts
+                                        .general
+                                        .info_message_previous,
+                                    self.context.settings.shortcuts.general.info_message_next
+                                )
                             },
                             &mut self.overlay_grid,
                             noto_colors.fg,
@@ -1174,7 +1192,15 @@ impl State {
                 self.redraw();
                 return;
             }
-            UIEvent::Input(Key::Alt('<')) => {
+            UIEvent::Input(ref key)
+                if *key
+                    == self
+                        .context
+                        .settings
+                        .shortcuts
+                        .general
+                        .info_message_previous =>
+            {
                 self.display_messages_expiration_start = Some(melib::datetime::now());
                 self.display_messages_active = true;
                 self.display_messages_initialised = false;
@@ -1182,7 +1208,9 @@ impl State {
                 self.display_messages_pos = self.display_messages_pos.saturating_sub(1);
                 return;
             }
-            UIEvent::Input(Key::Alt('>')) => {
+            UIEvent::Input(ref key)
+                if *key == self.context.settings.shortcuts.general.info_message_next =>
+            {
                 self.display_messages_expiration_start = Some(melib::datetime::now());
                 self.display_messages_active = true;
                 self.display_messages_initialised = false;
