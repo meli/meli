@@ -352,7 +352,7 @@ impl MailBackend for NntpType {
     }
 
     fn watch(&self) -> ResultFuture<()> {
-        Err(MeliError::new("Unimplemented."))
+        Err(MeliError::new("Unimplemented.").set_kind(ErrorKind::NotImplemented))
     }
 
     fn operation(&self, env_hash: EnvelopeHash) -> Result<Box<dyn BackendOp>> {

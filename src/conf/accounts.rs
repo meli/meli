@@ -28,7 +28,7 @@ use crate::jobs::{JobExecutor, JobId, JoinHandle};
 use indexmap::IndexMap;
 use melib::backends::*;
 use melib::email::*;
-use melib::error::{MeliError, Result};
+use melib::error::{ErrorKind, MeliError, Result};
 use melib::text_processing::GlobMatch;
 use melib::thread::{SortField, SortOrder, Threads};
 use melib::AddressBook;
@@ -1077,6 +1077,9 @@ impl Account {
                     };
                     self.active_jobs
                         .insert(handle.job_id, JobRequest::Watch { handle });
+                }
+                Err(e)
+                    if e.kind == ErrorKind::NotSupported || e.kind == ErrorKind::NotImplemented => {
                 }
                 Err(e) => {
                     self.sender

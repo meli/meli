@@ -42,6 +42,9 @@ pub enum ErrorKind {
     Bug,
     Network,
     Timeout,
+    OSError,
+    NotImplemented,
+    NotSupported,
 }
 
 impl fmt::Display for ErrorKind {
@@ -56,6 +59,9 @@ impl fmt::Display for ErrorKind {
                 ErrorKind::Bug => "Bug, please report this!",
                 ErrorKind::Network => "Network",
                 ErrorKind::Timeout => "Timeout",
+                ErrorKind::OSError => "OS Error",
+                ErrorKind::NotImplemented => "Not implemented",
+                ErrorKind::NotSupported => "Not supported",
             }
         )
     }
@@ -208,6 +214,7 @@ impl From<io::Error> for MeliError {
         MeliError::new(kind.to_string())
             .set_summary(format!("{:?}", kind.kind()))
             .set_source(Some(Arc::new(kind)))
+            .set_kind(ErrorKind::OSError)
     }
 }
 
