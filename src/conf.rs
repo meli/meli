@@ -1154,7 +1154,7 @@ identity="username@hostname.local"
             let mut buf = [0u8; 16];
             f.read_exact(&mut buf)?;
             let mut filename = String::with_capacity(2 * 16);
-            for byte in buf {
+            for byte in &buf {
                 write!(&mut filename, "{:02X}", byte).unwrap();
             }
             let mut path = std::env::temp_dir();

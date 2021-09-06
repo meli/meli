@@ -73,22 +73,34 @@ extern "C" {
     fn gettimeofday(tv: *mut libc::timeval, tz: *mut libc::timezone) -> i32;
 }
 
+#[cfg(not(target_os = "netbsd"))]
 struct Locale {
     new_locale: libc::locale_t,
     old_locale: libc::locale_t,
 }
+#[cfg(target_os = "netbsd")]
+struct Locale {
+    mask: std::os::raw::c_int,
+    old_locale: *const std::os::raw::c_char,
+}
 
 impl Drop for Locale {
     fn drop(&mut self) {
+        #[cfg(not(target_os = "netbsd"))]
         unsafe {
             let _ = libc::uselocale(self.old_locale);
             libc::freelocale(self.new_locale);
+        }
+        #[cfg(target_os = "netbsd")]
+        unsafe {
+            let _ = libc::setlocale(self.mask, self.old_locale);
         }
     }
 }
 
 // How to unit test this? Test machine is not guaranteed to have non-english locales.
 impl Locale {
+    #[cfg(not(target_os = "netbsd"))]
     fn new(
         mask: std::os::raw::c_int,
         locale: *const std::os::raw::c_char,
@@ -105,6 +117,25 @@ impl Locale {
         }
         Ok(Locale {
             new_locale,
+            old_locale,
+        })
+    }
+    #[cfg(target_os = "netbsd")]
+    fn new(
+        mask: std::os::raw::c_int,
+        locale: *const std::os::raw::c_char,
+        _base: libc::locale_t,
+    ) -> Result<Self> {
+        let old_locale = unsafe { libc::setlocale(mask, std::ptr::null_mut()) };
+        if old_locale.is_null() {
+            return Err(nix::Error::last().into());
+        }
+        let new_locale = unsafe { libc::setlocale(mask, locale) };
+        if new_locale.is_null() {
+            return Err(nix::Error::last().into());
+        }
+        Ok(Locale {
+            mask,
             old_locale,
         })
     }

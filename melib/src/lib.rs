@@ -181,6 +181,7 @@ pub mod shellexpand {
     use smallvec::SmallVec;
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
+    #[cfg(not(target_os = "netbsd"))]
     use std::os::unix::io::AsRawFd;
     use std::path::{Path, PathBuf};
 
