@@ -180,6 +180,10 @@ enum SubCommand {
     /// print documentation page and exit (Piping to a pager is recommended.).
     Man(ManOpt),
 
+    #[structopt(display_order = 4)]
+    /// print compile time feature flags of this binary
+    CompiledWith,
+
     /// View mail from input file.
     View {
         #[structopt(value_name = "INPUT", parse(from_os_str))]
@@ -289,6 +293,25 @@ fn run_app(opt: Opt) -> Result<()> {
         #[cfg(not(feature = "cli-docs"))]
         Some(SubCommand::Man(_manopt)) => {
             return Err(MeliError::new("error: this version of meli was not build with embedded documentation. You might have it installed as manpages (eg `man meli`), otherwise check https://meli.delivery"));
+        }
+        Some(SubCommand::CompiledWith) => {
+            #[cfg(feature = "notmuch")]
+            println!("notmuch");
+            #[cfg(feature = "jmap")]
+            println!("jmap");
+            #[cfg(feature = "sqlite3")]
+            println!("sqlite3");
+            #[cfg(feature = "smtp")]
+            println!("smtp");
+            #[cfg(feature = "regexp")]
+            println!("regexp");
+            #[cfg(feature = "dbus-notifications")]
+            println!("dbus-notifications");
+            #[cfg(feature = "cli-docs")]
+            println!("cli-docs");
+            #[cfg(feature = "gpgme")]
+            println!("gpgme");
+            return Ok(());
         }
         Some(SubCommand::PrintLoadedThemes) => {
             let s = conf::FileSettings::new()?;
