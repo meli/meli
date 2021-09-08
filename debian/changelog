@@ -1,3 +1,18 @@
+meli (0.7.1-1) bullseye; urgency=low
+
+  Added
+  - Change all Down/Up shortcuts to j/k
+  - add 'GB18030' charset
+  - melib/nntp: implement refresh
+  - melib/nntp: update total/new counters on new articles
+  - melib/nntp: implement NNTP posting
+  - configs: throw error on extra unusued conf flags in some imap/nntp
+  - configs: throw error on missing `composing` section with explanation
+
+  Fixed
+  - Fix compilation for netbsd-9.2
+  - conf: fixed some boolean flag values requiring to be string e.g. "true"
+ -- Manos Pitsidianakis <epilys@nessuent.xyz>  Wed, 08 Sep 2021 18:14:00 +0200
 meli (0.7.0-1) buster; urgency=low
 
  -- Manos Pitsidianakis <epilys@nessuent.xyz>  Fri, 03 Sep 2021 18:14:00 +0200

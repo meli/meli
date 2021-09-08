@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [alpha-0.7.1] - 2021-09-08
+
+### Added
+
+- Change all Down/Up shortcuts to j/k
+- add 'GB18030' charset
+- melib/nntp: implement refresh
+- melib/nntp: update total/new counters on new articles
+- melib/nntp: implement NNTP posting
+- configs: throw error on extra unusued conf flags in some imap/nntp
+- configs: throw error on missing `composing` section with explanation
+
+### Fixed
+
+- Fix compilation for netbsd-9.2
+- conf: fixed some boolean flag values requiring to be string e.g. "true"
+
 ## [alpha-0.7.0] - 2021-09-03
 
 ### Added
@@ -132,3 +149,4 @@ Notable changes:
 [alpha-0.6.1]: https://github.com/meli/meli/releases/tag/alpha-0.6.1
 [alpha-0.6.2]: https://github.com/meli/meli/releases/tag/alpha-0.6.2
 [alpha-0.7.0]: https://github.com/meli/meli/releases/tag/alpha-0.7.0
+[alpha-0.7.1]: https://github.com/meli/meli/releases/tag/alpha-0.7.1
