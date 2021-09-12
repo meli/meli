@@ -40,7 +40,7 @@ pub struct Pager {
     initialised: bool,
     show_scrollbar: bool,
     content: CellBuffer,
-    raw: bool,
+    filtered_content: Option<(String, Result<CellBuffer>)>,
     text_lines: Vec<String>,
     line_breaker: LineBreakText,
     movement: Option<PageMovement>,
@@ -145,35 +145,7 @@ impl Pager {
             }
         }
 
-        if let Some(content) = pager_filter.and_then(|bin| {
-            use std::io::Write;
-            use std::process::{Command, Stdio};
-            let mut filter_child = Command::new("sh")
-                .args(&["-c", bin])
-                .stdin(Stdio::piped())
-                .stdout(Stdio::piped())
-                .spawn()
-                .expect("Failed to start pager filter process");
-            let stdin = filter_child.stdin.as_mut().expect("failed to open stdin");
-            stdin
-                .write_all(text.as_bytes())
-                .expect("Failed to write to stdin");
-            let out = filter_child
-                .wait_with_output()
-                .expect("Failed to wait on filter")
-                .stdout;
-            let mut dev_null = std::fs::File::open("/dev/null").ok()?;
-            let mut embedded = crate::terminal::embed::EmbedGrid::new();
-            embedded.set_terminal_size((80, 20));
-
-            for b in out {
-                embedded.process_byte(&mut dev_null, b);
-            }
-            Some(std::mem::replace(embedded.buffer_mut(), Default::default()))
-        }) {
-            return Pager::from_buf(content, cursor_pos);
-        }
-        Pager {
+        let mut ret = Pager {
             text,
             text_lines: vec![],
             reflow,
@@ -184,26 +156,54 @@ impl Pager {
             initialised: false,
             dirty: true,
             id: ComponentId::new_v4(),
-            raw: false,
+            filtered_content: None,
             colors,
             ..Default::default()
+        };
+
+        if let Some(bin) = pager_filter {
+            ret.filter(bin);
         }
+
+        ret
     }
 
-    pub fn from_buf(content: CellBuffer, cursor_pos: Option<usize>) -> Self {
-        let (width, height) = content.size();
-        Pager {
-            text: String::new(),
-            cursor: (0, cursor_pos.unwrap_or(0)),
-            height,
-            width,
-            dirty: true,
-            content,
-            raw: true,
-            initialised: false,
-            id: ComponentId::new_v4(),
-            ..Default::default()
+    pub fn filter(&mut self, cmd: &str) {
+        let _f = |bin: &str, text: &str| -> Result<CellBuffer> {
+            use std::io::Write;
+            use std::process::{Command, Stdio};
+            let mut filter_child = Command::new("sh")
+                .args(&["-c", bin])
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .spawn()
+                .chain_err_summary(|| "Failed to start pager filter process")?;
+            let stdin = filter_child
+                .stdin
+                .as_mut()
+                .ok_or_else(|| "failed to open stdin")?;
+            stdin
+                .write_all(text.as_bytes())
+                .chain_err_summary(|| "Failed to write to stdin")?;
+            let out = filter_child
+                .wait_with_output()
+                .chain_err_summary(|| "Failed to wait on filter")?
+                .stdout;
+            let mut dev_null = std::fs::File::open("/dev/null")?;
+            let mut embedded = crate::terminal::embed::EmbedGrid::new();
+            embedded.set_terminal_size((80, 20));
+
+            for b in out {
+                embedded.process_byte(&mut dev_null, b);
+            }
+            Ok(std::mem::replace(embedded.buffer_mut(), Default::default()))
+        };
+        let buf = _f(cmd, &self.text);
+        if let Some((width, height)) = buf.as_ref().ok().map(CellBuffer::size) {
+            self.width = width;
+            self.height = height;
         }
+        self.filtered_content = Some((cmd.to_string(), buf));
     }
 
     pub fn cursor_pos(&self) -> usize {
@@ -219,7 +219,7 @@ impl Pager {
         if width < self.minimum_width {
             width = self.minimum_width;
         }
-        if !self.raw {
+        if self.filtered_content.is_none() {
             if self.line_breaker.width() != Some(width.saturating_sub(4)) {
                 let line_breaker = LineBreakText::new(
                     self.text.clone(),
@@ -296,26 +296,45 @@ impl Pager {
     }
 
     fn draw_page(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        if self.raw {
-            copy_area(
-                grid,
-                &self.content,
-                area,
-                (
-                    (
-                        std::cmp::min(
-                            self.cursor.0.saturating_sub(width!(area)),
-                            self.content.size().0.saturating_sub(width!(area)),
+        if let Some((ref cmd, ref filtered_content)) = self.filtered_content {
+            match filtered_content {
+                Ok(ref content) => {
+                    copy_area(
+                        grid,
+                        &content,
+                        area,
+                        (
+                            (
+                                std::cmp::min(
+                                    self.cursor.0,
+                                    content.size().0.saturating_sub(width!(area)),
+                                ),
+                                std::cmp::min(
+                                    self.cursor.1,
+                                    content.size().1.saturating_sub(height!(area)),
+                                ),
+                            ),
+                            pos_dec(content.size(), (1, 1)),
                         ),
-                        std::cmp::min(
-                            self.cursor.1.saturating_sub(height!(area)),
-                            self.content.size().1.saturating_sub(height!(area)),
-                        ),
-                    ),
-                    pos_dec(self.content.size(), (1, 1)),
-                ),
-            );
-            return;
+                    );
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::UpdateSubStatus(
+                            cmd.to_string(),
+                        )));
+                    return;
+                }
+                Err(ref err) => {
+                    let mut cmd = cmd.as_str();
+                    cmd.truncate_at_boundary(4);
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::UpdateSubStatus(format!(
+                            "{}: {}",
+                            cmd, err
+                        ))));
+                }
+            }
         }
 
         let (mut upper_left, bottom_right) = area;
@@ -507,7 +526,14 @@ impl Component for Pager {
         if cols < 2 || rows < 2 {
             return;
         }
-        let (width, height) = (self.line_breaker.width().unwrap_or(cols), self.height);
+        let (has_more_lines, (width, height)) = if self.filtered_content.is_some() {
+            (false, (self.width, self.height))
+        } else {
+            (
+                !self.line_breaker.is_finished(),
+                (self.line_breaker.width().unwrap_or(cols), self.height),
+            )
+        };
         if self.show_scrollbar && rows < height {
             cols -= 1;
             rows -= 1;
@@ -569,7 +595,7 @@ impl Component for Pager {
                             context: ScrollContext {
                                 shown_lines,
                                 total_lines,
-                                has_more_lines: !self.line_breaker.is_finished(),
+                                has_more_lines,
                             },
                         },
                     )));
@@ -591,11 +617,7 @@ impl Component for Pager {
                         search.cursor + 1
                     },
                     total_results = search.positions.len(),
-                    has_more_lines = if self.line_breaker.is_finished() {
-                        ""
-                    } else {
-                        "(+)"
-                    }
+                    has_more_lines = if !has_more_lines { "" } else { "(+)" }
                 );
                 let mut attribute = crate::conf::value(context, "status.bar");
                 if !context.settings.terminal.use_color() {
@@ -716,6 +738,12 @@ impl Component for Pager {
                     ))));
                 return true;
             }
+            UIEvent::Action(View(Filter(ref cmd))) => {
+                self.filter(cmd);
+                self.initialised = false;
+                self.dirty = true;
+                return true;
+            }
             UIEvent::Action(Action::Listing(ListingAction::Search(pattern))) => {
                 self.search = Some(SearchPattern {
                     pattern: pattern.to_string(),
@@ -759,6 +787,17 @@ impl Component for Pager {
                 self.dirty = true;
                 return true;
             }
+            UIEvent::Input(Key::Esc) if self.filtered_content.is_some() => {
+                self.filtered_content = None;
+                self.initialised = false;
+                self.dirty = true;
+                context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::UpdateSubStatus(
+                        String::new(),
+                    )));
+                return true;
+            }
             UIEvent::Resize => {
                 self.initialised = false;
                 self.dirty = true;
@@ -768,6 +807,11 @@ impl Component for Pager {
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
                         ScrollUpdate::End(self.id),
+                    )));
+                context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::UpdateSubStatus(
+                        String::new(),
                     )));
             }
             _ => {}

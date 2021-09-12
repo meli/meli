@@ -53,6 +53,7 @@ pub struct StatusBar {
     container: Box<dyn Component>,
     status: String,
     status_message: String,
+    substatus_message: String,
     ex_buffer: Field,
     ex_buffer_cmd_history_pos: Option<usize>,
     display_buffer: String,
@@ -96,6 +97,7 @@ impl StatusBar {
             container,
             status: String::with_capacity(256),
             status_message: String::with_capacity(256),
+            substatus_message: String::with_capacity(256),
             ex_buffer: Field::Text(UText::new(String::with_capacity(256)), None),
             ex_buffer_cmd_history_pos: None,
             display_buffer: String::with_capacity(8),
@@ -196,6 +198,31 @@ impl StatusBar {
         }
 
         context.dirty_areas.push_back(area);
+    }
+
+    fn update_status(&mut self, context: &Context) {
+        self.status = format!(
+            "{} {}| {}{}{}",
+            self.mode,
+            if self.mouse {
+                context
+                    .settings
+                    .terminal
+                    .mouse_flag
+                    .as_ref()
+                    .map(|s| s.as_str())
+                    .unwrap_or("🖱️ ")
+            } else {
+                ""
+            },
+            &self.status_message,
+            if !self.substatus_message.is_empty() {
+                " | "
+            } else {
+                ""
+            },
+            &self.substatus_message,
+        );
     }
 
     fn draw_command_bar(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
@@ -685,42 +712,19 @@ impl Component for StatusBar {
             UIEvent::StatusEvent(StatusEvent::UpdateStatus(ref mut s)) => {
                 self.status_message.clear();
                 self.status_message.push_str(s.as_str());
-                self.status = format!(
-                    "{} {}| {}",
-                    self.mode,
-                    if self.mouse {
-                        context
-                            .settings
-                            .terminal
-                            .mouse_flag
-                            .as_ref()
-                            .map(|s| s.as_str())
-                            .unwrap_or("🖱️ ")
-                    } else {
-                        ""
-                    },
-                    &self.status_message,
-                );
+                self.substatus_message.clear();
+                self.update_status(context);
+                self.dirty = true;
+            }
+            UIEvent::StatusEvent(StatusEvent::UpdateSubStatus(ref mut s)) => {
+                self.substatus_message.clear();
+                self.substatus_message.push_str(s.as_str());
+                self.update_status(context);
                 self.dirty = true;
             }
             UIEvent::StatusEvent(StatusEvent::SetMouse(val)) => {
                 self.mouse = *val;
-                self.status = format!(
-                    "{} {}| {}",
-                    self.mode,
-                    if self.mouse {
-                        context
-                            .settings
-                            .terminal
-                            .mouse_flag
-                            .as_ref()
-                            .map(|s| s.as_str())
-                            .unwrap_or("🖱️ ")
-                    } else {
-                        ""
-                    },
-                    &self.status_message,
-                );
+                self.update_status(context);
                 self.dirty = true;
             }
             UIEvent::StatusEvent(StatusEvent::JobCanceled(ref job_id))

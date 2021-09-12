@@ -510,6 +510,21 @@ define_commands!([
                       }
                   )
                 },
+                /* Filter pager contents through binary */
+                { tags: ["filter "],
+                  desc: "filter EXECUTABLE ARGS",
+                  tokens: &[One(Literal("filter")), One(Filepath), ZeroOrMore(QuotedStringValue)],
+                  parser:(
+                      fn filter<'a>(input: &'a [u8]) -> IResult<&'a [u8], Action> {
+                          let (input, _) = tag("filter")(input.trim())?;
+                          let (input, _) = is_a(" ")(input)?;
+                          let (input, cmd) = map_res(not_line_ending, std::str::from_utf8)(input)?;
+                          Ok((input, {
+                              View(Filter(cmd.to_string()))
+                          }))
+                      }
+                  )
+                },
                 { tags: ["add-attachment ", "add-attachment-file-picker "],
                   desc: "add-attachment PATH",
                   tokens: &[One(
@@ -885,7 +900,7 @@ fn account_action(input: &[u8]) -> IResult<&[u8], Action> {
 }
 
 fn view(input: &[u8]) -> IResult<&[u8], Action> {
-    alt((pipe, save_attachment, export_mail))(input)
+    alt((filter, pipe, save_attachment, export_mail))(input)
 }
 
 pub fn parse_command(input: &[u8]) -> Result<Action, MeliError> {

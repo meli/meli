@@ -53,6 +53,7 @@ pub enum StatusEvent {
     BufClear,
     BufSet(String),
     UpdateStatus(String),
+    UpdateSubStatus(String),
     NewJob(JobId),
     JobFinished(JobId),
     JobCanceled(JobId),
