@@ -128,7 +128,7 @@ trait EvenAfterSpaces {
 impl EvenAfterSpaces for str {
     fn even_after_spaces(&self) -> &Self {
         let mut ret = self;
-        while !ret.is_empty() && get_class!(&ret) != SP {
+        while !ret.is_empty() && get_class!(ret) != SP {
             ret = &ret[get_base_character!(ret).unwrap().len_utf8()..];
         }
         ret
@@ -173,7 +173,7 @@ impl<'a> Iterator for LineBreakCandidateIter<'a> {
 
             let LineBreakCandidateIter {
                 ref mut iter,
-                ref text,
+                text,
                 ref mut reg_ind_streak,
                 ref mut break_now,
                 ref mut last_break,
@@ -996,8 +996,8 @@ mod alg {
         let mut p_i = 0;
         while j > 0 {
             let mut line = String::new();
-            for i in breaks[j]..j {
-                line.push_str(words[i]);
+            for word in words.iter().take(j).skip(breaks[j]) {
+                line.push_str(word);
             }
             lines.push(line);
             if p_i + 1 < paragraphs {
@@ -1110,7 +1110,7 @@ pub fn split_lines_reflow(text: &str, reflow: Reflow, width: Option<usize>) -> V
                         for (idx, _g) in UnicodeSegmentation::grapheme_indices(line, true) {
                             t[idx] = 1;
                         }
-                        segment_tree::SegmentTree::new(t)
+                        Box::new(segment_tree::SegmentTree::new(t))
                     };
 
                     let mut prev = 0;
@@ -1342,17 +1342,17 @@ pub struct LineBreakText {
 
 #[derive(Debug, Clone)]
 enum ReflowState {
-    ReflowNo {
+    No {
         cur_index: usize,
     },
-    ReflowAllWidth {
+    AllWidth {
         width: usize,
         state: LineBreakTextState,
     },
-    ReflowAll {
+    All {
         cur_index: usize,
     },
-    ReflowFormatFlowed {
+    FormatFlowed {
         cur_index: usize,
     },
 }
@@ -1360,13 +1360,13 @@ enum ReflowState {
 impl ReflowState {
     fn new(reflow: Reflow, width: Option<usize>, cur_index: usize) -> ReflowState {
         match reflow {
-            Reflow::All if width.is_some() => ReflowState::ReflowAllWidth {
+            Reflow::All if width.is_some() => ReflowState::AllWidth {
                 width: width.unwrap(),
                 state: LineBreakTextState::AtLine { cur_index },
             },
-            Reflow::All => ReflowState::ReflowAll { cur_index },
-            Reflow::FormatFlowed => ReflowState::ReflowFormatFlowed { cur_index },
-            Reflow::No => ReflowState::ReflowNo { cur_index },
+            Reflow::All => ReflowState::All { cur_index },
+            Reflow::FormatFlowed => ReflowState::FormatFlowed { cur_index },
+            Reflow::No => ReflowState::No { cur_index },
         }
     }
 }
@@ -1382,7 +1382,7 @@ enum LineBreakTextState {
         within_line_index: usize,
         breaks: Vec<(usize, LineBreakCandidate)>,
         prev_break: usize,
-        segment_tree: segment_tree::SegmentTree,
+        segment_tree: Box<segment_tree::SegmentTree>,
     },
 }
 
@@ -1436,14 +1436,14 @@ impl LineBreakText {
 
     pub fn is_finished(&self) -> bool {
         match self.state {
-            ReflowState::ReflowNo { cur_index }
-            | ReflowState::ReflowAll { cur_index }
-            | ReflowState::ReflowFormatFlowed { cur_index }
-            | ReflowState::ReflowAllWidth {
+            ReflowState::No { cur_index }
+            | ReflowState::All { cur_index }
+            | ReflowState::FormatFlowed { cur_index }
+            | ReflowState::AllWidth {
                 width: _,
                 state: LineBreakTextState::AtLine { cur_index },
             } => cur_index >= self.text.len(),
-            ReflowState::ReflowAllWidth {
+            ReflowState::AllWidth {
                 width: _,
                 state: LineBreakTextState::WithinLine { .. },
             } => false,
@@ -1461,7 +1461,7 @@ impl Iterator for LineBreakText {
             return None;
         }
         match self.state {
-            ReflowState::ReflowFormatFlowed { ref mut cur_index } => {
+            ReflowState::FormatFlowed { ref mut cur_index } => {
                 /* rfc3676 - The Text/Plain Format and DelSp Parameters
                  * https://tools.ietf.org/html/rfc3676 */
 
@@ -1575,7 +1575,7 @@ impl Iterator for LineBreakText {
                 }
                 return self.paragraph.pop_front();
             }
-            ReflowState::ReflowAllWidth {
+            ReflowState::AllWidth {
                 width,
                 ref mut state,
             } => {
@@ -1624,7 +1624,7 @@ impl Iterator for LineBreakText {
                                     {
                                         t[idx] = 1;
                                     }
-                                    segment_tree::SegmentTree::new(t)
+                                    Box::new(segment_tree::SegmentTree::new(t))
                                 },
                             };
                             if let LineBreakTextState::WithinLine {
@@ -1740,9 +1740,8 @@ impl Iterator for LineBreakText {
                     };
                 }
             }
-            ReflowState::ReflowNo { ref mut cur_index }
-            | ReflowState::ReflowAll { ref mut cur_index } => {
-                for line in self.text[*cur_index..].split('\n') {
+            ReflowState::No { ref mut cur_index } | ReflowState::All { ref mut cur_index } => {
+                if let Some(line) = self.text[*cur_index..].split('\n').next() {
                     let ret = line.to_string();
                     *cur_index += line.len() + 2;
                     return Some(ret);

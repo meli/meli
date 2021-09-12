@@ -119,8 +119,8 @@ impl RequiredResponses {
         }
         if self.intersects(RequiredResponses::FETCH) {
             let mut ptr = 0;
-            for i in 0..line.len() {
-                if !line[i].is_ascii_digit() {
+            for (i, l) in line.iter().enumerate() {
+                if !l.is_ascii_digit() {
                     ptr = i;
                     break;
                 }
@@ -257,7 +257,7 @@ pub enum ImapResponse {
 impl TryFrom<&'_ [u8]> for ImapResponse {
     type Error = MeliError;
     fn try_from(val: &'_ [u8]) -> Result<ImapResponse> {
-        let val: &[u8] = val.split_rn().last().unwrap_or(val.as_ref());
+        let val: &[u8] = val.split_rn().last().unwrap_or_else(|| val.as_ref());
         let mut val = val[val.find(b" ").ok_or_else(|| {
             MeliError::new(format!(
                 "Expected tagged IMAP response (OK,NO,BAD, etc) but found {:?}",
@@ -594,7 +594,7 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
             } else {
                 return debug!(Err(MeliError::new(format!(
                     "Unexpected input while parsing UID FETCH response. Got: `{:.40}`",
-                    String::from_utf8_lossy(&input)
+                    String::from_utf8_lossy(input)
                 ))));
             }
         } else if input[i..].starts_with(b"FLAGS (") {
@@ -605,7 +605,7 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
             } else {
                 return debug!(Err(MeliError::new(format!(
                     "Unexpected input while parsing UID FETCH response. Got: `{:.40}`",
-                    String::from_utf8_lossy(&input)
+                    String::from_utf8_lossy(input)
                 ))));
             }
         } else if input[i..].starts_with(b"MODSEQ (") {
@@ -621,7 +621,7 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
             } else {
                 return debug!(Err(MeliError::new(format!(
                     "Unexpected input while parsing MODSEQ in UID FETCH response. Got: `{:.40}`",
-                    String::from_utf8_lossy(&input)
+                    String::from_utf8_lossy(input)
                 ))));
             }
         } else if input[i..].starts_with(b"RFC822 {") {
@@ -640,7 +640,7 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
             } else {
                 return debug!(Err(MeliError::new(format!(
                     "Unexpected input while parsing UID FETCH response. Got: `{:.40}`",
-                    String::from_utf8_lossy(&input)
+                    String::from_utf8_lossy(input)
                 ))));
             }
         } else if input[i..].starts_with(b"ENVELOPE (") {
@@ -682,7 +682,7 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
         } else {
             debug!(
                 "Got unexpected token while parsing UID FETCH response:\n`{}`\n",
-                String::from_utf8_lossy(&input)
+                String::from_utf8_lossy(input)
             );
             return debug!(Err(MeliError::new(format!(
                 "Got unexpected token while parsing UID FETCH response: `{:.40}`",
@@ -893,7 +893,7 @@ pub fn untagged_responses(input: &[u8]) -> ImapParseResult<Option<UntaggedRespon
     let (input, _) = tag::<_, &[u8], (&[u8], nom::error::ErrorKind)>(b"\r\n")(input)?;
     debug!(
         "Parse untagged response from {:?}",
-        String::from_utf8_lossy(&orig_input)
+        String::from_utf8_lossy(orig_input)
     );
     Ok((
         input,
@@ -1091,7 +1091,7 @@ pub fn select_response(input: &[u8]) -> Result<SelectResponse> {
                 let (_, highestmodseq) = res?;
                 ret.highestmodseq = Some(
                     std::num::NonZeroU64::new(u64::from_str(&String::from_utf8_lossy(
-                        &highestmodseq,
+                        highestmodseq,
                     ))?)
                     .map(|u| Ok(ModSequence(u)))
                     .unwrap_or(Err(())),
@@ -1099,12 +1099,12 @@ pub fn select_response(input: &[u8]) -> Result<SelectResponse> {
             } else if l.starts_with(b"* OK [NOMODSEQ") {
                 ret.highestmodseq = Some(Err(()));
             } else if !l.is_empty() {
-                debug!("select response: {}", String::from_utf8_lossy(&l));
+                debug!("select response: {}", String::from_utf8_lossy(l));
             }
         }
         Ok(ret)
     } else {
-        let ret = String::from_utf8_lossy(&input).to_string();
+        let ret = String::from_utf8_lossy(input).to_string();
         debug!("BAD/NO response in select: {}", &ret);
         Err(MeliError::new(ret))
     }
@@ -1215,7 +1215,7 @@ pub fn flags(input: &[u8]) -> IResult<&[u8], (Flag, Vec<String>)> {
             }
             (true, t) if t.eq_ignore_ascii_case(b"Recent") => { /* ignore */ }
             (_, f) => {
-                keywords.push(String::from_utf8_lossy(&f).into());
+                keywords.push(String::from_utf8_lossy(f).into());
             }
         }
         input = &input[match_end..];
@@ -1385,7 +1385,7 @@ pub fn envelope_address(input: &[u8]) -> IResult<&[u8], Address> {
                     to_str!(&name),
                     if name.is_empty() { "" } else { " " },
                     to_str!(&mailbox_name),
-                    to_str!(&host_name)
+                    to_str!(host_name)
                 )
                 .into_bytes()
             } else {
@@ -1453,7 +1453,7 @@ pub fn quoted(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
 }
 
 pub fn quoted_or_nil(input: &[u8]) -> IResult<&[u8], Option<Vec<u8>>> {
-    alt((map(tag("NIL"), |_| None), map(quoted, |v| Some(v))))(input.ltrim())
+    alt((map(tag("NIL"), |_| None), map(quoted, Some)))(input.ltrim())
 }
 
 pub fn uid_fetch_envelopes_response(
@@ -1526,7 +1526,7 @@ fn eat_whitespace(mut input: &[u8]) -> IResult<&[u8], ()> {
             break;
         }
     }
-    return Ok((input, ()));
+    Ok((input, ()))
 }
 
 #[derive(Debug, Default, Clone)]

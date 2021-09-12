@@ -134,10 +134,7 @@ impl Locale {
         if new_locale.is_null() {
             return Err(nix::Error::last().into());
         }
-        Ok(Locale {
-            mask,
-            old_locale,
-        })
+        Ok(Locale { mask, old_locale })
     }
 }
 
@@ -196,7 +193,7 @@ fn tm_to_secs(tm: libc::tm) -> std::result::Result<i64, ()> {
     let mut is_leap = false;
     let mut year = tm.tm_year;
     let mut month = tm.tm_mon;
-    if month >= 12 || month < 0 {
+    if !(0..12).contains(&month) {
         let mut adj = month / 12;
         month %= 12;
         if month < 0 {
@@ -229,9 +226,7 @@ fn year_to_secs(year: i64, is_leap: &mut bool) -> std::result::Result<i64, ()> {
         } else {
             *is_leap = false;
         }
-        return Ok((31536000 * (y - 70) + 86400 * leaps)
-            .try_into()
-            .unwrap_or(0));
+        return Ok(31536000 * (y - 70) + 86400 * leaps);
     }
 
     let cycles = (year - 100) / 400;

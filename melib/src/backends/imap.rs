@@ -1178,20 +1178,20 @@ impl MailBackend for ImapType {
                             keyword => {
                                 s.push_str(" KEYWORD ");
                                 s.push_str(keyword);
-                                s.push_str(" ");
+                                s.push(' ');
                             }
                         }
                     }
                 }
                 And(q1, q2) => {
                     rec(q1, s);
-                    s.push_str(" ");
+                    s.push(' ');
                     rec(q2, s);
                 }
                 Or(q1, q2) => {
                     s.push_str(" OR ");
                     rec(q1, s);
-                    s.push_str(" ");
+                    s.push(' ');
                     rec(q2, s);
                 }
                 Not(q) => {
@@ -1433,7 +1433,7 @@ impl ImapType {
             if !l.starts_with(b"*") {
                 continue;
             }
-            if let Ok(mut mailbox) = protocol_parser::list_mailbox_result(&l).map(|(_, v)| v) {
+            if let Ok(mut mailbox) = protocol_parser::list_mailbox_result(l).map(|(_, v)| v) {
                 if let Some(parent) = mailbox.parent {
                     if mailboxes.contains_key(&parent) {
                         mailboxes
@@ -1785,7 +1785,7 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
                         ref uid,
                         ref mut envelope,
                         ref mut flags,
-                        ref raw_fetch_value,
+                        raw_fetch_value,
                         ref references,
                         ..
                     } in v.iter_mut()

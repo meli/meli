@@ -276,7 +276,7 @@ pub async fn examine_updates(
                     if !l.starts_with(b"*") {
                         continue;
                     }
-                    if let Ok(status) = protocol_parser::status_response(&l).map(|(_, v)| v) {
+                    if let Ok(status) = protocol_parser::status_response(l).map(|(_, v)| v) {
                         if Some(mailbox_hash) == status.mailbox {
                             if let Some(total) = status.messages {
                                 if let Ok(mut exists_lck) = mailbox.exists.lock() {
@@ -326,10 +326,8 @@ pub async fn examine_updates(
                 return Ok(());
             }
             let mut cmd = "UID FETCH ".to_string();
-            if v.len() == 1 {
-                cmd.push_str(&v[0].to_string());
-            } else {
-                cmd.push_str(&v[0].to_string());
+            cmd.push_str(&v[0].to_string());
+            if v.len() != 1 {
                 for n in v.into_iter().skip(1) {
                     cmd.push(',');
                     cmd.push_str(&n.to_string());
@@ -372,7 +370,7 @@ pub async fn examine_updates(
         {
             let uid = uid.unwrap();
             let env = envelope.as_mut().unwrap();
-            env.set_hash(generate_envelope_hash(&mailbox.imap_path(), &uid));
+            env.set_hash(generate_envelope_hash(mailbox.imap_path(), &uid));
             if let Some(value) = references {
                 env.set_references(value);
             }
@@ -392,17 +390,15 @@ pub async fn examine_updates(
                 }
             }
         }
-        if uid_store.keep_offline_cache {
-            if !cache_handle.mailbox_state(mailbox_hash)?.is_none() {
-                cache_handle
-                    .insert_envelopes(mailbox_hash, &v)
-                    .chain_err_summary(|| {
-                        format!(
-                            "Could not save envelopes in cache for mailbox {}",
-                            mailbox.imap_path()
-                        )
-                    })?;
-            }
+        if uid_store.keep_offline_cache && cache_handle.mailbox_state(mailbox_hash)?.is_some() {
+            cache_handle
+                .insert_envelopes(mailbox_hash, &v)
+                .chain_err_summary(|| {
+                    format!(
+                        "Could not save envelopes in cache for mailbox {}",
+                        mailbox.imap_path()
+                    )
+                })?;
         }
 
         for FetchResponse { uid, envelope, .. } in v {

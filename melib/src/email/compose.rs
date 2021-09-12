@@ -144,22 +144,6 @@ impl Draft {
             if let Some(reply_to) = envelope.other_headers().get("Mail-Followup-To") {
                 ret.headers_mut()
                     .insert(HeaderName::new_unchecked("To"), reply_to.to_string());
-            } else {
-                if let Some(reply_to) = envelope.other_headers().get("Reply-To") {
-                    ret.headers_mut()
-                        .insert(HeaderName::new_unchecked("To"), reply_to.to_string());
-                } else {
-                    ret.headers_mut().insert(
-                        HeaderName::new_unchecked("To"),
-                        envelope.field_from_to_string(),
-                    );
-                }
-                // FIXME: add To/Cc
-            }
-        } else {
-            if let Some(reply_to) = envelope.other_headers().get("Mail-Reply-To") {
-                ret.headers_mut()
-                    .insert(HeaderName::new_unchecked("To"), reply_to.to_string());
             } else if let Some(reply_to) = envelope.other_headers().get("Reply-To") {
                 ret.headers_mut()
                     .insert(HeaderName::new_unchecked("To"), reply_to.to_string());
@@ -169,6 +153,18 @@ impl Draft {
                     envelope.field_from_to_string(),
                 );
             }
+            // FIXME: add To/Cc
+        } else if let Some(reply_to) = envelope.other_headers().get("Mail-Reply-To") {
+            ret.headers_mut()
+                .insert(HeaderName::new_unchecked("To"), reply_to.to_string());
+        } else if let Some(reply_to) = envelope.other_headers().get("Reply-To") {
+            ret.headers_mut()
+                .insert(HeaderName::new_unchecked("To"), reply_to.to_string());
+        } else {
+            ret.headers_mut().insert(
+                HeaderName::new_unchecked("To"),
+                envelope.field_from_to_string(),
+            );
         }
         ret.headers_mut().insert(
             HeaderName::new_unchecked("Cc"),

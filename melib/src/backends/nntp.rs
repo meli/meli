@@ -295,7 +295,7 @@ impl MailBackend for NntpType {
                         let mut hash_index_lck = uid_store.hash_index.lock().unwrap();
                         let mut uid_index_lck = uid_store.uid_index.lock().unwrap();
                         for l in res.split_rn().skip(1) {
-                            let (_, (num, env)) = protocol_parser::over_article(&l)?;
+                            let (_, (num, env)) = protocol_parser::over_article(l)?;
                             env_hash_set.insert(env.hash());
                             message_id_lck.insert(env.message_id_display().to_string(), env.hash());
                             hash_index_lck.insert(env.hash(), (num, mailbox_hash));
@@ -736,7 +736,7 @@ impl NntpType {
             .lock()
             .unwrap()
             .iter()
-            .map(|c| c.clone())
+            .cloned()
             .collect::<Vec<String>>()
     }
 }
@@ -778,9 +778,9 @@ impl FetchState {
                     &uid_store.account_name, path, res
                 )));
             }
-            let total = usize::from_str(&s[1]).unwrap_or(0);
-            let _low = usize::from_str(&s[2]).unwrap_or(0);
-            let high = usize::from_str(&s[3]).unwrap_or(0);
+            let total = usize::from_str(s[1]).unwrap_or(0);
+            let _low = usize::from_str(s[2]).unwrap_or(0);
+            let high = usize::from_str(s[3]).unwrap_or(0);
             *high_low_total = Some((high, _low, total));
             {
                 let f = &uid_store.mailboxes.lock().await[&mailbox_hash];
@@ -816,7 +816,7 @@ impl FetchState {
             let mut hash_index_lck = uid_store.hash_index.lock().unwrap();
             let mut uid_index_lck = uid_store.uid_index.lock().unwrap();
             for l in res.split_rn().skip(1) {
-                let (_, (num, env)) = protocol_parser::over_article(&l)?;
+                let (_, (num, env)) = protocol_parser::over_article(l)?;
                 message_id_lck.insert(env.message_id_display().to_string(), env.hash());
                 hash_index_lck.insert(env.hash(), (num, mailbox_hash));
                 uid_index_lck.insert((mailbox_hash, num), env.hash());

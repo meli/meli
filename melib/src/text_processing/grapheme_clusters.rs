@@ -35,11 +35,11 @@ extern crate unicode_segmentation;
 use self::unicode_segmentation::UnicodeSegmentation;
 
 pub trait TextProcessing: UnicodeSegmentation + CodePointsIter {
-    fn split_graphemes<'a>(&'a self) -> Vec<&'a str> {
+    fn split_graphemes(&self) -> Vec<&str> {
         UnicodeSegmentation::graphemes(self, true).collect::<Vec<&str>>()
     }
 
-    fn graphemes_indices<'a>(&'a self) -> Vec<(usize, &'a str)> {
+    fn graphemes_indices(&self) -> Vec<(usize, &str)> {
         UnicodeSegmentation::grapheme_indices(self, true).collect::<Vec<(usize, &str)>>()
     }
 

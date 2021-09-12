@@ -105,7 +105,7 @@ impl AddressBook {
         {
             let mut ret = AddressBook::new(s.name.clone());
             if let Some(vcard_path) = s.vcard_folder() {
-                if let Ok(cards) = vcard::load_cards(&std::path::Path::new(vcard_path)) {
+                if let Ok(cards) = vcard::load_cards(std::path::Path::new(vcard_path)) {
                     for c in cards {
                         ret.add_card(c);
                     }

@@ -178,17 +178,11 @@ pub trait GlobMatch {
 
 impl GlobMatch for str {
     fn matches_glob(&self, _pattern: &str) -> bool {
-        macro_rules! strip_slash {
-            ($v:expr) => {
-                if $v.ends_with("/") {
-                    &$v[..$v.len() - 1]
-                } else {
-                    $v
-                }
-            };
-        }
-        let pattern: Vec<&str> = strip_slash!(_pattern).split_graphemes();
-        let s: Vec<&str> = strip_slash!(self).split_graphemes();
+        let pattern: Vec<&str> = _pattern
+            .strip_suffix('/')
+            .unwrap_or(_pattern)
+            .split_graphemes();
+        let s: Vec<&str> = self.strip_suffix('/').unwrap_or(self).split_graphemes();
 
         // Taken from https://research.swtch.com/glob
 

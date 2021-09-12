@@ -804,7 +804,7 @@ pub fn interpret_format_flowed(_t: &str) -> String {
     unimplemented!()
 }
 
-type Filter<'a> = Box<dyn FnMut(&Attachment, &mut Vec<u8>) -> () + 'a>;
+type Filter<'a> = Box<dyn FnMut(&Attachment, &mut Vec<u8>) + 'a>;
 
 fn decode_rec_helper<'a, 'b>(a: &'a Attachment, filter: &mut Option<Filter<'b>>) -> Vec<u8> {
     match a.content_type {

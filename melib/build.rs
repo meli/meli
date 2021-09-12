@@ -163,7 +163,7 @@ fn main() -> Result<(), std::io::Error> {
 
         fn set_general_categories<'u>(codepoints: &mut Vec<Codepoint<'u>>, unicode_data: &'u str) {
             for line in unicode_data.lines() {
-                let fields = line.trim().split(";").collect::<Vec<_>>();
+                let fields = line.trim().split(';').collect::<Vec<_>>();
                 if fields.len() > FIELD_CATEGORY {
                     for idx in hexrange_to_range(fields[FIELD_CODEPOINT]) {
                         codepoints[idx].category = fields[FIELD_CATEGORY];
@@ -223,7 +223,7 @@ fn main() -> Result<(), std::io::Error> {
         fn set_emoji_widths(codepoints: &mut Vec<Codepoint<'_>>, emoji_data_lines: &str) {
             // Read from emoji-data.txt, set codepoint widths
             for line in emoji_data_lines.lines() {
-                if !line.contains("#") || line.trim().starts_with("#") {
+                if !line.contains('#') || line.trim().starts_with('#') {
                     continue;
                 }
                 let mut fields = line.trim().split('#').collect::<Vec<_>>();
@@ -233,7 +233,7 @@ fn main() -> Result<(), std::io::Error> {
                 let comment = fields.pop().unwrap();
                 let fields = fields.pop().unwrap();
 
-                let hexrange = fields.split(";").next().unwrap();
+                let hexrange = fields.split(';').next().unwrap();
 
                 // In later versions of emoji-data.txt there are some "reserved"
                 // entries that have "NA" instead of a Unicode version number
@@ -245,7 +245,7 @@ fn main() -> Result<(), std::io::Error> {
 
                 use std::str::FromStr;
                 let mut v = comment.trim().split_whitespace().next().unwrap();
-                if v.starts_with("E") {
+                if v.starts_with('E') {
                     v = &v[1..];
                 }
                 if v.as_bytes()

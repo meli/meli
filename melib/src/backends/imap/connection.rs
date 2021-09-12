@@ -319,7 +319,7 @@ impl ImapStream {
             .find(|l| l.starts_with(b"* CAPABILITY"))
             .ok_or_else(|| MeliError::new(""))
             .and_then(|res| {
-                protocol_parser::capabilities(&res)
+                protocol_parser::capabilities(res)
                     .map_err(|_| MeliError::new(""))
                     .map(|(_, v)| v)
             });
@@ -392,7 +392,7 @@ impl ImapStream {
             let mut should_break = false;
             for l in res.split_rn() {
                 if l.starts_with(b"* CAPABILITY") {
-                    capabilities = protocol_parser::capabilities(&l)
+                    capabilities = protocol_parser::capabilities(l)
                         .map(|(_, capabilities)| {
                             HashSet::from_iter(capabilities.into_iter().map(|s: &[u8]| s.to_vec()))
                         })
@@ -875,9 +875,9 @@ impl ImapConnection {
         debug!(
             "{} select response {}",
             imap_path,
-            String::from_utf8_lossy(&ret)
+            String::from_utf8_lossy(ret)
         );
-        let select_response = protocol_parser::select_response(&ret).chain_err_summary(|| {
+        let select_response = protocol_parser::select_response(ret).chain_err_summary(|| {
             format!("Could not parse select response for mailbox {}", imap_path)
         })?;
         {
@@ -958,8 +958,8 @@ impl ImapConnection {
             .await?;
         self.read_response(ret, RequiredResponses::EXAMINE_REQUIRED)
             .await?;
-        debug!("examine response {}", String::from_utf8_lossy(&ret));
-        let select_response = protocol_parser::select_response(&ret).chain_err_summary(|| {
+        debug!("examine response {}", String::from_utf8_lossy(ret));
+        let select_response = protocol_parser::select_response(ret).chain_err_summary(|| {
             format!("Could not parse select response for mailbox {}", imap_path)
         })?;
         self.stream.as_mut()?.current_mailbox = MailboxSelection::Examine(mailbox_hash);

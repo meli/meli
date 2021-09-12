@@ -154,7 +154,7 @@ impl BackendOp for ImapOp {
                     .set_summary(format!("message with UID {} was not found?", uid)));
                 }
                 let (_uid, (_flags, _)) = v[0];
-                assert_eq!(uid, uid);
+                assert_eq!(_uid, uid);
                 let mut bytes_cache = uid_store.byte_cache.lock()?;
                 let cache = bytes_cache.entry(uid).or_default();
                 cache.flags = Some(_flags);

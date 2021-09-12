@@ -1,4 +1,3 @@
-use melib;
 use melib::email::Draft;
 
 #[test]
@@ -13,7 +12,7 @@ fn build_draft() {
     new_draft.set_body("hello world.".to_string());
     let raw = new_draft.finalise().expect("could not finalise draft");
     let boundary_def = raw.find("bzz_bzz__bzz__").unwrap();
-    let boundary_end = boundary_def + raw[boundary_def..].find("\"").unwrap();
+    let boundary_end = boundary_def + raw[boundary_def..].find('\"').unwrap();
     let boundary = raw[boundary_def..boundary_end].to_string();
     let boundary_str = &boundary["bzz_bzz__bzz__".len()..];
 

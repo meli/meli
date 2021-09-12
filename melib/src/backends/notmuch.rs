@@ -1055,18 +1055,18 @@ impl MelibQueryToNotmuchQuery for crate::search::Query {
                 ret.push_str("tag:attachment");
             }
             And(q1, q2) => {
-                ret.push_str("(");
+                ret.push('(');
                 q1.query_to_string(ret);
                 ret.push_str(") AND (");
                 q2.query_to_string(ret);
-                ret.push_str(")");
+                ret.push(')');
             }
             Or(q1, q2) => {
-                ret.push_str("(");
+                ret.push('(');
                 q1.query_to_string(ret);
                 ret.push_str(") OR (");
                 q2.query_to_string(ret);
-                ret.push_str(")");
+                ret.push(')');
             }
             Not(q) => {
                 ret.push_str("(NOT (");

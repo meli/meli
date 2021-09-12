@@ -274,10 +274,10 @@ pub fn load_cards(p: &std::path::Path) -> Result<Vec<Card>> {
                         ret.push(
                             CardDeserializer::from_str(s)
                                 .and_then(TryInto::try_into)
-                                .and_then(|mut card| {
+                                .map(|mut card| {
                                     Card::set_external_resource(&mut card, true);
                                     is_any_valid = true;
-                                    Ok(card)
+                                    card
                                 }),
                         );
                     }
@@ -290,12 +290,10 @@ pub fn load_cards(p: &std::path::Path) -> Result<Vec<Card>> {
             debug!(&c);
         }
     }
-    if !is_any_valid {
-        ret.into_iter().collect::<Result<Vec<Card>>>()
-    } else {
+    if is_any_valid {
         ret.retain(Result::is_ok);
-        ret.into_iter().collect::<Result<Vec<Card>>>()
     }
+    ret.into_iter().collect::<Result<Vec<Card>>>()
 }
 
 #[test]
