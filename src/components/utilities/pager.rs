@@ -40,6 +40,7 @@ pub struct Pager {
     initialised: bool,
     show_scrollbar: bool,
     content: CellBuffer,
+    raw: bool,
     text_lines: Vec<String>,
     line_breaker: LineBreakText,
     movement: Option<PageMovement>,
@@ -110,7 +111,7 @@ impl Pager {
     }
 
     pub fn from_string(
-        mut text: String,
+        text: String,
         context: Option<&Context>,
         cursor_pos: Option<usize>,
         mut width: Option<usize>,
@@ -153,25 +154,22 @@ impl Pager {
                 .stdout(Stdio::piped())
                 .spawn()
                 .expect("Failed to start pager filter process");
-            {
-                let stdin = filter_child.stdin.as_mut().expect("failed to open stdin");
-                stdin
-                    .write_all(text.as_bytes())
-                    .expect("Failed to write to stdin");
-            }
+            let stdin = filter_child.stdin.as_mut().expect("failed to open stdin");
+            stdin
+                .write_all(text.as_bytes())
+                .expect("Failed to write to stdin");
+            let out = filter_child
+                .wait_with_output()
+                .expect("Failed to wait on filter")
+                .stdout;
+            let mut dev_null = std::fs::File::open("/dev/null").ok()?;
+            let mut embedded = crate::terminal::embed::EmbedGrid::new();
+            embedded.set_terminal_size((80, 20));
 
-            text = String::from_utf8_lossy(
-                &filter_child
-                    .wait_with_output()
-                    .expect("Failed to wait on filter")
-                    .stdout,
-            )
-            .to_string();
-            if text.is_empty() {
-                None
-            } else {
-                crate::terminal::ansi::ansi_to_cellbuffer(&text)
+            for b in out {
+                embedded.process_byte(&mut dev_null, b);
             }
+            Some(std::mem::replace(embedded.buffer_mut(), Default::default()))
         }) {
             return Pager::from_buf(content, cursor_pos);
         }
@@ -186,6 +184,7 @@ impl Pager {
             initialised: false,
             dirty: true,
             id: ComponentId::new_v4(),
+            raw: false,
             colors,
             ..Default::default()
         }
@@ -200,7 +199,8 @@ impl Pager {
             width,
             dirty: true,
             content,
-            initialised: true,
+            raw: true,
+            initialised: false,
             id: ComponentId::new_v4(),
             ..Default::default()
         }
@@ -219,41 +219,44 @@ impl Pager {
         if width < self.minimum_width {
             width = self.minimum_width;
         }
-        if self.line_breaker.width() != Some(width.saturating_sub(4)) {
-            let line_breaker = LineBreakText::new(
-                self.text.clone(),
-                self.reflow,
-                Some(width.saturating_sub(4)),
-            );
-
-            self.line_breaker = line_breaker;
-            self.text_lines.clear();
-        };
-        self.height = self.text_lines.len();
-        self.width = width;
-        if let Some(ref mut search) = self.search {
-            use melib::text_processing::search::KMP;
-            search.positions.clear();
-            for (y, l) in self.text_lines.iter().enumerate() {
-                search.positions.extend(
-                    l.kmp_search(&search.pattern)
-                        .into_iter()
-                        .map(|offset| (y, offset)),
+        if !self.raw {
+            if self.line_breaker.width() != Some(width.saturating_sub(4)) {
+                let line_breaker = LineBreakText::new(
+                    self.text.clone(),
+                    self.reflow,
+                    Some(width.saturating_sub(4)),
                 );
-            }
-            if let Some(pos) = search.positions.get(search.cursor) {
-                if self.cursor.1 > pos.0 || self.cursor.1 + height!(area) < pos.0 {
-                    self.cursor.1 = pos.0.saturating_sub(3);
+
+                self.line_breaker = line_breaker;
+                self.text_lines.clear();
+            };
+            self.height = self.text_lines.len();
+            self.width = width;
+            if let Some(ref mut search) = self.search {
+                use melib::text_processing::search::KMP;
+                search.positions.clear();
+                for (y, l) in self.text_lines.iter().enumerate() {
+                    search.positions.extend(
+                        l.kmp_search(&search.pattern)
+                            .into_iter()
+                            .map(|offset| (y, offset)),
+                    );
+                }
+                if let Some(pos) = search.positions.get(search.cursor) {
+                    if self.cursor.1 > pos.0 || self.cursor.1 + height!(area) < pos.0 {
+                        self.cursor.1 = pos.0.saturating_sub(3);
+                    }
                 }
             }
+            self.draw_lines_up_to(
+                grid,
+                area,
+                context,
+                self.cursor.1 + Self::PAGES_AHEAD_TO_RENDER_NO * height!(area),
+            );
         }
-        self.draw_lines_up_to(
-            grid,
-            area,
-            context,
-            self.cursor.1 + Self::PAGES_AHEAD_TO_RENDER_NO * height!(area),
-        );
         self.draw_page(grid, area, context);
+
         self.initialised = true;
     }
 
@@ -293,6 +296,28 @@ impl Pager {
     }
 
     fn draw_page(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        if self.raw {
+            copy_area(
+                grid,
+                &self.content,
+                area,
+                (
+                    (
+                        std::cmp::min(
+                            self.cursor.0.saturating_sub(width!(area)),
+                            self.content.size().0.saturating_sub(width!(area)),
+                        ),
+                        std::cmp::min(
+                            self.cursor.1.saturating_sub(height!(area)),
+                            self.content.size().1.saturating_sub(height!(area)),
+                        ),
+                    ),
+                    pos_dec(self.content.size(), (1, 1)),
+                ),
+            );
+            return;
+        }
+
         let (mut upper_left, bottom_right) = area;
         for l in self
             .text_lines
