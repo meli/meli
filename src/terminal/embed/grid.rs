@@ -36,17 +36,21 @@ use nix::sys::wait::{waitpid, WaitPidFlag};
  **/
 
 #[derive(Debug)]
+enum ScreenBuffer {
+    Normal,
+    Alternate,
+}
+
+#[derive(Debug)]
 pub struct EmbedGrid {
     cursor: (usize, usize),
     /// [top;bottom]
     scroll_region: ScrollRegion,
-    pub grid: CellBuffer,
+    pub alternate_screen: CellBuffer,
     pub state: State,
-    pub stdin: std::fs::File,
-    /// Pid of the embed process
-    pub child_pid: nix::unistd::Pid,
     /// (width, height)
     pub terminal_size: (usize, usize),
+    initialized: bool,
     fg_color: Color,
     bg_color: Color,
     /// Store the fg/bg color when highlighting the cell where the cursor is so that it can be
@@ -62,68 +66,35 @@ pub struct EmbedGrid {
     wrap_next: bool,
     /// Store state in case a multi-byte character is encountered
     codepoints: CodepointBuf,
+    pub normal_screen: CellBuffer,
+    screen_buffer: ScreenBuffer,
 }
 
-#[derive(Debug, PartialEq)]
-enum CodepointBuf {
-    None,
-    TwoCodepoints(u8),
-    ThreeCodepoints(u8, Option<u8>),
-    FourCodepoints(u8, Option<u8>, Option<u8>),
+#[derive(Debug)]
+pub struct EmbedTerminal {
+    pub grid: EmbedGrid,
+    pub stdin: std::fs::File,
+    /// Pid of the embed process
+    pub child_pid: nix::unistd::Pid,
 }
 
-impl EmbedGrid {
+impl EmbedTerminal {
     pub fn new(stdin: std::fs::File, child_pid: nix::unistd::Pid) -> Self {
-        EmbedGrid {
-            cursor: (0, 0),
-            scroll_region: ScrollRegion {
-                top: 0,
-                bottom: 0,
-                left: 0,
-                ..Default::default()
-            },
-            terminal_size: (0, 0),
-            grid: CellBuffer::default(),
-            state: State::Normal,
+        EmbedTerminal {
+            grid: EmbedGrid::new(),
             stdin,
             child_pid,
-            fg_color: Color::Default,
-            bg_color: Color::Default,
-            prev_fg_color: None,
-            prev_bg_color: None,
-            show_cursor: true,
-            auto_wrap_mode: true,
-            wrap_next: false,
-            origin_mode: false,
-            codepoints: CodepointBuf::None,
         }
     }
 
     pub fn set_terminal_size(&mut self, new_val: (usize, usize)) {
-        if new_val == self.terminal_size {
-            return;
-        }
-        //debug!("resizing to {:?}", new_val);
-        self.scroll_region.top = 0;
-        self.scroll_region.bottom = new_val.1.saturating_sub(1);
-
-        self.terminal_size = new_val;
-        if !self.grid.resize(new_val.0, new_val.1, None) {
-            panic!(
-                "Terminal size too big: ({} cols, {} rows)",
-                new_val.0, new_val.1
-            );
-        }
-        self.grid.clear(Some(Cell::default()));
-        self.cursor = (0, 0);
-        self.wrap_next = false;
+        self.grid.set_terminal_size(new_val);
         let winsize = Winsize {
             ws_row: <u16>::try_from(new_val.1).unwrap(),
             ws_col: <u16>::try_from(new_val.0).unwrap(),
             ws_xpixel: 0,
             ws_ypixel: 0,
         };
-
         let master_fd = self.stdin.as_raw_fd();
         let _ = unsafe { set_window_size(master_fd, &winsize) };
         let _ = nix::sys::signal::kill(self.child_pid, nix::sys::signal::SIGWINCH);
@@ -144,13 +115,102 @@ impl EmbedGrid {
     }
 
     pub fn process_byte(&mut self, byte: u8) {
+        let Self {
+            ref mut grid,
+            ref mut stdin,
+            child_pid: _,
+        } = self;
+        grid.process_byte(stdin, byte);
+    }
+}
+
+#[derive(Debug, PartialEq)]
+enum CodepointBuf {
+    None,
+    TwoCodepoints(u8),
+    ThreeCodepoints(u8, Option<u8>),
+    FourCodepoints(u8, Option<u8>, Option<u8>),
+}
+
+impl EmbedGrid {
+    pub fn new() -> Self {
+        let mut normal_screen = CellBuffer::default();
+        normal_screen.set_growable(true);
+        EmbedGrid {
+            cursor: (0, 0),
+            scroll_region: ScrollRegion {
+                top: 0,
+                bottom: 0,
+                left: 0,
+                ..Default::default()
+            },
+            terminal_size: (0, 0),
+            initialized: false,
+            alternate_screen: CellBuffer::default(),
+            state: State::Normal,
+            fg_color: Color::Default,
+            bg_color: Color::Default,
+            prev_fg_color: None,
+            prev_bg_color: None,
+            show_cursor: true,
+            auto_wrap_mode: true,
+            wrap_next: false,
+            origin_mode: false,
+            codepoints: CodepointBuf::None,
+            normal_screen,
+            screen_buffer: ScreenBuffer::Normal,
+        }
+    }
+
+    pub fn buffer(&self) -> &CellBuffer {
+        match self.screen_buffer {
+            ScreenBuffer::Normal => &self.normal_screen,
+            ScreenBuffer::Alternate => &self.alternate_screen,
+        }
+    }
+
+    pub fn buffer_mut(&mut self) -> &mut CellBuffer {
+        match self.screen_buffer {
+            ScreenBuffer::Normal => &mut self.normal_screen,
+            ScreenBuffer::Alternate => &mut self.alternate_screen,
+        }
+    }
+
+    pub fn set_terminal_size(&mut self, new_val: (usize, usize)) {
+        if new_val == self.terminal_size && self.initialized {
+            return;
+        }
+        self.initialized = true;
+        //debug!("resizing to {:?}", new_val);
+        self.scroll_region.top = 0;
+        self.scroll_region.bottom = new_val.1.saturating_sub(1);
+
+        self.terminal_size = new_val;
+        if !self.alternate_screen.resize(new_val.0, new_val.1, None) {
+            panic!(
+                "Terminal size too big: ({} cols, {} rows)",
+                new_val.0, new_val.1
+            );
+        }
+        self.alternate_screen.clear(Some(Cell::default()));
+        if !self.normal_screen.resize(new_val.0, new_val.1, None) {
+            panic!(
+                "Terminal size too big: ({} cols, {} rows)",
+                new_val.0, new_val.1
+            );
+        }
+        self.normal_screen.clear(Some(Cell::default()));
+        self.cursor = (0, 0);
+        self.wrap_next = false;
+    }
+
+    pub fn process_byte(&mut self, stdin: &mut std::fs::File, byte: u8) {
         let EmbedGrid {
             ref mut cursor,
             ref mut scroll_region,
-            ref terminal_size,
-            ref mut grid,
+            ref mut terminal_size,
+            ref mut alternate_screen,
             ref mut state,
-            ref mut stdin,
             ref mut fg_color,
             ref mut bg_color,
             ref mut prev_fg_color,
@@ -160,15 +220,45 @@ impl EmbedGrid {
             ref mut auto_wrap_mode,
             ref mut wrap_next,
             ref mut origin_mode,
-            child_pid: _,
+            ref mut screen_buffer,
+            ref mut normal_screen,
+            initialized: _,
         } = self;
+        let mut grid = normal_screen;
+
+        let is_alternate = match *screen_buffer {
+            ScreenBuffer::Normal => false,
+            _ => {
+                grid = alternate_screen;
+                true
+            }
+        };
+
+        macro_rules! increase_cursor_y {
+            () => {
+                cursor.1 += 1;
+                if !is_alternate {
+                    cursor.0 = 0;
+                    if cursor.1 >= terminal_size.1 {
+                        if !grid.resize(std::cmp::max(1, grid.cols()), grid.rows() + 2, None) {
+                            return;
+                        }
+                        scroll_region.bottom += 1;
+                        terminal_size.1 += 1;
+                    }
+                }
+            };
+        }
 
         macro_rules! increase_cursor_x {
             () => {
                 if cursor.0 + 1 < terminal_size.0 {
                     cursor.0 += 1;
-                } else if *auto_wrap_mode {
+                } else if is_alternate && *auto_wrap_mode {
                     *wrap_next = true;
+                } else if !is_alternate {
+                    cursor.0 = 0;
+                    increase_cursor_y!();
                 }
             };
         }
@@ -183,10 +273,14 @@ impl EmbedGrid {
         }
         macro_rules! cursor_y {
             () => {
-                std::cmp::min(
-                    cursor.1 + scroll_region.top,
-                    terminal_size.1.saturating_sub(1),
-                )
+                if is_alternate {
+                    std::cmp::min(
+                        cursor.1 + scroll_region.top,
+                        terminal_size.1.saturating_sub(1),
+                    )
+                } else {
+                    cursor.1
+                }
             };
         }
         macro_rules! cursor_val {
@@ -274,11 +368,11 @@ impl EmbedGrid {
                 //debug!("setting cell {:?} char '{}'", cursor, c as char);
                 //debug!("newline y-> y+1, cursor was: {:?}", cursor);
 
-                if cursor.1 + 1 < terminal_size.1 {
-                    if cursor.1 == scroll_region.bottom {
+                if cursor.1 + 1 < terminal_size.1 || !is_alternate {
+                    if cursor.1 == scroll_region.bottom && is_alternate {
                         grid.scroll_up(scroll_region, cursor.1, 1);
                     } else {
-                        cursor.1 += 1;
+                        increase_cursor_y!();
                     }
                 }
                 *wrap_next = false;
@@ -436,6 +530,9 @@ impl EmbedGrid {
                         grid[cursor_val!()].set_fg(Color::Black);
                         grid[cursor_val!()].set_bg(Color::White);
                     }
+                    b"1047" | b"1049" => {
+                        *screen_buffer = ScreenBuffer::Alternate;
+                    }
                     _ => {}
                 }
 
@@ -462,6 +559,9 @@ impl EmbedGrid {
                         } else {
                             grid[cursor_val!()].set_bg(*bg_color);
                         }
+                    }
+                    b"1047" | b"1049" => {
+                        *screen_buffer = ScreenBuffer::Normal;
                     }
                     _ => {}
                 }

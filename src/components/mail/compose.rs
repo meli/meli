@@ -26,7 +26,7 @@ use melib::Draft;
 
 use crate::conf::accounts::JobRequest;
 use crate::jobs::JoinHandle;
-use crate::terminal::embed::EmbedGrid;
+use crate::terminal::embed::EmbedTerminal;
 use indexmap::IndexSet;
 use nix::sys::wait::WaitStatus;
 use std::convert::TryInto;
@@ -53,13 +53,13 @@ enum Cursor {
 
 #[derive(Debug)]
 enum EmbedStatus {
-    Stopped(Arc<Mutex<EmbedGrid>>, File),
-    Running(Arc<Mutex<EmbedGrid>>, File),
+    Stopped(Arc<Mutex<EmbedTerminal>>, File),
+    Running(Arc<Mutex<EmbedTerminal>>, File),
 }
 
 impl std::ops::Deref for EmbedStatus {
-    type Target = Arc<Mutex<EmbedGrid>>;
-    fn deref(&self) -> &Arc<Mutex<EmbedGrid>> {
+    type Target = Arc<Mutex<EmbedTerminal>>;
+    fn deref(&self) -> &Arc<Mutex<EmbedTerminal>> {
         use EmbedStatus::*;
         match self {
             Stopped(ref e, _) | Running(ref e, _) => e,
@@ -68,7 +68,7 @@ impl std::ops::Deref for EmbedStatus {
 }
 
 impl std::ops::DerefMut for EmbedStatus {
-    fn deref_mut(&mut self) -> &mut Arc<Mutex<EmbedGrid>> {
+    fn deref_mut(&mut self) -> &mut Arc<Mutex<EmbedTerminal>> {
         use EmbedStatus::*;
         match self {
             Stopped(ref mut e, _) | Running(ref mut e, _) => e,
@@ -794,9 +794,9 @@ impl Component for Composer {
                     clear_area(grid, embed_area, theme_default);
                     copy_area(
                         grid,
-                        &guard.grid,
+                        &guard.grid.buffer(),
                         embed_area,
-                        ((0, 0), pos_dec(guard.terminal_size, (1, 1))),
+                        ((0, 0), pos_dec(guard.grid.terminal_size, (1, 1))),
                     );
                     guard.set_terminal_size((width!(embed_area), height!(embed_area)));
                     context.dirty_areas.push_back(area);
@@ -807,9 +807,9 @@ impl Component for Composer {
                     let guard = embed_pty.lock().unwrap();
                     copy_area(
                         grid,
-                        &guard.grid,
+                        &guard.grid.buffer(),
                         embed_area,
-                        ((0, 0), pos_dec(guard.terminal_size, (1, 1))),
+                        ((0, 0), pos_dec(guard.grid.terminal_size, (1, 1))),
                     );
                     change_colors(grid, embed_area, Color::Byte(8), theme_default.bg);
                     const STOPPED_MESSAGE: &str = "process has stopped, press 'e' to re-activate";

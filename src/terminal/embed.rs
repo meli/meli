@@ -37,7 +37,7 @@ use std::os::unix::{
 
 mod grid;
 
-pub use grid::EmbedGrid;
+pub use grid::{EmbedGrid, EmbedTerminal};
 
 // ioctl request code to "Make the given terminal the controlling terminal of the calling process"
 use libc::TIOCSCTTY;
@@ -55,7 +55,11 @@ ioctl_write_ptr_bad!(set_window_size, TIOCSWINSZ, Winsize);
 
 ioctl_none_bad!(set_controlling_terminal, TIOCSCTTY);
 
-pub fn create_pty(width: usize, height: usize, command: String) -> Result<Arc<Mutex<EmbedGrid>>> {
+pub fn create_pty(
+    width: usize,
+    height: usize,
+    command: String,
+) -> Result<Arc<Mutex<EmbedTerminal>>> {
     // Open a new PTY master
     let master_fd = posix_openpt(OFlag::O_RDWR)?;
 
@@ -149,7 +153,7 @@ pub fn create_pty(width: usize, height: usize, command: String) -> Result<Arc<Mu
     };
 
     let stdin = unsafe { std::fs::File::from_raw_fd(master_fd.clone().into_raw_fd()) };
-    let mut embed_grid = EmbedGrid::new(stdin, child_pid);
+    let mut embed_grid = EmbedTerminal::new(stdin, child_pid);
     embed_grid.set_terminal_size((width, height));
     let grid = Arc::new(Mutex::new(embed_grid));
     let grid_ = grid.clone();
@@ -164,7 +168,7 @@ pub fn create_pty(width: usize, height: usize, command: String) -> Result<Arc<Mu
     Ok(grid)
 }
 
-fn forward_pty_translate_escape_codes(pty_fd: std::fs::File, grid: Arc<Mutex<EmbedGrid>>) {
+fn forward_pty_translate_escape_codes(pty_fd: std::fs::File, grid: Arc<Mutex<EmbedTerminal>>) {
     let mut bytes_iter = pty_fd.bytes();
     //debug!("waiting for bytes");
     while let Some(Ok(byte)) = bytes_iter.next() {
@@ -390,6 +394,9 @@ impl std::fmt::Display for EscCode<'_> {
             ),
             EscCode(CsiQ(ref buf), c) => {
                 write!(f, "ESC[?{}{}\t\tCSI [UNKNOWN]", unsafestr!(buf), *c as char)
+            }
+            EscCode(Normal, c) => {
+                write!(f, "{} as char: {} Normal", c, *c as char)
             }
             EscCode(unknown, c) => {
                 write!(f, "{:?}{} [UNKNOWN]", unknown, c)
