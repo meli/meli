@@ -1345,12 +1345,26 @@ impl Component for MailView {
                             let colors = crate::conf::value(context, "mail.view.body");
                             self.pager =
                                 Pager::from_string(text, Some(context), Some(0), None, colors);
+                            if let Some(ref filter) = mailbox_settings!(
+                                context[self.coordinates.0][&self.coordinates.1]
+                                    .pager
+                                    .filter
+                            ) {
+                                self.pager.filter(filter);
+                            }
                             self.subview = None;
                         }
                     } else {
                         text.push_str("Internal error. MailView::open_attachment failed.");
                         let colors = crate::conf::value(context, "mail.view.body");
                         self.pager = Pager::from_string(text, Some(context), Some(0), None, colors);
+                        if let Some(ref filter) = mailbox_settings!(
+                            context[self.coordinates.0][&self.coordinates.1]
+                                .pager
+                                .filter
+                        ) {
+                            self.pager.filter(filter);
+                        }
                         self.subview = None;
                     }
                 }
@@ -1431,6 +1445,13 @@ impl Component for MailView {
                     };
                     let colors = crate::conf::value(context, "mail.view.body");
                     self.pager = Pager::from_string(text, Some(context), None, None, colors);
+                    if let Some(ref filter) = mailbox_settings!(
+                        context[self.coordinates.0][&self.coordinates.1]
+                            .pager
+                            .filter
+                    ) {
+                        self.pager.filter(filter);
+                    }
                 }
                 /*
                 ViewMode::Ansi(ref buf) => {
@@ -1482,6 +1503,13 @@ impl Component for MailView {
                     let colors = crate::conf::value(context, "mail.view.body");
                     self.pager =
                         Pager::from_string(text, Some(context), Some(cursor_pos), None, colors);
+                    if let Some(ref filter) = mailbox_settings!(
+                        context[self.coordinates.0][&self.coordinates.1]
+                            .pager
+                            .filter
+                    ) {
+                        self.pager.filter(filter);
+                    }
                     self.subview = None;
                 }
                 _ => {
@@ -1498,6 +1526,13 @@ impl Component for MailView {
                     let colors = crate::conf::value(context, "mail.view.body");
                     self.pager =
                         Pager::from_string(text, Some(context), Some(cursor_pos), None, colors);
+                    if let Some(ref filter) = mailbox_settings!(
+                        context[self.coordinates.0][&self.coordinates.1]
+                            .pager
+                            .filter
+                    ) {
+                        self.pager.filter(filter);
+                    }
                     self.subview = None;
                 }
             };
