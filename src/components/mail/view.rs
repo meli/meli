@@ -1111,8 +1111,52 @@ impl Component for MailView {
                         })+
                     };
                 }
+                let find_offset = |s: &str| -> (bool, (i64, i64)) {
+                    let mut diff = (true, (0, 0));
+                    if let Some(pos) = s.as_bytes().iter().position(|b| *b == b'+' || *b == b'-') {
+                        let offset = &s[pos..];
+                        diff.0 = offset.starts_with('+');
+                        if let (Ok(hr_offset), Ok(min_offset)) =
+                            (offset[1..3].parse::<i64>(), offset[3..5].parse::<i64>())
+                        {
+                            diff.1 .0 = hr_offset;
+                            diff.1 .1 = min_offset;
+                        }
+                    }
+                    diff
+                };
+                let orig_date = envelope.date_as_str();
+                let date_str: std::borrow::Cow<str> = if mailbox_settings!(
+                    context[self.coordinates.0][&self.coordinates.1]
+                        .pager
+                        .show_date_in_my_timezone
+                )
+                .is_true()
+                {
+                    let local_date = melib::datetime::timestamp_to_string(
+                        envelope.timestamp,
+                        Some(melib::datetime::RFC822_DATE),
+                        false,
+                    );
+                    let orig_offset = find_offset(orig_date);
+                    let local_offset = find_offset(&local_date);
+                    if orig_offset == local_offset {
+                        orig_date.into()
+                    } else {
+                        format!(
+                            "{} [actual timezone: {}{:02}{:02}]",
+                            local_date,
+                            if orig_offset.0 { '+' } else { '-' },
+                            orig_offset.1 .0,
+                            orig_offset.1 .1
+                        )
+                        .into()
+                    }
+                } else {
+                    orig_date.into()
+                };
                 print_header!(
-                    ("Date:", envelope.date_as_str()),
+                    ("Date:", date_str),
                     ("From:", envelope.field_from_to_string()),
                     ("To:", envelope.field_to_to_string()),
                 );

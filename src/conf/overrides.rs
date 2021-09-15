@@ -76,6 +76,11 @@ pub struct PagerSettingsOverride {
     #[serde(alias = "auto-choose-multipart-alternative")]
     #[serde(default)]
     pub auto_choose_multipart_alternative: Option<ToggleFlag>,
+    #[doc = " Show Date: in my timezone"]
+    #[doc = " Default: true"]
+    #[serde(alias = "show-date-in-my-timezone")]
+    #[serde(default)]
+    pub show_date_in_my_timezone: Option<ToggleFlag>,
 }
 impl Default for PagerSettingsOverride {
     fn default() -> Self {
@@ -90,6 +95,7 @@ impl Default for PagerSettingsOverride {
             split_long_lines: None,
             minimum_width: None,
             auto_choose_multipart_alternative: None,
+            show_date_in_my_timezone: None,
         }
     }
 }

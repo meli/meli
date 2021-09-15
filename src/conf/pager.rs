@@ -87,6 +87,10 @@ pub struct PagerSettings {
         alias = "auto-choose-multipart-alternative"
     )]
     pub auto_choose_multipart_alternative: ToggleFlag,
+    /// Show Date: in my timezone
+    /// Default: true
+    #[serde(default = "internal_value_true", alias = "show-date-in-my-timezone")]
+    pub show_date_in_my_timezone: ToggleFlag,
 }
 
 impl Default for PagerSettings {
@@ -102,6 +106,7 @@ impl Default for PagerSettings {
             split_long_lines: true,
             minimum_width: 80,
             auto_choose_multipart_alternative: ToggleFlag::InternalVal(true),
+            show_date_in_my_timezone: ToggleFlag::InternalVal(true),
         }
     }
 }
