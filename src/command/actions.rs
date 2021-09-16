@@ -78,6 +78,7 @@ pub enum ViewAction {
     Filter(String),
     SaveAttachment(usize, String),
     ExportMail(String),
+    AddAddressesToContacts,
 }
 
 #[derive(Debug)]

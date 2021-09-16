@@ -742,6 +742,17 @@ Alternatives(&[to_stream!(One(Literal("add-attachment")), One(Filepath)), to_str
                       }
                   )
                 },
+                { tags: ["add-addresses-to-contacts "],
+                  desc: "add-addresses-to-contacts",
+                  tokens: &[One(Literal("add-addresses-to-contacts"))],
+                  parser:(
+                      fn add_addresses_to_contacts(input: &[u8]) -> IResult<&[u8], Action> {
+                          let (input, _) = tag("add-addresses-to-contacts")(input.trim())?;
+                          let (input, _) = eof(input)?;
+                          Ok((input, View(AddAddressesToContacts)))
+                      }
+                  )
+                },
                 { tags: ["tag", "tag add", "tag remove"],
                    desc: "tag [add/remove], edits message's tags.",
                    tokens: &[One(Literal("tag")), One(Alternatives(&[to_stream!(One(Literal("add"))), to_stream!(One(Literal("remove")))]))],
@@ -900,7 +911,13 @@ fn account_action(input: &[u8]) -> IResult<&[u8], Action> {
 }
 
 fn view(input: &[u8]) -> IResult<&[u8], Action> {
-    alt((filter, pipe, save_attachment, export_mail))(input)
+    alt((
+        filter,
+        pipe,
+        save_attachment,
+        export_mail,
+        add_addresses_to_contacts,
+    ))(input)
 }
 
 pub fn parse_command(input: &[u8]) -> Result<Action, MeliError> {

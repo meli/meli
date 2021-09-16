@@ -1030,6 +1030,41 @@ impl MailView {
             ))));
         None
     }
+
+    fn start_contact_selector(&mut self, context: &mut Context) {
+        let account = &context.accounts[&self.coordinates.0];
+        if !account.contains_key(self.coordinates.2) {
+            context
+                .replies
+                .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
+                    "Email not found".into(),
+                )));
+            return;
+        }
+        let envelope: EnvelopeRef = account.collection.get_env(self.coordinates.2);
+
+        let mut entries = Vec::new();
+        for addr in envelope.from().iter().chain(envelope.to().iter()) {
+            let mut new_card: Card = Card::new();
+            new_card.set_email(addr.get_email());
+            if let Some(display_name) = addr.get_display_name() {
+                new_card.set_name(display_name);
+            }
+            entries.push((new_card, format!("{}", addr)));
+        }
+        drop(envelope);
+        self.mode = ViewMode::ContactSelector(Selector::new(
+            "select contacts to add",
+            entries,
+            false,
+            Some(Box::new(move |id: ComponentId, results: &[Card]| {
+                Some(UIEvent::FinishedUIDialog(id, Box::new(results.to_vec())))
+            })),
+            context,
+        ));
+        self.dirty = true;
+        self.initialised = false;
+    }
 }
 
 impl Component for MailView {
@@ -1943,36 +1978,17 @@ impl Component for MailView {
                 );
                 return true;
             }
+            UIEvent::Action(View(ViewAction::AddAddressesToContacts)) => {
+                self.start_contact_selector(context);
+                return true;
+            }
             UIEvent::Input(ref key)
                 if !self.mode.is_contact_selector()
                     && shortcut!(
                         key == shortcuts[MailView::DESCRIPTION]["add_addresses_to_contacts"]
                     ) =>
             {
-                let account = &context.accounts[&self.coordinates.0];
-                let envelope: EnvelopeRef = account.collection.get_env(self.coordinates.2);
-
-                let mut entries = Vec::new();
-                for addr in envelope.from().iter().chain(envelope.to().iter()) {
-                    let mut new_card: Card = Card::new();
-                    new_card.set_email(addr.get_email());
-                    if let Some(display_name) = addr.get_display_name() {
-                        new_card.set_name(display_name);
-                    }
-                    entries.push((new_card, format!("{}", addr)));
-                }
-                drop(envelope);
-                self.mode = ViewMode::ContactSelector(Selector::new(
-                    "select contacts to add",
-                    entries,
-                    false,
-                    Some(Box::new(move |id: ComponentId, results: &[Card]| {
-                        Some(UIEvent::FinishedUIDialog(id, Box::new(results.to_vec())))
-                    })),
-                    context,
-                ));
-                self.dirty = true;
-                self.initialised = false;
+                self.start_contact_selector(context);
                 return true;
             }
             UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Alt(''))
