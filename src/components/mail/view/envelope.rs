@@ -528,15 +528,24 @@ impl Component for EnvelopeView {
                     }
                 };
 
-                match Command::new("xdg-open")
+                let url_launcher = context
+                    .settings
+                    .pager
+                    .url_launcher
+                    .as_ref()
+                    .map(|s| s.as_str())
+                    .unwrap_or("xdg-open");
+                match Command::new(url_launcher)
                     .arg(url)
                     .stdin(Stdio::piped())
                     .stdout(Stdio::piped())
                     .spawn()
                 {
                     Ok(child) => context.children.push(child),
-                    Err(_err) => context.replies.push_back(UIEvent::StatusEvent(
-                        StatusEvent::DisplayMessage("Failed to start xdg_open".into()),
+                    Err(err) => context.replies.push_back(UIEvent::Notification(
+                        Some(format!("Failed to launch {:?}", url_launcher)),
+                        err.to_string(),
+                        Some(NotificationType::Error(melib::ErrorKind::External)),
                     )),
                 }
                 return true;

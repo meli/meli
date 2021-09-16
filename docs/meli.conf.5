@@ -772,7 +772,11 @@ for the mailcap file locations.
 .\" default value
 .Pq Em m
 .It Ic go_to_url
-Go to url of given index
+Go to url of given index (with the command
+.Ic url_launcher
+setting in
+.Sx PAGER
+section)
 .\" default value
 .Pq Em g
 .It Ic toggle_url_mode
@@ -885,6 +889,12 @@ Choose `text/html` alternative if `text/plain` is empty in `multipart/alternativ
 Show Date: in local timezone
 .\" default value
 .Pq Em true
+.It Ic url_launcher Ar String
+.Pq Em optional
+A command to launch URLs with.
+The URL will be given as the first argument of the command.
+.\" default value
+.Pq Em xdg-open
 .El
 .Sh LISTING
 .Bl -tag -width 36n

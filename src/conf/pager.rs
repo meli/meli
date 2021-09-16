@@ -91,6 +91,10 @@ pub struct PagerSettings {
     /// Default: true
     #[serde(default = "internal_value_true", alias = "show-date-in-my-timezone")]
     pub show_date_in_my_timezone: ToggleFlag,
+    /// A command to launch URLs with. The URL will be given as the first argument of the command.
+    /// Default: None
+    #[serde(default = "none", deserialize_with = "non_empty_string")]
+    pub url_launcher: Option<String>,
 }
 
 impl Default for PagerSettings {
@@ -107,6 +111,7 @@ impl Default for PagerSettings {
             minimum_width: 80,
             auto_choose_multipart_alternative: ToggleFlag::InternalVal(true),
             show_date_in_my_timezone: ToggleFlag::InternalVal(true),
+            url_launcher: None,
         }
     }
 }
@@ -129,6 +134,8 @@ impl DotAddressable for PagerSettings {
                     "auto_choose_multipart_alternative" => {
                         self.auto_choose_multipart_alternative.lookup(field, tail)
                     }
+                    "show_date_in_my_timezone" => self.show_date_in_my_timezone.lookup(field, tail),
+                    "url_launcher" => self.html_filter.lookup(field, tail),
                     other => Err(MeliError::new(format!(
                         "{} has no field named {}",
                         parent_field, other

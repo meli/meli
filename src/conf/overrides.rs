@@ -81,6 +81,11 @@ pub struct PagerSettingsOverride {
     #[serde(alias = "show-date-in-my-timezone")]
     #[serde(default)]
     pub show_date_in_my_timezone: Option<ToggleFlag>,
+    #[doc = " A command to launch URLs with. The URL will be given as the first argument of the command."]
+    #[doc = " Default: None"]
+    #[serde(deserialize_with = "non_empty_string")]
+    #[serde(default)]
+    pub url_launcher: Option<Option<String>>,
 }
 impl Default for PagerSettingsOverride {
     fn default() -> Self {
@@ -96,6 +101,7 @@ impl Default for PagerSettingsOverride {
             minimum_width: None,
             auto_choose_multipart_alternative: None,
             show_date_in_my_timezone: None,
+            url_launcher: None,
         }
     }
 }

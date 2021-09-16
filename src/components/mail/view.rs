@@ -2247,7 +2247,15 @@ impl Component for MailView {
                             }
                         };
 
-                        match Command::new("xdg-open")
+                        let url_launcher = mailbox_settings!(
+                            context[self.coordinates.0][&self.coordinates.1]
+                                .pager
+                                .url_launcher
+                        )
+                        .as_ref()
+                        .map(|s| s.as_str())
+                        .unwrap_or("xdg-open");
+                        match Command::new(url_launcher)
                             .arg(url)
                             .stdin(Stdio::piped())
                             .stdout(Stdio::piped())
@@ -2258,7 +2266,7 @@ impl Component for MailView {
                             }
                             Err(err) => {
                                 context.replies.push_back(UIEvent::Notification(
-                                    Some("Failed to launch xdg-open".to_string()),
+                                    Some(format!("Failed to launch {:?}", url_launcher)),
                                     err.to_string(),
                                     Some(NotificationType::Error(melib::ErrorKind::External)),
                                 ));
@@ -2527,7 +2535,15 @@ impl Component for MailView {
                                         }
                                     }
                                     list_management::ListAction::Url(url) => {
-                                        match Command::new("xdg-open")
+                                        let url_launcher = mailbox_settings!(
+                                            context[self.coordinates.0][&self.coordinates.1]
+                                                .pager
+                                                .url_launcher
+                                        )
+                                        .as_ref()
+                                        .map(|s| s.as_str())
+                                        .unwrap_or("xdg-open");
+                                        match Command::new(url_launcher)
                                             .arg(String::from_utf8_lossy(url).into_owned())
                                             .stdin(Stdio::piped())
                                             .stdout(Stdio::piped())
@@ -2539,8 +2555,8 @@ impl Component for MailView {
                                             Err(err) => {
                                                 context.replies.push_back(UIEvent::StatusEvent(
                                                     StatusEvent::DisplayMessage(format!(
-                                                        "Couldn't launch xdg-open: {}",
-                                                        err
+                                                        "Couldn't launch {:?}: {}",
+                                                        url_launcher, err
                                                     )),
                                                 ));
                                             }
@@ -2552,8 +2568,16 @@ impl Component for MailView {
                             }
                         }
                         MailingListAction::ListArchive if actions.archive.is_some() => {
-                            /* open archive url with xdg-open */
-                            match Command::new("xdg-open")
+                            /* open archive url with url_launcher */
+                            let url_launcher = mailbox_settings!(
+                                context[self.coordinates.0][&self.coordinates.1]
+                                    .pager
+                                    .url_launcher
+                            )
+                            .as_ref()
+                            .map(|s| s.as_str())
+                            .unwrap_or("xdg-open");
+                            match Command::new(url_launcher)
                                 .arg(actions.archive.unwrap())
                                 .stdin(Stdio::piped())
                                 .stdout(Stdio::piped())
@@ -2563,8 +2587,8 @@ impl Component for MailView {
                                 Err(err) => {
                                     context.replies.push_back(UIEvent::StatusEvent(
                                         StatusEvent::DisplayMessage(format!(
-                                            "Couldn't launch xdg-open: {}",
-                                            err
+                                            "Couldn't launch {:?}: {}",
+                                            url_launcher, err
                                         )),
                                     ));
                                 }
