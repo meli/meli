@@ -33,6 +33,7 @@ struct ThreadEntry {
     dirty: bool,
     hidden: bool,
     heading: String,
+    timestamp: UnixTimestamp,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -162,6 +163,26 @@ impl ThreadView {
     }
 
     fn initiate(&mut self, expanded_hash: Option<ThreadNodeHash>, context: &Context) {
+        #[inline(always)]
+        fn make_entry(
+            i: (usize, ThreadNodeHash, usize),
+            msg_hash: EnvelopeHash,
+            seen: bool,
+            timestamp: UnixTimestamp,
+        ) -> ThreadEntry {
+            let (ind, _, _) = i;
+            ThreadEntry {
+                index: i,
+                indentation: ind,
+                msg_hash,
+                seen,
+                dirty: true,
+                hidden: false,
+                heading: String::new(),
+                timestamp,
+            }
+        }
+
         let account = &context.accounts[&self.coordinates.0];
         let threads = account.collection.get_threads(self.coordinates.1);
 
@@ -174,8 +195,13 @@ impl ThreadView {
         for (line, (ind, thread_node_hash)) in thread_iter.enumerate() {
             let entry = if let Some(msg_hash) = threads.thread_nodes()[&thread_node_hash].message()
             {
-                let seen: bool = account.collection.get_env(msg_hash).is_seen();
-                self.make_entry((ind, thread_node_hash, line), msg_hash, seen)
+                let env_ref = account.collection.get_env(msg_hash);
+                make_entry(
+                    (ind, thread_node_hash, line),
+                    msg_hash,
+                    env_ref.is_seen(),
+                    env_ref.timestamp,
+                )
             } else {
                 continue;
             };
@@ -189,7 +215,13 @@ impl ThreadView {
             }
         }
         if expanded_hash.is_none() {
-            self.new_expanded_pos = self.entries.len().saturating_sub(1);
+            self.new_expanded_pos = self
+                .entries
+                .iter()
+                .enumerate()
+                .reduce(|a, b| if a.1.timestamp > b.1.timestamp { a } else { b })
+                .map(|el| el.0)
+                .unwrap_or(0);
             self.expanded_pos = self.new_expanded_pos + 1;
         }
 
@@ -390,24 +422,6 @@ impl ThreadView {
         }
         self.content = content;
         self.visible_entries = vec![(0..self.entries.len()).collect()];
-    }
-
-    fn make_entry(
-        &mut self,
-        i: (usize, ThreadNodeHash, usize),
-        msg_hash: EnvelopeHash,
-        seen: bool,
-    ) -> ThreadEntry {
-        let (ind, _, _) = i;
-        ThreadEntry {
-            index: i,
-            indentation: ind,
-            msg_hash,
-            seen,
-            dirty: true,
-            hidden: false,
-            heading: String::new(),
-        }
     }
 
     fn highlight_line(
