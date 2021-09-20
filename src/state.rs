@@ -33,19 +33,14 @@ use super::*;
 use melib::backends::{AccountHash, BackendEventConsumer};
 
 use crate::jobs::JobExecutor;
+use crate::terminal::screen::Screen;
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use indexmap::IndexMap;
 use smallvec::SmallVec;
 use std::env;
-use std::io::Write;
 use std::os::unix::io::RawFd;
 use std::sync::Arc;
 use std::thread;
-use termion::raw::IntoRawMode;
-use termion::screen::AlternateScreen;
-use termion::{clear, cursor};
-
-pub type StateStdout = termion::screen::AlternateScreen<termion::raw::RawTerminal<std::io::Stdout>>;
 
 struct InputHandler {
     pipe: (RawFd, RawFd),
@@ -169,16 +164,9 @@ impl Context {
 /// A State object to manage and own components and components of the UI. `State` is responsible for
 /// managing the terminal and interfacing with `melib`
 pub struct State {
-    cols: usize,
-    rows: usize,
-
-    grid: CellBuffer,
-    overlay_grid: CellBuffer,
+    screen: Screen,
     draw_rate_limit: RateLimit,
-    stdout: Option<StateStdout>,
-    mouse: bool,
     child: Option<ForkType>,
-    draw_horizontal_segment_fn: fn(&mut CellBuffer, &mut StateStdout, usize, usize, usize) -> (),
     pub mode: UIMode,
     overlay: Vec<Box<dyn Component>>,
     components: Vec<Box<dyn Component>>,
@@ -203,7 +191,7 @@ struct DisplayMessage {
 impl Drop for State {
     fn drop(&mut self) {
         // When done, restore the defaults to avoid messing with the terminal.
-        self.switch_to_main_screen();
+        self.screen.switch_to_main_screen();
         use nix::sys::wait::{waitpid, WaitPidFlag};
         for child in self.context.children.iter_mut() {
             if let Err(err) = waitpid(
@@ -315,23 +303,25 @@ impl State {
         let working = Arc::new(());
         let control = Arc::downgrade(&working);
         let mut s = State {
-            cols,
-            rows,
-            grid: CellBuffer::new(cols, rows, Cell::with_char(' ')),
-            overlay_grid: CellBuffer::new(cols, rows, Cell::with_char(' ')),
-            stdout: None,
-            mouse: settings.terminal.use_mouse.is_true(),
+            screen: Screen {
+                cols,
+                rows,
+                grid: CellBuffer::new(cols, rows, Cell::with_char(' ')),
+                overlay_grid: CellBuffer::new(cols, rows, Cell::with_char(' ')),
+                mouse: settings.terminal.use_mouse.is_true(),
+                stdout: None,
+                draw_horizontal_segment_fn: if settings.terminal.use_color() {
+                    Screen::draw_horizontal_segment
+                } else {
+                    Screen::draw_horizontal_segment_no_color
+                },
+            },
             child: None,
             mode: UIMode::Normal,
             components: Vec::with_capacity(8),
             overlay: Vec::new(),
             timer,
             draw_rate_limit: RateLimit::new(1, 3, job_executor.clone()),
-            draw_horizontal_segment_fn: if settings.terminal.use_color() {
-                State::draw_horizontal_segment
-            } else {
-                State::draw_horizontal_segment_no_color
-            },
             display_messages: SmallVec::new(),
             display_messages_expiration_start: None,
             display_messages_pos: 0,
@@ -360,11 +350,11 @@ impl State {
             },
         };
         if s.context.settings.terminal.ascii_drawing {
-            s.grid.set_ascii_drawing(true);
-            s.overlay_grid.set_ascii_drawing(true);
+            s.screen.grid.set_ascii_drawing(true);
+            s.screen.overlay_grid.set_ascii_drawing(true);
         }
 
-        s.switch_to_alternate_screen();
+        s.screen.switch_to_alternate_screen(&s.context);
         for i in 0..s.context.accounts.len() {
             if !s.context.accounts[i].backend_capabilities.is_remote {
                 s.context.accounts[i].watch();
@@ -416,78 +406,6 @@ impl State {
         }
     }
 
-    /// Switch back to the terminal's main screen (The command line the user sees before opening
-    /// the application)
-    pub fn switch_to_main_screen(&mut self) {
-        let mouse = self.mouse;
-        write!(
-            self.stdout(),
-            "{}{}{}{}{disable_sgr_mouse}{disable_mouse}",
-            termion::screen::ToMainScreen,
-            cursor::Show,
-            RestoreWindowTitleIconFromStack,
-            BracketModeEnd,
-            disable_sgr_mouse = if mouse { DisableSGRMouse.as_ref() } else { "" },
-            disable_mouse = if mouse { DisableMouse.as_ref() } else { "" },
-        )
-        .unwrap();
-        self.flush();
-        self.stdout = None;
-    }
-
-    pub fn switch_to_alternate_screen(&mut self) {
-        let s = std::io::stdout();
-
-        let mut stdout = AlternateScreen::from(s.into_raw_mode().unwrap());
-
-        write!(
-            &mut stdout,
-            "{save_title_to_stack}{}{}{}{window_title}{}{}{enable_mouse}{enable_sgr_mouse}",
-            termion::screen::ToAlternateScreen,
-            cursor::Hide,
-            clear::All,
-            cursor::Goto(1, 1),
-            BracketModeStart,
-            save_title_to_stack = SaveWindowTitleIconToStack,
-            window_title = if let Some(ref title) = self.context.settings.terminal.window_title {
-                format!("\x1b]2;{}\x07", title)
-            } else {
-                String::new()
-            },
-            enable_mouse = if self.mouse { EnableMouse.as_ref() } else { "" },
-            enable_sgr_mouse = if self.mouse {
-                EnableSGRMouse.as_ref()
-            } else {
-                ""
-            },
-        )
-        .unwrap();
-
-        self.stdout = Some(stdout);
-        self.flush();
-    }
-
-    pub fn set_mouse(&mut self, value: bool) {
-        if let Some(stdout) = self.stdout.as_mut() {
-            write!(
-                stdout,
-                "{mouse}{sgr_mouse}",
-                mouse = if value {
-                    AsRef::<str>::as_ref(&EnableMouse)
-                } else {
-                    AsRef::<str>::as_ref(&DisableMouse)
-                },
-                sgr_mouse = if value {
-                    AsRef::<str>::as_ref(&EnableSGRMouse)
-                } else {
-                    AsRef::<str>::as_ref(&DisableSGRMouse)
-                },
-            )
-            .unwrap();
-        }
-        self.flush();
-    }
-
     pub fn receiver(&self) -> Receiver<ThreadEvent> {
         self.context.receiver.clone()
     }
@@ -502,27 +420,7 @@ impl State {
 
     /// On `SIGWNICH` the `State` redraws itself according to the new terminal size.
     pub fn update_size(&mut self) {
-        let termsize = termion::terminal_size().ok();
-        let termcols = termsize.map(|(w, _)| w);
-        let termrows = termsize.map(|(_, h)| h);
-        if termcols.unwrap_or(72) as usize != self.cols
-            || termrows.unwrap_or(120) as usize != self.rows
-        {
-            debug!(
-                "Size updated, from ({}, {}) -> ({:?}, {:?})",
-                self.cols, self.rows, termcols, termrows
-            );
-        }
-        self.cols = termcols.unwrap_or(72) as usize;
-        self.rows = termrows.unwrap_or(120) as usize;
-        if !self.grid.resize(self.cols, self.rows, None) {
-            panic!(
-                "Terminal size too big: ({} cols, {} rows)",
-                self.cols, self.rows
-            );
-        }
-        let _ = self.overlay_grid.resize(self.cols, self.rows, None);
-
+        self.screen.update_size();
         self.rcv_event(UIEvent::Resize);
         self.display_messages_dirty = true;
         self.display_messages_initialised = false;
@@ -556,7 +454,10 @@ impl State {
                 self.display_messages_expiration_start = None;
                 areas.push((
                     (0, 0),
-                    (self.cols.saturating_sub(1), self.rows.saturating_sub(1)),
+                    (
+                        self.screen.cols.saturating_sub(1),
+                        self.screen.rows.saturating_sub(1),
+                    ),
                 ));
             }
         }
@@ -576,7 +477,7 @@ impl State {
             }
         }
         /* draw each dirty area */
-        let rows = self.rows;
+        let rows = self.screen.rows;
         for y in 0..rows {
             let mut segment = None;
             for ((x_start, y_start), (x_end, y_end)) in &areas {
@@ -584,9 +485,9 @@ impl State {
                     continue;
                 }
                 if let Some((x_start, x_end)) = segment.take() {
-                    (self.draw_horizontal_segment_fn)(
-                        &mut self.grid,
-                        self.stdout.as_mut().unwrap(),
+                    (self.screen.draw_horizontal_segment_fn)(
+                        &mut self.screen.grid,
+                        self.screen.stdout.as_mut().unwrap(),
                         x_start,
                         x_end,
                         y,
@@ -597,9 +498,9 @@ impl State {
                         *s = Some((*x_start, *x_end));
                     }
                     ref mut s @ Some(_) if s.unwrap().1 < *x_start => {
-                        (self.draw_horizontal_segment_fn)(
-                            &mut self.grid,
-                            self.stdout.as_mut().unwrap(),
+                        (self.screen.draw_horizontal_segment_fn)(
+                            &mut self.screen.grid,
+                            self.screen.stdout.as_mut().unwrap(),
                             s.unwrap().0,
                             s.unwrap().1,
                             y,
@@ -607,9 +508,9 @@ impl State {
                         *s = Some((*x_start, *x_end));
                     }
                     ref mut s @ Some(_) if s.unwrap().1 < *x_end => {
-                        (self.draw_horizontal_segment_fn)(
-                            &mut self.grid,
-                            self.stdout.as_mut().unwrap(),
+                        (self.screen.draw_horizontal_segment_fn)(
+                            &mut self.screen.grid,
+                            self.screen.stdout.as_mut().unwrap(),
                             s.unwrap().0,
                             s.unwrap().1,
                             y,
@@ -622,9 +523,9 @@ impl State {
                 }
             }
             if let Some((x_start, x_end)) = segment {
-                (self.draw_horizontal_segment_fn)(
-                    &mut self.grid,
-                    self.stdout.as_mut().unwrap(),
+                (self.screen.draw_horizontal_segment_fn)(
+                    &mut self.screen.grid,
+                    self.screen.stdout.as_mut().unwrap(),
                     x_start,
                     x_end,
                     y,
@@ -644,9 +545,9 @@ impl State {
                         /* Clear area previously occupied by floating notification box */
                         let displ_area = self.display_messages_area;
                         for y in get_y(upper_left!(displ_area))..=get_y(bottom_right!(displ_area)) {
-                            (self.draw_horizontal_segment_fn)(
-                                &mut self.grid,
-                                self.stdout.as_mut().unwrap(),
+                            (self.screen.draw_horizontal_segment_fn)(
+                                &mut self.screen.grid,
+                                self.screen.stdout.as_mut().unwrap(),
                                 get_x(upper_left!(displ_area)),
                                 get_x(bottom_right!(displ_area)),
                                 y,
@@ -656,7 +557,7 @@ impl State {
                     let noto_colors = crate::conf::value(&self.context, "status.notification");
                     use crate::melib::text_processing::{Reflow, TextProcessing};
 
-                    let msg_lines = msg.split_lines_reflow(Reflow::All, Some(self.cols / 3));
+                    let msg_lines = msg.split_lines_reflow(Reflow::All, Some(self.screen.cols / 3));
                     let width = msg_lines
                         .iter()
                         .map(|line| line.grapheme_len() + 4)
@@ -666,16 +567,19 @@ impl State {
                     let displ_area = place_in_area(
                         (
                             (0, 0),
-                            (self.cols.saturating_sub(1), self.rows.saturating_sub(1)),
+                            (
+                                self.screen.cols.saturating_sub(1),
+                                self.screen.rows.saturating_sub(1),
+                            ),
                         ),
-                        (width, std::cmp::min(self.rows, msg_lines.len() + 4)),
+                        (width, std::cmp::min(self.screen.rows, msg_lines.len() + 4)),
                         false,
                         false,
                     );
-                    let box_displ_area = create_box(&mut self.overlay_grid, displ_area);
-                    for row in self.overlay_grid.bounds_iter(box_displ_area) {
+                    let box_displ_area = create_box(&mut self.screen.overlay_grid, displ_area);
+                    for row in self.screen.overlay_grid.bounds_iter(box_displ_area) {
                         for c in row {
-                            self.overlay_grid[c]
+                            self.screen.overlay_grid[c]
                                 .set_ch(' ')
                                 .set_fg(noto_colors.fg)
                                 .set_bg(noto_colors.bg)
@@ -688,7 +592,7 @@ impl State {
                     )) {
                         write_string_to_grid(
                             &line,
-                            &mut self.overlay_grid,
+                            &mut self.screen.overlay_grid,
                             noto_colors.fg,
                             noto_colors.bg,
                             noto_colors.attrs,
@@ -725,7 +629,7 @@ impl State {
                                     self.context.settings.shortcuts.general.info_message_next
                                 )
                             },
-                            &mut self.overlay_grid,
+                            &mut self.screen.overlay_grid,
                             noto_colors.fg,
                             noto_colors.bg,
                             noto_colors.attrs,
@@ -738,9 +642,9 @@ impl State {
                 for y in get_y(upper_left!(self.display_messages_area))
                     ..=get_y(bottom_right!(self.display_messages_area))
                 {
-                    (self.draw_horizontal_segment_fn)(
-                        &mut self.overlay_grid,
-                        self.stdout.as_mut().unwrap(),
+                    (self.screen.draw_horizontal_segment_fn)(
+                        &mut self.screen.overlay_grid,
+                        self.screen.stdout.as_mut().unwrap(),
                         get_x(upper_left!(self.display_messages_area)),
                         get_x(bottom_right!(self.display_messages_area)),
                         y,
@@ -752,9 +656,9 @@ impl State {
             /* Clear area previously occupied by floating notification box */
             let displ_area = self.display_messages_area;
             for y in get_y(upper_left!(displ_area))..=get_y(bottom_right!(displ_area)) {
-                (self.draw_horizontal_segment_fn)(
-                    &mut self.grid,
-                    self.stdout.as_mut().unwrap(),
+                (self.screen.draw_horizontal_segment_fn)(
+                    &mut self.screen.grid,
+                    self.screen.stdout.as_mut().unwrap(),
                     get_x(upper_left!(displ_area)),
                     get_x(bottom_right!(displ_area)),
                     y,
@@ -766,30 +670,34 @@ impl State {
             let area = center_area(
                 (
                     (0, 0),
-                    (self.cols.saturating_sub(1), self.rows.saturating_sub(1)),
+                    (
+                        self.screen.cols.saturating_sub(1),
+                        self.screen.rows.saturating_sub(1),
+                    ),
                 ),
                 (
-                    if self.cols / 3 > 30 {
-                        self.cols / 3
+                    if self.screen.cols / 3 > 30 {
+                        self.screen.cols / 3
                     } else {
-                        self.cols
+                        self.screen.cols
                     },
-                    if self.rows / 5 > 10 {
-                        self.rows / 5
+                    if self.screen.rows / 5 > 10 {
+                        self.screen.rows / 5
                     } else {
-                        self.rows
+                        self.screen.rows
                     },
                 ),
             );
-            copy_area(&mut self.overlay_grid, &self.grid, area, area);
-            self.overlay
-                .get_mut(0)
-                .unwrap()
-                .draw(&mut self.overlay_grid, area, &mut self.context);
+            copy_area(&mut self.screen.overlay_grid, &self.screen.grid, area, area);
+            self.overlay.get_mut(0).unwrap().draw(
+                &mut self.screen.overlay_grid,
+                area,
+                &mut self.context,
+            );
             for y in get_y(upper_left!(area))..=get_y(bottom_right!(area)) {
-                (self.draw_horizontal_segment_fn)(
-                    &mut self.overlay_grid,
-                    self.stdout.as_mut().unwrap(),
+                (self.screen.draw_horizontal_segment_fn)(
+                    &mut self.screen.overlay_grid,
+                    self.screen.stdout.as_mut().unwrap(),
                     get_x(upper_left!(area)),
                     get_x(bottom_right!(area)),
                     y,
@@ -799,76 +707,11 @@ impl State {
         self.flush();
     }
 
-    /// Draw only a specific `area` on the screen.
-    fn draw_horizontal_segment(
-        grid: &mut CellBuffer,
-        stdout: &mut StateStdout,
-        x_start: usize,
-        x_end: usize,
-        y: usize,
-    ) {
-        write!(
-            stdout,
-            "{}",
-            cursor::Goto(x_start as u16 + 1, (y + 1) as u16)
-        )
-        .unwrap();
-        let mut current_fg = Color::Default;
-        let mut current_bg = Color::Default;
-        let mut current_attrs = Attr::DEFAULT;
-        write!(stdout, "\x1B[m").unwrap();
-        for x in x_start..=x_end {
-            let c = &grid[(x, y)];
-            if c.attrs() != current_attrs {
-                c.attrs().write(current_attrs, stdout).unwrap();
-                current_attrs = c.attrs();
-            }
-            if c.bg() != current_bg {
-                c.bg().write_bg(stdout).unwrap();
-                current_bg = c.bg();
-            }
-            if c.fg() != current_fg {
-                c.fg().write_fg(stdout).unwrap();
-                current_fg = c.fg();
-            }
-            if !c.empty() {
-                write!(stdout, "{}", c.ch()).unwrap();
-            }
-        }
-    }
-
-    fn draw_horizontal_segment_no_color(
-        grid: &mut CellBuffer,
-        stdout: &mut StateStdout,
-        x_start: usize,
-        x_end: usize,
-        y: usize,
-    ) {
-        write!(
-            stdout,
-            "{}",
-            cursor::Goto(x_start as u16 + 1, (y + 1) as u16)
-        )
-        .unwrap();
-        let mut current_attrs = Attr::DEFAULT;
-        write!(stdout, "\x1B[m").unwrap();
-        for x in x_start..=x_end {
-            let c = &grid[(x, y)];
-            if c.attrs() != current_attrs {
-                c.attrs().write(current_attrs, stdout).unwrap();
-                current_attrs = c.attrs();
-            }
-            if !c.empty() {
-                write!(stdout, "{}", c.ch()).unwrap();
-            }
-        }
-    }
-
     /// Draw the entire screen from scratch.
     pub fn render(&mut self) {
-        self.update_size();
-        let cols = self.cols;
-        let rows = self.rows;
+        self.screen.update_size();
+        let cols = self.screen.cols;
+        let rows = self.screen.rows;
         self.context
             .dirty_areas
             .push_back(((0, 0), (cols - 1, rows - 1)));
@@ -879,11 +722,11 @@ impl State {
     pub fn draw_component(&mut self, idx: usize) {
         let component = &mut self.components[idx];
         let upper_left = (0, 0);
-        let bottom_right = (self.cols - 1, self.rows - 1);
+        let bottom_right = (self.screen.cols - 1, self.screen.rows - 1);
 
         if component.is_dirty() {
             component.draw(
-                &mut self.grid,
+                &mut self.screen.grid,
                 (upper_left, bottom_right),
                 &mut self.context,
             );
@@ -1045,9 +888,11 @@ impl State {
                     ))));
             }
             ToggleMouse => {
-                self.mouse = !self.mouse;
-                self.set_mouse(self.mouse);
-                self.rcv_event(UIEvent::StatusEvent(StatusEvent::SetMouse(self.mouse)));
+                self.screen.mouse = !self.screen.mouse;
+                self.screen.set_mouse(self.screen.mouse);
+                self.rcv_event(UIEvent::StatusEvent(StatusEvent::SetMouse(
+                    self.screen.mouse,
+                )));
             }
             Quit => {
                 self.context
@@ -1137,11 +982,11 @@ impl State {
                  * Fork has finished in the past.
                  * We're back in the AlternateScreen, but the cursor is reset to Shown, so fix
                  * it.
-                write!(self.stdout(), "{}", cursor::Hide,).unwrap();
+                write!(self.screen.stdout(), "{}", cursor::Hide,).unwrap();
                 self.flush();
                  */
-                self.switch_to_main_screen();
-                self.switch_to_alternate_screen();
+                self.screen.switch_to_main_screen();
+                self.screen.switch_to_alternate_screen(&self.context);
                 self.context.restore_input();
                 return;
             }
@@ -1322,13 +1167,18 @@ impl State {
         }
         Some(false)
     }
-    fn flush(&mut self) {
-        if let Some(s) = self.stdout.as_mut() {
-            s.flush().unwrap();
-        }
+        /// Switch back to the terminal's main screen (The command line the user sees before opening
+        /// the application)
+    pub fn switch_to_main_screen(&mut self) {
+        self.screen.switch_to_main_screen();
     }
-    fn stdout(&mut self) -> &mut StateStdout {
-        self.stdout.as_mut().unwrap()
+
+        pub fn switch_to_alternate_screen(&mut self){
+            self.screen.switch_to_alternate_screen(&mut self.context);
+        }
+
+    fn flush(&mut self) {
+        self.screen.flush();
     }
 
     pub fn check_accounts(&mut self) {
