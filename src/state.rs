@@ -1167,15 +1167,15 @@ impl State {
         }
         Some(false)
     }
-        /// Switch back to the terminal's main screen (The command line the user sees before opening
-        /// the application)
+    /// Switch back to the terminal's main screen (The command line the user sees before opening
+    /// the application)
     pub fn switch_to_main_screen(&mut self) {
         self.screen.switch_to_main_screen();
     }
 
-        pub fn switch_to_alternate_screen(&mut self){
-            self.screen.switch_to_alternate_screen(&mut self.context);
-        }
+    pub fn switch_to_alternate_screen(&mut self) {
+        self.screen.switch_to_alternate_screen(&mut self.context);
+    }
 
     fn flush(&mut self) {
         self.screen.flush();

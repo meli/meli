@@ -168,11 +168,13 @@ pub struct MailView {
     id: ComponentId,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum PendingReplyAction {
     Reply,
     ReplyToAuthor,
     ReplyToAll,
+    ForwardAttachment,
+    ForwardInline,
 }
 
 #[derive(Debug)]
@@ -189,6 +191,7 @@ enum MailViewState {
     },
     Loaded {
         bytes: Vec<u8>,
+        env: Envelope,
         body: Attachment,
         display: Vec<AttachmentDisplay>,
         body_text: String,
@@ -310,6 +313,8 @@ impl MailView {
                                             .get_env_mut(self.coordinates.2)
                                             .populate_headers(&bytes);
                                     }
+                                    let env =
+                                        account.collection.get_env(self.coordinates.2).clone();
                                     let body = AttachmentBuilder::new(&bytes).build();
                                     let display = Self::attachment_to(
                                         &body,
@@ -325,6 +330,7 @@ impl MailView {
                                         self.attachment_displays_to_text(&display, context, true);
                                     self.state = MailViewState::Loaded {
                                         display,
+                                        env,
                                         body,
                                         bytes,
                                         body_text,
@@ -388,7 +394,7 @@ impl MailView {
     }
 
     fn perform_action(&mut self, action: PendingReplyAction, context: &mut Context) {
-        let reply_body = match self.state {
+        let (bytes, reply_body, env) = match self.state {
             MailViewState::Init {
                 ref mut pending_action,
                 ..
@@ -402,9 +408,16 @@ impl MailView {
                 }
                 return;
             }
-            MailViewState::Loaded { ref display, .. } => {
-                self.attachment_displays_to_text(&display, context, false)
-            }
+            MailViewState::Loaded {
+                ref bytes,
+                ref display,
+                ref env,
+                ..
+            } => (
+                bytes,
+                self.attachment_displays_to_text(&display, context, false),
+                env,
+            ),
             MailViewState::Error { .. } => {
                 return;
             }
@@ -423,6 +436,20 @@ impl MailView {
             PendingReplyAction::ReplyToAll => Box::new(Composer::reply_to_all(
                 self.coordinates,
                 reply_body,
+                context,
+            )),
+            PendingReplyAction::ForwardAttachment => Box::new(Composer::forward(
+                self.coordinates,
+                bytes,
+                env,
+                true,
+                context,
+            )),
+            PendingReplyAction::ForwardInline => Box::new(Composer::forward(
+                self.coordinates,
+                bytes,
+                env,
+                false,
                 context,
             )),
         };
@@ -1737,6 +1764,10 @@ impl Component for MailView {
                                             .get_env_mut(self.coordinates.2)
                                             .populate_headers(&bytes);
                                     }
+                                    let env = context.accounts[&self.coordinates.0]
+                                        .collection
+                                        .get_env(self.coordinates.2)
+                                        .clone();
                                     let body = AttachmentBuilder::new(&bytes).build();
                                     let display = Self::attachment_to(
                                         &body,
@@ -1752,6 +1783,7 @@ impl Component for MailView {
                                         self.attachment_displays_to_text(&display, context, true);
                                     self.state = MailViewState::Loaded {
                                         bytes,
+                                        env,
                                         body,
                                         display,
                                         links: vec![],
@@ -1905,6 +1937,53 @@ impl Component for MailView {
                 if shortcut!(key == shortcuts[MailView::DESCRIPTION]["reply_to_author"]) =>
             {
                 self.perform_action(PendingReplyAction::ReplyToAuthor, context);
+                return true;
+            }
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[MailView::DESCRIPTION]["forward"]) =>
+            {
+                match mailbox_settings!(
+                    context[self.coordinates.0][&self.coordinates.1]
+                        .composing
+                        .forward_as_attachment
+                ) {
+                    f if f.is_ask() => {
+                        let id = self.id;
+                        context.replies.push_back(UIEvent::GlobalUIDialog(Box::new(
+                            UIConfirmationDialog::new(
+                                "How do you want the email to be forwarded?",
+                                vec![
+                                    (true, "inline".to_string()),
+                                    (false, "as attachment".to_string()),
+                                ],
+                                true,
+                                Some(Box::new(move |_: ComponentId, result: bool| {
+                                    Some(UIEvent::FinishedUIDialog(
+                                        id,
+                                        Box::new(if result {
+                                            PendingReplyAction::ForwardInline
+                                        } else {
+                                            PendingReplyAction::ForwardAttachment
+                                        }),
+                                    ))
+                                })),
+                                context,
+                            ),
+                        )));
+                    }
+                    f if f.is_true() => {
+                        self.perform_action(PendingReplyAction::ForwardAttachment, context);
+                    }
+                    _ => {
+                        self.perform_action(PendingReplyAction::ForwardInline, context);
+                    }
+                }
+                return true;
+            }
+            UIEvent::FinishedUIDialog(id, ref result) if id == self.id() => {
+                if let Some(result) = result.downcast_ref::<PendingReplyAction>() {
+                    self.perform_action(*result, context);
+                }
                 return true;
             }
             UIEvent::Input(ref key)
@@ -2227,6 +2306,7 @@ impl Component for MailView {
                         body: _,
                         bytes: _,
                         display: _,
+                        env: _,
                         ref body_text,
                         ref links,
                     } => {

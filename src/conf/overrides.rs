@@ -312,6 +312,11 @@ pub struct ComposingSettingsOverride {
     #[doc = " Default: true"]
     #[serde(default)]
     pub attribution_use_posix_locale: Option<bool>,
+    #[doc = " Forward emails as attachment? (Alternative is inline)"]
+    #[doc = " Default: ask"]
+    #[serde(alias = "forward-as-attachment")]
+    #[serde(default)]
+    pub forward_as_attachment: Option<ToggleFlag>,
 }
 impl Default for ComposingSettingsOverride {
     fn default() -> Self {
@@ -325,6 +330,7 @@ impl Default for ComposingSettingsOverride {
             store_sent_mail: None,
             attribution_format_string: None,
             attribution_use_posix_locale: None,
+            forward_as_attachment: None,
         }
     }
 }

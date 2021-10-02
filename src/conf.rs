@@ -593,6 +593,10 @@ mod default_vals {
     pub(in crate::conf) fn internal_value_true<T: std::convert::From<super::ToggleFlag>>() -> T {
         super::ToggleFlag::InternalVal(true).into()
     }
+
+    pub(in crate::conf) fn ask<T: std::convert::From<super::ToggleFlag>>() -> T {
+        super::ToggleFlag::Ask.into()
+    }
 }
 
 mod deserializers {

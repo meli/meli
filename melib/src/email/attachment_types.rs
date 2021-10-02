@@ -564,3 +564,12 @@ impl From<&[u8]> for ContentDisposition {
             .unwrap_or_default()
     }
 }
+
+impl From<ContentDispositionKind> for ContentDisposition {
+    fn from(kind: ContentDispositionKind) -> ContentDisposition {
+        ContentDisposition {
+            kind,
+            ..ContentDisposition::default()
+        }
+    }
+}

@@ -408,6 +408,55 @@ impl Composer {
         Composer::reply_to(coordinates, reply_body, context, true)
     }
 
+    pub fn forward(
+        coordinates: (AccountHash, MailboxHash, EnvelopeHash),
+        bytes: &[u8],
+        env: &Envelope,
+        as_attachment: bool,
+        context: &mut Context,
+    ) -> Self {
+        let mut composer = Composer::with_account(coordinates.0, context);
+        let mut draft: Draft = Draft::default();
+        draft.set_header("Subject", format!("Fwd: {}", env.subject()));
+        let preamble = format!(
+            r#"
+---------- Forwarded message ---------
+From: {}
+Date: {}
+Subject: {}
+To: {}
+
+"#,
+            env.field_from_to_string(),
+            env.date_as_str(),
+            env.subject(),
+            env.field_to_to_string()
+        );
+        if as_attachment {
+            let mut attachment = AttachmentBuilder::new(b"");
+            let mut disposition: ContentDisposition = ContentDispositionKind::Attachment.into();
+            {
+                disposition.filename = Some(format!("{}.eml", env.message_id_raw()));
+            }
+            attachment
+                .set_raw(bytes.to_vec())
+                .set_body_to_raw()
+                .set_content_type(ContentType::MessageRfc822)
+                .set_content_transfer_encoding(ContentTransferEncoding::_8Bit)
+                .set_content_disposition(disposition);
+            draft.attachments.push(attachment);
+            draft.body = preamble;
+        } else {
+            let content_type = ContentType::default();
+            let preamble: AttachmentBuilder =
+                Attachment::new(content_type, Default::default(), preamble.into_bytes()).into();
+            draft.attachments.push(preamble);
+            draft.attachments.push(env.body_bytes(bytes).into());
+        }
+        composer.set_draft(draft);
+        composer
+    }
+
     pub fn set_draft(&mut self, draft: Draft) {
         self.draft = draft;
         self.update_form();

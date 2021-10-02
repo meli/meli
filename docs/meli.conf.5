@@ -520,6 +520,11 @@ with the replied envelope's date.
 Whether the strftime call for the attribution string uses the POSIX locale instead of the user's active locale.
 .\" default value
 .Pq Em true
+.It Ic forward_as_attachment Ar boolean or "ask"
+.Pq Em optional
+Forward emails as attachment? (Alternative is inline).
+.\" default value
+.Pq Em ask
 .El
 .Sh SHORTCUTS
 Shortcuts can take the following values:
@@ -751,6 +756,18 @@ View raw envelope source in a pager.
 Reply to envelope.
 .\" default value
 .Pq Em R
+.It Ic reply_to_author
+Reply to author.
+.\" default value
+.Pq Em Ctrl-r
+.It Ic reply_to_all
+Reply to all/Reply to list/Follow up.
+.\" default value
+.Pq Em Ctrl-g
+.It Ic forward
+Forward email.
+.\" default value
+.Pq Em Ctrl-f
 .It Ic edit
 Open envelope in composer.
 .\" default value

@@ -20,7 +20,8 @@
  */
 
 //! Configuration for composing email.
-use super::default_vals::{false_val, none, true_val};
+use super::default_vals::{ask, false_val, none, true_val};
+use melib::ToggleFlag;
 use std::collections::HashMap;
 
 /// Settings for writing and sending new e-mail
@@ -72,6 +73,10 @@ pub struct ComposingSettings {
     /// Default: true
     #[serde(default = "true_val")]
     pub attribution_use_posix_locale: bool,
+    /// Forward emails as attachment? (Alternative is inline)
+    /// Default: ask
+    #[serde(default = "ask", alias = "forward-as-attachment")]
+    pub forward_as_attachment: ToggleFlag,
 }
 
 impl Default for ComposingSettings {
@@ -86,6 +91,7 @@ impl Default for ComposingSettings {
             store_sent_mail: true,
             attribution_format_string: None,
             attribution_use_posix_locale: true,
+            forward_as_attachment: ToggleFlag::Ask,
         }
     }
 }
