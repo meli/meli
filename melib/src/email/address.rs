@@ -323,12 +323,14 @@ impl Hash for Address {
 impl core::fmt::Display for Address {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         match self {
-            Address::Mailbox(m) if m.display_name.length > 0 => write!(
-                f,
-                "{} <{}>",
-                m.display_name.display(&m.raw),
-                m.address_spec.display(&m.raw)
-            ),
+            Address::Mailbox(m) if m.display_name.length > 0 => {
+                match m.display_name.display(&m.raw) {
+                    d if d.contains(".") => {
+                        write!(f, "\"{}\" <{}>", d, m.address_spec.display(&m.raw))
+                    }
+                    d => write!(f, "{} <{}>", d, m.address_spec.display(&m.raw)),
+                }
+            }
             Address::Group(g) => {
                 let attachment_strings: Vec<String> =
                     g.mailbox_list.iter().map(|a| format!("{}", a)).collect();
