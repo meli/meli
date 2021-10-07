@@ -108,36 +108,44 @@ impl TokenStream {
                 ptr += 1;
             }
             *s = &s[ptr..];
-            //println!("{:?} {:?}", t, s);
-            if s.is_empty() {
+            //println!("\t before s.is_empty() {:?} {:?}", t, s);
+            if s.is_empty() || &*s == &" " {
                 match t.inner() {
                     Literal(lit) => {
-                        sugg.insert(format!(" {}", lit));
+                        sugg.insert(format!("{}{}", if s.is_empty() { " " } else { "" }, lit));
                     }
                     Alternatives(v) => {
                         for t in v.iter() {
                             //println!("adding empty suggestions for {:?}", t);
                             let mut _s = *s;
-                            t.matches(&mut _s, sugg);
+                            let mut m = t.matches(&mut _s, sugg);
+                            tokens.extend(m.drain(..));
                         }
                     }
                     Seq(_s) => {}
-                    RestOfStringValue => {}
-                    AttachmentIndexValue
-                    | MailboxIndexValue
-                    | IndexValue
-                    | Filepath
-                    | AccountName
-                    | MailboxPath
-                    | QuotedStringValue
-                    | AlphanumericStringValue => {}
+                    RestOfStringValue => {
+                        sugg.insert(String::new());
+                    }
+                    t @ AttachmentIndexValue
+                    | t @ MailboxIndexValue
+                    | t @ IndexValue
+                    | t @ Filepath
+                    | t @ AccountName
+                    | t @ MailboxPath
+                    | t @ QuotedStringValue
+                    | t @ AlphanumericStringValue => {
+                        let _t = t;
+                        //sugg.insert(format!("{}{:?}", if s.is_empty() { " " } else { "" }, t));
+                    }
                 }
+                tokens.push((*s, *t.inner()));
                 return tokens;
             }
             match t.inner() {
                 Literal(lit) => {
                     if lit.starts_with(*s) && lit.len() != s.len() {
                         sugg.insert(lit[s.len()..].to_string());
+                        tokens.push((s, *t.inner()));
                         return tokens;
                     } else if s.starts_with(lit) {
                         tokens.push((&s[..lit.len()], *t.inner()));
@@ -158,6 +166,9 @@ impl TokenStream {
                             *s = _s;
                             break;
                         }
+                    }
+                    if tokens.is_empty() {
+                        return tokens;
                     }
                     if !cont {
                         *s = "";
@@ -382,7 +393,7 @@ define_commands!([
                 },
                 { tags: ["toggle thread_snooze"],
                   desc: "turn off new notifications for this thread",
-                  tokens: &[One(Literal("toggle thread_snooze"))],
+                  tokens: &[One(Literal("toggle")), One(Literal("thread_snooze"))],
                   parser: (
                       fn toggle_thread_snooze(input: &[u8]) -> IResult<&[u8], Action> {
                           let (input, _) = tag("toggle")(input)?;
@@ -948,34 +959,93 @@ pub fn parse_command(input: &[u8]) -> Result<Action, MeliError> {
 }
 
 #[test]
-#[ignore]
 fn test_parser() {
+    let mut input = "sort".to_string();
+    macro_rules! match_input {
+        ($input:expr) => {{
+            let mut sugg = Default::default();
+            let mut vec = vec![];
+            //print!("{}", $input);
+            for (_tags, _desc, tokens) in COMMAND_COMPLETION.iter() {
+                //println!("{:?}, {:?}, {:?}", _tags, _desc, tokens);
+                let m = tokens.matches(&mut $input.as_str(), &mut sugg);
+                if !m.is_empty() {
+                    vec.push(tokens);
+                    //print!("{:?} ", desc);
+                    //println!(" result = {:#?}\n\n", m);
+                }
+            }
+            //println!("suggestions = {:#?}", sugg);
+            sugg.into_iter()
+                .map(|s| format!("{}{}", $input.as_str(), s.as_str()))
+                .collect::<HashSet<String>>()
+        }};
+    }
+    assert_eq!(
+        &match_input!(input),
+        &IntoIterator::into_iter(["sort date".to_string(), "sort subject".to_string()]).collect(),
+    );
+    input = "so".to_string();
+    assert_eq!(
+        &match_input!(input),
+        &IntoIterator::into_iter(["sort".to_string()]).collect(),
+    );
+    input = "so ".to_string();
+    assert_eq!(&match_input!(input), &HashSet::default(),);
+    input = "to".to_string();
+    assert_eq!(
+        &match_input!(input),
+        &IntoIterator::into_iter(["toggle".to_string()]).collect(),
+    );
+    input = "toggle ".to_string();
+    assert_eq!(
+        &match_input!(input),
+        &IntoIterator::into_iter([
+            "toggle mouse".to_string(),
+            "toggle sign".to_string(),
+            "toggle encrypt".to_string(),
+            "toggle thread_snooze".to_string()
+        ])
+        .collect(),
+    );
+}
+
+#[test]
+#[ignore]
+fn test_parser_interactive() {
     use std::io;
     let mut input = String::new();
     loop {
         input.clear();
+        print!("> ");
         match io::stdin().read_line(&mut input) {
             Ok(_n) => {
+                println!("Input is {:?}", input.as_str().trim());
                 let mut sugg = Default::default();
+                let mut vec = vec![];
                 //print!("{}", input);
-                for (_tags, desc, tokens) in COMMAND_COMPLETION.iter() {
+                for (_tags, _desc, tokens) in COMMAND_COMPLETION.iter() {
+                    //println!("{:?}, {:?}, {:?}", _tags, _desc, tokens);
                     let m = tokens.matches(&mut input.as_str().trim(), &mut sugg);
                     if !m.is_empty() {
-                        print!("{:?} ", desc);
-                        println!(" result = {:#?}\n\n", m);
+                        vec.push(tokens);
+                        //print!("{:?} ", desc);
+                        //println!(" result = {:#?}\n\n", m);
                     }
                 }
                 println!(
                     "suggestions = {:#?}",
                     sugg.into_iter()
-                        .map(|s| format!(
-                            "{}{}",
+                        .zip(vec.into_iter())
+                        .map(|(s, v)| format!(
+                            "{}{} {:?}",
                             input.as_str().trim(),
                             if input.trim().is_empty() {
                                 s.trim()
                             } else {
                                 s.as_str()
-                            }
+                            },
+                            v
                         ))
                         .collect::<Vec<String>>()
                 );
@@ -1004,16 +1074,6 @@ pub fn command_completion_suggestions(input: &str) -> Vec<String> {
         }
     }
     sugg.into_iter()
-        .map(|s| {
-            format!(
-                "{}{}",
-                input.trim(),
-                if input.trim().is_empty() {
-                    s.trim()
-                } else {
-                    s.as_str()
-                }
-            )
-        })
+        .map(|s| format!("{}{}", input, s.as_str()))
         .collect::<Vec<String>>()
 }
