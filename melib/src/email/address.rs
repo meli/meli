@@ -325,7 +325,7 @@ impl core::fmt::Display for Address {
         match self {
             Address::Mailbox(m) if m.display_name.length > 0 => {
                 match m.display_name.display(&m.raw) {
-                    d if d.contains(".") => {
+                    d if d.contains(".") || d.contains(",") => {
                         write!(f, "\"{}\" <{}>", d, m.address_spec.display(&m.raw))
                     }
                     d => write!(f, "{} <{}>", d, m.address_spec.display(&m.raw)),
