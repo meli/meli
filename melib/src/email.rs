@@ -488,6 +488,14 @@ impl Envelope {
         self.to.as_slice()
     }
 
+    pub fn cc(&self) -> &[Address] {
+        self.cc.as_slice()
+    }
+
+    pub fn bcc(&self) -> &[Address] {
+        self.bcc.as_slice()
+    }
+
     pub fn field_to_to_string(&self) -> String {
         if self.to.is_empty() {
             self.other_headers

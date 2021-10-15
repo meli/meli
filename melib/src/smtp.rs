@@ -616,7 +616,7 @@ impl SmtpConnection {
         let envelope = Envelope::from_bytes(mail.as_bytes(), None)
             .chain_err_summary(|| "SMTP submission was aborted")?;
         let tos = tos.unwrap_or_else(|| envelope.to());
-        if tos.is_empty() {
+        if tos.is_empty() && envelope.cc().is_empty() && envelope.bcc().is_empty() {
             return Err(MeliError::new("SMTP submission was aborted because there was no e-mail address found in the To: header field. Consider adding recipients."));
         }
         let mut current_command: SmallVec<[&[u8]; 16]> = SmallVec::new();
@@ -651,7 +651,11 @@ impl SmtpConnection {
         //return a reply indicating whether the failure is permanent (i.e., will occur again if
         //the client tries to send the same address again) or temporary (i.e., the address might
         //be accepted if the client tries again later).
-        for addr in tos {
+        for addr in tos
+            .into_iter()
+            .chain(envelope.cc().into_iter())
+            .chain(envelope.bcc().into_iter())
+        {
             current_command.clear();
             current_command.push(b"RCPT TO:<");
             current_command.push(addr.address_spec_raw().trim());
