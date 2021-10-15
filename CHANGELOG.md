@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [alpha-0.7.2] - 2021-10-15
+
+### Added
+
+- Add forward mail option
+- Add url_launcher config setting
+- Add add_addresses_to_contacts command
+- Add show_date_in_my_timezone pager config flag
+- docs: add pager filter documentation
+- mail/view: respect per-folder/account pager filter override
+- pager: add filter command, esc to clear filter
+- Show compile time features in with command argument
+
+### Fixed
+
+- melib/email/address: quote display_name if it contains ","
+- melib/smtp: fix Cc and Bcc ignored when sending mail
+- melib/email/address: quote display_name if it contains "."
+
 ## [alpha-0.7.1] - 2021-09-08
 
 ### Added
@@ -150,3 +169,4 @@ Notable changes:
 [alpha-0.6.2]: https://github.com/meli/meli/releases/tag/alpha-0.6.2
 [alpha-0.7.0]: https://github.com/meli/meli/releases/tag/alpha-0.7.0
 [alpha-0.7.1]: https://github.com/meli/meli/releases/tag/alpha-0.7.1
+[alpha-0.7.2]: https://github.com/meli/meli/releases/tag/alpha-0.7.2

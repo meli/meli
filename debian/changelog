@@ -1,3 +1,22 @@
+meli (0.7.2-1) bullseye; urgency=low
+    Added
+
+  - Add forward mail option
+  - Add url_launcher config setting
+  - Add add_addresses_to_contacts command
+  - Add show_date_in_my_timezone pager config flag
+  - docs: add pager filter documentation
+  - mail/view: respect per-folder/account pager filter override
+  - pager: add filter command, esc to clear filter
+  - Show compile time features in with command argument
+
+    Fixed
+
+  - melib/email/address: quote display_name if it contains ","
+  - melib/smtp: fix Cc and Bcc ignored when sending mail
+  - melib/email/address: quote display_name if it contains "."
+
+ -- Manos Pitsidianakis <epilys@nessuent.xyz>  Fri, 15 Oct 2021 12:34:00 +0200
 meli (0.7.1-1) bullseye; urgency=low
 
   Added

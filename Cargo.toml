@@ -1,6 +1,6 @@
 [package]
 name = "meli"
-version = "0.7.1"
+version = "0.7.2"
 authors = ["Manos Pitsidianakis <el13635@mail.ntua.gr>"]
 edition = "2018"
 
@@ -31,7 +31,7 @@ crossbeam = "0.7.2"
 signal-hook = "0.1.12"
 signal-hook-registry = "1.2.0"
 nix = "0.17.0"
-melib = { path = "melib", version = "0.7.1" }
+melib = { path = "melib", version = "0.7.2" }
 
 serde = "1.0.71"
 serde_derive = "1.0.71"
