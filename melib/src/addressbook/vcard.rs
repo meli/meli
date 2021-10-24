@@ -269,16 +269,24 @@ pub fn load_cards(p: &std::path::Path) -> Result<Vec<Card>> {
                 use std::io::Read;
                 contents.clear();
                 std::fs::File::open(&f)?.read_to_string(&mut contents)?;
-                if let Ok((_, c)) = parse_card().parse(contents.as_str()) {
-                    for s in c {
-                        ret.push(
-                            CardDeserializer::from_str(s)
-                                .and_then(TryInto::try_into)
-                                .map(|mut card| {
-                                    Card::set_external_resource(&mut card, true);
-                                    is_any_valid = true;
-                                    card
-                                }),
+                match parse_card().parse(contents.as_str()) {
+                    Ok((_, c)) => {
+                        for s in c {
+                            ret.push(
+                                CardDeserializer::from_str(s)
+                                    .and_then(TryInto::try_into)
+                                    .map(|mut card| {
+                                        Card::set_external_resource(&mut card, true);
+                                        is_any_valid = true;
+                                        card
+                                    }),
+                            );
+                        }
+                    }
+                    Err(err) => {
+                        crate::log(
+                            format!("Could not parse vcard from {}: {}", f.display(), err),
+                            crate::WARN,
                         );
                     }
                 }

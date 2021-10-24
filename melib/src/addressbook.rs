@@ -105,9 +105,17 @@ impl AddressBook {
         {
             let mut ret = AddressBook::new(s.name.clone());
             if let Some(vcard_path) = s.vcard_folder() {
-                if let Ok(cards) = vcard::load_cards(std::path::Path::new(vcard_path)) {
-                    for c in cards {
-                        ret.add_card(c);
+                match vcard::load_cards(std::path::Path::new(vcard_path)) {
+                    Ok(cards) => {
+                        for c in cards {
+                            ret.add_card(c);
+                        }
+                    }
+                    Err(err) => {
+                        crate::log(
+                            format!("Could not load vcards from {:?}: {}", vcard_path, err),
+                            crate::WARN,
+                        );
                     }
                 }
             }
