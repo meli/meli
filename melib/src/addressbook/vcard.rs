@@ -45,8 +45,12 @@ impl VCardVersion for VCardVersion3 {}
 
 pub struct CardDeserializer;
 
-static HEADER: &str = "BEGIN:VCARD\r\n"; //VERSION:4.0\r\n";
-static FOOTER: &str = "END:VCARD\r\n";
+const HEADER_CRLF: &str = "BEGIN:VCARD\r\n"; //VERSION:4.0\r\n";
+const FOOTER_CRLF: &str = "END:VCARD\r\n";
+const HEADER_LF: &str = "BEGIN:VCARD\n"; //VERSION:4.0\n";
+const FOOTER_LF: &str = "END:VCARD\n";
+const HEADER: &str = "BEGIN:VCARD"; //VERSION:4.0";
+const FOOTER: &str = "END:VCARD";
 
 #[derive(Debug)]
 pub struct VCard<T: VCardVersion>(
@@ -72,10 +76,14 @@ pub struct ContentLine {
 
 impl CardDeserializer {
     pub fn from_str(mut input: &str) -> Result<VCard<impl VCardVersion>> {
-        input = if !input.starts_with(HEADER) || !input.ends_with(FOOTER) {
+        input = if (!input.starts_with(HEADER_CRLF) || !input.ends_with(FOOTER_CRLF))
+            && (!input.starts_with(HEADER_LF) || !input.ends_with(FOOTER_LF))
+        {
             return Err(MeliError::new(format!("Error while parsing vcard: input does not start or end with correct header and footer. input is:\n{:?}", input)));
+        } else if input.starts_with(HEADER_CRLF) {
+            &input[HEADER_CRLF.len()..input.len() - FOOTER_CRLF.len()]
         } else {
-            &input[HEADER.len()..input.len() - FOOTER.len()]
+            &input[HEADER_LF.len()..input.len() - FOOTER_LF.len()]
         };
 
         let mut ret = HashMap::default();
@@ -307,5 +315,7 @@ pub fn load_cards(p: &std::path::Path) -> Result<Vec<Card>> {
 #[test]
 fn test_card() {
     let j = "BEGIN:VCARD\r\nVERSION:4.0\r\nN:Gump;Forrest;;Mr.;\r\nFN:Forrest Gump\r\nORG:Bubba Gump Shrimp Co.\r\nTITLE:Shrimp Man\r\nPHOTO;MEDIATYPE=image/gif:http://www.example.com/dir_photos/my_photo.gif\r\nTEL;TYPE=work,voice;VALUE=uri:tel:+1-111-555-1212\r\nTEL;TYPE=home,voice;VALUE=uri:tel:+1-404-555-1212\r\nADR;TYPE=WORK;PREF=1;LABEL=\"100 Waters Edge\\nBaytown\\, LA 30314\\nUnited States of America\":;;100 Waters Edge;Baytown;LA;30314;United States of America\r\nADR;TYPE=HOME;LABEL=\"42 Plantation St.\\nBaytown\\, LA 30314\\nUnited States of America\":;;42 Plantation St.;Baytown;LA;30314;United States of America\r\nEMAIL:forrestgump@example.com\r\nREV:20080424T195243Z\r\nx-qq:21588891\r\nEND:VCARD\r\n";
+    println!("results = {:#?}", CardDeserializer::from_str(j).unwrap());
+    let j = "BEGIN:VCARD\nVERSION:4.0\nN:Gump;Forrest;;Mr.;\nFN:Forrest Gump\nORG:Bubba Gump Shrimp Co.\nTITLE:Shrimp Man\nPHOTO;MEDIATYPE=image/gif:http://www.example.com/dir_photos/my_photo.gif\nTEL;TYPE=work,voice;VALUE=uri:tel:+1-111-555-1212\nTEL;TYPE=home,voice;VALUE=uri:tel:+1-404-555-1212\nADR;TYPE=WORK;PREF=1;LABEL=\"100 Waters Edge\\nBaytown\\, LA 30314\\nUnited States of America\":;;100 Waters Edge;Baytown;LA;30314;United States of America\nADR;TYPE=HOME;LABEL=\"42 Plantation St.\\nBaytown\\, LA 30314\\nUnited States of America\":;;42 Plantation St.;Baytown;LA;30314;United States of America\nEMAIL:forrestgump@example.com\nREV:20080424T195243Z\nx-qq:21588891\nEND:VCARD\n";
     println!("results = {:#?}", CardDeserializer::from_str(j).unwrap());
 }
