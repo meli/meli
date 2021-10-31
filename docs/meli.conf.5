@@ -457,6 +457,17 @@ Example:
   "INBOX" = { index_style = "plain" }
   "INBOX/Lists/devlist" = { autoload = false, pager = { filter = "pygmentize -l diff -f 256"} }
 .Ed
+.It Ic sort_order Ar unsigned integer
+.Pq Em optional
+Override sort order on the sidebar for this mailbox.
+Example:
+.Bd -literal
+[accounts."imap.example.com".mailboxes]
+  "INBOX" = { index_style = "plain" }
+  "INBOX/Sent" = { sort_order = 0 }
+  "INBOX/Drafts" = { sort_order = 1 }
+  "INBOX/Lists" = { sort_order = 2 }
+.Ed
 .El
 .Sh COMPOSING
 Composing specific options

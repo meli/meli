@@ -2276,24 +2276,41 @@ fn build_mailboxes_order(
         }
     }
 
+    macro_rules! mailbox_eq_key {
+        ($mailbox:expr) => {{
+            if let Some(sort_order) = $mailbox.conf.mailbox_conf.sort_order {
+                (0, sort_order, $mailbox.ref_mailbox.path())
+            } else {
+                (1, 0, $mailbox.ref_mailbox.path())
+            }
+        }};
+    }
     tree.sort_unstable_by(|a, b| {
         if mailbox_entries[&b.hash]
-            .ref_mailbox
-            .path()
-            .eq_ignore_ascii_case("INBOX")
+            .conf
+            .mailbox_conf
+            .sort_order
+            .is_none()
+            && mailbox_entries[&b.hash]
+                .ref_mailbox
+                .path()
+                .eq_ignore_ascii_case("INBOX")
         {
             std::cmp::Ordering::Greater
         } else if mailbox_entries[&a.hash]
-            .ref_mailbox
-            .path()
-            .eq_ignore_ascii_case("INBOX")
+            .conf
+            .mailbox_conf
+            .sort_order
+            .is_none()
+            && mailbox_entries[&a.hash]
+                .ref_mailbox
+                .path()
+                .eq_ignore_ascii_case("INBOX")
         {
             std::cmp::Ordering::Less
         } else {
-            mailbox_entries[&a.hash]
-                .ref_mailbox
-                .path()
-                .cmp(&mailbox_entries[&b.hash].ref_mailbox.path())
+            mailbox_eq_key!(mailbox_entries[&a.hash])
+                .cmp(&mailbox_eq_key!(mailbox_entries[&b.hash]))
         }
     });
 
@@ -2302,22 +2319,30 @@ fn build_mailboxes_order(
         mailboxes_order.push(n.hash);
         n.children.sort_unstable_by(|a, b| {
             if mailbox_entries[&b.hash]
-                .ref_mailbox
-                .path()
-                .eq_ignore_ascii_case("INBOX")
+                .conf
+                .mailbox_conf
+                .sort_order
+                .is_none()
+                && mailbox_entries[&b.hash]
+                    .ref_mailbox
+                    .path()
+                    .eq_ignore_ascii_case("INBOX")
             {
                 std::cmp::Ordering::Greater
             } else if mailbox_entries[&a.hash]
-                .ref_mailbox
-                .path()
-                .eq_ignore_ascii_case("INBOX")
+                .conf
+                .mailbox_conf
+                .sort_order
+                .is_none()
+                && mailbox_entries[&a.hash]
+                    .ref_mailbox
+                    .path()
+                    .eq_ignore_ascii_case("INBOX")
             {
                 std::cmp::Ordering::Less
             } else {
-                mailbox_entries[&a.hash]
-                    .ref_mailbox
-                    .path()
-                    .cmp(&mailbox_entries[&b.hash].ref_mailbox.path())
+                mailbox_eq_key!(mailbox_entries[&a.hash])
+                    .cmp(&mailbox_eq_key!(mailbox_entries[&b.hash]))
             }
         });
         stack.extend(n.children.iter().rev().map(Some));

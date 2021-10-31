@@ -87,6 +87,8 @@ pub struct MailboxConf {
     pub ignore: ToggleFlag,
     #[serde(default = "none")]
     pub usage: Option<SpecialUsageMailbox>,
+    #[serde(default = "none")]
+    pub sort_order: Option<usize>,
     #[serde(flatten)]
     pub extra: HashMap<String, String>,
 }
@@ -99,6 +101,7 @@ impl Default for MailboxConf {
             subscribe: ToggleFlag::Unset,
             ignore: ToggleFlag::Unset,
             usage: None,
+            sort_order: None,
             extra: HashMap::default(),
         }
     }
