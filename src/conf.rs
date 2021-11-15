@@ -304,6 +304,7 @@ impl Ask {
         let mut handle = stdin.lock();
 
         print!("{} [Y/n] ", &self.message);
+        let _ = io::stdout().flush();
         loop {
             buffer.clear();
             handle
@@ -319,6 +320,7 @@ impl Ask {
                 }
                 _ => {
                     print!("\n{} [Y/n] ", &self.message);
+                    let _ = io::stdout().flush();
                 }
             }
         }
