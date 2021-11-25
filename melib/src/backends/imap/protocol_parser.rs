@@ -676,6 +676,22 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
                     String::from_utf8_lossy(&input[i..])
                 ))));
             }
+        } else if input[i..].starts_with(b"BODY[HEADER.FIELDS (\"REFERENCES\")] ") {
+            i += b"BODY[HEADER.FIELDS (\"REFERENCES\")] ".len();
+            if let Ok((rest, mut references)) = astring_token(&input[i..]) {
+                if !references.trim().is_empty() {
+                    if let Ok((_, (_, v))) = crate::email::parser::headers::header(&references) {
+                        references = v;
+                    }
+                    ret.references = Some(references);
+                }
+                i += input.len() - i - rest.len();
+            } else {
+                return debug!(Err(MeliError::new(format!(
+                    "Unexpected input while parsing UID FETCH response. Got: `{:.40}`",
+                    String::from_utf8_lossy(&input[i..])
+                ))));
+            }
         } else if input[i..].starts_with(b")\r\n") {
             i += b")\r\n".len();
             break;
