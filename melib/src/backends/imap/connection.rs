@@ -376,8 +376,19 @@ impl ImapStream {
             _ => {
                 ret.send_command(
                     format!(
-                        "LOGIN \"{}\" \"{}\"",
-                        &server_conf.server_username, &server_conf.server_password
+                        r#"LOGIN "{}" "{}""#,
+                        &server_conf
+                            .server_username
+                            .replace(r#"\"#, r#"\\"#)
+                            .replace('"', r#"\""#)
+                            .replace('{', r#"\{"#)
+                            .replace('}', r#"\}"#),
+                        &server_conf
+                            .server_password
+                            .replace(r#"\"#, r#"\\"#)
+                            .replace('"', r#"\""#)
+                            .replace('{', r#"\{"#)
+                            .replace('}', r#"\}"#)
                     )
                     .as_bytes(),
                 )
