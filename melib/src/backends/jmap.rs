@@ -21,6 +21,7 @@
 
 use crate::backends::*;
 use crate::conf::AccountSettings;
+use crate::connections::timeout;
 use crate::email::*;
 use crate::error::{MeliError, Result};
 use crate::Collection;
@@ -34,7 +35,7 @@ use std::convert::TryFrom;
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex, RwLock};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 macro_rules! tag_hash {
     ($t:ident) => {{
@@ -105,6 +106,7 @@ pub struct JmapServerConf {
     pub server_password: String,
     pub server_port: u16,
     pub danger_accept_invalid_certs: bool,
+    pub timeout: Option<Duration>,
 }
 
 macro_rules! get_conf_val {
@@ -143,6 +145,13 @@ impl JmapServerConf {
             server_password: get_conf_val!(s["server_password"])?.to_string(),
             server_port: get_conf_val!(s["server_port"], 443)?,
             danger_accept_invalid_certs: get_conf_val!(s["danger_accept_invalid_certs"], false)?,
+            timeout: get_conf_val!(s["timeout"], 16_u64).map(|t| {
+                if t == 0 {
+                    None
+                } else {
+                    Some(Duration::from_secs(t))
+                }
+            })?,
         })
     }
 }
@@ -301,15 +310,17 @@ impl MailBackend for JmapType {
 
     fn is_online(&self) -> ResultFuture<()> {
         let online = self.store.online_status.clone();
+        let connection = self.connection.clone();
+        let timeout_dur = self.server_conf.timeout;
         Ok(Box::pin(async move {
-            //match timeout(std::time::Duration::from_secs(3), connection.lock()).await {
-            let online_lck = online.lock().await;
-            if online_lck.1.is_err()
-                && Instant::now().duration_since(online_lck.0) >= std::time::Duration::new(2, 0)
-            {
-                //let _ = self.mailboxes();
+            match timeout(timeout_dur, connection.lock()).await {
+                Ok(_conn) => match timeout(timeout_dur, online.lock()).await {
+                    Err(err) => Err(err),
+                    Ok(lck) if lck.1.is_err() => lck.1.clone(),
+                    _ => Ok(()),
+                },
+                Err(err) => Err(err),
             }
-            online_lck.1.clone()
         }))
     }
 
@@ -365,7 +376,7 @@ impl MailBackend for JmapType {
                         conn.email_changes(mailbox_hash).await?;
                     }
                 }
-                crate::connections::sleep(std::time::Duration::from_secs(60)).await;
+                crate::connections::sleep(Duration::from_secs(60)).await;
             }
         }))
     }
