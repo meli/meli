@@ -135,7 +135,7 @@ impl JmapConnection {
                 Get::new()
                     .ids(Some(JmapArgument::reference(
                         prev_seq,
-                        ResultField::<EmailChanges, EmailObject>::new("created"),
+                        ResultField::<EmailChanges, EmailObject>::new("/created"),
                     )))
                     .account_id(self.mail_account_id().clone()),
             );
@@ -156,7 +156,7 @@ impl JmapConnection {
                         Get::new()
                             .ids(Some(JmapArgument::reference(
                                 seq_no,
-                                ResultField::<EmailQueryChanges, EmailObject>::new("removed"),
+                                ResultField::<EmailQueryChanges, EmailObject>::new("/removed"),
                             )))
                             .account_id(self.mail_account_id().clone())
                             .properties(Some(vec![
