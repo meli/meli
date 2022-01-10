@@ -376,23 +376,22 @@ impl ImapStream {
             _ => {
                 ret.send_command(
                     format!(
-                        r#"LOGIN "{}" "{}""#,
+                        r#"LOGIN "{}" {{{}}}"#,
                         &server_conf
                             .server_username
                             .replace(r#"\"#, r#"\\"#)
                             .replace('"', r#"\""#)
                             .replace('{', r#"\{"#)
                             .replace('}', r#"\}"#),
-                        &server_conf
-                            .server_password
-                            .replace(r#"\"#, r#"\\"#)
-                            .replace('"', r#"\""#)
-                            .replace('{', r#"\{"#)
-                            .replace('}', r#"\}"#)
+                        &server_conf.server_password.as_bytes().len()
                     )
                     .as_bytes(),
                 )
                 .await?;
+                // wait for "+ Ready for literal data" reply
+                ret.wait_for_continuation_request().await?;
+                ret.send_literal(server_conf.server_password.as_bytes())
+                    .await?;
             }
         }
         let tag_start = format!("M{} ", (ret.cmd_id - 1));
