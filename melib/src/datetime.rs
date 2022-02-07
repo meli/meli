@@ -166,7 +166,7 @@ pub fn timestamp_to_string(timestamp: UnixTimestamp, fmt: Option<&str>, posix: b
             Some(
                 Locale::new(
                     libc::LC_TIME,
-                    b"C\0".as_ptr() as *const i8,
+                    b"C\0".as_ptr() as *const std::os::raw::c_char,
                     std::ptr::null_mut(),
                 )
                 .chain_err_summary(|| "Could not set locale for datetime conversion")
@@ -306,7 +306,7 @@ where
         let ret = {
             let _with_locale = Locale::new(
                 libc::LC_TIME,
-                b"C\0".as_ptr() as *const i8,
+                b"C\0".as_ptr() as *const std::os::raw::c_char,
                 std::ptr::null_mut(),
             )
             .chain_err_summary(|| "Could not set locale for datetime conversion")
@@ -367,7 +367,7 @@ where
         let ret = {
             let _with_locale = Locale::new(
                 libc::LC_TIME,
-                b"C\0".as_ptr() as *const i8,
+                b"C\0".as_ptr() as *const std::os::raw::c_char,
                 std::ptr::null_mut(),
             )
             .chain_err_summary(|| "Could not set locale for datetime conversion")
