@@ -1031,6 +1031,24 @@ impl Component for Listing {
                     self.menu_visibility = !self.menu_visibility;
                     self.set_dirty(true);
                 }
+                UIEvent::Input(ref k)
+                    if shortcut!(k == shortcuts[Listing::DESCRIPTION]["increase_sidebar"]) =>
+                {
+                    self.ratio = self.ratio.saturating_sub(2);
+                    self.prev_ratio = self.prev_ratio.saturating_sub(2);
+                    self.menu_width = WidgetWidth::Unset;
+                    self.set_dirty(true);
+                }
+                UIEvent::Input(ref k)
+                    if shortcut!(k == shortcuts[Listing::DESCRIPTION]["decrease_sidebar"]) =>
+                {
+                    self.ratio += 2;
+                    self.ratio = std::cmp::min(100, self.ratio);
+                    self.prev_ratio += 2;
+                    self.prev_ratio = std::cmp::min(100, self.prev_ratio);
+                    self.menu_width = WidgetWidth::Unset;
+                    self.set_dirty(true);
+                }
                 _ => {}
             }
 

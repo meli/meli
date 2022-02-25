@@ -184,6 +184,8 @@ shortcut_key_values! { "listing",
         diff_modifier |> "Difference modifier." |> Key::Ctrl('d'),
         intersection_modifier |> "Intersection modifier." |> Key::Ctrl('i'),
         select_entry |> "Select thread entry." |> Key::Char('v'),
+        increase_sidebar |> "Increase sidebar width." |> Key::Ctrl('p'),
+        decrease_sidebar |> "Decrease sidebar width." |> Key::Ctrl('o'),
         toggle_menu_visibility |> "Toggle visibility of side menu in mail list." |> Key::Char('`')
     }
 }
