@@ -617,6 +617,7 @@ pub struct Listing {
     cmd_buf: String,
     /// This is the width of the right container to the entire width.
     ratio: usize, // right/(container width) * 100
+    prev_ratio: usize,
     menu_width: WidgetWidth,
     focus: ListingFocus,
 }
@@ -918,6 +919,7 @@ impl Component for Listing {
                         self.menu_scrollbar_show_timer.rearm();
                         self.show_menu_scrollbar = ShowMenuScrollbar::True;
                     }
+                    self.prev_ratio = self.ratio;
                     self.ratio = 50;
                     self.set_dirty(true);
                 }
@@ -1271,7 +1273,7 @@ impl Component for Listing {
                         .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
                             ScrollUpdate::End(self.id),
                         )));
-                    self.ratio = 90;
+                    self.ratio = self.prev_ratio;
                     self.set_dirty(true);
                     return true;
                 }
@@ -1283,7 +1285,7 @@ impl Component for Listing {
                     self.open_status(self.menu_cursor_pos.0, context);
                     self.set_dirty(true);
                     self.focus = ListingFocus::Mailbox;
-                    self.ratio = 90;
+                    self.ratio = self.prev_ratio;
                     context
                         .replies
                         .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
@@ -1297,7 +1299,7 @@ impl Component for Listing {
                     self.cursor_pos = self.menu_cursor_pos;
                     self.change_account(context);
                     self.focus = ListingFocus::Mailbox;
-                    self.ratio = 90;
+                    self.ratio = self.prev_ratio;
                     self.set_dirty(true);
                     context
                         .replies
@@ -1713,7 +1715,8 @@ impl Listing {
             ),
             sidebar_divider_theme: conf::value(context, "mail.sidebar_divider"),
             menu_visibility: true,
-            ratio: 90,
+            ratio: *account_settings!(context[first_account_hash].listing.sidebar_ratio),
+            prev_ratio: *account_settings!(context[first_account_hash].listing.sidebar_ratio),
             menu_width: WidgetWidth::Unset,
             focus: ListingFocus::Mailbox,
             cmd_buf: String::with_capacity(4),

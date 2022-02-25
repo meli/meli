@@ -100,6 +100,10 @@ pub struct ListingSettings {
     #[serde(default = "default_divider")]
     pub sidebar_divider: char,
 
+    ///Default: 90
+    #[serde(default = "default_ratio")]
+    pub sidebar_ratio: usize,
+
     /// Flag to show if thread entry contains unseen mail.
     /// Default: "●"
     #[serde(default)]
@@ -125,6 +129,10 @@ const fn default_divider() -> char {
     ' '
 }
 
+const fn default_ratio() -> usize {
+    90
+}
+
 impl Default for ListingSettings {
     fn default() -> Self {
         Self {
@@ -139,6 +147,7 @@ impl Default for ListingSettings {
             sidebar_mailbox_tree_has_sibling_leaf: None,
             sidebar_mailbox_tree_no_sibling_leaf: None,
             sidebar_divider: default_divider(),
+            sidebar_ratio: 90,
             unseen_flag: None,
             thread_snoozed_flag: None,
             selected_flag: None,
@@ -172,6 +181,7 @@ impl DotAddressable for ListingSettings {
                         .sidebar_mailbox_tree_no_sibling_leaf
                         .lookup(field, tail),
                     "sidebar_divider" => self.sidebar_divider.lookup(field, tail),
+                    "sidebar_ratio" => self.sidebar_ratio.lookup(field, tail),
                     "unseen_flag" => self.unseen_flag.lookup(field, tail),
                     "thread_snoozed_flag" => self.thread_snoozed_flag.lookup(field, tail),
                     "selected_flag" => self.selected_flag.lookup(field, tail),

@@ -150,6 +150,9 @@ pub struct ListingSettingsOverride {
     #[doc = "Default: ' '"]
     #[serde(default)]
     pub sidebar_divider: Option<char>,
+    #[doc = "Default: 90"]
+    #[serde(default)]
+    pub sidebar_ratio: Option<usize>,
     #[doc = " Flag to show if thread entry contains unseen mail."]
     #[doc = " Default: \"●\""]
     #[serde(default)]
@@ -181,6 +184,7 @@ impl Default for ListingSettingsOverride {
             sidebar_mailbox_tree_has_sibling_leaf: None,
             sidebar_mailbox_tree_no_sibling_leaf: None,
             sidebar_divider: None,
+            sidebar_ratio: None,
             unseen_flag: None,
             thread_snoozed_flag: None,
             selected_flag: None,
