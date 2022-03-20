@@ -874,7 +874,34 @@ impl JmapType {
         }))
     }
 
-    pub fn validate_config(s: &AccountSettings) -> Result<()> {
+    pub fn validate_config(s: &mut AccountSettings) -> Result<()> {
+        macro_rules! get_conf_val {
+            ($s:ident[$var:literal]) => {
+                $s.extra.remove($var).ok_or_else(|| {
+                    MeliError::new(format!(
+                        "Configuration error ({}): JMAP connection requires the field `{}` set",
+                        $s.name.as_str(),
+                        $var
+                    ))
+                })
+            };
+            ($s:ident[$var:literal], $default:expr) => {
+                $s.extra
+                    .remove($var)
+                    .map(|v| {
+                        <_>::from_str(&v).map_err(|e| {
+                            MeliError::new(format!(
+                                "Configuration error ({}): Invalid value for field `{}`: {}\n{}",
+                                $s.name.as_str(),
+                                $var,
+                                v,
+                                e
+                            ))
+                        })
+                    })
+                    .unwrap_or_else(|| Ok($default))
+            };
+        }
         get_conf_val!(s["server_hostname"])?;
         get_conf_val!(s["server_username"])?;
         get_conf_val!(s["server_password"])?;

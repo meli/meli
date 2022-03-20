@@ -54,7 +54,7 @@ futures = "0.3.5"
 async-task = "3.0.0"
 num_cpus = "1.12.0"
 flate2 = { version = "1.0.16", optional = true }
- 
+
 [target.'cfg(target_os="linux")'.dependencies]
 notify-rust = { version = "^4", optional = true }
 
@@ -63,6 +63,9 @@ syn = { version = "1.0.31", features = [] }
 quote = "^1.0"
 proc-macro2 = "1.0.18"
 flate2 = { version = "1.0.16", optional = true }
+
+[dev-dependencies]
+regex = "1"
 
 [profile.release]
 lto = "fat"

@@ -223,7 +223,7 @@ fn run_app(opt: Opt) -> Result<()> {
             } else {
                 crate::conf::get_config_file()?
             };
-            conf::FileSettings::validate(config_path, true)?; // TODO: test for tty/interaction
+            conf::FileSettings::validate(config_path, true, false)?; // TODO: test for tty/interaction
             return Ok(());
         }
         Some(SubCommand::CreateConfig { path }) => {

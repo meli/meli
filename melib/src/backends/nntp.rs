@@ -654,12 +654,12 @@ impl NntpType {
         Ok(())
     }
 
-    pub fn validate_config(s: &AccountSettings) -> Result<()> {
+    pub fn validate_config(s: &mut AccountSettings) -> Result<()> {
         let mut keys: HashSet<&'static str> = Default::default();
         macro_rules! get_conf_val {
     ($s:ident[$var:literal]) => {{
         keys.insert($var);
-        $s.extra.get($var).ok_or_else(|| {
+        $s.extra.remove($var).ok_or_else(|| {
             MeliError::new(format!(
                 "Configuration error ({}): NNTP connection requires the field `{}` set",
                 $s.name.as_str(),
@@ -670,9 +670,9 @@ impl NntpType {
     ($s:ident[$var:literal], $default:expr) => {{
         keys.insert($var);
         $s.extra
-            .get($var)
+            .remove($var)
             .map(|v| {
-                <_>::from_str(v).map_err(|e| {
+                <_>::from_str(&v).map_err(|e| {
                     MeliError::new(format!(
                         "Configuration error ({}) NNTP: Invalid value for field `{}`: {}\n{}",
                         $s.name.as_str(),

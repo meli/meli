@@ -1339,7 +1339,34 @@ impl MboxType {
         Ok(Box::new(ret))
     }
 
-    pub fn validate_config(s: &AccountSettings) -> Result<()> {
+    pub fn validate_config(s: &mut AccountSettings) -> Result<()> {
+        macro_rules! get_conf_val {
+            ($s:ident[$var:literal]) => {
+                $s.extra.remove($var).ok_or_else(|| {
+                    MeliError::new(format!(
+                        "Configuration error ({}): mbox backend requires the field `{}` set",
+                        $s.name.as_str(),
+                        $var
+                    ))
+                })
+            };
+            ($s:ident[$var:literal], $default:expr) => {
+                $s.extra
+                    .remove($var)
+                    .map(|v| {
+                        <_>::from_str(&v).map_err(|e| {
+                            MeliError::new(format!(
+                                "Configuration error ({}): Invalid value for field `{}`: {}\n{}",
+                                $s.name.as_str(),
+                                $var,
+                                v,
+                                e
+                            ))
+                        })
+                    })
+                    .unwrap_or_else(|| Ok($default))
+            };
+        }
         let path = Path::new(s.root_mailbox.as_str()).expand();
         if !path.exists() {
             return Err(MeliError::new(format!(

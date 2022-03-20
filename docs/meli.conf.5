@@ -77,7 +77,7 @@ example configuration
 [accounts.account-name]
 root_mailbox = "/path/to/root/folder"
 format = "Maildir"
-index_style = "Compact"
+listing.index_style = "Compact"
 identity="email@example.com"
 subscribed_mailboxes = ["folder", "folder/Sent"] # or [ "*", ] for all mailboxes
 display_name = "Name"
@@ -93,7 +93,7 @@ display_name = "Name"
 [accounts.mbox]
 root_mailbox = "/var/mail/username"
 format = "mbox"
-index_style = "Compact"
+listing.index_style = "Compact"
 identity="username@hostname.local"
 composing.send_mail = { hostname = "localhost", port = 25, auth = { type = "none" }, security = { type = "none" } }
 
@@ -138,8 +138,6 @@ The glob wildcard
 can be used to match every mailbox name and path.
 .It Ic identity Ar String
 Your e-mail address that is inserted in the From: headers of outgoing mail.
-.It Ic index_style Ar String
-Sets the way mailboxes are displayed.
 .El
 .TS
 allbox tab(:);

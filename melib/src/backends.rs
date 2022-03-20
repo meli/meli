@@ -97,7 +97,7 @@ pub struct Backends {
 
 pub struct Backend {
     pub create_fn: Box<dyn Fn() -> BackendCreator>,
-    pub validate_conf_fn: Box<dyn Fn(&AccountSettings) -> Result<()>>,
+    pub validate_conf_fn: Box<dyn Fn(&mut AccountSettings) -> Result<()>>,
 }
 
 impl Default for Backends {
@@ -200,7 +200,7 @@ impl Backends {
         self.map.insert(key, backend);
     }
 
-    pub fn validate_config(&self, key: &str, s: &AccountSettings) -> Result<()> {
+    pub fn validate_config(&self, key: &str, s: &mut AccountSettings) -> Result<()> {
         (self
             .map
             .get(key)

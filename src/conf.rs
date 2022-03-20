@@ -350,10 +350,10 @@ impl FileSettings {
             return Err(MeliError::new("No configuration file found."));
         }
 
-        FileSettings::validate(config_path, true)
+        FileSettings::validate(config_path, true, false)
     }
 
-    pub fn validate(path: PathBuf, interactive: bool) -> Result<Self> {
+    pub fn validate(path: PathBuf, interactive: bool, clear_extras: bool) -> Result<Self> {
         let s = pp::pp(&path)?;
         let map: toml::map::Map<String, toml::value::Value> = toml::from_str(&s).map_err(|e| {
             MeliError::new(format!(
@@ -391,7 +391,7 @@ This is required so that you don't accidentally start meli and find out later th
                                 err
                             ))
                         })?;
-                    return FileSettings::validate(path, interactive);
+                    return FileSettings::validate(path, interactive, clear_extras);
                 }
             }
             return Err(MeliError::new(format!(
@@ -439,7 +439,7 @@ This is required so that you don't accidentally start meli and find out later th
         }
 
         s.terminal.themes.validate()?;
-        for (name, acc) in &s.accounts {
+        for (name, acc) in s.accounts.iter_mut() {
             let FileAccount {
                 root_mailbox,
                 format,
@@ -456,7 +456,7 @@ This is required so that you don't accidentally start meli and find out later th
             } = acc.clone();
 
             let lowercase_format = format.to_lowercase();
-            let s = AccountSettings {
+            let mut s = AccountSettings {
                 name: name.to_string(),
                 root_mailbox,
                 format: format.clone(),
@@ -471,7 +471,16 @@ This is required so that you don't accidentally start meli and find out later th
                     .collect(),
                 extra: extra.into_iter().collect(),
             };
-            backends.validate_config(&lowercase_format, &s)?;
+            backends.validate_config(&lowercase_format, &mut s)?;
+            if !s.extra.is_empty() {
+                return Err(MeliError::new(format!(
+                    "Unrecognised configuration values: {:?}",
+                    s.extra
+                )));
+            }
+            if clear_extras {
+                acc.extra.clear();
+            }
         }
 
         Ok(s)
@@ -1136,7 +1145,7 @@ fn test_config_parse() {
 [accounts.account-name]
 root_mailbox = "/path/to/root/mailbox"
 format = "Maildir"
-index_style = "Conversations" # or [plain, threaded, compact]
+listing.index_style = "Conversations" # or [plain, threaded, compact]
 identity="email@example.com"
 display_name = "Name"
 subscribed_mailboxes = ["INBOX", "INBOX/Sent", "INBOX/Drafts", "INBOX/Junk"]
@@ -1151,11 +1160,25 @@ subscribed_mailboxes = ["INBOX", "INBOX/Sent", "INBOX/Drafts", "INBOX/Junk"]
 [accounts.mbox]
 root_mailbox = "/var/mail/username"
 format = "mbox"
-index_style = "Compact"
+listing.index_style = "Compact"
 identity="username@hostname.local"
 "#;
+
+    const EXTRA_CONFIG: &str = r#"
+[accounts.mbox]
+root_mailbox = "/"
+format = "mbox"
+index_style = "Compact"
+identity="username@hostname.local"
+
+[composing]
+send_mail = '/bin/false'
+"#;
+
+    const EXAMPLE_CONFIG: &str = include_str!("../docs/samples/sample-config.toml");
+
     impl ConfigFile {
-        fn new() -> std::result::Result<Self, std::io::Error> {
+        fn new(content: &str) -> std::result::Result<Self, std::io::Error> {
             let mut f = fs::File::open("/dev/urandom")?;
             let mut buf = [0u8; 16];
             f.read_exact(&mut buf)?;
@@ -1169,7 +1192,7 @@ identity="username@hostname.local"
                 .create_new(true)
                 .append(true)
                 .open(&path)?;
-            file.write_all(TEST_CONFIG.as_bytes())?;
+            file.write_all(content.as_bytes())?;
             Ok(ConfigFile { path, file })
         }
     }
@@ -1180,13 +1203,46 @@ identity="username@hostname.local"
         }
     }
 
-    let mut new_file = ConfigFile::new().unwrap();
-    let err = FileSettings::validate(new_file.path.clone(), false).unwrap_err();
+    let mut new_file = ConfigFile::new(TEST_CONFIG).unwrap();
+    let err = FileSettings::validate(new_file.path.clone(), false, true).unwrap_err();
     assert!(err.details.as_ref().starts_with("You must set a global `composing` option. If you override `composing` in each account, you can use a dummy global like follows"));
     new_file
         .file
         .write_all("[composing]\nsend_mail = '/bin/false'\n".as_bytes())
         .unwrap();
-    let err = FileSettings::validate(new_file.path.clone(), false).unwrap_err();
+    let err = FileSettings::validate(new_file.path.clone(), false, true).unwrap_err();
     assert_eq!(err.details.as_ref(), "Configuration error (account-name): root_path `/path/to/root/mailbox` is not a valid directory.");
+
+    /* Test unrecognised configuration entries error */
+
+    let new_file = ConfigFile::new(EXTRA_CONFIG).unwrap();
+    let err = FileSettings::validate(new_file.path.clone(), false, true).unwrap_err();
+    assert_eq!(
+        err.details.as_ref(),
+        "Unrecognised configuration values: {\"index_style\": \"Compact\"}"
+    );
+
+    /* Test sample config */
+
+    let example_config = EXAMPLE_CONFIG.replace("\n#", "\n");
+    let re = regex::Regex::new(r#"root_mailbox\s*=\s*"[^"]*""#).unwrap();
+    let example_config = re.replace_all(
+        &example_config,
+        &format!(
+            r#"root_mailbox = "{}""#,
+            std::env::temp_dir().to_str().unwrap()
+        ),
+    );
+
+    let new_file = ConfigFile::new(&example_config).unwrap();
+    let config = FileSettings::validate(new_file.path.clone(), false, true)
+        .expect("Could not parse example config!");
+    for (accname, acc) in config.accounts.iter() {
+        if !acc.extra.is_empty() {
+            panic!(
+                "In example config, account `{}` has unrecognised configuration entries: {:?}",
+                accname, acc.extra
+            );
+        }
+    }
 }

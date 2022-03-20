@@ -1316,7 +1316,7 @@ impl MaildirType {
         Ok(())
     }
 
-    pub fn validate_config(s: &AccountSettings) -> Result<()> {
+    pub fn validate_config(s: &mut AccountSettings) -> Result<()> {
         let root_path = PathBuf::from(s.root_mailbox()).expand();
         if !root_path.exists() {
             return Err(MeliError::new(format!(

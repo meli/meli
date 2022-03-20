@@ -11,7 +11,7 @@
 #[accounts.account-name]
 #root_mailbox = "/path/to/root/mailbox"
 #format = "Maildir"
-#index_style = "Conversations" # or [plain, threaded, compact]
+#listing.index_style = "Conversations" # or [plain, threaded, compact]
 #identity="email@example.com"
 #display_name = "Name"
 #subscribed_mailboxes = ["INBOX", "INBOX/Sent", "INBOX/Drafts", "INBOX/Junk"]
@@ -26,7 +26,7 @@
 #[accounts.mbox]
 #root_mailbox = "/var/mail/username"
 #format = "mbox"
-#index_style = "Compact"
+#listing.index_style = "Compact"
 #identity="username@hostname.local"
 #
 ## Setting up an IMAP account
@@ -36,10 +36,10 @@
 #server_hostname="mail.example.com"
 #server_password="pha2hiLohs2eeeish2phaii1We3ood4chakaiv0hien2ahie3m"
 #server_username="username@example.com"
-#server_port="993" # imaps
+##server_port="993" # imaps
 #server_port="143" # STARTTLS
 #use_starttls=true #optional
-#index_style = "Conversations"
+#listing.index_style = "Conversations"
 #identity = "username@example.com"
 #display_name = "Name Name"
 ### match every mailbox:
@@ -51,7 +51,7 @@
 #[accounts.notmuch]
 #root_mailbox = "/path/to/folder" # where .notmuch/ directory is located
 #format = "notmuch"
-#index_style = "conversations"
+#listing.index_style = "conversations"
 #identity="username@example.com"
 #display_name = "Name Name"
 #  # notmuch mailboxes are virtual, they are defined by their alias and the notmuch query that corresponds to their content.
@@ -68,7 +68,7 @@
 #server_password="password"
 #server_username="username@gmail.com"
 #server_port="993"
-#index_style = "Conversations"
+#listing.index_style = "Conversations"
 #identity = "username@gmail.com"
 #display_name = "Name Name"
 ### match every mailbox:

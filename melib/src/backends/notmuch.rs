@@ -372,7 +372,7 @@ impl NotmuchDb {
         }))
     }
 
-    pub fn validate_config(s: &AccountSettings) -> Result<()> {
+    pub fn validate_config(s: &mut AccountSettings) -> Result<()> {
         let path = Path::new(s.root_mailbox.as_str()).expand();
         if !path.exists() {
             return Err(MeliError::new(format!(
@@ -381,8 +381,8 @@ impl NotmuchDb {
                 s.name()
             )));
         }
-        for (k, f) in s.mailboxes.iter() {
-            if f.extra.get("query").is_none() {
+        for (k, f) in s.mailboxes.iter_mut() {
+            if f.extra.remove("query").is_none() {
                 return Err(MeliError::new(format!(
                     "notmuch mailbox configuration entry \"{}\" should have a \"query\" value set.",
                     k
