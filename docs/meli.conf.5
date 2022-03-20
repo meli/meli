@@ -445,9 +445,7 @@ Override global settings for this mailbox.
 Available sections to override are
 .Em pager, notifications, shortcuts, composing
 and the account options
-.Em identity
-and
-.Em index_style Ns
+.Em identity Ns
 \&.
 Example:
 .Bd -literal
@@ -604,7 +602,7 @@ Toggle help and shortcuts view.
 .\" default value
 .Pq Em \&?
 .It Ic quit
-Quit application.
+Quit meli.
 .\" default value
 .Pq Ql Em q
 .It Ic enter_command_mode
@@ -621,7 +619,23 @@ Go to next tab.
 Go to the
 .Em n Ns
 th tab
-.Pq Em cannot be redefined
+.Pq Em M-n
+.It Ic scroll_right
+Generic scroll right (catch-all setting)
+.\" default value
+.Pq Em Right
+.It Ic scroll_left
+Generic scroll left (catch-all setting)
+.\" default value
+.Pq Em Left
+.It Ic scroll_up
+Generic scroll up (catch-all setting)
+.\" default value
+.Pq Em k
+.It Ic scroll_down
+Generic scroll down (catch-all setting)
+.\" default value
+.Pq Em j
 .It Ic info_message_next
 Show next info message, if any
 .\" default value
@@ -634,58 +648,86 @@ Show previous info message, if any
 .sp
 .Em listing
 .Bl -tag -width 36n
-.It Ic prev_page
-Go to previous page.
+.It Ic scroll_up
+Scroll up list.
 .\" default value
-.Pq Em PageUp
+.Pq Em k
+.It Ic scroll_down
+Scroll down list.
+.\" default value
+.Pq Em j
 .It Ic next_page
 Go to next page.
 .\" default value
 .Pq Em PageDown
-.It Ic prev_mailbox
-Go to previous mailbox.
+.It Ic prev_page
+Go to previous page.
 .\" default value
-.Pq Em K
-.It Ic next_mailbox
-Go to next mailbox.
+.Pq Em PageUp
+.It Ic new_mail
+Start new mail draft in new tab.
 .\" default value
-.Pq Em J
-.It Ic prev_account
-Go to previous account.
-.\" default value
-.Pq Em l
+.Pq Em m
 .It Ic next_account
 Go to next account.
 .\" default value
 .Pq Em h
-.It Ic new_mail
-Start new mail draft in new tab
+.It Ic prev_account
+Go to previous account.
 .\" default value
-.Pq Em m
-.It Ic set_seen
-Set thread as seen.
+.Pq Em l
+.It Ic next_mailbox
+Go to next mailbox.
 .\" default value
-.Pq Em n
-.It Ic refresh
-Manually request a mailbox refresh.
+.Pq Em J
+.It Ic prev_mailbox
+Go to previous mailbox.
 .\" default value
-.Pq Em F5
+.Pq Em K
+.It Ic open_mailbox
+Open selected mailbox
+.\" default value
+.Pq Em Enter
 .It Ic search
 Search within list of e-mails.
 .\" default value
 .Pq Em /
+.It Ic refresh
+Manually request a mailbox refresh.
+.\" default value
+.Pq Em F5
+.It Ic set_seen
+Set thread as seen.
+.\" default value
+.Pq Em n
+.It Ic union_modifier
+Union modifier.
+.\" default value
+.Pq Em C-u
+.It Ic diff_modifier
+Difference modifier.
+.\" default value
+.Pq Em C-d
+.It Ic intersection_modifier
+Intersection modifier.
+.\" default value
+.Pq Em i
+.It Ic select_entry
+Select thread entry.
+.\" default value
+.Pq Em v
+.It Ic increase_sidebar
+Increase sidebar width.
+.\" default value
+.Pq Em C-p
+.It Ic decrease_sidebar
+Decrease sidebar width.
+.\" default value
+.Pq Em C-o
 .It Ic toggle_menu_visibility
 Toggle visibility of side menu in mail list.
 .\" default value
 .Pq Em `
-.It Ic increase_sidebar
-Increase sidebar width.
-.\" default value
-.Pq Em Ctrl-p
-.It Ic decrease_sidebar
-Decrease sidebar width.
-.\" default value
-.Pq Em Ctrl-o
 .El
 .sp
 .Em compact-listing
@@ -698,10 +740,6 @@ Exit thread view
 Open thread.
 .\" default value
 .Pq Em Enter
-.It Ic select_entry
-Select thread entry.
-.\" default value
-.Pq Em v
 .El
 .sp
 .Em pager
@@ -726,18 +764,34 @@ Go to next pager pag
 .sp
 .Em contact-list
 .Bl -tag -width 36n
+.It Ic scroll_up
+Scroll up list.
+.\" default value
+.Pq Em k
+.It Ic scroll_down
+Scroll down list.
+.\" default value
+.Pq Em j
 .It Ic create_contact
 Create new contact.
 .\" default value
 .Pq Em c
 .It Ic edit_contact
-Edit contact under cursor
+Edit contact under cursor.
 .\" default value
 .Pq Em e
 .It Ic mail_contact
-Mail contact under cursor
+Mail contact under cursor.
 .\" default value
 .Pq Em m
+.It Ic next_account
+Go to next account.
+.\" default value
+.Pq Em h
+.It Ic prev_account
+Go to previous account.
+.\" default value
+.Pq Em l
 .It Ic toggle_menu_visibility
 Toggle visibility of side menu in mail list.
 .\" default value
@@ -747,14 +801,22 @@ Toggle visibility of side menu in mail list.
 .sp
 .Em composing
 .Bl -tag -width 36n
-.It Ic send_mail
-Deliver draft to mailer
-.\" default value
-.Pq Em s
 .It Ic edit_mail
 Edit mail.
 .\" default value
 .Pq Em e
+.It Ic send_mail
+Deliver draft to mailer
+.\" default value
+.Pq Em s
+.It Ic scroll_up
+Change field focus.
+.\" default value
+.Pq Em k
+.It Ic scroll_down
+Change field focus.
+.\" default value
+.Pq Em j
 .El
 .sp
 .Em envelope-view
@@ -765,34 +827,18 @@ To select an attachment, type its index (you will see the typed result in the co
 Select addresses from envelope to add to contacts.
 .\" default value
 .Pq Em c
-.It Ic view_raw_source
-View raw envelope source in a pager.
-.\" default value
-.Pq Em M-r
-.It Ic reply
-Reply to envelope.
-.\" default value
-.Pq Em R
-.It Ic reply_to_author
-Reply to author.
-.\" default value
-.Pq Em Ctrl-r
-.It Ic reply_to_all
-Reply to all/Reply to list/Follow up.
-.\" default value
-.Pq Em Ctrl-g
-.It Ic forward
-Forward email.
-.\" default value
-.Pq Em Ctrl-f
 .It Ic edit
 Open envelope in composer.
 .\" default value
 .Pq Em e
-.It Ic return_to_normal_view
-Return to envelope if viewing raw source or attachment.
+.It Ic go_to_url
+Go to url of given index (with the command
+.Ic url_launcher
+setting in
+.Sx PAGER
+section)
 .\" default value
-.Pq Em r
+.Pq Em g
 .It Ic open_attachment
 Opens selected attachment with
 .Cm xdg-open
@@ -805,52 +851,76 @@ See
 for the mailcap file locations.
 .\" default value
 .Pq Em m
-.It Ic go_to_url
-Go to url of given index (with the command
-.Ic url_launcher
-setting in
-.Sx PAGER
-section)
+.It Ic reply
+Reply to envelope.
 .\" default value
-.Pq Em g
+.Pq Em R
+.It Ic reply_to_author
+Reply to author.
+.\" default value
+.Pq Em C-r
+.It Ic reply_to_all
+Reply to all/Reply to list/Follow up.
+.\" default value
+.Pq Em C-g
+.It Ic forward
+Forward email.
+.\" default value
+.Pq Em C-f
+.It Ic return_to_normal_view
+Return to envelope if viewing raw source or attachment.
+.\" default value
+.Pq Em r
+.It Ic toggle_expand_headers
+Expand extra headers (References and others)
+.\" default value
+.Pq Em h
 .It Ic toggle_url_mode
 Toggles url open mode.
 When active, it prepends an index next to each url that you can select by typing the index and open by issuing
 .Ic go_to_url
 .\" default value
 .Pq Em u
-.It Ic toggle_expand_headers
-Expand extra headers (References and others)
+.It Ic view_raw_source
+View raw envelope source in a pager.
 .\" default value
-.Pq Em h
+.Pq Em M-r
 .El
 .sp
 .Em thread-view
 .Bl -tag -width 36n
-.It Ic reverse_thread_order
-Reverse thread order.
+.It Ic scroll_up
+Scroll up list.
 .\" default value
-.Pq Em r
-.It Ic toggle_mailview
-Toggle mail view visibility.
+.Pq Em k
+.It Ic scroll_down
+Scroll down list.
 .\" default value
-.Pq Em p
-.It Ic toggle_threadview
-Toggle thread view visibility.
-.\" default value
-.Pq Em t
+.Pq Em j
 .It Ic collapse_subtree
-Collapse thread branches.
+collapse thread branches
 .\" default value
 .Pq Em h
-.It Ic prev_page
-Go to previous page.
-.\" default value
-.Pq Em PageUp
 .It Ic next_page
 Go to next page.
 .\" default value
 .Pq Em PageDown
+.It Ic prev_page
+Go to previous page.
+.\" default value
+.Pq Em PageUp
+.It Ic reverse_thread_order
+reverse thread order
+.\" default value
+.Pq Em C-r
+.It Ic toggle_mailview
+toggle mail view visibility
+.\" default value
+.Pq Em p
+.It Ic toggle_threadview
+toggle thread view visibility
+.\" default value
+.Pq Em t
 .El
 .sp
 .Sh NOTIFICATIONS
