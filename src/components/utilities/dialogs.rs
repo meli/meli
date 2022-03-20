@@ -185,7 +185,9 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                 }
                 return true;
             }
-            (UIEvent::Input(Key::Down), SelectorCursor::Unfocused) => {
+            (UIEvent::Input(ref key), SelectorCursor::Unfocused)
+                if shortcut!(key == shortcuts["general"]["scroll_down"]) =>
+            {
                 if self.single_only {
                     for c in self.content.row_iter(0..(width - 1), 0) {
                         self.content[c]
@@ -206,7 +208,9 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                 self.dirty = true;
                 return true;
             }
-            (UIEvent::Input(Key::Up), SelectorCursor::Entry(c)) if c > 0 => {
+            (UIEvent::Input(ref key), SelectorCursor::Entry(c))
+                if shortcut!(key == shortcuts["general"]["scroll_up"]) && c > 0 =>
+            {
                 if self.single_only {
                     // Redraw selection
                     for c in self.content.row_iter(0..(width - 1), c) {
@@ -506,7 +510,9 @@ impl Component for UIConfirmationDialog {
                 }
                 return true;
             }
-            (UIEvent::Input(Key::Up), SelectorCursor::Entry(c)) if c > 0 => {
+            (UIEvent::Input(ref key), SelectorCursor::Entry(c))
+                if shortcut!(key == shortcuts["general"]["scroll_up"]) && c > 0 =>
+            {
                 if self.single_only {
                     // Redraw selection
                     for c in self.content.row_iter(0..(width - 1), c) {
@@ -856,10 +862,11 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selec
     }
 
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        let shortcuts = context.settings.shortcuts.general.key_values();
         let navigate_help_string = format!(
-            "Navigate options with {}, {}, select with {}",
-            Key::Up,
-            Key::Down,
+            "Navigate options with {} to go down, {} to go up, select with {}",
+            shortcuts["scroll_down"],
+            shortcuts["scroll_up"],
             Key::Char('\n')
         );
         let width = std::cmp::max(
