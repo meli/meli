@@ -1072,6 +1072,8 @@ impl Component for Tabbed {
             let mut max_width =
                 "Press ? to close, use COMMAND \"search\" to find shortcuts".len() + 3;
 
+            let mut max_first_column_width = 3;
+
             for (desc, shortcuts) in children_maps.iter() {
                 max_length += shortcuts.len() + 3;
                 max_width = std::cmp::max(
@@ -1084,6 +1086,14 @@ impl Component for Tabbed {
                             .max()
                             .unwrap_or(0),
                     ),
+                );
+                max_first_column_width = std::cmp::max(
+                    max_first_column_width,
+                    shortcuts
+                        .values()
+                        .map(|v| v.to_string().len() + 5)
+                        .max()
+                        .unwrap_or(0),
                 );
             }
             self.help_content =
@@ -1112,7 +1122,11 @@ impl Component for Tabbed {
                 idx += 2;
                 for (k, v) in shortcuts {
                     let (x, y) = write_string_to_grid(
-                        &format!("{:1$}", v, max_width),
+                        &format!(
+                            "{: >width$}",
+                            format!("{}", v),
+                            width = max_first_column_width
+                        ),
                         &mut self.help_content,
                         self.theme_default.fg,
                         self.theme_default.bg,
