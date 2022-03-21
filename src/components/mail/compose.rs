@@ -249,6 +249,21 @@ impl Composer {
         ret.draft
             .set_header("In-Reply-To", envelope.message_id_display().into());
 
+        if let Some(reply_to) = envelope
+            .other_headers()
+            .get("To")
+            .and_then(|v| v.as_str().try_into().ok())
+        {
+            let to: &str = reply_to;
+            let extra_identities = &account.settings.account.extra_identities;
+            if let Some(extra) = extra_identities
+                .iter()
+                .find(|extra| to.contains(extra.as_str()))
+            {
+                ret.draft.set_header("From", extra.into());
+            }
+        }
+
         // "Mail-Followup-To/(To+Cc+(Mail-Reply-To/Reply-To/From)) for follow-up,
         // Mail-Reply-To/Reply-To/From for reply-to-author."
         // source: https://cr.yp.to/proto/replyto.html

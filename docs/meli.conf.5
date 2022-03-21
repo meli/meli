@@ -138,6 +138,9 @@ The glob wildcard
 can be used to match every mailbox name and path.
 .It Ic identity Ar String
 Your e-mail address that is inserted in the From: headers of outgoing mail.
+.It Ic extra_identities Ar [String,]
+Extra e-mail address identities.
+When replying to an e-mail addressed to one of these identities, the From: header will be adjusted to its value instead of the default identity.
 .El
 .TS
 allbox tab(:);

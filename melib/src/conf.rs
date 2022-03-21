@@ -30,6 +30,7 @@ pub struct AccountSettings {
     pub root_mailbox: String,
     pub format: String,
     pub identity: String,
+    pub extra_identities: Vec<String>,
     pub read_only: bool,
     pub display_name: Option<String>,
     pub subscribed_mailboxes: Vec<String>,

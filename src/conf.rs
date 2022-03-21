@@ -155,6 +155,8 @@ pub struct FileAccount {
     root_mailbox: String,
     format: String,
     identity: String,
+    #[serde(default)]
+    extra_identities: Vec<String>,
     #[serde(default = "none")]
     display_name: Option<String>,
 
@@ -254,6 +256,7 @@ impl From<FileAccount> for AccountConf {
             root_mailbox,
             format,
             identity,
+            extra_identities: x.extra_identities.clone(),
             read_only: x.read_only,
             display_name,
             subscribed_mailboxes: x.subscribed_mailboxes.clone(),
@@ -444,6 +447,7 @@ This is required so that you don't accidentally start meli and find out later th
                 root_mailbox,
                 format,
                 identity,
+                extra_identities,
                 read_only,
                 display_name,
                 subscribed_mailboxes,
@@ -461,6 +465,7 @@ This is required so that you don't accidentally start meli and find out later th
                 root_mailbox,
                 format: format.clone(),
                 identity,
+                extra_identities,
                 read_only,
                 display_name,
                 subscribed_mailboxes,
