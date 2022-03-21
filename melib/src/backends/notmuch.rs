@@ -769,7 +769,7 @@ impl MailBackend for NotmuchDb {
                         }
                         Err(tag) => {
                             let c_tag = CString::new(tag.as_str()).unwrap();
-                            add_tag!(&c_tag.as_ref());
+                            remove_tag!(&c_tag.as_ref());
                         }
                     }
                 }
