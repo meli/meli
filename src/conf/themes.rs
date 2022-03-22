@@ -244,7 +244,13 @@ fn unlink_attrs<'k, 't: 'k>(theme: &'t Theme, mut key: &'k Cow<'static, str>) ->
 
 const DEFAULT_KEYS: &[&str] = &[
     "theme_default",
+    "error_message",
+    "email_header",
+    "highlight",
     "status.bar",
+    "status.command_bar",
+    "status.history",
+    "status.history.hints",
     "status.notification",
     "tab.focused",
     "tab.unfocused",
@@ -1312,7 +1318,17 @@ impl Default for Themes {
             };
         }
         add!("theme_default", dark = { fg: Color::Default, bg: Color::Default, attrs: Attr::DEFAULT }, light = { fg: Color::Default, bg: Color::Default, attrs: Attr::DEFAULT });
+
+        add!("error_message", dark = { fg: Color::Byte(243), bg: Color::Default, attrs: Attr::DEFAULT }, light = { fg: Color::Byte(243), bg: Color::Default, attrs: Attr::DEFAULT });
+
+        add!("email_header", dark = { fg: Color::Byte(33), bg: Color::Default, attrs: Attr::DEFAULT }, light = { fg: Color::Byte(33), bg: Color::Default, attrs: Attr::DEFAULT });
+
+        add!("highlight", dark = { fg: Color::Byte(240), bg: Color::Byte(237), attrs: Attr::BOLD }, light = { fg: Color::Byte(240), bg: Color::Byte(237), attrs: Attr::BOLD });
+
         add!("status.bar", dark = { fg: Color::Byte(123), bg: Color::Byte(26) }, light = { fg: Color::Byte(123), bg: Color::Byte(26) });
+        add!("status.command_bar", dark = { fg: Color::Byte(219), bg: Color::Byte(88) }, light = { fg: Color::Byte(219), bg: Color::Byte(88) });
+        add!("status.history", dark = { fg: Color::Byte(197), bg: Color::Byte(174) }, light = { fg: Color::Byte(197), bg: Color::Byte(174) });
+        add!("status.history.hints", dark = { fg: Color::Black, bg: "status.command_bar" }, light = { fg: Color::Black, bg: "status.command_bar" });
         add!("status.notification", dark = { fg: Color::Byte(219), bg: Color::Default }, light = { fg: Color::Byte(219), bg: Color::Default });
 
         add!("tab.focused");

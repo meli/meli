@@ -179,48 +179,14 @@ impl EnvelopeView {
             }
         }
     }
-    /*
-     * TODO: add recolor changes so that this function returns a vector of required highlights
-     * to pass to write_string...
-    pub fn plain_text_to_buf(s: &str, highlight_urls: bool) -> CellBuffer {
-        let mut buf = CellBuffer::from(s);
-
-        if highlight_urls {
-            let lines: Vec<&str> = s.split('\n').map(|l| l.trim_end()).collect();
-            let mut shift = 0;
-            let mut lidx_total = 0;
-            let finder = LinkFinder::new();
-            for r in &lines {
-                for l in finder.links(&r) {
-                    let offset = if lidx_total < 10 {
-                        3
-                    } else if lidx_total < 100 {
-                        4
-                    } else if lidx_total < 1000 {
-                        5
-                    } else {
-                        panic!("BUG: Message body with more than 100 urls");
-                    };
-                    for i in 1..=offset {
-                        buf[(l.start() + shift - i, 0)].set_fg(Color::Byte(226));
-                        //buf[(l.start() + shift - 2, 0)].set_fg(Color::Byte(226));
-                        //buf[(l.start() + shift - 3, 0)].set_fg(Color::Byte(226));
-                    }
-                    lidx_total += 1;
-                }
-                // Each Cell represents one char so next line will be:
-                shift += r.chars().count() + 1;
-            }
-        }
-        buf
-    }
-    */
 }
 
 impl Component for EnvelopeView {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
+        let theme_default = crate::conf::value(context, "theme_default");
+        let email_header_theme = crate::conf::value(context, "email_header");
 
         let y: usize = {
             if self.mode == ViewMode::Raw {
@@ -231,72 +197,77 @@ impl Component for EnvelopeView {
                 let (x, y) = write_string_to_grid(
                     &format!("Date: {}", self.mail.date_as_str()),
                     grid,
-                    Color::Byte(33),
-                    Color::Default,
-                    Attr::DEFAULT,
+                    email_header_theme.fg,
+                    email_header_theme.bg,
+                    email_header_theme.attrs,
                     area,
                     Some(get_x(upper_left)),
                 );
                 for x in x..=get_x(bottom_right) {
-                    grid[(x, y)].set_ch(' ');
-                    grid[(x, y)].set_bg(Color::Default);
-                    grid[(x, y)].set_fg(Color::Default);
+                    grid[(x, y)]
+                        .set_ch(' ')
+                        .set_fg(theme_default.fg)
+                        .set_bg(theme_default.bg);
                 }
                 let (x, y) = write_string_to_grid(
                     &format!("From: {}", self.mail.field_from_to_string()),
                     grid,
-                    Color::Byte(33),
-                    Color::Default,
-                    Attr::DEFAULT,
+                    email_header_theme.fg,
+                    email_header_theme.bg,
+                    email_header_theme.attrs,
                     (set_y(upper_left, y + 1), bottom_right),
                     Some(get_x(upper_left)),
                 );
                 for x in x..=get_x(bottom_right) {
-                    grid[(x, y)].set_ch(' ');
-                    grid[(x, y)].set_bg(Color::Default);
-                    grid[(x, y)].set_fg(Color::Default);
+                    grid[(x, y)]
+                        .set_ch(' ')
+                        .set_fg(theme_default.fg)
+                        .set_bg(theme_default.bg);
                 }
                 let (x, y) = write_string_to_grid(
                     &format!("To: {}", self.mail.field_to_to_string()),
                     grid,
-                    Color::Byte(33),
-                    Color::Default,
-                    Attr::DEFAULT,
+                    email_header_theme.fg,
+                    email_header_theme.bg,
+                    email_header_theme.attrs,
                     (set_y(upper_left, y + 1), bottom_right),
                     Some(get_x(upper_left)),
                 );
                 for x in x..=get_x(bottom_right) {
-                    grid[(x, y)].set_ch(' ');
-                    grid[(x, y)].set_bg(Color::Default);
-                    grid[(x, y)].set_fg(Color::Default);
+                    grid[(x, y)]
+                        .set_ch(' ')
+                        .set_fg(theme_default.fg)
+                        .set_bg(theme_default.bg);
                 }
                 let (x, y) = write_string_to_grid(
                     &format!("Subject: {}", self.mail.subject()),
                     grid,
-                    Color::Byte(33),
-                    Color::Default,
-                    Attr::DEFAULT,
+                    email_header_theme.fg,
+                    email_header_theme.bg,
+                    email_header_theme.attrs,
                     (set_y(upper_left, y + 1), bottom_right),
                     Some(get_x(upper_left)),
                 );
                 for x in x..=get_x(bottom_right) {
-                    grid[(x, y)].set_ch(' ');
-                    grid[(x, y)].set_bg(Color::Default);
-                    grid[(x, y)].set_fg(Color::Default);
+                    grid[(x, y)]
+                        .set_ch(' ')
+                        .set_fg(theme_default.fg)
+                        .set_bg(theme_default.bg);
                 }
                 let (x, y) = write_string_to_grid(
                     &format!("Message-ID: <{}>", self.mail.message_id_raw()),
                     grid,
-                    Color::Byte(33),
-                    Color::Default,
-                    Attr::DEFAULT,
+                    email_header_theme.fg,
+                    email_header_theme.bg,
+                    email_header_theme.attrs,
                     (set_y(upper_left, y + 1), bottom_right),
                     Some(get_x(upper_left)),
                 );
                 for x in x..=get_x(bottom_right) {
-                    grid[(x, y)].set_ch(' ');
-                    grid[(x, y)].set_bg(Color::Default);
-                    grid[(x, y)].set_fg(Color::Default);
+                    grid[(x, y)]
+                        .set_ch(' ')
+                        .set_fg(theme_default.fg)
+                        .set_bg(theme_default.bg);
                 }
                 clear_area(
                     grid,
@@ -322,14 +293,7 @@ impl Component for EnvelopeView {
                     self.mode = ViewMode::Subview;
                 }
                 _ => {
-                    let text = {
-                        self.attachment_to_text(&body, context)
-                        /*
-                        let text = self.attachment_to_text(&body);
-                        // URL indexes must be colored (ugh..)
-                        EnvelopeView::plain_text_to_buf(&text, self.mode == ViewMode::Url)
-                        */
-                    };
+                    let text = { self.attachment_to_text(&body, context) };
                     let cursor_pos = if self.mode.is_attachment() {
                         Some(0)
                     } else {

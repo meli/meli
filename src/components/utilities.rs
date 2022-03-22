@@ -230,9 +230,9 @@ impl StatusBar {
         let (_, y) = write_string_to_grid(
             self.ex_buffer.as_str(),
             grid,
-            Color::Byte(219),
-            Color::Byte(88),
-            Attr::DEFAULT,
+            crate::conf::value(context, "status.command_bar").fg,
+            crate::conf::value(context, "status.command_bar").bg,
+            crate::conf::value(context, "status.command_bar").attrs,
             area,
             None,
         );
@@ -242,7 +242,12 @@ impl StatusBar {
         ) {
             cell.set_attrs(Attr::UNDERLINE);
         }
-        change_colors(grid, area, Color::Byte(219), Color::Byte(88));
+        change_colors(
+            grid,
+            area,
+            crate::conf::value(context, "status.command_bar").fg,
+            crate::conf::value(context, "status.command_bar").bg,
+        );
         context.dirty_areas.push_back(area);
     }
 }
@@ -387,8 +392,8 @@ impl Component for StatusBar {
                     change_colors(
                         grid,
                         hist_area,
-                        Color::Byte(197), // DeepPink2,
-                        Color::Byte(174), //LightPink3
+                        crate::conf::value(context, "status.history").fg,
+                        crate::conf::value(context, "status.history").bg,
                     );
                     context.dirty_areas.push_back(hist_area);
                     hist_area
@@ -420,8 +425,8 @@ impl Component for StatusBar {
                     change_colors(
                         grid,
                         hist_area,
-                        Color::Byte(88),  // DarkRed,
-                        Color::Byte(174), //LightPink3
+                        crate::conf::value(context, "status.history.hints").fg,
+                        crate::conf::value(context, "status.history.hints").bg,
                     );
                 }
                 for (y_offset, s) in self
@@ -435,9 +440,9 @@ impl Component for StatusBar {
                     let (x, y) = write_string_to_grid(
                         s.as_str(),
                         grid,
-                        Color::Byte(88),  // DarkRed,
-                        Color::Byte(174), //LightPink3
-                        Attr::DEFAULT,
+                        crate::conf::value(context, "status.history.hints").fg,
+                        crate::conf::value(context, "status.history.hints").bg,
+                        crate::conf::value(context, "status.history.hints").attrs,
                         (
                             set_y(
                                 upper_left!(hist_area),
@@ -450,9 +455,9 @@ impl Component for StatusBar {
                     write_string_to_grid(
                         &s.description,
                         grid,
-                        Color::White,
-                        Color::Byte(174),
-                        Attr::DEFAULT,
+                        crate::conf::value(context, "status.history.hints").fg,
+                        crate::conf::value(context, "status.history.hints").bg,
+                        crate::conf::value(context, "status.history.hints").attrs,
                         ((x + 2, y), bottom_right!(hist_area)),
                         None,
                     );
@@ -469,15 +474,15 @@ impl Component for StatusBar {
                                     get_y(bottom_right!(hist_area)) - hist_height + y_offset + 1,
                                 ),
                             ),
-                            Color::Byte(88),  // DarkRed,
-                            Color::Byte(173), //LightSalmon3
+                            crate::conf::value(context, "status.history.hints").fg,
+                            crate::conf::value(context, "status.history.hints").bg,
                         );
                         write_string_to_grid(
                             &s.as_str()[self.ex_buffer.as_str().len()..],
                             grid,
-                            Color::Byte(97), // MediumPurple3,
-                            Color::Byte(88), //LightPink3
-                            Attr::DEFAULT,
+                            crate::conf::value(context, "status.history.hints").fg,
+                            crate::conf::value(context, "status.history.hints").bg,
+                            crate::conf::value(context, "status.history.hints").attrs,
                             (
                                 (
                                     get_x(upper_left)
@@ -891,8 +896,6 @@ impl Tabbed {
             .iter_mut()
         {
             c.set_ch(' ').set_bg(tab_unfocused_attribute.bg);
-            //.set_fg(tab_unfocused_attribute.bg)
-            //.set_bg(Color::Byte(7));
         }
 
         if self.cursor_pos == self.children.len() - 1 {

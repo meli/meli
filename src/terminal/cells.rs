@@ -1381,7 +1381,6 @@ pub mod boundaries {
                             break;
                         } else if adj == 0b0100 {
                             cell.set_ch(bin_to_ch(0b0101));
-                            cell.set_fg(Color::Byte(240));
                             bin_set |= 0b0100;
                             break;
                         }
@@ -1422,7 +1421,6 @@ pub mod boundaries {
                 if let Some(cell) = grid.get_mut(x, y - 1) {
                     if let Some(adj) = ch_to_bin(cell.ch()) {
                         cell.set_ch(bin_to_ch(adj | 0b1000));
-                        cell.set_fg(Color::Byte(240));
                     } else {
                         bin_set &= 0b1101;
                     }
@@ -1441,7 +1439,6 @@ pub mod boundaries {
             if let Some(cell) = grid.get_mut(x, y + 1) {
                 if let Some(adj) = ch_to_bin(cell.ch()) {
                     cell.set_ch(bin_to_ch(adj | 0b0010));
-                    cell.set_fg(Color::Byte(240));
                 } else {
                     bin_set &= 0b0111;
                 }
@@ -1476,7 +1473,6 @@ pub mod boundaries {
                         } else if adj == 0b0010 {
                             bin_set |= 0b0010;
                             cell.set_ch(bin_to_ch(0b1010));
-                            cell.set_fg(Color::Byte(240));
                             break;
                         }
                     }
@@ -1501,7 +1497,6 @@ pub mod boundaries {
                     } else if adj == 0b1000 {
                         bin_set |= 0b1000;
                         cell.set_ch(bin_to_ch(0b1010));
-                        cell.set_fg(Color::Byte(240));
                         break;
                     }
                 }
@@ -1521,7 +1516,6 @@ pub mod boundaries {
                 if let Some(cell) = grid.get_mut(x - 1, y) {
                     if let Some(adj) = ch_to_bin(cell.ch()) {
                         cell.set_ch(bin_to_ch(adj | 0b0001));
-                        cell.set_fg(Color::Byte(240));
                     } else {
                         bin_set &= 0b1011;
                     }
@@ -1540,7 +1534,6 @@ pub mod boundaries {
             if let Some(cell) = grid.get_mut(x + 1, y) {
                 if let Some(adj) = ch_to_bin(cell.ch()) {
                     cell.set_ch(bin_to_ch(adj | 0b0100));
-                    cell.set_fg(Color::Byte(240));
                 } else {
                     bin_set &= 0b1110;
                 }
@@ -1576,8 +1569,6 @@ pub mod boundaries {
                 BoxBoundary::Vertical => '|',
                 BoxBoundary::Horizontal => '-',
             });
-
-            grid[idx].set_fg(Color::Byte(240));
             return;
         }
 
@@ -1587,7 +1578,6 @@ pub mod boundaries {
         };
 
         grid[idx].set_ch(bin_to_ch(bin_set));
-        grid[idx].set_fg(Color::Byte(240));
     }
 
     /// Puts boundaries in `area`.
@@ -1601,21 +1591,13 @@ pub mod boundaries {
 
         if !grid.ascii_drawing {
             for x in get_x(upper_left)..get_x(bottom_right) {
-                grid[(x, get_y(upper_left))]
-                    .set_ch(HORZ_BOUNDARY)
-                    .set_fg(Color::Byte(240));
-                grid[(x, get_y(bottom_right))]
-                    .set_ch(HORZ_BOUNDARY)
-                    .set_fg(Color::Byte(240));
+                grid[(x, get_y(upper_left))].set_ch(HORZ_BOUNDARY);
+                grid[(x, get_y(bottom_right))].set_ch(HORZ_BOUNDARY);
             }
 
             for y in get_y(upper_left)..get_y(bottom_right) {
-                grid[(get_x(upper_left), y)]
-                    .set_ch(VERT_BOUNDARY)
-                    .set_fg(Color::Byte(240));
-                grid[(get_x(bottom_right), y)]
-                    .set_ch(VERT_BOUNDARY)
-                    .set_fg(Color::Byte(240));
+                grid[(get_x(upper_left), y)].set_ch(VERT_BOUNDARY);
+                grid[(get_x(bottom_right), y)].set_ch(VERT_BOUNDARY);
             }
             set_and_join_box(grid, upper_left, BoxBoundary::Horizontal);
             set_and_join_box(

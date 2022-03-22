@@ -131,7 +131,7 @@ impl Component for EditAttachmentsRefMut<'_, '_> {
                 for (i, a) in self.draft.attachments().iter().enumerate() {
                     let bg = if let EditAttachmentCursor::AttachmentNo(u) = self.inner.cursor {
                         if u == i {
-                            Color::Byte(237)
+                            crate::conf::value(context, "highlight").bg
                         } else {
                             theme_default.bg
                         }

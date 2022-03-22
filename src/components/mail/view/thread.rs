@@ -266,6 +266,7 @@ impl ThreadView {
             width = cmp::max(width, e.index.0 * 4 + e.heading.grapheme_width() + 2);
         }
         let theme_default = crate::conf::value(context, "theme_default");
+        let highlight_theme = crate::conf::value(context, "highlight");
         let mut content = CellBuffer::new_with_context(width, height, None, context);
         if self.reversed {
             for (y, e) in self.entries.iter().rev().enumerate() {
@@ -294,12 +295,12 @@ impl ThreadView {
                     if e.seen {
                         theme_default.fg
                     } else {
-                        Color::Byte(0)
+                        highlight_theme.fg
                     },
                     if e.seen {
                         theme_default.bg
                     } else {
-                        Color::Byte(251)
+                        highlight_theme.bg
                     },
                     theme_default.attrs,
                     (
@@ -308,19 +309,10 @@ impl ThreadView {
                     ),
                     None,
                 );
-                {
-                    let envelope: EnvelopeRef = context.accounts[&self.coordinates.0]
-                        .collection
-                        .get_env(e.msg_hash);
-                    if envelope.has_attachments() {
-                        content[(e.index.0 * 4 + e.heading.grapheme_width(), 2 * y)]
-                            .set_fg(Color::Byte(103));
-                    }
-                }
                 if let Some(len) = highlight_reply_subjects[y] {
                     let index = e.index.0 * 4 + 1 + e.heading.grapheme_width() - len;
                     let area = ((index, 2 * y), (width - 2, 2 * y));
-                    change_colors(&mut content, area, Color::Byte(33), theme_default.bg);
+                    change_colors(&mut content, area, highlight_theme.fg, theme_default.bg);
                 }
                 set_and_join_box(&mut content, (e.index.0 * 4, 2 * y), BoxBoundary::Vertical);
                 set_and_join_box(
@@ -375,12 +367,12 @@ impl ThreadView {
                     if e.seen {
                         theme_default.fg
                     } else {
-                        Color::Byte(0)
+                        highlight_theme.fg
                     },
                     if e.seen {
                         theme_default.bg
                     } else {
-                        Color::Byte(251)
+                        highlight_theme.bg
                     },
                     theme_default.attrs,
                     (
@@ -389,19 +381,10 @@ impl ThreadView {
                     ),
                     None,
                 );
-                {
-                    let envelope: EnvelopeRef = context.accounts[&self.coordinates.0]
-                        .collection
-                        .get_env(e.msg_hash);
-                    if envelope.has_attachments() {
-                        content[(e.index.0 * 4 + e.heading.grapheme_width(), 2 * y)]
-                            .set_fg(Color::Byte(103));
-                    }
-                }
                 if let Some(_len) = highlight_reply_subjects[y] {
                     let index = e.index.0 * 4 + 1;
                     let area = ((index, 2 * y), (width - 2, 2 * y));
-                    change_colors(&mut content, area, Color::Byte(33), theme_default.bg);
+                    change_colors(&mut content, area, highlight_theme.fg, theme_default.bg);
                 }
                 set_and_join_box(&mut content, (e.index.0 * 4, 2 * y), BoxBoundary::Vertical);
                 set_and_join_box(
@@ -439,7 +422,7 @@ impl ThreadView {
             .collect();
         if idx == *visibles[self.cursor_pos] {
             let theme_default = crate::conf::value(context, "theme_default");
-            let bg_color = Color::Byte(246);
+            let bg_color = crate::conf::value(context, "highlight").bg;
             let attrs = if self.use_color {
                 theme_default.attrs
             } else {
@@ -695,7 +678,7 @@ impl ThreadView {
             let (x, y) = write_string_to_grid(
                 &envelope.subject(),
                 grid,
-                Color::Byte(33),
+                crate::conf::value(context, "highlight").fg,
                 theme_default.bg,
                 theme_default.attrs,
                 area,
@@ -729,7 +712,7 @@ impl ThreadView {
         for x in get_x(upper_left)..=get_x(bottom_right) {
             set_and_join_box(grid, (x, y - 1), BoxBoundary::Horizontal);
             grid[(x, y - 1)]
-                .set_fg(Color::Byte(33))
+                .set_fg(theme_default.fg)
                 .set_bg(theme_default.bg);
         }
 
@@ -803,7 +786,7 @@ impl ThreadView {
             let (x, y) = write_string_to_grid(
                 &envelope.subject(),
                 grid,
-                Color::Byte(33),
+                theme_default.fg,
                 theme_default.bg,
                 theme_default.attrs,
                 area,

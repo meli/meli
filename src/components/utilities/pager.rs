@@ -355,8 +355,8 @@ impl Pager {
             );
             if l.starts_with("⤷") {
                 grid[upper_left]
-                    .set_fg(Color::Byte(240))
-                    .set_attrs(Attr::BOLD);
+                    .set_fg(crate::conf::value(context, "highlight").fg)
+                    .set_attrs(crate::conf::value(context, "highlight").attrs);
             }
             upper_left = pos_inc(upper_left, (0, 1));
         }

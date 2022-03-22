@@ -586,7 +586,7 @@ To: {}
                 grid,
                 theme_default.fg,
                 if self.cursor == Cursor::Sign {
-                    Color::Byte(237)
+                    crate::conf::value(context, "highlight").bg
                 } else {
                     theme_default.bg
                 },
@@ -600,7 +600,7 @@ To: {}
                 grid,
                 theme_default.fg,
                 if self.cursor == Cursor::Sign {
-                    Color::Byte(237)
+                    crate::conf::value(context, "highlight").bg
                 } else {
                     theme_default.bg
                 },
@@ -636,7 +636,7 @@ To: {}
                 grid,
                 theme_default.fg,
                 if self.cursor == Cursor::Encrypt {
-                    Color::Byte(237)
+                    crate::conf::value(context, "highlight").bg
                 } else {
                     theme_default.bg
                 },
@@ -650,7 +650,7 @@ To: {}
                 grid,
                 theme_default.fg,
                 if self.cursor == Cursor::Encrypt {
-                    Color::Byte(237)
+                    crate::conf::value(context, "highlight").bg
                 } else {
                     theme_default.bg
                 },
@@ -665,7 +665,7 @@ To: {}
                 grid,
                 theme_default.fg,
                 if self.cursor == Cursor::Attachments {
-                    Color::Byte(237)
+                    crate::conf::value(context, "highlight").bg
                 } else {
                     theme_default.bg
                 },
@@ -679,7 +679,7 @@ To: {}
                 grid,
                 theme_default.fg,
                 if self.cursor == Cursor::Attachments {
-                    Color::Byte(237)
+                    crate::conf::value(context, "highlight").bg
                 } else {
                     theme_default.bg
                 },
@@ -809,9 +809,9 @@ impl Component for Composer {
                 "COMPOSING MESSAGE"
             },
             grid,
-            Color::Byte(189),
-            Color::Byte(167),
-            Attr::DEFAULT,
+            crate::conf::value(context, "highlight").fg,
+            crate::conf::value(context, "highlight").bg,
+            crate::conf::value(context, "highlight").attrs,
             (
                 pos_dec(upper_left!(header_area), (0, 1)),
                 bottom_right!(header_area),
@@ -825,8 +825,8 @@ impl Component for Composer {
                 set_x(pos_dec(upper_left!(header_area), (0, 1)), x),
                 set_y(bottom_right!(header_area), y),
             ),
-            Color::Byte(189),
-            Color::Byte(167),
+            crate::conf::value(context, "highlight").fg,
+            crate::conf::value(context, "highlight").bg,
         );
         clear_area(
             grid,
@@ -943,7 +943,7 @@ impl Component for Composer {
                         ),
                     ),
                     theme_default.fg,
-                    Color::Byte(237),
+                    crate::conf::value(context, "highlight").bg,
                 );
             }
             Cursor::Sign | Cursor::Encrypt | Cursor::Attachments => {}

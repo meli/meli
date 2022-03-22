@@ -1918,7 +1918,7 @@ impl Listing {
             write_string_to_grid(
                 "offline",
                 &mut self.menu_content,
-                Color::Byte(243),
+                crate::conf::value(context, "error_message").fg,
                 account_attrs.bg,
                 account_attrs.attrs,
                 (pos_inc(upper_left, (0, 1)), bottom_right),

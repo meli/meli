@@ -80,7 +80,7 @@ impl ContactManager {
         let (x, _) = write_string_to_grid(
             "Last edited: ",
             &mut self.content,
-            Color::Byte(250),
+            self.theme_default.fg,
             self.theme_default.bg,
             self.theme_default.attrs,
             ((0, 0), (width - 1, 0)),
@@ -89,7 +89,7 @@ impl ContactManager {
         let (x, y) = write_string_to_grid(
             &self.card.last_edited(),
             &mut self.content,
-            Color::Byte(250),
+            self.theme_default.fg,
             self.theme_default.bg,
             self.theme_default.attrs,
             ((x, 0), (width - 1, 0)),
@@ -102,7 +102,7 @@ impl ContactManager {
             write_string_to_grid(
                 "This contact's origin is external and cannot be edited within meli.",
                 &mut self.content,
-                Color::Byte(250),
+                self.theme_default.fg,
                 self.theme_default.bg,
                 self.theme_default.attrs,
                 ((x, y), (width - 1, y)),

@@ -49,6 +49,7 @@ pub struct ContactList {
     data_columns: DataColumns,
     initialized: bool,
     theme_default: ThemeAttribute,
+    highlight_theme: ThemeAttribute,
 
     id_positions: Vec<CardId>,
 
@@ -95,6 +96,7 @@ impl ContactList {
             mode: ViewMode::List,
             data_columns: DataColumns::default(),
             theme_default: crate::conf::value(context, "theme_default"),
+            highlight_theme: crate::conf::value(context, "highlight"),
             initialized: false,
             dirty: true,
             movement: None,
@@ -222,7 +224,7 @@ impl ContactList {
         /* Reset previously highlighted line */
         let fg_color = self.theme_default.fg;
         let bg_color = if idx == self.new_cursor_pos {
-            Color::Byte(246)
+            self.highlight_theme.bg
         } else {
             self.theme_default.bg
         };

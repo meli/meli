@@ -121,8 +121,8 @@ impl Field {
                 change_colors(
                     grid,
                     (pos_inc(upper_left, (pos, 0)), pos_inc(upper_left, (pos, 0))),
-                    Color::Default,
-                    Color::Byte(248),
+                    crate::conf::value(context, "theme_default").fg,
+                    crate::conf::value(context, "highlight").bg,
                 );
                 if term.grapheme_len() <= 2 {
                     return;
@@ -810,7 +810,7 @@ where
                     grid,
                     theme_default.fg,
                     if i == self.cursor && self.focus {
-                        Color::Byte(246)
+                        crate::conf::value(context, "highlight").bg
                     } else {
                         theme_default.bg
                     },
@@ -965,8 +965,8 @@ impl Component for AutoComplete {
                         get_y(pos_inc(upper_left, (0, (self.cursor - 1) % rows))),
                     ),
                 ),
-                Color::Default,
-                Color::Byte(246),
+                crate::conf::value(context, "highlight").fg,
+                crate::conf::value(context, "highlight").bg,
             );
         }
         if rows < self.entries.len() {
@@ -1020,6 +1020,7 @@ impl AutoComplete {
             return false;
         }
 
+        // FIXME: remove hardcoded color values
         let mut content = CellBuffer::new(
             entries
                 .iter()

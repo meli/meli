@@ -116,9 +116,9 @@ impl Component for OfflineListing {
             let (x, _) = write_string_to_grid(
                 "offline: ",
                 grid,
-                Color::Byte(243),
-                theme_default.bg,
-                theme_default.attrs,
+                conf::value(context, "error_message").fg,
+                conf::value(context, "error_message").bg,
+                conf::value(context, "error_message").attrs,
                 area,
                 None,
             );
@@ -135,9 +135,9 @@ impl Component for OfflineListing {
             let (_, mut y) = write_string_to_grid(
                 "loading...",
                 grid,
-                Color::Byte(243),
-                theme_default.bg,
-                theme_default.attrs,
+                conf::value(context, "highlight").fg,
+                conf::value(context, "highlight").bg,
+                conf::value(context, "highlight").attrs,
                 area,
                 None,
             );
