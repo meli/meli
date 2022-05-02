@@ -24,15 +24,15 @@ use crate::conf::AccountSettings;
 use crate::error::{MeliError, Result};
 use crate::get_conf_val;
 use nom::{
-    branch::alt, bytes::complete::tag, combinator::map, error::ErrorKind,
-    multi::separated_nonempty_list, sequence::separated_pair, IResult,
+    branch::alt, bytes::complete::tag, combinator::map, error::Error as NomError, error::ErrorKind,
+    multi::separated_list1, sequence::separated_pair, IResult,
 };
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 pub fn managesieve_capabilities(input: &[u8]) -> Result<Vec<(&[u8], &[u8])>> {
-    let (_, ret) = separated_nonempty_list(
+    let (_, ret) = separated_list1(
         tag(b"\r\n"),
         alt((
             separated_pair(quoted_raw, tag(b" "), quoted_raw),
@@ -58,7 +58,10 @@ fn test_managesieve_capabilities() {
 // Return a byte sequence surrounded by "s and decoded if necessary
 pub fn quoted_raw(input: &[u8]) -> IResult<&[u8], &[u8]> {
     if input.is_empty() || input[0] != b'"' {
-        return Err(nom::Err::Error((input, ErrorKind::Tag)));
+        return Err(nom::Err::Error(NomError {
+            input,
+            code: ErrorKind::Tag,
+        }));
     }
 
     let mut i = 1;
@@ -69,7 +72,10 @@ pub fn quoted_raw(input: &[u8]) -> IResult<&[u8], &[u8]> {
         i += 1;
     }
 
-    Err(nom::Err::Error((input, ErrorKind::Tag)))
+    Err(nom::Err::Error(NomError {
+        input,
+        code: ErrorKind::Tag,
+    }))
 }
 
 pub trait ManageSieve {

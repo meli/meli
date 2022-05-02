@@ -51,7 +51,7 @@ fn main() -> Result<()> {
                 Err(melib::nom::Err::Error(err)) => {
                     println!(
                         "Error in parsing {:?}",
-                        unsafe { std::str::from_utf8_unchecked(err.0) }
+                        unsafe { std::str::from_utf8_unchecked(err.input) }
                             .chars()
                             .take(150)
                             .collect::<String>()

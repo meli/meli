@@ -22,7 +22,7 @@ path = "src/lib.rs"
 bitflags = "1.0"
 data-encoding = "2.1.1"
 encoding = "0.2.33"
-nom = { version = "5" }
+nom = { version = "7" }
 
 indexmap = { version = "^1.5", features = ["serde-1", ] }
 notify = { version = "4.0.15", optional = true }

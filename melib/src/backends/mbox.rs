@@ -131,7 +131,7 @@ use crate::shellexpand::ShellExpandTrait;
 use nom::bytes::complete::tag;
 use nom::character::complete::digit1;
 use nom::combinator::map_res;
-use nom::{self, error::ErrorKind, IResult};
+use nom::{self, error::Error as NomError, error::ErrorKind, IResult};
 
 extern crate notify;
 use self::notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
@@ -491,7 +491,10 @@ impl MboxFormat {
                         }
                         Err(err) => {
                             debug!("Could not parse mail {:?}", err);
-                            Err(nom::Err::Error((input, ErrorKind::Tag)))
+                            Err(nom::Err::Error(NomError {
+                                input,
+                                code: ErrorKind::Tag,
+                            }))
                         }
                     }
                 } else {
@@ -535,7 +538,10 @@ impl MboxFormat {
                         }
                         Err(err) => {
                             debug!("Could not parse mail at {:?}", err);
-                            Err(nom::Err::Error((input, ErrorKind::Tag)))
+                            Err(nom::Err::Error(NomError {
+                                input,
+                                code: ErrorKind::Tag,
+                            }))
                         }
                     }
                 }
@@ -589,7 +595,10 @@ impl MboxFormat {
                         }
                         Err(err) => {
                             debug!("Could not parse mail {:?}", err);
-                            Err(nom::Err::Error((input, ErrorKind::Tag)))
+                            Err(nom::Err::Error(NomError {
+                                input,
+                                code: ErrorKind::Tag,
+                            }))
                         }
                     }
                 } else {
@@ -633,7 +642,10 @@ impl MboxFormat {
                         }
                         Err(err) => {
                             debug!("Could not parse mail {:?}", err);
-                            Err(nom::Err::Error((input, ErrorKind::Tag)))
+                            Err(nom::Err::Error(NomError {
+                                input,
+                                code: ErrorKind::Tag,
+                            }))
                         }
                     }
                 }
@@ -724,7 +736,10 @@ pub fn mbox_parse(
     format: Option<MboxFormat>,
 ) -> IResult<&[u8], Vec<Envelope>> {
     if input.is_empty() {
-        return Err(nom::Err::Error((input, ErrorKind::Tag)));
+        return Err(nom::Err::Error(NomError {
+            input,
+            code: ErrorKind::Tag,
+        }));
     }
     let mut offset = 0;
     let mut index = index.lock().unwrap();

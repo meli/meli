@@ -33,7 +33,7 @@ use nom::{
     character::complete::digit1,
     character::is_digit,
     combinator::{map, map_res, opt},
-    multi::{fold_many1, length_data, many0, many1, separated_nonempty_list},
+    multi::{fold_many1, length_data, many0, many1, separated_list1},
     sequence::{delimited, preceded},
 };
 use std::convert::TryFrom;
@@ -823,7 +823,7 @@ macro_rules! flags_to_imap_list {
 pub fn capabilities(input: &[u8]) -> IResult<&[u8], Vec<&[u8]>> {
     let (input, _) = take_until("CAPABILITY ")(input)?;
     let (input, _) = tag("CAPABILITY ")(input)?;
-    let (input, ret) = separated_nonempty_list(tag(" "), is_not(" ]\r\n"))(input)?;
+    let (input, ret) = separated_list1(tag(" "), is_not(" ]\r\n"))(input)?;
     let (input, _) = take_until("\r\n")(input)?;
     let (input, _) = tag("\r\n")(input)?;
     Ok((input, ret))
@@ -981,7 +981,7 @@ pub fn search_results<'a>(input: &'a [u8]) -> IResult<&'a [u8], Vec<ImapNum>> {
     alt((
         |input: &'a [u8]| -> IResult<&'a [u8], Vec<ImapNum>> {
             let (input, _) = tag("* SEARCH ")(input)?;
-            let (input, list) = separated_nonempty_list(
+            let (input, list) = separated_list1(
                 tag(b" "),
                 map_res(is_not(" \r\n"), |s: &[u8]| {
                     ImapNum::from_str(unsafe { std::str::from_utf8_unchecked(s) })
@@ -1367,7 +1367,7 @@ pub fn envelope_addresses<'a>(
             let (input, _) = tag("(")(input)?;
             let (input, envelopes) = fold_many1(
                 delimited(tag("("), envelope_address, tag(")")),
-                SmallVec::new(),
+                SmallVec::new,
                 |mut acc, item| {
                     acc.push(item);
                     acc
@@ -1472,11 +1472,11 @@ pub fn quoted_or_nil(input: &[u8]) -> IResult<&[u8], Option<Vec<u8>>> {
     alt((map(tag("NIL"), |_| None), map(quoted, Some)))(input.ltrim())
 }
 
-pub fn uid_fetch_envelopes_response(
-    input: &[u8],
-) -> IResult<&[u8], Vec<(UID, Option<(Flag, Vec<String>)>, Envelope)>> {
+pub fn uid_fetch_envelopes_response<'a>(
+    input: &'a [u8],
+) -> IResult<&'a [u8], Vec<(UID, Option<(Flag, Vec<String>)>, Envelope)>> {
     many0(
-        |input: &[u8]| -> IResult<&[u8], (UID, Option<(Flag, Vec<String>)>, Envelope)> {
+        |input: &'a [u8]| -> IResult<&'a [u8], (UID, Option<(Flag, Vec<String>)>, Envelope)> {
             let (input, _) = tag("* ")(input)?;
             let (input, _) = take_while(is_digit)(input)?;
             let (input, _) = tag(" FETCH (")(input)?;

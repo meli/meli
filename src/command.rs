@@ -28,7 +28,8 @@ use melib::nom::{
     bytes::complete::{is_a, is_not, tag, take_until},
     character::complete::{digit1, not_line_ending},
     combinator::{map, map_res},
-    multi::separated_list,
+    error::Error as NomError,
+    multi::separated_list1,
     sequence::{pair, preceded, separated_pair},
     IResult,
 };
@@ -72,7 +73,10 @@ macro_rules! define_commands {
 
 pub fn quoted_argument(input: &[u8]) -> IResult<&[u8], &str> {
     if input.is_empty() {
-        return Err(nom::Err::Error((input, nom::error::ErrorKind::Tag)));
+        return Err(nom::Err::Error(NomError {
+            input,
+            code: nom::error::ErrorKind::Tag,
+        }));
     }
 
     if input[0] == b'"' {
@@ -85,7 +89,10 @@ pub fn quoted_argument(input: &[u8]) -> IResult<&[u8], &str> {
             }
             i += 1;
         }
-        Err(nom::Err::Error((input, nom::error::ErrorKind::Tag)))
+        Err(nom::Err::Error(NomError {
+            input,
+            code: nom::error::ErrorKind::Tag,
+        }))
     } else {
         map_res(is_not(" "), std::str::from_utf8)(input)
     }
@@ -243,7 +250,10 @@ fn eof(input: &[u8]) -> IResult<&[u8], ()> {
     if input.is_empty() {
         Ok((input, ()))
     } else {
-        Err(nom::Err::Error((input, nom::error::ErrorKind::Tag)))
+        Err(nom::Err::Error(NomError {
+            input,
+            code: nom::error::ErrorKind::Tag,
+        }))
     }
 }
 
@@ -502,7 +512,7 @@ define_commands!([
                                       let (input, _) = is_a(" ")(input)?;
                                       let (input, bin) = quoted_argument(input)?;
                                       let (input, _) = is_a(" ")(input)?;
-                                      let (input, args) = separated_list(is_a(" "), quoted_argument)(input)?;
+                                      let (input, args) = separated_list1(is_a(" "), quoted_argument)(input)?;
                                       let (input, _) = eof(input)?;
                                       Ok((input, {
                                           View(Pipe(bin.to_string(), args.into_iter().map(String::from).collect::<Vec<String>>()))

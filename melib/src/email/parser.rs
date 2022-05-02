@@ -28,7 +28,7 @@ use nom::{
     combinator::peek,
     combinator::{map, opt},
     error::{context, ErrorKind},
-    multi::{many0, many1, separated_nonempty_list},
+    multi::{many0, many1, separated_list1},
     number::complete::le_u8,
     sequence::{delimited, pair, preceded, separated_pair, terminated},
 };
@@ -112,6 +112,17 @@ impl<I> nom::error::ParseError<I> for ParsingError<I> {
     }
 }
 
+impl<I, E> nom::error::FromExternalError<I, E> for ParsingError<I> {
+    fn from_external_error(input: I, kind: ErrorKind, _e: E) -> Self {
+        Self {
+            input,
+            error: kind.description().to_string().into(),
+        }
+    }
+}
+
+impl<I> nom::error::ContextError<I> for ParsingError<I> {}
+
 impl<'i> From<ParsingError<&'i [u8]>> for MeliError {
     fn from(val: ParsingError<&'i [u8]>) -> MeliError {
         MeliError::new("Parsing error").set_summary(format!(
@@ -151,6 +162,15 @@ impl<'i> From<nom::Err<ParsingError<&'i str>>> for MeliError {
         match val {
             nom::Err::Incomplete(_) => MeliError::new("Parsing Error: Incomplete"),
             nom::Err::Error(err) | nom::Err::Failure(err) => err.into(),
+        }
+    }
+}
+
+impl From<nom::Err<nom::error::Error<&[u8]>>> for MeliError {
+    fn from(val: nom::Err<nom::error::Error<&[u8]>>) -> MeliError {
+        match val {
+            nom::Err::Incomplete(_) => MeliError::new("Parsing Error: Incomplete"),
+            nom::Err::Error(_) | nom::Err::Failure(_) => MeliError::new("Parsing Error"),
         }
     }
 }
@@ -1158,7 +1178,7 @@ pub mod mailing_lists {
     pub fn rfc_2369_list_headers_action_list(input: &[u8]) -> IResult<&[u8], Vec<&[u8]>> {
         let (input, _) = opt(cfws)(input)?;
         let (input, ret) = alt((
-            separated_nonempty_list(
+            separated_list1(
                 delimited(
                     map(opt(cfws), |_| ()),
                     map(is_a(", "), |_| ()),
@@ -1954,7 +1974,7 @@ pub mod encodings {
     }
 
     pub fn encoded_word_list(input: &[u8]) -> IResult<&[u8], SmallVec<[u8; 64]>> {
-        let (input, list) = separated_nonempty_list(space, encoded_word)(input)?;
+        let (input, list) = separated_list1(space, encoded_word)(input)?;
         let list_len = list.iter().fold(0, |mut acc, x| {
             acc += x.len();
             acc
