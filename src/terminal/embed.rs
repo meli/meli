@@ -80,11 +80,11 @@ pub fn create_pty(
             ws_ypixel: 0,
         };
 
-        let master_fd = master_fd.clone().into_raw_fd();
+        let master_fd = master_fd.as_raw_fd();
         unsafe { set_window_size(master_fd, &winsize)? };
     }
 
-    let child_pid = match fork()? {
+    let child_pid = match unsafe { fork()? } {
         ForkResult::Child => {
             /* Open slave end for pseudoterminal */
             let slave_fd = open(Path::new(&slave_name), OFlag::O_RDWR, stat::Mode::empty())?;
@@ -152,7 +152,7 @@ pub fn create_pty(
         ForkResult::Parent { child } => child,
     };
 
-    let stdin = unsafe { std::fs::File::from_raw_fd(master_fd.clone().into_raw_fd()) };
+    let stdin = unsafe { std::fs::File::from_raw_fd(master_fd.as_raw_fd()) };
     let mut embed_grid = EmbedTerminal::new(stdin, child_pid);
     embed_grid.set_terminal_size((width, height));
     let grid = Arc::new(Mutex::new(embed_grid));

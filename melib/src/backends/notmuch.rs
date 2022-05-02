@@ -69,6 +69,7 @@ pub use thread::*;
 
 #[derive(Debug)]
 pub struct DbConnection {
+    #[allow(dead_code)]
     pub lib: Arc<libloading::Library>,
     pub inner: Arc<RwLock<*mut notmuch_database_t>>,
     pub revision_uuid: Arc<RwLock<u64>>,
@@ -215,6 +216,7 @@ impl Drop for DbConnection {
 
 #[derive(Debug)]
 pub struct NotmuchDb {
+    #[allow(dead_code)]
     lib: Arc<libloading::Library>,
     revision_uuid: Arc<RwLock<u64>>,
     mailboxes: Arc<RwLock<HashMap<MailboxHash, NotmuchMailbox>>>,
@@ -311,7 +313,7 @@ impl NotmuchDb {
         let dlpath = "libnotmuch.so.5";
         #[cfg(target_os = "macos")]
         let dlpath = "libnotmuch.5.dylib";
-        let lib = Arc::new(libloading::Library::new(dlpath)?);
+        let lib = Arc::new(unsafe { libloading::Library::new(dlpath)? });
         let path = Path::new(s.root_mailbox.as_str()).expand();
         if !path.exists() {
             return Err(MeliError::new(format!(
@@ -862,6 +864,7 @@ struct NotmuchOp {
     collection: Collection,
     database: Arc<DbConnection>,
     bytes: Option<Vec<u8>>,
+    #[allow(dead_code)]
     lib: Arc<libloading::Library>,
 }
 
@@ -886,6 +889,7 @@ impl BackendOp for NotmuchOp {
 }
 
 pub struct Query<'s> {
+    #[allow(dead_code)]
     lib: Arc<libloading::Library>,
     ptr: *mut notmuch_query_t,
     query_str: &'s str,

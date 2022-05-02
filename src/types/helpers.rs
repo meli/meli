@@ -25,7 +25,7 @@ use std::io::{Read, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 
-use uuid::Uuid;
+use melib::uuid::Uuid;
 
 #[derive(Debug)]
 pub struct File {
@@ -84,7 +84,7 @@ pub fn create_temp_file(
             dir.push(filename)
         } else {
             let u = Uuid::new_v4();
-            dir.push(u.to_hyphenated().to_string());
+            dir.push(u.as_hyphenated().to_string());
         }
         &dir
     });

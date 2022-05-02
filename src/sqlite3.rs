@@ -375,7 +375,7 @@ pub fn search(
         .map_err(|e| MeliError::new(e.to_string()))?;
 
     let results = stmt
-        .query_map(rusqlite::NO_PARAMS, |row| Ok(row.get(0)?))
+        .query_map([], |row| Ok(row.get(0)?))
         .map_err(|e| MeliError::new(e.to_string()))?
         .map(|r: std::result::Result<Vec<u8>, rusqlite::Error>| {
             Ok(u64::from_be_bytes(

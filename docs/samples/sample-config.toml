@@ -48,18 +48,18 @@
 ##subscribed_mailboxes = ["INBOX", "INBOX/Sent", "INBOX/Drafts", "INBOX/Junk"]
 #
 ## Setting up an account for an already existing notmuch database
-#[accounts.notmuch]
-#root_mailbox = "/path/to/folder" # where .notmuch/ directory is located
-#format = "notmuch"
-#listing.index_style = "conversations"
-#identity="username@example.com"
-#display_name = "Name Name"
-#  # notmuch mailboxes are virtual, they are defined by their alias and the notmuch query that corresponds to their content.
-#  [accounts.notmuch.mailboxes]
-#  "INBOX" = {  query="tag:inbox", subscribe = true }
-#  "Drafts" = {  query="tag:draft", subscribe = true }
-#  "Sent" = {  query="from:username@example.com from:username2@example.com", subscribe = true }
-#
+##[accounts.notmuch]
+##root_mailbox = "/path/to/folder" # where .notmuch/ directory is located
+##format = "notmuch"
+##listing.index_style = "conversations"
+##identity="username@example.com"
+##display_name = "Name Name"
+##  # notmuch mailboxes are virtual, they are defined by their alias and the notmuch query that corresponds to their content.
+##  [accounts.notmuch.mailboxes]
+##  "INBOX" = {  query="tag:inbox", subscribe = true }
+##  "Drafts" = {  query="tag:draft", subscribe = true }
+##  "Sent" = {  query="from:username@example.com from:username2@example.com", subscribe = true }
+##
 ## Setting up a Gmail account
 #[accounts."gmail"]
 #root_mailbox = '[Gmail]'

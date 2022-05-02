@@ -34,7 +34,7 @@ use std::path::PathBuf;
 #[macro_use]
 extern crate serde_derive;
 extern crate linkify;
-extern crate uuid;
+pub(crate) use melib::uuid;
 
 extern crate bitflags;
 extern crate serde_json;
@@ -84,18 +84,17 @@ fn notify(
     sender: crossbeam::channel::Sender<ThreadEvent>,
 ) -> std::result::Result<crossbeam::channel::Receiver<c_int>, std::io::Error> {
     use std::time::Duration;
-    let (alarm_pipe_r, alarm_pipe_w) = nix::unistd::pipe().map_err(|err| {
-        std::io::Error::from_raw_os_error(err.as_errno().map(|n| n as i32).unwrap_or(0))
-    })?;
+    let (alarm_pipe_r, alarm_pipe_w) =
+        nix::unistd::pipe().map_err(|err| std::io::Error::from_raw_os_error(err as i32))?;
     let alarm_handler = move |info: &nix::libc::siginfo_t| {
         let value = unsafe { info.si_value().sival_ptr as u8 };
         let _ = nix::unistd::write(alarm_pipe_w, &[value]);
     };
     unsafe {
-        signal_hook_registry::register_sigaction(signal_hook::SIGALRM, alarm_handler)?;
+        signal_hook_registry::register_sigaction(signal_hook::consts::SIGALRM, alarm_handler)?;
     }
     let (s, r) = crossbeam::channel::bounded(100);
-    let signals = signal_hook::iterator::Signals::new(signals)?;
+    let mut signals = signal_hook::iterator::Signals::new(signals)?;
     let _ = nix::fcntl::fcntl(
         alarm_pipe_r,
         nix::fcntl::FcntlArg::F_SETFL(nix::fcntl::OFlag::O_NONBLOCK),
@@ -344,9 +343,9 @@ fn run_app(opt: Opt) -> Result<()> {
     /* Catch SIGWINCH to handle terminal resizing */
     let signals = &[
         /* Catch SIGWINCH to handle terminal resizing */
-        signal_hook::SIGWINCH,
+        signal_hook::consts::SIGWINCH,
         /* Catch SIGCHLD to handle embed applications status change */
-        signal_hook::SIGCHLD,
+        signal_hook::consts::SIGCHLD,
     ];
 
     let signal_recvr = notify(signals, sender.clone())?;
@@ -529,14 +528,14 @@ fn run_app(opt: Opt) -> Result<()> {
                 },
                 recv(signal_recvr) -> sig => {
                     match sig.unwrap() {
-                        signal_hook::SIGWINCH => {
+                        signal_hook::consts::SIGWINCH => {
                             if state.mode != UIMode::Fork  {
                                 state.update_size();
                                 state.render();
                                 state.redraw();
                             }
                         },
-                        signal_hook::SIGCHLD => {
+                        signal_hook::consts::SIGCHLD => {
                             state.rcv_event(UIEvent::EmbedInput((Key::Null, vec![0])));
                             state.redraw();
 

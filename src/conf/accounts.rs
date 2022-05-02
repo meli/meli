@@ -39,7 +39,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::types::UIEvent::{self, EnvelopeRemove, EnvelopeRename, EnvelopeUpdate, Notification};
 use crate::{StatusEvent, ThreadEvent};
-use crossbeam::Sender;
+use crossbeam::channel::Sender;
 use futures::{
     future::FutureExt,
     stream::{Stream, StreamExt},

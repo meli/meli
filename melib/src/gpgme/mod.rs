@@ -213,9 +213,8 @@ impl Drop for ContextInner {
 
 impl Context {
     pub fn new() -> Result<Self> {
-        let lib = Arc::new(libloading::Library::new(libloading::library_filename(
-            "gpgme",
-        ))?);
+        let lib =
+            Arc::new(unsafe { libloading::Library::new(libloading::library_filename("gpgme")) }?);
         if unsafe { call!(&lib, gpgme_check_version)(GPGME_VERSION.as_bytes().as_ptr() as *mut _) }
             .is_null()
         {

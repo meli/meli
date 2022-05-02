@@ -26,24 +26,23 @@
 //!  let (channel, handle, job_id) = job_executor.spawn(job);
 //! ```
 
-use melib::error::Result;
 use melib::smol;
+use melib::uuid::Uuid;
 use std::collections::HashMap;
 use std::future::Future;
 use std::panic::catch_unwind;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
-use uuid::Uuid;
 
 use crate::types::{ThreadEvent, UIEvent};
+use crossbeam::channel::Sender;
 use crossbeam::deque::{Injector, Stealer, Worker};
 use crossbeam::sync::{Parker, Unparker};
-use crossbeam::Sender;
 pub use futures::channel::oneshot;
 use std::iter;
 
-type AsyncTask = async_task::Task<()>;
+type AsyncTask = async_task::Runnable;
 
 fn find_task<T>(local: &Worker<T>, global: &Injector<T>, stealers: &[Stealer<T>]) -> Option<T> {
     // Pop a task from the local queue, if not empty.
@@ -117,7 +116,8 @@ struct TimerPrivate {
     /// Time until next expiration.
     value: Duration,
     active: bool,
-    handle: Option<async_task::JoinHandle<(), ()>>,
+    handle: Option<async_task::Task<()>>,
+    cancel: Arc<Mutex<bool>>,
 }
 
 #[derive(Debug)]
@@ -215,32 +215,36 @@ impl JobExecutor {
         let finished_sender = self.sender.clone();
         let job_id = JobId::new();
         let injector = self.global_queue.clone();
+        let cancel = Arc::new(Mutex::new(false));
+        let cancel2 = cancel.clone();
         // Create a task and schedule it for execution.
-        let (task, handle) = async_task::spawn(
+        let (handle, task) = async_task::spawn(
             async move {
                 let res = future.await;
                 let _ = sender.send(res);
                 finished_sender
                     .send(ThreadEvent::JobFinished(job_id))
                     .unwrap();
-                Ok(())
             },
             move |task| {
+                if *cancel.lock().unwrap() {
+                    return;
+                }
                 injector.push(MeliTask {
                     task,
                     id: job_id,
                     timer: false,
                 })
             },
-            (),
         );
-        task.schedule();
+        handle.schedule();
         for unparker in self.parkers.iter() {
             unparker.unpark();
         }
 
         JoinHandle {
-            inner: handle,
+            task: Arc::new(Mutex::new(Some(task))),
+            cancel: cancel2,
             chan: receiver,
             job_id,
         }
@@ -259,6 +263,7 @@ impl JobExecutor {
         let id = Uuid::new_v4();
         let timer = TimerPrivate {
             interval,
+            cancel: Arc::new(Mutex::new(false)),
             value,
             active: true,
             handle: None,
@@ -274,9 +279,6 @@ impl JobExecutor {
     pub fn rearm(&self, timer_id: Uuid) {
         let mut timers_lck = self.timers.lock().unwrap();
         if let Some(timer) = timers_lck.get_mut(&timer_id) {
-            if let Some(handle) = timer.handle.take() {
-                handle.cancel();
-            }
             let value = timer.value;
             drop(timers_lck);
             self.arm_timer(timer_id, value);
@@ -288,6 +290,8 @@ impl JobExecutor {
         let sender = self.sender.clone();
         let injector = self.global_queue.clone();
         let timers = self.timers.clone();
+        let cancel = Arc::new(Mutex::new(false));
+        let cancel2 = cancel.clone();
         let (task, handle) = async_task::spawn(
             async move {
                 let mut value = value;
@@ -312,16 +316,19 @@ impl JobExecutor {
                 }
             },
             move |task| {
+                if *cancel.lock().unwrap() {
+                    return;
+                }
                 injector.push(MeliTask {
                     task,
                     id: job_id,
                     timer: true,
                 })
             },
-            (),
         );
         self.timers.lock().unwrap().entry(id).and_modify(|timer| {
             timer.handle = Some(handle);
+            timer.cancel = cancel2;
             timer.active = true;
         });
         task.schedule();
@@ -333,10 +340,8 @@ impl JobExecutor {
     fn disable_timer(&self, id: Uuid) {
         let mut timers_lck = self.timers.lock().unwrap();
         if let Some(timer) = timers_lck.get_mut(&id) {
-            if let Some(handle) = timer.handle.take() {
-                handle.cancel();
-            }
             timer.active = false;
+            *timer.cancel.lock().unwrap() = true;
         }
     }
 
@@ -353,14 +358,15 @@ pub type JobChannel<T> = oneshot::Receiver<T>;
 #[derive(Debug)]
 /// JoinHandle for the future that allows us to cancel the task.
 pub struct JoinHandle<T> {
-    pub inner: async_task::JoinHandle<Result<()>, ()>,
+    pub task: Arc<Mutex<Option<async_task::Task<()>>>>,
     pub chan: JobChannel<T>,
+    pub cancel: Arc<Mutex<bool>>,
     pub job_id: JobId,
 }
 
 impl<T> JoinHandle<T> {
     pub fn cancel(&self) {
-        self.inner.cancel()
+        *self.cancel.lock().unwrap() = true;
     }
 }
 

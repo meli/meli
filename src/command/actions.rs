@@ -25,10 +25,8 @@
 
 use crate::components::Component;
 pub use melib::thread::{SortField, SortOrder};
+use melib::uuid::Uuid;
 use std::path::PathBuf;
-
-extern crate uuid;
-use uuid::Uuid;
 
 #[derive(Debug)]
 pub enum TagAction {

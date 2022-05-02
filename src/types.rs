@@ -42,10 +42,10 @@ use crate::components::{Component, ComponentId, ScrollUpdate};
 use std::sync::Arc;
 
 use melib::backends::{AccountHash, BackendEvent, MailboxHash};
+use melib::uuid::Uuid;
 use melib::{EnvelopeHash, RefreshEvent, ThreadHash};
 use nix::unistd::Pid;
 use std::fmt;
-use uuid::Uuid;
 
 #[derive(Debug)]
 pub enum StatusEvent {

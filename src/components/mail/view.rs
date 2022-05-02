@@ -2466,8 +2466,8 @@ impl Component for MailView {
                         if let Some(filename) = u.filename() {
                             path.push(filename);
                         } else {
-                            let u = Uuid::new_v4();
-                            path.push(u.to_hyphenated().to_string());
+                            let u = melib::uuid::Uuid::new_v4();
+                            path.push(u.as_hyphenated().to_string());
                         }
                     }
                     match save_attachment(&path, &decode(u, None)) {

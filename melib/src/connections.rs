@@ -91,9 +91,7 @@ impl Connection {
                         !nix::fcntl::OFlag::O_NONBLOCK
                     }),
                 )
-                .map_err(|err| {
-                    std::io::Error::from_raw_os_error(err.as_errno().map(|n| n as i32).unwrap_or(0))
-                })?;
+                .map_err(|err| std::io::Error::from_raw_os_error(err as i32))?;
                 Ok(())
             }
             #[cfg(feature = "deflate_compression")]
