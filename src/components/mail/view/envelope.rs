@@ -498,7 +498,16 @@ impl Component for EnvelopeView {
                     .url_launcher
                     .as_ref()
                     .map(|s| s.as_str())
-                    .unwrap_or("xdg-open");
+                    .unwrap_or(
+                        #[cfg(target_os = "macos")]
+                        {
+                            "open"
+                        },
+                        #[cfg(not(target_os = "macos"))]
+                        {
+                            "xdg-open"
+                        },
+                    );
                 match Command::new(url_launcher)
                     .arg(url)
                     .stdin(Stdio::piped())

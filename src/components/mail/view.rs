@@ -2334,7 +2334,16 @@ impl Component for MailView {
                         )
                         .as_ref()
                         .map(|s| s.as_str())
-                        .unwrap_or("xdg-open");
+                        .unwrap_or(
+                            #[cfg(target_os = "macos")]
+                            {
+                                "open"
+                            },
+                            #[cfg(not(target_os = "macos"))]
+                            {
+                                "xdg-open"
+                            },
+                        );
                         match Command::new(url_launcher)
                             .arg(url)
                             .stdin(Stdio::piped())
@@ -2622,7 +2631,16 @@ impl Component for MailView {
                                         )
                                         .as_ref()
                                         .map(|s| s.as_str())
-                                        .unwrap_or("xdg-open");
+                                        .unwrap_or(
+                                            #[cfg(target_os = "macos")]
+                                            {
+                                                "open"
+                                            },
+                                            #[cfg(not(target_os = "macos"))]
+                                            {
+                                                "xdg-open"
+                                            },
+                                        );
                                         match Command::new(url_launcher)
                                             .arg(String::from_utf8_lossy(url).into_owned())
                                             .stdin(Stdio::piped())
@@ -2656,7 +2674,16 @@ impl Component for MailView {
                             )
                             .as_ref()
                             .map(|s| s.as_str())
-                            .unwrap_or("xdg-open");
+                            .unwrap_or(
+                                #[cfg(target_os = "macos")]
+                                {
+                                    "open"
+                                },
+                                #[cfg(not(target_os = "macos"))]
+                                {
+                                    "xdg-open"
+                                },
+                            );
                             match Command::new(url_launcher)
                                 .arg(actions.archive.unwrap())
                                 .stdin(Stdio::piped())
