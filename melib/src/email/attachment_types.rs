@@ -139,7 +139,9 @@ impl<'a> From<&'a [u8]> for Charset {
                 Charset::Windows1252
             }
             b if b.eq_ignore_ascii_case(b"windows-1253")
-                || b.eq_ignore_ascii_case(b"windows1253") =>
+                || b.eq_ignore_ascii_case(b"windows1253")
+                || b.eq_ignore_ascii_case(b"cp1253")
+                || b.eq_ignore_ascii_case(b"cp-1253") =>
             {
                 Charset::Windows1253
             }
