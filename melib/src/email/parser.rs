@@ -55,6 +55,15 @@ impl core::fmt::Debug for ParsingError<&'_ [u8]> {
     }
 }
 
+impl core::fmt::Debug for ParsingError<&'_ str> {
+    fn fmt(&self, fmt: &mut core::fmt::Formatter) -> core::fmt::Result {
+        fmt.debug_struct("ParsingError")
+            .field("input", &self.input)
+            .field("error", &self.error)
+            .finish()
+    }
+}
+
 struct DebugOkWrapper<'r, I, R: AsRef<[u8]>>(&'r IResult<I, R>);
 
 impl<R: AsRef<[u8]> + core::fmt::Debug> core::fmt::Debug for DebugOkWrapper<'_, &'_ [u8], R> {
