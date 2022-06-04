@@ -1642,23 +1642,30 @@ impl Component for Composer {
                 );
 
                 if *account_settings!(context[self.account_hash].composing.embed) {
-                    self.embed = Some(EmbedStatus::Running(
-                        crate::terminal::embed::create_pty(
-                            width!(self.embed_area),
-                            height!(self.embed_area),
-                            [editor, f.path().display().to_string()].join(" "),
-                        )
-                        .unwrap(),
-                        f,
-                    ));
-                    self.set_dirty(true);
-                    context
-                        .replies
-                        .push_back(UIEvent::ChangeMode(UIMode::Embed));
-                    context.replies.push_back(UIEvent::Fork(ForkType::Embed(
-                        self.embed.as_ref().unwrap().lock().unwrap().child_pid,
-                    )));
-                    self.mode = ViewMode::Embed;
+                    match crate::terminal::embed::create_pty(
+                        width!(self.embed_area),
+                        height!(self.embed_area),
+                        [editor, f.path().display().to_string()].join(" "),
+                    ) {
+                        Ok(embed) => {
+                            self.embed = Some(EmbedStatus::Running(embed, f));
+                            self.set_dirty(true);
+                            context
+                                .replies
+                                .push_back(UIEvent::ChangeMode(UIMode::Embed));
+                            context.replies.push_back(UIEvent::Fork(ForkType::Embed(
+                                self.embed.as_ref().unwrap().lock().unwrap().child_pid,
+                            )));
+                            self.mode = ViewMode::Embed;
+                        }
+                        Err(err) => {
+                            context.replies.push_back(UIEvent::Notification(
+                                Some(format!("Failed to create pseudoterminal: {}", err)),
+                                err.to_string(),
+                                Some(NotificationType::Error(melib::error::ErrorKind::External)),
+                            ));
+                        }
+                    }
                     return true;
                 }
                 /* Kill input thread so that spawned command can be sole receiver of stdin */
