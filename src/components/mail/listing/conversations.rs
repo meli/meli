@@ -101,8 +101,7 @@ pub struct ConversationsListing {
     subsort: (SortField, SortOrder),
     all_threads: HashSet<ThreadHash>,
     order: HashMap<ThreadHash, usize>,
-    /// Cache current view.
-    content: CellBuffer,
+    rows: std::result::Result<Vec<((usize, (ThreadHash, EnvelopeHash)), EntryStrings)>, String>,
 
     search_job: Option<(String, JoinHandle<Result<SmallVec<[EnvelopeHash; 512]>>>)>,
     filter_term: String,
@@ -152,8 +151,6 @@ impl MailListingTrait for ConversationsListing {
         SmallVec::from_iter(iter.into_iter())
     }
 
-    /// Fill the `self.data_columns` `CellBuffers` with the contents of the account mailbox the user has
-    /// chosen.
     fn refresh_mailbox(&mut self, context: &mut Context, force: bool) {
         self.dirty = true;
         let old_mailbox_hash = self.cursor_pos.1;
@@ -192,17 +189,7 @@ impl MailListingTrait for ConversationsListing {
             Err(_) => {
                 let message: String =
                     context.accounts[&self.cursor_pos.0][&self.cursor_pos.1].status();
-                self.content = CellBuffer::new_with_context(message.len(), 1, None, context);
-                self.length = 0;
-                write_string_to_grid(
-                    message.as_str(),
-                    &mut self.content,
-                    self.color_cache.theme_default.fg,
-                    self.color_cache.theme_default.bg,
-                    self.color_cache.theme_default.attrs,
-                    ((0, 0), (message.len() - 1, 0)),
-                    None,
-                );
+                self.rows = Err(message);
                 return;
             }
         }
@@ -244,7 +231,11 @@ impl MailListingTrait for ConversationsListing {
         self.order.clear();
         self.selection.clear();
         self.length = 0;
-        let mut rows = Vec::with_capacity(1024);
+        if self.rows.is_err() {
+            self.rows = Ok(vec![]);
+        } else {
+            self.rows.as_mut().unwrap().clear();
+        }
         let mut max_entry_columns = 0;
 
         let mut from_address_list = Vec::new();
@@ -334,7 +325,10 @@ impl MailListingTrait for ConversationsListing {
                 max_entry_columns,
                 strings.date.len() + 1 + strings.from.grapheme_width(),
             );
-            rows.push(((self.length, (thread, root_env_hash)), strings));
+            self.rows
+                .as_mut()
+                .unwrap()
+                .push(((self.length, (thread, root_env_hash)), strings));
             self.all_threads.insert(thread);
 
             self.order.insert(thread, self.length);
@@ -342,148 +336,9 @@ impl MailListingTrait for ConversationsListing {
             self.length += 1;
         }
 
-        let width = max_entry_columns;
-        self.content = CellBuffer::new_with_context(width, 4 * rows.len(), None, context);
-
-        for ((idx, (thread_hash, root_env_hash)), strings) in rows {
-            if !context.accounts[&self.cursor_pos.0].contains_key(root_env_hash) {
-                panic!();
-            }
-            let thread = threads.thread_ref(thread_hash);
-
-            let row_attr = row_attr!(
-                self.color_cache,
-                thread.unseen() > 0,
-                false,
-                self.selection[&thread_hash]
-            );
-            /* draw flags */
-            let (x, _) = write_string_to_grid(
-                &strings.flag,
-                &mut self.content,
-                row_attr.fg,
-                row_attr.bg,
-                row_attr.attrs,
-                ((0, 3 * idx), (width - 1, 3 * idx)),
-                None,
-            );
-            for x in x..(x + 3) {
-                self.content[(x, 3 * idx)].set_bg(row_attr.bg);
-            }
-            let subject_attr = row_attr!(
-                subject,
-                self.color_cache,
-                thread.unseen() > 0,
-                false,
-                self.selection[&thread_hash]
-            );
-            /* draw subject */
-            let (mut x, _) = write_string_to_grid(
-                &strings.subject,
-                &mut self.content,
-                subject_attr.fg,
-                subject_attr.bg,
-                subject_attr.attrs,
-                ((x, 3 * idx), (width - 1, 3 * idx)),
-                None,
-            );
-            for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
-                let color = color.unwrap_or(self.color_cache.tag_default.bg);
-                let (_x, _) = write_string_to_grid(
-                    t,
-                    &mut self.content,
-                    self.color_cache.tag_default.fg,
-                    color,
-                    self.color_cache.tag_default.attrs,
-                    ((x + 1, 3 * idx), (width - 1, 3 * idx)),
-                    None,
-                );
-                self.content[(x, 3 * idx)].set_bg(color);
-                if _x < width {
-                    self.content[(_x, 3 * idx)].set_bg(color).set_keep_bg(true);
-                }
-                for x in (x + 1).._x {
-                    self.content[(x, 3 * idx)]
-                        .set_keep_fg(true)
-                        .set_keep_bg(true);
-                }
-                self.content[(x, 3 * idx)].set_keep_bg(true);
-                x = _x + 1;
-            }
-            for x in x..width {
-                self.content[(x, 3 * idx)]
-                    .set_ch(' ')
-                    .set_fg(row_attr.fg)
-                    .set_bg(row_attr.bg);
-            }
-            let date_attr = row_attr!(
-                date,
-                self.color_cache,
-                thread.unseen() > 0,
-                false,
-                self.selection[&thread_hash]
-            );
-            /* Next line, draw date */
-            let (x, _) = write_string_to_grid(
-                &strings.date,
-                &mut self.content,
-                date_attr.fg,
-                date_attr.bg,
-                date_attr.attrs,
-                ((0, 3 * idx + 1), (width - 1, 3 * idx + 1)),
-                None,
-            );
-            for x in x..(x + 4) {
-                self.content[(x, 3 * idx + 1)]
-                    .set_ch('▁')
-                    .set_fg(row_attr.fg)
-                    .set_bg(row_attr.bg);
-            }
-            let from_attr = row_attr!(
-                from,
-                self.color_cache,
-                thread.unseen() > 0,
-                false,
-                self.selection[&thread_hash]
-            );
-            /* draw from */
-            let (x, _) = write_string_to_grid(
-                &strings.from,
-                &mut self.content,
-                from_attr.fg,
-                from_attr.bg,
-                from_attr.attrs,
-                ((x + 4, 3 * idx + 1), (width - 1, 3 * idx + 1)),
-                None,
-            );
-
-            for x in x..width {
-                self.content[(x, 3 * idx + 1)]
-                    .set_ch('▁')
-                    .set_fg(row_attr.fg)
-                    .set_bg(row_attr.bg);
-            }
-            /*
-            for x in 0..width {
-                self.content[(x, 3 * idx + 2)]
-                    .set_ch(Self::PADDING_CHAR)
-                    .set_fg(row_attr.fg)
-                    .set_bg(row_attr.bg);
-            }
-            */
-        }
         if self.length == 0 && self.filter_term.is_empty() {
             let message: String = account[&self.cursor_pos.1].status();
-            self.content = CellBuffer::new_with_context(message.len(), 1, None, context);
-            write_string_to_grid(
-                &message,
-                &mut self.content,
-                self.color_cache.theme_default.fg,
-                self.color_cache.theme_default.bg,
-                self.color_cache.theme_default.attrs,
-                ((0, 0), (message.len() - 1, 0)),
-                None,
-            );
+            self.rows = Err(message);
         }
     }
 }
@@ -507,69 +362,7 @@ impl ListingTrait for ConversationsListing {
         if self.length == 0 {
             return;
         }
-        let thread_hash = self.get_thread_under_cursor(idx);
-
-        let account = &context.accounts[&self.cursor_pos.0];
-        let threads = account.collection.get_threads(self.cursor_pos.1);
-        let thread = threads.thread_ref(thread_hash);
-
-        let row_attr = row_attr!(
-            self.color_cache,
-            thread.unseen() > 0,
-            self.cursor_pos.2 == idx,
-            self.selection[&thread_hash]
-        );
-
-        copy_area(
-            grid,
-            &self.content,
-            area,
-            ((0, 3 * idx), pos_dec(self.content.size(), (1, 1))),
-        );
-        let (upper_left, bottom_right) = area;
-        let width = self.content.size().0;
-        let (x, y) = upper_left;
-        if self.cursor_pos.2 == idx || self.selection[&thread_hash] {
-            for x in x..=get_x(bottom_right) {
-                grid[(x, y)]
-                    .set_fg(row_attr.fg)
-                    .set_bg(row_attr.bg)
-                    .set_attrs(row_attr.attrs);
-
-                grid[(x, y + 1)]
-                    .set_fg(row_attr.fg)
-                    .set_bg(row_attr.bg)
-                    .set_attrs(row_attr.attrs);
-
-                /*
-                grid[(x, y + 2)]
-                    .set_fg(row_attr.fg)
-                    .set_bg(row_attr.bg)
-                    .set_attrs(row_attr.attrs);
-                */
-            }
-        }
-        if width < width!(area) {
-            /* fill any remaining columns, if our view is wider than self.content */
-            for x in (x + width)..=get_x(bottom_right) {
-                grid[(x, y)]
-                    .set_fg(row_attr.fg)
-                    .set_bg(row_attr.bg)
-                    .set_attrs(row_attr.attrs);
-
-                grid[(x, y + 1)]
-                    .set_fg(row_attr.fg)
-                    .set_bg(row_attr.bg)
-                    .set_attrs(row_attr.attrs);
-
-                /*
-                grid[(x, y + 2)]
-                    .set_fg(row_attr.fg)
-                    .set_bg(row_attr.bg)
-                    .set_attrs(row_attr.attrs);
-                */
-            }
-        }
+        self.draw_rows(grid, area, context, idx);
     }
 
     /// Draw the list of `Envelope`s.
@@ -580,13 +373,16 @@ impl ListingTrait for ConversationsListing {
         }
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
-        if self.length == 0 {
+        if let Err(message) = self.rows.as_ref() {
             clear_area(grid, area, self.color_cache.theme_default);
-            copy_area(
+            write_string_to_grid(
+                &message,
                 grid,
-                &self.content,
+                self.color_cache.theme_default.fg,
+                self.color_cache.theme_default.bg,
+                self.color_cache.theme_default.attrs,
                 area,
-                ((0, 0), pos_dec(self.content.size(), (1, 1))),
+                None,
             );
             context.dirty_areas.push_back(area);
             return;
@@ -595,8 +391,6 @@ impl ListingTrait for ConversationsListing {
         if rows == 0 {
             return;
         }
-        let pad = (get_y(bottom_right) - get_y(upper_left) + 1) % 3;
-
         if let Some(mvm) = self.movement.take() {
             match mvm {
                 PageMovement::Up(amount) => {
@@ -647,7 +441,7 @@ impl ListingTrait for ConversationsListing {
                 }
                 let new_area = (
                     set_y(upper_left, get_y(upper_left) + 3 * (*idx % rows)),
-                    set_y(bottom_right, get_y(upper_left) + 3 * (*idx % rows) + 1),
+                    set_y(bottom_right, get_y(upper_left) + 3 * (*idx % rows) + 2),
                 );
                 self.highlight_line(grid, new_area, *idx, context);
                 context.dirty_areas.push_back(new_area);
@@ -663,21 +457,7 @@ impl ListingTrait for ConversationsListing {
 
         clear_area(grid, area, self.color_cache.theme_default);
         /* Page_no has changed, so draw new page */
-        copy_area(
-            grid,
-            &self.content,
-            (
-                upper_left,
-                set_x(
-                    bottom_right,
-                    std::cmp::min(
-                        get_x(bottom_right),
-                        get_x(upper_left) + self.content.size().0,
-                    ),
-                ),
-            ),
-            ((0, 3 * top_idx), pos_dec(self.content.size(), (1, 1))),
-        );
+        self.draw_rows(grid, area, context, top_idx);
 
         self.highlight_line(
             grid,
@@ -685,68 +465,12 @@ impl ListingTrait for ConversationsListing {
                 pos_inc(upper_left, (0, 3 * (self.cursor_pos.2 % rows))),
                 set_y(
                     bottom_right,
-                    get_y(upper_left) + 3 * (self.cursor_pos.2 % rows) + 1,
+                    get_y(upper_left) + 3 * (self.cursor_pos.2 % rows) + 2,
                 ),
             ),
             self.cursor_pos.2,
             context,
         );
-
-        /* calculate how many entries are visible in this page */
-        let (pad, rows) = if top_idx + rows > self.length {
-            clear_area(
-                grid,
-                (
-                    pos_inc(upper_left, (0, 3 * (self.length - top_idx))),
-                    bottom_right,
-                ),
-                self.color_cache.theme_default,
-            );
-            (0, self.length - top_idx)
-        } else {
-            (pad, rows)
-        };
-
-        /* fill any remaining columns, if our view is wider than self.content */
-        let width = self.content.size().0;
-
-        if width < width!(area) {
-            let y_offset = get_y(upper_left);
-            for y in 0..rows {
-                let fg_color = grid[(get_x(upper_left) + width - 1, y_offset + 3 * y)].fg();
-                let bg_color = grid[(get_x(upper_left) + width - 1, y_offset + 3 * y)].bg();
-                for x in (get_x(upper_left) + width)..=get_x(bottom_right) {
-                    grid[(x, y_offset + 3 * y)].set_bg(bg_color);
-                    grid[(x, y_offset + 3 * y + 1)]
-                        .set_ch('▁')
-                        .set_fg(fg_color)
-                        .set_bg(bg_color);
-                    /*
-                    grid[(x, y_offset + 3 * y + 2)]
-                        .set_ch(Self::PADDING_CHAR)
-                        .set_fg(fg_color)
-                        .set_bg(bg_color);
-                    */
-                }
-            }
-            if pad > 0 {
-                let y = 3 * rows;
-                let _fg_color = grid[(get_x(upper_left) + width - 1, y_offset + y)].fg();
-                let bg_color = grid[(get_x(upper_left) + width - 1, y_offset + y)].bg();
-                for x in (get_x(upper_left) + width)..=get_x(bottom_right) {
-                    grid[(x, y_offset + y)].set_bg(bg_color);
-                    grid[(x, y_offset + y + 1)].set_ch('▁').set_bg(bg_color);
-                    if pad == 2 {
-                        /*
-                        grid[(x, y_offset + y + 2)]
-                            .set_ch(Self::PADDING_CHAR)
-                            .set_fg(fg_color)
-                            .set_bg(bg_color);
-                        */
-                    }
-                }
-            }
-        }
 
         context.dirty_areas.push_back(area);
     }
@@ -803,8 +527,6 @@ impl ListingTrait for ConversationsListing {
                     );
                     self.new_cursor_pos.2 =
                         std::cmp::min(self.filtered_selection.len() - 1, self.cursor_pos.2);
-                } else {
-                    self.content = CellBuffer::new_with_context(0, 0, None, context);
                 }
                 self.redraw_threads_list(
                     context,
@@ -823,16 +545,7 @@ impl ListingTrait for ConversationsListing {
                     format!("Failed to search for term {}: {}", self.filter_term, e),
                     ERROR,
                 );
-                self.content = CellBuffer::new_with_context(message.len(), 1, None, context);
-                write_string_to_grid(
-                    &message,
-                    &mut self.content,
-                    self.color_cache.theme_default.fg,
-                    self.color_cache.theme_default.bg,
-                    self.color_cache.theme_default.attrs,
-                    ((0, 0), (message.len() - 1, 0)),
-                    None,
-                );
+                self.rows = Err(message);
             }
         }
     }
@@ -884,7 +597,7 @@ impl ConversationsListing {
             filtered_order: HashMap::default(),
             selection: HashMap::default(),
             row_updates: SmallVec::new(),
-            content: Default::default(),
+            rows: Ok(Vec::with_capacity(1024)),
             dirty: true,
             force_draw: true,
             unfocused: false,
@@ -896,6 +609,7 @@ impl ConversationsListing {
             id: ComponentId::new_v4(),
         }
     }
+
     pub(super) fn make_entry_string(
         &self,
         e: &Envelope,
@@ -1025,19 +739,9 @@ impl ConversationsListing {
     fn update_line(&mut self, context: &Context, thread_hash: ThreadHash) {
         let account = &context.accounts[&self.cursor_pos.0];
         let threads = account.collection.get_threads(self.cursor_pos.1);
-        let thread = threads.thread_ref(thread_hash);
         let thread_node_hash = threads.thread_group_iter(thread_hash).next().unwrap().1;
         let idx: usize = self.order[&thread_hash];
-        let width = self.content.size().0;
-
         let env_hash = threads.thread_nodes()[&thread_node_hash].message().unwrap();
-
-        let row_attr = row_attr!(
-            self.color_cache,
-            thread.unseen() > 0,
-            false,
-            self.selection[&thread_hash]
-        );
 
         let mut from_address_list = Vec::new();
         let mut from_address_set: std::collections::HashSet<Vec<u8>> =
@@ -1068,120 +772,148 @@ impl ConversationsListing {
             thread_hash,
         );
         drop(envelope);
-        /* draw flags */
-        let (x, _) = write_string_to_grid(
-            &strings.flag,
-            &mut self.content,
-            row_attr.fg,
-            row_attr.bg,
-            row_attr.attrs,
-            ((0, 3 * idx), (width - 1, 3 * idx)),
-            None,
-        );
-        for c in self.content.row_iter(x..(x + 4), 3 * idx) {
-            self.content[c].set_bg(row_attr.bg);
+        if let Ok(rows) = self.rows.as_mut() {
+            if let Some(row) = rows.get_mut(idx) {
+                row.1 = strings;
+            }
         }
-        let subject_attr = row_attr!(
-            subject,
-            self.color_cache,
-            thread.unseen() > 0,
-            false,
-            self.selection[&thread_hash]
-        );
-        /* draw subject */
-        let (mut x, _) = write_string_to_grid(
-            &strings.subject,
-            &mut self.content,
-            subject_attr.fg,
-            subject_attr.bg,
-            subject_attr.attrs,
-            ((x, 3 * idx), (width - 1, 3 * idx)),
-            None,
-        );
-        for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
-            let color = color.unwrap_or(self.color_cache.tag_default.bg);
-            let (_x, _) = write_string_to_grid(
-                t,
-                &mut self.content,
-                self.color_cache.tag_default.fg,
-                color,
-                self.color_cache.tag_default.attrs,
-                ((x + 1, 3 * idx), (width - 1, 3 * idx)),
+    }
+
+    fn draw_rows(&self, grid: &mut CellBuffer, area: Area, context: &Context, top_idx: usize) {
+        let rows_ref = match self.rows.as_ref() {
+            Ok(rows) => rows,
+            Err(_) => return,
+        };
+        let account = &context.accounts[&self.cursor_pos.0];
+        let threads = account.collection.get_threads(self.cursor_pos.1);
+        let (mut upper_left, bottom_right) = area;
+        for ((idx, (thread_hash, root_env_hash)), strings) in rows_ref.iter().skip(top_idx) {
+            if !context.accounts[&self.cursor_pos.0].contains_key(*root_env_hash) {
+                panic!();
+            }
+            let thread = threads.thread_ref(*thread_hash);
+
+            let row_attr = row_attr!(
+                self.color_cache,
+                thread.unseen() > 0,
+                self.cursor_pos.2 == *idx,
+                self.selection[thread_hash]
+            );
+            /* draw flags */
+            let (x, _) = write_string_to_grid(
+                &strings.flag,
+                grid,
+                row_attr.fg,
+                row_attr.bg,
+                row_attr.attrs,
+                (upper_left, bottom_right),
                 None,
             );
-            self.content[(x, 3 * idx)].set_bg(color);
-            if _x < width {
-                self.content[(_x, 3 * idx)].set_bg(color).set_keep_bg(true);
+            for x in x..(x + 3) {
+                grid[set_x(upper_left, x)].set_bg(row_attr.bg);
             }
-            for x in (x + 1).._x {
-                self.content[(x, 3 * idx)]
-                    .set_keep_fg(true)
-                    .set_keep_bg(true);
+            let subject_attr = row_attr!(
+                subject,
+                self.color_cache,
+                thread.unseen() > 0,
+                self.cursor_pos.2 == *idx,
+                self.selection[thread_hash]
+            );
+            /* draw subject */
+            let (mut x, _) = write_string_to_grid(
+                &strings.subject,
+                grid,
+                subject_attr.fg,
+                subject_attr.bg,
+                subject_attr.attrs,
+                (set_x(upper_left, x), bottom_right),
+                None,
+            );
+            for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
+                let color = color.unwrap_or(self.color_cache.tag_default.bg);
+                let (_x, _) = write_string_to_grid(
+                    t,
+                    grid,
+                    self.color_cache.tag_default.fg,
+                    color,
+                    self.color_cache.tag_default.attrs,
+                    (set_x(upper_left, x + 1), bottom_right),
+                    None,
+                );
+                grid[set_x(upper_left, x)].set_bg(color);
+                if _x <= get_x(bottom_right) {
+                    grid[set_x(upper_left, _x)].set_bg(color).set_keep_bg(true);
+                }
+                for x in (x + 1).._x {
+                    grid[set_x(upper_left, x)]
+                        .set_keep_fg(true)
+                        .set_keep_bg(true);
+                }
+                grid[set_x(upper_left, x)].set_keep_bg(true);
+                x = _x + 1;
             }
-            self.content[(x, 3 * idx)].set_keep_bg(true);
-            x = _x + 1;
-        }
-        for c in self.content.row_iter(x..width, 3 * idx) {
-            self.content[c]
-                .set_ch(' ')
-                .set_fg(row_attr.fg)
-                .set_bg(row_attr.bg);
-        }
-        let date_attr = row_attr!(
-            date,
-            self.color_cache,
-            thread.unseen() > 0,
-            false,
-            self.selection[&thread_hash]
-        );
-        /* Next line, draw date */
-        let (x, _) = write_string_to_grid(
-            &strings.date,
-            &mut self.content,
-            date_attr.fg,
-            date_attr.bg,
-            date_attr.attrs,
-            ((0, 3 * idx + 1), (width - 1, 3 * idx + 1)),
-            None,
-        );
-        for c in self.content.row_iter(x..(x + 4), 3 * idx + 1) {
-            self.content[c]
-                .set_ch('▁')
-                .set_fg(row_attr.fg)
-                .set_bg(row_attr.bg);
-        }
-        let from_attr = row_attr!(
-            from,
-            self.color_cache,
-            thread.unseen() > 0,
-            false,
-            self.selection[&thread_hash]
-        );
-        /* draw from */
-        let (x, _) = write_string_to_grid(
-            &strings.from,
-            &mut self.content,
-            from_attr.fg,
-            from_attr.bg,
-            from_attr.attrs,
-            ((x + 4, 3 * idx + 1), (width - 1, 3 * idx + 1)),
-            None,
-        );
+            for x in x..get_x(bottom_right) {
+                grid[set_x(upper_left, x)]
+                    .set_ch(' ')
+                    .set_fg(row_attr.fg)
+                    .set_bg(row_attr.bg);
+            }
+            let date_attr = row_attr!(
+                date,
+                self.color_cache,
+                thread.unseen() > 0,
+                self.cursor_pos.2 == *idx,
+                self.selection[thread_hash]
+            );
+            upper_left.1 += 1;
+            if upper_left.1 >= bottom_right.1 {
+                return;
+            }
+            /* Next line, draw date */
+            let (x, _) = write_string_to_grid(
+                &strings.date,
+                grid,
+                date_attr.fg,
+                date_attr.bg,
+                date_attr.attrs,
+                (upper_left, bottom_right),
+                None,
+            );
+            for x in x..(x + 4) {
+                grid[set_x(upper_left, x)]
+                    .set_ch('▁')
+                    .set_fg(row_attr.fg)
+                    .set_bg(row_attr.bg);
+            }
+            let from_attr = row_attr!(
+                from,
+                self.color_cache,
+                thread.unseen() > 0,
+                self.cursor_pos.2 == *idx,
+                self.selection[thread_hash]
+            );
+            /* draw from */
+            let (x, _) = write_string_to_grid(
+                &strings.from,
+                grid,
+                from_attr.fg,
+                from_attr.bg,
+                from_attr.attrs,
+                (set_x(upper_left, x + 4), bottom_right),
+                None,
+            );
 
-        for c in self.content.row_iter(x..width, 3 * idx + 1) {
-            self.content[c]
-                .set_ch('▁')
-                .set_fg(row_attr.fg)
-                .set_bg(row_attr.bg);
+            for x in x..get_x(bottom_right) {
+                grid[set_x(upper_left, x)]
+                    .set_ch('▁')
+                    .set_fg(row_attr.fg)
+                    .set_bg(row_attr.bg);
+            }
+            upper_left.1 += 2;
+            if upper_left.1 >= bottom_right.1 {
+                return;
+            }
         }
-        /*
-        for c in self.content.row_iter(0..width, 3 * idx + 2) {
-            self.content[c]
-                .set_ch(Self::PADDING_CHAR)
-                .set_fg(row_attr.fg)
-                .set_bg(row_attr.bg);
-        }
-        */
     }
 }
 
@@ -1192,26 +924,7 @@ impl Component for ConversationsListing {
         }
         let (upper_left, bottom_right) = area;
         {
-            let mut area = if self.unfocused {
-                clear_area(
-                    grid,
-                    (
-                        pos_inc(upper_left, (width!(area) / 3, 0)),
-                        set_x(bottom_right, get_x(upper_left) + width!(area) / 3 + 1),
-                    ),
-                    self.color_cache.theme_default,
-                );
-                context.dirty_areas.push_back((
-                    pos_inc(upper_left, (width!(area) / 3, 0)),
-                    set_x(bottom_right, get_x(upper_left) + width!(area) / 3 + 1),
-                ));
-                (
-                    upper_left,
-                    set_x(bottom_right, get_x(upper_left) + width!(area) / 3 - 1),
-                )
-            } else {
-                area
-            };
+            let mut area = area;
 
             if !self.filter_term.is_empty() {
                 let (x, y) = write_string_to_grid(
@@ -1428,7 +1141,7 @@ impl Component for ConversationsListing {
                     if row >= top_idx && row < top_idx + rows {
                         let area = (
                             set_y(upper_left, get_y(upper_left) + (3 * (row % rows))),
-                            set_y(bottom_right, get_y(upper_left) + (3 * (row % rows) + 1)),
+                            set_y(bottom_right, get_y(upper_left) + (3 * (row % rows) + 2)),
                         );
                         self.highlight_line(grid, area, row, context);
                         context.dirty_areas.push_back(area);
