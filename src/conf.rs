@@ -1179,6 +1179,18 @@ identity="username@hostname.local"
 [composing]
 send_mail = '/bin/false'
 "#;
+    const IMAP_CONFIG: &str = r#"
+[accounts.imap]
+root_mailbox = "INBOX"
+format = "imap"
+identity="username@example.com"
+server_username = "null"
+server_hostname = "example.com"
+server_password_command = "/bin/false"
+
+[composing]
+send_mail = '/bin/false'
+"#;
 
     const EXAMPLE_CONFIG: &str = include_str!("../docs/samples/sample-config.toml");
 
@@ -1226,6 +1238,12 @@ send_mail = '/bin/false'
         err.details.as_ref(),
         "Unrecognised configuration values: {\"index_style\": \"Compact\"}"
     );
+
+    /* Test IMAP config */
+
+    let new_file = ConfigFile::new(IMAP_CONFIG).unwrap();
+    FileSettings::validate(new_file.path.clone(), false, true)
+        .expect("could not parse IMAP config");
 
     /* Test sample config */
 
