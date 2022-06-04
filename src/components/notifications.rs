@@ -210,6 +210,32 @@ impl Component for NotificationCommand {
                             debug!("Could not run notification script: {:?}", err);
                         }
                     }
+                } else {
+                    #[cfg(target_os = "macos")]
+                    {
+                        let applescript = format!("display notification \"{message}\" with title \"{title}\" subtitle \"{subtitle}\"", message = body.replace('"', "'"), title = title.as_ref().map(String::as_str).unwrap_or("meli"), subtitle = kind.map(|k| k.to_string()).unwrap_or_default());
+                        match Command::new("osascript")
+                            .arg("-e")
+                            .arg(applescript)
+                            .stdin(Stdio::piped())
+                            .stdout(Stdio::piped())
+                            .spawn()
+                        {
+                            Ok(child) => {
+                                context.children.push(child);
+                            }
+                            Err(err) => {
+                                log(
+                                    format!(
+                                        "Could not run notification script: {}.",
+                                        err.to_string()
+                                    ),
+                                    ERROR,
+                                );
+                                debug!("Could not run notification script: {:?}", err);
+                            }
+                        }
+                    }
                 }
             }
 
