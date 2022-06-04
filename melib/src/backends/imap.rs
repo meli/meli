@@ -1549,6 +1549,7 @@ impl ImapType {
                 s.name.as_str(),
             )));
         }
+        let _ = get_conf_val!(s["server_password_command"]);
         get_conf_val!(s["server_port"], 143)?;
         let use_tls = get_conf_val!(s["use_tls"], true)?;
         let use_starttls = get_conf_val!(s["use_starttls"], false)?;

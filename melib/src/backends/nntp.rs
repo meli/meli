@@ -696,6 +696,7 @@ impl NntpType {
                 s.name.as_str(),
             )));
         }
+        let _ = get_conf_val!(s["server_password_command"]);
         let server_port = get_conf_val!(s["server_port"], 119)?;
         let use_tls = get_conf_val!(s["use_tls"], server_port == 563)?;
         let use_starttls = get_conf_val!(s["use_starttls"], !(server_port == 563))?;
