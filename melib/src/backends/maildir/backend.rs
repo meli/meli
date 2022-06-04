@@ -142,7 +142,7 @@ macro_rules! get_path_hash {
     }};
 }
 
-pub(super) fn get_file_hash(file: &Path) -> EnvelopeHash {
+pub fn get_file_hash(file: &Path) -> EnvelopeHash {
     let mut hasher = DefaultHasher::default();
     file.hash(&mut hasher);
     hasher.finish()
@@ -234,26 +234,7 @@ impl MailBackend for MaildirType {
             let thunk = move |sender: &BackendEventConsumer| {
                 debug!("refreshing");
                 let mut buf = Vec::with_capacity(4096);
-                let mut path = path.clone();
-                path.push("new");
-                for d in path.read_dir()? {
-                    if let Ok(p) = d {
-                        move_to_cur(p.path()).ok().take();
-                    }
-                }
-                path.pop();
-
-                path.push("cur");
-                let iter = path.read_dir()?;
-                let count = path.read_dir()?.count();
-                let mut files: Vec<PathBuf> = Vec::with_capacity(count);
-                for e in iter {
-                    let e = e.and_then(|x| {
-                        let path = x.path();
-                        Ok(path)
-                    })?;
-                    files.push(e);
-                }
+                let files = Self::list_mail_in_maildir_fs(path.clone(), false)?;
                 let mut current_hashes = {
                     let mut map = map.lock().unwrap();
                     let map = map.entry(mailbox_hash).or_default();
@@ -1333,6 +1314,32 @@ impl MaildirType {
         }
 
         Ok(())
+    }
+
+    pub fn list_mail_in_maildir_fs(mut path: PathBuf, read_only: bool) -> Result<Vec<PathBuf>> {
+        let mut files: Vec<PathBuf> = vec![];
+        path.push("new");
+        for d in path.read_dir()? {
+            if let Ok(p) = d {
+                if !read_only {
+                    move_to_cur(p.path()).ok().take();
+                } else {
+                    files.push(p.path());
+                }
+            }
+        }
+        path.pop();
+
+        path.push("cur");
+        let iter = path.read_dir()?;
+        for e in iter {
+            let e = e.and_then(|x| {
+                let path = x.path();
+                Ok(path)
+            })?;
+            files.push(e);
+        }
+        Ok(files)
     }
 }
 
