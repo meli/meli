@@ -213,7 +213,7 @@ impl Component for NotificationCommand {
                 } else {
                     #[cfg(target_os = "macos")]
                     {
-                        let applescript = format!("display notification \"{message}\" with title \"{title}\" subtitle \"{subtitle}\"", message = body.replace('"', "'"), title = title.as_ref().map(String::as_str).unwrap_or("meli"), subtitle = kind.map(|k| k.to_string()).unwrap_or_default());
+                        let applescript = format!("display notification \"{message}\" with title \"{title}\" subtitle \"{subtitle}\"", message = body.replace('"', "'"), title = title.as_ref().map(String::as_str).unwrap_or("meli").replace('"', "'"), subtitle = kind.map(|k| k.to_string()).unwrap_or_default().replace('"', "'"));
                         match Command::new("osascript")
                             .arg("-e")
                             .arg(applescript)
