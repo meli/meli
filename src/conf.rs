@@ -879,7 +879,12 @@ mod pp {
             for theme_mailbox in xdg_dirs.find_config_files("themes") {
                 let read_dir = std::fs::read_dir(theme_mailbox)?;
                 for theme in read_dir {
-                    ret.push_str(&pp_helper(&theme?.path(), 0)?);
+                    let file = theme?.path();
+                    if let Some(extension) = file.extension() {
+                        if extension == "toml" {
+                            ret.push_str(&pp_helper(&file, 0)?);
+                        }
+                    }
                 }
             }
         }
