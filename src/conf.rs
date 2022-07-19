@@ -50,6 +50,7 @@ pub use self::composing::*;
 pub use self::pgp::*;
 pub use self::shortcuts::*;
 pub use self::tags::*;
+pub use melib::thread::{SortField, SortOrder};
 
 use self::default_vals::*;
 use self::listing::ListingSettings;
@@ -170,6 +171,8 @@ pub struct FileAccount {
     mailboxes: IndexMap<String, FileMailboxConf>,
     #[serde(default)]
     search_backend: SearchBackend,
+    #[serde(default)]
+    order: (SortField, SortOrder),
     #[serde(default = "false_val")]
     pub manual_refresh: bool,
     #[serde(default = "none")]
@@ -247,6 +250,7 @@ impl From<FileAccount> for AccountConf {
         let root_mailbox = x.root_mailbox.clone();
         let identity = x.identity.clone();
         let display_name = x.display_name.clone();
+        let order = x.order.clone();
         let mailboxes = x
             .mailboxes
             .iter()
@@ -261,6 +265,7 @@ impl From<FileAccount> for AccountConf {
             extra_identities: x.extra_identities.clone(),
             read_only: x.read_only,
             display_name,
+            order,
             subscribed_mailboxes: x.subscribed_mailboxes.clone(),
             mailboxes,
             manual_refresh: x.manual_refresh,
@@ -452,6 +457,7 @@ This is required so that you don't accidentally start meli and find out later th
                 extra_identities,
                 read_only,
                 display_name,
+                order,
                 subscribed_mailboxes,
                 mailboxes,
                 extra,
@@ -470,6 +476,7 @@ This is required so that you don't accidentally start meli and find out later th
                 extra_identities,
                 read_only,
                 display_name,
+                order,
                 subscribed_mailboxes,
                 manual_refresh,
                 mailboxes: mailboxes
@@ -945,6 +952,7 @@ mod dotaddressable {
     {
     }
     impl<K: DotAddressable + std::cmp::Eq + std::hash::Hash> DotAddressable for HashSet<K> {}
+    impl DotAddressable for (SortField, SortOrder) {}
 
     impl DotAddressable for LogSettings {
         fn lookup(&self, parent_field: &str, path: &[&str]) -> Result<String> {
@@ -1079,6 +1087,7 @@ mod dotaddressable {
                         "refresh_command" => self.refresh_command.lookup(field, tail),
                         "conf_override" => self.conf_override.lookup(field, tail),
                         "extra" => self.extra.lookup(field, tail),
+                        "order" => self.order.lookup(field, tail),
                         other => Err(MeliError::new(format!(
                             "{} has no field named {}",
                             parent_field, other
