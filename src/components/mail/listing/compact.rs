@@ -165,6 +165,7 @@ pub struct CompactListing {
     new_cursor_pos: (AccountHash, MailboxHash, usize),
     length: usize,
     sort: (SortField, SortOrder),
+    sortcmd: bool,
     subsort: (SortField, SortOrder),
     all_threads: HashSet<ThreadHash>,
     order: HashMap<ThreadHash, usize>,
@@ -316,6 +317,10 @@ impl MailListingTrait for CompactListing {
 
         let threads = account.collection.get_threads(self.cursor_pos.1);
         self.order.clear();
+        // Use account settings only if no sortcmd has been used
+        if !self.sortcmd {
+            self.sort = context.accounts[&self.cursor_pos.0].settings.account.order
+        }
         self.length = 0;
         let mut rows = Vec::with_capacity(1024);
         let mut min_width = (0, 0, 0, 0);
@@ -877,6 +882,7 @@ impl CompactListing {
             new_cursor_pos: (coordinates.0, coordinates.1, 0),
             length: 0,
             sort: (Default::default(), Default::default()),
+            sortcmd: false,
             subsort: (SortField::Date, SortOrder::Desc),
             all_threads: HashSet::default(),
             order: HashMap::default(),
@@ -1791,6 +1797,7 @@ impl Component for CompactListing {
                         Action::Sort(field, order) if !self.unfocused => {
                             debug!("Sort {:?} , {:?}", field, order);
                             self.sort = (*field, *order);
+                            self.sortcmd = true;
                             if !self.filtered_selection.is_empty() {
                                 // FIXME: perform sort
                                 self.dirty = true;
