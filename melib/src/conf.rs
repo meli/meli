@@ -21,6 +21,7 @@
 
 //! Basic mail account configuration to use with [`backends`](./backends/index.html)
 use crate::backends::SpecialUsageMailbox;
+pub use crate::{SortField, SortOrder};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
 
@@ -33,6 +34,8 @@ pub struct AccountSettings {
     pub extra_identities: Vec<String>,
     pub read_only: bool,
     pub display_name: Option<String>,
+    #[serde(default)]
+    pub order: (SortField, SortOrder),
     pub subscribed_mailboxes: Vec<String>,
     #[serde(default)]
     pub mailboxes: HashMap<String, MailboxConf>,
@@ -63,6 +66,9 @@ impl AccountSettings {
     }
     pub fn display_name(&self) -> Option<&String> {
         self.display_name.as_ref()
+    }
+    pub fn order(&self) -> Option<(SortField, SortOrder)> {
+        Some(self.order)
     }
 
     pub fn subscribed_mailboxes(&self) -> &Vec<String> {
