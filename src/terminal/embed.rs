@@ -23,10 +23,15 @@ use crate::terminal::position::*;
 use melib::{error::*, log, ERROR};
 use smallvec::SmallVec;
 
-use nix::fcntl::{open, OFlag};
+#[cfg(not(target_os = "macos"))]
+use nix::{
+    fcntl::{open, OFlag},
+    pty::{grantpt, posix_openpt, ptsname, unlockpt},
+    sys::stat,
+};
+
 use nix::libc::{STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
-use nix::pty::{grantpt, posix_openpt, ptsname, unlockpt, Winsize};
-use nix::sys::stat;
+use nix::pty::Winsize;
 use nix::unistd::{dup2, fork, ForkResult};
 use nix::{ioctl_none_bad, ioctl_write_ptr_bad};
 use std::ffi::{CString, OsStr};
@@ -43,6 +48,8 @@ pub use grid::{EmbedGrid, EmbedTerminal};
 use libc::TIOCSCTTY;
 // ioctl request code to set window size of pty:
 use libc::TIOCSWINSZ;
+
+#[cfg(not(target_os = "macos"))]
 use std::path::Path;
 
 use std::convert::TryFrom;
@@ -60,19 +67,33 @@ pub fn create_pty(
     height: usize,
     command: String,
 ) -> Result<Arc<Mutex<EmbedTerminal>>> {
-    // Open a new PTY master
-    let master_fd = posix_openpt(OFlag::O_RDWR)?;
+    #[cfg(not(target_os = "macos"))]
+    let (master_fd, slave_name) = {
+        // Open a new PTY master
+        let master_fd = posix_openpt(OFlag::O_RDWR)?;
 
-    // Allow a slave to be generated for it
-    grantpt(&master_fd)?;
-    unlockpt(&master_fd)?;
+        // Allow a slave to be generated for it
+        grantpt(&master_fd)?;
+        unlockpt(&master_fd)?;
 
-    // Get the name of the slave
-    let slave_name = unsafe { ptsname(&master_fd) }?;
+        // Get the name of the slave
+        let slave_name = unsafe { ptsname(&master_fd) }?;
 
-    // Try to open the slave
-    //let _slave_fd = open(Path::new(&slave_name), OFlag::O_RDWR, Mode::empty())?;
-    {
+        {
+            let winsize = Winsize {
+                ws_row: <u16>::try_from(height).unwrap(),
+                ws_col: <u16>::try_from(width).unwrap(),
+                ws_xpixel: 0,
+                ws_ypixel: 0,
+            };
+
+            let master_fd = master_fd.as_raw_fd();
+            unsafe { set_window_size(master_fd, &winsize)? };
+        }
+        (master_fd, slave_name)
+    };
+    #[cfg(target_os = "macos")]
+    let (master_fd, slave_fd) = {
         let winsize = Winsize {
             ws_row: <u16>::try_from(height).unwrap(),
             ws_col: <u16>::try_from(width).unwrap(),
@@ -80,12 +101,13 @@ pub fn create_pty(
             ws_ypixel: 0,
         };
 
-        let master_fd = master_fd.as_raw_fd();
-        unsafe { set_window_size(master_fd, &winsize)? };
-    }
+        let ends = nix::pty::openpty(Some(&winsize), None)?;
+        (ends.master, ends.slave)
+    };
 
     let child_pid = match unsafe { fork()? } {
         ForkResult::Child => {
+            #[cfg(not(target_os = "macos"))]
             /* Open slave end for pseudoterminal */
             let slave_fd = open(Path::new(&slave_name), OFlag::O_RDWR, stat::Mode::empty())?;
 
