@@ -407,6 +407,11 @@ Show a different name for this mailbox in the UI
 Load this mailbox on startup
 .\" default value
 .Pq Em true
+.It Ic collapsed Ar boolean
+.Pq Em optional
+Collapse this mailbox subtree in menu.
+.\" default value
+.Pq Em false
 .It Ic subscribe Ar boolean
 .Pq Em optional
 Watch this mailbox for updates
@@ -691,6 +696,10 @@ Go to previous mailbox.
 Open selected mailbox
 .\" default value
 .Pq Em Enter
+.It Ic toggle_mailbox_collapse
+Toggle mailbox visibility in menu.
+.\" default value
+.Pq Em Space
 .It Ic search
 Search within list of e-mails.
 .\" default value

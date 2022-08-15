@@ -2389,6 +2389,6 @@ fn build_mailboxes_order(
             }
         }
 
-        rec(node, &mailbox_entries, 0, 0, false);
+        rec(node, &mailbox_entries, 1, 0, false);
     }
 }

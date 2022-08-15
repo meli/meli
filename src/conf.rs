@@ -135,6 +135,8 @@ pub struct MailUIConf {
 pub struct FileMailboxConf {
     #[serde(flatten)]
     pub conf_override: MailUIConf,
+    #[serde(default = "false_val")]
+    pub collapsed: bool,
     #[serde(flatten)]
     pub mailbox_conf: MailboxConf,
 }

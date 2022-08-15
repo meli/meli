@@ -24,7 +24,7 @@ use crate::conf::accounts::JobRequest;
 use crate::types::segment_tree::SegmentTree;
 use melib::backends::EnvelopeHashBatch;
 use smallvec::SmallVec;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::convert::TryFrom;
 use std::ops::{Deref, DerefMut};
 
@@ -162,11 +162,22 @@ column_str!(struct FlagString(String));
 column_str!(struct TagString(String, SmallVec<[Option<Color>; 8]>));
 
 #[derive(Debug)]
+struct MailboxMenuEntry {
+    depth: usize,
+    indentation: u32,
+    has_sibling: bool,
+    visible: bool,
+    collapsed: bool,
+    mailbox_hash: MailboxHash,
+}
+
+#[derive(Debug)]
 struct AccountMenuEntry {
     name: String,
     hash: AccountHash,
     index: usize,
-    entries: SmallVec<[(usize, u32, bool, MailboxHash); 16]>,
+    visible: bool,
+    entries: SmallVec<[MailboxMenuEntry; 16]>,
 }
 
 pub trait MailListingTrait: ListingTrait {
@@ -768,6 +779,18 @@ impl Component for Listing {
                 if self.cursor_pos.0 == account_index {
                     self.change_account(context);
                 } else {
+                    let previous_collapsed_mailboxes: BTreeSet<MailboxHash> = self.accounts
+                        [account_index]
+                        .entries
+                        .iter()
+                        .filter_map(|e| {
+                            if e.collapsed {
+                                Some(e.mailbox_hash)
+                            } else {
+                                None
+                            }
+                        })
+                        .collect::<_>();
                     self.accounts[account_index].entries = context.accounts[&*account_hash]
                         .list_mailboxes()
                         .into_iter()
@@ -776,7 +799,18 @@ impl Component for Listing {
                                 .ref_mailbox
                                 .is_subscribed()
                         })
-                        .map(|f| (f.depth, f.indentation, f.has_sibling, f.hash))
+                        .map(|f| MailboxMenuEntry {
+                            depth: f.depth,
+                            indentation: f.indentation,
+                            has_sibling: f.has_sibling,
+                            mailbox_hash: f.hash,
+                            visible: true,
+                            collapsed: if previous_collapsed_mailboxes.is_empty() {
+                                context.accounts[&*account_hash][&f.hash].conf.collapsed
+                            } else {
+                                previous_collapsed_mailboxes.contains(&f.hash)
+                            },
+                        })
                         .collect::<_>();
                     self.set_dirty(true);
                     self.menu_content.empty();
@@ -795,6 +829,18 @@ impl Component for Listing {
                     .get_index_of(account_hash)
                     .expect("Invalid account_hash in UIEventMailbox{Delete,Create}");
                 self.menu_content.empty();
+                let previous_collapsed_mailboxes: BTreeSet<MailboxHash> = self.accounts
+                    [account_index]
+                    .entries
+                    .iter()
+                    .filter_map(|e| {
+                        if e.collapsed {
+                            Some(e.mailbox_hash)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<_>();
                 self.accounts[account_index].entries = context.accounts[&*account_hash]
                     .list_mailboxes()
                     .into_iter()
@@ -803,7 +849,14 @@ impl Component for Listing {
                             .ref_mailbox
                             .is_subscribed()
                     })
-                    .map(|f| (f.depth, f.indentation, f.has_sibling, f.hash))
+                    .map(|f| MailboxMenuEntry {
+                        depth: f.depth,
+                        indentation: f.indentation,
+                        has_sibling: f.has_sibling,
+                        mailbox_hash: f.hash,
+                        visible: true,
+                        collapsed: previous_collapsed_mailboxes.contains(&f.hash),
+                    })
                     .collect::<_>();
                 let mut fallback = 0;
                 if let MenuEntryCursor::Mailbox(ref mut cur) = self.cursor_pos.1 {
@@ -821,7 +874,7 @@ impl Component for Listing {
                         .process_event(&mut UIEvent::VisibilityChange(false), context);
                     self.component.set_coordinates((
                         self.accounts[self.cursor_pos.0].hash,
-                        self.accounts[self.cursor_pos.0].entries[fallback].3,
+                        self.accounts[self.cursor_pos.0].entries[fallback].mailbox_hash,
                     ));
                     self.component.refresh_mailbox(context, true);
                 }
@@ -840,7 +893,7 @@ impl Component for Listing {
                 self.set_dirty(true);
             }
             UIEvent::Action(Action::ViewMailbox(ref idx)) => {
-                if let Some((_, _, _, mailbox_hash)) =
+                if let Some(MailboxMenuEntry { mailbox_hash, .. }) =
                     self.accounts[self.cursor_pos.0].entries.get(*idx)
                 {
                     let account_hash = self.accounts[self.cursor_pos.0].hash;
@@ -1312,6 +1365,33 @@ impl Component for Listing {
                     return true;
                 }
                 UIEvent::Input(ref k)
+                    if shortcut!(
+                        k == shortcuts[Listing::DESCRIPTION]["toggle_mailbox_collapse"]
+                    ) && matches!(self.menu_cursor_pos.1, MenuEntryCursor::Mailbox(_)) =>
+                {
+                    let target_mailbox_idx =
+                        if let MenuEntryCursor::Mailbox(idx) = self.menu_cursor_pos.1 {
+                            idx
+                        } else {
+                            return false;
+                        };
+                    if let Some(target) = self.accounts[self.menu_cursor_pos.0]
+                        .entries
+                        .get_mut(target_mailbox_idx)
+                    {
+                        target.collapsed = !(target.collapsed);
+                        self.dirty = true;
+                        self.menu_content.empty();
+                        context
+                            .replies
+                            .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
+                                ScrollUpdate::End(self.id),
+                            )));
+                        return true;
+                    }
+                    return false;
+                }
+                UIEvent::Input(ref k)
                     if shortcut!(k == shortcuts[Listing::DESCRIPTION]["open_mailbox"]) =>
                 {
                     self.cursor_pos = self.menu_cursor_pos;
@@ -1371,13 +1451,22 @@ impl Component for Listing {
                                         return true;
                                     }
                                 }
-                                (_, MenuEntryCursor::Mailbox(ref mut mailbox_idx)) => {
+                                (
+                                    ref account_cursor,
+                                    MenuEntryCursor::Mailbox(ref mut mailbox_idx),
+                                ) => loop {
                                     if *mailbox_idx > 0 {
                                         *mailbox_idx -= 1;
+                                        if self.accounts[*account_cursor].entries[*mailbox_idx]
+                                            .visible
+                                        {
+                                            break;
+                                        }
                                     } else {
                                         self.menu_cursor_pos.1 = MenuEntryCursor::Status;
+                                        break;
                                     }
-                                }
+                                },
                             }
 
                             amount -= 1;
@@ -1407,18 +1496,24 @@ impl Component for Listing {
                                 (
                                     ref mut account_cursor,
                                     MenuEntryCursor::Mailbox(ref mut mailbox_idx),
-                                ) => {
+                                ) => loop {
                                     if (*mailbox_idx + 1)
                                         < self.accounts[*account_cursor].entries.len()
                                     {
                                         *mailbox_idx += 1;
+                                        if self.accounts[*account_cursor].entries[*mailbox_idx]
+                                            .visible
+                                        {
+                                            break;
+                                        }
                                     } else if *account_cursor + 1 < self.accounts.len() {
                                         *account_cursor += 1;
                                         self.menu_cursor_pos.1 = MenuEntryCursor::Status;
+                                        break;
                                     } else {
                                         return true;
                                     }
-                                }
+                                },
                             }
 
                             amount -= 1;
@@ -1648,7 +1743,7 @@ impl Component for Listing {
     fn get_status(&self, context: &Context) -> String {
         let mailbox_hash = match self.cursor_pos.1 {
             MenuEntryCursor::Mailbox(idx) => {
-                if let Some((_, _, _, mailbox_hash)) =
+                if let Some(MailboxMenuEntry { mailbox_hash, .. }) =
                     self.accounts[self.cursor_pos.0].entries.get(idx)
                 {
                     *mailbox_hash
@@ -1695,17 +1790,25 @@ impl Listing {
             .iter()
             .enumerate()
             .map(|(i, (h, a))| {
-                let entries: SmallVec<[(usize, u32, bool, MailboxHash); 16]> = a
+                let entries: SmallVec<[MailboxMenuEntry; 16]> = a
                     .list_mailboxes()
                     .into_iter()
                     .filter(|mailbox_node| a[&mailbox_node.hash].ref_mailbox.is_subscribed())
-                    .map(|f| (f.depth, f.indentation, f.has_sibling, f.hash))
+                    .map(|f| MailboxMenuEntry {
+                        depth: f.depth,
+                        indentation: f.indentation,
+                        has_sibling: f.has_sibling,
+                        mailbox_hash: f.hash,
+                        visible: true,
+                        collapsed: a[&f.hash].conf.collapsed,
+                    })
                     .collect::<_>();
 
                 AccountMenuEntry {
                     name: a.name().to_string(),
                     hash: *h,
                     index: i,
+                    visible: true,
                     entries,
                 }
             })
@@ -1848,6 +1951,19 @@ impl Listing {
      */
     fn print_account(&mut self, area: Area, aidx: usize, context: &mut Context) -> usize {
         debug_assert!(is_valid_area!(area));
+
+        #[derive(Copy, Debug, Clone)]
+        struct Line {
+            visible: bool,
+            collapsed: bool,
+            depth: usize,
+            inc: usize,
+            indentation: u32,
+            has_sibling: bool,
+            mailbox_idx: MailboxHash,
+            count: Option<usize>,
+            collapsed_count: Option<usize>,
+        }
         // Each entry and its index in the account
         let mailboxes: HashMap<MailboxHash, Mailbox> = context.accounts[self.accounts[aidx].index]
             .mailbox_entries
@@ -1865,25 +1981,47 @@ impl Listing {
 
         let must_highlight_account: bool = cursor.0 == self.accounts[aidx].index;
 
-        let mut lines: Vec<(usize, usize, u32, bool, MailboxHash, Option<usize>)> = Vec::new();
+        let mut lines: Vec<Line> = Vec::new();
 
-        for (i, &(depth, indentation, has_sibling, mailbox_hash)) in
-            self.accounts[aidx].entries.iter().enumerate()
+        for (
+            i,
+            &MailboxMenuEntry {
+                depth,
+                indentation,
+                has_sibling,
+                mailbox_hash,
+                visible,
+                collapsed,
+            },
+        ) in self.accounts[aidx].entries.iter().enumerate()
         {
             if mailboxes[&mailbox_hash].is_subscribed() {
                 match context.accounts[self.accounts[aidx].index][&mailbox_hash].status {
                     crate::conf::accounts::MailboxStatus::Failed(_) => {
-                        lines.push((depth, i, indentation, has_sibling, mailbox_hash, None));
-                    }
-                    _ => {
-                        lines.push((
+                        lines.push(Line {
+                            visible,
+                            collapsed,
                             depth,
-                            i,
+                            inc: i,
                             indentation,
                             has_sibling,
-                            mailbox_hash,
-                            mailboxes[&mailbox_hash].count().ok().map(|(v, _)| v),
-                        ));
+                            mailbox_idx: mailbox_hash,
+                            count: None,
+                            collapsed_count: None,
+                        });
+                    }
+                    _ => {
+                        lines.push(Line {
+                            visible,
+                            collapsed,
+                            depth,
+                            inc: i,
+                            indentation,
+                            has_sibling,
+                            mailbox_idx: mailbox_hash,
+                            count: mailboxes[&mailbox_hash].count().ok().map(|(v, _)| v),
+                            collapsed_count: None,
+                        });
                     }
                 }
             }
@@ -1931,9 +2069,43 @@ impl Listing {
         let mut idx = 0;
         let mut branches = String::with_capacity(16);
 
-        for y in get_y(upper_left) + 1..get_y(bottom_right) {
+        // What depth to skip if a mailbox is toggled to collapse
+        // The value should be the collapsed mailbox's indentation, so that its children are not
+        // visible.
+        let mut skip: Option<usize> = None;
+        let mut skipped_counter: usize = 0;
+        'grid_loop: for y in get_y(upper_left) + 1..get_y(bottom_right) {
             if idx == lines_len {
                 break;
+            }
+            let mut l = lines[idx];
+            while let Some(p) = skip {
+                if l.depth > p {
+                    self.accounts[aidx].entries[idx].visible = false;
+                    idx += 1;
+                    skipped_counter += 1;
+                    if idx >= lines.len() {
+                        break 'grid_loop;
+                    }
+                    l = lines[idx];
+                } else {
+                    skip = None;
+                }
+            }
+            self.accounts[aidx].entries[idx].visible = true;
+            if l.collapsed {
+                skip = Some(l.depth);
+                // Calculate total unseen from hidden children mailboxes
+                let mut idx = idx + 1;
+                let mut counter = 0;
+                while idx < lines.len() {
+                    if lines[idx].depth <= l.depth {
+                        break;
+                    }
+                    counter += lines[idx].count.unwrap_or(0);
+                    idx += 1;
+                }
+                l.collapsed_count = Some(counter);
             }
             let (att, index_att, unread_count_att) = if must_highlight_account {
                 if match cursor.1 {
@@ -1970,7 +2142,6 @@ impl Listing {
                 )
             };
 
-            let (depth, inc, indentation, has_sibling, mailbox_idx, count) = lines[idx];
             /* Calculate how many columns the mailbox index tags should occupy with right alignment,
              * eg.
              *  1
@@ -2025,7 +2196,7 @@ impl Listing {
             .unwrap_or(" ");
 
             let (x, _) = write_string_to_grid(
-                &format!("{:>width$}", inc, width = total_mailbox_no_digits),
+                &format!("{:>width$}", l.inc, width = total_mailbox_no_digits),
                 &mut self.menu_content,
                 index_att.fg,
                 index_att.bg,
@@ -2036,18 +2207,18 @@ impl Listing {
             {
                 branches.clear();
                 branches.push_str(no_sibling_str);
-                let leading_zeros = indentation.leading_zeros();
+                let leading_zeros = l.indentation.leading_zeros();
                 let mut o = 1_u32.wrapping_shl(31_u32.saturating_sub(leading_zeros));
                 for _ in 0..(32_u32.saturating_sub(leading_zeros)) {
-                    if indentation & o > 0 {
+                    if l.indentation & o > 0 {
                         branches.push_str(has_sibling_str);
                     } else {
                         branches.push_str(no_sibling_str);
                     }
                     o >>= 1;
                 }
-                if depth > 0 {
-                    if has_sibling {
+                if l.depth > 0 {
+                    if l.has_sibling {
                         branches.push_str(has_sibling_leaf_str);
                     } else {
                         branches.push_str(no_sibling_leaf_str);
@@ -2064,7 +2235,7 @@ impl Listing {
                 None,
             );
             let (x, _) = write_string_to_grid(
-                context.accounts[self.accounts[aidx].index].mailbox_entries[&mailbox_idx].name(),
+                context.accounts[self.accounts[aidx].index].mailbox_entries[&l.mailbox_idx].name(),
                 &mut self.menu_content,
                 att.fg,
                 att.bg,
@@ -2074,14 +2245,15 @@ impl Listing {
             );
 
             /* Unread message count */
-            let count_string = if let Some(c) = count {
-                if c > 0 {
-                    format!(" {}", c)
-                } else {
-                    String::new()
-                }
-            } else {
-                " ...".to_string()
+            let count_string = match (l.count, l.collapsed_count) {
+                (None, None) => " ...".to_string(),
+                (Some(0), None) => String::new(),
+                (Some(0), Some(0)) | (None, Some(0)) => " v".to_string(),
+                (Some(0), Some(coll)) => format!(" ({}) v", coll),
+                (Some(c), Some(0)) => format!(" {} v", c),
+                (Some(c), Some(coll)) => format!(" {} ({}) v", c, coll),
+                (Some(c), None) => format!(" {}", c),
+                (None, Some(coll)) => format!(" ({}) v", coll),
             };
 
             let (x, _) = write_string_to_grid(
@@ -2090,7 +2262,7 @@ impl Listing {
                 unread_count_att.fg,
                 unread_count_att.bg,
                 unread_count_att.attrs
-                    | if count.unwrap_or(0) > 0 {
+                    | if l.count.unwrap_or(0) > 0 {
                         Attr::BOLD
                     } else {
                         Attr::DEFAULT
@@ -2116,12 +2288,23 @@ impl Listing {
         if idx == 0 {
             0
         } else {
-            idx - 1
+            idx - 1 - skipped_counter
         }
     }
 
     fn change_account(&mut self, context: &mut Context) {
         let account_hash = context.accounts[self.cursor_pos.0].hash();
+        let previous_collapsed_mailboxes: BTreeSet<MailboxHash> = self.accounts[self.cursor_pos.0]
+            .entries
+            .iter()
+            .filter_map(|e| {
+                if e.collapsed {
+                    Some(e.mailbox_hash)
+                } else {
+                    None
+                }
+            })
+            .collect::<_>();
         self.accounts[self.cursor_pos.0].entries = context.accounts[self.cursor_pos.0]
             .list_mailboxes()
             .into_iter()
@@ -2130,12 +2313,23 @@ impl Listing {
                     .ref_mailbox
                     .is_subscribed()
             })
-            .map(|f| (f.depth, f.indentation, f.has_sibling, f.hash))
+            .map(|f| MailboxMenuEntry {
+                depth: f.depth,
+                indentation: f.indentation,
+                has_sibling: f.has_sibling,
+                mailbox_hash: f.hash,
+                visible: true,
+                collapsed: if previous_collapsed_mailboxes.is_empty() {
+                    context.accounts[self.cursor_pos.0][&f.hash].conf.collapsed
+                } else {
+                    previous_collapsed_mailboxes.contains(&f.hash)
+                },
+            })
             .collect::<_>();
         match self.cursor_pos.1 {
             MenuEntryCursor::Mailbox(idx) => {
                 /* Account might have no mailboxes yet if it's offline */
-                if let Some((_, _, _, mailbox_hash)) =
+                if let Some(MailboxMenuEntry { mailbox_hash, .. }) =
                     self.accounts[self.cursor_pos.0].entries.get(idx)
                 {
                     self.component
