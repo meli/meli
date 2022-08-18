@@ -27,8 +27,7 @@ use crate::error::{MeliError, Result};
 use crate::Collection;
 use futures::lock::Mutex as FutureMutex;
 use isahc::config::RedirectPolicy;
-use isahc::prelude::HttpClient;
-use isahc::ResponseExt;
+use isahc::{AsyncReadResponseExt, HttpClient};
 use serde_json::Value;
 use std::collections::{hash_map::DefaultHasher, HashMap, HashSet};
 use std::convert::TryFrom;
@@ -451,7 +450,7 @@ impl MailBackend for JmapType {
                     )));
                 }
             };
-            let res_text = res.text_async().await?;
+            let res_text = res.text().await?;
 
             let upload_response: UploadResponse = serde_json::from_str(&res_text)?;
             let mut req = Request::new(conn.request_no.clone());
@@ -475,7 +474,7 @@ impl MailBackend for JmapType {
                 .client
                 .post_async(api_url.as_str(), serde_json::to_string(&req)?)
                 .await?;
-            let res_text = res.text_async().await?;
+            let res_text = res.text().await?;
 
             let mut v: MethodResponse = serde_json::from_str(&res_text)?;
             let m = ImportResponse::try_from(v.method_responses.remove(0)).or_else(|err| {
@@ -550,7 +549,7 @@ impl MailBackend for JmapType {
                 .post_async(api_url.as_str(), serde_json::to_string(&req)?)
                 .await?;
 
-            let res_text = res.text_async().await?;
+            let res_text = res.text().await?;
             let mut v: MethodResponse = serde_json::from_str(&res_text).unwrap();
             *store.online_status.lock().await = (std::time::Instant::now(), Ok(()));
             let m = QueryResponse::<EmailObject>::try_from(v.method_responses.remove(0))?;
@@ -645,7 +644,7 @@ impl MailBackend for JmapType {
                 .post_async(api_url.as_str(), serde_json::to_string(&req)?)
                 .await?;
 
-            let res_text = res.text_async().await?;
+            let res_text = res.text().await?;
 
             let mut v: MethodResponse = serde_json::from_str(&res_text).unwrap();
             *store.online_status.lock().await = (std::time::Instant::now(), Ok(()));
@@ -747,7 +746,7 @@ impl MailBackend for JmapType {
                 .post_async(api_url.as_str(), serde_json::to_string(&req)?)
                 .await?;
 
-            let res_text = res.text_async().await?;
+            let res_text = res.text().await?;
             /*
              *{"methodResponses":[["Email/set",{"notUpdated":null,"notDestroyed":null,"oldState":"86","newState":"87","accountId":"u148940c7","updated":{"M045926eed54b11423918f392":{"id":"M045926eed54b11423918f392"}},"created":null,"destroyed":null,"notCreated":null},"m3"]],"sessionState":"cyrus-0;p-5;vfs-0"}
              */

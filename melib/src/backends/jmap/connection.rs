@@ -69,7 +69,7 @@ impl JmapConnection {
         jmap_session_resource_url.push_str("/.well-known/jmap");
 
         let mut req = self.client.get_async(&jmap_session_resource_url).await?;
-        let res_text = req.text_async().await?;
+        let res_text = req.text().await?;
 
         let session: JmapSession = match serde_json::from_str(&res_text) {
             Err(err) => {
@@ -177,7 +177,7 @@ impl JmapConnection {
                 .post_async(api_url.as_str(), serde_json::to_string(&req)?)
                 .await?;
 
-            let res_text = res.text_async().await?;
+            let res_text = res.text().await?;
             debug!(&res_text);
             let mut v: MethodResponse = serde_json::from_str(&res_text).unwrap();
             let changes_response =

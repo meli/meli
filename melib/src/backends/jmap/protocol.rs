@@ -101,7 +101,7 @@ pub async fn get_mailboxes(conn: &JmapConnection) -> Result<HashMap<MailboxHash,
         )
         .await?;
 
-    let res_text = res.text_async().await?;
+    let res_text = res.text().await?;
     let mut v: MethodResponse = serde_json::from_str(&res_text).unwrap();
     *conn.store.online_status.lock().await = (std::time::Instant::now(), Ok(()));
     let m = GetResponse::<MailboxObject>::try_from(v.method_responses.remove(0))?;
@@ -191,7 +191,7 @@ pub async fn get_message_list(
         .post_async(api_url.as_str(), serde_json::to_string(&req)?)
         .await?;
 
-    let res_text = res.text_async().await?;
+    let res_text = res.text().await?;
     let mut v: MethodResponse = serde_json::from_str(&res_text).unwrap();
     *conn.store.online_status.lock().await = (std::time::Instant::now(), Ok(()));
     let m = QueryResponse::<EmailObject>::try_from(v.method_responses.remove(0))?;
@@ -214,7 +214,7 @@ pub async fn get_message(conn: &JmapConnection, ids: &[String]) -> Result<Vec<En
         .post_async(&conn.session.api_url, serde_json::to_string(&req)?)
         .await?;
 
-    let res_text = res.text_async().await?;
+    let res_text = res.text().await?;
     let mut v: MethodResponse = serde_json::from_str(&res_text).unwrap();
     let e = GetResponse::<EmailObject>::try_from(v.method_responses.remove(0))?;
     let GetResponse::<EmailObject> { list, .. } = e;
@@ -263,7 +263,7 @@ pub async fn fetch(
         .post_async(api_url.as_str(), serde_json::to_string(&req)?)
         .await?;
 
-    let res_text = res.text_async().await?;
+    let res_text = res.text().await?;
 
     let mut v: MethodResponse = serde_json::from_str(&res_text).unwrap();
     let e = GetResponse::<EmailObject>::try_from(v.method_responses.pop().unwrap())?;

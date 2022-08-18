@@ -71,7 +71,7 @@ impl BackendOp for JmapOp {
                 ))
                 .await?;
 
-            let res_text = res.text_async().await?;
+            let res_text = res.text().await?;
 
             store
                 .byte_cache
