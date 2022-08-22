@@ -403,14 +403,14 @@ impl ListingTrait for ConversationsListing {
                     if self.new_cursor_pos.2 + amount + 1 < self.length {
                         self.new_cursor_pos.2 += amount;
                     } else {
-                        self.new_cursor_pos.2 = self.length - 1;
+                        self.new_cursor_pos.2 = self.length.saturating_sub(1);
                     }
                 }
                 PageMovement::PageDown(multiplier) => {
                     if self.new_cursor_pos.2 + rows * multiplier + 1 < self.length {
                         self.new_cursor_pos.2 += rows * multiplier;
                     } else if self.new_cursor_pos.2 + rows * multiplier > self.length {
-                        self.new_cursor_pos.2 = self.length - 1;
+                        self.new_cursor_pos.2 = self.length.saturating_sub(1);
                     } else {
                         self.new_cursor_pos.2 = (self.length.saturating_sub(1) / rows) * rows;
                     }
@@ -451,7 +451,7 @@ impl ListingTrait for ConversationsListing {
             self.cursor_pos = self.new_cursor_pos;
         }
         if self.new_cursor_pos.2 >= self.length {
-            self.new_cursor_pos.2 = self.length - 1;
+            self.new_cursor_pos.2 = self.length.saturating_sub(1);
             self.cursor_pos.2 = self.new_cursor_pos.2;
         }
 
@@ -516,7 +516,7 @@ impl ListingTrait for ConversationsListing {
                     if self.all_threads.contains(&thread) {
                         self.filtered_selection.push(thread);
                         self.filtered_order
-                            .insert(thread, self.filtered_selection.len() - 1);
+                            .insert(thread, self.filtered_selection.len().saturating_sub(1));
                     }
                 }
                 if !self.filtered_selection.is_empty() {
@@ -525,8 +525,10 @@ impl ListingTrait for ConversationsListing {
                         self.sort,
                         &context.accounts[&self.cursor_pos.0].collection.envelopes,
                     );
-                    self.new_cursor_pos.2 =
-                        std::cmp::min(self.filtered_selection.len() - 1, self.cursor_pos.2);
+                    self.new_cursor_pos.2 = std::cmp::min(
+                        self.filtered_selection.len().saturating_sub(1),
+                        self.cursor_pos.2,
+                    );
                 }
                 self.redraw_threads_list(
                     context,
