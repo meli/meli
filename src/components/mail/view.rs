@@ -1646,6 +1646,9 @@ impl Component for MailView {
         match self.mode {
             ViewMode::Subview if self.subview.is_some() => {
                 if let Some(s) = self.subview.as_mut() {
+                    if !s.is_dirty() {
+                        s.set_dirty(true);
+                    }
                     s.draw(grid, (set_y(upper_left, y), bottom_right), context);
                 }
             }
