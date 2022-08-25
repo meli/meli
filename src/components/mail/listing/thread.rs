@@ -241,6 +241,7 @@ impl MailListingTrait for ThreadListing {
         }
         let mut rows = Vec::with_capacity(1024);
         let mut min_width = (0, 0, 0, 0, 0);
+        #[allow(clippy::type_complexity)]
         let mut row_widths: (
             SmallVec<[u8; 1024]>,
             SmallVec<[u8; 1024]>,
@@ -260,7 +261,7 @@ impl MailListingTrait for ThreadListing {
             .filter_map(|r| threads.groups[&r].root().map(|r| r.root))
             .collect::<_>();
         let mut iter = threads.threads_group_iter(roots).peekable();
-        let thread_nodes: &HashMap<ThreadNodeHash, ThreadNode> = &threads.thread_nodes();
+        let thread_nodes: &HashMap<ThreadNodeHash, ThreadNode> = threads.thread_nodes();
         /* This is just a desugared for loop so that we can use .peek() */
         let mut idx = 0;
         let mut prev_group = ThreadHash::null();
@@ -737,8 +738,8 @@ impl fmt::Display for ThreadListing {
 }
 
 impl ThreadListing {
-    pub fn new(coordinates: (AccountHash, MailboxHash)) -> Self {
-        ThreadListing {
+    pub fn new(coordinates: (AccountHash, MailboxHash)) -> Box<Self> {
+        Box::new(ThreadListing {
             cursor_pos: (coordinates.0, 0, 0),
             new_cursor_pos: (coordinates.0, coordinates.1, 0),
             length: 0,
@@ -757,7 +758,7 @@ impl ThreadListing {
             initialised: false,
             movement: None,
             id: ComponentId::new_v4(),
-        }
+        })
     }
 
     fn highlight_line_self(&mut self, _idx: usize, _context: &Context) {
@@ -879,7 +880,7 @@ impl ThreadListing {
         EntryStrings {
             date: DateString(ConversationsListing::format_date(context, e.date())),
             subject: SubjectString(subject),
-            flag: FlagString(format!("{}", if e.has_attachments() { "📎" } else { "" },)),
+            flag: FlagString((if e.has_attachments() { "📎" } else { "" }).to_string()),
             from: FromString(address_list!((e.from()) as comma_sep_list)),
             tags: TagString(tags, colors),
         }
@@ -1243,7 +1244,7 @@ impl Component for ThreadListing {
             }
             UIEvent::EnvelopeRename(ref old_hash, ref new_hash) => {
                 let account = &context.accounts[&self.cursor_pos.0];
-                if !account.collection.contains_key(&new_hash) {
+                if !account.collection.contains_key(new_hash) {
                     return false;
                 }
                 if let Some(row) = self.order.remove(old_hash) {

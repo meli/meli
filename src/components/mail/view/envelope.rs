@@ -36,10 +36,7 @@ enum ViewMode {
 
 impl ViewMode {
     fn is_attachment(&self) -> bool {
-        match self {
-            ViewMode::Attachment(_) => true,
-            _ => false,
-        }
+        matches!(self, ViewMode::Attachment(_))
     }
 }
 
@@ -53,7 +50,7 @@ pub struct EnvelopeView {
     mode: ViewMode,
     mail: Mail,
 
-    account_hash: AccountHash,
+    _account_hash: AccountHash,
     cmd_buf: String,
     id: ComponentId,
 }
@@ -69,7 +66,7 @@ impl EnvelopeView {
         mail: Mail,
         pager: Option<Pager>,
         subview: Option<Box<dyn Component>>,
-        account_hash: AccountHash,
+        _account_hash: AccountHash,
     ) -> Self {
         EnvelopeView {
             pager,
@@ -77,7 +74,7 @@ impl EnvelopeView {
             dirty: true,
             mode: ViewMode::Normal,
             mail,
-            account_hash,
+            _account_hash,
             cmd_buf: String::with_capacity(4),
             id: ComponentId::new_v4(),
         }
@@ -87,7 +84,7 @@ impl EnvelopeView {
     fn attachment_to_text(&self, body: &Attachment, context: &mut Context) -> String {
         let finder = LinkFinder::new();
         let body_text = String::from_utf8_lossy(&decode_rec(
-            &body,
+            body,
             Some(Box::new(|a: &Attachment, v: &mut Vec<u8>| {
                 if a.content_type().is_text_html() {
                     let settings = &context.settings;
@@ -107,14 +104,13 @@ impl EnvelopeView {
                                     err.to_string(),
                                     Some(NotificationType::Error(melib::ErrorKind::External)),
                                 ));
-                                return;
                             }
                             Ok(mut html_filter) => {
                                 html_filter
                                     .stdin
                                     .as_mut()
                                     .unwrap()
-                                    .write_all(&v)
+                                    .write_all(v)
                                     .expect("Failed to write to stdin");
                                 *v = format!(
                             "Text piped through `{}`. Press `v` to open in web browser. \n\n",
@@ -286,7 +282,7 @@ impl Component for EnvelopeView {
             match self.mode {
                 ViewMode::Attachment(aidx) if body.attachments()[aidx].is_html() => {
                     let attachment = &body.attachments()[aidx];
-                    self.subview = Some(Box::new(HtmlView::new(&attachment, context)));
+                    self.subview = Some(Box::new(HtmlView::new(attachment, context)));
                 }
                 ViewMode::Normal if body.is_html() => {
                     self.subview = Some(Box::new(HtmlView::new(&body, context)));
@@ -336,7 +332,7 @@ impl Component for EnvelopeView {
                     .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
                 return true;
             }
-            UIEvent::Input(Key::Char(c)) if c >= '0' && c <= '9' => {
+            UIEvent::Input(Key::Char(c)) if ('0'..='9').contains(&c) => {
                 self.cmd_buf.push(c);
                 return true;
             }
@@ -368,71 +364,70 @@ impl Component for EnvelopeView {
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
 
-                {
-                    if let Some(u) = self.mail.body().attachments().get(lidx) {
-                        match u.content_type() {
-                            ContentType::MessageRfc822 => {
-                                self.mode = ViewMode::Subview;
-                                let colors = crate::conf::value(context, "mail.view.body");
-                                self.subview = Some(Box::new(Pager::from_string(
-                                    String::from_utf8_lossy(&decode_rec(u, None)).to_string(),
-                                    Some(context),
-                                    None,
-                                    None,
-                                    colors,
-                                )));
-                            }
+                if let Some(u) = self.mail.body().attachments().get(lidx) {
+                    match u.content_type() {
+                        ContentType::MessageRfc822 => {
+                            self.mode = ViewMode::Subview;
+                            let colors = crate::conf::value(context, "mail.view.body");
+                            self.subview = Some(Box::new(Pager::from_string(
+                                String::from_utf8_lossy(&decode_rec(u, None)).to_string(),
+                                Some(context),
+                                None,
+                                None,
+                                colors,
+                            )));
+                        }
 
-                            ContentType::Text { .. }
-                            | ContentType::PGPSignature
-                            | ContentType::CMSSignature => {
-                                self.mode = ViewMode::Attachment(lidx);
-                                self.dirty = true;
-                            }
-                            ContentType::Multipart { .. } => {
-                                context.replies.push_back(UIEvent::StatusEvent(
-                                    StatusEvent::DisplayMessage(
-                                        "Multipart attachments are not supported yet.".to_string(),
-                                    ),
-                                ));
-                                return true;
-                            }
-                            ContentType::Other { .. } => {
-                                let attachment_type = u.mime_type();
-                                let filename = u.filename();
-                                if let Ok(command) = query_default_app(&attachment_type) {
-                                    let p = create_temp_file(
-                                        &decode(u, None),
-                                        filename.as_ref().map(|s| s.as_str()),
-                                        None,
-                                        true,
-                                    );
-                                    let (exec_cmd, argument) = super::desktop_exec_to_command(
-                                        &command,
-                                        p.path.display().to_string(),
-                                        false,
-                                    );
-                                    match Command::new(&exec_cmd)
-                                        .arg(&argument)
-                                        .stdin(Stdio::piped())
-                                        .stdout(Stdio::piped())
-                                        .spawn()
-                                    {
-                                        Ok(child) => {
-                                            context.temp_files.push(p);
-                                            context.children.push(child);
-                                        }
-                                        Err(err) => {
-                                            context.replies.push_back(UIEvent::StatusEvent(
-                                                StatusEvent::DisplayMessage(format!(
-                                                    "Failed to start `{} {}`: {}",
-                                                    &exec_cmd, &argument, err
-                                                )),
-                                            ));
-                                        }
+                        ContentType::Text { .. }
+                        | ContentType::PGPSignature
+                        | ContentType::CMSSignature => {
+                            self.mode = ViewMode::Attachment(lidx);
+                            self.dirty = true;
+                        }
+                        ContentType::Multipart { .. } => {
+                            context.replies.push_back(UIEvent::StatusEvent(
+                                StatusEvent::DisplayMessage(
+                                    "Multipart attachments are not supported yet.".to_string(),
+                                ),
+                            ));
+                            return true;
+                        }
+                        ContentType::Other { .. } => {
+                            let attachment_type = u.mime_type();
+                            let filename = u.filename();
+                            if let Ok(command) = query_default_app(&attachment_type) {
+                                let p = create_temp_file(
+                                    &decode(u, None),
+                                    filename.as_deref(),
+                                    None,
+                                    true,
+                                );
+                                let (exec_cmd, argument) = super::desktop_exec_to_command(
+                                    &command,
+                                    p.path.display().to_string(),
+                                    false,
+                                );
+                                match Command::new(&exec_cmd)
+                                    .arg(&argument)
+                                    .stdin(Stdio::piped())
+                                    .stdout(Stdio::piped())
+                                    .spawn()
+                                {
+                                    Ok(child) => {
+                                        context.temp_files.push(p);
+                                        context.children.push(child);
                                     }
-                                } else {
-                                    context.replies.push_back(UIEvent::StatusEvent(
+                                    Err(err) => {
+                                        context.replies.push_back(UIEvent::StatusEvent(
+                                            StatusEvent::DisplayMessage(format!(
+                                                "Failed to start `{} {}`: {}",
+                                                &exec_cmd, &argument, err
+                                            )),
+                                        ));
+                                    }
+                                }
+                            } else {
+                                context.replies.push_back(UIEvent::StatusEvent(
                                         StatusEvent::DisplayMessage(if let Some(filename) = filename.as_ref() {
                                             format!(
                                                 "Couldn't find a default application for file {} (type {})",
@@ -446,28 +441,27 @@ impl Component for EnvelopeView {
                                             )
                                         }),
                                 ));
-                                    return true;
-                                }
-                            }
-                            ContentType::OctetStream { .. } => {
-                                context.replies.push_back(UIEvent::StatusEvent(
-                                    StatusEvent::DisplayMessage(
-                                        "application/octet-stream isn't supported yet".to_string(),
-                                    ),
-                                ));
                                 return true;
                             }
                         }
-                    } else {
-                        context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(format!(
-                                "Attachment `{}` not found.",
-                                lidx
-                            )),
-                        ));
-                        return true;
+                        ContentType::OctetStream { .. } => {
+                            context.replies.push_back(UIEvent::StatusEvent(
+                                StatusEvent::DisplayMessage(
+                                    "application/octet-stream isn't supported yet".to_string(),
+                                ),
+                            ));
+                            return true;
+                        }
                     }
-                };
+                } else {
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(format!(
+                            "Attachment `{}` not found.",
+                            lidx
+                        ))));
+                    return true;
+                }
                 return true;
             }
             UIEvent::Input(Key::Char('g'))
@@ -492,22 +486,16 @@ impl Component for EnvelopeView {
                     }
                 };
 
-                let url_launcher = context
-                    .settings
-                    .pager
-                    .url_launcher
-                    .as_ref()
-                    .map(|s| s.as_str())
-                    .unwrap_or(
-                        #[cfg(target_os = "macos")]
-                        {
-                            "open"
-                        },
-                        #[cfg(not(target_os = "macos"))]
-                        {
-                            "xdg-open"
-                        },
-                    );
+                let url_launcher = context.settings.pager.url_launcher.as_deref().unwrap_or(
+                    #[cfg(target_os = "macos")]
+                    {
+                        "open"
+                    },
+                    #[cfg(not(target_os = "macos"))]
+                    {
+                        "xdg-open"
+                    },
+                );
                 match Command::new(url_launcher)
                     .arg(url)
                     .stdin(Stdio::piped())

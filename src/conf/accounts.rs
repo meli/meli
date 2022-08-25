@@ -89,18 +89,11 @@ impl Default for MailboxStatus {
 
 impl MailboxStatus {
     pub fn is_available(&self) -> bool {
-        if let MailboxStatus::Available = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, MailboxStatus::Available)
     }
+
     pub fn is_parsing(&self) -> bool {
-        if let MailboxStatus::Parsing(_, _) = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, MailboxStatus::Parsing(_, _))
     }
 }
 
@@ -132,7 +125,7 @@ impl MailboxEntry {
         if let Some(name) = self.conf.mailbox_conf.alias.as_ref() {
             name
         } else {
-            &self.ref_mailbox.name()
+            self.ref_mailbox.name()
         }
     }
 }
@@ -165,6 +158,7 @@ pub enum JobRequest {
     },
     Fetch {
         mailbox_hash: MailboxHash,
+        #[allow(clippy::type_complexity)]
         handle: JoinHandle<(
             Option<Result<Vec<Envelope>>>,
             Pin<Box<dyn Stream<Item = Result<Vec<Envelope>>> + Send + 'static>>,
@@ -345,26 +339,17 @@ impl core::fmt::Display for JobRequest {
 
 impl JobRequest {
     pub fn is_watch(&self) -> bool {
-        match self {
-            JobRequest::Watch { .. } => true,
-            _ => false,
-        }
+        matches!(self, JobRequest::Watch { .. })
     }
 
     pub fn is_fetch(&self, mailbox_hash: MailboxHash) -> bool {
-        match self {
-            JobRequest::Fetch {
-                mailbox_hash: h, ..
-            } if *h == mailbox_hash => true,
-            _ => false,
-        }
+        matches!(self, JobRequest::Fetch {
+                 mailbox_hash: h, ..
+             } if *h == mailbox_hash)
     }
 
     pub fn is_online(&self) -> bool {
-        match self {
-            JobRequest::IsOnline { .. } => true,
-            _ => false,
-        }
+        matches!(self, JobRequest::IsOnline { .. })
     }
 }
 
@@ -388,7 +373,6 @@ impl Drop for Account {
                 let writer = io::BufWriter::new(f);
                 if let Err(err) = serde_json::to_writer(writer, &self.address_book) {
                     eprintln!("{}", err);
-                    return;
                 };
             };
             /*
@@ -455,7 +439,7 @@ impl Account {
         )?;
 
         let data_dir = xdg::BaseDirectories::with_profile("meli", &name).unwrap();
-        let mut address_book = AddressBook::with_account(&settings.account());
+        let mut address_book = AddressBook::with_account(settings.account());
 
         if let Ok(data) = data_dir.place_data_file("addressbook") {
             if data.exists() {
@@ -730,7 +714,7 @@ impl Account {
                                     format!(
                                         "Failed to update envelope {} in cache: {}",
                                         envelope.message_id_display(),
-                                        err.to_string()
+                                        err
                                     ),
                                     melib::ERROR,
                                 );
@@ -804,7 +788,7 @@ impl Account {
                                         "Failed to update envelope {} in cache: {}",
                                         self.collection.envelopes.read().unwrap()[&env_hash]
                                             .message_id_display(),
-                                        err.to_string()
+                                        err
                                     ),
                                     melib::ERROR,
                                 );
@@ -834,7 +818,7 @@ impl Account {
                                         "Failed to update envelope {} in cache: {}",
                                         &self.collection.envelopes.read().unwrap()[&new_hash]
                                             .message_id_display(),
-                                        err.to_string()
+                                        err
                                     ),
                                     melib::ERROR,
                                 );
@@ -961,7 +945,7 @@ impl Account {
                                     "Failed to remove envelope {} [{}] in cache: {}",
                                     &envelopes[&env_hash].message_id_display(),
                                     env_hash,
-                                    err.to_string()
+                                    err
                                 ),
                                 melib::ERROR,
                             );
@@ -1193,14 +1177,10 @@ impl Account {
             self.special_use_mailbox(SpecialUsageMailbox::Normal),
         ] {
             if let Some(mailbox_hash) = mailbox {
-                if let Err(e) = self.save(bytes, *mailbox_hash, Some(flags)) {
-                    debug!("{:?} could not save msg", e);
+                if let Err(err) = self.save(bytes, *mailbox_hash, Some(flags)) {
+                    debug!("{:?} could not save msg", err);
                     melib::log(
-                        format!(
-                            "Could not save in '{}' mailbox: {}.",
-                            *mailbox_hash,
-                            e.to_string()
-                        ),
+                        format!("Could not save in '{}' mailbox: {}.", *mailbox_hash, err),
                         melib::ERROR,
                     );
                 } else {
@@ -1311,9 +1291,7 @@ impl Account {
                         )
                     };
                     melib::log(&error_message, melib::LoggingLevel::ERROR);
-                    return Err(
-                        MeliError::new(error_message.clone()).set_summary("Message not sent.")
-                    );
+                    return Err(MeliError::new(error_message).set_summary("Message not sent."));
                 }
                 Ok(None)
             }
@@ -1334,11 +1312,11 @@ impl Account {
             }
             SendMail::ServerSubmission => {
                 if self.backend_capabilities.supports_submission {
-                    let job = self.backend.write().unwrap().submit(
-                        message.clone().into_bytes(),
-                        None,
-                        None,
-                    )?;
+                    let job =
+                        self.backend
+                            .write()
+                            .unwrap()
+                            .submit(message.into_bytes(), None, None)?;
 
                     let handle = if self.backend_capabilities.is_async {
                         self.job_executor.spawn_specialized(job)
@@ -1348,8 +1326,8 @@ impl Account {
                     self.insert_job(handle.job_id, JobRequest::SendMessageBackground { handle });
                     return Ok(None);
                 }
-                return Err(MeliError::new("Server does not support submission.")
-                    .set_summary("Message not sent."));
+                Err(MeliError::new("Server does not support submission.")
+                    .set_summary("Message not sent."))
             }
         }
     }
@@ -1400,8 +1378,9 @@ impl Account {
                         )
                             };
                             melib::log(&error_message, melib::LoggingLevel::ERROR);
-                            return Err(MeliError::new(error_message.clone())
-                                .set_summary("Message not sent."));
+                            return Err(
+                                MeliError::new(error_message).set_summary("Message not sent.")
+                            );
                         }
                         Ok(())
                     }
@@ -1423,8 +1402,8 @@ impl Account {
                             fut.await?;
                             return Ok(());
                         }
-                        return Err(MeliError::new("Server does not support submission.")
-                            .set_summary("Message not sent."));
+                        Err(MeliError::new("Server does not support submission.")
+                            .set_summary("Message not sent."))
                     }
                 }
             })
@@ -1537,11 +1516,7 @@ impl Account {
             .mailbox_entries
             .iter()
             .find(|(_, f)| f.conf.mailbox_conf().usage == Some(special_use));
-        if let Some(ret) = ret.as_ref() {
-            Some(ret.1.ref_mailbox.hash())
-        } else {
-            None
-        }
+        ret.as_ref().map(|ret| ret.1.ref_mailbox.hash())
     }
 
     /* Call only in Context::is_online, since only Context can launch the watcher threads if an
@@ -1575,7 +1550,7 @@ impl Account {
                 self.insert_job(handle.job_id, JobRequest::IsOnline { handle });
             }
         }
-        return self.is_online.clone();
+        self.is_online.clone()
     }
 
     pub fn search(
@@ -2272,7 +2247,7 @@ fn build_mailboxes_order(
                 node
             }
 
-            tree.push(rec(*h, &mailbox_entries, 0));
+            tree.push(rec(*h, mailbox_entries, 0));
         }
     }
 
@@ -2356,7 +2331,6 @@ fn build_mailboxes_order(
         fn rec(
             node: &mut MailboxNode,
             mailbox_entries: &IndexMap<MailboxHash, MailboxEntry>,
-            depth: usize,
             mut indentation: u32,
             has_sibling: bool,
         ) {
@@ -2379,16 +2353,10 @@ fn build_mailboxes_order(
             }
             while let Some(i) = iter.next() {
                 let c = &mut node.children[i];
-                rec(
-                    c,
-                    mailbox_entries,
-                    depth + 1,
-                    indentation,
-                    iter.peek() != None,
-                );
+                rec(c, mailbox_entries, indentation, iter.peek() != None);
             }
         }
 
-        rec(node, &mailbox_entries, 1, 0, false);
+        rec(node, mailbox_entries, 0, false);
     }
 }

@@ -101,8 +101,10 @@ pub struct ConversationsListing {
     subsort: (SortField, SortOrder),
     all_threads: HashSet<ThreadHash>,
     order: HashMap<ThreadHash, usize>,
+    #[allow(clippy::type_complexity)]
     rows: std::result::Result<Vec<((usize, (ThreadHash, EnvelopeHash)), EntryStrings)>, String>,
 
+    #[allow(clippy::type_complexity)]
     search_job: Option<(String, JoinHandle<Result<SmallVec<[EnvelopeHash; 512]>>>)>,
     filter_term: String,
     filtered_selection: Vec<ThreadHash>,
@@ -148,7 +150,7 @@ impl MailListingTrait for ConversationsListing {
             .flatten()
             .chain(cursor_iter.into_iter().flatten())
             .cloned();
-        SmallVec::from_iter(iter.into_iter())
+        SmallVec::from_iter(iter)
     }
 
     fn refresh_mailbox(&mut self, context: &mut Context, force: bool) {
@@ -376,7 +378,7 @@ impl ListingTrait for ConversationsListing {
         if let Err(message) = self.rows.as_ref() {
             clear_area(grid, area, self.color_cache.theme_default);
             write_string_to_grid(
-                &message,
+                message,
                 grid,
                 self.color_cache.theme_default.fg,
                 self.color_cache.theme_default.bg,
@@ -584,8 +586,8 @@ impl ConversationsListing {
     const DESCRIPTION: &'static str = "conversations listing";
     //const PADDING_CHAR: char = ' '; //░';
 
-    pub fn new(coordinates: (AccountHash, MailboxHash)) -> Self {
-        ConversationsListing {
+    pub fn new(coordinates: (AccountHash, MailboxHash)) -> Box<Self> {
+        Box::new(ConversationsListing {
             cursor_pos: (coordinates.0, 1, 0),
             new_cursor_pos: (coordinates.0, coordinates.1, 0),
             length: 0,
@@ -609,7 +611,7 @@ impl ConversationsListing {
             modifier_active: false,
             modifier_command: None,
             id: ComponentId::new_v4(),
-        }
+        })
     }
 
     pub(super) fn make_entry_string(
@@ -714,8 +716,7 @@ impl ConversationsListing {
                     .settings
                     .listing
                     .datetime_fmt
-                    .as_ref()
-                    .map(String::as_str)
+                    .as_deref()
                     .or(Some("%Y-%m-%d %T")),
                 false,
             ),
@@ -1226,7 +1227,7 @@ impl Component for ConversationsListing {
                 UIEvent::EnvelopeRename(ref old_hash, ref new_hash) => {
                     let account = &context.accounts[&self.cursor_pos.0];
                     let threads = account.collection.get_threads(self.cursor_pos.1);
-                    if !account.collection.contains_key(&new_hash) {
+                    if !account.collection.contains_key(new_hash) {
                         return false;
                     }
                     let env_thread_node_hash = account.collection.get_env(*new_hash).thread();
@@ -1258,7 +1259,7 @@ impl Component for ConversationsListing {
                 UIEvent::EnvelopeUpdate(ref env_hash) => {
                     let account = &context.accounts[&self.cursor_pos.0];
                     let threads = account.collection.get_threads(self.cursor_pos.1);
-                    if !account.collection.contains_key(&env_hash) {
+                    if !account.collection.contains_key(env_hash) {
                         return false;
                     }
                     let env_thread_node_hash = account.collection.get_env(*env_hash).thread();

@@ -102,7 +102,7 @@ pub fn attrs(context: &Context, key: &'static str) -> Attr {
 }
 
 #[inline(always)]
-fn unlink<'k, 't: 'k>(theme: &'t Theme, key: &'k Cow<'static, str>) -> ThemeAttribute {
+fn unlink<'k, 't: 'k>(theme: &'t Theme, key: &'k str) -> ThemeAttribute {
     ThemeAttribute {
         fg: unlink_fg(theme, &ColorField::Fg, key),
         bg: unlink_bg(theme, &ColorField::Bg, key),
@@ -111,11 +111,7 @@ fn unlink<'k, 't: 'k>(theme: &'t Theme, key: &'k Cow<'static, str>) -> ThemeAttr
 }
 
 #[inline(always)]
-fn unlink_fg<'k, 't: 'k>(
-    theme: &'t Theme,
-    mut field: &'k ColorField,
-    mut key: &'k Cow<'static, str>,
-) -> Color {
+fn unlink_fg<'k, 't: 'k>(theme: &'t Theme, mut field: &'k ColorField, mut key: &'k str) -> Color {
     loop {
         match field {
             ColorField::LikeSelf | ColorField::Fg => match &theme[key].fg {
@@ -166,11 +162,7 @@ fn unlink_fg<'k, 't: 'k>(
 }
 
 #[inline(always)]
-fn unlink_bg<'k, 't: 'k>(
-    theme: &'t Theme,
-    mut field: &'k ColorField,
-    mut key: &'k Cow<'static, str>,
-) -> Color {
+fn unlink_bg<'k, 't: 'k>(theme: &'t Theme, mut field: &'k ColorField, mut key: &'k str) -> Color {
     loop {
         match field {
             ColorField::LikeSelf | ColorField::Bg => match &theme[key].bg {
@@ -220,7 +212,7 @@ fn unlink_bg<'k, 't: 'k>(
 }
 
 #[inline(always)]
-fn unlink_attrs<'k, 't: 'k>(theme: &'t Theme, mut key: &'k Cow<'static, str>) -> Attr {
+fn unlink_attrs<'k, 't: 'k>(theme: &'t Theme, mut key: &'k str) -> Attr {
     loop {
         match &theme[key].attrs {
             ThemeValue::Link(ref new_key, ()) => key = new_key,
@@ -416,8 +408,8 @@ impl<'de> Deserialize<'de> for ThemeValue<Attr> {
         D: Deserializer<'de>,
     {
         if let Ok(s) = <String>::deserialize(deserializer) {
-            if s.starts_with("$") {
-                Ok(ThemeValue::Alias(s[1..].to_string().into()))
+            if let Some(stripped) = s.strip_prefix('$') {
+                Ok(ThemeValue::Alias(stripped.to_string().into()))
             } else if let Ok(c) = Attr::from_string_de::<'de, D, String>(s.clone()) {
                 Ok(ThemeValue::Value(c))
             } else {
@@ -467,8 +459,8 @@ impl<'de> Deserialize<'de> for ThemeValue<Color> {
         D: Deserializer<'de>,
     {
         if let Ok(s) = <String>::deserialize(deserializer) {
-            if s.starts_with("$") {
-                Ok(ThemeValue::Alias(s[1..].to_string().into()))
+            if let Some(stripped) = s.strip_prefix('$') {
+                Ok(ThemeValue::Alias(stripped.to_string().into()))
             } else if let Ok(c) = Color::from_string_de::<'de, D>(s.clone()) {
                 Ok(ThemeValue::Value(c))
             } else if s.ends_with(".fg") {
@@ -606,37 +598,26 @@ mod regexp {
 
         fn next(&mut self) -> Option<Self::Item> {
             loop {
-                let next_byte_offset = self.pcre_iter.next();
-                if next_byte_offset.is_none() {
-                    return None;
-                }
-                let next_byte_offset = next_byte_offset.unwrap();
+                let next_byte_offset = self.pcre_iter.next()?;
                 if next_byte_offset.is_err() {
                     continue;
                 }
                 let next_byte_offset = next_byte_offset.unwrap();
 
-                let mut next_char_index = self.char_indices.next();
-                if next_char_index.is_none() {
-                    return None;
-                }
+                let mut next_char_index = self.char_indices.next()?;
 
-                while next_byte_offset.start() < next_char_index.unwrap().0 {
+                while next_byte_offset.start() < next_char_index.0 {
                     self.char_offset += 1;
-                    next_char_index = self.char_indices.next();
-                    if next_char_index.is_none() {
-                        return None;
-                    }
+                    next_char_index = self.char_indices.next()?;
                 }
                 let start = self.char_offset;
 
                 while next_byte_offset.end()
-                    >= self
+                    > self
                         .char_indices
                         .next()
                         .map(|(v, _)| v)
-                        .unwrap_or(next_byte_offset.end())
-                        + 1
+                        .unwrap_or_else(|| next_byte_offset.end())
                 {
                     self.char_offset += 1;
                 }
@@ -1219,7 +1200,7 @@ impl Themes {
         Ok(())
     }
     pub fn validate(&self) -> Result<()> {
-        let hash_set: HashSet<&'static str> = DEFAULT_KEYS.into_iter().map(|k| *k).collect();
+        let hash_set: HashSet<&'static str> = DEFAULT_KEYS.iter().copied().collect();
         Themes::validate_keys("light", &self.light, &hash_set)?;
         Themes::validate_keys("dark", &self.dark, &hash_set)?;
         for (name, t) in self.other_themes.iter() {
@@ -1255,51 +1236,49 @@ impl Themes {
             t => self.other_themes.get(t).unwrap_or(&self.dark),
         };
         let mut ret = String::new();
-        ret.extend(format!("[terminal.themes.{}]\n", key).chars());
+        ret.push_str(&format!("[terminal.themes.{}]\n", key));
         if unlink {
             for k in theme.keys() {
-                ret.extend(
-                    format!(
-                        "\"{}\" = {{ fg = {}, bg = {}, attrs = {} }}\n",
-                        k,
-                        toml::to_string(&unlink_fg(&theme, &ColorField::Fg, k)).unwrap(),
-                        toml::to_string(&unlink_bg(&theme, &ColorField::Bg, k)).unwrap(),
-                        toml::to_string(&unlink_attrs(&theme, k)).unwrap(),
-                    )
-                    .chars(),
-                );
+                ret.push_str(&format!(
+                    "\"{}\" = {{ fg = {}, bg = {}, attrs = {} }}\n",
+                    k,
+                    toml::to_string(&unlink_fg(theme, &ColorField::Fg, k)).unwrap(),
+                    toml::to_string(&unlink_bg(theme, &ColorField::Bg, k)).unwrap(),
+                    toml::to_string(&unlink_attrs(theme, k)).unwrap(),
+                ));
             }
         } else {
             for k in theme.keys() {
-                ret.extend(
-                    format!(
-                        "\"{}\" = {{ fg = {}, bg = {}, attrs = {} }}\n",
-                        k,
-                        toml::to_string(&theme[k].fg).unwrap(),
-                        toml::to_string(&theme[k].bg).unwrap(),
-                        toml::to_string(&theme[k].attrs).unwrap(),
-                    )
-                    .chars(),
-                );
+                ret.push_str(&format!(
+                    "\"{}\" = {{ fg = {}, bg = {}, attrs = {} }}\n",
+                    k,
+                    toml::to_string(&theme[k].fg).unwrap(),
+                    toml::to_string(&theme[k].bg).unwrap(),
+                    toml::to_string(&theme[k].attrs).unwrap(),
+                ));
             }
-        }
-        ret
-    }
-    pub fn to_string(&self) -> String {
-        let mut ret = String::new();
-        ret.extend(self.key_to_string("dark", true).chars());
-
-        ret.push_str("\n\n");
-        ret.extend(self.key_to_string("light", true).chars());
-        for name in self.other_themes.keys() {
-            ret.push_str("\n\n");
-            ret.extend(self.key_to_string(name, true).chars());
         }
         ret
     }
 }
 
+impl std::fmt::Display for Themes {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let mut ret = String::new();
+        ret.push_str(&self.key_to_string("dark", true));
+
+        ret.push_str("\n\n");
+        ret.push_str(&self.key_to_string("light", true));
+        for name in self.other_themes.keys() {
+            ret.push_str("\n\n");
+            ret.push_str(&self.key_to_string(name, true));
+        }
+        write!(fmt, "{}", ret)
+    }
+}
+
 impl Default for Themes {
+    #[allow(clippy::needless_update)]
     fn default() -> Themes {
         let mut light = IndexMap::default();
         let mut dark = IndexMap::default();
@@ -1762,9 +1741,9 @@ impl Serialize for Themes {
                 new_map.insert(
                     k.clone(),
                     ThemeAttribute {
-                        fg: unlink_fg(&t, &ColorField::Fg, k),
-                        bg: unlink_bg(&t, &ColorField::Bg, k),
-                        attrs: unlink_attrs(&t, k),
+                        fg: unlink_fg(t, &ColorField::Fg, k),
+                        bg: unlink_bg(t, &ColorField::Bg, k),
+                        attrs: unlink_attrs(t, k),
                     },
                 );
             }
@@ -1790,10 +1769,10 @@ fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
     }
     fn is_cyclic_util<'a>(
         course: Course,
-        k: &'a Cow<'static, str>,
-        visited: &mut IndexMap<(&'a Cow<'static, str>, Course), bool>,
-        stack: &mut IndexMap<(&'a Cow<'static, str>, Course), bool>,
-        path: &mut SmallVec<[(&'a Cow<'static, str>, Course); 16]>,
+        k: &'a str,
+        visited: &mut IndexMap<(&'a str, Course), bool>,
+        stack: &mut IndexMap<(&'a str, Course), bool>,
+        path: &mut SmallVec<[(&'a str, Course); 16]>,
         theme: &'a Theme,
     ) -> bool {
         if !visited[&(k, course)] {
@@ -1804,6 +1783,7 @@ fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
                 Course::Fg => match theme[k].fg {
                     ThemeValue::Link(ref l, ColorField::LikeSelf)
                     | ThemeValue::Link(ref l, ColorField::Fg) => {
+                        let l = l.as_ref();
                         path.push((l, Course::Fg));
                         if (!visited[&(l, Course::Fg)]
                             && is_cyclic_util(course, l, visited, stack, path, theme))
@@ -1814,6 +1794,7 @@ fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
                         path.pop();
                     }
                     ThemeValue::Link(ref l, ColorField::Bg) => {
+                        let l = l.as_ref();
                         path.push((l, Course::Bg));
                         if (!visited[&(l, Course::Bg)]
                             && is_cyclic_util(Course::Bg, l, visited, stack, path, theme))
@@ -1824,6 +1805,7 @@ fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
                         path.pop();
                     }
                     ThemeValue::Alias(ref ident) => {
+                        let ident = ident.as_ref();
                         path.push((ident, Course::ColorAliasFg));
                         if (!visited[&(ident, Course::ColorAliasFg)]
                             && is_cyclic_util(
@@ -1845,6 +1827,7 @@ fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
                 Course::Bg => match theme[k].bg {
                     ThemeValue::Link(ref l, ColorField::LikeSelf)
                     | ThemeValue::Link(ref l, ColorField::Bg) => {
+                        let l = l.as_ref();
                         path.push((l, Course::Bg));
                         if (!visited[&(l, Course::Bg)]
                             && is_cyclic_util(Course::Bg, l, visited, stack, path, theme))
@@ -1855,6 +1838,7 @@ fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
                         path.pop();
                     }
                     ThemeValue::Link(ref l, ColorField::Fg) => {
+                        let l = l.as_ref();
                         path.push((l, Course::Fg));
                         if (!visited[&(l, Course::Fg)]
                             && is_cyclic_util(Course::Fg, l, visited, stack, path, theme))
@@ -1865,6 +1849,7 @@ fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
                         path.pop();
                     }
                     ThemeValue::Alias(ref ident) => {
+                        let ident = ident.as_ref();
                         path.push((ident, Course::ColorAliasBg));
                         if (!visited[&(ident, Course::ColorAliasBg)]
                             && is_cyclic_util(
@@ -1885,6 +1870,7 @@ fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
                 },
                 Course::Attrs => match theme[k].attrs {
                     ThemeValue::Link(ref l, _) => {
+                        let l = l.as_ref();
                         path.push((l, course));
                         if (!visited[&(l, course)]
                             && is_cyclic_util(course, l, visited, stack, path, theme))
@@ -1895,6 +1881,7 @@ fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
                         path.pop();
                     }
                     ThemeValue::Alias(ref ident) => {
+                        let ident = ident.as_ref();
                         path.push((ident, Course::AttrAlias));
                         if (!visited[&(ident, Course::AttrAlias)]
                             && is_cyclic_util(
@@ -1915,6 +1902,7 @@ fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
                 },
                 Course::ColorAliasFg | Course::ColorAliasBg => match &theme.color_aliases[k] {
                     ThemeValue::Link(ref l, ref field) => {
+                        let l = l.as_ref();
                         let course = match (course, field) {
                             (Course::ColorAliasFg, ColorField::LikeSelf) => Course::Fg,
                             (Course::ColorAliasBg, ColorField::LikeSelf) => Course::Bg,
@@ -1934,6 +1922,7 @@ fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
                         path.pop();
                     }
                     ThemeValue::Alias(ref ident) => {
+                        let ident = ident.as_ref();
                         path.push((ident, course));
                         if (!visited[&(ident, course)]
                             && is_cyclic_util(course, ident, visited, stack, path, theme))
@@ -1947,6 +1936,7 @@ fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
                 },
                 Course::AttrAlias => match &theme.attr_aliases[k] {
                     ThemeValue::Link(ref l, ()) => {
+                        let l = l.as_ref();
                         path.push((l, Course::Attrs));
                         if (!visited[&(l, Course::Attrs)]
                             && is_cyclic_util(Course::Attrs, l, visited, stack, path, theme))
@@ -1957,6 +1947,7 @@ fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
                         path.pop();
                     }
                     ThemeValue::Alias(ref ident) => {
+                        let ident = ident.as_ref();
                         path.push((ident, course));
                         if (!visited[&(ident, course)]
                             && is_cyclic_util(course, ident, visited, stack, path, theme))
@@ -1977,35 +1968,28 @@ fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
     let mut path = SmallVec::new();
     let mut visited = theme
         .keys()
-        .map(|k| {
-            std::iter::once(((k, Course::Fg), false))
-                .chain(std::iter::once(((k, Course::Bg), false)))
-                .chain(std::iter::once(((k, Course::Attrs), false)))
+        .flat_map(|k| {
+            std::iter::once(((k.as_ref(), Course::Fg), false))
+                .chain(std::iter::once(((k.as_ref(), Course::Bg), false)))
+                .chain(std::iter::once(((k.as_ref(), Course::Attrs), false)))
         })
-        .flatten()
-        .chain(
-            theme
-                .color_aliases
-                .keys()
-                .map(|k| {
-                    std::iter::once(((k, Course::ColorAliasFg), false))
-                        .chain(std::iter::once(((k, Course::ColorAliasBg), false)))
-                })
-                .flatten(),
-        )
+        .chain(theme.color_aliases.keys().flat_map(|k| {
+            std::iter::once(((k.as_ref(), Course::ColorAliasFg), false))
+                .chain(std::iter::once(((k.as_ref(), Course::ColorAliasBg), false)))
+        }))
         .chain(
             theme
                 .attr_aliases
                 .keys()
-                .map(|k| ((k, Course::AttrAlias), false)),
+                .map(|k| ((k.as_ref(), Course::AttrAlias), false)),
         )
-        .collect::<IndexMap<(&Cow<'static, str>, Course), bool>>();
+        .collect::<IndexMap<(&str, Course), bool>>();
 
     let mut stack = visited.clone();
     for k in theme.keys() {
         for &course in [Course::Fg, Course::Bg, Course::Attrs].iter() {
-            path.push((k, course));
-            if is_cyclic_util(course, k, &mut visited, &mut stack, &mut path, &theme) {
+            path.push((k.as_ref(), course));
+            if is_cyclic_util(course, k, &mut visited, &mut stack, &mut path, theme) {
                 let path = path
                     .into_iter()
                     .map(|(k, c)| match c {
@@ -2037,7 +2021,7 @@ fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
         }
     }
 
-    return Ok(());
+    Ok(())
 }
 
 #[test]

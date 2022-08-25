@@ -169,7 +169,7 @@ mod dbus {
 }
 
 /// Passes notifications to a user defined shell command
-#[derive(Debug)]
+#[derive(Default, Debug)]
 pub struct NotificationCommand {}
 
 impl NotificationCommand {
@@ -204,7 +204,7 @@ impl Component for NotificationCommand {
                         }
                         Err(err) => {
                             log(
-                                format!("Could not run notification script: {}.", err.to_string()),
+                                format!("Could not run notification script: {}.", err),
                                 ERROR,
                             );
                             debug!("Could not run notification script: {:?}", err);
@@ -226,10 +226,7 @@ impl Component for NotificationCommand {
                             }
                             Err(err) => {
                                 log(
-                                    format!(
-                                        "Could not run notification script: {}.",
-                                        err.to_string()
-                                    ),
+                                    format!("Could not run notification script: {}.", err),
                                     ERROR,
                                 );
                                 debug!("Could not run notification script: {:?}", err);

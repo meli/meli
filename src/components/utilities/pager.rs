@@ -39,7 +39,6 @@ pub struct Pager {
     colors: ThemeAttribute,
     initialised: bool,
     show_scrollbar: bool,
-    content: CellBuffer,
     filtered_content: Option<(String, Result<CellBuffer>)>,
     text_lines: Vec<String>,
     line_breaker: LineBreakText,
@@ -57,8 +56,10 @@ impl Pager {
     pub const DESCRIPTION: &'static str = "pager";
     const PAGES_AHEAD_TO_RENDER_NO: usize = 16;
     pub fn new(context: &Context) -> Self {
-        let mut ret = Pager::default();
-        ret.minimum_width = context.settings.pager.minimum_width;
+        let mut ret = Pager {
+            minimum_width: context.settings.pager.minimum_width,
+            ..Pager::default()
+        };
         ret.set_colors(crate::conf::value(context, "theme_default"))
             .set_reflow(if context.settings.pager.split_long_lines {
                 Reflow::All
@@ -178,10 +179,7 @@ impl Pager {
                 .stdout(Stdio::piped())
                 .spawn()
                 .chain_err_summary(|| "Failed to start pager filter process")?;
-            let stdin = filter_child
-                .stdin
-                .as_mut()
-                .ok_or_else(|| "failed to open stdin")?;
+            let stdin = filter_child.stdin.as_mut().ok_or("failed to open stdin")?;
             stdin
                 .write_all(text.as_bytes())
                 .chain_err_summary(|| "Failed to write to stdin")?;
@@ -196,7 +194,7 @@ impl Pager {
             for b in out {
                 embedded.process_byte(&mut dev_null, b);
             }
-            Ok(std::mem::replace(embedded.buffer_mut(), Default::default()))
+            Ok(std::mem::take(embedded.buffer_mut()))
         };
         let buf = _f(cmd, &self.text);
         if let Some((width, height)) = buf.as_ref().ok().map(CellBuffer::size) {
@@ -301,7 +299,7 @@ impl Pager {
                 Ok(ref content) => {
                     copy_area(
                         grid,
-                        &content,
+                        content,
                         area,
                         (
                             (
@@ -353,7 +351,7 @@ impl Pager {
                 (upper_left, bottom_right),
                 None,
             );
-            if l.starts_with("⤷") {
+            if l.starts_with('⤷') {
                 grid[upper_left]
                     .set_fg(crate::conf::value(context, "highlight").fg)
                     .set_attrs(crate::conf::value(context, "highlight").attrs);

@@ -149,12 +149,12 @@ pub enum UIEvent {
     GlobalUIDialog(Box<dyn Component>),
     Timer(Uuid),
     ConfigReload {
-        old_settings: crate::conf::Settings,
+        old_settings: Box<crate::conf::Settings>,
     },
     VisibilityChange(bool),
 }
 
-pub struct CallbackFn(pub Box<dyn FnOnce(&mut crate::Context) -> () + Send + 'static>);
+pub struct CallbackFn(pub Box<dyn FnOnce(&mut crate::Context) + Send + 'static>);
 
 impl core::fmt::Debug for CallbackFn {
     fn fmt(&self, fmt: &mut core::fmt::Formatter) -> core::fmt::Result {
@@ -322,8 +322,6 @@ pub struct RateLimit {
     last_tick: std::time::Instant,
     pub timer: crate::jobs::Timer,
     rate: std::time::Duration,
-    reqs: u64,
-    millis: std::time::Duration,
     pub active: bool,
 }
 
@@ -336,8 +334,6 @@ impl RateLimit {
                 std::time::Duration::from_millis(millis),
             ),
             rate: std::time::Duration::from_millis(millis / reqs),
-            reqs,
-            millis: std::time::Duration::from_millis(millis),
             active: false,
         }
     }

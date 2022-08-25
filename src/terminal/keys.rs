@@ -182,7 +182,7 @@ pub fn get_events(
         select! {
             default => {
                 if stdin_fd.revents().is_some() {
-                    'stdin_while: while let Some(c) = stdin_iter.next(){
+                    'stdin_while: for c in stdin_iter.by_ref() {
                         match (c, &mut input_mode) {
                             (Ok((TermionEvent::Key(k), bytes)), InputMode::Normal) => {
                                 closure((Key::from(k), bytes));
@@ -192,7 +192,7 @@ pub fn get_events(
                                 Ok((TermionEvent::Key(TermionKey::Char(k)), ref mut bytes)), InputMode::Paste(ref mut buf),
                             ) => {
                                 paste_buf.push(k);
-                                let bytes = std::mem::replace(bytes, Vec::new());
+                                let bytes = std::mem::take(bytes);
                                 buf.extend(bytes.into_iter());
                                 continue 'stdin_while;
                             }
@@ -203,7 +203,7 @@ pub fn get_events(
                             (Ok((TermionEvent::Unsupported(ref k), _)), InputMode::Paste(ref mut buf))
                                 if k.as_slice() == BRACKET_PASTE_END =>
                                 {
-                                    let buf = std::mem::replace(buf, Vec::new());
+                                    let buf = std::mem::take(buf);
                                     input_mode = InputMode::Normal;
                                     let ret = Key::from(&paste_buf);
                                     paste_buf.clear();
@@ -277,12 +277,12 @@ impl<'de> Deserialize<'de> for Key {
                     "Enter" | "enter" => Ok(Key::Char('\n')),
                     "Tab" | "tab" => Ok(Key::Char('\t')),
                     "Esc" | "esc" => Ok(Key::Esc),
-                    ref s if s.len() == 1 => Ok(Key::Char(s.chars().nth(0).unwrap())),
-                    ref s if s.starts_with("F") && (s.len() == 2 || s.len() == 3) => {
+                    s if s.len() == 1 => Ok(Key::Char(s.chars().next().unwrap())),
+                    s if s.starts_with('F') && (s.len() == 2 || s.len() == 3) => {
                         use std::str::FromStr;
 
                         if let Ok(n) = u8::from_str(&s[1..]) {
-                            if n >= 1 && n <= 12 {
+                            if (1..=12).contains(&n) {
                                 return Ok(Key::F(n));
                             }
                         }
@@ -291,7 +291,7 @@ impl<'de> Deserialize<'de> for Key {
                                     &s[1..]
                         )))
                     }
-                    ref s if s.starts_with("M-") && s.len() == 3 => {
+                    s if s.starts_with("M-") && s.len() == 3 => {
                         let c = s.as_bytes()[2] as char;
 
                         if c.is_lowercase() || c.is_numeric() {
@@ -303,7 +303,7 @@ impl<'de> Deserialize<'de> for Key {
                                     &s[2..]
                         )))
                     }
-                    ref s if s.starts_with("C-") && s.len() == 3 => {
+                    s if s.starts_with("C-") && s.len() == 3 => {
                         let c = s.as_bytes()[2] as char;
 
                         if c.is_lowercase() || c.is_numeric() {

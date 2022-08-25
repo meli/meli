@@ -34,7 +34,7 @@ enum ViewMode {
 #[derive(Debug)]
 struct AccountMenuEntry {
     name: String,
-    hash: AccountHash,
+    _hash: AccountHash,
     // Index in the config account vector.
     index: usize,
 }
@@ -82,7 +82,7 @@ impl ContactList {
             .enumerate()
             .map(|(i, (h, a))| AccountMenuEntry {
                 name: a.name().to_string(),
-                hash: *h,
+                _hash: *h,
                 index: i,
             })
             .collect();
@@ -216,7 +216,6 @@ impl ContactList {
                 ((0, 0), (message.len() - 1, 0)),
                 None,
             );
-            return;
         }
     }
 
@@ -241,7 +240,7 @@ impl ContactList {
         self.dirty = false;
         let mut y = get_y(upper_left);
         for a in &self.accounts {
-            self.print_account(grid, (set_y(upper_left, y), bottom_right), &a, context);
+            self.print_account(grid, (set_y(upper_left, y), bottom_right), a, context);
             y += 1;
         }
 
@@ -393,6 +392,7 @@ impl ContactList {
                     }
                 }
                 PageMovement::PageDown(multiplier) => {
+                    #[allow(clippy::comparison_chain)]
                     if self.new_cursor_pos + rows * multiplier < self.length {
                         self.new_cursor_pos += rows * multiplier;
                     } else if self.new_cursor_pos + rows * multiplier > self.length {
@@ -782,7 +782,7 @@ impl Component for ContactList {
                         .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
                     return true;
                 }
-                UIEvent::Input(Key::Char(c)) if c >= '0' && c <= '9' => {
+                UIEvent::Input(Key::Char(c)) if ('0'..='9').contains(&c) => {
                     self.cmd_buf.push(c);
                     context
                         .replies

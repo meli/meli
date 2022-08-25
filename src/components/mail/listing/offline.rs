@@ -41,7 +41,7 @@ impl MailListingTrait for OfflineListing {
     }
 
     fn get_focused_items(&self, _context: &Context) -> SmallVec<[ThreadHash; 8]> {
-        return SmallVec::new();
+        SmallVec::new()
     }
 
     fn refresh_mailbox(&mut self, _context: &mut Context, _force: bool) {}
@@ -93,14 +93,14 @@ impl fmt::Display for OfflineListing {
 }
 
 impl OfflineListing {
-    pub fn new(cursor_pos: (AccountHash, MailboxHash)) -> Self {
-        OfflineListing {
+    pub fn new(cursor_pos: (AccountHash, MailboxHash)) -> Box<Self> {
+        Box::new(OfflineListing {
             cursor_pos,
             _row_updates: SmallVec::new(),
             _selection: HashMap::default(),
             dirty: true,
             id: ComponentId::new_v4(),
-        }
+        })
     }
 }
 

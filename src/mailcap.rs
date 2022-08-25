@@ -96,6 +96,7 @@ impl MailcapEntry {
                 //let flags = parts_iter.next().unwrap();
                 if key.starts_with(&content_type) || key.matches_glob(&content_type) {
                     let mut copiousoutput = false;
+                    #[allow(clippy::while_let_on_iterator)]
                     while let Some(flag) = parts_iter.next() {
                         if flag.trim() == "copiousoutput" {
                             copiousoutput = true;
@@ -118,6 +119,7 @@ impl MailcapEntry {
                 //let flags = parts_iter.next().unwrap();
                 if key.starts_with(&content_type) || key.matches_glob(&content_type) {
                     let mut copiousoutput = false;
+                    #[allow(clippy::while_let_on_iterator)]
                     while let Some(flag) = parts_iter.next() {
                         if flag.trim() == "copiousoutput" {
                             copiousoutput = true;
@@ -178,7 +180,7 @@ impl MailcapEntry {
                     .collect::<Vec<String>>();
                 let cmd_string = format!("{} {}", cmd, args.join(" "));
                 melib::log(
-                    format!("Executing: sh -c \"{}\"", cmd_string.replace("\"", "\\\"")),
+                    format!("Executing: sh -c \"{}\"", cmd_string.replace('"', "\\\"")),
                     melib::DEBUG,
                 );
                 if copiousoutput {
@@ -212,25 +214,23 @@ impl MailcapEntry {
                         .spawn()?;
                     pager.stdin.as_mut().unwrap().write_all(&out)?;
                     debug!(pager.wait_with_output()?.stdout);
+                } else if needs_stdin {
+                    let mut child = Command::new("sh")
+                        .args(&["-c", &cmd_string])
+                        .stdin(Stdio::piped())
+                        .stdout(Stdio::inherit())
+                        .spawn()?;
+
+                    child.stdin.as_mut().unwrap().write_all(&decode(a, None))?;
+                    debug!(child.wait_with_output()?.stdout);
                 } else {
-                    if needs_stdin {
-                        let mut child = Command::new("sh")
-                            .args(&["-c", &cmd_string])
-                            .stdin(Stdio::piped())
-                            .stdout(Stdio::inherit())
-                            .spawn()?;
+                    let child = Command::new("sh")
+                        .args(&["-c", &cmd_string])
+                        .stdin(Stdio::inherit())
+                        .stdout(Stdio::inherit())
+                        .spawn()?;
 
-                        child.stdin.as_mut().unwrap().write_all(&decode(a, None))?;
-                        debug!(child.wait_with_output()?.stdout);
-                    } else {
-                        let child = Command::new("sh")
-                            .args(&["-c", &cmd_string])
-                            .stdin(Stdio::inherit())
-                            .stdout(Stdio::inherit())
-                            .spawn()?;
-
-                        debug!(child.wait_with_output()?.stdout);
-                    }
+                    debug!(child.wait_with_output()?.stdout);
                 }
                 context.replies.push_back(UIEvent::Fork(ForkType::Finished));
                 Ok(())

@@ -134,20 +134,18 @@ impl Context {
         } = self;
         let was_online = accounts[account_pos].is_online.is_ok();
         let ret = accounts[account_pos].is_online();
-        if ret.is_ok() {
-            if !was_online {
-                debug!("inserting mailbox hashes:");
-                for mailbox_node in accounts[account_pos].list_mailboxes() {
-                    debug!(
-                        "hash & mailbox: {:?} {}",
-                        mailbox_node.hash,
-                        accounts[account_pos][&mailbox_node.hash].name()
-                    );
-                }
-                accounts[account_pos].watch();
-
-                replies.push_back(UIEvent::AccountStatusChange(accounts[account_pos].hash()));
+        if ret.is_ok() && !was_online {
+            debug!("inserting mailbox hashes:");
+            for mailbox_node in accounts[account_pos].list_mailboxes() {
+                debug!(
+                    "hash & mailbox: {:?} {}",
+                    mailbox_node.hash,
+                    accounts[account_pos][&mailbox_node.hash].name()
+                );
             }
+            accounts[account_pos].watch();
+
+            replies.push_back(UIEvent::AccountStatusChange(accounts[account_pos].hash()));
         }
         if ret.is_ok() != was_online {
             replies.push_back(UIEvent::AccountStatusChange(accounts[account_pos].hash()));
@@ -331,7 +329,7 @@ impl State {
             display_messages_area: ((0, 0), (0, 0)),
             context: Context {
                 accounts,
-                settings: settings,
+                settings,
                 dirty_areas: VecDeque::with_capacity(5),
                 replies: VecDeque::with_capacity(5),
                 temp_files: Vec::new(),
@@ -399,10 +397,8 @@ impl State {
                 }
                 self.rcv_event(notification);
             }
-        } else {
-            if let melib::backends::RefreshEventKind::Failure(err) = event.kind {
-                debug!(err);
-            }
+        } else if let melib::backends::RefreshEventKind::Failure(err) = event.kind {
+            debug!(err);
         }
     }
 
@@ -850,7 +846,7 @@ impl State {
                 ));
             }
             AccountAction(ref account_name, PrintAccountSetting(ref setting)) => {
-                let path = setting.split(".").collect::<SmallVec<[&str; 16]>>();
+                let path = setting.split('.').collect::<SmallVec<[&str; 16]>>();
                 if let Some(pos) = self
                     .context
                     .accounts
@@ -858,13 +854,12 @@ impl State {
                     .position(|(_h, a)| a.name() == account_name)
                 {
                     self.context.replies.push_back(UIEvent::StatusEvent(
-                        StatusEvent::UpdateStatus(format!(
-                            "{}",
+                        StatusEvent::UpdateStatus(
                             self.context.accounts[pos]
                                 .settings
                                 .lookup("settings", &path)
-                                .unwrap_or_else(|err| err.to_string())
-                        )),
+                                .unwrap_or_else(|err| err.to_string()),
+                        ),
                     ));
                 } else {
                     self.context.replies.push_back(UIEvent::Notification(
@@ -872,20 +867,18 @@ impl State {
                         format!("Account {} was not found.", account_name),
                         Some(NotificationType::Error(ErrorKind::None)),
                     ));
-                    return;
                 }
             }
             PrintSetting(ref setting) => {
-                let path = setting.split(".").collect::<SmallVec<[&str; 16]>>();
+                let path = setting.split('.').collect::<SmallVec<[&str; 16]>>();
                 self.context
                     .replies
-                    .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(format!(
-                        "{}",
+                    .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
                         self.context
                             .settings
                             .lookup("settings", &path)
-                            .unwrap_or_else(|err| err.to_string())
-                    ))));
+                            .unwrap_or_else(|err| err.to_string()),
+                    )));
             }
             ToggleMouse => {
                 self.screen.mouse = !self.screen.mouse;
@@ -920,7 +913,7 @@ impl State {
         match event {
             // Command type is handled only by State.
             UIEvent::Command(cmd) => {
-                if let Ok(action) = parse_command(&cmd.as_bytes()) {
+                if let Ok(action) = parse_command(cmd.as_bytes()) {
                     if action.needs_confirmation() {
                         self.overlay.push(Box::new(UIConfirmationDialog::new(
                             "You sure?",
@@ -932,7 +925,7 @@ impl State {
                                     Box::new(if result { Some(action) } else { None }),
                                 ))
                             })),
-                            &mut self.context,
+                            &self.context,
                         )));
                     } else if let Action::ReloadConfiguration = action {
                         match Settings::new().and_then(|new_settings| {
@@ -952,7 +945,7 @@ impl State {
                             Ok(new_settings)
                         }) {
                             Ok(new_settings) => {
-                                let old_settings = std::mem::replace(&mut self.context.settings, new_settings);
+                                let old_settings = Box::new(std::mem::replace(&mut self.context.settings, new_settings));
                                 self.context.replies.push_back(UIEvent::ConfigReload {
                                     old_settings
                                 });
@@ -1130,11 +1123,8 @@ impl State {
                 match w {
                     Ok(Some(_)) => true,
                     Ok(None) => false,
-                    Err(e) => {
-                        log(
-                            format!("Failed to wait on editor process: {}", e.to_string()),
-                            ERROR,
-                        );
+                    Err(err) => {
+                        log(format!("Failed to wait on editor process: {}", err), ERROR);
                         return None;
                     }
                 }
@@ -1144,11 +1134,8 @@ impl State {
                 match w {
                     Ok(Some(_)) => true,
                     Ok(None) => false,
-                    Err(e) => {
-                        log(
-                            format!("Failed to wait on child process: {}", e.to_string()),
-                            ERROR,
-                        );
+                    Err(err) => {
+                        log(format!("Failed to wait on child process: {}", err), ERROR);
                         return None;
                     }
                 }
@@ -1174,7 +1161,7 @@ impl State {
     }
 
     pub fn switch_to_alternate_screen(&mut self) {
-        self.screen.switch_to_alternate_screen(&mut self.context);
+        self.screen.switch_to_alternate_screen(&self.context);
     }
 
     fn flush(&mut self) {

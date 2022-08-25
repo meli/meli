@@ -29,7 +29,7 @@ pub use self::contact_list::*;
 #[derive(Debug)]
 enum ViewMode {
     ReadOnly,
-    Discard(UIDialog<char>),
+    Discard(Box<UIDialog<char>>),
     Edit,
     //New,
 }
@@ -113,27 +113,21 @@ impl ContactManager {
         self.form = FormWidget::new(("Save".into(), true));
         self.form.add_button(("Cancel(Esc)".into(), false));
         self.form
-            .push(("NAME".into(), self.card.name().to_string().into()));
+            .push(("NAME".into(), self.card.name().to_string()));
         self.form.push((
             "ADDITIONAL NAME".into(),
-            self.card.additionalname().to_string().into(),
-        ));
-        self.form.push((
-            "NAME PREFIX".into(),
-            self.card.name_prefix().to_string().into(),
-        ));
-        self.form.push((
-            "NAME SUFFIX".into(),
-            self.card.name_suffix().to_string().into(),
+            self.card.additionalname().to_string(),
         ));
         self.form
-            .push(("E-MAIL".into(), self.card.email().to_string().into()));
+            .push(("NAME PREFIX".into(), self.card.name_prefix().to_string()));
         self.form
-            .push(("URL".into(), self.card.url().to_string().into()));
+            .push(("NAME SUFFIX".into(), self.card.name_suffix().to_string()));
         self.form
-            .push(("KEY".into(), self.card.key().to_string().into()));
+            .push(("E-MAIL".into(), self.card.email().to_string()));
+        self.form.push(("URL".into(), self.card.url().to_string()));
+        self.form.push(("KEY".into(), self.card.key().to_string()));
         for (k, v) in self.card.extra_properties() {
-            self.form.push((k.to_string().into(), v.to_string().into()));
+            self.form.push((k.to_string().into(), v.to_string()));
         }
     }
 
@@ -168,26 +162,20 @@ impl Component for ContactManager {
             (set_y(upper_left, get_y(upper_left) + 2), bottom_right),
             context,
         );
-        match self.mode {
-            ViewMode::Discard(ref mut selector) => {
-                /* Let user choose whether to quit with/without saving or cancel */
-                selector.draw(grid, area, context);
-            }
-            _ => {}
+        if let ViewMode::Discard(ref mut selector) = self.mode {
+            /* Let user choose whether to quit with/without saving or cancel */
+            selector.draw(grid, area, context);
         }
 
         context.dirty_areas.push_back(area);
     }
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
-        match event {
-            UIEvent::ConfigReload { old_settings: _ } => {
-                self.theme_default = crate::conf::value(context, "theme_default");
-                self.content = CellBuffer::new_with_context(100, 1, None, context);
-                self.initialized = false;
-                self.set_dirty(true);
-            }
-            _ => {}
+        if let UIEvent::ConfigReload { old_settings: _ } = event {
+            self.theme_default = crate::conf::value(context, "theme_default");
+            self.content = CellBuffer::new_with_context(100, 1, None, context);
+            self.initialized = false;
+            self.set_dirty(true);
         }
         match self.mode {
             ViewMode::Discard(ref mut selector) => {
@@ -209,9 +197,7 @@ impl Component for ContactManager {
                     match self.form.buttons_result() {
                         None => {}
                         Some(true) => {
-                            let fields = std::mem::replace(&mut self.form, FormWidget::default())
-                                .collect()
-                                .unwrap();
+                            let fields = std::mem::take(&mut self.form).collect().unwrap();
                             let fields: HashMap<String, String> = fields
                                 .into_iter()
                                 .map(|(s, v)| {
@@ -290,7 +276,7 @@ impl Component for ContactManager {
 
         let parent_id = self.parent_id;
         /* Play it safe and ask user for confirmation */
-        self.mode = ViewMode::Discard(UIDialog::new(
+        self.mode = ViewMode::Discard(Box::new(UIDialog::new(
             "this contact has unsaved changes",
             vec![
                 ('x', "quit without saving".to_string()),
@@ -305,7 +291,7 @@ impl Component for ContactManager {
                 _ => None,
             })),
             context,
-        ));
+        )));
         self.set_dirty(true);
         false
     }

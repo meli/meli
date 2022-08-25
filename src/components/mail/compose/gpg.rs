@@ -36,7 +36,7 @@ pub enum KeySelection {
         err: MeliError,
     },
     Loaded {
-        widget: UIDialog<melib::gpgme::Key>,
+        widget: Box<UIDialog<melib::gpgme::Key>>,
         keys: Vec<melib::gpgme::Key>,
     },
 }
@@ -129,7 +129,7 @@ impl Component for KeySelection {
                                     match Self::new(
                                         *secret,
                                         *local,
-                                        std::mem::replace(pattern, String::new()),
+                                        std::mem::take(pattern),
                                         *allow_remote_lookup,
                                         context,
                                     ) {
@@ -166,7 +166,7 @@ impl Component for KeySelection {
                                 }
                                 return false;
                             }
-                            let mut widget = UIDialog::new(
+                            let mut widget = Box::new(UIDialog::new(
                                 "select key",
                                 keys.iter()
                                     .map(|k| {
@@ -185,12 +185,12 @@ impl Component for KeySelection {
                                     move |id: ComponentId, results: &[melib::gpgme::Key]| {
                                         Some(UIEvent::FinishedUIDialog(
                                             id,
-                                            Box::new(results.get(0).map(|k| k.clone())),
+                                            Box::new(results.get(0).cloned()),
                                         ))
                                     },
                                 )),
                                 context,
-                            );
+                            ));
                             widget.set_dirty(true);
                             *self = KeySelection::Loaded { widget, keys };
                         }
@@ -275,8 +275,8 @@ pub struct GpgComposeState {
     pub sign_keys: Vec<melib::gpgme::Key>,
 }
 
-impl GpgComposeState {
-    pub fn new() -> Self {
+impl Default for GpgComposeState {
+    fn default() -> Self {
         GpgComposeState {
             sign_mail: ToggleFlag::Unset,
             encrypt_mail: ToggleFlag::Unset,

@@ -415,11 +415,7 @@ impl ThreadView {
         idx: usize,
         context: &Context,
     ) {
-        let visibles: Vec<&usize> = self
-            .visible_entries
-            .iter()
-            .flat_map(|ref v| v.iter())
-            .collect();
+        let visibles: Vec<&usize> = self.visible_entries.iter().flat_map(|v| v.iter()).collect();
         if idx == *visibles[self.cursor_pos] {
             let theme_default = crate::conf::value(context, "theme_default");
             let bg_color = crate::conf::value(context, "highlight").bg;
@@ -514,11 +510,8 @@ impl ThreadView {
             if page_no != prev_page_no {
                 clear_area(grid, area, crate::conf::value(context, "theme_default"));
             }
-            let visibles: Vec<&usize> = self
-                .visible_entries
-                .iter()
-                .flat_map(|ref v| v.iter())
-                .collect();
+            let visibles: Vec<&usize> =
+                self.visible_entries.iter().flat_map(|v| v.iter()).collect();
 
             for (visible_entry_counter, v) in visibles.iter().skip(top_idx).take(rows).enumerate() {
                 if visible_entry_counter >= rows {
@@ -595,11 +588,8 @@ impl ThreadView {
             self.cursor_pos = self.new_cursor_pos;
             /* If cursor position has changed, remove the highlight from the previous position and
              * apply it in the new one. */
-            let visibles: Vec<&usize> = self
-                .visible_entries
-                .iter()
-                .flat_map(|ref v| v.iter())
-                .collect();
+            let visibles: Vec<&usize> =
+                self.visible_entries.iter().flat_map(|v| v.iter()).collect();
             for &idx in &[old_cursor_pos, self.cursor_pos] {
                 let entry_idx = *visibles[idx];
                 let src_area = { get_entry_area(entry_idx, &self.entries) };
@@ -948,11 +938,7 @@ impl ThreadView {
 
     /// Current position in self.entries (not in drawn entries which might exclude nonvisible ones)
     fn current_pos(&self) -> usize {
-        let visibles: Vec<&usize> = self
-            .visible_entries
-            .iter()
-            .flat_map(|ref v| v.iter())
-            .collect();
+        let visibles: Vec<&usize> = self.visible_entries.iter().flat_map(|v| v.iter()).collect();
         *visibles[self.new_cursor_pos]
     }
 }
@@ -999,15 +985,12 @@ impl Component for ThreadView {
         self.dirty = false;
     }
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
-        match event {
-            UIEvent::Action(Listing(OpenInNewTab)) => {
-                /* Handle this before self.mailview does */
-                context
-                    .replies
-                    .push_back(UIEvent::Action(Tab(New(Some(Box::new(self.clone()))))));
-                return true;
-            }
-            _ => {}
+        if let UIEvent::Action(Listing(OpenInNewTab)) = event {
+            /* Handle this before self.mailview does */
+            context
+                .replies
+                .push_back(UIEvent::Action(Tab(New(Some(Box::new(self.clone()))))));
+            return true;
         }
 
         if self.show_mailview && self.mailview.process_event(event, context) {

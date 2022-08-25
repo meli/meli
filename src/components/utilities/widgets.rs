@@ -42,7 +42,7 @@ impl Default for FormFocus {
 }
 
 pub enum Field {
-    Text(UText, Option<(AutoCompleteFn, AutoComplete)>),
+    Text(UText, Option<(AutoCompleteFn, Box<AutoComplete>)>),
     Choice(Vec<Cow<'static, str>>, Cursor),
 }
 
@@ -454,6 +454,10 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> FormWidget<T> 
 
     pub fn len(&self) -> usize {
         self.layout.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.layout.len() == 0
     }
 
     pub fn add_button(&mut self, val: (Cow<'static, str>, T)) {
@@ -1003,7 +1007,7 @@ impl Component for AutoComplete {
 }
 
 impl AutoComplete {
-    pub fn new(entries: Vec<AutoCompleteEntry>) -> Self {
+    pub fn new(entries: Vec<AutoCompleteEntry>) -> Box<Self> {
         let mut ret = AutoComplete {
             entries: Vec::new(),
             content: CellBuffer::default(),
@@ -1012,7 +1016,7 @@ impl AutoComplete {
             id: ComponentId::new_v4(),
         };
         ret.set_suggestions(entries);
-        ret
+        Box::new(ret)
     }
 
     pub fn set_suggestions(&mut self, entries: Vec<AutoCompleteEntry>) -> bool {
@@ -1401,7 +1405,7 @@ impl Component for ProgressSpinner {
             if self.active {
                 write_string_to_grid(
                     match self.kind.as_ref() {
-                        Ok(kind) => (Self::KINDS[*kind].1)[self.stage].as_ref(),
+                        Ok(kind) => (Self::KINDS[*kind].1)[self.stage],
                         Err(custom) => custom[self.stage].as_ref(),
                     },
                     grid,

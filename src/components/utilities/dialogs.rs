@@ -760,7 +760,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selec
     ) -> Selector<T, F> {
         let entry_titles = entries
             .iter_mut()
-            .map(|(_id, ref mut title)| std::mem::replace(title, String::new()))
+            .map(|(_id, ref mut title)| std::mem::take(title))
             .collect::<Vec<String>>();
         let mut identifiers: Vec<(T, bool)> =
             entries.into_iter().map(|(id, _)| (id, false)).collect();
@@ -812,7 +812,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selec
         if self.single_only {
             for (i, e) in self.entry_titles.iter().enumerate() {
                 write_string_to_grid(
-                    &e,
+                    e,
                     &mut content,
                     self.theme_default.fg,
                     self.theme_default.bg,
@@ -824,7 +824,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selec
         } else {
             for (i, e) in self.entry_titles.iter().enumerate() {
                 write_string_to_grid(
-                    &format!("[ ] {}", &e),
+                    &format!("[ ] {}", e),
                     &mut content,
                     self.theme_default.fg,
                     self.theme_default.bg,

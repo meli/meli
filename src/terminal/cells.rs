@@ -151,7 +151,7 @@ impl CellBuffer {
     pub fn resize(&mut self, newcols: usize, newrows: usize, blank: Option<Cell>) -> bool {
         let newlen = newcols * newrows;
         if (self.cols, self.rows) == (newcols, newrows) || newlen >= Self::MAX_SIZE {
-            return !(newlen >= Self::MAX_SIZE);
+            return newlen < Self::MAX_SIZE;
         }
 
         let blank = blank.unwrap_or(self.default_cell);
@@ -432,10 +432,10 @@ impl CellBuffer {
     pub fn set_tag(&mut self, tag: u64, start: (usize, usize), end: (usize, usize)) {
         let start = self
             .pos_to_index(start.0, start.1)
-            .unwrap_or(self.buf.len().saturating_sub(1));
+            .unwrap_or_else(|| self.buf.len().saturating_sub(1));
         let end = self
             .pos_to_index(end.0, end.1)
-            .unwrap_or(self.buf.len().saturating_sub(1));
+            .unwrap_or_else(|| self.buf.len().saturating_sub(1));
         if start != end {
             self.tag_associations.push((tag, (start, end)));
         }
@@ -856,9 +856,9 @@ impl Attr {
             "Blink" => Ok(Attr::BLINK),
             "Reverse" => Ok(Attr::REVERSE),
             "Hidden" => Ok(Attr::HIDDEN),
-            combination if combination.contains("|") => {
+            combination if combination.contains('|') => {
                 let mut ret = Attr::DEFAULT;
-                for c in combination.trim().split("|") {
+                for c in combination.trim().split('|') {
                     ret |= Self::from_string_de::<'de, D, &str>(c)?;
                 }
                 Ok(ret)
@@ -1725,7 +1725,7 @@ impl core::cmp::Ord for FormatTag {
 
 impl core::cmp::PartialOrd for FormatTag {
     fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
-        Some(self.cmp(&other))
+        Some(self.cmp(other))
     }
 }
 

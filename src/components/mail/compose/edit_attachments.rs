@@ -37,7 +37,7 @@ impl Default for EditAttachmentCursor {
 pub enum EditAttachmentMode {
     Overview,
     Edit {
-        inner: FormWidget<FormButtonActions>,
+        inner: Box<FormWidget<FormButtonActions>>,
         no: usize,
     },
 }
@@ -68,7 +68,7 @@ impl EditAttachments {
 }
 
 impl EditAttachmentsRefMut<'_, '_> {
-    fn new_edit_widget(&self, no: usize) -> Option<FormWidget<FormButtonActions>> {
+    fn new_edit_widget(&self, no: usize) -> Option<Box<FormWidget<FormButtonActions>>> {
         if no >= self.draft.attachments().len() {
             return None;
         }
@@ -80,7 +80,7 @@ impl EditAttachmentsRefMut<'_, '_> {
         ret.add_button(("Cancel".into(), FormButtonActions::Cancel));
         ret.push(("Filename".into(), filename.unwrap_or_default().to_string()));
         ret.push(("Mime type".into(), mime_type.to_string()));
-        Some(ret)
+        Some(Box::new(ret))
     }
 }
 

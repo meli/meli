@@ -133,6 +133,7 @@ pub struct PlainListing {
     /// Cache current view.
     data_columns: DataColumns,
 
+    #[allow(clippy::type_complexity)]
     search_job: Option<(String, JoinHandle<Result<SmallVec<[EnvelopeHash; 512]>>>)>,
     filter_term: String,
     filtered_selection: Vec<EnvelopeHash>,
@@ -311,7 +312,7 @@ impl MailListingTrait for PlainListing {
         let roots = items
             .filter_map(|r| threads.groups[&r].root().map(|r| r.root))
             .collect::<_>();
-        let thread_nodes: &HashMap<ThreadNodeHash, ThreadNode> = &threads.thread_nodes();
+        let thread_nodes: &HashMap<ThreadNodeHash, ThreadNode> = threads.thread_nodes();
         let env_hash_iter = Box::new(
             threads
                 .threads_group_iter(roots)
@@ -685,8 +686,8 @@ impl fmt::Display for PlainListing {
 
 impl PlainListing {
     const DESCRIPTION: &'static str = "plain listing";
-    pub fn new(coordinates: (AccountHash, MailboxHash)) -> Self {
-        PlainListing {
+    pub fn new(coordinates: (AccountHash, MailboxHash)) -> Box<Self> {
+        Box::new(PlainListing {
             cursor_pos: (0, 1, 0),
             new_cursor_pos: (coordinates.0, coordinates.1, 0),
             length: 0,
@@ -714,7 +715,7 @@ impl PlainListing {
 
             movement: None,
             id: ComponentId::new_v4(),
-        }
+        })
     }
 
     fn make_entry_string(&self, e: EnvelopeRef, context: &Context) -> EntryStrings {
@@ -884,7 +885,7 @@ impl PlainListing {
             Box::new(self.local_collection.iter().cloned())
                 as Box<dyn Iterator<Item = EnvelopeHash>>
         } else {
-            Box::new(self.filtered_selection.iter().map(|h| *h))
+            Box::new(self.filtered_selection.iter().cloned())
                 as Box<dyn Iterator<Item = EnvelopeHash>>
         };
 
@@ -1234,7 +1235,7 @@ impl Component for PlainListing {
                             .flatten()
                             .chain(cursor_iter.into_iter().flatten())
                             .cloned();
-                        let stack: SmallVec<[_; 8]> = SmallVec::from_iter(iter.into_iter());
+                        let stack: SmallVec<[_; 8]> = SmallVec::from_iter(iter);
                         for i in stack {
                             self.perform_action(context, i, a);
                         }

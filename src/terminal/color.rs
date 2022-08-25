@@ -391,10 +391,12 @@ impl Color {
             "Yellow5" => 106,
             "Yellow6" => 148,
             "Default" => return Ok(Color::Default),
-            s if s.starts_with("#")
+            s if s.starts_with('#')
                 && s.len() == 7
                 && s[1..].as_bytes().iter().all(|&b| {
-                    (b >= b'0' && b <= b'9') || (b >= b'a' && b <= b'f') || (b >= b'A' && b <= b'F')
+                    (b'0'..=b'9').contains(&b)
+                        || (b'a'..=b'f').contains(&b)
+                        || (b'A'..=b'F').contains(&b)
                 }) =>
             {
                 return Ok(Color::Rgb(
@@ -406,10 +408,12 @@ impl Color {
                         .map_err(|_| de::Error::custom("invalid `color` value"))?,
                 ))
             }
-            s if s.starts_with("#")
+            s if s.starts_with('#')
                 && s.len() == 4
                 && s[1..].as_bytes().iter().all(|&b| {
-                    (b >= b'0' && b <= b'9') || (b >= b'a' && b <= b'f') || (b >= b'A' && b <= b'F')
+                    (b'0'..=b'9').contains(&b)
+                        || (b'a'..=b'f').contains(&b)
+                        || (b'A'..=b'F').contains(&b)
                 }) =>
             {
                 return Ok(Color::Rgb(
@@ -421,7 +425,8 @@ impl Color {
                         .map_err(|_| de::Error::custom("invalid `color` value"))?,
                 ))
             }
-            _ => u8::from_str_radix(&s, 10)
+            _ => s
+                .parse::<u8>()
                 .map_err(|_| de::Error::custom("invalid `color` value"))?,
         };
         Ok(Color::Byte(byte))

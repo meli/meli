@@ -172,9 +172,12 @@ pub struct CompactListing {
     /// Cache current view.
     data_columns: DataColumns,
     rows_drawn: SegmentTree,
+    #[allow(clippy::type_complexity)]
     rows: Vec<((usize, (ThreadHash, EnvelopeHash)), EntryStrings)>,
 
+    #[allow(clippy::type_complexity)]
     search_job: Option<(String, JoinHandle<Result<SmallVec<[EnvelopeHash; 512]>>>)>,
+    #[allow(clippy::type_complexity)]
     select_job: Option<(String, JoinHandle<Result<SmallVec<[EnvelopeHash; 512]>>>)>,
     filter_term: String,
     filtered_selection: Vec<ThreadHash>,
@@ -220,7 +223,7 @@ impl MailListingTrait for CompactListing {
             .flatten()
             .chain(cursor_iter.into_iter().flatten())
             .cloned();
-        SmallVec::from_iter(iter.into_iter())
+        SmallVec::from_iter(iter)
     }
 
     /// Fill the `self.data_columns` `CellBuffers` with the contents of the account mailbox the user has
@@ -324,6 +327,7 @@ impl MailListingTrait for CompactListing {
         self.length = 0;
         let mut rows = Vec::with_capacity(1024);
         let mut min_width = (0, 0, 0, 0);
+        #[allow(clippy::type_complexity)]
         let mut row_widths: (
             SmallVec<[u8; 1024]>,
             SmallVec<[u8; 1024]>,
@@ -404,11 +408,7 @@ impl MailListingTrait for CompactListing {
             );
             /* subject */
             row_widths.3.push(
-                (entry_strings
-                    .flag
-                    .grapheme_width()
-                    .try_into()
-                    .unwrap_or(255)
+                (entry_strings.flag.grapheme_width()
                     + 1
                     + entry_strings.subject.grapheme_width()
                     + 1
@@ -876,8 +876,8 @@ impl fmt::Display for CompactListing {
 
 impl CompactListing {
     pub const DESCRIPTION: &'static str = "compact listing";
-    pub fn new(coordinates: (AccountHash, MailboxHash)) -> Self {
-        CompactListing {
+    pub fn new(coordinates: (AccountHash, MailboxHash)) -> Box<Self> {
+        Box::new(CompactListing {
             cursor_pos: (coordinates.0, 1, 0),
             new_cursor_pos: (coordinates.0, coordinates.1, 0),
             length: 0,
@@ -905,8 +905,9 @@ impl CompactListing {
             modifier_active: false,
             modifier_command: None,
             id: ComponentId::new_v4(),
-        }
+        })
     }
+
     fn make_entry_string(
         &self,
         e: &Envelope,
@@ -1423,7 +1424,7 @@ impl CompactListing {
             }
             /* Set fg color for flags */
             let mut x = 0;
-            if self.selection.get(&thread_hash).cloned().unwrap_or(false) {
+            if self.selection.get(thread_hash).cloned().unwrap_or(false) {
                 x += selected_flag_len;
             }
             if thread.snoozed() {
@@ -1887,7 +1888,7 @@ impl Component for CompactListing {
             UIEvent::EnvelopeRename(ref old_hash, ref new_hash) => {
                 let account = &context.accounts[&self.cursor_pos.0];
                 let threads = account.collection.get_threads(self.cursor_pos.1);
-                if !account.collection.contains_key(&new_hash) {
+                if !account.collection.contains_key(new_hash) {
                     return false;
                 }
                 let new_env_thread_node_hash = account.collection.get_env(*new_hash).thread();
@@ -1917,7 +1918,7 @@ impl Component for CompactListing {
             UIEvent::EnvelopeUpdate(ref env_hash) => {
                 let account = &context.accounts[&self.cursor_pos.0];
                 let threads = account.collection.get_threads(self.cursor_pos.1);
-                if !account.collection.contains_key(&env_hash) {
+                if !account.collection.contains_key(env_hash) {
                     return false;
                 }
                 let new_env_thread_node_hash = account.collection.get_env(*env_hash).thread();

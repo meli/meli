@@ -346,7 +346,7 @@ impl EmbedGrid {
                 *state = State::CsiQ(buf1);
             }
             /* OSC stuff */
-            (c, State::Osc1(ref mut buf)) if (c >= b'0' && c <= b'9') || c == b'?' => {
+            (c, State::Osc1(ref mut buf)) if (b'0'..=b'9').contains(&c) || c == b'?' => {
                 buf.push(c);
             }
             (b';', State::Osc1(ref mut buf1_p)) => {
@@ -354,7 +354,7 @@ impl EmbedGrid {
                 let buf2 = SmallVec::new();
                 *state = State::Osc2(buf1, buf2);
             }
-            (c, State::Osc2(_, ref mut buf)) if (c >= b'0' && c <= b'9') || c == b'?' => {
+            (c, State::Osc2(_, ref mut buf)) if (b'0'..=b'9').contains(&c) || c == b'?' => {
                 buf.push(c);
             }
             /* Normal */
@@ -512,7 +512,7 @@ impl EmbedGrid {
                 *state = State::Normal;
             }
             /* CSI ? stuff */
-            (c, State::CsiQ(ref mut buf)) if c >= b'0' && c <= b'9' => {
+            (c, State::CsiQ(ref mut buf)) if (b'0'..=b'9').contains(&c) => {
                 buf.push(c);
             }
             (b'h', State::CsiQ(ref buf)) => {
@@ -569,7 +569,7 @@ impl EmbedGrid {
                 *state = State::Normal;
             }
             /* END OF CSI ? stuff */
-            (c, State::Csi) if c >= b'0' && c <= b'9' => {
+            (c, State::Csi) if (b'0'..=b'9').contains(&c) => {
                 let mut buf1 = SmallVec::new();
                 buf1.push(c);
                 *state = State::Csi1(buf1);
@@ -973,17 +973,9 @@ impl EmbedGrid {
                         *bg_color = Color::Default;
                     }
                     b"1" => { /* bold */ }
-                    b"7" => {
-                        /* Inverse */
-                        let temp = *fg_color;
-                        *fg_color = *bg_color;
-                        *bg_color = temp;
-                    }
-                    b"27" => {
-                        /* Inverse off */
-                        let temp = *fg_color;
-                        *fg_color = *bg_color;
-                        *bg_color = temp;
+                    b"7" | b"27" => {
+                        /* Inverse on/off */
+                        std::mem::swap(&mut (*fg_color), &mut (*bg_color))
                     }
                     b"30" => *fg_color = Color::Black,
                     b"31" => *fg_color = Color::Red,
@@ -1037,17 +1029,9 @@ impl EmbedGrid {
                             *bg_color = Color::Default;
                         }
                         b"1" => { /* bold */ }
-                        b"7" => {
-                            /* Inverse */
-                            let temp = *fg_color;
-                            *fg_color = *bg_color;
-                            *bg_color = temp;
-                        }
-                        b"27" => {
-                            /* Inverse off */
-                            let temp = *fg_color;
-                            *fg_color = *bg_color;
-                            *bg_color = temp;
+                        b"7" | b"27" => {
+                            /* Inverse  on/off */
+                            std::mem::swap(&mut (*fg_color), &mut (*bg_color))
                         }
                         b"30" => *fg_color = Color::Black,
                         b"31" => *fg_color = Color::Red,
@@ -1094,7 +1078,7 @@ impl EmbedGrid {
                 grid[cursor_val!()].set_bg(*bg_color);
                 *state = State::Normal;
             }
-            (c, State::Csi1(ref mut buf)) if (c >= b'0' && c <= b'9') || c == b' ' => {
+            (c, State::Csi1(ref mut buf)) if (b'0'..=b'9').contains(&c) || c == b' ' => {
                 buf.push(c);
             }
             (b';', State::Csi2(ref mut buf1_p, ref mut buf2_p)) => {
@@ -1144,7 +1128,7 @@ impl EmbedGrid {
                 //debug!("cursor became: {:?}", cursor);
                 *state = State::Normal;
             }
-            (c, State::Csi2(_, ref mut buf)) if c >= b'0' && c <= b'9' => {
+            (c, State::Csi2(_, ref mut buf)) if (b'0'..=b'9').contains(&c) => {
                 buf.push(c);
             }
             (b'r', State::Csi2(_, _)) | (b'r', State::Csi) => {
@@ -1177,7 +1161,7 @@ impl EmbedGrid {
                 *state = State::Normal;
             }
 
-            (c, State::Csi3(_, _, ref mut buf)) if c >= b'0' && c <= b'9' => {
+            (c, State::Csi3(_, _, ref mut buf)) if (b'0'..=b'9').contains(&c) => {
                 buf.push(c);
             }
             (b'm', State::Csi3(ref buf1, ref buf2, ref buf3))
@@ -1185,7 +1169,7 @@ impl EmbedGrid {
             {
                 /* Set character attributes | foreground color */
                 *fg_color = if let Ok(byte) =
-                    u8::from_str_radix(unsafe { std::str::from_utf8_unchecked(buf3) }, 10)
+                    unsafe { std::str::from_utf8_unchecked(buf3) }.parse::<u8>()
                 {
                     //debug!("parsed buf as {}", byte);
                     Color::Byte(byte)
@@ -1200,7 +1184,7 @@ impl EmbedGrid {
             {
                 /* Set character attributes | background color */
                 *bg_color = if let Ok(byte) =
-                    u8::from_str_radix(unsafe { std::str::from_utf8_unchecked(buf3) }, 10)
+                    unsafe { std::str::from_utf8_unchecked(buf3) }.parse::<u8>()
                 {
                     //debug!("parsed buf as {}", byte);
                     Color::Byte(byte)
@@ -1244,5 +1228,11 @@ impl EmbedGrid {
                 *state = State::Normal;
             }
         }
+    }
+}
+
+impl Default for EmbedGrid {
+    fn default() -> Self {
+        Self::new()
     }
 }

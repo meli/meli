@@ -116,19 +116,11 @@ enum ViewMode {
 
 impl ViewMode {
     fn is_edit(&self) -> bool {
-        if let ViewMode::Edit = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, ViewMode::Edit)
     }
 
     fn is_edit_attachments(&self) -> bool {
-        if let ViewMode::EditAttachments { .. } = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, ViewMode::EditAttachments { .. })
     }
 }
 
@@ -160,7 +152,7 @@ impl Composer {
             form: FormWidget::default(),
             mode: ViewMode::Edit,
             #[cfg(feature = "gpgme")]
-            gpg_state: gpg::GpgComposeState::new(),
+            gpg_state: gpg::GpgComposeState::default(),
             dirty: true,
             has_changes: false,
             embed_area: ((0, 0), (0, 0)),
@@ -249,11 +241,7 @@ impl Composer {
         ret.draft
             .set_header("In-Reply-To", envelope.message_id_display().into());
 
-        if let Some(reply_to) = envelope
-            .other_headers()
-            .get("To")
-            .and_then(|v| v.as_str().try_into().ok())
-        {
+        if let Some(reply_to) = envelope.other_headers().get("To").map(|v| v.as_str()) {
             let to: &str = reply_to;
             let extra_identities = &account.settings.account.extra_identities;
             if let Some(extra) = extra_identities
@@ -288,30 +276,26 @@ impl Composer {
                 .and_then(|v| v.as_str().try_into().ok())
             {
                 to.insert(reply_to);
+            } else if let Some(reply_to) = envelope
+                .other_headers()
+                .get("Reply-To")
+                .and_then(|v| v.as_str().try_into().ok())
+            {
+                to.insert(reply_to);
             } else {
-                if let Some(reply_to) = envelope
-                    .other_headers()
-                    .get("Reply-To")
-                    .and_then(|v| v.as_str().try_into().ok())
-                {
-                    to.insert(reply_to);
-                } else {
-                    to.extend(envelope.from().iter().cloned());
-                }
+                to.extend(envelope.from().iter().cloned());
             }
             to.extend(envelope.to().iter().cloned());
-            if let Some(ours) = TryInto::<Address>::try_into(
+            if let Ok(ours) = TryInto::<Address>::try_into(
                 crate::components::mail::get_display_name(context, coordinates.0).as_str(),
-            )
-            .ok()
-            {
+            ) {
                 to.remove(&ours);
             }
             ret.draft.set_header("To", {
                 let mut ret: String =
                     to.into_iter()
                         .fold(String::new(), |mut s: String, n: Address| {
-                            s.extend(n.to_string().chars());
+                            s.push_str(&n.to_string());
                             s.push_str(", ");
                             s
                         });
@@ -320,14 +304,12 @@ impl Composer {
                 ret
             });
             ret.draft.set_header("Cc", envelope.field_cc_to_string());
+        } else if let Some(reply_to) = envelope.other_headers().get("Mail-Reply-To") {
+            ret.draft.set_header("To", reply_to.to_string());
+        } else if let Some(reply_to) = envelope.other_headers().get("Reply-To") {
+            ret.draft.set_header("To", reply_to.to_string());
         } else {
-            if let Some(reply_to) = envelope.other_headers().get("Mail-Reply-To") {
-                ret.draft.set_header("To", reply_to.to_string());
-            } else if let Some(reply_to) = envelope.other_headers().get("Reply-To") {
-                ret.draft.set_header("To", reply_to.to_string());
-            } else {
-                ret.draft.set_header("To", envelope.field_from_to_string());
-            }
+            ret.draft.set_header("To", envelope.field_from_to_string());
         }
         ret.draft.body = {
             let mut ret = attribution_string(
@@ -481,7 +463,7 @@ To: {}
         let header_values = self.form.values_mut();
         let draft_header_map = self.draft.headers_mut();
         for (k, v) in draft_header_map.iter_mut() {
-            if let Some(ref vn) = header_values.get(k.as_str()) {
+            if let Some(vn) = header_values.get(k.as_str()) {
                 *v = vn.as_str().to_string();
             }
         }
@@ -498,23 +480,22 @@ To: {}
             if k == "To" || k == "Cc" || k == "Bcc" {
                 self.form.push_cl((
                     k.into(),
-                    headers[k].to_string().into(),
+                    headers[k].to_string(),
                     Box::new(move |c, term| {
                         let book: &AddressBook = &c.accounts[&account_hash].address_book;
                         let results: Vec<String> = book.search(term);
                         results
                             .into_iter()
-                            .map(|r| AutoCompleteEntry::from(r))
+                            .map(AutoCompleteEntry::from)
                             .collect::<Vec<AutoCompleteEntry>>()
                     }),
                 ));
             } else if k == "From" {
                 self.form.push_cl((
                     k.into(),
-                    headers[k].to_string().into(),
+                    headers[k].to_string(),
                     Box::new(move |c, _term| {
-                        let results: Vec<(String, String)> = c
-                            .accounts
+                        c.accounts
                             .values()
                             .map(|acc| {
                                 let addr = if let Some(display_name) =
@@ -548,15 +529,12 @@ To: {}
 
                                 (addr, desc)
                             })
-                            .collect::<Vec<_>>();
-                        results
-                            .into_iter()
-                            .map(|r| AutoCompleteEntry::from(r))
+                            .map(AutoCompleteEntry::from)
                             .collect::<Vec<AutoCompleteEntry>>()
                     }),
                 ));
             } else {
-                self.form.push((k.into(), headers[k].to_string().into()));
+                self.form.push((k.into(), headers[k].to_string()));
             }
         }
     }
@@ -858,7 +836,7 @@ impl Component for Composer {
                     clear_area(grid, embed_area, theme_default);
                     copy_area(
                         grid,
-                        &guard.grid.buffer(),
+                        guard.grid.buffer(),
                         embed_area,
                         ((0, 0), pos_dec(guard.grid.terminal_size, (1, 1))),
                     );
@@ -871,7 +849,7 @@ impl Component for Composer {
                     let guard = embed_pty.lock().unwrap();
                     copy_area(
                         grid,
-                        &guard.grid.buffer(),
+                        guard.grid.buffer(),
                         embed_area,
                         ((0, 0), pos_dec(guard.grid.terminal_size, (1, 1))),
                     );
@@ -1120,8 +1098,7 @@ impl Component for Composer {
                 UIEvent::FinishedUIDialog(id, ref mut result),
             ) if selector.id() == *id => {
                 if let Some(to_val) = result.downcast_mut::<String>() {
-                    self.draft
-                        .set_header("To", std::mem::replace(to_val, String::new()));
+                    self.draft.set_header("To", std::mem::take(to_val));
                     self.update_form();
                 }
                 self.mode = ViewMode::Edit;
@@ -1677,7 +1654,7 @@ impl Component for Composer {
                 log(
                     format!(
                         "Executing: sh -c \"{}\"",
-                        editor_command.replace("\"", "\\\"")
+                        editor_command.replace('"', "\\\"")
                     ),
                     DEBUG,
                 );
@@ -1804,9 +1781,10 @@ impl Component for Composer {
                     return true;
                 }
                 Action::Compose(ComposeAction::AddAttachmentFilePicker(ref command)) => {
-                    let command = if let Some(ref cmd) = command
-                        .as_ref()
-                        .or_else(|| context.settings.terminal.file_picker_command.as_ref())
+                    let command = if let Some(cmd) =
+                        command
+                            .as_ref()
+                            .or(context.settings.terminal.file_picker_command.as_ref())
                     {
                         cmd.as_str()
                     } else {
@@ -1823,7 +1801,7 @@ impl Component for Composer {
                     }
 
                     log(
-                        format!("Executing: sh -c \"{}\"", command.replace("\"", "\\\"")),
+                        format!("Executing: sh -c \"{}\"", command.replace('"', "\\\"")),
                         DEBUG,
                     );
                     match Command::new("sh")
@@ -1838,7 +1816,7 @@ impl Component for Composer {
                             debug!(&String::from_utf8_lossy(&stderr));
                             for path in stderr.split(|c| [b'\0', b'\t', b'\n'].contains(c)) {
                                 match melib::email::compose::attachment_from_file(
-                                    &String::from_utf8_lossy(&path).as_ref(),
+                                    &String::from_utf8_lossy(path).as_ref(),
                                 ) {
                                     Ok(a) => {
                                         self.draft.attachments_mut().push(a);
@@ -1848,7 +1826,7 @@ impl Component for Composer {
                                         context.replies.push_back(UIEvent::Notification(
                                             Some(format!(
                                                 "could not add attachment: {}",
-                                                String::from_utf8_lossy(&path)
+                                                String::from_utf8_lossy(path)
                                             )),
                                             err.to_string(),
                                             Some(NotificationType::Error(
@@ -1984,7 +1962,7 @@ impl Component for Composer {
                 Some(Box::new(move |id: ComponentId, results: &[char]| {
                     Some(UIEvent::FinishedUIDialog(
                         id,
-                        Box::new(results.get(0).map(|c| *c).unwrap_or('n')),
+                        Box::new(results.get(0).copied().unwrap_or('n')),
                     ))
                 })),
                 context,
@@ -2033,7 +2011,7 @@ impl Component for Composer {
                 Some(Box::new(move |id: ComponentId, results: &[char]| {
                     Some(UIEvent::FinishedUIDialog(
                         id,
-                        Box::new(results.get(0).map(|c| *c).unwrap_or('n')),
+                        Box::new(results.get(0).copied().unwrap_or('n')),
                     ))
                 })),
                 context,
@@ -2136,7 +2114,7 @@ pub fn send_draft(
             let body: AttachmentBuilder = Attachment::new(
                 content_type,
                 Default::default(),
-                std::mem::replace(&mut draft.body, String::new()).into_bytes(),
+                std::mem::take(&mut draft.body).into_bytes(),
             )
             .into();
             draft.attachments.insert(0, body);
@@ -2195,6 +2173,7 @@ pub fn send_draft_async(
     let format_flowed = *account_settings!(context[account_hash].composing.format_flowed);
     let event_sender = context.sender.clone();
     #[cfg(feature = "gpgme")]
+    #[allow(clippy::type_complexity)]
     let mut filters_stack: Vec<
         Box<
             dyn FnOnce(
@@ -2207,7 +2186,7 @@ pub fn send_draft_async(
     #[cfg(feature = "gpgme")]
     if gpg_state.sign_mail.is_true() && !gpg_state.encrypt_mail.is_true() {
         filters_stack.push(Box::new(crate::components::mail::pgp::sign_filter(
-            gpg_state.sign_keys.clone(),
+            gpg_state.sign_keys,
         )?));
     } else if gpg_state.encrypt_mail.is_true() {
         filters_stack.push(Box::new(crate::components::mail::pgp::encrypt_filter(
@@ -2216,7 +2195,7 @@ pub fn send_draft_async(
             } else {
                 None
             },
-            gpg_state.encrypt_keys.clone(),
+            gpg_state.encrypt_keys,
         )?));
     }
     let send_mail = account_settings!(context[account_hash].composing.send_mail).clone();
@@ -2233,11 +2212,11 @@ pub fn send_draft_async(
     let mut body: AttachmentBuilder = Attachment::new(
         content_type,
         Default::default(),
-        std::mem::replace(&mut draft.body, String::new()).into_bytes(),
+        std::mem::take(&mut draft.body).into_bytes(),
     )
     .into();
     if !draft.attachments.is_empty() {
-        let mut parts = std::mem::replace(&mut draft.attachments, Vec::new());
+        let mut parts = std::mem::take(&mut draft.attachments);
         parts.insert(0, body);
         let boundary = ContentType::make_boundary(&parts);
         body = Attachment::new(
@@ -2261,7 +2240,7 @@ pub fn send_draft_async(
         let message = Arc::new(draft.finalise()?);
         let ret = send_cb(message.clone()).await;
         let is_ok = ret.is_ok();
-        if !is_ok || (store_sent_mail && is_ok) {
+        if !is_ok || store_sent_mail {
             event_sender
                 .send(ThreadEvent::UIEvent(UIEvent::Callback(CallbackFn(
                     Box::new(move |context| {

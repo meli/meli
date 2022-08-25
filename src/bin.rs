@@ -42,6 +42,8 @@ extern crate serde_json;
 extern crate smallvec;
 extern crate termion;
 
+use structopt::StructOpt;
+
 #[global_allocator]
 static GLOBAL: System = System;
 
@@ -120,6 +122,7 @@ fn notify(
     Ok(r)
 }
 
+#[cfg(feature = "cli-docs")]
 fn parse_manpage(src: &str) -> Result<ManPages> {
     match src {
         "" | "meli" | "main" => Ok(ManPages::Main),
@@ -132,8 +135,7 @@ fn parse_manpage(src: &str) -> Result<ManPages> {
     }
 }
 
-use structopt::StructOpt;
-
+#[cfg(feature = "cli-docs")]
 #[derive(Copy, Clone, Debug)]
 /// Choose manpage
 enum ManPages {
@@ -193,9 +195,11 @@ enum SubCommand {
 #[derive(Debug, StructOpt)]
 struct ManOpt {
     #[structopt(default_value = "meli", possible_values=&["meli", "conf", "themes"], value_name="PAGE", parse(try_from_str = parse_manpage))]
+    #[cfg(feature = "cli-docs")]
     page: ManPages,
     /// If true, output text in stdout instead of spawning $PAGER.
     #[structopt(long = "no-raw", alias = "no-raw", value_name = "bool")]
+    #[cfg(feature = "cli-docs")]
     no_raw: Option<Option<bool>>,
 }
 
@@ -243,7 +247,7 @@ fn run_app(opt: Opt) -> Result<()> {
         #[cfg(feature = "cli-docs")]
         Some(SubCommand::Man(manopt)) => {
             let ManOpt { page, no_raw } = manopt;
-            const MANPAGES: [&'static [u8]; 3] = [
+            const MANPAGES: [&[u8]; 3] = [
                 include_bytes!(concat!(env!("OUT_DIR"), "/meli.txt.gz")),
                 include_bytes!(concat!(env!("OUT_DIR"), "/meli.conf.txt.gz")),
                 include_bytes!(concat!(env!("OUT_DIR"), "/meli-themes.txt.gz")),
@@ -255,10 +259,9 @@ fn run_app(opt: Opt) -> Result<()> {
                 str::parse::<usize>(unsafe {
                     std::str::from_utf8_unchecked(gz.header().unwrap().comment().unwrap())
                 })
-                .expect(&format!(
-                    "{:?} was not compressed with size comment header",
-                    page
-                )),
+                .unwrap_or_else(|_| {
+                    panic!("{:?} was not compressed with size comment header", page)
+                }),
             );
             gz.read_to_string(&mut v)?;
 
@@ -271,19 +274,18 @@ fn run_app(opt: Opt) -> Result<()> {
                         return Ok(());
                     }
                 }
-            } else {
-                if unsafe { libc::isatty(libc::STDOUT_FILENO) != 1 } {
-                    println!("{}", &v);
-                    return Ok(());
-                }
+            } else if unsafe { libc::isatty(libc::STDOUT_FILENO) != 1 } {
+                println!("{}", &v);
+                return Ok(());
             }
 
             use std::process::{Command, Stdio};
-            let mut handle = Command::new(std::env::var("PAGER").unwrap_or("more".to_string()))
-                .stdin(Stdio::piped())
-                .stdout(Stdio::inherit())
-                .stderr(Stdio::inherit())
-                .spawn()?;
+            let mut handle =
+                Command::new(std::env::var("PAGER").unwrap_or_else(|_| "more".to_string()))
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::inherit())
+                    .stderr(Stdio::inherit())
+                    .spawn()?;
             handle.stdin.take().unwrap().write_all(v.as_bytes())?;
             handle.wait()?;
 
@@ -314,7 +316,7 @@ fn run_app(opt: Opt) -> Result<()> {
         }
         Some(SubCommand::PrintLoadedThemes) => {
             let s = conf::FileSettings::new()?;
-            print!("{}", s.terminal.themes.to_string());
+            print!("{}", s.terminal.themes);
             return Ok(());
         }
         Some(SubCommand::PrintDefaultTheme) => {

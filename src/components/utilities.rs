@@ -67,7 +67,7 @@ pub struct StatusBar {
     done_jobs: HashSet<JobId>,
     scroll_contexts: IndexMap<ComponentId, ScrollContext>,
 
-    auto_complete: AutoComplete,
+    auto_complete: Box<AutoComplete>,
     cmd_history: Vec<String>,
 }
 
@@ -136,7 +136,7 @@ impl StatusBar {
                 .set_bg(attribute.bg)
                 .set_attrs(attribute.attrs);
         }
-        let offset = self.status.find('|').unwrap_or_else(|| self.status.len());
+        let offset = self.status.find('|').unwrap_or(self.status.len());
         if y < get_y(bottom_right!(area)) + 1 {
             for x in get_x(upper_left!(area))
                 ..std::cmp::min(
@@ -209,8 +209,7 @@ impl StatusBar {
                     .settings
                     .terminal
                     .mouse_flag
-                    .as_ref()
-                    .map(|s| s.as_str())
+                    .as_deref()
                     .unwrap_or("🖱️ ")
             } else {
                 ""
@@ -362,7 +361,7 @@ impl Component for StatusBar {
                 }
 
                 suggestions.sort_by(|a, b| a.entry.cmp(&b.entry));
-                suggestions.dedup_by(|a, b| &a.entry == &b.entry);
+                suggestions.dedup_by(|a, b| a.entry == b.entry);
                 if self.auto_complete.set_suggestions(suggestions) {
                     let len = self.auto_complete.suggestions().len() - 1;
                     self.auto_complete.set_cursor(len);
@@ -529,7 +528,7 @@ impl Component for StatusBar {
                 self.container.set_dirty(true);
             }
             UIEvent::ChangeMode(m) => {
-                let offset = self.status.find('|').unwrap_or_else(|| self.status.len());
+                let offset = self.status.find('|').unwrap_or(self.status.len());
                 self.status.replace_range(
                     ..offset,
                     &format!(
@@ -540,8 +539,7 @@ impl Component for StatusBar {
                                 .settings
                                 .terminal
                                 .mouse_flag
-                                .as_ref()
-                                .map(|s| s.as_str())
+                                .as_deref()
                                 .unwrap_or("🖱️ ")
                         } else {
                             ""
@@ -559,7 +557,7 @@ impl Component for StatusBar {
                                 .replies
                                 .push_back(UIEvent::Command(self.ex_buffer.as_str().to_string()));
                         }
-                        if parse_command(&self.ex_buffer.as_str().as_bytes()).is_ok()
+                        if parse_command(self.ex_buffer.as_str().as_bytes()).is_ok()
                             && self.cmd_history.last().map(String::as_str)
                                 != Some(self.ex_buffer.as_str())
                         {
@@ -1138,7 +1136,7 @@ impl Component for Tabbed {
                         None,
                     );
                     write_string_to_grid(
-                        &k,
+                        k,
                         &mut self.help_content,
                         self.theme_default.fg,
                         self.theme_default.bg,
@@ -1485,13 +1483,13 @@ impl Component for Tabbed {
                         self.help_screen_cursor.1 = self.help_screen_cursor.1.saturating_sub(1);
                     }
                     _ if shortcut!(key == shortcuts["general"]["scroll_down"]) => {
-                        self.help_screen_cursor.1 = self.help_screen_cursor.1 + 1;
+                        self.help_screen_cursor.1 += 1;
                     }
                     _ if shortcut!(key == shortcuts["general"]["scroll_left"]) => {
                         self.help_screen_cursor.0 = self.help_screen_cursor.0.saturating_sub(1);
                     }
                     _ if shortcut!(key == shortcuts["general"]["scroll_right"]) => {
-                        self.help_screen_cursor.0 = self.help_screen_cursor.0 + 1;
+                        self.help_screen_cursor.0 += 1;
                     }
                     _ => {
                         /* ignore, don't pass to components below the shortcut panel */
@@ -1600,7 +1598,7 @@ impl Component for RawBuffer {
                 true
             }
             UIEvent::Input(Key::Right) => {
-                self.cursor.0 = self.cursor.0 + 1;
+                self.cursor.0 += 1;
                 self.dirty = true;
                 true
             }
@@ -1610,7 +1608,7 @@ impl Component for RawBuffer {
                 true
             }
             UIEvent::Input(Key::Down) => {
-                self.cursor.1 = self.cursor.1 + 1;
+                self.cursor.1 += 1;
                 self.dirty = true;
                 true
             }
@@ -1641,9 +1639,6 @@ impl RawBuffer {
         }
     }
     pub fn title(&self) -> &str {
-        self.title
-            .as_ref()
-            .map(String::as_str)
-            .unwrap_or("untitled")
+        self.title.as_deref().unwrap_or("untitled")
     }
 }

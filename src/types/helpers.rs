@@ -36,7 +36,7 @@ pub struct File {
 impl Drop for File {
     fn drop(&mut self) {
         if self.delete_on_drop {
-            std::fs::remove_file(self.path()).unwrap_or_else(|_| {});
+            let _ = std::fs::remove_file(self.path());
         }
     }
 }
@@ -54,6 +54,7 @@ impl File {
     pub fn path(&self) -> &PathBuf {
         &self.path
     }
+
     pub fn read_to_string(&self) -> String {
         let mut buf = Vec::new();
         let mut f = fs::File::open(&self.path)

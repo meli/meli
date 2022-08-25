@@ -34,7 +34,7 @@ macro_rules! shortcut {
     };
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Shortcuts {
     #[serde(default)]
@@ -53,21 +53,6 @@ pub struct Shortcuts {
     pub thread_view: ThreadViewShortcuts,
     #[serde(default)]
     pub pager: PagerShortcuts,
-}
-
-impl Default for Shortcuts {
-    fn default() -> Self {
-        Self {
-            general: GeneralShortcuts::default(),
-            listing: ListingShortcuts::default(),
-            composing: ComposingShortcuts::default(),
-            compact_listing: CompactListingShortcuts::default(),
-            contact_list: ContactListShortcuts::default(),
-            envelope_view: EnvelopeViewShortcuts::default(),
-            thread_view: ThreadViewShortcuts::default(),
-            pager: PagerShortcuts::default(),
-        }
-    }
 }
 
 impl DotAddressable for Shortcuts {

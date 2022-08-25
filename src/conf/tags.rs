@@ -28,22 +28,13 @@ use serde::{Deserialize, Deserializer};
 use std::collections::{hash_map::DefaultHasher, HashMap, HashSet};
 use std::hash::Hasher;
 
-#[derive(Debug, Deserialize, Clone, Serialize)]
+#[derive(Default, Debug, Deserialize, Clone, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct TagsSettings {
     #[serde(default, deserialize_with = "tag_color_de")]
     pub colors: HashMap<u64, Color>,
     #[serde(default, deserialize_with = "tag_set_de", alias = "ignore-tags")]
     pub ignore_tags: HashSet<u64>,
-}
-
-impl Default for TagsSettings {
-    fn default() -> Self {
-        TagsSettings {
-            colors: Default::default(),
-            ignore_tags: Default::default(),
-        }
-    }
 }
 
 pub fn tag_set_de<'de, D, T: std::convert::From<HashSet<u64>>>(

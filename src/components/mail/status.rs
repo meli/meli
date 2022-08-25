@@ -292,7 +292,7 @@ impl Component for AccountStatus {
                 None,
             );
             line += 1;
-            for (name, status) in extensions.into_iter() {
+            for (name, status) in extensions.iter() {
                 width = self.content.size().0;
                 write_string_to_grid(
                     name.trim_at_boundary(30),
@@ -418,7 +418,7 @@ impl Component for AccountStatus {
                 return true;
             }
             UIEvent::Input(ref key) if shortcut!(key == shortcuts["general"]["scroll_right"]) => {
-                self.cursor.0 = self.cursor.0 + 1;
+                self.cursor.0 += 1;
                 self.dirty = true;
                 return true;
             }
@@ -428,7 +428,7 @@ impl Component for AccountStatus {
                 return true;
             }
             UIEvent::Input(ref key) if shortcut!(key == shortcuts["general"]["scroll_down"]) => {
-                self.cursor.1 = self.cursor.1 + 1;
+                self.cursor.1 += 1;
                 self.dirty = true;
                 return true;
             }

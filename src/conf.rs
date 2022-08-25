@@ -250,7 +250,7 @@ impl From<FileAccount> for AccountConf {
         let root_mailbox = x.root_mailbox.clone();
         let identity = x.identity.clone();
         let display_name = x.display_name.clone();
-        let order = x.order.clone();
+        let order = x.order;
         let mailboxes = x
             .mailboxes
             .iter()
@@ -365,13 +365,14 @@ impl FileSettings {
 
     pub fn validate(path: PathBuf, interactive: bool, clear_extras: bool) -> Result<Self> {
         let s = pp::pp(&path)?;
-        let map: toml::map::Map<String, toml::value::Value> = toml::from_str(&s).map_err(|e| {
-            MeliError::new(format!(
-                "{}:\nConfig file is invalid TOML: {}",
-                path.display(),
-                e.to_string()
-            ))
-        })?;
+        let map: toml::map::Map<String, toml::value::Value> =
+            toml::from_str(&s).map_err(|err| {
+                MeliError::new(format!(
+                    "{}:\nConfig file is invalid TOML: {}",
+                    path.display(),
+                    err
+                ))
+            })?;
         /*
          * Check that a global composing option is set and return a user-friendly error message because the
          * default serde one is confusing.
@@ -410,11 +411,11 @@ This is required so that you don't accidentally start meli and find out later th
                 path.display()
             )));
         }
-        let mut s: FileSettings = toml::from_str(&s).map_err(|e| {
+        let mut s: FileSettings = toml::from_str(&s).map_err(|err| {
             MeliError::new(format!(
                 "{}:\nConfig file contains errors: {}",
                 path.display(),
-                e.to_string()
+                err
             ))
         })?;
         let backends = melib::backends::Backends::new();
@@ -831,7 +832,7 @@ mod pp {
                 }
                 i += 1;
             }
-            return Ok(("", None));
+            Ok(("", None))
         }
     }
 

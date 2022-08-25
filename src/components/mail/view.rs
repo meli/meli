@@ -58,7 +58,7 @@ enum ViewMode {
     Source(Source),
     //Ansi(RawBuffer),
     Subview,
-    ContactSelector(UIDialog<Card>),
+    ContactSelector(Box<UIDialog<Card>>),
 }
 
 impl Default for ViewMode {
@@ -76,69 +76,65 @@ impl ViewMode {
         }
     }
     */
+
     fn is_attachment(&self) -> bool {
-        match self {
-            ViewMode::Attachment(_) => true,
-            _ => false,
-        }
+        matches!(self, ViewMode::Attachment(_))
     }
+
     fn is_contact_selector(&self) -> bool {
-        match self {
-            ViewMode::ContactSelector(_) => true,
-            _ => false,
-        }
+        matches!(self, ViewMode::ContactSelector(_))
     }
 }
 
 #[derive(Debug)]
 pub enum AttachmentDisplay {
     Alternative {
-        inner: Attachment,
+        inner: Box<Attachment>,
         shown_display: usize,
         display: Vec<AttachmentDisplay>,
     },
     InlineText {
-        inner: Attachment,
+        inner: Box<Attachment>,
         comment: Option<String>,
         text: String,
     },
     InlineOther {
-        inner: Attachment,
+        inner: Box<Attachment>,
     },
     Attachment {
-        inner: Attachment,
+        inner: Box<Attachment>,
     },
     SignedPending {
-        inner: Attachment,
+        inner: Box<Attachment>,
         display: Vec<AttachmentDisplay>,
         handle: JoinHandle<Result<()>>,
         job_id: JobId,
     },
     SignedFailed {
-        inner: Attachment,
+        inner: Box<Attachment>,
         display: Vec<AttachmentDisplay>,
         error: MeliError,
     },
     SignedUnverified {
-        inner: Attachment,
+        inner: Box<Attachment>,
         display: Vec<AttachmentDisplay>,
     },
     SignedVerified {
-        inner: Attachment,
+        inner: Box<Attachment>,
         display: Vec<AttachmentDisplay>,
         description: String,
     },
     EncryptedPending {
-        inner: Attachment,
+        inner: Box<Attachment>,
         handle: JoinHandle<Result<(melib::pgp::DecryptionMetadata, Vec<u8>)>>,
     },
     EncryptedFailed {
-        inner: Attachment,
+        inner: Box<Attachment>,
         error: MeliError,
     },
     EncryptedSuccess {
-        inner: Attachment,
-        plaintext: Attachment,
+        inner: Box<Attachment>,
+        plaintext: Box<Attachment>,
         plaintext_display: Vec<AttachmentDisplay>,
         description: String,
     },
@@ -191,8 +187,8 @@ enum MailViewState {
     },
     Loaded {
         bytes: Vec<u8>,
-        env: Envelope,
-        body: Attachment,
+        env: Box<Envelope>,
+        body: Box<Attachment>,
         display: Vec<AttachmentDisplay>,
         body_text: String,
         links: Vec<Link>,
@@ -313,9 +309,10 @@ impl MailView {
                                             .get_env_mut(self.coordinates.2)
                                             .populate_headers(&bytes);
                                     }
-                                    let env =
-                                        account.collection.get_env(self.coordinates.2).clone();
-                                    let body = AttachmentBuilder::new(&bytes).build();
+                                    let env = Box::new(
+                                        account.collection.get_env(self.coordinates.2).clone(),
+                                    );
+                                    let body = Box::new(AttachmentBuilder::new(&bytes).build());
                                     let display = Self::attachment_to(
                                         &body,
                                         context,
@@ -415,7 +412,7 @@ impl MailView {
                 ..
             } => (
                 bytes,
-                self.attachment_displays_to_text(&display, context, false),
+                self.attachment_displays_to_text(display, context, false),
                 env,
             ),
             MailViewState::Error { .. } => {
@@ -489,13 +486,13 @@ impl MailView {
                     if !acc.ends_with("\n\n") {
                         acc.push_str("\n\n");
                     }
-                    acc.push_str(&text);
+                    acc.push_str(text);
                 }
                 InlineText {
                     inner: _,
                     text,
                     comment: _,
-                } => acc.push_str(&text),
+                } => acc.push_str(text),
                 InlineOther { inner } => {
                     if !acc.ends_with("\n\n") {
                         acc.push_str("\n\n");
@@ -550,7 +547,7 @@ impl MailView {
                         if description.is_empty() {
                             acc.push_str("Verified signature.\n\n");
                         } else {
-                            acc.push_str(&description);
+                            acc.push_str(description);
                             acc.push_str("\n\n");
                         }
                     }
@@ -574,7 +571,7 @@ impl MailView {
                         if description.is_empty() {
                             acc.push_str("Succesfully decrypted.\n\n");
                         } else {
-                            acc.push_str(&description);
+                            acc.push_str(description);
                             acc.push_str("\n\n");
                         }
                     }
@@ -672,35 +669,32 @@ impl MailView {
                 s.push(' ');
             }
 
-            s.extend(att.to_string().chars());
+            s.push_str(&att.to_string());
             paths.push(cur_path.clone());
-            match att.content_type {
-                ContentType::Multipart { .. } => {
-                    let mut iter = (0..sub_att_display_vec.len()).peekable();
-                    if has_sibling {
-                        branches.push(true);
-                    } else {
-                        branches.push(false);
-                    }
-                    while let Some(i) = iter.next() {
-                        *idx += 1;
-                        cur_path.push(i);
-                        append_entry(
-                            (idx, (depth + 1, &sub_att_display_vec[i])),
-                            branches,
-                            paths,
-                            cur_path,
-                            iter.peek() != None,
-                            s,
-                        );
-                        if Some(i) == default_alternative {
-                            s.push_str(" (displayed by default)");
-                        }
-                        cur_path.pop();
-                    }
-                    branches.pop();
+            if matches!(att.content_type, ContentType::Multipart { .. }) {
+                let mut iter = (0..sub_att_display_vec.len()).peekable();
+                if has_sibling {
+                    branches.push(true);
+                } else {
+                    branches.push(false);
                 }
-                _ => {}
+                while let Some(i) = iter.next() {
+                    *idx += 1;
+                    cur_path.push(i);
+                    append_entry(
+                        (idx, (depth + 1, &sub_att_display_vec[i])),
+                        branches,
+                        paths,
+                        cur_path,
+                        iter.peek() != None,
+                        s,
+                    );
+                    if Some(i) == default_alternative {
+                        s.push_str(" (displayed by default)");
+                    }
+                    cur_path.pop();
+                }
+                branches.pop();
             }
         }
 
@@ -735,7 +729,9 @@ impl MailView {
             active_jobs: &mut HashSet<JobId>,
         ) {
             if a.content_disposition.kind.is_attachment() || a.content_type == "message/rfc822" {
-                acc.push(AttachmentDisplay::Attachment { inner: a.clone() });
+                acc.push(AttachmentDisplay::Attachment {
+                    inner: Box::new(a.clone()),
+                });
             } else if a.content_type().is_text_html() {
                 let bytes = decode(a, None);
                 let filter_invocation =
@@ -764,7 +760,7 @@ impl MailView {
                             ));
                         let text = String::from_utf8_lossy(&bytes).to_string();
                         acc.push(AttachmentDisplay::InlineText {
-                            inner: a.clone(),
+                            inner: Box::new(a.clone()),
                             comment,
                             text,
                         });
@@ -785,7 +781,7 @@ impl MailView {
                         )
                         .to_string();
                         acc.push(AttachmentDisplay::InlineText {
-                            inner: a.clone(),
+                            inner: Box::new(a.clone()),
                             comment,
                             text,
                         });
@@ -794,7 +790,7 @@ impl MailView {
             } else if a.is_text() {
                 let bytes = decode(a, None);
                 acc.push(AttachmentDisplay::InlineText {
-                    inner: a.clone(),
+                    inner: Box::new(a.clone()),
                     comment: None,
                     text: String::from_utf8_lossy(&bytes).to_string(),
                 });
@@ -838,7 +834,7 @@ impl MailView {
                             rec(a, context, coordinates, &mut display, active_jobs);
                         }
                         acc.push(AttachmentDisplay::Alternative {
-                            inner: a.clone(),
+                            inner: Box::new(a.clone()),
                             shown_display: chosen_attachment_idx,
                             display,
                         });
@@ -847,7 +843,7 @@ impl MailView {
                         #[cfg(not(feature = "gpgme"))]
                         {
                             acc.push(AttachmentDisplay::SignedUnverified {
-                                inner: a.clone(),
+                                inner: Box::new(a.clone()),
                                 display: {
                                     let mut v = vec![];
                                     rec(&parts[0], context, coordinates, &mut v, active_jobs);
@@ -869,7 +865,7 @@ impl MailView {
                                     StatusEvent::NewJob(handle.job_id),
                                 ));
                                 acc.push(AttachmentDisplay::SignedPending {
-                                    inner: a.clone(),
+                                    inner: Box::new(a.clone()),
                                     job_id: handle.job_id,
                                     display: {
                                         let mut v = vec![];
@@ -880,7 +876,7 @@ impl MailView {
                                 });
                             } else {
                                 acc.push(AttachmentDisplay::SignedUnverified {
-                                    inner: a.clone(),
+                                    inner: Box::new(a.clone()),
                                     display: {
                                         let mut v = vec![];
                                         rec(&parts[0], context, coordinates, &mut v, active_jobs);
@@ -896,7 +892,7 @@ impl MailView {
                                 #[cfg(not(feature = "gpgme"))]
                                 {
                                     acc.push(AttachmentDisplay::EncryptedFailed {
-                                                inner: a.clone(),
+                                    inner: Box::new(a.clone()),
                                                 error: MeliError::new("Cannot decrypt: meli must be compiled with libgpgme support."),
                                             });
                                 }
@@ -914,12 +910,12 @@ impl MailView {
                                             StatusEvent::NewJob(handle.job_id),
                                         ));
                                         acc.push(AttachmentDisplay::EncryptedPending {
-                                            inner: a.clone(),
+                                            inner: Box::new(a.clone()),
                                             handle,
                                         });
                                     } else {
                                         acc.push(AttachmentDisplay::EncryptedFailed {
-                                            inner: a.clone(),
+                                            inner: Box::new(a.clone()),
                                             error: MeliError::new("Undecrypted."),
                                         });
                                     }
@@ -963,17 +959,13 @@ impl MailView {
         } else {
             return None;
         };
-        if let Some(path) =
-            self.attachment_paths.get(lidx).and_then(
-                |path| {
-                    if path.len() > 0 {
-                        Some(path)
-                    } else {
-                        None
-                    }
-                },
-            )
-        {
+        if let Some(path) = self.attachment_paths.get(lidx).and_then(|path| {
+            if !path.is_empty() {
+                Some(path)
+            } else {
+                None
+            }
+        }) {
             let first = path[0];
             use AttachmentDisplay::*;
             let root_attachment = match &display[first] {
@@ -1022,14 +1014,11 @@ impl MailView {
                 if path.is_empty() {
                     return Some(a);
                 }
-                match a.content_type {
-                    ContentType::Multipart { ref parts, .. } => {
-                        let first = path[0];
-                        if first < parts.len() {
-                            return find_attachment(&parts[first], &path[1..]);
-                        }
+                if let ContentType::Multipart { ref parts, .. } = a.content_type {
+                    let first = path[0];
+                    if first < parts.len() {
+                        return find_attachment(&parts[first], &path[1..]);
                     }
-                    _ => {}
                 }
                 None
             }
@@ -1080,7 +1069,7 @@ impl MailView {
             entries.push((new_card, format!("{}", addr)));
         }
         drop(envelope);
-        self.mode = ViewMode::ContactSelector(Selector::new(
+        self.mode = ViewMode::ContactSelector(Box::new(Selector::new(
             "select contacts to add",
             entries,
             false,
@@ -1088,7 +1077,7 @@ impl MailView {
                 Some(UIEvent::FinishedUIDialog(id, Box::new(results.to_vec())))
             })),
             context,
-        ));
+        )));
         self.dirty = true;
         self.initialised = false;
     }
@@ -1420,10 +1409,7 @@ impl Component for MailView {
                     err.to_string(),
                     Some(NotificationType::Error(err.kind)),
                 ));
-                log(
-                    format!("Failed to open envelope: {}", err.to_string()),
-                    ERROR,
-                );
+                log(format!("Failed to open envelope: {}", err), ERROR);
                 self.init_futures(context);
                 return;
             } else {
@@ -1444,7 +1430,7 @@ impl Component for MailView {
                     let mut text = "Viewing attachment. Press `r` to return \n".to_string();
                     if let Some(attachment) = self.open_attachment(aidx, context) {
                         if attachment.is_html() {
-                            self.subview = Some(Box::new(HtmlView::new(&attachment, context)));
+                            self.subview = Some(Box::new(HtmlView::new(attachment, context)));
                             self.mode = ViewMode::Subview;
                         } else {
                             text.push_str(&attachment.text());
@@ -1475,7 +1461,7 @@ impl Component for MailView {
                     }
                 }
                 ViewMode::Normal if body.is_html() => {
-                    self.subview = Some(Box::new(HtmlView::new(&body, context)));
+                    self.subview = Some(Box::new(HtmlView::new(body, context)));
                     self.mode = ViewMode::Subview;
                 }
                 ViewMode::Normal
@@ -1497,13 +1483,12 @@ impl Component for MailView {
                         } =>
                 {
                     self.subview = Some(Box::new(HtmlView::new(
-                        &body
-                            .content_type
+                        body.content_type
                             .parts()
                             .unwrap()
-                            .into_iter()
+                            .iter()
                             .find(|a| a.is_html())
-                            .unwrap_or(&body),
+                            .unwrap_or(body),
                         context,
                     )));
                     self.mode = ViewMode::Subview;
@@ -1541,7 +1526,7 @@ impl Component for MailView {
                             if !ret.ends_with("\n\n") {
                                 ret.push_str("\n\n");
                             }
-                            ret.extend(body_text.chars());
+                            ret.push_str(body_text);
                             if !ret.ends_with("\n\n") {
                                 ret.push_str("\n\n");
                             }
@@ -1721,10 +1706,8 @@ impl Component for MailView {
                     self.force_draw_headers = true;
                     if self.pager.cursor_pos() == 0 {
                         self.headers_cursor = self.headers_cursor.saturating_sub(1);
-                    } else {
-                        if self.pager.process_event(event, context) {
-                            return true;
-                        }
+                    } else if self.pager.process_event(event, context) {
+                        return true;
                     }
                     self.pager.set_dirty(true);
                     return true;
@@ -1767,11 +1750,13 @@ impl Component for MailView {
                                             .get_env_mut(self.coordinates.2)
                                             .populate_headers(&bytes);
                                     }
-                                    let env = context.accounts[&self.coordinates.0]
-                                        .collection
-                                        .get_env(self.coordinates.2)
-                                        .clone();
-                                    let body = AttachmentBuilder::new(&bytes).build();
+                                    let env = Box::new(
+                                        context.accounts[&self.coordinates.0]
+                                            .collection
+                                            .get_env(self.coordinates.2)
+                                            .clone(),
+                                    );
+                                    let body = Box::new(AttachmentBuilder::new(&bytes).build());
                                     let display = Self::attachment_to(
                                         &body,
                                         context,
@@ -1823,9 +1808,11 @@ impl Component for MailView {
                                                 *d = AttachmentDisplay::SignedVerified {
                                                     inner: std::mem::replace(
                                                         inner,
-                                                        AttachmentBuilder::new(&[]).build(),
+                                                        Box::new(
+                                                            AttachmentBuilder::new(&[]).build(),
+                                                        ),
                                                     ),
-                                                    display: std::mem::replace(display, vec![]),
+                                                    display: std::mem::take(display),
                                                     description: String::new(),
                                                 };
                                             }
@@ -1833,9 +1820,11 @@ impl Component for MailView {
                                                 *d = AttachmentDisplay::SignedFailed {
                                                     inner: std::mem::replace(
                                                         inner,
-                                                        AttachmentBuilder::new(&[]).build(),
+                                                        Box::new(
+                                                            AttachmentBuilder::new(&[]).build(),
+                                                        ),
                                                     ),
-                                                    display: std::mem::replace(display, vec![]),
+                                                    display: std::mem::take(display),
                                                     error,
                                                 };
                                             }
@@ -1851,9 +1840,10 @@ impl Component for MailView {
                                             Ok(None) => { /* something happened, perhaps a worker thread panicked */
                                             }
                                             Ok(Some(Ok((metadata, decrypted_bytes)))) => {
-                                                let plaintext =
+                                                let plaintext = Box::new(
                                                     AttachmentBuilder::new(&decrypted_bytes)
-                                                        .build();
+                                                        .build(),
+                                                );
                                                 let plaintext_display = Self::attachment_to(
                                                     &plaintext,
                                                     context,
@@ -1863,7 +1853,9 @@ impl Component for MailView {
                                                 *d = AttachmentDisplay::EncryptedSuccess {
                                                     inner: std::mem::replace(
                                                         inner,
-                                                        AttachmentBuilder::new(&[]).build(),
+                                                        Box::new(
+                                                            AttachmentBuilder::new(&[]).build(),
+                                                        ),
                                                     ),
                                                     plaintext,
                                                     plaintext_display,
@@ -1874,7 +1866,9 @@ impl Component for MailView {
                                                 *d = AttachmentDisplay::EncryptedFailed {
                                                     inner: std::mem::replace(
                                                         inner,
-                                                        AttachmentBuilder::new(&[]).build(),
+                                                        Box::new(
+                                                            AttachmentBuilder::new(&[]).build(),
+                                                        ),
                                                     ),
                                                     error,
                                                 };
@@ -1888,9 +1882,9 @@ impl Component for MailView {
                                 let mut new_body_text = String::new();
                                 if let MailViewState::Loaded { ref display, .. } = self.state {
                                     new_body_text =
-                                        self.attachment_displays_to_text(&display, context, true);
+                                        self.attachment_displays_to_text(display, context, true);
                                     let (paths, attachment_tree_s) =
-                                        self.attachment_displays_to_tree(&display);
+                                        self.attachment_displays_to_tree(display);
                                     self.attachment_tree = attachment_tree_s;
                                     self.attachment_paths = paths;
                                 }
@@ -2042,7 +2036,7 @@ impl Component for MailView {
                                                 .get(&env_hash)
                                                 .map(|env| env.message_id_display())
                                                 .unwrap_or_else(|| "Not found".into()),
-                                                err.to_string()
+                                                err
                                             );
                                             log(&err_string, ERROR);
                                             context.replies.push_back(UIEvent::Notification(
@@ -2088,7 +2082,7 @@ impl Component for MailView {
                     .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
                 return true;
             }
-            UIEvent::Input(Key::Char(c)) if c >= '0' && c <= '9' => {
+            UIEvent::Input(Key::Char(c)) if ('0'..='9').contains(&c) => {
                 self.cmd_buf.push(c);
                 context
                     .replies
@@ -2218,7 +2212,7 @@ impl Component for MailView {
                                     if let Ok(command) = query_default_app(&attachment_type) {
                                         let p = create_temp_file(
                                             &decode(attachment, None),
-                                            filename.as_ref().map(|s| s.as_str()),
+                                            filename.as_deref(),
                                             None,
                                             true,
                                         );
@@ -2400,10 +2394,7 @@ impl Component for MailView {
                         err.to_string(),
                         Some(NotificationType::Error(err.kind)),
                     ));
-                    log(
-                        format!("Failed to open envelope: {}", err.to_string()),
-                        ERROR,
-                    );
+                    log(format!("Failed to open envelope: {}", err), ERROR);
                     self.init_futures(context);
                     return true;
                 } else {
@@ -2424,11 +2415,7 @@ impl Component for MailView {
                             Some(NotificationType::Error(melib::ErrorKind::External)),
                         ));
                         log(
-                            format!(
-                                "Failed to create file at {}: {}",
-                                path.display(),
-                                err.to_string()
-                            ),
+                            format!("Failed to create file at {}: {}", path.display(), err),
                             ERROR,
                         );
                         return true;
@@ -2461,10 +2448,7 @@ impl Component for MailView {
                         err.to_string(),
                         Some(NotificationType::Error(err.kind)),
                     ));
-                    log(
-                        format!("Failed to open envelope: {}", err.to_string()),
-                        ERROR,
-                    );
+                    log(format!("Failed to open envelope: {}", err), ERROR);
                     self.init_futures(context);
                     return true;
                 } else {
@@ -2490,11 +2474,7 @@ impl Component for MailView {
                                 Some(NotificationType::Error(melib::ErrorKind::External)),
                             ));
                             log(
-                                format!(
-                                    "Failed to create file at {}: {}",
-                                    path.display(),
-                                    err.to_string()
-                                ),
+                                format!("Failed to create file at {}: {}", path.display(), err),
                                 ERROR,
                             );
                         }
@@ -2521,11 +2501,7 @@ impl Component for MailView {
                                 Some(NotificationType::Error(melib::ErrorKind::External)),
                             ));
                             log(
-                                format!(
-                                    "Failed to create file at {}: {}",
-                                    path.display(),
-                                    err.to_string()
-                                ),
+                                format!("Failed to create file at {}: {}", path.display(), err),
                                 ERROR,
                             );
                             return true;

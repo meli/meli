@@ -176,7 +176,6 @@ struct AccountMenuEntry {
     name: String,
     hash: AccountHash,
     index: usize,
-    visible: bool,
     entries: SmallVec<[MailboxMenuEntry; 16]>,
 }
 
@@ -380,7 +379,7 @@ pub trait MailListingTrait: ListingTrait {
                     .map(|&env_hash| account.operation(env_hash).and_then(|mut op| op.as_bytes()))
                     .collect::<Result<Vec<_>>>();
                 let path_ = path.to_path_buf();
-                let format = format.clone().unwrap_or_default();
+                let format = (*format).unwrap_or_default();
                 let collection = account.collection.clone();
                 let (sender, mut receiver) = crate::jobs::oneshot::channel();
                 let fut: Pin<Box<dyn Future<Output = Result<()>> + Send + 'static>> =
@@ -521,11 +520,11 @@ pub trait ListingTrait: Component {
 
 #[derive(Debug)]
 pub enum ListingComponent {
-    Plain(PlainListing),
-    Threaded(ThreadListing),
-    Compact(CompactListing),
-    Conversations(ConversationsListing),
-    Offline(OfflineListing),
+    Plain(Box<PlainListing>),
+    Threaded(Box<ThreadListing>),
+    Compact(Box<CompactListing>),
+    Conversations(Box<ConversationsListing>),
+    Offline(Box<OfflineListing>),
 }
 use crate::ListingComponent::*;
 
@@ -534,11 +533,11 @@ impl core::ops::Deref for ListingComponent {
 
     fn deref(&self) -> &Self::Target {
         match &self {
-            Compact(ref l) => l,
-            Plain(ref l) => l,
-            Threaded(ref l) => l,
-            Conversations(ref l) => l,
-            Offline(ref l) => l,
+            Compact(ref l) => l.as_ref(),
+            Plain(ref l) => l.as_ref(),
+            Threaded(ref l) => l.as_ref(),
+            Conversations(ref l) => l.as_ref(),
+            Offline(ref l) => l.as_ref(),
         }
     }
 }
@@ -546,11 +545,11 @@ impl core::ops::Deref for ListingComponent {
 impl core::ops::DerefMut for ListingComponent {
     fn deref_mut(&mut self) -> &mut (dyn MailListingTrait + 'static) {
         match self {
-            Compact(l) => l,
-            Plain(l) => l,
-            Threaded(l) => l,
-            Conversations(l) => l,
-            Offline(l) => l,
+            Compact(l) => l.as_mut(),
+            Plain(l) => l.as_mut(),
+            Threaded(l) => l.as_mut(),
+            Conversations(l) => l.as_mut(),
+            Offline(l) => l.as_mut(),
         }
     }
 }
@@ -611,7 +610,6 @@ pub struct Listing {
     accounts: Vec<AccountMenuEntry>,
     status: Option<AccountStatus>,
     dirty: bool,
-    visible: bool,
     cursor_pos: (usize, MenuEntryCursor),
     menu_cursor_pos: (usize, MenuEntryCursor),
     menu_content: CellBuffer,
@@ -755,12 +753,10 @@ impl Component for Listing {
                 }
                 return true;
             }
-            UIEvent::StartupCheck(ref f) => {
-                if self.component.coordinates().1 == *f {
-                    if !self.startup_checks_rate.tick() {
-                        return false;
-                    }
-                }
+            UIEvent::StartupCheck(ref f)
+                if self.component.coordinates().1 == *f && !self.startup_checks_rate.tick() =>
+            {
+                return false;
             }
             UIEvent::Timer(n) if *n == self.startup_checks_rate.id() => {
                 if self.startup_checks_rate.active {
@@ -1127,7 +1123,7 @@ impl Component for Listing {
                         Action::Listing(ListingAction::Import(file_path, mailbox_path)) => {
                             let account = &mut context.accounts[self.cursor_pos.0];
                             if let Err(err) = account
-                                .mailbox_by_path(&mailbox_path)
+                                .mailbox_by_path(mailbox_path)
                                 .and_then(|mailbox_hash| {
                                     Ok((
                                         std::fs::read(&file_path).chain_err_summary(|| {
@@ -1687,7 +1683,7 @@ impl Component for Listing {
                     .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
                 return true;
             }
-            UIEvent::Input(Key::Char(c)) if c >= '0' && c <= '9' => {
+            UIEvent::Input(Key::Char(c)) if ('0'..='9').contains(&c) => {
                 self.cmd_buf.push(c);
                 self.component.set_modifier_active(true);
                 context
@@ -1808,7 +1804,6 @@ impl Listing {
                     name: a.name().to_string(),
                     hash: *h,
                     index: i,
-                    visible: true,
                     entries,
                 }
             })
@@ -1818,7 +1813,6 @@ impl Listing {
             component: Offline(OfflineListing::new((first_account_hash, 0))),
             accounts: account_entries,
             status: None,
-            visible: true,
             dirty: true,
             cursor_pos: (0, MenuEntryCursor::Mailbox(0)),
             menu_cursor_pos: (0, MenuEntryCursor::Mailbox(0)),
@@ -1954,7 +1948,6 @@ impl Listing {
 
         #[derive(Copy, Debug, Clone)]
         struct Line {
-            visible: bool,
             collapsed: bool,
             depth: usize,
             inc: usize,
@@ -1990,7 +1983,7 @@ impl Listing {
                 indentation,
                 has_sibling,
                 mailbox_hash,
-                visible,
+                visible: _,
                 collapsed,
             },
         ) in self.accounts[aidx].entries.iter().enumerate()
@@ -1999,7 +1992,6 @@ impl Listing {
                 match context.accounts[self.accounts[aidx].index][&mailbox_hash].status {
                     crate::conf::accounts::MailboxStatus::Failed(_) => {
                         lines.push(Line {
-                            visible,
                             collapsed,
                             depth,
                             inc: i,
@@ -2012,7 +2004,6 @@ impl Listing {
                     }
                     _ => {
                         lines.push(Line {
-                            visible,
                             collapsed,
                             depth,
                             inc: i,

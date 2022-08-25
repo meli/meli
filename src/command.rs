@@ -116,7 +116,7 @@ impl TokenStream {
             }
             *s = &s[ptr..];
             //println!("\t before s.is_empty() {:?} {:?}", t, s);
-            if s.is_empty() || &*s == &" " {
+            if s.is_empty() || *s == " " {
                 match t.inner() {
                     Literal(lit) => {
                         sugg.insert(format!("{}{}", if s.is_empty() { " " } else { "" }, lit));
@@ -126,7 +126,7 @@ impl TokenStream {
                             //println!("adding empty suggestions for {:?}", t);
                             let mut _s = *s;
                             let mut m = t.matches(&mut _s, sugg);
-                            tokens.extend(m.drain(..));
+                            tokens.append(&mut m);
                         }
                     }
                     Seq(_s) => {}
@@ -167,7 +167,7 @@ impl TokenStream {
                         let mut _s = *s;
                         let mut m = t.matches(&mut _s, sugg);
                         if !m.is_empty() {
-                            tokens.extend(m.drain(..));
+                            tokens.append(&mut m);
                             //println!("_s is empty {}", _s.is_empty());
                             cont = !_s.is_empty();
                             *s = _s;
@@ -262,7 +262,7 @@ define_commands!([
                    desc: "set [seen/unseen], toggles message's Seen flag.",
                    tokens: &[One(Literal("set")), One(Alternatives(&[to_stream!(One(Literal("seen"))), to_stream!(One(Literal("unseen")))]))],
                    parser: (
-                       fn seen_flag<'a>(input: &'a [u8]) -> IResult<&'a [u8], Action> {
+                       fn seen_flag(input: &'_ [u8]) -> IResult<&'_ [u8], Action> {
                            let (input, _) = tag("set")(input.trim())?;
                            let (input, _) = is_a(" ")(input)?;
                            let (input, ret) = alt((map(tag("seen"), |_| Listing(SetSeen)), map(tag("unseen"), |_| Listing(SetUnseen))))(input)?;
@@ -275,7 +275,7 @@ define_commands!([
                    desc: "delete message",
                    tokens: &[One(Literal("delete"))],
                    parser: (
-                       fn delete_message<'a>(input: &'a [u8]) -> IResult<&'a [u8], Action> {
+                       fn delete_message(input: &'_ [u8]) -> IResult<&'_ [u8], Action> {
                            let (input, ret) = map(preceded(tag("delete"), eof), |_| Listing(Delete))(input)?;
                            let (input, _) = eof(input)?;
                            Ok((input, ret))
@@ -536,7 +536,7 @@ define_commands!([
                   desc: "filter EXECUTABLE ARGS",
                   tokens: &[One(Literal("filter")), One(Filepath), ZeroOrMore(QuotedStringValue)],
                   parser:(
-                      fn filter<'a>(input: &'a [u8]) -> IResult<&'a [u8], Action> {
+                      fn filter(input: &'_ [u8]) -> IResult<&'_ [u8], Action> {
                           let (input, _) = tag("filter")(input.trim())?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, cmd) = map_res(not_line_ending, std::str::from_utf8)(input)?;
@@ -1080,7 +1080,7 @@ pub fn command_completion_suggestions(input: &str) -> Vec<String> {
         }
         if let Some((s, Filepath)) = _m.last() {
             let p = std::path::Path::new(s);
-            sugg.extend(p.complete(true).into_iter().map(|m| m.into()));
+            sugg.extend(p.complete(true).into_iter());
         }
     }
     sugg.into_iter()

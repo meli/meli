@@ -168,14 +168,14 @@ pub async fn insert(
                 format!(
                     "Failed to open envelope {}: {}",
                     envelope.message_id_display(),
-                    err.to_string()
+                    err
                 )
             );
             log(
                 format!(
                     "Failed to open envelope {}: {}",
                     envelope.message_id_display(),
-                    err.to_string()
+                    err
                 ),
                 ERROR,
             );
@@ -190,13 +190,13 @@ pub async fn insert(
         debug!(
             "Failed to insert envelope {}: {}",
             envelope.message_id_display(),
-            err.to_string()
+            err
         );
         log(
             format!(
                 "Failed to insert envelope {}: {}",
                 envelope.message_id_display(),
-                err.to_string()
+                err
             ),
             ERROR,
         );
@@ -217,19 +217,19 @@ pub async fn insert(
     if let Err(err) = conn.execute(
             "INSERT OR REPLACE INTO envelopes (account_id, hash, date, _from, _to, cc, bcc, subject, message_id, in_reply_to, _references, flags, has_attachments, body_text, timestamp)
               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
-              params![account_id, envelope.hash().to_be_bytes().to_vec(), envelope.date_as_str(), envelope.field_from_to_string(), envelope.field_to_to_string(), envelope.field_cc_to_string(), envelope.field_bcc_to_string(), envelope.subject().into_owned().trim_end_matches('\u{0}'), envelope.message_id_display().to_string(), envelope.in_reply_to_display().map(|f| f.to_string()).unwrap_or(String::new()), envelope.field_references_to_string(), i64::from(envelope.flags().bits()), if envelope.has_attachments() { 1 } else { 0 }, body, envelope.date().to_be_bytes().to_vec()],
+              params![account_id, envelope.hash().to_be_bytes().to_vec(), envelope.date_as_str(), envelope.field_from_to_string(), envelope.field_to_to_string(), envelope.field_cc_to_string(), envelope.field_bcc_to_string(), envelope.subject().into_owned().trim_end_matches('\u{0}'), envelope.message_id_display().to_string(), envelope.in_reply_to_display().map(|f| f.to_string()).unwrap_or_default(), envelope.field_references_to_string(), i64::from(envelope.flags().bits()), if envelope.has_attachments() { 1 } else { 0 }, body, envelope.date().to_be_bytes().to_vec()],
         )
             .map_err(|e| MeliError::new(e.to_string())) {
                 debug!(
                         "Failed to insert envelope {}: {}",
                         envelope.message_id_display(),
-                        err.to_string()
+                        err
                     );
                 log(
                     format!(
                         "Failed to insert envelope {}: {}",
                         envelope.message_id_display(),
-                        err.to_string()
+                        err
                     ),
                     ERROR,
                 );
@@ -253,17 +253,9 @@ pub fn remove(env_hash: EnvelopeHash) -> Result<()> {
         )
         .map_err(|e| MeliError::new(e.to_string()))
     {
-        debug!(
-            "Failed to remove envelope {}: {}",
-            env_hash,
-            err.to_string()
-        );
+        debug!("Failed to remove envelope {}: {}", env_hash, err);
         log(
-            format!(
-                "Failed to remove envelope {}: {}",
-                env_hash,
-                err.to_string()
-            ),
+            format!("Failed to remove envelope {}: {}", env_hash, err),
             ERROR,
         );
         return Err(err);
@@ -324,11 +316,11 @@ pub fn index(context: &mut crate::state::Context, account_index: usize) -> Resul
                     .await
                     .chain_err_summary(|| format!("Failed to open envelope {}", env_hash))?;
                 let envelopes_lck = acc_mutex.read().unwrap();
-                if let Some(e) = envelopes_lck.get(&env_hash) {
+                if let Some(e) = envelopes_lck.get(env_hash) {
                     let body = e.body_bytes(&bytes).text().replace('\0', "");
                     conn.execute("INSERT OR REPLACE INTO envelopes (account_id, hash, date, _from, _to, cc, bcc, subject, message_id, in_reply_to, _references, flags, has_attachments, body_text, timestamp)
               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
-              params![account_id, e.hash().to_be_bytes().to_vec(), e.date_as_str(), e.field_from_to_string(), e.field_to_to_string(), e.field_cc_to_string(), e.field_bcc_to_string(), e.subject().into_owned().trim_end_matches('\u{0}'), e.message_id_display().to_string(), e.in_reply_to_display().map(|f| f.to_string()).unwrap_or(String::new()), e.field_references_to_string(), i64::from(e.flags().bits()), if e.has_attachments() { 1 } else { 0 }, body, e.date().to_be_bytes().to_vec()],
+              params![account_id, e.hash().to_be_bytes().to_vec(), e.date_as_str(), e.field_from_to_string(), e.field_to_to_string(), e.field_cc_to_string(), e.field_bcc_to_string(), e.subject().into_owned().trim_end_matches('\u{0}'), e.message_id_display().to_string(), e.in_reply_to_display().map(|f| f.to_string()).unwrap_or_default(), e.field_references_to_string(), i64::from(e.flags().bits()), if e.has_attachments() { 1 } else { 0 }, body, e.date().to_be_bytes().to_vec()],
                         ).chain_err_summary(|| format!( "Failed to insert envelope {}", e.message_id_display()))?;
                 }
             }
@@ -366,7 +358,7 @@ pub fn search(
         .prepare(
             debug!(format!(
                 "SELECT hash FROM envelopes WHERE {} ORDER BY {} {};",
-                query_to_sql(&query),
+                query_to_sql(query),
                 sort_field,
                 sort_order
             ))
@@ -375,7 +367,7 @@ pub fn search(
         .map_err(|e| MeliError::new(e.to_string()))?;
 
     let results = stmt
-        .query_map([], |row| Ok(row.get(0)?))
+        .query_map([], |row| row.get(0))
         .map_err(|e| MeliError::new(e.to_string()))?
         .map(|r: std::result::Result<Vec<u8>, rusqlite::Error>| {
             Ok(u64::from_be_bytes(
@@ -424,14 +416,14 @@ pub fn query_to_sql(q: &Query) -> String {
                 s.push_str("%\" ");
             }
             And(q1, q2) => {
-                s.push_str("(");
+                s.push('(');
                 rec(q1, s);
                 s.push_str(") AND (");
                 rec(q2, s);
                 s.push_str(") ");
             }
             Or(q1, q2) => {
-                s.push_str("(");
+                s.push('(');
                 rec(q1, s);
                 s.push_str(") OR (");
                 rec(q2, s);
@@ -445,7 +437,7 @@ pub fn query_to_sql(q: &Query) -> String {
             Flags(v) => {
                 let total = v.len();
                 if total > 1 {
-                    s.push_str("(");
+                    s.push('(');
                 }
                 for (i, f) in v.iter().enumerate() {
                     match f.as_str() {
