@@ -443,6 +443,65 @@ pub mod dates {
         }
     }
 
+    ///e.g Wed Sep  9 00:27:54 2020
+    ///day-of-week month day time year
+    ///date-time       =   [ day-of-week "," ] date time [CFWS]
+    ///date            =   day month year
+    ///time            =   time-of-day zone
+    ///time-of-day     =   hour ":" minute [ ":" second ]
+    ///hour            =   2DIGIT / obs-hour
+    ///minute          =   2DIGIT / obs-minute
+    ///second          =   2DIGIT / obs-second
+    pub fn mbox_date_time(input: &[u8]) -> IResult<&[u8], UnixTimestamp> {
+        let orig_input = input;
+        let mut accum: SmallVec<[u8; 32]> = SmallVec::new();
+        let (input, _) = opt(cfws)(input)?;
+        let (input, day_of_week) = day_of_week(input)?;
+        let (input, _) = opt(cfws)(input)?;
+        let (input, month) = month(input)?;
+        let (input, _) = opt(cfws)(input)?;
+        let (input, day) = day(input)?;
+        let (input, _) = opt(cfws)(input)?;
+        let (input, hour) = take_n_digits(2)(input)?;
+        let (input, _) = tag(":")(input)?;
+        let (input, minute) = take_n_digits(2)(input)?;
+        let (input, second) = opt(preceded(tag(":"), take_n_digits(2)))(input)?;
+        let (input, _) = fws(input)?;
+        let (input, zone) = opt(zone)(input)?;
+        let (input, _) = opt(cfws)(input)?;
+        let (input, year) = year(input)?;
+        accum.extend_from_slice(&day_of_week);
+        accum.extend_from_slice(b", ");
+        accum.extend_from_slice(&day);
+        accum.extend_from_slice(b" ");
+        accum.extend_from_slice(&month);
+        accum.extend_from_slice(b" ");
+        accum.extend_from_slice(&year);
+        accum.extend_from_slice(b" ");
+        accum.extend_from_slice(&hour);
+        accum.extend_from_slice(b":");
+        accum.extend_from_slice(&minute);
+        if let Some(second) = second {
+            accum.extend_from_slice(b":");
+            accum.extend_from_slice(&second);
+        }
+        if let Some((sign, zone)) = zone {
+            accum.extend_from_slice(b" ");
+            accum.extend_from_slice(&sign);
+            accum.extend_from_slice(&zone);
+        }
+        match crate::datetime::rfc822_to_timestamp(accum.to_vec()) {
+            Ok(t) => Ok((input, t)),
+            Err(_err) => Err(nom::Err::Error(
+                (
+                    orig_input,
+                    "mbox_date_time(): could not convert date from rfc822",
+                )
+                    .into(),
+            )),
+        }
+    }
+
     ///`day-of-week     =   ([FWS] day-name) / obs-day-of-week`
     ///day-name        =   "Mon" / "Tue" / "Wed" / "Thu" /
     ///                    "Fri" / "Sat" / "Sun"
@@ -490,9 +549,9 @@ pub mod dates {
 
     ///year            =   (FWS 4*DIGIT FWS) / obs-year
     fn year(input: &[u8]) -> IResult<&[u8], &[u8]> {
-        let (input, _) = fws(input)?;
+        let (input, _) = opt(fws)(input)?;
         let (input, ret) = take_n_digits(4)(input)?;
-        let (input, _) = fws(input)?;
+        let (input, _) = opt(fws)(input)?;
         Ok((input, ret))
     }
 
@@ -506,6 +565,17 @@ pub mod dates {
                     Err(_) => {
                         return Err(nom::Err::Error(
                             (rest, "rfc5322_date(): invalid input").into(),
+                        ));
+                    }
+                };
+                Ok((rest, ret))
+            })
+            .or_else(|_| {
+                let (rest, ret) = match mbox_date_time(&input) {
+                    Ok(v) => v,
+                    Err(_) => {
+                        return Err(nom::Err::Error(
+                            (input, "rfc5322_date(): invalid input").into(),
                         ));
                     }
                 };
@@ -532,6 +602,8 @@ pub mod dates {
         assert_eq!(rfc5322_date(_s).unwrap(), rfc5322_date(__s).unwrap());
         let val = b"Fri, 23 Dec 0001 21:20:36 -0800 (PST)";
         assert_eq!(rfc5322_date(val).unwrap(), 0);
+        let val = b"Wed Sep  9 00:27:54 2020";
+        assert_eq!(rfc5322_date(val).unwrap(), 1599611274);
     }
 }
 

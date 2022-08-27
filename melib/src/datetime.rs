@@ -50,6 +50,7 @@ pub const RFC822_FMT_WITH_TIME: &str = "%a, %e %h %Y %H:%M:%S \0";
 pub const RFC822_FMT: &str = "%e %h %Y %H:%M:%S \0";
 pub const DEFAULT_FMT: &str = "%a, %d %b %Y %R\0";
 //"Tue May 21 13:46:22 1991\n"
+//"Wed Sep  9 00:27:54 2020\n"
 pub const ASCTIME_FMT: &str = "%a %b %d %H:%M:%S %Y\n\0";
 
 extern "C" {
@@ -301,7 +302,7 @@ where
 {
     let s = CString::new(s)?;
     let mut new_tm: libc::tm = unsafe { std::mem::zeroed() };
-    for fmt in &[RFC822_FMT_WITH_TIME, RFC822_FMT] {
+    for fmt in &[RFC822_FMT_WITH_TIME, RFC822_FMT, ASCTIME_FMT] {
         let fmt = unsafe { CStr::from_bytes_with_nul_unchecked(fmt.as_bytes()) };
         let ret = {
             let _with_locale = Locale::new(
