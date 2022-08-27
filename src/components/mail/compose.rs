@@ -57,6 +57,13 @@ enum EmbedStatus {
     Running(Arc<Mutex<EmbedTerminal>>, File),
 }
 
+impl EmbedStatus {
+    #[inline(always)]
+    fn is_stopped(&self) -> bool {
+        matches!(self, Self::Stopped(_, _))
+    }
+}
+
 impl std::ops::Deref for EmbedStatus {
     type Target = Arc<Mutex<EmbedTerminal>>;
     fn deref(&self) -> &Arc<Mutex<EmbedTerminal>> {
@@ -696,6 +703,33 @@ To: {}
             }
         }
     }
+
+    fn update_from_file(&mut self, file: File, context: &mut Context) -> bool {
+        let result = file.read_to_string();
+        match Draft::from_str(result.as_str()) {
+            Ok(mut new_draft) => {
+                std::mem::swap(self.draft.attachments_mut(), new_draft.attachments_mut());
+                if self.draft != new_draft {
+                    self.has_changes = true;
+                }
+                self.draft = new_draft;
+                true
+            }
+            Err(err) => {
+                context.replies.push_back(UIEvent::Notification(
+                    Some("Could not parse draft headers correctly.".to_string()),
+                    format!(
+                        "{}\nThe invalid text has been set as the body of your draft",
+                        &err
+                    ),
+                    Some(NotificationType::Error(melib::error::ErrorKind::None)),
+                ));
+                self.draft.set_body(result);
+                self.has_changes = true;
+                false
+            }
+        }
+    }
 }
 
 impl Component for Composer {
@@ -854,7 +888,23 @@ impl Component for Composer {
                         ((0, 0), pos_dec(guard.grid.terminal_size, (1, 1))),
                     );
                     change_colors(grid, embed_area, Color::Byte(8), theme_default.bg);
-                    const STOPPED_MESSAGE: &str = "process has stopped, press 'e' to re-activate";
+                    let our_map: ShortcutMap =
+                        account_settings!(context[self.account_hash].shortcuts.composing)
+                            .key_values();
+                    let mut shortcuts: ShortcutMaps = Default::default();
+                    shortcuts.insert(Composer::DESCRIPTION, our_map);
+                    let stopped_message: String =
+                        format!("Process with PID {} has stopped.", guard.child_pid);
+                    let stopped_message_2: String = format!(
+                        "-press '{}' (edit_mail shortcut) to re-activate.",
+                        shortcuts[Self::DESCRIPTION]["edit_mail"]
+                    );
+                    const STOPPED_MESSAGE_3: &str =
+                        "-press Ctrl-C to forcefully kill it and return to editor.";
+                    let max_len = std::cmp::max(
+                        stopped_message.len(),
+                        std::cmp::max(stopped_message_2.len(), STOPPED_MESSAGE_3.len()),
+                    );
                     let inner_area = create_box(
                         grid,
                         (
@@ -862,22 +912,34 @@ impl Component for Composer {
                             pos_inc(
                                 upper_left!(body_area),
                                 (
-                                    std::cmp::min(STOPPED_MESSAGE.len() + 5, width!(body_area)),
+                                    std::cmp::min(max_len + 5, width!(body_area)),
                                     std::cmp::min(5, height!(body_area)),
                                 ),
                             ),
                         ),
                     );
                     clear_area(grid, inner_area, theme_default);
-                    write_string_to_grid(
-                        STOPPED_MESSAGE,
-                        grid,
-                        theme_default.fg,
-                        theme_default.bg,
-                        theme_default.attrs,
-                        inner_area,
-                        Some(get_x(upper_left!(inner_area))),
-                    );
+                    for (i, l) in [
+                        stopped_message.as_str(),
+                        stopped_message_2.as_str(),
+                        STOPPED_MESSAGE_3,
+                    ]
+                    .iter()
+                    .enumerate()
+                    {
+                        write_string_to_grid(
+                            l,
+                            grid,
+                            theme_default.fg,
+                            theme_default.bg,
+                            theme_default.attrs,
+                            (
+                                pos_inc((0, i), upper_left!(inner_area)),
+                                bottom_right!(inner_area),
+                            ),
+                            Some(get_x(upper_left!(inner_area))),
+                        );
+                    }
                     context.dirty_areas.push_back(area);
                     self.dirty = false;
                     return;
@@ -1356,6 +1418,7 @@ impl Component for Composer {
                         match embed_guard.is_active() {
                             Ok(WaitStatus::Exited(_, exit_code)) => {
                                 drop(embed_guard);
+                                let embed = self.embed.take();
                                 if exit_code != 0 {
                                     context.replies.push_back(UIEvent::Notification(
                                         None,
@@ -1367,31 +1430,9 @@ impl Component for Composer {
                                             melib::error::ErrorKind::External,
                                         )),
                                     ));
-                                } else if let EmbedStatus::Running(_, f) = embed {
-                                    let result = f.read_to_string();
-                                    match Draft::from_str(result.as_str()) {
-                                        Ok(mut new_draft) => {
-                                            std::mem::swap(
-                                                self.draft.attachments_mut(),
-                                                new_draft.attachments_mut(),
-                                            );
-                                            if self.draft != new_draft {
-                                                self.has_changes = true;
-                                            }
-                                            self.draft = new_draft;
-                                        }
-                                        Err(err) => {
-                                            context.replies.push_back(UIEvent::Notification(
-                                                    Some("Could not parse draft headers correctly.".to_string()),
-                                                    format!("{}\nThe invalid text has been set as the body of your draft", &err),
-                                                    Some(NotificationType::Error(melib::error::ErrorKind::None)),
-                                            ));
-                                            self.draft.set_body(result);
-                                            self.has_changes = true;
-                                        }
-                                    }
+                                } else if let Some(EmbedStatus::Running(_, file)) = embed {
+                                    self.update_from_file(file, context);
                                 }
-                                self.embed = None;
                                 self.initialized = false;
                                 self.mode = ViewMode::Edit;
                                 self.set_dirty(true);
@@ -1584,6 +1625,32 @@ impl Component for Composer {
                 context
                     .replies
                     .push_back(UIEvent::ChangeMode(UIMode::Embed));
+                self.set_dirty(true);
+                return true;
+            }
+            UIEvent::Input(Key::Ctrl('c'))
+                if self.embed.is_some() && self.embed.as_ref().unwrap().is_stopped() =>
+            {
+                match self.embed.take() {
+                    Some(EmbedStatus::Running(embed, file))
+                    | Some(EmbedStatus::Stopped(embed, file)) => {
+                        let guard = embed.lock().unwrap();
+                        guard.wake_up();
+                        guard.terminate();
+                        self.update_from_file(file, context);
+                    }
+                    _ => {}
+                }
+                context.replies.push_back(UIEvent::Notification(
+                    None,
+                    "Subprocess was killed by SIGTERM signal".to_string(),
+                    Some(NotificationType::Error(melib::error::ErrorKind::External)),
+                ));
+                self.initialized = false;
+                self.mode = ViewMode::Edit;
+                context
+                    .replies
+                    .push_back(UIEvent::ChangeMode(UIMode::Normal));
                 self.set_dirty(true);
                 return true;
             }

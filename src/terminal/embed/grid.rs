@@ -109,6 +109,12 @@ impl EmbedTerminal {
         let _ = nix::sys::signal::kill(debug!(self.child_pid), nix::sys::signal::SIGSTOP);
     }
 
+    pub fn terminate(&self) {
+        let _ = nix::sys::signal::kill(self.child_pid, nix::sys::signal::SIGTERM);
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        let _ = waitpid(self.child_pid, Some(WaitPidFlag::WNOHANG));
+    }
+
     pub fn is_active(&self) -> Result<WaitStatus> {
         debug!(waitpid(self.child_pid, Some(WaitPidFlag::WNOHANG),))
             .map_err(|e| MeliError::new(e.to_string()))
