@@ -16,6 +16,8 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with meli. If not, see <http://www.gnu.org/licenses/>.
+.POSIX:
+.SUFFIXES:
 
 # Options
 PREFIX ?= /usr/local
@@ -46,11 +48,11 @@ CARGO_COLOR ?= `[ -z $${NO_COLOR+x} ] && echo "" || echo "--color=never "`
 RED ?= `[ -z $${NO_COLOR+x} ] && ([ -z $${TERM} ] && echo "" || tput setaf 1) || echo ""`
 GREEN ?= `[ -z $${NO_COLOR+x} ] && ([ -z $${TERM} ] && echo "" || tput setaf 2) || echo ""`
 
-.POSIX:
-.SUFFIXES:
+.PHONY: meli
 meli: check-deps
 	@${CARGO_BIN} build ${CARGO_ARGS} ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" ${FEATURES} --release
 
+.PHONY: help
 help:
 	@echo "For a quick start, build and install locally:\n ${BOLD}${GREEN}PREFIX=~/.local make install${ANSI_RESET}\n"
 	@echo "Available subcommands:"
@@ -126,9 +128,9 @@ install-doc:
 			MANPAGEPATH=${DESTDIR}${MANDIR}/man$${SECTION}/$${MANPAGE}.gz; \
 			echo "  * installing $${MANPAGE} → ${GREEN}$${MANPAGEPATH}${ANSI_RESET}"; \
 			gzip -n < ${DOCS_SUBDIR}$${MANPAGE} > $${MANPAGEPATH} \
-    ; done ; \
+		; done ; \
 	(case ":${MANPATHS}:" in \
-  *:${DESTDIR}${MANDIR}:*) echo -n "";; \
+	*:${DESTDIR}${MANDIR}:*) echo -n "";; \
 	*) echo "\n${RED}${BOLD}WARNING${ANSI_RESET}: ${UNDERLINE}Path ${DESTDIR}${MANDIR} is not contained in your MANPATH variable or the output of \`manpath\` command.${ANSI_RESET} \`man\` might fail finding the installed manpages. Consider adding it if necessary.\nMANPATH variable / output of \`manpath\`: ${MANPATHS}" ;; \
 	esac) ; \
 	else echo "NO_MAN is defined, so no documentation is going to be installed." ; fi)
@@ -138,7 +140,7 @@ install-bin: meli
 	@mkdir -p $(DESTDIR)${BINDIR}
 	@echo " - ${BOLD}Installing binary to ${ANSI_RESET}${GREEN}${DESTDIR}${BINDIR}/meli${ANSI_RESET}"
 	@case ":${PATH}:" in \
-  *:${DESTDIR}${BINDIR}:*) echo -n "";; \
+	*:${DESTDIR}${BINDIR}:*) echo -n "";; \
 	*) echo "\n${RED}${BOLD}WARNING${ANSI_RESET}: ${UNDERLINE}Path ${DESTDIR}${BINDIR} is not contained in your PATH variable.${ANSI_RESET} Consider adding it if necessary.\nPATH variable: ${PATH}";; \
 	esac
 	@mkdir -p $(DESTDIR)${BINDIR}
