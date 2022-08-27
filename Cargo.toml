@@ -71,6 +71,7 @@ lto = "fat"
 codegen-units = 1
 opt-level = "s"
 debug = false
+strip = true
 
 [workspace]
 members = ["melib", "tools", ]
