@@ -10,7 +10,7 @@ homepage = "https://meli.delivery"
 repository = "https://git.meli.delivery/meli/meli.git"
 description = "mail library"
 keywords = ["mail", "mua", "maildir", "imap", "jmap"]
-categories = [ "email", "parser-implementations"]
+categories = ["email", "parser-implementations"]
 license = "GPL-3.0-or-later"
 readme = "README.md"
 
@@ -19,34 +19,34 @@ name = "melib"
 path = "src/lib.rs"
 
 [dependencies]
-bitflags = "1.0"
-data-encoding = "2.1.1"
-encoding = "0.2.33"
-nom = { version = "7" }
-
-indexmap = { version = "^1.5", features = ["serde-1", ] }
-notify = { version = "4.0.15", optional = true }
-xdg = "2.1.0"
-native-tls = { version ="0.2.3", optional=true }
-serde = { version = "1.0.71", features = ["rc", ] }
-serde_derive = "1.0.71"
-bincode = "^1.3.0"
-uuid = { version = "^1", features = ["serde", "v4", "v5"] }
-
-unicode-segmentation = { version = "1.2.1", optional = true }
-libc = {version = "0.2.125", features = ["extra_traits",]}
-isahc = { version = "^1.7.2", optional = true, default-features = false, features = ["http2", "json", "text-decoding"]}
-serde_json = { version = "1.0", optional = true, features = ["raw_value",] }
-smallvec = { version = "^1.5.0", features = ["serde", ] }
-nix = "^0.24"
-rusqlite = {version = "^0.27", optional = true }
-
-libloading = "^0.7"
-futures = "0.3.5"
-smol = "1.0.0"
 async-stream = "^0.3"
 base64 = { version = "^0.13", optional = true }
+bincode = { version = "^1.3.0", default-features = false }
+bitflags = "1.0"
+data-encoding = { version = "2.1.1" }
+encoding = { version = "0.2.33", default-features = false }
 flate2 = { version = "1.0.16", optional = true }
+futures = "0.3.5"
+
+indexmap = { version = "^1.5", default-features = false, features = ["serde-1", ] }
+isahc = { version = "^1.7.2", optional = true, default-features = false, features = ["http2", "json", "text-decoding"] }
+libc = { version = "0.2.125", features = ["extra_traits",] }
+
+libloading = "^0.7"
+native-tls = { version = "0.2.3", default-features = false, optional = true }
+nix = "^0.24"
+nom = { version = "7" }
+notify = { version = "4.0.15", optional = true }
+rusqlite = { version = "^0.28", default-features = false, optional = true }
+serde = { version = "1.0.71", features = ["rc", ] }
+serde_derive = "1.0.71"
+serde_json = { version = "1.0", optional = true, features = ["raw_value",] }
+smallvec = { version = "^1.5.0", features = ["serde", ] }
+smol = "1.0.0"
+
+unicode-segmentation = { version = "1.2.1", default-features = false, optional = true }
+uuid = { version = "^1", features = ["serde", "v4", "v5"] }
+xdg = "2.1.0"
 xdg-utils = "^0.4.0"
 
 [features]
