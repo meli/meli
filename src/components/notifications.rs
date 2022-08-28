@@ -190,6 +190,15 @@ impl Component for NotificationCommand {
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         if let UIEvent::Notification(ref title, ref body, ref kind) = event {
             if context.settings.notifications.enable {
+                if *kind == Some(NotificationType::NewMail) {
+                    if let Some(ref path) = context.settings.notifications.xbiff_file_path {
+                        if let Err(err) = update_xbiff(path) {
+                            debug!("Could not update xbiff file: {:?}", &err);
+                            melib::log(format!("Could not update xbiff file: {}.", err), ERROR);
+                        }
+                    }
+                }
+
                 if let Some(ref bin) = context.settings.notifications.script {
                     match Command::new(bin)
                         .arg(&kind.map(|k| k.to_string()).unwrap_or_default())
@@ -223,6 +232,7 @@ impl Component for NotificationCommand {
                         {
                             Ok(child) => {
                                 context.children.push(child);
+                                return false;
                             }
                             Err(err) => {
                                 log(
@@ -233,18 +243,19 @@ impl Component for NotificationCommand {
                             }
                         }
                     }
-                }
-            }
 
-            if *kind == Some(NotificationType::NewMail) {
-                if let Some(ref path) = context.settings.notifications.xbiff_file_path {
-                    if let Err(err) = update_xbiff(path) {
-                        debug!("Could not update xbiff file: {:?}", &err);
-                        melib::log(format!("Could not update xbiff file: {}.", err), ERROR);
-                    }
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(format!(
+                            "{title}{}{body}",
+                            if title.is_some() { " " } else { "" },
+                            title = title.as_deref().unwrap_or_default(),
+                            body = body,
+                        ))));
                 }
             }
         }
+
         false
     }
     fn id(&self) -> ComponentId {
