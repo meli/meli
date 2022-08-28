@@ -1614,7 +1614,23 @@ impl Account {
                                 self.hash,
                             )))
                             .unwrap();
-                        if let Err(err) = mailboxes.and_then(|mailboxes| self.init(mailboxes)) {
+                        if let Err(err) = mailboxes.and_then(|mailboxes| {
+                            let mut table = crate::components::utilities::Table::new(
+                                Default::default(),
+                                Default::default(),
+                            );
+                            table.insert_rows(
+                                mailboxes
+                                    .iter()
+                                    .map(|mbox| [mbox.1.path().to_string()])
+                                    .collect::<Vec<[String; 1]>>(),
+                            );
+                            self.sender
+                                .send(ThreadEvent::UIEvent(UIEvent::GlobalUIDialog(table)))
+                                .unwrap();
+
+                            self.init(mailboxes)
+                        }) {
                             if err.kind.is_authentication() {
                                 self.sender
                                     .send(ThreadEvent::UIEvent(UIEvent::Notification(

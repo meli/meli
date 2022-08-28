@@ -1089,7 +1089,9 @@ impl State {
                 return;
             }
             UIEvent::GlobalUIDialog(dialog) => {
-                self.overlay.push(dialog);
+                if self.overlay.is_empty() {
+                    self.overlay.push(dialog);
+                }
                 return;
             }
             _ => {}

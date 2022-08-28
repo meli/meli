@@ -36,6 +36,9 @@ pub use self::layouts::*;
 mod dialogs;
 pub use self::dialogs::*;
 
+mod tables;
+pub use self::tables::*;
+
 use crate::jobs::JobId;
 use std::collections::HashSet;
 

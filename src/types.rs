@@ -216,6 +216,12 @@ pub mod segment_tree {
         tree: SmallVec<[u8; 1024]>,
     }
 
+    impl From<Vec<u8>> for SegmentTree {
+        fn from(val: Vec<u8>) -> SegmentTree {
+            SegmentTree::new(SmallVec::from(val))
+        }
+    }
+
     impl From<SmallVec<[u8; 1024]>> for SegmentTree {
         fn from(val: SmallVec<[u8; 1024]>) -> SegmentTree {
             SegmentTree::new(val)
