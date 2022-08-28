@@ -113,6 +113,12 @@ pub struct ThreadListing {
     /// Cache current view.
     color_cache: ColorCache,
 
+    #[allow(clippy::type_complexity)]
+    search_job: Option<(
+        String,
+        crate::jobs::JoinHandle<Result<SmallVec<[EnvelopeHash; 512]>>>,
+    )>,
+
     data_columns: DataColumns,
     rows_drawn: SegmentTree,
     rows: Vec<((usize, bool, bool, EnvelopeHash), EntryStrings)>,
@@ -721,6 +727,19 @@ impl ListingTrait for ThreadListing {
         }
     }
 
+    fn filter(
+        &mut self,
+        filter_term: String,
+        _results: SmallVec<[EnvelopeHash; 512]>,
+        context: &Context,
+    ) {
+        if filter_term.is_empty() {
+            return;
+        }
+
+        let _account = &context.accounts[&self.cursor_pos.0];
+    }
+
     fn unfocused(&self) -> bool {
         self.unfocused
     }
@@ -758,6 +777,7 @@ impl ThreadListing {
             initialised: false,
             movement: None,
             id: ComponentId::new_v4(),
+            search_job: None,
         })
     }
 
@@ -1308,8 +1328,53 @@ impl Component for ThreadListing {
                     self.refresh_mailbox(context, false);
                     return true;
                 }
+                Action::Listing(Search(ref filter_term)) if !self.unfocused => {
+                    match context.accounts[&self.cursor_pos.0].search(
+                        filter_term,
+                        self.sort,
+                        self.cursor_pos.1,
+                    ) {
+                        Ok(job) => {
+                            let handle = context.accounts[&self.cursor_pos.0]
+                                .job_executor
+                                .spawn_specialized(job);
+                            self.search_job = Some((filter_term.to_string(), handle));
+                        }
+                        Err(err) => {
+                            context.replies.push_back(UIEvent::Notification(
+                                Some("Could not perform search".to_string()),
+                                err.to_string(),
+                                Some(crate::types::NotificationType::Error(err.kind)),
+                            ));
+                        }
+                    };
+                    self.set_dirty(true);
+                    return true;
+                }
                 _ => {}
             },
+            UIEvent::StatusEvent(StatusEvent::JobFinished(ref job_id))
+                if self
+                    .search_job
+                    .as_ref()
+                    .map(|(_, j)| j == job_id)
+                    .unwrap_or(false) =>
+            {
+                let (filter_term, mut handle) = self.search_job.take().unwrap();
+                match handle.chan.try_recv() {
+                    Err(_) => { /* search was canceled */ }
+                    Ok(None) => { /* something happened, perhaps a worker thread panicked */ }
+                    Ok(Some(Ok(results))) => self.filter(filter_term, results, context),
+                    Ok(Some(Err(err))) => {
+                        context.replies.push_back(UIEvent::Notification(
+                            Some("Could not perform search".to_string()),
+                            err.to_string(),
+                            Some(crate::types::NotificationType::Error(err.kind)),
+                        ));
+                    }
+                }
+                self.set_dirty(true);
+            }
             _ => {}
         }
         false

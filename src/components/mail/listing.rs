@@ -505,7 +505,7 @@ pub trait ListingTrait: Component {
     fn filter(
         &mut self,
         _filter_term: String,
-        _results: Result<SmallVec<[EnvelopeHash; 512]>>,
+        _results: SmallVec<[EnvelopeHash; 512]>,
         _context: &Context,
     ) {
     }

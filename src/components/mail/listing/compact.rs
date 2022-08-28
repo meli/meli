@@ -768,7 +768,7 @@ impl ListingTrait for CompactListing {
     fn filter(
         &mut self,
         filter_term: String,
-        results: Result<SmallVec<[EnvelopeHash; 512]>>,
+        results: SmallVec<[EnvelopeHash; 512]>,
         context: &Context,
     ) {
         self.order.clear();
@@ -780,70 +780,41 @@ impl ListingTrait for CompactListing {
         self.row_updates.clear();
 
         let account = &context.accounts[&self.cursor_pos.0];
-        match results {
-            Ok(results) => {
-                let threads = account.collection.get_threads(self.cursor_pos.1);
-                for env_hash in results {
-                    if !account.collection.contains_key(&env_hash) {
-                        continue;
-                    }
-                    let env_thread_node_hash = account.collection.get_env(env_hash).thread();
-                    if !threads.thread_nodes.contains_key(&env_thread_node_hash) {
-                        continue;
-                    }
-                    let thread =
-                        threads.find_group(threads.thread_nodes[&env_thread_node_hash].group);
-                    if self.filtered_order.contains_key(&thread) {
-                        continue;
-                    }
-                    if self.all_threads.contains(&thread) {
-                        self.filtered_selection.push(thread);
-                        self.filtered_order
-                            .insert(thread, self.filtered_selection.len() - 1);
-                    }
-                }
-                if !self.filtered_selection.is_empty() {
-                    threads.group_inner_sort_by(
-                        &mut self.filtered_selection,
-                        self.sort,
-                        &context.accounts[&self.cursor_pos.0].collection.envelopes,
-                    );
-                    self.new_cursor_pos.2 =
-                        std::cmp::min(self.filtered_selection.len() - 1, self.cursor_pos.2);
-                } else {
-                    self.data_columns.columns[0] =
-                        CellBuffer::new_with_context(0, 0, None, context);
-                }
-                self.redraw_threads_list(
-                    context,
-                    Box::new(self.filtered_selection.clone().into_iter())
-                        as Box<dyn Iterator<Item = ThreadHash>>,
-                );
+        let threads = account.collection.get_threads(self.cursor_pos.1);
+        for env_hash in results {
+            if !account.collection.contains_key(&env_hash) {
+                continue;
             }
-            Err(e) => {
-                self.cursor_pos.2 = 0;
-                self.new_cursor_pos.2 = 0;
-                let message = format!(
-                    "Encountered an error while searching for `{}`: {}.",
-                    &self.filter_term, e
-                );
-                log(
-                    format!("Failed to search for term {}: {}", &self.filter_term, e),
-                    ERROR,
-                );
-                self.data_columns.columns[0] =
-                    CellBuffer::new_with_context(message.len(), 1, None, context);
-                write_string_to_grid(
-                    &message,
-                    &mut self.data_columns.columns[0],
-                    self.color_cache.theme_default.fg,
-                    self.color_cache.theme_default.bg,
-                    self.color_cache.theme_default.attrs,
-                    ((0, 0), (message.len() - 1, 0)),
-                    None,
-                );
+            let env_thread_node_hash = account.collection.get_env(env_hash).thread();
+            if !threads.thread_nodes.contains_key(&env_thread_node_hash) {
+                continue;
+            }
+            let thread = threads.find_group(threads.thread_nodes[&env_thread_node_hash].group);
+            if self.filtered_order.contains_key(&thread) {
+                continue;
+            }
+            if self.all_threads.contains(&thread) {
+                self.filtered_selection.push(thread);
+                self.filtered_order
+                    .insert(thread, self.filtered_selection.len() - 1);
             }
         }
+        if !self.filtered_selection.is_empty() {
+            threads.group_inner_sort_by(
+                &mut self.filtered_selection,
+                self.sort,
+                &context.accounts[&self.cursor_pos.0].collection.envelopes,
+            );
+            self.new_cursor_pos.2 =
+                std::cmp::min(self.filtered_selection.len() - 1, self.cursor_pos.2);
+        } else {
+            self.data_columns.columns[0] = CellBuffer::new_with_context(0, 0, None, context);
+        }
+        self.redraw_threads_list(
+            context,
+            Box::new(self.filtered_selection.clone().into_iter())
+                as Box<dyn Iterator<Item = ThreadHash>>,
+        );
     }
 
     fn unfocused(&self) -> bool {
@@ -2020,7 +1991,14 @@ impl Component for CompactListing {
                 match handle.chan.try_recv() {
                     Err(_) => { /* search was canceled */ }
                     Ok(None) => { /* something happened, perhaps a worker thread panicked */ }
-                    Ok(Some(results)) => self.filter(filter_term, results, context),
+                    Ok(Some(Ok(results))) => self.filter(filter_term, results, context),
+                    Ok(Some(Err(err))) => {
+                        context.replies.push_back(UIEvent::Notification(
+                            Some("Could not perform search".to_string()),
+                            err.to_string(),
+                            Some(crate::types::NotificationType::Error(err.kind)),
+                        ));
+                    }
                 }
                 self.set_dirty(true);
             }

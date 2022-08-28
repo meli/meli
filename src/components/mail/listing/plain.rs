@@ -595,7 +595,7 @@ impl ListingTrait for PlainListing {
     fn filter(
         &mut self,
         filter_term: String,
-        results: Result<SmallVec<[EnvelopeHash; 512]>>,
+        results: SmallVec<[EnvelopeHash; 512]>,
         context: &Context,
     ) {
         if filter_term.is_empty() {
@@ -614,58 +614,30 @@ impl ListingTrait for PlainListing {
         }
 
         let account = &context.accounts[&self.cursor_pos.0];
-        match results {
-            Ok(results) => {
-                for env_hash in results {
-                    if !account.collection.contains_key(&env_hash) {
-                        continue;
-                    }
-                    if self.filtered_order.contains_key(&env_hash) {
-                        continue;
-                    }
-                    if self.all_envelopes.contains(&env_hash) {
-                        self.filtered_selection.push(env_hash);
-                        self.filtered_order
-                            .insert(env_hash, self.filtered_selection.len() - 1);
-                    }
-                }
-                if !self.filtered_selection.is_empty() {
-                    self.new_cursor_pos.2 =
-                        std::cmp::min(self.filtered_selection.len() - 1, self.cursor_pos.2);
-                } else {
-                    self.data_columns.columns[0] =
-                        CellBuffer::new_with_context(0, 0, None, context);
-                }
-                self.redraw_list(
-                    context,
-                    Box::new(self.filtered_selection.clone().into_iter())
-                        as Box<dyn Iterator<Item = EnvelopeHash>>,
-                );
+        for env_hash in results {
+            if !account.collection.contains_key(&env_hash) {
+                continue;
             }
-            Err(e) => {
-                self.cursor_pos.2 = 0;
-                self.new_cursor_pos.2 = 0;
-                let message = format!(
-                    "Encountered an error while searching for `{}`: {}.",
-                    &self.filter_term, e
-                );
-                log(
-                    format!("Failed to search for term {}: {}", &self.filter_term, e),
-                    ERROR,
-                );
-                self.data_columns.columns[0] =
-                    CellBuffer::new_with_context(message.len(), 1, None, context);
-                write_string_to_grid(
-                    &message,
-                    &mut self.data_columns.columns[0],
-                    self.color_cache.theme_default.fg,
-                    self.color_cache.theme_default.bg,
-                    self.color_cache.theme_default.attrs,
-                    ((0, 0), (message.len() - 1, 0)),
-                    None,
-                );
+            if self.filtered_order.contains_key(&env_hash) {
+                continue;
+            }
+            if self.all_envelopes.contains(&env_hash) {
+                self.filtered_selection.push(env_hash);
+                self.filtered_order
+                    .insert(env_hash, self.filtered_selection.len() - 1);
             }
         }
+        if !self.filtered_selection.is_empty() {
+            self.new_cursor_pos.2 =
+                std::cmp::min(self.filtered_selection.len() - 1, self.cursor_pos.2);
+        } else {
+            self.data_columns.columns[0] = CellBuffer::new_with_context(0, 0, None, context);
+        }
+        self.redraw_list(
+            context,
+            Box::new(self.filtered_selection.clone().into_iter())
+                as Box<dyn Iterator<Item = EnvelopeHash>>,
+        );
     }
 
     fn unfocused(&self) -> bool {
@@ -1402,7 +1374,14 @@ impl Component for PlainListing {
                 match handle.chan.try_recv() {
                     Err(_) => { /* search was canceled */ }
                     Ok(None) => { /* something happened, perhaps a worker thread panicked */ }
-                    Ok(Some(results)) => self.filter(filter_term, results, context),
+                    Ok(Some(Ok(results))) => self.filter(filter_term, results, context),
+                    Ok(Some(Err(err))) => {
+                        context.replies.push_back(UIEvent::Notification(
+                            Some("Could not perform search".to_string()),
+                            err.to_string(),
+                            Some(crate::types::NotificationType::Error(err.kind)),
+                        ));
+                    }
                 }
                 self.set_dirty(true);
             }
