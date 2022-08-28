@@ -456,12 +456,13 @@ pub use screen::StateStdout;
 pub mod screen {
     use super::*;
     use cells::CellBuffer;
+    use std::io::BufWriter;
     use std::io::Write;
     use termion::raw::IntoRawMode;
     use termion::screen::AlternateScreen;
     use termion::{clear, cursor};
     pub type StateStdout =
-        termion::screen::AlternateScreen<termion::raw::RawTerminal<std::io::Stdout>>;
+        termion::screen::AlternateScreen<termion::raw::RawTerminal<BufWriter<std::io::Stdout>>>;
     pub struct Screen {
         pub cols: usize,
         pub rows: usize,
@@ -495,6 +496,7 @@ pub mod screen {
 
         pub fn switch_to_alternate_screen(&mut self, context: &crate::Context) {
             let s = std::io::stdout();
+            let s = BufWriter::with_capacity(240 * 80, s);
 
             let mut stdout = AlternateScreen::from(s.into_raw_mode().unwrap());
 
