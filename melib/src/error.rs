@@ -39,6 +39,7 @@ pub enum ErrorKind {
     None,
     External,
     Authentication,
+    Configuration,
     Bug,
     Network,
     Timeout,
@@ -60,6 +61,7 @@ impl fmt::Display for ErrorKind {
                 ErrorKind::Network => "Network",
                 ErrorKind::Timeout => "Timeout",
                 ErrorKind::OSError => "OS Error",
+                ErrorKind::Configuration => "Configuration",
                 ErrorKind::NotImplemented => "Not implemented",
                 ErrorKind::NotSupported => "Not supported",
             }
@@ -69,24 +71,15 @@ impl fmt::Display for ErrorKind {
 
 impl ErrorKind {
     pub fn is_network(&self) -> bool {
-        match self {
-            ErrorKind::Network => true,
-            _ => false,
-        }
+        matches!(self, ErrorKind::Network)
     }
 
     pub fn is_timeout(&self) -> bool {
-        match self {
-            ErrorKind::Timeout => true,
-            _ => false,
-        }
+        matches!(self, ErrorKind::Timeout)
     }
 
     pub fn is_authentication(&self) -> bool {
-        match self {
-            ErrorKind::Authentication => true,
-            _ => false,
-        }
+        matches!(self, ErrorKind::Authentication)
     }
 }
 

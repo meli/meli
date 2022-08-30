@@ -314,14 +314,32 @@ impl NotmuchDb {
         #[cfg(target_os = "macos")]
         let dlpath = "libnotmuch.5.dylib";
         let lib = Arc::new(unsafe { libloading::Library::new(dlpath)? });
-        let path = Path::new(s.root_mailbox.as_str()).expand();
+        let mut path = Path::new(s.root_mailbox.as_str()).expand();
         if !path.exists() {
             return Err(MeliError::new(format!(
-                "\"root_mailbox\" {} for account {} is not a valid path.",
+                "Notmuch `root_mailbox` {} for account {} does not exist.",
                 s.root_mailbox.as_str(),
                 s.name()
-            )));
+            ))
+            .set_kind(ErrorKind::Configuration));
         }
+        if !path.is_dir() {
+            return Err(MeliError::new(format!(
+                "Notmuch `root_mailbox` {} for account {} is not a directory.",
+                s.root_mailbox.as_str(),
+                s.name()
+            ))
+            .set_kind(ErrorKind::Configuration));
+        }
+        path.push(".notmuch");
+        if !path.exists() || !path.is_dir() {
+            return Err(MeliError::new(format!(
+                "Notmuch `root_mailbox` {} for account {} does not contain a `.notmuch` subdirectory.",
+                s.root_mailbox.as_str(),
+                s.name()
+            )).set_kind(ErrorKind::Configuration));
+        }
+        path.pop();
 
         let mut mailboxes = HashMap::default();
         for (k, f) in s.mailboxes.iter() {
@@ -347,9 +365,11 @@ impl NotmuchDb {
                 );
             } else {
                 return Err(MeliError::new(format!(
-                    "notmuch mailbox configuration entry \"{}\" should have a \"query\" value set.",
-                    k
-                )));
+                    "notmuch mailbox configuration entry `{}` for account {} should have a `query` value set.",
+                    k,
+                    s.name(),
+                ))
+                .set_kind(ErrorKind::Configuration));
             }
         }
 
@@ -375,20 +395,42 @@ impl NotmuchDb {
     }
 
     pub fn validate_config(s: &mut AccountSettings) -> Result<()> {
-        let path = Path::new(s.root_mailbox.as_str()).expand();
+        let mut path = Path::new(s.root_mailbox.as_str()).expand();
         if !path.exists() {
             return Err(MeliError::new(format!(
-                "\"root_mailbox\" {} for account {} is not a valid path.",
+                "Notmuch `root_mailbox` {} for account {} does not exist.",
                 s.root_mailbox.as_str(),
                 s.name()
-            )));
+            ))
+            .set_kind(ErrorKind::Configuration));
         }
+        if !path.is_dir() {
+            return Err(MeliError::new(format!(
+                "Notmuch `root_mailbox` {} for account {} is not a directory.",
+                s.root_mailbox.as_str(),
+                s.name()
+            ))
+            .set_kind(ErrorKind::Configuration));
+        }
+        path.push(".notmuch");
+        if !path.exists() || !path.is_dir() {
+            return Err(MeliError::new(format!(
+                "Notmuch `root_mailbox` {} for account {} does not contain a `.notmuch` subdirectory.",
+                s.root_mailbox.as_str(),
+                s.name()
+            )).set_kind(ErrorKind::Configuration));
+        }
+        path.pop();
+
+        let account_name = s.name().to_string();
         for (k, f) in s.mailboxes.iter_mut() {
             if f.extra.remove("query").is_none() {
                 return Err(MeliError::new(format!(
-                    "notmuch mailbox configuration entry \"{}\" should have a \"query\" value set.",
-                    k
-                )));
+                    "notmuch mailbox configuration entry `{}` for account {} should have a `query` value set.",
+                    k,
+                    account_name,
+                ))
+                .set_kind(ErrorKind::Configuration));
             }
         }
         Ok(())
