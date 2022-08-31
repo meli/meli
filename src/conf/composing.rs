@@ -77,6 +77,13 @@ pub struct ComposingSettings {
     /// Default: ask
     #[serde(default = "ask", alias = "forward-as-attachment")]
     pub forward_as_attachment: ToggleFlag,
+    /// Alternative lists of reply prefixes (etc. ["Re:", "RE:", ...]) to strip
+    /// Default: `["Re:", "RE:", "Fwd:", "Fw:", "回复:", "回覆:", "SV:", "Sv:", "VS:", "Antw:", "Doorst:", "VS:", "VL:", "REF:", "TR:", "TR:", "AW:", "WG:", "ΑΠ:", "Απ:", "απ:", "ΠΡΘ:", "Πρθ:", "πρθ:", "ΣΧΕΤ:", "Σχετ:", "σχετ:", "ΠΡΘ:", "Πρθ:", "πρθ:", "Vá:", "Továbbítás:", "R:", "I:", "RIF:", "FS:", "BLS:", "TRS:", "VS:", "VB:", "RV:", "RES:", "Res", "ENC:", "Odp:", "PD:", "YNT:", "İLT:", "ATB:", "YML:"]`
+    #[serde(default, alias = "reply-prefix-list-to-strip")]
+    pub reply_prefix_list_to_strip: Option<Vec<String>>,
+    /// The prefix to use in reply subjects. The de facto prefix is "Re:".
+    #[serde(default = "res", alias = "reply-prefix")]
+    pub reply_prefix: String,
 }
 
 impl Default for ComposingSettings {
@@ -92,8 +99,14 @@ impl Default for ComposingSettings {
             attribution_format_string: None,
             attribution_use_posix_locale: true,
             forward_as_attachment: ToggleFlag::Ask,
+            reply_prefix_list_to_strip: None,
+            reply_prefix: res(),
         }
     }
+}
+
+fn res() -> String {
+    "Re:".to_string()
 }
 
 macro_rules! named_unit_variant {

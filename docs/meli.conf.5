@@ -540,6 +540,24 @@ Whether the strftime call for the attribution string uses the POSIX locale inste
 Forward emails as attachment? (Alternative is inline).
 .\" default value
 .Pq Em ask
+.It Ic reply_prefix_list_to_strip Ar [String]
+.Pq Em optional
+Alternative lists of reply prefixes (etc. ["Re:", "RE:", ...]) to strip.
+.\" default value
+.Pq Em ["Re:", "RE:", "Fwd:", "Fw:", "回复:", "回覆:", "SV:", "Sv:", "VS:", "Antw:", "Doorst:", "VS:", "VL:", "REF:", "TR:", "TR:", "AW:", "WG:", "ΑΠ:", "Απ:", "απ:", "ΠΡΘ:", "Πρθ:", "πρθ:", "ΣΧΕΤ:", "Σχετ:", "σχετ:", "ΠΡΘ:", "Πρθ:", "πρθ:", "Vá:", "Továbbítás:", "R:", "I:", "RIF:", "FS:", "BLS:", "TRS:", "VS:", "VB:", "RV:", "RES:", "Res", "ENC:", "Odp:", "PD:", "YNT:", "İLT:", "ATB:", "YML:"]
+.It Ic reply_prefix Ar String
+.Pq Em optional
+The prefix to use in reply subjects.
+The de facto prefix is "Re:".
+.\" default value
+.Pq Em `Re:`
+.Pp
+RFC 2822, "Internet Message Format" has this to say on the matter:
+.Bd -literal -offset indent -compact
+When used in a reply, the field body MAY start with the string "Re: " (from
+the Latin "res", in the matter of) followed by the contents of the "Subject:"
+field body of the original message.
+.Ed
 .El
 .Sh SHORTCUTS
 Shortcuts can take the following values:

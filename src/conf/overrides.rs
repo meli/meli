@@ -323,6 +323,15 @@ pub struct ComposingSettingsOverride {
     #[serde(alias = "forward-as-attachment")]
     #[serde(default)]
     pub forward_as_attachment: Option<ToggleFlag>,
+    #[doc = " Alternative lists of reply prefixes (etc. [\"Re:\", \"RE:\", ...]) to strip"]
+    #[doc = " Default: `[\"Re:\", \"RE:\", \"Fwd:\", \"Fw:\", \"回复:\", \"回覆:\", \"SV:\", \"Sv:\", \"VS:\", \"Antw:\", \"Doorst:\", \"VS:\", \"VL:\", \"REF:\", \"TR:\", \"TR:\", \"AW:\", \"WG:\", \"ΑΠ:\", \"Απ:\", \"απ:\", \"ΠΡΘ:\", \"Πρθ:\", \"πρθ:\", \"ΣΧΕΤ:\", \"Σχετ:\", \"σχετ:\", \"ΠΡΘ:\", \"Πρθ:\", \"πρθ:\", \"Vá:\", \"Továbbítás:\", \"R:\", \"I:\", \"RIF:\", \"FS:\", \"BLS:\", \"TRS:\", \"VS:\", \"VB:\", \"RV:\", \"RES:\", \"Res\", \"ENC:\", \"Odp:\", \"PD:\", \"YNT:\", \"İLT:\", \"ATB:\", \"YML:\"]`"]
+    #[serde(alias = "reply-prefix-list-to-strip")]
+    #[serde(default)]
+    pub reply_prefix_list_to_strip: Option<Option<Vec<String>>>,
+    #[doc = " The prefix to use in reply subjects. The de facto prefix is \"Re:\"."]
+    #[serde(alias = "reply-prefix")]
+    #[serde(default)]
+    pub reply_prefix: Option<String>,
 }
 impl Default for ComposingSettingsOverride {
     fn default() -> Self {
@@ -337,6 +346,8 @@ impl Default for ComposingSettingsOverride {
             attribution_format_string: None,
             attribution_use_posix_locale: None,
             forward_as_attachment: None,
+            reply_prefix_list_to_strip: None,
+            reply_prefix: None,
         }
     }
 }

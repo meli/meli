@@ -219,15 +219,34 @@ impl Composer {
         let mut ret = Composer::with_account(coordinates.0, context);
         let account = &context.accounts[&coordinates.0];
         let envelope = account.collection.get_env(coordinates.2);
-        let subject = envelope.subject();
-        ret.draft.set_header(
-            "Subject",
-            if !subject.starts_with("Re: ") {
-                format!("Re: {}", subject)
+        let subject = {
+            let subject = envelope.subject();
+            let prefix_list = account_settings!(
+                context[ret.account_hash]
+                    .composing
+                    .reply_prefix_list_to_strip
+            )
+            .as_ref()
+            .map(|v| v.iter().map(String::as_str).collect::<Vec<&str>>())
+            .unwrap_or(vec![]);
+            let subject = subject
+                .as_ref()
+                .strip_prefixes_from_list(if prefix_list.is_empty() {
+                    <&str>::USUAL_PREFIXES
+                } else {
+                    &prefix_list
+                })
+                .to_string();
+
+            let prefix =
+                account_settings!(context[ret.account_hash].composing.reply_prefix).as_str();
+            if !subject.starts_with(prefix) {
+                format!("{prefix} {subject}", prefix = prefix, subject = subject)
             } else {
-                subject.into()
-            },
-        );
+                subject.to_string()
+            }
+        };
+        ret.draft.set_header("Subject", subject);
         ret.draft.set_header(
             "References",
             format!(
