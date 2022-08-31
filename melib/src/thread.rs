@@ -172,18 +172,125 @@ macro_rules! make {
         }};
 }
 
-/* Strip common prefixes from subjects */
-trait SubjectPrefix {
+/// Strip common prefixes from subjects
+///
+///
+/// ```rust
+/// use melib::thread::SubjectPrefix;
+///
+/// let mut subject = "Re: RE: Res: Re: Res: Subject";
+/// assert_eq!(subject.strip_prefixes_from_list(<&str>::USUAL_PREFIXES), &"Subject");
+/// ```
+pub trait SubjectPrefix {
+    const USUAL_PREFIXES: &'static [&'static str] = &[
+        "Re:",
+        // Canada (Réponse)
+        // Spanish (Respuesta)
+        "RE:",
+        "Fwd:",
+        "Fw:",
+        /* taken from
+         * https://en.wikipedia.org/wiki/List_of_email_subject_abbreviations#Abbreviations_in_other_languages
+         * */
+        "回复:",
+        "回覆:",
+        // Dutch (Antwoord)
+        "Antw:",
+        // Dutch (Doorsturen)
+        "Doorst:",
+        // Finnish (Välitetty)
+        "VL:",
+        // French (Référence)
+        "REF:",
+        // French (Transfert)
+        // Canada (Transfert)
+        "TR:",
+        // German (Antwort)
+        "AW:",
+        // German (Weitergeleitet)
+        "WG:",
+        // Greek (Απάντηση)
+        "ΑΠ:",
+        "Απ:",
+        "απ:",
+        // Greek (Προωθημένο)
+        "ΠΡΘ:",
+        "Πρθ:",
+        "πρθ:",
+        // Greek (Σχετικό)
+        "ΣΧΕΤ:",
+        "Σχετ:",
+        "σχετ:",
+        // Greek (Προωθημένο)
+        "ΠΡΘ:",
+        "Πρθ:",
+        "πρθ:",
+        // Hungarian (Válasz)
+        "Vá:",
+        // Hungarian
+        "Továbbítás:",
+        // Italian (Riferimento)
+        "R:",
+        // Italian (Inoltro)
+        "I:",
+        // Italian (Riferimento)
+        "RIF:",
+        // Icelandic (Svara)
+        // Swedish (Svar)
+        // Norwegian (Svar)
+        // Danish (Svar)
+        "SV:",
+        "Sv:",
+        // Icelandic (Framsenda)
+        "FS:",
+        "Fs:",
+        // Indonesian (Balas)
+        "BLS:",
+        // Indonesian (Terusan)
+        "TRS:",
+        // Norwegian (Videresendt)
+        // Danish (Videresendt)
+        // Finnish (Vastaus)
+        "VS:",
+        "Vs:",
+        // Swedish (Vidarebefordrat)
+        "VB:",
+        "Vb:",
+        // Spanish (Reenviado)
+        "RV:",
+        "Rv:",
+        // Portuguese (Resposta)
+        "RES:",
+        "Res:",
+        // Portuguese (Encaminhado)
+        "ENC:",
+        // Polish (Odpowiedź)
+        "Odp:",
+        // Polish (Podaj dalej)
+        "PD:",
+        // Turkish (Yanıt)
+        "YNT:",
+        // Turkish (İlet)
+        "İLT:",
+        // Welsh (Ateb)
+        "ATB:",
+        // Welsh (Ymlaen)
+        "YML:",
+    ];
     fn is_a_reply(&self) -> bool;
     fn strip_prefixes(&mut self) -> &mut Self;
+    fn strip_prefixes_from_list(&mut self, list: &[&str]) -> &mut Self;
 }
 
 impl SubjectPrefix for &[u8] {
     fn is_a_reply(&self) -> bool {
-        self.starts_with(b"RE: ")
-            || self.starts_with(b"Re: ")
-            || self.starts_with(b"FW: ")
-            || self.starts_with(b"Fw: ")
+        let self_ = self.trim();
+        self_.starts_with(b"RE: ")
+            || self_.starts_with(b"Re: ")
+            || self_.starts_with(b"RES: ")
+            || self_.starts_with(b"Res: ")
+            || self_.starts_with(b"FW: ")
+            || self_.starts_with(b"Fw: ")
     }
 
     fn strip_prefixes(&mut self) -> &mut Self {
@@ -221,6 +328,104 @@ impl SubjectPrefix for &[u8] {
                     continue;
                 }
                 break;
+            }
+            slice
+        };
+        *self = result;
+        self
+    }
+
+    fn strip_prefixes_from_list(&mut self, list: &[&str]) -> &mut Self {
+        let result = {
+            let mut slice = self.trim();
+            loop {
+                let len = slice.len();
+                for prefix in list.iter() {
+                    if slice
+                        .get(0..prefix.as_bytes().len())
+                        .map(|p| p.eq_ignore_ascii_case(prefix.as_bytes()))
+                        .unwrap_or(false)
+                    {
+                        slice = &slice[prefix.len()..];
+                    }
+                    slice = slice.trim();
+                }
+                if slice.len() == len {
+                    break;
+                }
+            }
+            slice
+        };
+        *self = result;
+        self
+    }
+}
+
+impl SubjectPrefix for &str {
+    fn is_a_reply(&self) -> bool {
+        self.as_bytes().is_a_reply()
+    }
+
+    fn strip_prefixes(&mut self) -> &mut Self {
+        let result = {
+            let mut slice = self.trim();
+            loop {
+                if slice.starts_with("RE: ")
+                    || slice.starts_with("Re: ")
+                    || slice.starts_with("FW: ")
+                    || slice.starts_with("Fw: ")
+                {
+                    slice = &slice[3..];
+                    continue;
+                }
+                if slice.starts_with("FWD: ")
+                    || slice.starts_with("Fwd: ")
+                    || slice.starts_with("fwd: ")
+                {
+                    slice = &slice[4..];
+                    continue;
+                }
+                if slice.starts_with(" ") || slice.starts_with("\t") || slice.starts_with("\r") {
+                    //FIXME just trim whitespace
+                    slice = &slice[1..];
+                    continue;
+                }
+                if slice.starts_with("[")
+                    && !(slice.starts_with("[PATCH") || slice.starts_with("[RFC"))
+                {
+                    if let Some(pos) = slice.find("]") {
+                        slice = &slice[pos..];
+                        continue;
+                    }
+                    slice = &slice[1..];
+                    continue;
+                }
+                break;
+            }
+            slice
+        };
+        *self = result;
+        self
+    }
+
+    fn strip_prefixes_from_list(&mut self, list: &[&str]) -> &mut Self {
+        let result = {
+            let mut slice = self.trim();
+            loop {
+                let len = slice.len();
+                for prefix in list.iter() {
+                    if slice
+                        .get(0..prefix.as_bytes().len())
+                        .map(|p| p.eq_ignore_ascii_case(prefix))
+                        .unwrap_or(false)
+                    {
+                        slice = &slice[prefix.len()..];
+                    }
+                    slice = slice.trim();
+                }
+                if slice.len() == len {
+                    break;
+                }
             }
             slice
         };
