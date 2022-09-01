@@ -17,6 +17,10 @@ default-run = "meli"
 name = "meli"
 path = "src/main.rs"
 
+[lib]
+name = "meli"
+path = "src/lib.rs"
+
 #[[bin]]
 #name = "managesieve-meli"
 #path = "src/managesieve.rs"

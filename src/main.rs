@@ -27,58 +27,7 @@
 //! split is done to theoretically be able to create different frontends with the same innards.
 //!
 
-use std::alloc::System;
-use std::collections::VecDeque;
-use std::path::PathBuf;
-
-#[macro_use]
-extern crate serde_derive;
-extern crate linkify;
-pub(crate) use melib::uuid;
-
-extern crate bitflags;
-extern crate serde_json;
-#[macro_use]
-extern crate smallvec;
-extern crate termion;
-
-use structopt::StructOpt;
-
-#[global_allocator]
-static GLOBAL: System = System;
-
-#[macro_use]
-extern crate melib;
-use melib::*;
-
-#[macro_use]
-pub mod types;
-use crate::types::*;
-
-#[macro_use]
-pub mod terminal;
-use crate::terminal::*;
-
-#[macro_use]
-pub mod command;
-use crate::command::*;
-
-pub mod state;
-use crate::state::*;
-
-pub mod components;
-use crate::components::*;
-
-#[macro_use]
-pub mod conf;
-use crate::conf::*;
-
-#[cfg(feature = "sqlite3")]
-pub mod sqlite3;
-
-pub mod jobs;
-pub mod mailcap;
-
+use meli::*;
 use std::os::raw::c_int;
 
 fn notify(

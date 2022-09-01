@@ -312,7 +312,7 @@ mod braille {
     /// ];
     ///
     /// for lines in BEE.chunks(12) {
-    ///     let iter = ui::BraillePixelIter::from(lines);
+    ///     let iter = meli::BraillePixelIter::from(lines);
     ///     for b in iter {
     ///         print!("{}", b);
     ///     }

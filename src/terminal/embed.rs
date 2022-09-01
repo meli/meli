@@ -210,6 +210,27 @@ pub enum State {
     Csi1(SmallVec<[u8; 8]>),
     Csi2(SmallVec<[u8; 8]>, SmallVec<[u8; 8]>),
     Csi3(SmallVec<[u8; 8]>, SmallVec<[u8; 8]>, SmallVec<[u8; 8]>),
+    Csi4(
+        SmallVec<[u8; 8]>,
+        SmallVec<[u8; 8]>,
+        SmallVec<[u8; 8]>,
+        SmallVec<[u8; 8]>,
+    ),
+    Csi5(
+        SmallVec<[u8; 8]>,
+        SmallVec<[u8; 8]>,
+        SmallVec<[u8; 8]>,
+        SmallVec<[u8; 8]>,
+        SmallVec<[u8; 8]>,
+    ),
+    Csi6(
+        SmallVec<[u8; 8]>,
+        SmallVec<[u8; 8]>,
+        SmallVec<[u8; 8]>,
+        SmallVec<[u8; 8]>,
+        SmallVec<[u8; 8]>,
+        SmallVec<[u8; 8]>,
+    ),
     CsiQ(SmallVec<[u8; 8]>),
     Normal,
 }

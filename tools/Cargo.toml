@@ -21,11 +21,21 @@ path = "src/imapshell.rs"
 name = "smtp_conn"
 path = "src/smtp_conn.rs"
 
+[[bin]]
+name = "embed"
+path = "src/embed.rs"
+
+
 [dependencies]
 melib = { path = "../melib", version = "*", features = ["debug-tracing", "unicode_algorithms"] }
+meli = { path = "..", version = "*" }
+crossbeam = { version = "^0.8" }
+signal-hook = { version = "^0.3", default-features = false }
+signal-hook-registry = { version = "1.2.0", default-features = false }
+nix = { version = "^0.24", default-features = false }
 
 [features]
-default = []
+default = ["debug-tracing"]
 
 # Print tracing logs as meli runs
-debug-tracing = []
+debug-tracing = ["meli/debug-tracing"]

@@ -29,25 +29,31 @@ use melib::{MeliError, Result};
 /// Tree decoration examples:
 ///
 ///```no_run
-///const HAS_SIBLING: &'static str = " ┃";
-///const NO_SIBLING: &'static str = "  ";
-///const HAS_SIBLING_LEAF: &'static str = " ┣━";
-///const NO_SIBLING_LEAF: &'static str = " ┗━";
+///const HAS_SIBLING: &str = " ┃";
+///const NO_SIBLING: &str = "  ";
+///const HAS_SIBLING_LEAF: &str = " ┣━";
+///const NO_SIBLING_LEAF: &str = " ┗━";
+///```
 ///
-///const HAS_SIBLING: &'static str = " |";
-///const NO_SIBLING: &'static str = "  ";
-///const HAS_SIBLING_LEAF: &'static str = " |\\_";
-///const NO_SIBLING_LEAF: &'static str = " \\_";
+///```no_run
+///const HAS_SIBLING: &str = " |";
+///const NO_SIBLING: &str = "  ";
+///const HAS_SIBLING_LEAF: &str = " |\\_";
+///const NO_SIBLING_LEAF: &str = " \\_";
+///```
 ///
-///const HAS_SIBLING: &'static str = " ";
-///const NO_SIBLING: &'static str = " ";
-///const HAS_SIBLING_LEAF: &'static str = " ";
-///const NO_SIBLING_LEAF: &'static str = " ";
+///```no_run
+///const HAS_SIBLING: &str = " ";
+///const NO_SIBLING: &str = " ";
+///const HAS_SIBLING_LEAF: &str = " ";
+///const NO_SIBLING_LEAF: &str = " ";
+///```
 ///
-///const HAS_SIBLING: &'static str = " │";
-///const NO_SIBLING: &'static str = "  ";
-///const HAS_SIBLING_LEAF: &'static str = " ├─";
-///const NO_SIBLING_LEAF: &'static str = " ╰─";
+///```no_run
+///const HAS_SIBLING: &str = " │";
+///const NO_SIBLING: &str = "  ";
+///const HAS_SIBLING_LEAF: &str = " ├─";
+///const NO_SIBLING_LEAF: &str = " ╰─";
 ///```
 #[derive(Debug, Deserialize, Clone, Serialize)]
 #[serde(deny_unknown_fields)]

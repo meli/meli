@@ -1414,7 +1414,7 @@ impl Component for Composer {
                 use std::io::Write;
                 if let Some(ref mut embed) = self.embed {
                     let mut embed_guard = embed.lock().unwrap();
-                    if embed_guard.stdin.write_all(b).is_err() {
+                    if embed_guard.write_all(b).is_err() {
                         match embed_guard.is_active() {
                             Ok(WaitStatus::Exited(_, exit_code)) => {
                                 drop(embed_guard);

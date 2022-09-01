@@ -65,35 +65,43 @@ pub type Area = (Pos, Pos);
 /// Get an area's height
 ///
 /// Example:
-/// ```
+/// ```no_run
+/// use meli::height;
+///
 /// let new_area = ((0, 0), (1, 1));
 /// assert_eq!(height!(new_area), 1);
 /// ```
 #[macro_export]
 macro_rules! height {
     ($a:expr) => {
-        (get_y(bottom_right!($a))).saturating_sub(get_y(upper_left!($a)))
+        ($crate::get_y($crate::bottom_right!($a)))
+            .saturating_sub($crate::get_y($crate::upper_left!($a)))
     };
 }
 
 /// Get an area's width
 ///
 /// Example:
-/// ```
+/// ```no_run
+/// use meli::width;
+///
 /// let new_area = ((0, 0), (1, 1));
 /// assert_eq!(width!(new_area), 1);
 /// ```
 #[macro_export]
 macro_rules! width {
     ($a:expr) => {
-        (get_x(bottom_right!($a))).saturating_sub(get_x(upper_left!($a)))
+        ($crate::get_x($crate::bottom_right!($a)))
+            .saturating_sub($crate::get_x($crate::upper_left!($a)))
     };
 }
 
 /// Get the upper left Position of an area
 ///
 /// Example:
-/// ```
+/// ```no_run
+/// use meli::upper_left;
+///
 /// let new_area = ((0, 0), (1, 1));
 /// assert_eq!(upper_left!(new_area), (0, 0));
 /// ```
@@ -107,7 +115,9 @@ macro_rules! upper_left {
 /// Get the bottom right Position of an area
 ///
 /// Example:
-/// ```
+/// ```no_run
+/// use meli::bottom_right;
+///
 /// let new_area = ((0, 0), (1, 1));
 /// assert_eq!(bottom_right!(new_area), (1, 1));
 /// ```
@@ -121,7 +131,9 @@ macro_rules! bottom_right {
 /// Check if area is valid.
 ///
 /// Example:
-/// ```
+/// ```no_run
+/// use meli::is_valid_area;
+///
 /// let valid_area = ((0, 0), (1, 1));
 /// assert!(is_valid_area!(valid_area));
 ///
@@ -132,9 +144,10 @@ macro_rules! bottom_right {
 #[macro_export]
 macro_rules! is_valid_area {
     ($a:expr) => {{
-        let upper_left = upper_left!($a);
-        let bottom_right = bottom_right!($a);
-        !(get_y(upper_left) > get_y(bottom_right) || get_x(upper_left) > get_x(bottom_right))
+        let upper_left = $crate::upper_left!($a);
+        let bottom_right = $crate::bottom_right!($a);
+        !($crate::get_y(upper_left) > $crate::get_y(bottom_right)
+            || $crate::get_x(upper_left) > $crate::get_x(bottom_right))
     }};
 }
 

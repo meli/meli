@@ -197,15 +197,6 @@ impl CellBuffer {
 
     /// Returns a reference to the `Cell` at the given coordinates, or `None` if the index is out of
     /// bounds.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    ///
-    /// let mut term = Terminal::new().unwrap();
-    ///
-    /// let a_cell = term.get(5, 5);
-    /// ```
     pub fn get(&self, x: usize, y: usize) -> Option<&Cell> {
         match self.pos_to_index(x, y) {
             Some(i) => self.cellvec().get(i),
@@ -215,15 +206,6 @@ impl CellBuffer {
 
     /// Returns a mutable reference to the `Cell` at the given coordinates, or `None` if the index
     /// is out of bounds.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    ///
-    /// let mut term = Terminal::new().unwrap();
-    ///
-    /// let a_mut_cell = term.get_mut(5, 5);
-    /// ```
     pub fn get_mut(&mut self, x: usize, y: usize) -> Option<&mut Cell> {
         match self.pos_to_index(x, y) {
             Some(i) => self.cellvec_mut().get_mut(i),
@@ -518,6 +500,8 @@ impl Cell {
     /// # Examples
     ///
     /// ```no_run
+    /// use meli::{Color, Attr, Cell};
+    ///
     /// let cell = Cell::new('x', Color::Default, Color::Green, Attr::DEFAULT);
     /// assert_eq!(cell.ch(), 'x');
     /// assert_eq!(cell.fg(), Color::Default);
@@ -542,6 +526,8 @@ impl Cell {
     /// # Examples
     ///
     /// ```no_run
+    /// use meli::{Color, Attr, Cell};
+    ///
     /// let mut cell = Cell::with_char('x');
     /// assert_eq!(cell.ch(), 'x');
     /// assert_eq!(cell.fg(), Color::Default);
@@ -557,6 +543,8 @@ impl Cell {
     /// # Examples
     ///
     /// ```no_run
+    /// use meli::{Color, Attr, Cell};
+    ///
     /// let mut cell = Cell::with_style(Color::Default, Color::Red, Attr::BOLD);
     /// assert_eq!(cell.fg(), Color::Default);
     /// assert_eq!(cell.bg(), Color::Red);
@@ -572,6 +560,8 @@ impl Cell {
     /// # Examples
     ///
     /// ```no_run
+    /// use meli::Cell;
+    ///
     /// let mut cell = Cell::with_char('x');
     /// assert_eq!(cell.ch(), 'x');
     /// ```
@@ -584,6 +574,8 @@ impl Cell {
     /// # Examples
     ///
     /// ```no_run
+    /// use meli::Cell;
+    ///
     /// let mut cell = Cell::with_char('x');
     /// assert_eq!(cell.ch(), 'x');
     ///
@@ -603,6 +595,8 @@ impl Cell {
     /// # Examples
     ///
     /// ```no_run
+    /// use meli::{Color, Attr, Cell};
+    ///
     /// let mut cell = Cell::with_style(Color::Blue, Color::Default, Attr::DEFAULT);
     /// assert_eq!(cell.fg(), Color::Blue);
     /// ```
@@ -615,6 +609,8 @@ impl Cell {
     /// # Examples
     ///
     /// ```no_run
+    /// use meli::{Color, Cell};
+    ///
     /// let mut cell = Cell::default();
     /// assert_eq!(cell.fg(), Color::Default);
     ///
@@ -633,6 +629,8 @@ impl Cell {
     /// # Examples
     ///
     /// ```no_run
+    /// use meli::{Attr, Color, Cell};
+    ///
     /// let mut cell = Cell::with_style(Color::Default, Color::Green, Attr::DEFAULT);
     /// assert_eq!(cell.bg(), Color::Green);
     /// ```
@@ -645,6 +643,8 @@ impl Cell {
     /// # Examples
     ///
     /// ```no_run
+    /// use meli::{Cell, Color};
+    ///
     /// let mut cell = Cell::default();
     /// assert_eq!(cell.bg(), Color::Default);
     ///
@@ -708,6 +708,8 @@ impl Default for Cell {
     /// # Examples
     ///
     /// ```no_run
+    /// use meli::{Color, Cell};
+    ///
     /// let mut cell = Cell::default();
     /// assert_eq!(cell.ch(), ' ');
     /// assert_eq!(cell.fg(), Color::Default);
@@ -728,6 +730,8 @@ bitflags::bitflags! {
     /// # Examples
     ///
     /// ```no_run
+    /// use meli::Attr;
+    ///
     /// // Default attribute.
     /// let def = Attr::DEFAULT;
     ///
@@ -1234,6 +1238,8 @@ pub fn clear_area(grid: &mut CellBuffer, area: Area, attributes: crate::conf::Th
 /// `RowIterator` can be created via the `CellBuffer::row_iter` method and can be returned by
 /// `BoundsIterator` which iterates each row.
 /// ```no_run
+/// # let mut grid = meli::CellBuffer::new(1, 1, meli::Cell::default());
+/// # let x = 0;
 /// for c in grid.row_iter(
 ///     x..(x + 11),
 ///     0,
@@ -1248,9 +1254,13 @@ pub struct RowIterator {
 
 /// `BoundsIterator` iterates each row returning a `RowIterator`.
 /// ```no_run
+/// # let mut grid = meli::CellBuffer::new(1, 1, meli::Cell::default());
+/// # let area = ((0, 0), (1, 1));
 /// /* Visit each `Cell` in `area`. */
-/// for c in grid.bounds_iter(area) {
+/// for row in grid.bounds_iter(area) {
+///    for c in row {
 ///     grid[c].set_ch('w');
+///     }
 /// }
 /// ```
 pub struct BoundsIterator {

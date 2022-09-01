@@ -20,11 +20,6 @@
  */
 
 //! Async job executor thread pool
-//!
-//! ## Usage
-//! ```no_run
-//!  let (channel, handle, job_id) = job_executor.spawn(job);
-//! ```
 
 use melib::smol;
 use melib::uuid::Uuid;

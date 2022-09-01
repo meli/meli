@@ -53,11 +53,14 @@ pub struct EmbedGrid {
     initialized: bool,
     fg_color: Color,
     bg_color: Color,
+    attrs: Attr,
     /// Store the fg/bg color when highlighting the cell where the cursor is so that it can be
     /// restored afterwards
     prev_fg_color: Option<Color>,
     prev_bg_color: Option<Color>,
+    prev_attrs: Option<Attr>,
 
+    cursor_key_mode: bool, // (DECCKM)
     show_cursor: bool,
     origin_mode: bool,
     auto_wrap_mode: bool,
@@ -73,9 +76,55 @@ pub struct EmbedGrid {
 #[derive(Debug)]
 pub struct EmbedTerminal {
     pub grid: EmbedGrid,
-    pub stdin: std::fs::File,
+    stdin: std::fs::File,
     /// Pid of the embed process
     pub child_pid: nix::unistd::Pid,
+}
+
+impl std::io::Write for EmbedTerminal {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        /*
+
+                 Key            Normal     Application
+                 -------------+----------+-------------
+                 Cursor Up    | CSI A    | SS3 A
+                 Cursor Down  | CSI B    | SS3 B
+                 Cursor Right | CSI C    | SS3 C
+                 Cursor Left  | CSI D    | SS3 D
+                 -------------+----------+-------------
+
+                   Key        Normal     Application
+                   ---------+----------+-------------
+                   Home     | CSI H    | SS3 H
+                   End      | CSI F    | SS3 F
+                   ---------+----------+-------------
+
+        */
+        if self.grid.cursor_key_mode {
+            match buf {
+                &[0x1b, 0x5b, b'A']
+                | &[0x1b, 0x5b, b'B']
+                | &[0x1b, 0x5b, b'C']
+                | &[0x1b, 0x5b, b'D']
+                | &[0x1b, 0x5b, b'H']
+                | &[0x1b, 0x5b, b'F'] => {
+                    self.stdin.write_all(&[0x1b, 0x4f, buf[2]])?;
+                    Ok(buf.len())
+                }
+                _ => {
+                    self.stdin.write_all(buf)?;
+                    Ok(buf.len())
+                }
+            }
+        } else {
+            self.stdin.write_all(buf)?;
+            Ok(buf.len())
+        }
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.stdin.flush()
+    }
 }
 
 impl EmbedTerminal {
@@ -156,11 +205,14 @@ impl EmbedGrid {
             state: State::Normal,
             fg_color: Color::Default,
             bg_color: Color::Default,
+            attrs: Attr::DEFAULT,
             prev_fg_color: None,
             prev_bg_color: None,
+            prev_attrs: None,
             show_cursor: true,
             auto_wrap_mode: true,
             wrap_next: false,
+            cursor_key_mode: false,
             origin_mode: false,
             codepoints: CodepointBuf::None,
             normal_screen,
@@ -219,12 +271,15 @@ impl EmbedGrid {
             ref mut state,
             ref mut fg_color,
             ref mut bg_color,
+            ref mut attrs,
             ref mut prev_fg_color,
             ref mut prev_bg_color,
+            ref mut prev_attrs,
             ref mut codepoints,
             ref mut show_cursor,
             ref mut auto_wrap_mode,
             ref mut wrap_next,
+            ref mut cursor_key_mode,
             ref mut origin_mode,
             ref mut screen_buffer,
             ref mut normal_screen,
@@ -475,6 +530,7 @@ impl EmbedGrid {
                 grid[cursor_val!()].set_ch(c);
                 grid[cursor_val!()].set_fg(*fg_color);
                 grid[cursor_val!()].set_bg(*bg_color);
+                grid[cursor_val!()].set_attrs(*attrs);
                 match wcwidth(u32::from(c)) {
                     Some(0) | None => {
                         /* Skip drawing zero width characters */
@@ -489,6 +545,7 @@ impl EmbedGrid {
                             grid[cursor_val!()].set_empty(true);
                             grid[cursor_val!()].set_fg(*fg_color);
                             grid[cursor_val!()].set_bg(*bg_color);
+                            grid[cursor_val!()].set_attrs(*attrs);
                         }
                     }
                 }
@@ -505,8 +562,10 @@ impl EmbedGrid {
                 //debug!("{}", EscCode::from((&(*state), byte)));
                 *fg_color = Color::Default;
                 *bg_color = Color::Default;
+                *attrs = Attr::DEFAULT;
                 grid[cursor_val!()].set_fg(Color::Default);
                 grid[cursor_val!()].set_bg(Color::Default);
+                grid[cursor_val!()].set_attrs(Attr::DEFAULT);
                 *state = State::Normal;
             }
             (b'C', State::Csi) => {
@@ -523,6 +582,9 @@ impl EmbedGrid {
             }
             (b'h', State::CsiQ(ref buf)) => {
                 match buf.as_slice() {
+                    b"1" => {
+                        *cursor_key_mode = true;
+                    }
                     b"6" => {
                         *origin_mode = true;
                     }
@@ -533,13 +595,17 @@ impl EmbedGrid {
                         *show_cursor = true;
                         *prev_fg_color = Some(grid[cursor_val!()].fg());
                         *prev_bg_color = Some(grid[cursor_val!()].bg());
+                        *prev_attrs = Some(grid[cursor_val!()].attrs());
                         grid[cursor_val!()].set_fg(Color::Black);
                         grid[cursor_val!()].set_bg(Color::White);
+                        grid[cursor_val!()].set_attrs(Attr::DEFAULT);
                     }
                     b"1047" | b"1049" => {
                         *screen_buffer = ScreenBuffer::Alternate;
                     }
-                    _ => {}
+                    _ => {
+                        debug!("unknown csi? {:?}", String::from_utf8_lossy(buf.as_slice()));
+                    }
                 }
 
                 //debug!("{}", EscCode::from((&(*state), byte)));
@@ -547,6 +613,9 @@ impl EmbedGrid {
             }
             (b'l', State::CsiQ(ref mut buf)) => {
                 match buf.as_slice() {
+                    b"1" => {
+                        *cursor_key_mode = false;
+                    }
                     b"6" => {
                         *origin_mode = false;
                     }
@@ -565,11 +634,21 @@ impl EmbedGrid {
                         } else {
                             grid[cursor_val!()].set_bg(*bg_color);
                         }
+                        if let Some(attrs) = prev_attrs.take() {
+                            grid[cursor_val!()].set_attrs(attrs);
+                        } else {
+                            grid[cursor_val!()].set_attrs(*attrs);
+                        }
                     }
                     b"1047" | b"1049" => {
                         *screen_buffer = ScreenBuffer::Normal;
                     }
-                    _ => {}
+                    _ => {
+                        debug!(
+                            "unknown csi? `l` {:?}",
+                            String::from_utf8_lossy(buf.as_slice())
+                        );
+                    }
                 }
                 //debug!("{}", EscCode::from((&(*state), byte)));
                 *state = State::Normal;
@@ -975,14 +1054,63 @@ impl EmbedGrid {
                 // Character Attributes.
                 match buf1.as_slice() {
                     b"0" => {
-                        *fg_color = Color::Default;
-                        *bg_color = Color::Default;
+                        *attrs = Attr::DEFAULT;
                     }
-                    b"1" => { /* bold */ }
-                    b"7" | b"27" => {
-                        /* Inverse on/off */
-                        std::mem::swap(&mut (*fg_color), &mut (*bg_color))
+                    b"1" => {
+                        /* bold */
+                        *attrs |= Attr::BOLD;
                     }
+                    b"2" => {
+                        /* faint, dim */
+                        *attrs |= Attr::DIM;
+                    }
+                    b"3" => {
+                        /* italicized */
+                        *attrs |= Attr::ITALICS;
+                    }
+                    b"4" => {
+                        /* underlined */
+                        *attrs |= Attr::UNDERLINE;
+                    }
+                    b"5" => {
+                        /* blink */
+                        *attrs |= Attr::BLINK;
+                    }
+                    b"7" => {
+                        /* Inverse */
+                        *attrs |= Attr::REVERSE;
+                    }
+                    b"8" => {
+                        /* invisible */
+                        *attrs |= Attr::HIDDEN;
+                    }
+                    b"9" => { /* crossed out */ }
+                    b"21" => { /* Doubly-underlined */ }
+                    b"22" => {
+                        /* Normal (neither bold nor faint), ECMA-48 3rd. */
+                        *attrs &= !(Attr::BOLD | Attr::DIM);
+                    }
+                    b"23" => {
+                        /* Not italicized, ECMA-48 3rd */
+                        *attrs &= !Attr::ITALICS;
+                    }
+                    b"24" => {
+                        /* Not underlined, ECMA-48 3rd. */
+                        *attrs &= !Attr::UNDERLINE;
+                    }
+                    b"25" => {
+                        /* Steady (not blinking), ECMA-48 3rd. */
+                        *attrs &= !Attr::BLINK;
+                    }
+                    b"27" => {
+                        /* Positive (not inverse), ECMA-48 3rd. */
+                        *attrs &= !Attr::REVERSE;
+                    }
+                    b"28" => {
+                        /* Visible, i.e., not hidden, ECMA-48 3rd, VT300. */
+                        *attrs &= !Attr::HIDDEN;
+                    }
+                    b"29" => { /* Not crossed-out, ECMA-48 3rd. */ }
                     b"30" => *fg_color = Color::Black,
                     b"31" => *fg_color = Color::Red,
                     b"32" => *fg_color = Color::Green,
@@ -991,8 +1119,8 @@ impl EmbedGrid {
                     b"35" => *fg_color = Color::Magenta,
                     b"36" => *fg_color = Color::Cyan,
                     b"37" => *fg_color = Color::White,
-
                     b"39" => *fg_color = Color::Default,
+
                     b"40" => *bg_color = Color::Black,
                     b"41" => *bg_color = Color::Red,
                     b"42" => *bg_color = Color::Green,
@@ -1001,7 +1129,6 @@ impl EmbedGrid {
                     b"45" => *bg_color = Color::Magenta,
                     b"46" => *bg_color = Color::Cyan,
                     b"47" => *bg_color = Color::White,
-
                     b"49" => *bg_color = Color::Default,
 
                     b"90" => *fg_color = Color::Black,
@@ -1021,24 +1148,79 @@ impl EmbedGrid {
                     b"105" => *bg_color = Color::Magenta,
                     b"106" => *bg_color = Color::Cyan,
                     b"107" => *bg_color = Color::White,
-                    _ => {}
+                    _ => {
+                        debug!(
+                            "unknown attribute Csi1 {:?} m",
+                            String::from_utf8_lossy(buf1.as_slice())
+                        );
+                    }
                 }
                 grid[cursor_val!()].set_fg(*fg_color);
                 grid[cursor_val!()].set_bg(*bg_color);
+                grid[cursor_val!()].set_attrs(*attrs);
                 *state = State::Normal;
             }
             (b'm', State::Csi2(ref buf1, ref buf2)) => {
                 for b in &[buf1, buf2] {
                     match b.as_slice() {
                         b"0" => {
-                            *fg_color = Color::Default;
-                            *bg_color = Color::Default;
+                            *attrs = Attr::DEFAULT;
                         }
-                        b"1" => { /* bold */ }
-                        b"7" | b"27" => {
-                            /* Inverse  on/off */
-                            std::mem::swap(&mut (*fg_color), &mut (*bg_color))
+                        b"1" => {
+                            /* bold */
+                            *attrs |= Attr::BOLD;
                         }
+                        b"2" => {
+                            /* faint, dim */
+                            *attrs |= Attr::DIM;
+                        }
+                        b"3" => {
+                            /* italicized */
+                            *attrs |= Attr::ITALICS;
+                        }
+                        b"4" => {
+                            /* underlined */
+                            *attrs |= Attr::UNDERLINE;
+                        }
+                        b"5" => {
+                            /* blink */
+                            *attrs |= Attr::BLINK;
+                        }
+                        b"7" => {
+                            /* Inverse */
+                            *attrs |= Attr::REVERSE;
+                        }
+                        b"8" => {
+                            /* invisible */
+                            *attrs |= Attr::HIDDEN;
+                        }
+                        b"9" => { /* crossed out */ }
+                        b"21" => { /* Doubly-underlined */ }
+                        b"22" => {
+                            /* Normal (neither bold nor faint), ECMA-48 3rd. */
+                            *attrs &= !(Attr::BOLD | Attr::DIM);
+                        }
+                        b"23" => {
+                            /* Not italicized, ECMA-48 3rd */
+                            *attrs &= !Attr::ITALICS;
+                        }
+                        b"24" => {
+                            /* Not underlined, ECMA-48 3rd. */
+                            *attrs &= !Attr::UNDERLINE;
+                        }
+                        b"25" => {
+                            /* Steady (not blinking), ECMA-48 3rd. */
+                            *attrs &= !Attr::BLINK;
+                        }
+                        b"27" => {
+                            /* Positive (not inverse), ECMA-48 3rd. */
+                            *attrs &= !Attr::REVERSE;
+                        }
+                        b"28" => {
+                            /* Visible, i.e., not hidden, ECMA-48 3rd, VT300. */
+                            *attrs &= !Attr::HIDDEN;
+                        }
+                        b"29" => { /* Not crossed-out, ECMA-48 3rd. */ }
                         b"30" => *fg_color = Color::Black,
                         b"31" => *fg_color = Color::Red,
                         b"32" => *fg_color = Color::Green,
@@ -1047,8 +1229,8 @@ impl EmbedGrid {
                         b"35" => *fg_color = Color::Magenta,
                         b"36" => *fg_color = Color::Cyan,
                         b"37" => *fg_color = Color::White,
-
                         b"39" => *fg_color = Color::Default,
+
                         b"40" => *bg_color = Color::Black,
                         b"41" => *bg_color = Color::Red,
                         b"42" => *bg_color = Color::Green,
@@ -1057,7 +1239,6 @@ impl EmbedGrid {
                         b"45" => *bg_color = Color::Magenta,
                         b"46" => *bg_color = Color::Cyan,
                         b"47" => *bg_color = Color::White,
-
                         b"49" => *bg_color = Color::Default,
 
                         b"90" => *fg_color = Color::Black,
@@ -1077,11 +1258,17 @@ impl EmbedGrid {
                         b"105" => *bg_color = Color::Magenta,
                         b"106" => *bg_color = Color::Cyan,
                         b"107" => *bg_color = Color::White,
-                        _ => {}
+                        _ => {
+                            debug!(
+                                "unknown attribute Csi1 {:?} m",
+                                String::from_utf8_lossy(buf1.as_slice())
+                            );
+                        }
                     }
                 }
                 grid[cursor_val!()].set_fg(*fg_color);
                 grid[cursor_val!()].set_bg(*bg_color);
+                grid[cursor_val!()].set_attrs(*attrs);
                 *state = State::Normal;
             }
             (c, State::Csi1(ref mut buf)) if (b'0'..=b'9').contains(&c) || c == b' ' => {
@@ -1200,32 +1387,245 @@ impl EmbedGrid {
                 grid[cursor_val!()].set_bg(*bg_color);
                 *state = State::Normal;
             }
+            (c, State::Csi3(_, _, ref mut buf)) if (b'0'..=b'9').contains(&c) => {
+                buf.push(c);
+            }
+            (b';', State::Csi3(ref mut buf1_p, ref mut buf2_p, ref mut buf3_p)) => {
+                let buf1 = std::mem::replace(buf1_p, SmallVec::new());
+                let buf2 = std::mem::replace(buf2_p, SmallVec::new());
+                let buf3 = std::mem::replace(buf3_p, SmallVec::new());
+                let buf4 = SmallVec::new();
+                *state = State::Csi4(buf1, buf2, buf3, buf4);
+            }
+            (c, State::Csi4(_, _, _, ref mut buf)) if (b'0'..=b'9').contains(&c) => {
+                buf.push(c);
+            }
+            (b';', State::Csi4(ref mut buf1_p, ref mut buf2_p, ref mut buf3_p, ref mut buf4_p)) => {
+                let buf1 = std::mem::replace(buf1_p, SmallVec::new());
+                let buf2 = std::mem::replace(buf2_p, SmallVec::new());
+                let buf3 = std::mem::replace(buf3_p, SmallVec::new());
+                let buf4 = std::mem::replace(buf4_p, SmallVec::new());
+                let buf5 = SmallVec::new();
+                *state = State::Csi5(buf1, buf2, buf3, buf4, buf5);
+            }
+            (c, State::Csi5(_, _, _, _, ref mut buf)) if (b'0'..=b'9').contains(&c) => {
+                buf.push(c);
+            }
+            (
+                b';',
+                State::Csi5(
+                    ref mut buf1_p,
+                    ref mut buf2_p,
+                    ref mut buf3_p,
+                    ref mut buf4_p,
+                    ref mut buf5_p,
+                ),
+            ) => {
+                let buf1 = std::mem::replace(buf1_p, SmallVec::new());
+                let buf2 = std::mem::replace(buf2_p, SmallVec::new());
+                let buf3 = std::mem::replace(buf3_p, SmallVec::new());
+                let buf4 = std::mem::replace(buf4_p, SmallVec::new());
+                let buf5 = std::mem::replace(buf5_p, SmallVec::new());
+                let buf6 = SmallVec::new();
+                *state = State::Csi6(buf1, buf2, buf3, buf4, buf5, buf6);
+            }
+            (c, State::Csi6(_, _, _, _, _, ref mut buf)) if (b'0'..=b'9').contains(&c) => {
+                buf.push(c);
+            }
+            (
+                b'm',
+                State::Csi6(
+                    ref mut buf1,
+                    ref mut buf2,
+                    ref mut _color_space_buf,
+                    ref mut r_buf,
+                    ref mut g_buf,
+                    ref mut b_buf,
+                ),
+            ) if buf1.as_ref() == b"38" && buf2.as_ref() == b"2" => {
+                /* Set true foreground color */
+                *fg_color = match (
+                    unsafe { std::str::from_utf8_unchecked(r_buf) }.parse::<u8>(),
+                    unsafe { std::str::from_utf8_unchecked(g_buf) }.parse::<u8>(),
+                    unsafe { std::str::from_utf8_unchecked(b_buf) }.parse::<u8>(),
+                ) {
+                    (Ok(r), Ok(g), Ok(b)) => Color::Rgb(r, g, b),
+                    _ => Color::Default,
+                };
+                grid[cursor_val!()].set_fg(*fg_color);
+                *state = State::Normal;
+            }
+            (
+                b'm',
+                State::Csi6(
+                    ref mut buf1,
+                    ref mut buf2,
+                    ref mut _color_space_buf,
+                    ref mut r_buf,
+                    ref mut g_buf,
+                    ref mut b_buf,
+                ),
+            ) if buf1.as_ref() == b"48" && buf2.as_ref() == b"2" => {
+                /* Set true background color */
+                *bg_color = match (
+                    unsafe { std::str::from_utf8_unchecked(r_buf) }.parse::<u8>(),
+                    unsafe { std::str::from_utf8_unchecked(g_buf) }.parse::<u8>(),
+                    unsafe { std::str::from_utf8_unchecked(b_buf) }.parse::<u8>(),
+                ) {
+                    (Ok(r), Ok(g), Ok(b)) => Color::Rgb(r, g, b),
+                    _ => Color::Default,
+                };
+                grid[cursor_val!()].set_bg(*bg_color);
+                *state = State::Normal;
+            }
+            (
+                b'm',
+                State::Csi5(
+                    ref mut buf1,
+                    ref mut buf2,
+                    ref mut r_buf,
+                    ref mut g_buf,
+                    ref mut b_buf,
+                ),
+            ) if buf1.as_ref() == b"38" && buf2.as_ref() == b"2" => {
+                /* Set true foreground color */
+                *fg_color = match (
+                    unsafe { std::str::from_utf8_unchecked(r_buf) }.parse::<u8>(),
+                    unsafe { std::str::from_utf8_unchecked(g_buf) }.parse::<u8>(),
+                    unsafe { std::str::from_utf8_unchecked(b_buf) }.parse::<u8>(),
+                ) {
+                    (Ok(r), Ok(g), Ok(b)) => Color::Rgb(r, g, b),
+                    _ => Color::Default,
+                };
+                grid[cursor_val!()].set_fg(*fg_color);
+                *state = State::Normal;
+            }
+            (
+                b'm',
+                State::Csi5(
+                    ref mut buf1,
+                    ref mut buf2,
+                    ref mut r_buf,
+                    ref mut g_buf,
+                    ref mut b_buf,
+                ),
+            ) if buf1.as_ref() == b"48" && buf2.as_ref() == b"2" => {
+                /* Set true background color */
+                *bg_color = match (
+                    unsafe { std::str::from_utf8_unchecked(r_buf) }.parse::<u8>(),
+                    unsafe { std::str::from_utf8_unchecked(g_buf) }.parse::<u8>(),
+                    unsafe { std::str::from_utf8_unchecked(b_buf) }.parse::<u8>(),
+                ) {
+                    (Ok(r), Ok(g), Ok(b)) => Color::Rgb(r, g, b),
+                    _ => Color::Default,
+                };
+                grid[cursor_val!()].set_bg(*bg_color);
+                *state = State::Normal;
+            }
+            (b'q', State::Csi1(buf))
+                if buf.len() == 2 && buf[1] == b' ' && (b'0'..=b'6').contains(&buf[0]) =>
+            {
+                /*
+                  CSI Ps SP q
+                  Set cursor style (DECSCUSR), VT520.
+                  Ps = 0  ⇒  blinking block.
+                  Ps = 1  ⇒  blinking block (default).
+                  Ps = 2  ⇒  steady block.
+                  Ps = 3  ⇒  blinking underline.
+                  Ps = 4  ⇒  steady underline.
+                  Ps = 5  ⇒  blinking bar, xterm.
+                  Ps = 6  ⇒  steady bar, xterm.
+                */
+                *state = State::Normal;
+            }
             (_, State::Csi) => {
-                debug!("ignoring unknown code {}", EscCode::from((&(*state), byte)));
+                debug!(
+                    "state: {:?} ignoring unknown code {} byte {}",
+                    &state,
+                    EscCode::from((&(*state), byte)),
+                    byte
+                );
                 *state = State::Normal;
             }
             (_, State::Csi1(_)) => {
-                debug!("ignoring unknown code {}", EscCode::from((&(*state), byte)));
+                debug!(
+                    "state: {:?} ignoring unknown code {} byte {}",
+                    &state,
+                    EscCode::from((&(*state), byte)),
+                    byte
+                );
                 *state = State::Normal;
             }
             (_, State::Csi2(_, _)) => {
-                debug!("ignoring unknown code {}", EscCode::from((&(*state), byte)));
+                debug!(
+                    "state: {:?} ignoring unknown code {} byte {}",
+                    &state,
+                    EscCode::from((&(*state), byte)),
+                    byte
+                );
                 *state = State::Normal;
             }
             (_, State::Csi3(_, _, _)) => {
-                debug!("ignoring unknown code {}", EscCode::from((&(*state), byte)));
+                debug!(
+                    "state: {:?} ignoring unknown code {} byte {}",
+                    &state,
+                    EscCode::from((&(*state), byte)),
+                    byte
+                );
+                *state = State::Normal;
+            }
+            (_, State::Csi4(_, _, _, _)) => {
+                debug!(
+                    "state: {:?} ignoring unknown code {} byte {}",
+                    &state,
+                    EscCode::from((&(*state), byte)),
+                    byte
+                );
+                *state = State::Normal;
+            }
+            (_, State::Csi5(_, _, _, _, _)) => {
+                debug!(
+                    "state: {:?} ignoring unknown code {} byte {}",
+                    &state,
+                    EscCode::from((&(*state), byte)),
+                    byte
+                );
+                *state = State::Normal;
+            }
+            (_, State::Csi6(_, _, _, _, _, _)) => {
+                debug!(
+                    "state: {:?} ignoring unknown code {} byte {}",
+                    &state,
+                    EscCode::from((&(*state), byte)),
+                    byte
+                );
                 *state = State::Normal;
             }
             (_, State::Osc1(_)) => {
-                debug!("ignoring unknown code {}", EscCode::from((&(*state), byte)));
+                debug!(
+                    "state: {:?} ignoring unknown code {} byte {}",
+                    &state,
+                    EscCode::from((&(*state), byte)),
+                    byte
+                );
                 *state = State::Normal;
             }
             (_, State::Osc2(_, _)) => {
-                debug!("ignoring unknown code {}", EscCode::from((&(*state), byte)));
+                debug!(
+                    "state: {:?} ignoring unknown code {} byte {}",
+                    &state,
+                    EscCode::from((&(*state), byte)),
+                    byte
+                );
                 *state = State::Normal;
             }
             (_, State::CsiQ(_)) => {
-                debug!("ignoring unknown code {}", EscCode::from((&(*state), byte)));
+                debug!(
+                    "state: {:?} ignoring unknown code {} byte {}",
+                    &state,
+                    EscCode::from((&(*state), byte)),
+                    byte
+                );
                 *state = State::Normal;
             }
             /* other stuff */

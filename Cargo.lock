@@ -1880,7 +1880,12 @@ dependencies = [
 name = "tools"
 version = "0.4.1"
 dependencies = [
+ "crossbeam",
+ "meli",
  "melib",
+ "nix",
+ "signal-hook",
+ "signal-hook-registry",
 ]
 
 [[package]]
