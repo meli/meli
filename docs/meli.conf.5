@@ -182,7 +182,11 @@ Its format is described below in
 \&.
 .El
 .Ss notmuch only
-.Ic root_mailbox
+notmuch is supported by loading the dynamic library libnotmuch.
+If its location is missing from your library paths, you must add it yourself.
+Alternatively, you can specify its path by using a setting.
+.Bl -tag -width 36n
+.It Ic root_mailbox
 points to the directory which contains the
 .Pa .notmuch/
 subdirectory.
@@ -192,10 +196,15 @@ You must explicitly state the mailboxes you want in the
 field and set the
 .Ar query
 property to each of them.
+.It Ic library_file_path Ar Path
+Use an arbitrary location of libnotmuch by specifying its full filesystem path.
+.Pq Em optional
+.El
 Example:
 .Bd -literal
 [accounts.notmuch]
 format = "notmuch"
+#library_file_path = "/opt/homebrew/lib/libnotmuch.5.dylib"
 \&...
   [accounts.notmuch.mailboxes]
   "INBOX" = {  query="tag:inbox", subscribe = true }

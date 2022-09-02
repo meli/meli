@@ -310,10 +310,30 @@ impl NotmuchDb {
         event_consumer: BackendEventConsumer,
     ) -> Result<Box<dyn MailBackend>> {
         #[cfg(not(target_os = "macos"))]
-        let dlpath = "libnotmuch.so.5";
+        let mut dlpath = "libnotmuch.so.5";
         #[cfg(target_os = "macos")]
-        let dlpath = "libnotmuch.5.dylib";
-        let lib = Arc::new(unsafe { libloading::Library::new(dlpath)? });
+        let mut dlpath = "libnotmuch.5.dylib";
+        let mut custom_dlpath = false;
+        if let Some(lib_path) = s.extra.get("library_file_path") {
+            dlpath = lib_path.as_str();
+            custom_dlpath = true;
+        }
+        let lib = Arc::new(unsafe {
+            match libloading::Library::new(dlpath) {
+                Ok(l) => l,
+                Err(err) => {
+                    if custom_dlpath {
+                        return Err(MeliError::new(format!("Notmuch `library_file_path` setting value `{}` for account {} does not exist or is a directory or not a valid library file.",dlpath, s.name()))
+                            .set_kind(ErrorKind::Configuration)
+                            .set_source(Some(Arc::new(err))));
+                    } else {
+                        return Err(MeliError::new("Could not load libnotmuch!")
+                            .set_details(super::NOTMUCH_ERROR_DETAILS)
+                            .set_source(Some(Arc::new(err))));
+                    }
+                }
+            }
+        });
         let mut path = Path::new(s.root_mailbox.as_str()).expand();
         if !path.exists() {
             return Err(MeliError::new(format!(
@@ -423,6 +443,15 @@ impl NotmuchDb {
         path.pop();
 
         let account_name = s.name().to_string();
+        if let Some(lib_path) = s.extra.remove("library_file_path") {
+            if !Path::new(&lib_path).exists() || Path::new(&lib_path).is_dir() {
+                return Err(MeliError::new(format!(
+                            "Notmuch `library_file_path` setting value `{}` for account {} does not exist or is a directory.",
+                            &lib_path,
+                            s.name()
+                )).set_kind(ErrorKind::Configuration));
+            }
+        }
         for (k, f) in s.mailboxes.iter_mut() {
             if f.extra.remove("query").is_none() {
                 return Err(MeliError::new(format!(

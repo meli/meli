@@ -108,9 +108,44 @@ impl Default for Backends {
 
 #[cfg(feature = "notmuch_backend")]
 pub const NOTMUCH_ERROR_MSG: &str =
-    "libnotmuch5 was not found in your system. Make sure it is installed and in the library paths.\n";
+    "libnotmuch5 was not found in your system. Make sure it is installed and in the library paths. For a custom file path, use `library_file_path` setting in your notmuch account.\n";
 #[cfg(not(feature = "notmuch_backend"))]
 pub const NOTMUCH_ERROR_MSG: &str = "this version of meli is not compiled with notmuch support. Use an appropriate version and make sure libnotmuch5 is installed and in the library paths.\n";
+
+#[cfg(not(feature = "notmuch_backend"))]
+pub const NOTMUCH_ERROR_DETAILS: &str = "";
+
+#[cfg(all(feature = "notmuch_backend", target_os = "unix"))]
+pub const NOTMUCH_ERROR_DETAILS: &str = r#"If you have installed the library manually, try setting the `LD_LIBRARY_PATH` environment variable to its `lib` directory. Otherwise, set it to the location of libnotmuch.5.so. Example:
+
+LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/path/to/notmuch/lib" meli
+
+or, put this in your shell init script (.bashenv, .zshenv, .bashrc, .zshrc, .profile):
+
+export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/path/to/notmuch/lib"
+
+You can also set any location by specifying the library file path with the configuration flag `library_file_path`."#;
+
+#[cfg(all(feature = "notmuch_backend", target_os = "macos"))]
+pub const NOTMUCH_ERROR_DETAILS: &str = r#"If you have installed the library via homebrew, try setting the `DYLD_LIBRARY_PATH` environment variable to its `lib` directory. Otherwise, set it to the location of libnotmuch.5.dylib. Example:
+
+DYLD_LIBRARY_PATH="$(brew --prefix)/lib" meli
+
+or, put this in your shell init script (.bashenv, .zshenv, .bashrc, .zshrc, .profile):
+
+export DYLD_LIBRARY_PATH="$(brew --prefix)/lib"
+
+Make sure to append to DYLD_LIBRARY_PATH if it's not empty, by prepending a colon to the libnotmuch5.dylib location:
+
+export DYLD_LIBRARY_PATH="$DYLD_LIBRARY_PATH:$(brew --prefix)/lib"
+
+You can also set any location by specifying the library file path with the configuration flag `library_file_path`."#;
+
+#[cfg(all(
+    feature = "notmuch_backend",
+    not(any(target_os = "unix", target_os = "macos"))
+))]
+pub const NOTMUCH_ERROR_DETAILS: &str = r#"If notmuch is installed but the library isn't found, consult your system's documentation on how to make dynamic libraries discoverable."#;
 
 impl Backends {
     pub fn new() -> Self {
@@ -156,19 +191,13 @@ impl Backends {
         }
         #[cfg(feature = "notmuch_backend")]
         {
-            #[cfg(not(target_os = "macos"))]
-            let dlpath = "libnotmuch.so.5";
-            #[cfg(target_os = "macos")]
-            let dlpath = "libnotmuch.5.dylib";
-            if unsafe { libloading::Library::new(dlpath) }.is_ok() {
-                b.register(
-                    "notmuch".to_string(),
-                    Backend {
-                        create_fn: Box::new(|| Box::new(|f, i, ev| NotmuchDb::new(f, i, ev))),
-                        validate_conf_fn: Box::new(NotmuchDb::validate_config),
-                    },
-                );
-            }
+            b.register(
+                "notmuch".to_string(),
+                Backend {
+                    create_fn: Box::new(|| Box::new(|f, i, ev| NotmuchDb::new(f, i, ev))),
+                    validate_conf_fn: Box::new(NotmuchDb::validate_config),
+                },
+            );
         }
         #[cfg(feature = "jmap_backend")]
         {
@@ -187,6 +216,10 @@ impl Backends {
         if !self.map.contains_key(key) {
             if key == "notmuch" {
                 eprint!("{}", NOTMUCH_ERROR_MSG);
+                #[cfg(feature = "notmuch_backend")]
+                {
+                    eprint!("{}", NOTMUCH_ERROR_DETAILS);
+                }
             }
             panic!("{} is not a valid mail backend", key);
         }
@@ -206,13 +239,18 @@ impl Backends {
             .get(key)
             .ok_or_else(|| {
                 MeliError::new(format!(
-                    "{}{} is not a valid mail backend",
+                    "{}{} is not a valid mail backend. {}",
                     if key == "notmuch" {
                         NOTMUCH_ERROR_MSG
                     } else {
                         ""
                     },
-                    key
+                    key,
+                    if cfg!(feature = "notmuch_backend") {
+                        NOTMUCH_ERROR_DETAILS
+                    } else {
+                        ""
+                    },
                 ))
             })?
             .validate_conf_fn)(s)
