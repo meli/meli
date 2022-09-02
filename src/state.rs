@@ -1004,14 +1004,14 @@ impl State {
                     format!(
                         "{}: {}{}{}",
                         self.context.accounts[&account_hash].name(),
-                        description.as_ref().map(|s| s.as_str()).unwrap_or(""),
-                        if description.is_some() { ": " } else { "" },
-                        content.as_str()
+                        description.as_str(),
+                        if content.is_some() { ": " } else { "" },
+                        content.as_ref().map(|s| s.as_str()).unwrap_or("")
                     ),
                     level,
                 );
                 self.rcv_event(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
-                    content.to_string(),
+                    description.to_string(),
                 )));
                 return;
             }

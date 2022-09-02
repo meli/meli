@@ -222,8 +222,8 @@ impl Backends {
 #[derive(Debug, Clone)]
 pub enum BackendEvent {
     Notice {
-        description: Option<String>,
-        content: String,
+        description: String,
+        content: Option<String>,
         level: crate::LoggingLevel,
     },
     Refresh(RefreshEvent),
@@ -233,8 +233,8 @@ pub enum BackendEvent {
 impl From<MeliError> for BackendEvent {
     fn from(val: MeliError) -> BackendEvent {
         BackendEvent::Notice {
-            description: val.summary.as_ref().map(|s| s.to_string()),
-            content: val.to_string(),
+            description: val.summary.to_string(),
+            content: Some(val.to_string()),
             level: crate::LoggingLevel::ERROR,
         }
     }

@@ -1239,20 +1239,20 @@ send_mail = '/bin/false'
 
     let mut new_file = ConfigFile::new(TEST_CONFIG).unwrap();
     let err = FileSettings::validate(new_file.path.clone(), false, true).unwrap_err();
-    assert!(err.details.as_ref().starts_with("You must set a global `composing` option. If you override `composing` in each account, you can use a dummy global like follows"));
+    assert!(err.summary.as_ref().starts_with("You must set a global `composing` option. If you override `composing` in each account, you can use a dummy global like follows"));
     new_file
         .file
         .write_all("[composing]\nsend_mail = '/bin/false'\n".as_bytes())
         .unwrap();
     let err = FileSettings::validate(new_file.path.clone(), false, true).unwrap_err();
-    assert_eq!(err.details.as_ref(), "Configuration error (account-name): root_path `/path/to/root/mailbox` is not a valid directory.");
+    assert_eq!(err.summary.as_ref(), "Configuration error (account-name): root_path `/path/to/root/mailbox` is not a valid directory.");
 
     /* Test unrecognised configuration entries error */
 
     let new_file = ConfigFile::new(EXTRA_CONFIG).unwrap();
     let err = FileSettings::validate(new_file.path.clone(), false, true).unwrap_err();
     assert_eq!(
-        err.details.as_ref(),
+        err.summary.as_ref(),
         "Unrecognised configuration values: {\"index_style\": \"Compact\"}"
     );
 

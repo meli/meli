@@ -2229,8 +2229,8 @@ pub fn save_draft(
             ..
         }) => {
             context.replies.push_back(UIEvent::Notification(
-                summary.map(|s| s.into()),
-                details.into(),
+                details.map(|s| s.into()),
+                summary.to_string(),
                 Some(NotificationType::Error(kind)),
             ));
         }

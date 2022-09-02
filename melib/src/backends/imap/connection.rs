@@ -746,8 +746,8 @@ impl ImapConnection {
                             (self.uid_store.event_consumer)(
                                 self.uid_store.account_hash,
                                 crate::backends::BackendEvent::Notice {
-                                    description: None,
-                                    content: response_code.to_string(),
+                                    description: response_code.to_string(),
+                                    content: None,
                                     level: crate::logging::LoggingLevel::ERROR,
                                 },
                             );
@@ -763,8 +763,8 @@ impl ImapConnection {
                             (self.uid_store.event_consumer)(
                                 self.uid_store.account_hash,
                                 crate::backends::BackendEvent::Notice {
-                                    description: None,
-                                    content: response_code.to_string(),
+                                    description: response_code.to_string(),
+                                    content: None,
                                     level: crate::logging::LoggingLevel::ERROR,
                                 },
                             );
