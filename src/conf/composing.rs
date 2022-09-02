@@ -54,6 +54,12 @@ pub struct ComposingSettings {
     /// Default: empty
     #[serde(default, alias = "default-header-values")]
     pub default_header_values: HashMap<String, String>,
+    /// Wrap header preample when editing a draft in an editor. This allows you to write non-plain
+    /// text email without the preamble creating syntax errors. They are stripped when you return
+    /// from the editor. The values should be a two element array of strings, a prefix and suffix.
+    /// Default: None
+    #[serde(default, alias = "wrap-header-preample")]
+    pub wrap_header_preamble: Option<(String, String)>,
     /// Store sent mail after successful submission. This setting is meant to be disabled for
     /// non-standard behaviour in gmail, which auto-saves sent mail on its own.
     /// Default: true
@@ -96,6 +102,7 @@ impl Default for ComposingSettings {
             insert_user_agent: true,
             default_header_values: HashMap::default(),
             store_sent_mail: true,
+            wrap_header_preamble: None,
             attribution_format_string: None,
             attribution_use_posix_locale: true,
             forward_as_attachment: ToggleFlag::Ask,

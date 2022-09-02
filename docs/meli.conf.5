@@ -512,7 +512,21 @@ Add meli User-Agent header in new drafts
 .\" default value
 .Pq Em true
 .It Ic default_header_values Ar hash table String[String]
+.Pq Em optional
 Default header values used when creating a new draft.
+.\" default value
+.Pq Em []
+.It Ic wrap_header_preamble Ar Option<(String, String)>
+.Pq Em optional
+Wrap header preample when editing a draft in an editor.
+This allows you to write non-plain text email without the preamble creating syntax errors.
+They are stripped when you return from the editor.
+The values should be a two element array of strings, a prefix and suffix.
+This can be useful when for example you're writing Markdown; you can set the value to
+.Em ["<!--",\ "-->"]
+which wraps the headers in an HTML comment.
+.\" default value
+.Pq Em None
 .It Ic store_sent_mail Ar boolean
 .Pq Em optional
 Store sent mail after successful submission.

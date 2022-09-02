@@ -299,6 +299,13 @@ pub struct ComposingSettingsOverride {
     #[serde(alias = "default-header-values")]
     #[serde(default)]
     pub default_header_values: Option<HashMap<String, String>>,
+    #[doc = " Wrap header preample when editing a draft in an editor. This allows you to write non-plain"]
+    #[doc = " text email without the preamble creating syntax errors. They are stripped when you return"]
+    #[doc = " from the editor. The values should be a two element array of strings, a prefix and suffix."]
+    #[doc = " Default: None"]
+    #[serde(alias = "wrap-header-preample")]
+    #[serde(default)]
+    pub wrap_header_preamble: Option<Option<(String, String)>>,
     #[doc = " Store sent mail after successful submission. This setting is meant to be disabled for"]
     #[doc = " non-standard behaviour in gmail, which auto-saves sent mail on its own."]
     #[doc = " Default: true"]
@@ -342,6 +349,7 @@ impl Default for ComposingSettingsOverride {
             format_flowed: None,
             insert_user_agent: None,
             default_header_values: None,
+            wrap_header_preamble: None,
             store_sent_mail: None,
             attribution_format_string: None,
             attribution_use_posix_locale: None,

@@ -30,7 +30,7 @@ use data_encoding::BASE64_MIME;
 use std::ffi::OsStr;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::str;
+use std::str::FromStr;
 use xdg_utils::query_mime_info;
 
 pub mod mime;
@@ -44,6 +44,7 @@ use super::parser;
 pub struct Draft {
     pub headers: HeaderMap,
     pub body: String,
+    pub wrap_header_preamble: Option<(String, String)>,
 
     pub attachments: Vec<AttachmentBuilder>,
 }
@@ -68,13 +69,14 @@ impl Default for Draft {
         Draft {
             headers,
             body: String::new(),
+            wrap_header_preamble: None,
 
             attachments: Vec::new(),
         }
     }
 }
 
-impl str::FromStr for Draft {
+impl FromStr for Draft {
     type Err = MeliError;
     fn from_str(s: &str) -> Result<Self> {
         if s.is_empty() {
@@ -112,6 +114,37 @@ impl Draft {
         self.headers
             .insert(HeaderName::new_unchecked(header), value);
         self
+    }
+
+    pub fn set_wrap_header_preamble(&mut self, value: Option<(String, String)>) -> &mut Self {
+        self.wrap_header_preamble = value;
+        self
+    }
+
+    pub fn update(&mut self, value: &str) -> Result<bool> {
+        let mut value: std::borrow::Cow<'_, str> = value.into();
+        if let Some((pre, post)) = self.wrap_header_preamble.as_ref() {
+            let mut s = value.as_ref();
+            s = s.strip_prefix(pre).unwrap_or(s);
+            s = s.strip_prefix('\n').unwrap_or(s);
+
+            if let Some(pos) = s.find(post) {
+                let mut headers = &s[..pos];
+                headers = headers.strip_suffix(post).unwrap_or(headers);
+                headers = headers.strip_suffix('\n').unwrap_or(headers);
+                value = format!(
+                    "{headers}{body}",
+                    headers = headers,
+                    body = &s[pos + post.len()..]
+                )
+                .into();
+            }
+        }
+        let new = Draft::from_str(value.as_ref())?;
+        let changes: bool = self.headers != new.headers || self.body != new.body;
+        self.headers = new.headers;
+        self.body = new.body;
+        Ok(changes)
     }
 
     pub fn new_reply(envelope: &Envelope, bytes: &[u8], reply_to_all: bool) -> Self {
@@ -217,17 +250,35 @@ impl Draft {
         self
     }
 
-    pub fn to_string(&self) -> Result<String> {
+    pub fn to_edit_string(&self) -> String {
         let mut ret = String::new();
+
+        if let Some((pre, _)) = self.wrap_header_preamble.as_ref() {
+            if !pre.is_empty() {
+                ret.push_str(&pre);
+                if !pre.ends_with('\n') {
+                    ret.push('\n');
+                }
+            }
+        }
 
         for (k, v) in self.headers.deref() {
             ret.push_str(&format!("{}: {}\n", k, v));
         }
 
+        if let Some((_, post)) = self.wrap_header_preamble.as_ref() {
+            if !post.is_empty() {
+                if !post.starts_with('\n') {
+                    ret.push('\n');
+                }
+                ret.push_str(&post);
+            }
+        }
+
         ret.push('\n');
         ret.push_str(&self.body);
 
-        Ok(ret)
+        ret
     }
 
     pub fn finalise(mut self) -> Result<String> {
@@ -415,27 +466,69 @@ mod tests {
     use std::str::FromStr;
 
     #[test]
-    fn test_new() {
+    fn test_new_draft() {
         let mut default = Draft::default();
-        assert_eq!(
-            Draft::from_str(&default.to_string().unwrap()).unwrap(),
-            default
-        );
+        assert_eq!(Draft::from_str(&default.to_edit_string()).unwrap(), default);
         default.set_body("αδφαφσαφασ".to_string());
-        assert_eq!(
-            Draft::from_str(&default.to_string().unwrap()).unwrap(),
-            default
-        );
+        assert_eq!(Draft::from_str(&default.to_edit_string()).unwrap(), default);
         default.set_body("ascii only".to_string());
-        assert_eq!(
-            Draft::from_str(&default.to_string().unwrap()).unwrap(),
-            default
-        );
+        assert_eq!(Draft::from_str(&default.to_edit_string()).unwrap(), default);
     }
 
     #[test]
+    fn test_draft_update() {
+        let mut default = Draft::default();
+        default
+            .set_wrap_header_preamble(Some(("<!--".to_string(), "-->".to_string())))
+            .set_body("αδφαφσαφασ".to_string())
+            .set_header("Subject", "test_update()".into())
+            .set_header("Date", "Sun, 16 Jun 2013 17:56:45 +0200".into());
+
+        let original = default.clone();
+        let s = default.to_edit_string();
+        assert_eq!(s, "<!--\nDate: Sun, 16 Jun 2013 17:56:45 +0200\nFrom: \nTo: \nCc: \nBcc: \nSubject: test_update()\n\n-->\nαδφαφσαφασ");
+        assert!(!default.update(&s).unwrap());
+        assert_eq!(&original, &default);
+
+        default.set_wrap_header_preamble(Some(("".to_string(), "".to_string())));
+        let original = default.clone();
+        let s = default.to_edit_string();
+        assert_eq!(s, "Date: Sun, 16 Jun 2013 17:56:45 +0200\nFrom: \nTo: \nCc: \nBcc: \nSubject: test_update()\n\nαδφαφσαφασ");
+        assert!(!default.update(&s).unwrap());
+        assert_eq!(&original, &default);
+
+        default.set_wrap_header_preamble(None);
+        let original = default.clone();
+        let s = default.to_edit_string();
+        assert_eq!(s, "Date: Sun, 16 Jun 2013 17:56:45 +0200\nFrom: \nTo: \nCc: \nBcc: \nSubject: test_update()\n\nαδφαφσαφασ");
+        assert!(!default.update(&s).unwrap());
+        assert_eq!(&original, &default);
+
+        default.set_wrap_header_preamble(Some((
+            "{-\n\n\n===========".to_string(),
+            "</mixed>".to_string(),
+        )));
+        let original = default.clone();
+        let s = default.to_edit_string();
+        assert_eq!(s, "{-\n\n\n===========\nDate: Sun, 16 Jun 2013 17:56:45 +0200\nFrom: \nTo: \nCc: \nBcc: \nSubject: test_update()\n\n</mixed>\nαδφαφσαφασ");
+        assert!(!default.update(&s).unwrap());
+        assert_eq!(&original, &default);
+
+        default
+            .set_body(
+                "hellohello<!--\n<!--\n<--hellohello\nhellohello-->\n-->\n-->hello\n".to_string(),
+            )
+            .set_wrap_header_preamble(Some(("<!--".to_string(), "-->".to_string())));
+        let original = default.clone();
+        let s = default.to_edit_string();
+        assert_eq!(s, "<!--\nDate: Sun, 16 Jun 2013 17:56:45 +0200\nFrom: \nTo: \nCc: \nBcc: \nSubject: test_update()\n\n-->\nhellohello<!--\n<!--\n<--hellohello\nhellohello-->\n-->\n-->hello\n");
+        assert!(!default.update(&s).unwrap());
+        assert_eq!(&original, &default);
+    }
+
+    /*
+    #[test]
     fn test_attachments() {
-        /*
         let mut default = Draft::default();
         default.set_body("αδφαφσαφασ".to_string());
 
@@ -453,8 +546,8 @@ mod tests {
             .set_content_transfer_encoding(ContentTransferEncoding::Base64);
         default.attachments_mut().push(attachment);
         println!("{}", default.finalise().unwrap());
-        */
     }
+        */
 }
 
 /// Reads file from given path, and returns an 'application/octet-stream' AttachmentBuilder object

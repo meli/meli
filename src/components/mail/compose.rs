@@ -33,7 +33,6 @@ use std::convert::TryInto;
 use std::future::Future;
 use std::pin::Pin;
 use std::process::{Command, Stdio};
-use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
 #[cfg(feature = "gpgme")]
@@ -725,13 +724,9 @@ To: {}
 
     fn update_from_file(&mut self, file: File, context: &mut Context) -> bool {
         let result = file.read_to_string();
-        match Draft::from_str(result.as_str()) {
-            Ok(mut new_draft) => {
-                std::mem::swap(self.draft.attachments_mut(), new_draft.attachments_mut());
-                if self.draft != new_draft {
-                    self.has_changes = true;
-                }
-                self.draft = new_draft;
+        match self.draft.update(result.as_str()) {
+            Ok(has_changes) => {
+                self.has_changes = has_changes;
                 true
             }
             Err(err) => {
@@ -1697,8 +1692,13 @@ impl Component for Composer {
                 };
                 /* update Draft's headers based on form values */
                 self.update_draft();
+                self.draft.set_wrap_header_preamble(
+                    account_settings!(context[self.account_hash].composing.wrap_header_preamble)
+                        .clone(),
+                );
+
                 let f = create_temp_file(
-                    self.draft.to_string().unwrap().as_str().as_bytes(),
+                    self.draft.to_edit_string().as_str().as_bytes(),
                     None,
                     None,
                     true,
@@ -1766,13 +1766,9 @@ impl Component for Composer {
                 }
                 context.replies.push_back(UIEvent::Fork(ForkType::Finished));
                 let result = f.read_to_string();
-                match Draft::from_str(result.as_str()) {
-                    Ok(mut new_draft) => {
-                        std::mem::swap(self.draft.attachments_mut(), new_draft.attachments_mut());
-                        if self.draft != new_draft {
-                            self.has_changes = true;
-                        }
-                        self.draft = new_draft;
+                match self.draft.update(result.as_str()) {
+                    Ok(has_changes) => {
+                        self.has_changes = has_changes;
                     }
                     Err(err) => {
                         context.replies.push_back(UIEvent::Notification(
