@@ -204,7 +204,7 @@ pub struct SmtpExtensionSupport {
     //envelope exchange.
     #[serde(default = "crate::conf::true_val")]
     prdr: bool,
-    #[serde(default = "crate::conf::false_val")]
+    #[serde(default = "crate::conf::true_val")]
     binarymime: bool,
     //Resources:
     //- http://www.postfix.org/SMTPUTF8_README.html
@@ -227,7 +227,7 @@ impl Default for SmtpExtensionSupport {
             chunking: true,
             prdr: true,
             _8bitmime: true,
-            binarymime: false,
+            binarymime: true,
             smtputf8: true,
             auth: true,
             dsn_notify: Some("FAILURE".into()),
@@ -641,7 +641,9 @@ impl SmtpConnection {
         if self.server_conf.extensions.prdr {
             current_command.push(b" PRDR");
         }
-        if self.server_conf.extensions._8bitmime {
+        if self.server_conf.extensions.binarymime {
+            current_command.push(b" BODY=BINARYMIME");
+        } else if self.server_conf.extensions._8bitmime {
             current_command.push(b" BODY=8BITMIME");
         }
         self.send_command(&current_command).await?;
@@ -688,70 +690,80 @@ impl SmtpConnection {
         //permitted on either side of the colon following FROM in the MAIL command or TO in the
         //RCPT command. The syntax is exactly as given above.
 
-        //The third step in the procedure is the DATA command
-        //(or some alternative specified in a service extension).
-        //DATA <CRLF>
-        self.send_command(&[b"DATA"]).await?;
-        //Client SMTP implementations that employ pipelining MUST check ALL statuses associated
-        //with each command in a group. For example, if none of the RCPT TO recipient addresses
-        //were accepted the client must then check the response to the DATA command -- the client
-        //cannot assume that the DATA command will be rejected just because none of the RCPT TO
-        //commands worked. If the DATA command was properly rejected the client SMTP can just
-        //issue RSET, but if the DATA command was accepted the client SMTP should send a single
-        //dot.
-        let mut _all_error = self.server_conf.extensions.pipelining;
-        let mut _any_error = false;
-        let mut ignore_mailfrom = true;
-        for expected_reply_code in pipelining_queue {
-            let reply = self.read_lines(&mut res, expected_reply_code).await?;
-            if !ignore_mailfrom {
-                _all_error &= reply.code.is_err();
-                _any_error |= reply.code.is_err();
+        if self.server_conf.extensions.binarymime {
+            let mail_length = format!("{}", mail.as_bytes().len());
+            self.send_command(&[b"BDAT", mail_length.as_bytes(), b"LAST"])
+                .await?;
+            self.stream
+                .write_all(mail.as_bytes())
+                .await
+                .chain_err_kind(crate::error::ErrorKind::Network)?;
+        } else {
+            //The third step in the procedure is the DATA command
+            //(or some alternative specified in a service extension).
+            //DATA <CRLF>
+            self.send_command(&[b"DATA"]).await?;
+            //Client SMTP implementations that employ pipelining MUST check ALL statuses associated
+            //with each command in a group. For example, if none of the RCPT TO recipient addresses
+            //were accepted the client must then check the response to the DATA command -- the client
+            //cannot assume that the DATA command will be rejected just because none of the RCPT TO
+            //commands worked. If the DATA command was properly rejected the client SMTP can just
+            //issue RSET, but if the DATA command was accepted the client SMTP should send a single
+            //dot.
+            let mut _all_error = self.server_conf.extensions.pipelining;
+            let mut _any_error = false;
+            let mut ignore_mailfrom = true;
+            for expected_reply_code in pipelining_queue {
+                let reply = self.read_lines(&mut res, expected_reply_code).await?;
+                if !ignore_mailfrom {
+                    _all_error &= reply.code.is_err();
+                    _any_error |= reply.code.is_err();
+                }
+                ignore_mailfrom = false;
+                pipelining_results.push(reply.into());
             }
-            ignore_mailfrom = false;
-            pipelining_results.push(reply.into());
-        }
 
-        //If accepted, the SMTP server returns a 354 Intermediate reply and considers all
-        //succeeding lines up to but not including the end of mail data indicator to be the
-        //message text. When the end of text is successfully received and stored, the
-        //SMTP-receiver sends a "250 OK" reply.
-        self.read_lines(&mut res, Some((ReplyCode::_354, &[])))
-            .await?;
+            //If accepted, the SMTP server returns a 354 Intermediate reply and considers all
+            //succeeding lines up to but not including the end of mail data indicator to be the
+            //message text. When the end of text is successfully received and stored, the
+            //SMTP-receiver sends a "250 OK" reply.
+            self.read_lines(&mut res, Some((ReplyCode::_354, &[])))
+                .await?;
 
-        //Before sending a line of mail text, the SMTP client checks the first character of the
-        //line.If it is a period, one additional period is inserted at the beginning of the line.
-        for line in mail.lines() {
-            if line.starts_with('.') {
+            //Before sending a line of mail text, the SMTP client checks the first character of the
+            //line.If it is a period, one additional period is inserted at the beginning of the line.
+            for line in mail.lines() {
+                if line.starts_with('.') {
+                    self.stream
+                        .write_all(b".")
+                        .await
+                        .chain_err_kind(crate::error::ErrorKind::Network)?;
+                }
                 self.stream
-                    .write_all(b".")
+                    .write_all(line.as_bytes())
+                    .await
+                    .chain_err_kind(crate::error::ErrorKind::Network)?;
+                self.stream
+                    .write_all(b"\r\n")
                     .await
                     .chain_err_kind(crate::error::ErrorKind::Network)?;
             }
-            self.stream
-                .write_all(line.as_bytes())
-                .await
-                .chain_err_kind(crate::error::ErrorKind::Network)?;
-            self.stream
-                .write_all(b"\r\n")
-                .await
-                .chain_err_kind(crate::error::ErrorKind::Network)?;
-        }
 
-        if !mail.ends_with('\n') {
+            if !mail.ends_with('\n') {
+                self.stream
+                    .write_all(b".\r\n")
+                    .await
+                    .chain_err_kind(crate::error::ErrorKind::Network)?;
+            }
+
+            //The mail data are terminated by a line containing only a period, that is, the character
+            //sequence "<CRLF>.<CRLF>", where the first <CRLF> is actually the terminator of the
+            //previous line (see Section 4.5.2). This is the end of mail data indication.
             self.stream
                 .write_all(b".\r\n")
                 .await
                 .chain_err_kind(crate::error::ErrorKind::Network)?;
         }
-
-        //The mail data are terminated by a line containing only a period, that is, the character
-        //sequence "<CRLF>.<CRLF>", where the first <CRLF> is actually the terminator of the
-        //previous line (see Section 4.5.2). This is the end of mail data indication.
-        self.stream
-            .write_all(b".\r\n")
-            .await
-            .chain_err_kind(crate::error::ErrorKind::Network)?;
 
         //The end of mail data indicator also confirms the mail transaction and tells the SMTP
         //server to now process the stored recipients and mail data. If accepted, the SMTP
