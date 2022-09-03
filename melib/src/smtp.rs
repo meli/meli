@@ -195,6 +195,8 @@ pub struct SmtpExtensionSupport {
     pipelining: bool,
     #[serde(default = "crate::conf::true_val")]
     chunking: bool,
+    #[serde(default = "crate::conf::true_val")]
+    _8bitmime: bool,
     //Essentially, the PRDR extension to SMTP allows (but does not require) an SMTP server to
     //issue multiple responses after a message has been transferred, by mutual consent of the
     //client and server. SMTP clients that support the PRDR extension then use the expanded
@@ -224,6 +226,7 @@ impl Default for SmtpExtensionSupport {
             pipelining: true,
             chunking: true,
             prdr: true,
+            _8bitmime: true,
             binarymime: false,
             smtputf8: true,
             auth: true,
@@ -561,6 +564,7 @@ impl SmtpConnection {
         self.server_conf.extensions.pipelining &= reply.lines.contains(&"PIPELINING");
         self.server_conf.extensions.chunking &= reply.lines.contains(&"CHUNKING");
         self.server_conf.extensions.prdr &= reply.lines.contains(&"PRDR");
+        self.server_conf.extensions._8bitmime &= reply.lines.contains(&"8BITMIME");
         self.server_conf.extensions.binarymime &= reply.lines.contains(&"BINARYMIME");
         self.server_conf.extensions.smtputf8 &= reply.lines.contains(&"SMTPUTF8");
         if !reply.lines.contains(&"DSN") {
@@ -636,6 +640,9 @@ impl SmtpConnection {
         current_command.push(b">");
         if self.server_conf.extensions.prdr {
             current_command.push(b" PRDR");
+        }
+        if self.server_conf.extensions._8bitmime {
+            current_command.push(b" BODY=8BITMIME");
         }
         self.send_command(&current_command).await?;
         current_command.clear();
