@@ -449,6 +449,7 @@ pub fn list_mailbox_result(input: &[u8]) -> IResult<&[u8], ImapMailbox> {
         ({
             let separator: u8 = separator[0];
             let mut f = ImapMailbox::default();
+            f.has_children = true;
             f.no_select = false;
             f.is_subscribed = false;
 
@@ -475,6 +476,10 @@ pub fn list_mailbox_result(input: &[u8]) -> IResult<&[u8], ImapMailbox> {
                     let _ = f.set_special_usage(SpecialUsageMailbox::Flagged);
                 } else if p.eq_ignore_ascii_case(b"\\Archive") {
                     let _ = f.set_special_usage(SpecialUsageMailbox::Archive);
+                } else if p.eq_ignore_ascii_case(b"\\HasChildren") {
+                    f.has_children = true;
+                } else if p.eq_ignore_ascii_case(b"\\HasNoChildren") {
+                    f.has_children = false;
                 }
             }
             f.imap_path = path.to_string();

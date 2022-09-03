@@ -66,6 +66,7 @@ pub type MessageSequenceNumber = ImapNum;
 
 pub static SUPPORTED_CAPABILITIES: &[&str] = &[
     "AUTH=OAUTH2",
+    "CHILDREN",
     #[cfg(feature = "deflate_compression")]
     "COMPRESS=DEFLATE",
     "CONDSTORE",

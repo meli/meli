@@ -33,6 +33,7 @@ pub struct ImapMailbox {
     pub path: String,
     pub name: String,
     pub parent: Option<MailboxHash>,
+    pub has_children: bool,
     pub children: Vec<MailboxHash>,
     pub separator: u8,
     pub usage: Arc<RwLock<SpecialUsageMailbox>>,
@@ -47,6 +48,12 @@ pub struct ImapMailbox {
 }
 
 impl ImapMailbox {
+    pub fn set_has_children(&mut self, has_children: bool) -> &mut Self {
+        self.has_children = has_children;
+
+        self
+    }
+
     pub fn imap_path(&self) -> &str {
         &self.imap_path
     }
@@ -88,6 +95,9 @@ impl BackendMailbox for ImapMailbox {
     }
 
     fn children(&self) -> &[MailboxHash] {
+        if !self.has_children {
+            return &[];
+        }
         &self.children
     }
 
@@ -106,9 +116,11 @@ impl BackendMailbox for ImapMailbox {
     fn permissions(&self) -> MailboxPermissions {
         *self.permissions.lock().unwrap()
     }
+
     fn is_subscribed(&self) -> bool {
         self.is_subscribed
     }
+
     fn set_is_subscribed(&mut self, new_val: bool) -> Result<()> {
         self.is_subscribed = new_val;
         Ok(())
