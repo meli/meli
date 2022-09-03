@@ -573,12 +573,12 @@ impl NntpType {
         let account_hash = {
             let mut hasher = DefaultHasher::new();
             hasher.write(s.name.as_bytes());
-            hasher.finish()
+            AccountHash(hasher.finish())
         };
         let account_name = Arc::new(s.name().to_string());
         let mut mailboxes = HashMap::default();
         for (k, _f) in s.mailboxes.iter() {
-            let mailbox_hash = get_path_hash!(&k);
+            let mailbox_hash = MailboxHash(get_path_hash!(&k));
             mailboxes.insert(
                 mailbox_hash,
                 NntpMailbox {
@@ -645,7 +645,7 @@ impl NntpType {
             if s.len() != 3 {
                 continue;
             }
-            let mailbox_hash = get_path_hash!(&s[0]);
+            let mailbox_hash = MailboxHash(get_path_hash!(&s[0]));
             mailboxes_lck.entry(mailbox_hash).and_modify(|m| {
                 *m.high_watermark.lock().unwrap() = usize::from_str(s[1]).unwrap_or(0);
                 *m.low_watermark.lock().unwrap() = usize::from_str(s[2]).unwrap_or(0);

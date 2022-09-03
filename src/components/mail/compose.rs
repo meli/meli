@@ -151,7 +151,7 @@ impl Composer {
         pager.set_show_scrollbar(true);
         Composer {
             reply_context: None,
-            account_hash: 0,
+            account_hash: AccountHash(0),
             cursor: Cursor::Headers,
             pager,
             draft: Draft::default(),

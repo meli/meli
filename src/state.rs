@@ -258,7 +258,7 @@ impl State {
                         use std::hash::Hasher;
                         let mut hasher = DefaultHasher::new();
                         hasher.write(n.as_bytes());
-                        hasher.finish()
+                        AccountHash(hasher.finish())
                     };
                     Account::new(
                         account_hash,

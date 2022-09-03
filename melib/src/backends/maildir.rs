@@ -138,8 +138,11 @@ impl MaildirMailbox {
         settings: &AccountSettings,
     ) -> Result<Self> {
         let pathbuf = PathBuf::from(&path);
-        let mut h = DefaultHasher::new();
-        pathbuf.hash(&mut h);
+        let hash = {
+            let mut h = DefaultHasher::new();
+            pathbuf.hash(&mut h);
+            MailboxHash(h.finish())
+        };
 
         /* Check if mailbox path (Eg `INBOX/Lists/luddites`) is included in the subscribed
          * mailboxes in user configuration */
@@ -159,7 +162,7 @@ impl MaildirMailbox {
         };
 
         let ret = MaildirMailbox {
-            hash: h.finish(),
+            hash,
             name: file_name,
             path: fname.unwrap().to_path_buf(),
             fs_path: pathbuf,

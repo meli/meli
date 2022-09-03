@@ -220,7 +220,7 @@ impl MailBackend for MaildirType {
         let account_hash = {
             let mut hasher = DefaultHasher::default();
             hasher.write(self.name.as_bytes());
-            hasher.finish()
+            AccountHash(hasher.finish())
         };
         let sender = self.event_consumer.clone();
 
@@ -327,7 +327,7 @@ impl MailBackend for MaildirType {
         let account_hash = {
             let mut hasher = DefaultHasher::default();
             hasher.write(self.name.as_bytes());
-            hasher.finish()
+            AccountHash(hasher.finish())
         };
         let root_path = self.path.to_path_buf();
         watcher.watch(&root_path, RecursiveMode::Recursive).unwrap();
@@ -377,7 +377,7 @@ impl MailBackend for MaildirType {
                                     }
                                 };
                             }
-                            let mailbox_hash = get_path_hash!(pathbuf);
+                            let mailbox_hash = MailboxHash(get_path_hash!(pathbuf));
                             let file_name = pathbuf
                                 .as_path()
                                 .strip_prefix(&root_path)
@@ -418,7 +418,7 @@ impl MailBackend for MaildirType {
                         /* Update */
                         DebouncedEvent::NoticeWrite(pathbuf) | DebouncedEvent::Write(pathbuf) => {
                             debug!("DebouncedEvent::Write(path = {:?}", &pathbuf);
-                            let mailbox_hash = get_path_hash!(pathbuf);
+                            let mailbox_hash = MailboxHash(get_path_hash!(pathbuf));
                             let mut hash_indexes_lock = hash_indexes.lock().unwrap();
                             let index_lock =
                                 &mut hash_indexes_lock.entry(mailbox_hash).or_default();
@@ -495,7 +495,7 @@ impl MailBackend for MaildirType {
                         /* Remove */
                         DebouncedEvent::NoticeRemove(pathbuf) | DebouncedEvent::Remove(pathbuf) => {
                             debug!("DebouncedEvent::Remove(path = {:?}", pathbuf);
-                            let mailbox_hash = get_path_hash!(pathbuf);
+                            let mailbox_hash = MailboxHash(get_path_hash!(pathbuf));
                             let mut hash_indexes_lock = hash_indexes.lock().unwrap();
                             let index_lock = hash_indexes_lock.entry(mailbox_hash).or_default();
                             let hash: EnvelopeHash = if let Some((k, _)) =
@@ -549,9 +549,9 @@ impl MailBackend for MaildirType {
                         /* Envelope hasn't changed */
                         DebouncedEvent::Rename(src, dest) => {
                             debug!("DebouncedEvent::Rename(src = {:?}, dest = {:?})", src, dest);
-                            let mailbox_hash = get_path_hash!(src);
+                            let mailbox_hash = MailboxHash(get_path_hash!(src));
                             let dest_mailbox = {
-                                let dest_mailbox = get_path_hash!(dest);
+                                let dest_mailbox = MailboxHash(get_path_hash!(dest));
                                 if dest_mailbox == mailbox_hash {
                                     None
                                 } else {
@@ -787,7 +787,7 @@ impl MailBackend for MaildirType {
                             /* Maybe a re-read should be triggered here just to be safe.
                                (sender)(account_hash, BackendEvent::Refresh(RefreshEvent {
                                 account_hash,
-                                mailbox_hash: get_path_hash!(dest),
+                                mailbox_hash: MailboxHash(get_path_hash!(dest)),
                                 kind: Rescan,
                             }));
                             */
@@ -1011,7 +1011,7 @@ impl MailBackend for MaildirType {
                 .map(|item| *item.0)
         });
 
-        let mailbox_hash = get_path_hash!(&path);
+        let mailbox_hash = MailboxHash(get_path_hash!(&path));
         if let Some(parent) = parent {
             self.mailboxes
                 .entry(parent)

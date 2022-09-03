@@ -849,7 +849,7 @@ impl CompactListing {
     pub const DESCRIPTION: &'static str = "compact listing";
     pub fn new(coordinates: (AccountHash, MailboxHash)) -> Box<Self> {
         Box::new(CompactListing {
-            cursor_pos: (coordinates.0, 1, 0),
+            cursor_pos: (coordinates.0, MailboxHash(0), 0),
             new_cursor_pos: (coordinates.0, coordinates.1, 0),
             length: 0,
             sort: (Default::default(), Default::default()),

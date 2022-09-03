@@ -257,6 +257,27 @@ impl Backends {
     }
 }
 
+#[derive(
+    Debug, Serialize, Deserialize, Clone, PartialOrd, Ord, Default, Copy, Hash, PartialEq, Eq,
+)]
+pub struct AccountHash(pub u64);
+
+#[derive(
+    Debug, Serialize, Deserialize, Clone, PartialOrd, Ord, Default, Copy, Hash, PartialEq, Eq,
+)]
+pub struct MailboxHash(pub u64);
+
+impl std::fmt::Display for AccountHash {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "AccountHash({})", self.0)
+    }
+}
+
+impl std::fmt::Display for MailboxHash {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "MailboxHash({})", self.0)
+    }
+}
 #[derive(Debug, Clone)]
 pub enum BackendEvent {
     Notice {
@@ -589,8 +610,6 @@ pub trait BackendMailbox: Debug {
     fn count(&self) -> Result<(usize, usize)>;
 }
 
-pub type AccountHash = u64;
-pub type MailboxHash = u64;
 pub type Mailbox = Box<dyn BackendMailbox + Send + Sync>;
 
 impl Clone for Mailbox {

@@ -478,7 +478,7 @@ pub fn list_mailbox_result(input: &[u8]) -> IResult<&[u8], ImapMailbox> {
                 }
             }
             f.imap_path = path.to_string();
-            f.hash = get_path_hash!(&f.imap_path);
+            f.hash = MailboxHash(get_path_hash!(&f.imap_path));
             f.path = if separator == b'/' {
                 f.imap_path.clone()
             } else {
@@ -486,7 +486,7 @@ pub fn list_mailbox_result(input: &[u8]) -> IResult<&[u8], ImapMailbox> {
             };
             f.name = if let Some(pos) = f.imap_path.as_bytes().iter().rposition(|&c| c == separator)
             {
-                f.parent = Some(get_path_hash!(&f.imap_path[..pos]));
+                f.parent = Some(MailboxHash(get_path_hash!(&f.imap_path[..pos])));
                 f.imap_path[pos + 1..].to_string()
             } else {
                 f.imap_path.clone()
@@ -1561,7 +1561,9 @@ pub struct StatusResponse {
 pub fn status_response(input: &[u8]) -> IResult<&[u8], StatusResponse> {
     let (input, _) = tag("* STATUS ")(input)?;
     let (input, mailbox) = take_until(" (")(input)?;
-    let mailbox = mailbox_token(mailbox).map(|(_, m)| get_path_hash!(m)).ok();
+    let mailbox = mailbox_token(mailbox)
+        .map(|(_, m)| MailboxHash(get_path_hash!(m)))
+        .ok();
     let (input, _) = tag(" (")(input)?;
     let (input, result) = permutation((
         opt(preceded(

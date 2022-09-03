@@ -505,7 +505,7 @@ impl MailBackend for ImapType {
                 let account_hash = uid_store.account_hash;
                 main_conn_lck.add_refresh_event(RefreshEvent {
                     account_hash,
-                    mailbox_hash: 0,
+                    mailbox_hash: MailboxHash(0),
                     kind: RefreshEventKind::Failure(err.clone()),
                 });
                 return Err(err);
@@ -938,7 +938,7 @@ impl MailBackend for ImapType {
             }
             let ret: Result<()> = ImapResponse::try_from(response.as_slice())?.into();
             ret?;
-            let new_hash = get_path_hash!(path.as_str());
+            let new_hash = MailboxHash(get_path_hash!(path.as_str()));
             uid_store.mailboxes.lock().await.clear();
             Ok((new_hash, new_mailbox_fut?.await.map_err(|err| MeliError::new(format!("Mailbox create was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", String::from_utf8_lossy(&response), err)))?))
         }))
@@ -1075,7 +1075,7 @@ impl MailBackend for ImapType {
                     .read_response(&mut response, RequiredResponses::empty())
                     .await?;
             }
-            let new_hash = get_path_hash!(new_path.as_str());
+            let new_hash = MailboxHash(get_path_hash!(new_path.as_str()));
             let ret: Result<()> = ImapResponse::try_from(response.as_slice())?.into();
             ret?;
             uid_store.mailboxes.lock().await.clear();
@@ -1322,7 +1322,7 @@ impl ImapType {
         let account_hash = {
             let mut hasher = DefaultHasher::new();
             hasher.write(s.name.as_bytes());
-            hasher.finish()
+            AccountHash(hasher.finish())
         };
         let account_name = Arc::new(s.name().to_string());
         let uid_store: Arc<UIDStore> = Arc::new(UIDStore {
@@ -1475,7 +1475,7 @@ impl ImapType {
                 debug!("parse error for {:?}", l);
             }
         }
-        mailboxes.retain(|_, v| v.hash != 0);
+        mailboxes.retain(|_, v| v.hash.0 != 0);
         conn.send_command(b"LSUB \"\" \"*\"").await?;
         conn.read_response(&mut res, RequiredResponses::LSUB_REQUIRED)
             .await?;

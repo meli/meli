@@ -367,7 +367,7 @@ impl NotmuchDb {
                 let hash = {
                     let mut h = DefaultHasher::new();
                     k.hash(&mut h);
-                    h.finish()
+                    MailboxHash(h.finish())
                 };
                 mailboxes.insert(
                     hash,
@@ -396,7 +396,7 @@ impl NotmuchDb {
         let account_hash = {
             let mut hasher = DefaultHasher::new();
             hasher.write(s.name().as_bytes());
-            hasher.finish()
+            AccountHash(hasher.finish())
         };
         Ok(Box::new(NotmuchDb {
             lib,
@@ -533,7 +533,7 @@ impl MailBackend for NotmuchDb {
             database: Arc<DbConnection>,
             index: Arc<RwLock<HashMap<EnvelopeHash, CString>>>,
             mailbox_index: Arc<RwLock<HashMap<EnvelopeHash, SmallVec<[MailboxHash; 16]>>>>,
-            mailboxes: Arc<RwLock<HashMap<u64, NotmuchMailbox>>>,
+            mailboxes: Arc<RwLock<HashMap<MailboxHash, NotmuchMailbox>>>,
             tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
             iter: std::vec::IntoIter<CString>,
         }

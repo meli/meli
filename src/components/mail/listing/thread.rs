@@ -759,7 +759,7 @@ impl fmt::Display for ThreadListing {
 impl ThreadListing {
     pub fn new(coordinates: (AccountHash, MailboxHash)) -> Box<Self> {
         Box::new(ThreadListing {
-            cursor_pos: (coordinates.0, 0, 0),
+            cursor_pos: (coordinates.0, MailboxHash(0), 0),
             new_cursor_pos: (coordinates.0, coordinates.1, 0),
             length: 0,
             sort: (Default::default(), Default::default()),

@@ -1112,7 +1112,7 @@ impl Account {
     }
 
     pub fn load(&mut self, mailbox_hash: MailboxHash) -> result::Result<(), usize> {
-        if mailbox_hash == 0 {
+        if mailbox_hash.0 == 0 {
             return Err(0);
         }
         match self.mailbox_entries[&mailbox_hash].status {

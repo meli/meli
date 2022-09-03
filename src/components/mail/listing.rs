@@ -613,6 +613,7 @@ pub struct Listing {
     cursor_pos: (usize, MenuEntryCursor),
     menu_cursor_pos: (usize, MenuEntryCursor),
     menu_content: CellBuffer,
+    menu_content_dirty: bool,
     menu_scrollbar_show_timer: crate::jobs::Timer,
     show_menu_scrollbar: ShowMenuScrollbar,
     startup_checks_rate: RateLimit,
@@ -698,7 +699,8 @@ impl Component for Listing {
                 match self.component {
                     ListingComponent::Offline(_) => {}
                     _ => {
-                        self.component = Offline(OfflineListing::new((account_hash, 0)));
+                        self.component =
+                            Offline(OfflineListing::new((account_hash, MailboxHash(0))));
                     }
                 }
             }
@@ -720,7 +722,8 @@ impl Component for Listing {
                 match self.component {
                     ListingComponent::Offline(_) => {}
                     _ => {
-                        self.component = Offline(OfflineListing::new((account_hash, 0)));
+                        self.component =
+                            Offline(OfflineListing::new((account_hash, MailboxHash(0))));
                     }
                 }
             }
@@ -743,6 +746,7 @@ impl Component for Listing {
                     *account_settings!(context[account_hash].listing.sidebar_divider);
                 self.sidebar_divider_theme = conf::value(context, "mail.sidebar_divider");
                 self.menu_content = CellBuffer::new_with_context(0, 0, None, context);
+                self.menu_content_dirty = true;
                 self.set_dirty(true);
             }
             UIEvent::Timer(n) if *n == self.menu_scrollbar_show_timer.id() => {
@@ -750,6 +754,7 @@ impl Component for Listing {
                     self.show_menu_scrollbar = ShowMenuScrollbar::False;
                     self.set_dirty(true);
                     self.menu_content.empty();
+                    self.menu_content_dirty = true;
                 }
                 return true;
             }
@@ -775,41 +780,10 @@ impl Component for Listing {
                 if self.cursor_pos.0 == account_index {
                     self.change_account(context);
                 } else {
-                    let previous_collapsed_mailboxes: BTreeSet<MailboxHash> = self.accounts
-                        [account_index]
-                        .entries
-                        .iter()
-                        .filter_map(|e| {
-                            if e.collapsed {
-                                Some(e.mailbox_hash)
-                            } else {
-                                None
-                            }
-                        })
-                        .collect::<_>();
-                    self.accounts[account_index].entries = context.accounts[&*account_hash]
-                        .list_mailboxes()
-                        .into_iter()
-                        .filter(|mailbox_node| {
-                            context.accounts[&*account_hash][&mailbox_node.hash]
-                                .ref_mailbox
-                                .is_subscribed()
-                        })
-                        .map(|f| MailboxMenuEntry {
-                            depth: f.depth,
-                            indentation: f.indentation,
-                            has_sibling: f.has_sibling,
-                            mailbox_hash: f.hash,
-                            visible: true,
-                            collapsed: if previous_collapsed_mailboxes.is_empty() {
-                                context.accounts[&*account_hash][&f.hash].conf.collapsed
-                            } else {
-                                previous_collapsed_mailboxes.contains(&f.hash)
-                            },
-                        })
-                        .collect::<_>();
+                    self.update_menu_account(account_index, context);
                     self.set_dirty(true);
                     self.menu_content.empty();
+                    self.menu_content_dirty = true;
                     context
                         .replies
                         .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
@@ -825,35 +799,8 @@ impl Component for Listing {
                     .get_index_of(account_hash)
                     .expect("Invalid account_hash in UIEventMailbox{Delete,Create}");
                 self.menu_content.empty();
-                let previous_collapsed_mailboxes: BTreeSet<MailboxHash> = self.accounts
-                    [account_index]
-                    .entries
-                    .iter()
-                    .filter_map(|e| {
-                        if e.collapsed {
-                            Some(e.mailbox_hash)
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<_>();
-                self.accounts[account_index].entries = context.accounts[&*account_hash]
-                    .list_mailboxes()
-                    .into_iter()
-                    .filter(|mailbox_node| {
-                        context.accounts[&*account_hash][&mailbox_node.hash]
-                            .ref_mailbox
-                            .is_subscribed()
-                    })
-                    .map(|f| MailboxMenuEntry {
-                        depth: f.depth,
-                        indentation: f.indentation,
-                        has_sibling: f.has_sibling,
-                        mailbox_hash: f.hash,
-                        visible: true,
-                        collapsed: previous_collapsed_mailboxes.contains(&f.hash),
-                    })
-                    .collect::<_>();
+                self.menu_content_dirty = true;
+                self.update_menu_account(account_index, context);
                 let mut fallback = 0;
                 if let MenuEntryCursor::Mailbox(ref mut cur) = self.cursor_pos.1 {
                     *cur = std::cmp::min(
@@ -900,6 +847,7 @@ impl Component for Listing {
                     self.component
                         .set_coordinates((account_hash, *mailbox_hash));
                     self.menu_content.empty();
+                    self.menu_content_dirty = true;
                     self.set_dirty(true);
                 }
                 return true;
@@ -1378,6 +1326,7 @@ impl Component for Listing {
                         target.collapsed = !(target.collapsed);
                         self.dirty = true;
                         self.menu_content.empty();
+                        self.menu_content_dirty = true;
                         context
                             .replies
                             .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
@@ -1520,6 +1469,7 @@ impl Component for Listing {
                         self.show_menu_scrollbar = ShowMenuScrollbar::True;
                     }
                     self.menu_content.empty();
+                    self.menu_content_dirty = true;
                     self.set_dirty(true);
                     return true;
                 }
@@ -1581,6 +1531,7 @@ impl Component for Listing {
                         self.show_menu_scrollbar = ShowMenuScrollbar::True;
                     }
                     self.menu_content.empty();
+                    self.menu_content_dirty = true;
                     return true;
                 }
                 UIEvent::Input(ref k)
@@ -1634,6 +1585,7 @@ impl Component for Listing {
                         self.show_menu_scrollbar = ShowMenuScrollbar::True;
                     }
                     self.menu_content.empty();
+                    self.menu_content_dirty = true;
                     self.set_dirty(true);
 
                     return true;
@@ -1660,6 +1612,7 @@ impl Component for Listing {
                 self.dirty = true;
                 /* clear menu to force redraw */
                 self.menu_content.empty();
+                self.menu_content_dirty = true;
                 context
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
@@ -1810,13 +1763,14 @@ impl Listing {
             .collect();
         let first_account_hash = account_entries[0].hash;
         let mut ret = Listing {
-            component: Offline(OfflineListing::new((first_account_hash, 0))),
+            component: Offline(OfflineListing::new((first_account_hash, MailboxHash(0)))),
             accounts: account_entries,
             status: None,
             dirty: true,
             cursor_pos: (0, MenuEntryCursor::Mailbox(0)),
             menu_cursor_pos: (0, MenuEntryCursor::Mailbox(0)),
             menu_content: CellBuffer::new_with_context(0, 0, None, context),
+            menu_content_dirty: true,
             menu_scrollbar_show_timer: context.job_executor.clone().create_timer(
                 std::time::Duration::from_secs(0),
                 std::time::Duration::from_millis(1200),
@@ -1841,6 +1795,11 @@ impl Listing {
     }
 
     fn draw_menu(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        if self.menu_content_dirty {
+            for account_index in 0..self.accounts.len() {
+                self.update_menu_account(account_index, context);
+            }
+        }
         clear_area(grid, area, self.theme_default);
         let total_height: usize = 3 * (self.accounts.len())
             + self
@@ -2283,9 +2242,8 @@ impl Listing {
         }
     }
 
-    fn change_account(&mut self, context: &mut Context) {
-        let account_hash = context.accounts[self.cursor_pos.0].hash();
-        let previous_collapsed_mailboxes: BTreeSet<MailboxHash> = self.accounts[self.cursor_pos.0]
+    fn update_menu_account(&mut self, account_index: usize, context: &mut Context) {
+        let previous_collapsed_mailboxes: BTreeSet<MailboxHash> = self.accounts[account_index]
             .entries
             .iter()
             .filter_map(|e| {
@@ -2296,11 +2254,11 @@ impl Listing {
                 }
             })
             .collect::<_>();
-        self.accounts[self.cursor_pos.0].entries = context.accounts[self.cursor_pos.0]
+        self.accounts[account_index].entries = context.accounts[account_index]
             .list_mailboxes()
             .into_iter()
             .filter(|mailbox_node| {
-                context.accounts[self.cursor_pos.0][&mailbox_node.hash]
+                context.accounts[account_index][&mailbox_node.hash]
                     .ref_mailbox
                     .is_subscribed()
             })
@@ -2311,12 +2269,17 @@ impl Listing {
                 mailbox_hash: f.hash,
                 visible: true,
                 collapsed: if previous_collapsed_mailboxes.is_empty() {
-                    context.accounts[self.cursor_pos.0][&f.hash].conf.collapsed
+                    context.accounts[account_index][&f.hash].conf.collapsed
                 } else {
                     previous_collapsed_mailboxes.contains(&f.hash)
                 },
             })
             .collect::<_>();
+    }
+
+    fn change_account(&mut self, context: &mut Context) {
+        self.update_menu_account(self.cursor_pos.0, context);
+        let account_hash = self.accounts[self.cursor_pos.0].hash;
         match self.cursor_pos.1 {
             MenuEntryCursor::Mailbox(idx) => {
                 /* Account might have no mailboxes yet if it's offline */
@@ -2334,7 +2297,7 @@ impl Listing {
                     self.component.set_style(*index_style);
                 } else {
                     /* Set to dummy */
-                    self.component = Offline(OfflineListing::new((account_hash, 0)));
+                    self.component = Offline(OfflineListing::new((account_hash, MailboxHash(0))));
                 }
                 self.status = None;
                 context
