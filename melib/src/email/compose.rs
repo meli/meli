@@ -131,7 +131,9 @@ impl Draft {
             if let Some(pos) = s.find(post) {
                 let mut headers = &s[..pos];
                 headers = headers.strip_suffix(post).unwrap_or(headers);
-                headers = headers.strip_suffix('\n').unwrap_or(headers);
+                if headers.ends_with('\n') {
+                    headers = &headers[..headers.len() - 1];
+                }
                 value = format!(
                     "{headers}{body}",
                     headers = headers,
@@ -268,10 +270,11 @@ impl Draft {
 
         if let Some((_, post)) = self.wrap_header_preamble.as_ref() {
             if !post.is_empty() {
-                if !post.starts_with('\n') {
+                if !post.starts_with('\n') && !ret.ends_with('\n') {
                     ret.push('\n');
                 }
                 ret.push_str(&post);
+                ret.push('\n');
             }
         }
 
@@ -486,7 +489,7 @@ mod tests {
 
         let original = default.clone();
         let s = default.to_edit_string();
-        assert_eq!(s, "<!--\nDate: Sun, 16 Jun 2013 17:56:45 +0200\nFrom: \nTo: \nCc: \nBcc: \nSubject: test_update()\n\n-->\nαδφαφσαφασ");
+        assert_eq!(s, "<!--\nDate: Sun, 16 Jun 2013 17:56:45 +0200\nFrom: \nTo: \nCc: \nBcc: \nSubject: test_update()\n-->\n\nαδφαφσαφασ");
         assert!(!default.update(&s).unwrap());
         assert_eq!(&original, &default);
 
@@ -510,7 +513,7 @@ mod tests {
         )));
         let original = default.clone();
         let s = default.to_edit_string();
-        assert_eq!(s, "{-\n\n\n===========\nDate: Sun, 16 Jun 2013 17:56:45 +0200\nFrom: \nTo: \nCc: \nBcc: \nSubject: test_update()\n\n</mixed>\nαδφαφσαφασ");
+        assert_eq!(s, "{-\n\n\n===========\nDate: Sun, 16 Jun 2013 17:56:45 +0200\nFrom: \nTo: \nCc: \nBcc: \nSubject: test_update()\n</mixed>\n\nαδφαφσαφασ");
         assert!(!default.update(&s).unwrap());
         assert_eq!(&original, &default);
 
@@ -521,7 +524,7 @@ mod tests {
             .set_wrap_header_preamble(Some(("<!--".to_string(), "-->".to_string())));
         let original = default.clone();
         let s = default.to_edit_string();
-        assert_eq!(s, "<!--\nDate: Sun, 16 Jun 2013 17:56:45 +0200\nFrom: \nTo: \nCc: \nBcc: \nSubject: test_update()\n\n-->\nhellohello<!--\n<!--\n<--hellohello\nhellohello-->\n-->\n-->hello\n");
+        assert_eq!(s, "<!--\nDate: Sun, 16 Jun 2013 17:56:45 +0200\nFrom: \nTo: \nCc: \nBcc: \nSubject: test_update()\n-->\n\nhellohello<!--\n<!--\n<--hellohello\nhellohello-->\n-->\n-->hello\n");
         assert!(!default.update(&s).unwrap());
         assert_eq!(&original, &default);
     }
