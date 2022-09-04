@@ -1,3 +1,8 @@
+pub enum Statement {
+    Command { inner: MuttrcCommand },
+    Value { inner: MuttrcConfigurationValues },
+}
+
 pub enum MuttrcCommand {
     /// alias [-group name [...]] key address [, address [ ... ]]
     /// unalias [ *  | key ]
