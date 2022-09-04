@@ -1,0 +1,14 @@
+use std::str::FromStr;
+use crate::lexer::{MuttrcCommand, MuttrcConfigurationValues};
+
+grammar;
+
+pub Command: MuttrcCommand = {
+  <c:MuttrcCommand> => c,
+  <c:MuttrcCommand> <_s:String> => c,
+};
+
+pub Configuration: MuttrcConfigurationValues = {
+  <c:MuttrcConfigurationValues> => c,
+  <c:MutrcConfigurationValues> <_s:String> => c,
+};
