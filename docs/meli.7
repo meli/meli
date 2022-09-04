@@ -1,0 +1,314 @@
+.\" meli - meli.7
+.\"
+.\" Copyright 2017-2022 Manos Pitsidianakis
+.\"
+.\" This file is part of meli.
+.\"
+.\" meli is free software: you can redistribute it and/or modify
+.\" it under the terms of the GNU General Public License as published by
+.\" the Free Software Foundation, either version 3 of the License, or
+.\" (at your option) any later version.
+.\"
+.\" meli is distributed in the hope that it will be useful,
+.\" but WITHOUT ANY WARRANTY; without even the implied warranty of
+.\" MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+.\" GNU General Public License for more details.
+.\"
+.\" You should have received a copy of the GNU General Public License
+.\" along with meli. If not, see <http://www.gnu.org/licenses/>.
+.\"
+.de Hr
+.sp
+.Bd -literal -offset center
+╌╍─────────────────────────────────────────────────────────╍╌
+.Ed
+.sp
+..
+.de Shortcut
+.Sm
+.Aq \\$1
+\ 
+.Po
+.Em shortcuts.\\$2\&. Ns
+.Em \\$3
+.Pc
+.Sm
+..
+.de ShortcutPeriod
+.Aq \\$1
+.Po
+.Em shortcuts.\\$2\&. Ns
+.Em \\$3
+.Pc Ns
+..
+.de Command
+.Bd -ragged
+.Cm \\$*
+.Ed
+.sp
+..
+.Dd September 4, 2022
+.Dt MELI 7
+.Os
+.Sh NAME
+.Nm meli
+.Nd Tutorial for the Meli Mail User Agent
+.Sh SYNOPSIS
+.Nm
+.Op ...
+.Sh DESCRIPTION
+.Nm
+is a terminal mail client aiming for extensive and user-frendly configurability.
+.Bd -literal
+     ^^      .-=-=-=-.  ^^
+ ^^        (`-=-=-=-=-`)         ^^
+         (`-=-=-=-=-=-=-`)  ^^         ^^
+   ^^   (`-=-=-=-=-=-=-=-`)   ^^
+       ( `-=-=-=-(@)-=-=-` )      ^^
+       (`-=-=-=-=-=-=-=-=-`)  ^^
+       (`-=-=-=-=-=-=-=-=-`)          ^^
+       (`-=-=-=-=-=-=-=-=-`)
+^^     (`-=-=-=-=-=-=-=-=-`)  ^^
+   ^^   (`-=-=-=-=-=-=-=-`)          ^^
+         (`-=-=-=-=-=-=-`)  ^^
+  ^^       (`-=-=-=-=-`)
+            `-=-=-=-=-`          ^^
+.Ed
+.Sh STARTING WITH meli
+When launched for the first time,
+.Nm
+will search for its configuration directory,
+.Pa $XDG_CONFIG_HOME/meli/ Ns
+\&.
+If it doesn't exist, you will be asked if you want to create one and presented with a sample configuration file
+.Pq Pa $XDG_CONFIG_HOME/meli/config.toml
+that includes the basic settings required for setting up accounts allowing you to copy and edit right away.
+See
+.Xr meli.conf 5
+for the available configuration options.
+.Pp
+At any time, you may press
+.Shortcut \&? general toggle_help
+for a searchable list of all available actions and shortcuts, along with every possible setting and command that your version supports.
+.Pp
+Each time a shortcut is mentioned in this document, you will find a parenthesis next to it with the name of the shortcut setting along with its section in the configuration settings so that you can modify it if you wish.
+.Pp
+For example, to set the
+.Em toggle_help
+shortcut mentioned in the previous paragraph, add the following to your configuration:
+.Bd -literal -offset center
+[shortcuts]
+general.toggle_help = 'F1'
+.Ed
+.sp
+Or alternatively:
+.Bd -literal -offset center
+[shortcuts.general]
+toggle_help = 'F1'
+.Ed
+.Sh INTERACTING WITH Nm
+You will be interacting with
+.Nm
+in four primary ways:
+.Bl -column
+.It 1.
+keyboard shortcuts in
+.Sy NORMAL
+mode.
+.It 2.
+commands with arguments in
+.Sy COMMAND
+mode.
+.It 3.
+regular text input in text input widgets in
+.Sy INSERT
+mode.
+.It 4.
+any kind of input that gets passed directly into an embedded terminal in
+.Sy EMBED
+mode.
+.El
+.Ss MODES
+.Nm
+is a modal application, just like
+.Xr vi 1 Ns
+\&.
+This means that pressing the same keys in different modes would yield different results.
+This allows you to separate how the input is interpreted without the need to focus your input with a mouse.
+.Bl -tag -width 8n
+.It NORMAL
+This is the default mode of
+.Nm Ns
+\&.
+All keyboard shortcuts work in this mode.
+.It COMMAND
+Commands are issued in
+.Sy COMMAND
+mode, by default started with
+.Shortcut \&: general enter_command_mode
+and exited with
+.Aq Esc
+key.
+.It EMBED
+This is the mode of the embed terminal emulator.
+To exit an embedded application, issue
+.Aq Ctrl-C
+to kill it or
+.Aq Ctrl-Z
+to stop the program and follow the instructions on
+.Nm
+to exit.
+.It INSERT
+This mode is entered when pressing
+.Aq Enter
+on a cursor selected text input field, and it captures all input as text input.
+It is exited with the
+.Aq Esc
+key.
+.El
+.Ss MAIN VIEW
+.Bd -literal -offset center
+ ┌───────────────────────┐
+ ├────┼──────────────────┤
+ │___ │  ___________     │
+ │ _  │ _______________  │
+ │ _  │__________________│
+ │ _  │      ___________ │
+ │    │  _____           │
+ │    │                  │
+ └────┴──────────────────┘
+.Ed
+.Bd -ragged -offset center
+.Sy The main view.
+.Ed
+.sp
+This is the view you will spend more time with in
+.Nm Ns
+\&.
+.Pp
+Press
+.Shortcut ` listing toggle_menu_visibility
+to toggle the sidebars visibility.
+.Pp
+Press
+.Shortcut Left listing focus_on_menu
+to switch focus on the sidebar menu.
+Press
+.Shortcut Right listing focus_on_list
+to switch focus on the e-mail list.
+.Pp
+On the e-mail list, press
+.Shortcut k listing scroll_up
+to scroll up, and
+.Shortcut j listing scroll_down
+to scroll down.
+Press
+.Shortcut Enter listing open_entry
+to open an e-mail entry and
+.Shortcut i listing exit_entry
+to exit it.
+.Hr
+.Bd -literal -offset center
+personal account
+ 0  INBOX
+ 1   ┣━Sent
+ 2   ┣━Lists
+ 3   ┃ ┣━meli-dev
+ 4   ┃ ┗━meli
+ 5   ┣━Drafts
+ 6   ┣━Trash
+ 7   ┗━foobar
+ 8  Trash
+ 9  Archived
+.Ed
+.Bd -ragged -offset 3n
+.Sy The sidebar\&.
+.Ed
+.sp
+Press
+.Shortcut k listing scroll_up
+to scroll up, and
+.Shortcut j listing scroll_down
+to scroll down.
+.Pp
+Press
+.Shortcut Enter listing open_mailbox
+to open an entry (either a mailbox or an account name).
+Entering an account name will show you a page with details about the account and its network connection, depending on the backend.
+.Pp
+While focused in the sidebar, you can
+.Dq collapse
+a mailbox tree, if it has children, and you can
+.Dq uncollapse
+it with
+.ShortcutPeriod Space listing toggle_mailbox_collapse
+\&.
+You can have mailbox trees collapsed on startup by default by setting a mailbox's
+.Ic collapsed
+setting to
+.Em true Ns
+\&.
+See
+.Xr meli.conf 5 section MAILBOXES
+for details.
+.Pp
+You can increase the sidebar's width with
+.Shortcut Ctrl-p listing increase_sidebar
+and decrease with
+.ShortcutPeriod Ctrl-o listing decrease_sidebar
+\&.
+.Hr
+.Bd -literal
+┌────────────────────────────────────────────────────┈┈
+│NORMAL | Mailbox: Inbox, Messages: 25772, New: 3006
+└────────────────────────────────────────────────────┈┈
+.Ed
+.Bd -ragged -offset 3n
+.Sy The status bar.
+.Ed
+.Pp
+The status bar shows which mode you are, and the status message of the current view.
+In the pictured example, it shows the status of a mailbox called
+.Dq Inbox
+with lots of e-mails.
+.Hr
+.Bd -literal
+ ┈┈────────────┐
+            12 │
+ ┈┈────────────┘
+.Ed
+.Bd -ragged -offset 3n
+.Sy The number modifier buffer.
+.Ed
+.Pp
+Some commands may accept a number qualifier.
+For example, scroll down commands can receive a multiplier
+.Em n
+to scroll down
+.Em n
+entries.
+Another use of the number buffer is opening URLs inside the pager.
+See
+.Sx PAGER
+for an explanation of interacting with URLs in e-mails.
+.Pp
+Pressing numbers in
+.Sy NORMAL
+mode will populate this buffer.
+To erase it, press the
+.Aq Esc
+key.
+.Sh SEE ALSO
+.Xr meli 1 ,
+.Xr meli.conf 5 ,
+.Xr meli-themes 5 ,
+.Xr xdg-open 1 ,
+.Xr mailcap 5
+.Sh AUTHORS
+Copyright 2017-2022
+.An Manos Pitsidianakis Mt manos@pitsidianak.is
+Released under the GPL, version 3 or greater.
+This software carries no warranty of any kind.
+(See COPYING for full copyright and warranty notices.)
+.Pp
+.Lk https://meli.delivery

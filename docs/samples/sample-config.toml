@@ -93,10 +93,6 @@
 #[shortcuts.composing]
 #edit_mail = 'e'
 #
-##Thread view defaults:
-#[shortcuts.compact-listing]
-#exit_thread = 'i'
-#
 #[shortcuts.contact-list]
 #create_contact = 'c'
 #edit_contact = 'e'
@@ -111,6 +107,7 @@
 #next_account = 'h'
 #new_mail = 'm'
 #set_seen = 'n'
+#exit_entry = 'i'
 #
 ##Pager defaults
 #

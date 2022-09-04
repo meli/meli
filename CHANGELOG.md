@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- A new manual page, `meli.7` which contains a general tutorial for using meli.
+- Added shortcuts for focusing to sidebar menu and back to the e-mail view (`focus_on_menu` and `focus_on_list`)
+
+### Changed
+
+- Shortcut `open_thread` and `exit_thread` renamed to `open_entry` and `exit_entry`.
+
 ## [alpha-0.7.2] - 2021-10-15
 
 ### Added

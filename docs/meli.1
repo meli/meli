@@ -17,6 +17,29 @@
 .\" You should have received a copy of the GNU General Public License
 .\" along with meli. If not, see <http://www.gnu.org/licenses/>.
 .\"
+.de Shortcut
+.Sm
+.Aq \\$1
+\ 
+.Po
+.Em shortcuts.\\$2\&. Ns
+.Em \\$3
+.Pc
+.Sm
+..
+.de ShortcutPeriod
+.Aq \\$1
+.Po
+.Em shortcuts.\\$2\&. Ns
+.Em \\$3
+.Pc Ns
+..
+.de Command
+.Bd -ragged
+.Cm \\$*
+.Ed
+.sp
+..
 .Dd July 29, 2019
 .Dt MELI 1
 .Os
@@ -43,7 +66,7 @@ if given, or at
 .It Cm test-config Op Ar path
 Test a configuration file for syntax issues or missing options.
 .It Cm man Op Ar page
-Print documentation page and exit (Piping to a pager is recommended.)
+Print documentation page and exit (Piping to a pager is recommended).
 .It Cm print-default-theme
 Print default theme keys and values in TOML syntax, to be used as a blueprint.
 .It Cm print-loaded-themes
@@ -85,14 +108,12 @@ See
 for the available configuration options.
 .Pp
 At any time, you may press
-.Cm \&?
+.Shortcut \&? general toggle_help
 for a searchable list of all available actions and shortcuts, along with every possible setting and command that your version supports.
 .Pp
 The main visual navigation tool, the left-side sidebar may be toggled with
-.Cm `
-(shortcuts.listing:
-.Ic toggle_menu_visibility Ns
-).
+.ShortcutPeriod ` listing toggle_menu_visibility
+\&.
 .Pp
 Each mailbox may be viewed in 4 modes:
 Plain views each mail individually, Threaded shows their thread relationship visually, Conversations collapses each thread of emails into a single entry, Compact shows one row per thread.
@@ -105,23 +126,22 @@ section of your configuration.
 See
 .Xr meli-themes 5
 for complete documentation on user themes.
+.Pp
+See
+.Xr meli 7
+for a more detailed tutorial on using
+.Nm Ns
+\&.
 .Sh VIEWING MAIL
 Open attachments by typing their index in the attachments list and then
-.Cm a
-.Po
-shortcut
-.Ic open_attachment
-.Pc .
+.ShortcutPeriod a envelope_view open_attachment
+\&.
 .Nm
 will attempt to open text inside its pager, and other content via
 .Cm xdg-open Ns
 \&.
 Press
-.Cm m
-.Po
-shortcut
-.Ic open_mailcap
-.Pc
+.Shortcut m envelope_view open_mailcap
 instead to use the mailcap entry for the MIME type of the attachment, if any.
 See
 .Sx FILES
@@ -129,12 +149,12 @@ for the location of the mailcap files and
 .Xr mailcap 5
 for their syntax.
 You can save individual attachments with the
-.Em COMMAND
-.Cm save-attachment Ar INDEX Ar path-to-file
-where
+.Command save-attachment Ar INDEX Ar path-to-file
+command.
 .Ar INDEX
 is the attachment's index in the listing.
-If the zeroth index is provided, the entire message is saved.
+If the path provided is a directory, the attachment is saved with its filename set to the filename in the attachment, if any.
+If the 0th index is provided, the entire message is saved.
 If the path provided is a directory, the message is saved as an eml file with its filename set to the messages message-id.
 .Sh SEARCH
 Each e-mail storage backend has a default search method assigned.
@@ -163,9 +183,8 @@ To enable sqlite3 indexing for an account set
 .Em search_backend
 to
 .Em sqlite3
-in the configuration file and to create the sqlite3 index issue command
-.Cm index Ar ACCOUNT_NAME Ns \&.
-.sp
+in the configuration file and to create the sqlite3 index issue command:
+.Command index Ar ACCOUNT_NAME Ns
 To search in the message body type your keywords without any special formatting.
 To search in specific fields, prepend your search keyword with "field:" like so:
 .Pp
@@ -234,9 +253,9 @@ Sqlite3 on the contrary at reasonable mailbox sizes should have a non noticable 
 .Nm
 supports tagging in notmuch and IMAP/JMAP backends.
 Tags can be searched with the `tags:` or `flags:` prefix in a search query, and can be modified by
-.Cm tag add TAG
+.Command tag add TAG
 and
-.Cm tag remove TAG
+.Command tag remove TAG
 (see
 .Xr meli.conf 5 TAGS Ns
 , settings
@@ -247,22 +266,17 @@ for how to set tag colors and tag visiblity)
 .Sh COMPOSING
 .Ss Opening the message Composer tab
 To create a new mail message, press
-.Cm m
-(shortcut
-.Ic new_mail Ns
-) while viewing a mailbox.
+.Shortcut m listing new_mail
+while viewing a mailbox.
 To reply to a mail, press
-.Cm R
-.Po
-shortcut
-.Ic reply
-.Pc .
+.ShortcutPeriod R envelope_view reply
+\&.
 Both these actions open the mail composer view in a new tab.
 .Ss Editing text
 .Bl -bullet -compact
 .It
 Edit the header fields by selecting with the arrow keys and pressing
-.Cm enter
+.Shortcut Enter general focus_in_text_field
 to enter
 .Em INSERT
 mode and
@@ -270,10 +284,8 @@ mode and
 key to exit.
 .It
 At any time you may press
-.Cm e
-(shortcut
-.Ic edit_mail Ns
-) to launch your editor (see
+.Shortcut e composing edit_mail Ns
+to launch your editor (see
 .Xr meli.conf 5 COMPOSING Ns
 , setting
 .Ic editor_command
@@ -285,19 +297,23 @@ Your editor can be used in
 .Ic embed
 to
 .Em true
-in your composing settings.
+in your composing settings
+.Po
+You can return to
+.Nm
+at any time by pressing
+.Aq Ctrl-Z
+.Pc
 .It
 When launched, your editor captures all input until it exits or stops.
 .It
 To stop your editor and return to
 .Nm
-press Ctrl-z and to resume editing press the
+press
+.Aq Ctrl-z
+and to resume editing press the
 .Ic edit_mail
-command again
-.Po
-default
-.Em e
-.Pc .
+command again.
 .El
 .Ss Attachments
 Attachments may be handled with the
@@ -307,14 +323,12 @@ Attachments may be handled with the
 commands (see below).
 .Ss Sending
 Finally, pressing
-.Cm s
-(shortcut
-.Ic send_mail Ns
-) will send your message according to your settings
+.Shortcut s composing send_mail
+will send your message according to your settings
 .Po
 see
 .Xr meli.conf 5 COMPOSING Ns
-, setting
+, setting name
 .Ic send_mail
 .Pc Ns
 \&.
@@ -363,9 +377,9 @@ is the default mode
 commands are issued in
 .Em COMMAND
 mode, by default started with
-.Cm \&:
+.Shortcut \&: general enter_command_mode
 and exited with
-.Cm Esc
+.Aq Esc
 key.
 .It EMBED
 is the mode of the embed terminal emulator
@@ -585,19 +599,19 @@ Mailcap entries are searched for in the following files, in this order:
 .Sh SEE ALSO
 .Xr meli.conf 5 ,
 .Xr meli-themes 5 ,
+.Xr meli 7 ,
 .Xr xdg-open 1 ,
 .Xr mailcap 5
 .Sh CONFORMING TO
 XDG Standard
-.Aq https://standards.freedesktop.org/basedir-spec/basedir-spec-latest.html Ns
+.Lk https://standards.freedesktop.org/basedir-spec/basedir-spec-latest.html Ns
 , maildir
-.Aq https://cr.yp.to/proto/maildir.html Ns
+.Lk https://cr.yp.to/proto/maildir.html Ns
 , IMAPv4rev1 RFC3501, The JSON Meta Application Protocol (JMAP) RFC8620, The JSON Meta Application Protocol (JMAP) for Mail RFC8621.
 .Sh AUTHORS
-Copyright 2017-2019
-.An Manos Pitsidianakis Aq epilys@nessuent.xyz
+Copyright 2017-2022
+.An Manos Pitsidianakis Mt manos@pitsidianak.is
 Released under the GPL, version 3 or greater.
-This software carries no warranty of any kind.
-(See COPYING for full copyright and warranty notices.)
+This software carries no warranty of any kind (See COPYING for full copyright and warranty notices).
 .Pp
-.Aq https://meli.delivery
+.Lk https://meli.delivery

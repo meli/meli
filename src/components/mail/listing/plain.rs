@@ -657,7 +657,7 @@ impl fmt::Display for PlainListing {
 }
 
 impl PlainListing {
-    const DESCRIPTION: &'static str = "plain listing";
+    //const DESCRIPTION: &'static str = "plain listing";
     pub fn new(coordinates: (AccountHash, MailboxHash)) -> Box<Self> {
         Box::new(PlainListing {
             cursor_pos: (0, 1, 0),
@@ -1139,7 +1139,7 @@ impl Component for PlainListing {
             match *event {
                 UIEvent::Input(ref k)
                     if !self.unfocused
-                        && shortcut!(k == shortcuts[PlainListing::DESCRIPTION]["open_thread"]) =>
+                        && shortcut!(k == shortcuts[Listing::DESCRIPTION]["open_entry"]) =>
                 {
                     let env_hash = self.get_env_under_cursor(self.cursor_pos.2, context);
                     let temp = (self.cursor_pos.0, self.cursor_pos.1, env_hash);
@@ -1150,7 +1150,7 @@ impl Component for PlainListing {
                 }
                 UIEvent::Input(ref k)
                     if self.unfocused
-                        && shortcut!(k == shortcuts[PlainListing::DESCRIPTION]["exit_thread"]) =>
+                        && shortcut!(k == shortcuts[Listing::DESCRIPTION]["exit_entry"]) =>
                 {
                     self.unfocused = false;
                     self.view
@@ -1411,8 +1411,6 @@ impl Component for PlainListing {
             ShortcutMaps::default()
         };
 
-        let config_map = context.settings.shortcuts.compact_listing.key_values();
-        map.insert(PlainListing::DESCRIPTION, config_map);
         let config_map = context.settings.shortcuts.listing.key_values();
         map.insert(Listing::DESCRIPTION, config_map);
 

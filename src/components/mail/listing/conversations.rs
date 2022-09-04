@@ -565,7 +565,7 @@ impl fmt::Display for ConversationsListing {
 }
 
 impl ConversationsListing {
-    const DESCRIPTION: &'static str = "conversations listing";
+    //const DESCRIPTION: &'static str = "conversations listing";
     //const PADDING_CHAR: char = ' '; //░';
 
     pub fn new(coordinates: (AccountHash, MailboxHash)) -> Box<Self> {
@@ -1167,9 +1167,7 @@ impl Component for ConversationsListing {
             match *event {
                 UIEvent::Input(ref k)
                     if !self.unfocused
-                        && shortcut!(
-                            k == shortcuts[ConversationsListing::DESCRIPTION]["open_thread"]
-                        ) =>
+                        && shortcut!(k == shortcuts[Listing::DESCRIPTION]["open_entry"]) =>
                 {
                     let thread = self.get_thread_under_cursor(self.cursor_pos.2);
                     self.view = ThreadView::new(self.cursor_pos, thread, None, context);
@@ -1179,9 +1177,7 @@ impl Component for ConversationsListing {
                 }
                 UIEvent::Input(ref k)
                     if self.unfocused
-                        && shortcut!(
-                            k == shortcuts[ConversationsListing::DESCRIPTION]["exit_thread"]
-                        ) =>
+                        && shortcut!(k == shortcuts[Listing::DESCRIPTION]["exit_entry"]) =>
                 {
                     self.unfocused = false;
                     self.view
@@ -1458,8 +1454,6 @@ impl Component for ConversationsListing {
             ShortcutMaps::default()
         };
 
-        let config_map = context.settings.shortcuts.compact_listing.key_values();
-        map.insert(ConversationsListing::DESCRIPTION, config_map);
         let config_map = context.settings.shortcuts.listing.key_values();
         map.insert(Listing::DESCRIPTION, config_map);
 

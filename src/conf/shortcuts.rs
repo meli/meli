@@ -43,8 +43,6 @@ pub struct Shortcuts {
     pub listing: ListingShortcuts,
     #[serde(default)]
     pub composing: ComposingShortcuts,
-    #[serde(default, alias = "compact-listing")]
-    pub compact_listing: CompactListingShortcuts,
     #[serde(default, alias = "contact-list")]
     pub contact_list: ContactListShortcuts,
     #[serde(default, alias = "envelope-view")]
@@ -64,9 +62,6 @@ impl DotAddressable for Shortcuts {
                     "general" => self.general.lookup(field, tail),
                     "listing" => self.listing.lookup(field, tail),
                     "composing" => self.composing.lookup(field, tail),
-                    "compact_listing" | "compact-listing" => {
-                        self.compact_listing.lookup(field, tail)
-                    }
                     "contact_list" | "contact-list" => self.contact_list.lookup(field, tail),
                     "envelope_view" | "envelope-view" => self.envelope_view.lookup(field, tail),
                     "thread_view" | "thread-view" => self.thread_view.lookup(field, tail),
@@ -141,14 +136,6 @@ macro_rules! shortcut_key_values {
     }
 }
 
-shortcut_key_values! { "compact-listing",
-    /// Shortcut listing for a mail listing in compact mode.
-    pub struct CompactListingShortcuts {
-        exit_thread |> "Exit thread view." |> Key::Char('i'),
-        open_thread |> "Open thread." |> Key::Char('\n')
-    }
-}
-
 shortcut_key_values! { "listing",
     /// Shortcut listing for a mail listing.
     pub struct ListingShortcuts {
@@ -172,7 +159,11 @@ shortcut_key_values! { "listing",
         select_entry |> "Select thread entry." |> Key::Char('v'),
         increase_sidebar |> "Increase sidebar width." |> Key::Ctrl('p'),
         decrease_sidebar |> "Decrease sidebar width." |> Key::Ctrl('o'),
-        toggle_menu_visibility |> "Toggle visibility of side menu in mail list." |> Key::Char('`')
+        toggle_menu_visibility |> "Toggle visibility of side menu in mail list." |> Key::Char('`'),
+        focus_on_menu |> "Switch focus on sidebar menu." |> Key::Left,
+        focus_on_list |> "Switch focus on mail list." |> Key::Right,
+        exit_entry |> "Exit e-mail entry." |> Key::Char('i'),
+        open_entry |> "Open e-mail entry." |> Key::Char('\n')
     }
 }
 
@@ -212,7 +203,8 @@ shortcut_key_values! { "general",
         scroll_up |> "Generic scroll up (catch-all setting)" |> Key::Char('k'),
         scroll_down |> "Generic scroll down (catch-all setting)" |> Key::Char('j'),
         info_message_next |> "Show next info message, if any" |> Key::Alt('>'),
-        info_message_previous |> "Show previous info message, if any" |> Key::Alt('<')
+        info_message_previous |> "Show previous info message, if any" |> Key::Alt('<'),
+        focus_in_text_field |> "Focus on a text field." |> Key::Char('\n')
     }
 }
 

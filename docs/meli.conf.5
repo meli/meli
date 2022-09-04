@@ -635,12 +635,12 @@ next_tab = 'T'
 .Ed
 .sp
 and for
-.Em compact-listing Ns
+.Em listing Ns
 :
 .Bd -literal
-[shortcuts.compact-listing]
-open_thread = "Enter"
-exit_thread = 'i'
+[shortcuts.listing]
+open_entry = "Enter"
+exit_entry = 'i'
 .Ed
 .sp
 .Pp
@@ -781,16 +781,12 @@ Decrease sidebar width.
 Toggle visibility of side menu in mail list.
 .\" default value
 .Pq Em `
-.El
-.sp
-.Em compact-listing
-.Bl -tag -width 36n
-.It Ic exit_thread
-Exit thread view
+.It Ic exit_entry
+Exit e-mail entry.
 .\" default value
 .Pq Em i
-.It Ic open_thread
-Open thread.
+.It Ic open_entry
+Open e-mail entry.
 .\" default value
 .Pq Em Enter
 .El

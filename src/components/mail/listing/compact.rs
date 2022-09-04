@@ -1725,9 +1725,7 @@ impl Component for CompactListing {
             match *event {
                 UIEvent::Input(ref k)
                     if !self.unfocused
-                        && shortcut!(
-                            k == shortcuts[CompactListing::DESCRIPTION]["open_thread"]
-                        ) =>
+                        && shortcut!(k == shortcuts[Listing::DESCRIPTION]["open_entry"]) =>
                 {
                     let thread = self.get_thread_under_cursor(self.cursor_pos.2);
                     self.view = ThreadView::new(self.cursor_pos, thread, None, context);
@@ -1737,9 +1735,7 @@ impl Component for CompactListing {
                 }
                 UIEvent::Input(ref k)
                     if self.unfocused
-                        && shortcut!(
-                            k == shortcuts[CompactListing::DESCRIPTION]["exit_thread"]
-                        ) =>
+                        && shortcut!(k == shortcuts[Listing::DESCRIPTION]["exit_entry"]) =>
                 {
                     self.unfocused = false;
                     self.view
@@ -2043,8 +2039,6 @@ impl Component for CompactListing {
             ShortcutMaps::default()
         };
 
-        let config_map = context.settings.shortcuts.compact_listing.key_values();
-        map.insert(CompactListing::DESCRIPTION, config_map);
         let config_map = context.settings.shortcuts.listing.key_values();
         map.insert(Listing::DESCRIPTION, config_map);
 

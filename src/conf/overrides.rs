@@ -240,9 +240,6 @@ pub struct ShortcutsOverride {
     pub listing: Option<ListingShortcuts>,
     #[serde(default)]
     pub composing: Option<ComposingShortcuts>,
-    #[serde(alias = "compact-listing")]
-    #[serde(default)]
-    pub compact_listing: Option<CompactListingShortcuts>,
     #[serde(alias = "contact-list")]
     #[serde(default)]
     pub contact_list: Option<ContactListShortcuts>,
@@ -261,7 +258,6 @@ impl Default for ShortcutsOverride {
             general: None,
             listing: None,
             composing: None,
-            compact_listing: None,
             contact_list: None,
             envelope_view: None,
             thread_view: None,

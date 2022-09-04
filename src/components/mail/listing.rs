@@ -962,7 +962,10 @@ impl Component for Listing {
                     self.set_dirty(true);
                     return true;
                 }
-                UIEvent::Input(Key::Left) if self.menu_visibility => {
+                UIEvent::Input(ref k)
+                    if self.menu_visibility
+                        && shortcut!(k == shortcuts[Listing::DESCRIPTION]["focus_on_menu"]) =>
+                {
                     self.focus = ListingFocus::Menu;
                     if self.show_menu_scrollbar != ShowMenuScrollbar::Never {
                         self.menu_scrollbar_show_timer.rearm();
@@ -1333,7 +1336,9 @@ impl Component for Listing {
             }
         } else if self.focus == ListingFocus::Menu {
             match *event {
-                UIEvent::Input(Key::Right) => {
+                UIEvent::Input(ref k)
+                    if shortcut!(k == shortcuts[Listing::DESCRIPTION]["focus_on_list"]) =>
+                {
                     self.focus = ListingFocus::Mailbox;
                     context
                         .replies
