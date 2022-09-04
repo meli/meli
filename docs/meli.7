@@ -1,0 +1,111 @@
+.\" meli - meli.7
+.\"
+.\" Copyright 2017-2022 Manos Pitsidianakis
+.\"
+.\" This file is part of meli.
+.\"
+.\" meli is free software: you can redistribute it and/or modify
+.\" it under the terms of the GNU General Public License as published by
+.\" the Free Software Foundation, either version 3 of the License, or
+.\" (at your option) any later version.
+.\"
+.\" meli is distributed in the hope that it will be useful,
+.\" but WITHOUT ANY WARRANTY; without even the implied warranty of
+.\" MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+.\" GNU General Public License for more details.
+.\"
+.\" You should have received a copy of the GNU General Public License
+.\" along with meli. If not, see <http://www.gnu.org/licenses/>.
+.\"
+.Dd September 4, 2022
+.Dt MELI 7
+.Os
+.Sh NAME
+.Nm meli
+.Nd Tutorial for the Meli Mail User Agent.
+.Sh SYNOPSIS
+.Nm
+.Op ...
+.Sh DESCRIPTION
+.Nm
+is a terminal mail client aiming for extensive and user-frendly configurability.
+.Bd -literal
+     ^^      .-=-=-=-.  ^^
+ ^^        (`-=-=-=-=-`)         ^^
+         (`-=-=-=-=-=-=-`)  ^^         ^^
+   ^^   (`-=-=-=-=-=-=-=-`)   ^^
+       ( `-=-=-=-(@)-=-=-` )      ^^
+       (`-=-=-=-=-=-=-=-=-`)  ^^
+       (`-=-=-=-=-=-=-=-=-`)          ^^
+       (`-=-=-=-=-=-=-=-=-`)
+^^     (`-=-=-=-=-=-=-=-=-`)  ^^
+   ^^   (`-=-=-=-=-=-=-=-`)          ^^
+         (`-=-=-=-=-=-=-`)  ^^
+  ^^       (`-=-=-=-=-`)
+            `-=-=-=-=-`          ^^
+.Ed
+.Sh STARTING WITH meli
+When launched for the first time,
+.Nm
+will search for its configuration directory,
+.Pa $XDG_CONFIG_HOME/meli/ Ns
+\&.
+If it doesn't exist, you will be asked if you want to create one and presented with a sample configuration file
+.Pq Pa $XDG_CONFIG_HOME/meli/config.toml
+that includes the basic settings required for setting up accounts allowing you to copy and edit right away.
+See
+.Xr meli.conf 5
+for the available configuration options.
+.Pp
+At any time, you may press
+.Cm \&?
+for a searchable list of all available actions and shortcuts, along with every possible setting and command that your version supports.
+Each time a shortcut is mentioned, you will find a parenthesis next to it with the name of the shortcut setting along with its section in the configuration settings so that you can modify it if you wish.
+.Ss First view: a mailbox list, with a sidebar
+.Bd -literal
+ ┌───────────────────────┐
+ ├────┼──────────────────┤
+ │___ │  ___________     │
+ │ _  │ _______________  │
+ │ _  │__________________│
+ │ _  │      ___________ │
+ │    │  _____           │
+ │    │                  │
+ └────┴──────────────────┘
+.Ed
+.Pp
+This is the view you will spend more time with in
+.Nm Ns
+\&.
+.Pp
+Press
+.Cm `
+(shortcuts.listing\&.
+.Cm toggle_menu_visibility Ns
+) to toggle the sidebars visibility.
+.Pp
+Press
+.Cm j
+to scroll up, and
+.Cm k
+to scroll down.
+.Sh SEE ALSO
+.Xr meli 1 ,
+.Xr meli.conf 5 ,
+.Xr meli-themes 5 ,
+.Xr xdg-open 1 ,
+.Xr mailcap 5
+.Sh CONFORMING TO
+XDG Standard
+.Aq https://standards.freedesktop.org/basedir-spec/basedir-spec-latest.html Ns
+, maildir
+.Aq https://cr.yp.to/proto/maildir.html Ns
+, IMAPv4rev1 RFC3501, The JSON Meta Application Protocol (JMAP) RFC8620, The JSON Meta Application Protocol (JMAP) for Mail RFC8621.
+.Sh AUTHORS
+Copyright 2017-2022
+.An Manos Pitsidianakis Aq manos@pitsidianak.is
+Released under the GPL, version 3 or greater.
+This software carries no warranty of any kind.
+(See COPYING for full copyright and warranty notices.)
+.Pp
+.Aq https://meli.delivery
