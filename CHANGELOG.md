@@ -9,12 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- A new manual page, `meli.7` which contains a general tutorial for using meli.
-- Added shortcuts for focusing to sidebar menu and back to the e-mail view (`focus_on_menu` and `focus_on_list`)
+- `f76f4ea3` A new manual page, `meli.7` which contains a general tutorial for using meli.
+- `f76f4ea3` Added shortcuts for focusing to sidebar menu and back to the e-mail view (`focus_on_menu` and `focus_on_list`)
+- `cbe593cf` add configurable header preample suffix and prefix for editing
+- `a484b397` Added instructions and information to error shown when libnotmuch could not be found.
+- `a484b397` Added configuration setting `library_file_path` to notmuch backend if user wants to specify the library's location manually.
+- `aa99b0d7` Implement configurable subject prefix stripping when replying
+- `a73885ac` added RGB support to embedded terminal emulator.
+- `f4e0970d` added ability to kill embed process with Ctrl-C, or Ctrl-Z and pressing 'q'.
+- `9205f3b8` added a per account mail sort order parameter.
+- `d921b3c3` implemented sorting with user sort order parameter if defined.
+- `dc5afa13` use osascript/applescript for notifications on macos
+- `d0de0485` add {in,de}crease_sidebar shortcuts
+- `340d6451` add config setting for sidebar ratio
+- `36e29cb6` Add configurable mailbox sort order
 
 ### Changed
 
-- Shortcut `open_thread` and `exit_thread` renamed to `open_entry` and `exit_entry`.
+- `f76f4ea3` Shortcut `open_thread` and `exit_thread` renamed to `open_entry` and `exit_entry`.
+- `7650805c` Binary size reduced significantly.
+
+### Fixed
+
+- `a42a6ca8` show notifications in terminal if there is no other alternative.
 
 ## [alpha-0.7.2] - 2021-10-15
 
