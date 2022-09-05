@@ -17,13 +17,11 @@
 .\" You should have received a copy of the GNU General Public License
 .\" along with meli. If not, see <http://www.gnu.org/licenses/>.
 .\"
-.de Hr
-.sp
-.Bd -literal -offset center
-╌╍─────────────────────────────────────────────────────────╍╌
-.Ed
-.sp
-..
+.\".de Hr
+.\".Bd -literal -offset center
+.\"╌╍─────────────────────────────────────────────────────────╍╌
+.\".Ed
+.\"..
 .de Shortcut
 .Sm
 .Aq \\$1
@@ -59,7 +57,7 @@
 .Sh DESCRIPTION
 .Nm
 is a terminal mail client aiming for extensive and user-frendly configurability.
-.Bd -literal
+.Bd -literal -offset center
      ^^      .-=-=-=-.  ^^
  ^^        (`-=-=-=-=-`)         ^^
          (`-=-=-=-=-=-=-`)  ^^         ^^
@@ -128,7 +126,7 @@ any kind of input that gets passed directly into an embedded terminal in
 .Sy EMBED
 mode.
 .El
-.Ss MODES
+.Sh MODES
 .Nm
 is a modal application, just like
 .Xr vi 1 Ns
@@ -166,7 +164,7 @@ It is exited with the
 .Aq Esc
 key.
 .El
-.Ss MAIN VIEW
+.Sh MAIN VIEW
 .Bd -literal -offset center
  ┌───────────────────────┐
  ├────┼──────────────────┤
@@ -178,8 +176,8 @@ key.
  │    │                  │
  └────┴──────────────────┘
 .Ed
-.Bd -ragged -offset center
-.Sy The main view.
+.Bd -ragged -offset 3n
+.Em The\ main\ view's\ layout\&.
 .Ed
 .sp
 This is the view you will spend more time with in
@@ -207,22 +205,23 @@ Press
 to open an e-mail entry and
 .Shortcut i listing exit_entry
 to exit it.
-.Hr
-.Bd -literal -offset center
-personal account
- 0  INBOX
- 1   ┣━Sent
- 2   ┣━Lists
- 3   ┃ ┣━meli-dev
- 4   ┃ ┗━meli
- 5   ┣━Drafts
- 6   ┣━Trash
- 7   ┗━foobar
- 8  Trash
- 9  Archived
-.Ed
-.Bd -ragged -offset 3n
+.Bd -ragged
 .Sy The sidebar\&.
+.Ed
+.Bd -literal -offset center
+┌─────────────┉┉┉┉┉✂
+│ mail▐  contact li✂
+│personal account  ✂
+│ 0  INBOX         ✂
+│ 1   ┣━Sent       ✂
+│ 2   ┣━Lists      ✂
+│ 3   ┃ ┣━meli-dev ✂
+│ 4   ┃ ┗━meli     ✂
+│ 5   ┣━Drafts     ✂
+│ 6   ┣━Trash      ✂
+│ 7   ┗━foobar     ✂
+┇ 8  Trash         ✂
+ ✂ ✂ ✂ ✂ ✂ ✂ ✂ ✂ ✂ ✂
 .Ed
 .sp
 Press
@@ -257,28 +256,26 @@ You can increase the sidebar's width with
 and decrease with
 .ShortcutPeriod Ctrl-o listing decrease_sidebar
 \&.
-.Hr
-.Bd -literal
+.Bd -ragged
+.Sy The status bar.
+.Ed
+.Bd -literal -offset center
 ┌────────────────────────────────────────────────────┈┈
 │NORMAL | Mailbox: Inbox, Messages: 25772, New: 3006
 └────────────────────────────────────────────────────┈┈
-.Ed
-.Bd -ragged -offset 3n
-.Sy The status bar.
 .Ed
 .Pp
 The status bar shows which mode you are, and the status message of the current view.
 In the pictured example, it shows the status of a mailbox called
 .Dq Inbox
 with lots of e-mails.
-.Hr
-.Bd -literal
+.Bd -ragged
+.Sy The number modifier buffer.
+.Ed
+.Bd -literal -offset center
  ┈┈────────────┐
             12 │
  ┈┈────────────┘
-.Ed
-.Bd -ragged -offset 3n
-.Sy The number modifier buffer.
 .Ed
 .Pp
 Some commands may accept a number qualifier.
@@ -298,6 +295,133 @@ mode will populate this buffer.
 To erase it, press the
 .Aq Esc
 key.
+.Sh ACTIVE SHORTCUTS POPUP
+.Bd -literal -offset center
+┌─shortcuts──Press ? to close────────────────────────────────┐
+│                                                           ▀│
+│  use COMMAND "search" to find shortcuts                   █│
+│  Use Up, Down, Left, Right to scroll.                     █│
+│                                                           █│
+│  pager                                                    █│
+│                                                           █│
+│       PageDown  page_down                                 █│
+│         PageUp  page_up                                    │
+│              j  scroll_down                                │
+│              k  scroll_up                                  │
+│                                                            │
+│  view mail                                                 │
+│                                                            │
+│              c  add_addresses_to_contacts                  │
+│              e  edit                                       │
+│              u  toggle_url_mode                            │
+│              a  open_attachment                            │
+│              m  open_mailcap                               │
+│              R  reply                                      │
+│            C-r  reply_to_author                            │
+│            C-g  reply_to_all                               │
+│            C-f  forward                                    │
+│            M-r  view_raw_source                            │
+│              h  toggle_expand_headers                     ▄│
+└────────────────────────────────────────────────────────────┘
+.Ed
+.Bd -ragged -offset 3n
+.Em Shows\ active\ shortcuts\ in\ order\ of\ the\ widget\ hierarchy\&.
+.Ed
+.Sh COMPOSING
+.Bd -literal -offset center
+┌────────────────────────────────────────────────────────────┐
+│ mail▐  contact list  ▐  composing  ▍███████████████████████│
+│          COMPOSING MESSAGE                                 │
+│           Date     Mon, 05 Sep 2022 17:49:19 +0300         │
+│           From     myself <myself@example.com>░░░░         │
+│           To       friend <myfriend@example.com>░░         │
+│           Cc       ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░         │
+│           Bcc      ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░         │
+│           Subject  This is my subject!░░░░░░░░░░░░         │
+│                                                            │
+│          Hello friend!░░░░░░░░░░░░░░░░░░░░░░░░░░░░         │
+│          ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░         │
+│          ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░         │
+│                                                            │
+│          ☐ don't sign                                      │
+│          ☐ don't encrypt                                   │
+│          no attachments                                    │
+│                                                            │
+│NORMAL | Mailbox: Inbox, Messages: 25772, New: 3006         │
+└────────────────────────────────────────────────────────────┘
+.Ed
+.Bd -ragged -offset 3n
+.Em The\ lightly\ highlighted\ cells\ represent\ text\ input\ fields\&.
+.Ed
+.sp
+If you enable the embed terminal option, you can launch your terminal editor of choice when you press
+.Ic edit_mail Ns
+\&.
+.Bd -literal -offset center
+┌────────────────────────────────────────────────────────────┐
+│ mail▐  contact list  ▐  composing  ▍███████████████████████│
+│   ╓COMPOSING MESSAGE┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄╖   │
+│   ║ p/v/f/h/5/T/m/07f56b6e-ec09-49d9-b8d8-f0c5a81e7826 ║   │
+│   ║  7 Date: Mon, 05 Sep 2022 18:43:10 +0300           ║   │
+│   ║  6 From: Mister Cardholder <mrholder@example.com>  ║   │
+│   ║  5 To:                                             ║   │
+│   ║  4 Cc:                                             ║   │
+│   ║  3 Bcc:                                            ║   │
+│   ║  2 Subject:                                        ║   │
+│   ║  1 User-Agent: meli 0.7.2                          ║   │
+│   ║8 █                                                 ║   │
+│   ║~                                                   ║   │
+│   ║~                                                   ║   │
+│   ║~                                                   ║   │
+│   ║~                                                   ║   │
+│   ║ N…  <6e-ec09-49d9-b8d8-f0c5a81e7826   100% ㏑:8 ℅:1║   │
+│   ╚════════════════════════════════════════════════════╝   │
+│                                                            │
+│                                                            │
+│ ☐ don't sign                                               │
+│ ☐ don't encrypt                                            │
+│ no attachments                                             │
+│                                                            │
+│EMBED | Mailbox: Inbox, Messages: 25772, New: 3006          │
+└────────────────────────────────────────────────────────────┘
+.Ed
+.Bd -ragged -offset 3n
+.Bf -emphasis
+.Xr neovim 1 Ns
+\ running\ inside\ the\ composing\ tab\&.
+The\ double\ line\ border\ annotates\ the\ area\ of\ the\ embedded\ terminal,\ the\ actual\ embedding\ is\ seamless\&.
+.Ef
+.Ed
+.Sh PAGER
+.Bd -literal -offset center
+┌────────────────────────────────────────────────────────────┐
+│Date: Sat, 21 May 2022 16:16:11 +0300                      ▀│
+│From: Narrator <narrator@example.com>                      █│
+│To: Stanley <427@example.com>                              █│
+│Subject: The e-mail ending                                 █│
+│Message-ID: <gambheerata@example.com>                      █│
+│                                                           █│
+│The story, and the choices, or what have you, and therefore█│
+│by becoming it is! So on and so forth, until inevitably, we │
+│all until the end of time. At which time, everything all at │
+│once, so now you see? Blah, blah, blah, rah, rah, rah...    │
+│We've eaten too much and it can't be just yet. No, no!      │
+│Until two-hundred and forty-five! But the logic of          │
+│elimination, working backwards, the deduction therefore     │
+│becomes impossible to manufacture. It went on for nearly    │
+│ten thousand years, until just yesterday. Here and there,   │
+│forward and back, and never a moment before lunchtime. It   │
+│can't be! It's the only thing there is! How many billions   │
+│left until so much more than forever ago! Which is why I    │
+│say:                                                        │
+│                                                            │
+│The story, and the choices, or what have you, and therefore │
+│by becoming it is! So on and so forth, until inevitably, we▄│
+└────────────────────────────────────────────────────────────┘
+.Ed
+.Bd -ragged -offset 3n
+.Em The pager displaying an e-mail\&.
+.Ed
 .Sh SEE ALSO
 .Xr meli 1 ,
 .Xr meli.conf 5 ,
