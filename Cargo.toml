@@ -81,7 +81,7 @@ strip = true
 members = ["melib", "tools", ]
 
 [features]
-default = ["sqlite3", "notmuch", "regexp", "smtp", "dbus-notifications", "gpgme"]
+default = ["sqlite3", "notmuch", "regexp", "smtp", "dbus-notifications", "gpgme", "cli-docs"]
 notmuch = ["melib/notmuch_backend", ]
 jmap = ["melib/jmap_backend",]
 sqlite3 = ["melib/sqlite3"]
