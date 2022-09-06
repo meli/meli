@@ -74,9 +74,10 @@ fn notify(
 #[cfg(feature = "cli-docs")]
 fn parse_manpage(src: &str) -> Result<ManPages> {
     match src {
-        "" | "meli" | "main" => Ok(ManPages::Main),
-        "meli.conf" | "conf" | "config" | "configuration" => Ok(ManPages::Conf),
-        "meli-themes" | "themes" | "theming" | "theme" => Ok(ManPages::Themes),
+        "" | "meli" | "meli.1" | "main" => Ok(ManPages::Main),
+        "meli.7" | "guide" => Ok(ManPages::Guide),
+        "meli.conf" | "meli.conf.5" | "conf" | "config" | "configuration" => Ok(ManPages::Conf),
+        "meli-themes" | "meli-themes.5" | "themes" | "theming" | "theme" => Ok(ManPages::Themes),
         _ => Err(MeliError::new(format!(
             "Invalid documentation page: {}",
             src
@@ -94,6 +95,8 @@ enum ManPages {
     Conf = 1,
     /// meli-themes(5)
     Themes = 2,
+    /// meli(7)
+    Guide = 3,
 }
 
 #[derive(Debug, StructOpt)]
@@ -143,7 +146,7 @@ enum SubCommand {
 
 #[derive(Debug, StructOpt)]
 struct ManOpt {
-    #[structopt(default_value = "meli", possible_values=&["meli", "conf", "themes"], value_name="PAGE", parse(try_from_str = parse_manpage))]
+    #[structopt(default_value = "meli", possible_values=&["meli", "conf", "themes", "meli.7", "guide"], value_name="PAGE", parse(try_from_str = parse_manpage))]
     #[cfg(feature = "cli-docs")]
     page: ManPages,
     /// If true, output text in stdout instead of spawning $PAGER.
@@ -196,10 +199,11 @@ fn run_app(opt: Opt) -> Result<()> {
         #[cfg(feature = "cli-docs")]
         Some(SubCommand::Man(manopt)) => {
             let ManOpt { page, no_raw } = manopt;
-            const MANPAGES: [&[u8]; 3] = [
+            const MANPAGES: [&[u8]; 4] = [
                 include_bytes!(concat!(env!("OUT_DIR"), "/meli.txt.gz")),
                 include_bytes!(concat!(env!("OUT_DIR"), "/meli.conf.txt.gz")),
                 include_bytes!(concat!(env!("OUT_DIR"), "/meli-themes.txt.gz")),
+                include_bytes!(concat!(env!("OUT_DIR"), "/meli.7.txt.gz")),
             ];
             use flate2::bufread::GzDecoder;
             use std::io::prelude::*;
@@ -242,7 +246,7 @@ fn run_app(opt: Opt) -> Result<()> {
         }
         #[cfg(not(feature = "cli-docs"))]
         Some(SubCommand::Man(_manopt)) => {
-            return Err(MeliError::new("error: this version of meli was not build with embedded documentation. You might have it installed as manpages (eg `man meli`), otherwise check https://meli.delivery"));
+            return Err(MeliError::new("error: this version of meli was not build with embedded documentation (cargo feature `cli-docs`). You might have it installed as manpages (eg `man meli`), otherwise check https://meli.delivery"));
         }
         Some(SubCommand::CompiledWith) => {
             #[cfg(feature = "notmuch")]

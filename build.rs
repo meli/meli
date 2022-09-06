@@ -45,62 +45,31 @@ fn main() {
         use std::io::prelude::*;
         use std::path::Path;
         use std::process::Command;
+
         let out_dir = env::var("OUT_DIR").unwrap();
         let mut out_dir_path = Path::new(&out_dir).to_path_buf();
-        out_dir_path.push("meli.txt.gz");
 
-        let output = Command::new("mandoc")
-            .args(MANDOC_OPTS)
-            .arg("docs/meli.1")
-            .output()
-            .or_else(|_| Command::new("man").arg("-l").arg("docs/meli.1").output())
-            .unwrap();
+        let mut cl = |filepath: &str, output: &str| {
+            out_dir_path.push(output);
+            let output = Command::new("mandoc")
+                .args(MANDOC_OPTS)
+                .arg(filepath)
+                .output()
+                .or_else(|_| Command::new("man").arg("-l").arg(filepath).output())
+                .unwrap();
 
-        let file = File::create(&out_dir_path).unwrap();
-        let mut gz = GzBuilder::new()
-            .comment(output.stdout.len().to_string().into_bytes())
-            .write(file, Compression::default());
-        gz.write_all(&output.stdout).unwrap();
-        gz.finish().unwrap();
-        out_dir_path.pop();
+            let file = File::create(&out_dir_path).unwrap();
+            let mut gz = GzBuilder::new()
+                .comment(output.stdout.len().to_string().into_bytes())
+                .write(file, Compression::default());
+            gz.write_all(&output.stdout).unwrap();
+            gz.finish().unwrap();
+            out_dir_path.pop();
+        };
 
-        out_dir_path.push("meli.conf.txt.gz");
-        let output = Command::new("mandoc")
-            .args(MANDOC_OPTS)
-            .arg("docs/meli.conf.5")
-            .output()
-            .or_else(|_| {
-                Command::new("man")
-                    .arg("-l")
-                    .arg("docs/meli.conf.5")
-                    .output()
-            })
-            .unwrap();
-        let file = File::create(&out_dir_path).unwrap();
-        let mut gz = GzBuilder::new()
-            .comment(output.stdout.len().to_string().into_bytes())
-            .write(file, Compression::default());
-        gz.write_all(&output.stdout).unwrap();
-        gz.finish().unwrap();
-        out_dir_path.pop();
-
-        out_dir_path.push("meli-themes.txt.gz");
-        let output = Command::new("mandoc")
-            .args(MANDOC_OPTS)
-            .arg("docs/meli-themes.5")
-            .output()
-            .or_else(|_| {
-                Command::new("man")
-                    .arg("-l")
-                    .arg("docs/meli-themes.5")
-                    .output()
-            })
-            .unwrap();
-        let file = File::create(&out_dir_path).unwrap();
-        let mut gz = GzBuilder::new()
-            .comment(output.stdout.len().to_string().into_bytes())
-            .write(file, Compression::default());
-        gz.write_all(&output.stdout).unwrap();
-        gz.finish().unwrap();
+        cl("docs/meli.1", "meli.txt.gz");
+        cl("docs/meli.conf.5", "meli.conf.txt.gz");
+        cl("docs/meli-themes.5", "meli-themes.txt.gz");
+        cl("docs/meli.7", "meli.7.txt.gz");
     }
 }

@@ -24,11 +24,13 @@ Official mirrors:
 
 ## Documentation
 
-See also [Quickstart tutorial](https://meli.delivery/documentation.html#quick-start).
+See a comprehensive tour of `meli` in the manual page [`meli(7)`](./docs/meli.7).
 
-After installing meli, see `meli(1)`, `meli.conf(5)` and `meli-themes(5)` for documentation. Sample configuration and theme files can be found in the `docs/samples/` subdirectory. Manual pages are also [hosted online](https://meli.delivery/documentation.html "meli documentation").
+See also the [Quickstart tutorial](https://meli.delivery/documentation.html#quick-start) online.
 
-meli by default looks for a configuration file in this location: `$XDG_CONFIG_HOME/meli/config.toml`
+After installing `meli`, see `meli(1)`, `meli.conf(5)`, `meli(7)` and `meli-themes(5)` for documentation. Sample configuration and theme files can be found in the `docs/samples/` subdirectory. Manual pages are also [hosted online](https://meli.delivery/documentation.html "meli documentation").
+
+`meli` by default looks for a configuration file in this location: `$XDG_CONFIG_HOME/meli/config.toml`
 
 You can run meli with arbitrary configuration files by setting the `$MELI_CONFIG`
 environment variable to their locations, i.e.:
@@ -46,12 +48,12 @@ For a quick start, build and install locally:
 
 Available subcommands for `make` are listed with `make help`. The Makefile *should* be POSIX portable and not require a specific `make` version.
 
-meli requires rust 1.39 and rust's package manager, Cargo. Information on how
+`meli` requires rust 1.39 and rust's package manager, Cargo. Information on how
 to get it on your system can be found here: <https://doc.rust-lang.org/cargo/getting-started/installation.html>
 
 With Cargo available, the project can be built with `make` and the resulting binary will then be found under `target/release/meli`. Run `make install` to install the binary and man pages. This requires root, so I suggest you override the default paths and install it in your `$HOME`: `make PREFIX=$HOME/.local install`.
 
-You can build and run meli with one command: `cargo run --release`.
+You can build and run `meli` with one command: `cargo run --release`.
 
 ### Build features
 
@@ -63,8 +65,8 @@ Some functionality is held behind "feature gates", or compile-time flags. The fo
 - `jmap` provides support for connecting to a jmap server and use it as a mail backend (off by default)
 - `sqlite3` provides support for builting fast search indexes in local sqlite3 databases (on by default)
 - `cli-docs` includes the manpage documentation compiled by either `mandoc` or `man` binary to plain text in `meli`'s command line. Embedded documentation can be viewed with the subcommand `meli man [PAGE]`
-- `svgscreenshot` provides support for taking screenshots of the current view of meli and saving it as SVG files. Its only purpose is taking screenshots for the official meli webpage. (off by default)
-- `debug-tracing` enables various trace debug logs from various places around the meli code base. The trace log is printed in `stderr`. (off by default)
+- `svgscreenshot` provides support for taking screenshots of the current view of `meli` and saving it as SVG files. Its only purpose is taking screenshots for the official `meli` webpage. (off by default)
+- `debug-tracing` enables various trace debug logs from various places around the `meli` code base. The trace log is printed in `stderr`. (off by default)
 
 ### Build Debian package (*deb*)
 
@@ -75,11 +77,11 @@ A `*.deb` package can be built with `make deb-dist`
 
 ### Using notmuch
 
-To use the optional notmuch backend feature, you must have `libnotmuch5` installed in your system. In Debian-like systems, install the `libnotmuch5` packages. meli detects the library's presence on runtime.
+To use the optional notmuch backend feature, you must have `libnotmuch5` installed in your system. In Debian-like systems, install the `libnotmuch5` packages. `meli` detects the library's presence on runtime.
 
 ### Using GPG
 
-To use the optional gpg feature, you must have `libgpgme` installed in your system. In Debian-like systems, install the `libgpgme11` package. meli detects the library's presence on runtime.
+To use the optional gpg feature, you must have `libgpgme` installed in your system. In Debian-like systems, install the `libgpgme11` package. `meli` detects the library's presence on runtime.
 
 ### Building with JMAP
 
@@ -102,7 +104,7 @@ cargo run
 
 There is a debug/tracing log feature that can be enabled by using the flag
 `--feature debug-tracing` after uncommenting the features in `Cargo.toml`. The logs
-are printed in stderr, thus you can run meli with a redirection (i.e `2> log`)
+are printed in stderr, thus you can run `meli` with a redirection (i.e `2> log`)
 
 Code style follows the default rustfmt profile.
 

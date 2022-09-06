@@ -40,10 +40,9 @@
 .Pc Ns
 ..
 .de Command
-.Bd -ragged
+.Bd -offset 1n -ragged
 .Cm \\$*
 .Ed
-.sp
 ..
 .Dd September 4, 2022
 .Dt MELI 7
@@ -72,7 +71,16 @@ is a terminal mail client aiming for extensive and user-frendly configurability.
   ^^       (`-=-=-=-=-`)
             `-=-=-=-=-`          ^^
 .Ed
-.Sh STARTING WITH meli
+.Sh INTRODUCTION
+To quit
+.Nm
+press
+.Shortcut q general quit
+at any time.
+To go to the next tab on the right, press
+.ShortcutPeriod T general next_tab
+\&.
+.Pp
 When launched for the first time,
 .Nm
 will search for its configuration directory,
@@ -164,6 +172,42 @@ It is exited with the
 .Aq Esc
 key.
 .El
+.Sh ACTIVE SHORTCUTS POPUP
+By pressing
+.Shortcut \&? general toggle_help
+at any time, the shortcuts popup display status gets toggled.
+You can find all valid shortcuts for the current UI state you are in.
+.Bd -literal -offset center
+┌─shortcuts──Press ? to close────────────────────────────────┐
+│                                                           ▀│
+│  use COMMAND "search" to find shortcuts                   █│
+│  Use Up, Down, Left, Right to scroll.                     █│
+│                                                           █│
+│  pager                                                    █│
+│                                                           █│
+│       PageDown  page_down                                 █│
+│         PageUp  page_up                                    │
+│              j  scroll_down                                │
+│              k  scroll_up                                  │
+│                                                            │
+│  view mail                                                 │
+│                                                            │
+│              c  add_addresses_to_contacts                  │
+│              e  edit                                       │
+│              u  toggle_url_mode                            │
+│              a  open_attachment                            │
+│              m  open_mailcap                               │
+│              R  reply                                      │
+│            C-r  reply_to_author                            │
+│            C-g  reply_to_all                               │
+│            C-f  forward                                    │
+│            M-r  view_raw_source                            │
+│              h  toggle_expand_headers                     ▄│
+└────────────────────────────────────────────────────────────┘
+.Ed
+.Bd -ragged -offset 3n
+.Em Shows\ active\ shortcuts\ in\ order\ of\ the\ widget\ hierarchy\&.
+.Ed
 .Sh MAIN VIEW
 .Bd -literal -offset center
  ┌───────────────────────┐
@@ -237,9 +281,7 @@ Entering an account name will show you a page with details about the account and
 .Pp
 While focused in the sidebar, you can
 .Dq collapse
-a mailbox tree, if it has children, and you can
-.Dq uncollapse
-it with
+a mailbox tree, if it has children, and you can open it with
 .ShortcutPeriod Space listing toggle_mailbox_collapse
 \&.
 You can have mailbox trees collapsed on startup by default by setting a mailbox's
@@ -278,7 +320,8 @@ with lots of e-mails.
  ┈┈────────────┘
 .Ed
 .Pp
-Some commands may accept a number qualifier.
+Some commands may accept a number modifier.
+.Tg number-modifier
 For example, scroll down commands can receive a multiplier
 .Em n
 to scroll down
@@ -295,39 +338,289 @@ mode will populate this buffer.
 To erase it, press the
 .Aq Esc
 key.
-.Sh ACTIVE SHORTCUTS POPUP
+.Sh MAIL LIST
+There are four different list styles:
+.Bl -hyphen -compact
+.It
+.Qq plain
+which shows one line per e-mail.
+.It
+.Qq threaded
+which shows a threaded view with drawn tree structure.
+.It
+.Qq compact
+which shows one line per thread which can include multiple e-mails.
+.It
+.Qq conversations
+which shows more than one line per thread which can include multiple e-mails with more details about the thread.
+.El
+.Bd -ragged
+.Sy Plain view\&.
+.Ed
 .Bd -literal -offset center
-┌─shortcuts──Press ? to close────────────────────────────────┐
-│                                                           ▀│
-│  use COMMAND "search" to find shortcuts                   █│
-│  Use Up, Down, Left, Right to scroll.                     █│
-│                                                           █│
-│  pager                                                    █│
-│                                                           █│
-│       PageDown  page_down                                 █│
-│         PageUp  page_up                                    │
-│              j  scroll_down                                │
-│              k  scroll_up                                  │
+│42     Fri, 02 Sep 2022 19:51  xxxxxxxxxxxxx <  [PATCH 3/8] │
+│43     Fri, 02 Sep 2022 19:51  xxxxxxxxxxxxx <  [PATCH 2/8] │
+│44     Fri, 02 Sep 2022 19:51  xxxxxxxxxxxxx <  [PATCH 1/8] │
+|45     Fri, 02 Sep 2022 19:51  xxxxxxxxxxxxx <  [PATCH 0/8] |
+│46     Fri, 02 Sep 2022 18:18  xxxxxxxx <xxxxx  Re: [PATCH 3│
+.Ed
+.Bd -ragged
+.Sy Threaded view\&.
+.Ed
+.Bd -literal -offset center
+│12     9 hours ago            xxxxxxxxxxxxxxx    [PATCH v3 0│
+│13     9 hours ago            xxxxxxxxxxxxxxx     ├─>[PATCH │
+│14     9 hours ago            xxxxxxxxxxxxxxx     ├─>[PATCH │
+|15     9 hours ago            xxxxxxxxxxxxxxx     ├─>[PATCH |
+│16     9 hours ago            xxxxxxxxxxxxxxx     ├─>[PATCH │
+│17     9 hours ago            xxxxxxxxxxxxxxx     └─>[PATCH │
+│18     2022-08-23 01:23:51    xxxxxxxxxxxxxxx    [RFC v4 00/│
+│19     2022-08-23 01:23:52    xxxxxxxxxxxxxxx     ├─>[RFC v4│
+|20     2022-08-30 10:30:16    xxxxxxxxxxxxxxx     │ └─>     |
+│21     6 days ago             xxxxxxxxxxxxxxx     │   └─>   │
+│22     2022-08-23 01:23:53    xxxxxxxxxxxxxxx     ├─>[RFC v4│
+.Ed
+.Bd -ragged
+.Sy Compact view\&.
+.Ed
+.Bd -literal -offset center
+│18  2022-…:38  xxxxxxxxxxxxxxx  [PATCH v3 3/3] u…_l() (2)   │
+|19  2022-…:49  xxxxxxxxxxxxxxx  [PATCH v8 0/7] A…e (3)      |
+│20  2022-…:10  xxxxxxxxxxxxxxx  [PATCH v8 2/7] f…s (2)      │
+│21  2022-…:38  xxxxxxxxxxxxxxx  [PATCH v8 3/7] b…s (2)      │
+│22  2022-…:53  xxxxxxxxxxxxxxx  [PATCH v6 00/10] p…g (31)   │
+.Ed
+.Bd -ragged
+.Sy Conversations view\&.
+.Ed
+.Bd -literal -offset center
+│[PATCH v2] xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (5)  │
+|1 day ago▁▁▁▁xxxxxxxxxxxxx <xxxxxxxxxxxxx@xxxxxxxxxx>, xxxxx│
+│                                                            |
+│[PATCH v2 0/8] xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx│
+│1 day ago▁▁▁▁xxxxxxxxxxxxxxx <xxxxxxxxxx@xxxxxxxxxxxxxx>, xx│
+|                                                            │
+│[PATCH 0/2] xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (4)    |
+│2 days ago▁▁▁▁xxxxxxxxxxxxxxxx <xxxxxxxx@xxxxxxxxxxx>, xxxxx│
 │                                                            │
-│  view mail                                                 │
+│[PATCH 0/8] xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (12)  │
+│2 days ago▁▁▁▁xxxxxxxxxxxxx <xxxxxxxx@xxxxxxxxxx>, xxxxxxxxx│
+.Ed
+.sp
+.sp
+.Sy Performing actions on entries and/or selections\&.
+.Pp
+Press
+.Shortcut v listing select_entry
+to toggle the selection of a single entry.
+.Qq select_entry
+can be prefixed by a number modifier and affixed by a scrolling motion (up or down) to select multiple entries.
+.Tg number-modifier
+Simple set operations can be performed on a selection with these shortcut modifiers:
+.sp
+.Bl -hyphen -compact
+.It
+Union modifier:
+.Shortcut Ctrl-u listing union_modifier
+.It
+Difference modifier:
+.Shortcut Ctrl-d listing diff_modifier
+.It
+Intersection modifier:
+.Shortcut Ctrl-i listing intersection_modifier
+.El
+.Pp
+To set an entry as
+.Qq read
+\&, use the
+.Shortcut n listing set_seen
+shortcut.
+To set an entry as
+.Qq unread
+\&, use the command
+.Command set unseen
+.sp
+which also has its complement
+.Command set seen
+.sp
+action.
+.Pp
+For e-mail backends that support tags
+.Po
+like
+.Qq IMAP
+or
+.Qq notmuch Ns
+.Pc
+you can use the following commands on entries and selections to modify them:
+.Command tag add TAG
+.Command tag remove TAG
+.sp
+(see
+.Xr meli.conf 5 TAGS Ns
+, settings
+.Ic colors
+and
+.Ic ignore_tags
+for how to set tag colors and tag visibility)
+.Sh PAGER
+You can open an e-mail entry by pressing
+.ShortcutPeriod Enter listing open_entry
+\&. This brings up the e-mail view with the e-mail content inside a pager.
+.Bd -literal -offset center
+┌────────────────────────────────────────────────────────────┐
+│Date: Sat, 21 May 2022 16:16:11 +0300                      ▀│
+│From: Narrator <narrator@example.com>                      █│
+│To: Stanley <427@example.com>                              █│
+│Subject: The e-mail ending                                 █│
+│Message-ID: <gambheerata@example.com>                      █│
+│                                                           █│
+│The story, and the choices, or what have you, and therefore█│
+│by becoming it is! So on and so forth, until inevitably, we │
+│all until the end of time. At which time, everything all at │
+│once, so now you see? Blah, blah, blah, rah, rah, rah...    │
+│We've eaten too much and it can't be just yet. No, no!      │
+│Until two-hundred and forty-five! But the logic of          │
+│elimination, working backwards, the deduction therefore     │
+│becomes impossible to manufacture. It went on for nearly    │
+│ten thousand years, until just yesterday. Here and there,   │
+│forward and back, and never a moment before lunchtime. It   │
+│can't be! It's the only thing there is! How many billions   │
+│left until so much more than forever ago! Which is why I    │
+│say:                                                        │
 │                                                            │
-│              c  add_addresses_to_contacts                  │
-│              e  edit                                       │
-│              u  toggle_url_mode                            │
-│              a  open_attachment                            │
-│              m  open_mailcap                               │
-│              R  reply                                      │
-│            C-r  reply_to_author                            │
-│            C-g  reply_to_all                               │
-│            C-f  forward                                    │
-│            M-r  view_raw_source                            │
-│              h  toggle_expand_headers                     ▄│
+│The story, and the choices, or what have you, and therefore │
+│by becoming it is! So on and so forth, until inevitably, we▄│
 └────────────────────────────────────────────────────────────┘
 .Ed
 .Bd -ragged -offset 3n
-.Em Shows\ active\ shortcuts\ in\ order\ of\ the\ widget\ hierarchy\&.
+.Em The\ pager\ displaying\ an\ e-mail\&.
 .Ed
+.Pp
+The pager is simple to use.
+Scroll with the following:
+.Bl -hang -width 27n
+.It Go to next pager page
+.Shortcut  PageDown pager page_down
+.It Go to previous pager page
+.Shortcut PageUp pager page_up
+.It Scroll down pager.
+.Shortcut j pager scroll_down
+.It Scroll up pager.
+.Shortcut k pager scroll_up
+.El
+.sp
+All scrolling shortcuts can be prefixed with a number modifier
+.Tg number-modifier
+which will act as a multiplier.
+.Pp
+The pager can enter a special
+.Em url
+mode which will prefix all detected hyperlinks and e-mail addresses with a number inside square brackets
+.ShortcutPeriod u pager toggle_url_mode
+\&.
+Writing down a chosen number as a number modifier
+.Tg number-modifier
+and pressing
+.Shortcut g envelope_view go_to_url
+will attempt to open the link with the system's default open command
+.Po
+.Xr xdg-open 1
+in supported OSes,
+and
+.Xr open 1
+on MacOS
+.Pc Ns
+\&.
+To override with a custom launcher, see
+.Qo
+.Li pager
+.Qc
+configuration setting
+.Qo
+.Li url_launcher
+.Qc
+.Po
+see
+.Xr meli.conf 5 PAGER
+for more details
+.Pc Ns
+\&.
+.Sh MAIL VIEW
+Other things you can do when viewing e-mail:
+.Bl -bullet -compact
+.It
+Most importantly, you can exit the mail view with:
+.Shortcut i listing exit_entry
+.It
+Add addresses from the e-mail headers to contacts:
+.Shortcut c envelope_view add_addresses_to_contacts
+.It
+Open an attachment by entering its index as a number modifier and pressing:
+.Tg number-modifier
+.Shortcut a envelope_view open_attachment
+.It
+Open an attachment by its
+.Xr mailcap 4
+entry by entering its index as a number modifier and pressing:
+.Shortcut m envelope_view open_mailcap
+.It
+Reply to envelope:
+.Shortcut R envelope_view reply
+.It
+Reply to author:
+.Shortcut Ctrl-r envelope_view reply_to_author
+.It
+Reply to all/Reply to list/Follow up:
+.Shortcut Ctrl-g envelope_view reply_to_all
+.It
+Forward email:
+.Shortcut Ctrl-f envelope_view forward
+.It
+Expand extra headers: (References and others)
+.Shortcut h envelope_view toggle_expand_headerk
+.It
+View envelope source in a pager: (toggles between raw and decoded source)
+.Shortcut M-r envelope_view view_raw_source
+.It
+Return to envelope_view if viewing raw source or attachment:
+.Shortcut r envelope_view return_to_normal_view
+.El
 .Sh COMPOSING
+To compose an e-mail, you can either start with an empty draft by pressing
+.Shortcut m listing new_mail
+which opens a composer view in a new tab.
+To reply to a specific e-mail, when in envelope view you can select the specific action you want to take:
+.sp
+.Bl -bullet -compact
+.It
+Reply to envelope.
+.Shortcut R envelope_view reply
+.It
+Reply to author.
+.Shortcut Ctrl-r envelope_view reply_to_author
+.It
+Reply to all.
+.Shortcut Ctrl-g envelope_view reply_to_all
+.El
+.sp
+To launch your editor, press
+.ShortcutPeriod e composing edit_mail
+\&.
+To send your draft, press
+.ShortcutPeriod s composing send_mail
+\&.
+To save the draft without submission, enter the command
+.Command close
+.sp
+and select
+.Qq save as draft Ns
+\&.
+You can return to the draft by going to your
+.Qq Drafts
+mailbox and selecting
+.ShortcutPeriod e envelope_view edit_mail
+\&.
 .Bd -literal -offset center
 ┌────────────────────────────────────────────────────────────┐
 │ mail▐  contact list  ▐  composing  ▍███████████████████████│
@@ -389,39 +682,48 @@ If you enable the embed terminal option, you can launch your terminal editor of 
 .Bf -emphasis
 .Xr neovim 1 Ns
 \ running\ inside\ the\ composing\ tab\&.
-The\ double\ line\ border\ annotates\ the\ area\ of\ the\ embedded\ terminal,\ the\ actual\ embedding\ is\ seamless\&.
 .Ef
+The\ double\ line\ border\ annotates\ the\ area\ of\ the\ embedded\ terminal,
+the\ actual\ embedding\ is\ seamless\&.
 .Ed
-.Sh PAGER
-.Bd -literal -offset center
-┌────────────────────────────────────────────────────────────┐
-│Date: Sat, 21 May 2022 16:16:11 +0300                      ▀│
-│From: Narrator <narrator@example.com>                      █│
-│To: Stanley <427@example.com>                              █│
-│Subject: The e-mail ending                                 █│
-│Message-ID: <gambheerata@example.com>                      █│
-│                                                           █│
-│The story, and the choices, or what have you, and therefore█│
-│by becoming it is! So on and so forth, until inevitably, we │
-│all until the end of time. At which time, everything all at │
-│once, so now you see? Blah, blah, blah, rah, rah, rah...    │
-│We've eaten too much and it can't be just yet. No, no!      │
-│Until two-hundred and forty-five! But the logic of          │
-│elimination, working backwards, the deduction therefore     │
-│becomes impossible to manufacture. It went on for nearly    │
-│ten thousand years, until just yesterday. Here and there,   │
-│forward and back, and never a moment before lunchtime. It   │
-│can't be! It's the only thing there is! How many billions   │
-│left until so much more than forever ago! Which is why I    │
-│say:                                                        │
-│                                                            │
-│The story, and the choices, or what have you, and therefore │
-│by becoming it is! So on and so forth, until inevitably, we▄│
-└────────────────────────────────────────────────────────────┘
-.Ed
-.Bd -ragged -offset 3n
-.Em The pager displaying an e-mail\&.
-.Ed
+.Ss composing mail commands
+.Bl -tag -width 36n
+.It Cm add-attachment Ar PATH
+in composer, add
+.Ar PATH
+as an attachment
+.It Cm add-attachment < Ar CMD Ar ARGS
+in composer, pipe
+.Ar CMD Ar ARGS
+output into an attachment
+.It Cm add-attachment-file-picker
+Launch command defined in the configuration value
+.Ic file_picker_command
+in
+.Xr meli.conf 5 TERMINAL
+.It Cm add-attachment-file-picker < Ar CMD Ar ARGS
+Launch command
+.Ar CMD Ar ARGS Ns
+\&.
+The command should print file paths in stderr, separated by NULL bytes.
+.It Cm remove-attachment Ar INDEX
+remove attachment with given index
+.It Cm toggle sign
+toggle between signing and not signing this message.
+If the gpg invocation fails then the mail won't be sent.
+See
+.Xr meli.conf 5 PGP
+for PGP configuration.
+.It Cm save-draft
+saves a copy of the draft in the Draft folder
+.El
+.\" TODO add contacts section
+.Sh THEMES
+See
+.Xr meli-themes 5
+for documentation on how to theme
+.Nm Ns
+\&.
 .Sh SEE ALSO
 .Xr meli 1 ,
 .Xr meli.conf 5 ,
@@ -436,3 +738,5 @@ This software carries no warranty of any kind.
 (See COPYING for full copyright and warranty notices.)
 .Pp
 .Lk https://meli.delivery
+.Lk https://github.com/meli/meli
+.Lk https://crates.io/crates/meli
