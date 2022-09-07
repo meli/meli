@@ -9,8 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added shortcuts for focusing to sidebar menu and back to the e-mail view (`focus_left` and `focus_right`)
 - `f76f4ea3` A new manual page, `meli.7` which contains a general tutorial for using meli.
-- `f76f4ea3` Added shortcuts for focusing to sidebar menu and back to the e-mail view (`focus_on_menu` and `focus_on_list`)
 - `cbe593cf` add configurable header preample suffix and prefix for editing
 - `a484b397` Added instructions and information to error shown when libnotmuch could not be found.
 - `a484b397` Added configuration setting `library_file_path` to notmuch backend if user wants to specify the library's location manually.

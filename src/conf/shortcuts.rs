@@ -160,8 +160,8 @@ shortcut_key_values! { "listing",
         increase_sidebar |> "Increase sidebar width." |> Key::Ctrl('p'),
         decrease_sidebar |> "Decrease sidebar width." |> Key::Ctrl('o'),
         toggle_menu_visibility |> "Toggle visibility of side menu in mail list." |> Key::Char('`'),
-        focus_on_menu |> "Switch focus on sidebar menu." |> Key::Left,
-        focus_on_list |> "Switch focus on mail list." |> Key::Right,
+        focus_left |> "Switch focus on the left." |> Key::Left,
+        focus_right |> "Switch focus on the right." |> Key::Right,
         exit_entry |> "Exit e-mail entry." |> Key::Char('i'),
         open_entry |> "Open e-mail entry." |> Key::Char('\n')
     }

@@ -146,7 +146,7 @@ pub struct PlainListing {
     dirty: bool,
     force_draw: bool,
     /// If `self.view` exists or not.
-    unfocused: bool,
+    focus: Focus,
     view: MailView,
     row_updates: SmallVec<[EnvelopeHash; 8]>,
     _row_updates: SmallVec<[ThreadHash; 8]>,
@@ -296,7 +296,7 @@ impl MailListingTrait for PlainListing {
             let temp = (self.new_cursor_pos.0, self.new_cursor_pos.1, env_hash);
             if !force && old_cursor_pos == self.new_cursor_pos {
                 self.view.update(temp, context);
-            } else if self.unfocused {
+            } else if self.unfocused() {
                 self.view = MailView::new(temp, None, None, context);
             }
         }
@@ -335,7 +335,7 @@ impl ListingTrait for PlainListing {
 
     fn set_coordinates(&mut self, coordinates: (AccountHash, MailboxHash)) {
         self.new_cursor_pos = (coordinates.0, coordinates.1, 0);
-        self.unfocused = false;
+        self.focus = Focus::None;
         self.view = MailView::default();
         self.filtered_selection.clear();
         self.filtered_order.clear();
@@ -641,12 +641,43 @@ impl ListingTrait for PlainListing {
     }
 
     fn unfocused(&self) -> bool {
-        self.unfocused
+        !matches!(self.focus, Focus::None)
     }
 
     fn set_movement(&mut self, mvm: PageMovement) {
         self.movement = Some(mvm);
         self.set_dirty(true);
+    }
+
+    fn set_focus(&mut self, new_value: Focus, context: &mut Context) {
+        match new_value {
+            Focus::None => {
+                self.view
+                    .process_event(&mut UIEvent::VisibilityChange(false), context);
+                self.dirty = true;
+                /* If self.row_updates is not empty and we exit a thread, the row_update events
+                 * will be performed but the list will not be drawn. So force a draw in any case.
+                 * */
+                self.force_draw = true;
+            }
+            Focus::Entry => {
+                let env_hash = self.get_env_under_cursor(self.cursor_pos.2, context);
+                let temp = (self.cursor_pos.0, self.cursor_pos.1, env_hash);
+                self.view = MailView::new(temp, None, None, context);
+                self.force_draw = true;
+                self.dirty = true;
+                self.view.set_dirty(true);
+            }
+            Focus::EntryFullscreen => {
+                self.dirty = true;
+                self.view.set_dirty(true);
+            }
+        }
+        self.focus = new_value;
+    }
+
+    fn focus(&self) -> Focus {
+        self.focus
     }
 }
 
@@ -680,7 +711,7 @@ impl PlainListing {
             data_columns: DataColumns::default(),
             dirty: true,
             force_draw: true,
-            unfocused: false,
+            focus: Focus::None,
             view: MailView::default(),
             color_cache: ColorCache::default(),
             active_jobs: HashMap::default(),
@@ -1060,10 +1091,15 @@ impl PlainListing {
 
 impl Component for PlainListing {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        if !self.unfocused {
-            if !self.is_dirty() {
-                return;
-            }
+        if !self.is_dirty() {
+            return;
+        }
+
+        if matches!(self.focus, Focus::EntryFullscreen) {
+            return self.view.draw(grid, area, context);
+        }
+
+        if matches!(self.focus, Focus::None) {
             let mut area = area;
             if !self.filter_term.is_empty() {
                 let (upper_left, bottom_right) = area;
@@ -1129,48 +1165,79 @@ impl Component for PlainListing {
         }
         self.dirty = false;
     }
+
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
-        if self.unfocused && self.view.process_event(event, context) {
+        let shortcuts = self.get_shortcuts(context);
+
+        match (&event, self.focus) {
+            (UIEvent::Input(ref k), Focus::Entry)
+                if shortcut!(k == shortcuts[Listing::DESCRIPTION]["focus_right"]) =>
+            {
+                self.set_focus(Focus::EntryFullscreen, context);
+                return true;
+            }
+            (UIEvent::Input(ref k), Focus::EntryFullscreen)
+                if shortcut!(k == shortcuts[Listing::DESCRIPTION]["focus_left"]) =>
+            {
+                self.set_focus(Focus::Entry, context);
+                return true;
+            }
+            (UIEvent::Input(ref k), Focus::Entry)
+                if shortcut!(k == shortcuts[Listing::DESCRIPTION]["focus_left"]) =>
+            {
+                self.set_focus(Focus::None, context);
+                return true;
+            }
+            _ => {}
+        }
+
+        if self.unfocused() && self.view.process_event(event, context) {
             return true;
         }
 
-        let shortcuts = self.get_shortcuts(context);
         if self.length > 0 {
             match *event {
                 UIEvent::Input(ref k)
-                    if !self.unfocused
-                        && shortcut!(k == shortcuts[Listing::DESCRIPTION]["open_entry"]) =>
+                    if matches!(self.focus, Focus::None)
+                        && (shortcut!(k == shortcuts[Listing::DESCRIPTION]["open_entry"])
+                            || shortcut!(k == shortcuts[Listing::DESCRIPTION]["focus_right"])) =>
                 {
-                    let env_hash = self.get_env_under_cursor(self.cursor_pos.2, context);
-                    let temp = (self.cursor_pos.0, self.cursor_pos.1, env_hash);
-                    self.view = MailView::new(temp, None, None, context);
-                    self.unfocused = true;
-                    self.dirty = true;
+                    self.set_focus(Focus::Entry, context);
                     return true;
                 }
                 UIEvent::Input(ref k)
-                    if self.unfocused
+                    if !matches!(self.focus, Focus::None)
                         && shortcut!(k == shortcuts[Listing::DESCRIPTION]["exit_entry"]) =>
                 {
-                    self.unfocused = false;
-                    self.view
-                        .process_event(&mut UIEvent::VisibilityChange(false), context);
-                    self.dirty = true;
-                    /* If self.row_updates is not empty and we exit a thread, the row_update events
-                     * will be performed but the list will not be drawn. So force a draw in any case.
-                     * */
-                    self.force_draw = true;
+                    self.set_focus(Focus::None, context);
+                    return true;
+                }
+                UIEvent::Input(ref k)
+                    if !matches!(self.focus, Focus::None)
+                        && shortcut!(k == shortcuts[Listing::DESCRIPTION]["focus_left"]) =>
+                {
+                    match self.focus {
+                        Focus::Entry => {
+                            self.set_focus(Focus::None, context);
+                        }
+                        Focus::EntryFullscreen => {
+                            self.set_focus(Focus::Entry, context);
+                        }
+                        Focus::None => {
+                            unreachable!();
+                        }
+                    }
                     return true;
                 }
                 UIEvent::Input(ref key)
-                    if !self.unfocused
+                    if !self.unfocused()
                         && shortcut!(key == shortcuts[Listing::DESCRIPTION]["select_entry"]) =>
                 {
                     let env_hash = self.get_env_under_cursor(self.cursor_pos.2, context);
                     self.selection.entry(env_hash).and_modify(|e| *e = !*e);
                 }
                 UIEvent::Action(ref action) => match action {
-                    Action::SubSort(field, order) if !self.unfocused => {
+                    Action::SubSort(field, order) if !self.unfocused() => {
                         debug!("SubSort {:?} , {:?}", field, order);
                         self.subsort = (*field, *order);
                         //if !self.filtered_selection.is_empty() {
@@ -1181,7 +1248,7 @@ impl Component for PlainListing {
                         //}
                         return true;
                     }
-                    Action::Sort(field, order) if !self.unfocused => {
+                    Action::Sort(field, order) if !self.unfocused() => {
                         debug!("Sort {:?} , {:?}", field, order);
                         self.sort = (*field, *order);
                         return true;
@@ -1189,7 +1256,7 @@ impl Component for PlainListing {
                     Action::Listing(a @ ListingAction::SetSeen)
                     | Action::Listing(a @ ListingAction::SetUnseen)
                     | Action::Listing(a @ ListingAction::Delete)
-                        if !self.unfocused =>
+                        if !self.unfocused() =>
                     {
                         let is_selection_empty =
                             self.selection.values().cloned().any(std::convert::identity);
@@ -1295,7 +1362,7 @@ impl Component for PlainListing {
 
                 self.dirty = true;
 
-                if self.unfocused {
+                if self.unfocused() {
                     self.view
                         .process_event(&mut UIEvent::EnvelopeRename(*old_hash, *new_hash), context);
                 }
@@ -1314,7 +1381,7 @@ impl Component for PlainListing {
                 self.row_updates.push(*env_hash);
                 self.dirty = true;
 
-                if self.unfocused {
+                if self.unfocused() {
                     self.view
                         .process_event(&mut UIEvent::EnvelopeUpdate(*env_hash), context);
                 }
@@ -1326,7 +1393,7 @@ impl Component for PlainListing {
                 self.dirty = true;
             }
             UIEvent::Input(Key::Esc)
-                if !self.unfocused
+                if !self.unfocused()
                     && self.selection.values().cloned().any(std::convert::identity) =>
             {
                 for v in self.selection.values_mut() {
@@ -1335,13 +1402,13 @@ impl Component for PlainListing {
                 self.dirty = true;
                 return true;
             }
-            UIEvent::Input(Key::Esc) if !self.unfocused && !self.filter_term.is_empty() => {
+            UIEvent::Input(Key::Esc) if !self.unfocused() && !self.filter_term.is_empty() => {
                 self.set_coordinates((self.new_cursor_pos.0, self.new_cursor_pos.1));
                 self.set_dirty(true);
                 self.refresh_mailbox(context, false);
                 return true;
             }
-            UIEvent::Action(Action::Listing(Search(ref filter_term))) if !self.unfocused => {
+            UIEvent::Action(Action::Listing(Search(ref filter_term))) if !self.unfocused() => {
                 match context.accounts[&self.cursor_pos.0].search(
                     filter_term,
                     self.sort,
@@ -1389,23 +1456,23 @@ impl Component for PlainListing {
         }
         false
     }
+
     fn is_dirty(&self) -> bool {
-        self.dirty
-            || if self.unfocused {
-                self.view.is_dirty()
-            } else {
-                false
-            }
+        match self.focus {
+            Focus::None => self.dirty,
+            Focus::Entry | Focus::EntryFullscreen => self.view.is_dirty(),
+        }
     }
+
     fn set_dirty(&mut self, value: bool) {
         self.dirty = value;
-        if self.unfocused {
+        if self.unfocused() {
             self.view.set_dirty(value);
         }
     }
 
     fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
-        let mut map = if self.unfocused {
+        let mut map = if self.unfocused() {
             self.view.get_shortcuts(context)
         } else {
             ShortcutMaps::default()

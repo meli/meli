@@ -84,6 +84,12 @@ impl ListingTrait for OfflineListing {
     }
 
     fn set_movement(&mut self, _: PageMovement) {}
+
+    fn focus(&self) -> Focus {
+        Focus::None
+    }
+
+    fn set_focus(&mut self, _new_value: Focus, _context: &mut Context) {}
 }
 
 impl fmt::Display for OfflineListing {

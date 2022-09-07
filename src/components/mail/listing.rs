@@ -61,6 +61,13 @@ pub use self::plain::*;
 mod offline;
 pub use self::offline::*;
 
+#[derive(Debug, Copy, Clone)]
+pub enum Focus {
+    None,
+    Entry,
+    EntryFullscreen,
+}
+
 #[derive(Debug, Copy, PartialEq, Clone)]
 pub enum Modifier {
     SymmetricDifference,
@@ -516,6 +523,8 @@ pub trait ListingTrait: Component {
         None
     }
     fn set_movement(&mut self, mvm: PageMovement);
+    fn focus(&self) -> Focus;
+    fn set_focus(&mut self, new_value: Focus, context: &mut Context);
 }
 
 #[derive(Debug)]
@@ -655,7 +664,7 @@ impl Component for Listing {
         let bottom_right = bottom_right!(area);
         let total_cols = get_x(bottom_right) - get_x(upper_left);
 
-        let right_component_width = if self.menu_visibility {
+        let right_component_width = if self.is_menu_visible() {
             if self.focus == ListingFocus::Menu {
                 (self.ratio * total_cols) / 100
             } else {
@@ -925,7 +934,7 @@ impl Component for Listing {
         if self.focus == ListingFocus::Mailbox {
             match *event {
                 UIEvent::Input(Key::Mouse(MouseEvent::Press(MouseButton::Left, x, _y)))
-                    if self.menu_visibility =>
+                    if self.is_menu_visible() =>
                 {
                     match self.menu_width {
                         WidgetWidth::Hold(wx) | WidgetWidth::Set(wx)
@@ -942,7 +951,7 @@ impl Component for Listing {
                     self.set_dirty(true);
                     return true;
                 }
-                UIEvent::Input(Key::Mouse(MouseEvent::Hold(x, _y))) if self.menu_visibility => {
+                UIEvent::Input(Key::Mouse(MouseEvent::Hold(x, _y))) if self.is_menu_visible() => {
                     match self.menu_width {
                         WidgetWidth::Hold(ref mut hx) => {
                             *hx = usize::from(x).saturating_sub(1);
@@ -952,7 +961,9 @@ impl Component for Listing {
                     self.set_dirty(true);
                     return true;
                 }
-                UIEvent::Input(Key::Mouse(MouseEvent::Release(x, _y))) if self.menu_visibility => {
+                UIEvent::Input(Key::Mouse(MouseEvent::Release(x, _y)))
+                    if self.is_menu_visible() =>
+                {
                     match self.menu_width {
                         WidgetWidth::Hold(_) => {
                             self.menu_width = WidgetWidth::Set(usize::from(x).saturating_sub(1));
@@ -963,8 +974,8 @@ impl Component for Listing {
                     return true;
                 }
                 UIEvent::Input(ref k)
-                    if self.menu_visibility
-                        && shortcut!(k == shortcuts[Listing::DESCRIPTION]["focus_on_menu"]) =>
+                    if self.is_menu_visible()
+                        && shortcut!(k == shortcuts[Listing::DESCRIPTION]["focus_left"]) =>
                 {
                     self.focus = ListingFocus::Menu;
                     if self.show_menu_scrollbar != ShowMenuScrollbar::Never {
@@ -1337,7 +1348,7 @@ impl Component for Listing {
         } else if self.focus == ListingFocus::Menu {
             match *event {
                 UIEvent::Input(ref k)
-                    if shortcut!(k == shortcuts[Listing::DESCRIPTION]["focus_on_list"]) =>
+                    if shortcut!(k == shortcuts[Listing::DESCRIPTION]["focus_right"]) =>
                 {
                     self.focus = ListingFocus::Mailbox;
                     context
@@ -2373,5 +2384,9 @@ impl Listing {
             .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
                 self.get_status(context),
             )));
+    }
+
+    fn is_menu_visible(&self) -> bool {
+        !matches!(self.component.focus(), Focus::EntryFullscreen) && self.menu_visibility
     }
 }

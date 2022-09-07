@@ -128,7 +128,7 @@ pub struct ThreadListing {
     /// If we must redraw on next redraw event
     dirty: bool,
     /// If `self.view` is focused or not.
-    unfocused: bool,
+    focus: Focus,
     initialised: bool,
     view: Option<MailView>,
     movement: Option<PageMovement>,
@@ -410,9 +410,10 @@ impl ListingTrait for ThreadListing {
     fn coordinates(&self) -> (AccountHash, MailboxHash) {
         (self.new_cursor_pos.0, self.new_cursor_pos.1)
     }
+
     fn set_coordinates(&mut self, coordinates: (AccountHash, MailboxHash)) {
         self.new_cursor_pos = (coordinates.0, coordinates.1, 0);
-        self.unfocused = false;
+        self.focus = Focus::None;
         self.view = None;
         self.order.clear();
         self.row_updates.clear();
@@ -741,12 +742,54 @@ impl ListingTrait for ThreadListing {
     }
 
     fn unfocused(&self) -> bool {
-        self.unfocused
+        !matches!(self.focus, Focus::None)
     }
 
     fn set_movement(&mut self, mvm: PageMovement) {
         self.movement = Some(mvm);
         self.set_dirty(true);
+    }
+
+    fn set_focus(&mut self, new_value: Focus, context: &mut Context) {
+        match new_value {
+            Focus::None => {
+                self.view = None;
+                self.dirty = true;
+                /* If self.row_updates is not empty and we exit a thread, the row_update events
+                 * will be performed but the list will not be drawn. So force a draw in any case.
+                 * */
+                // self.force_draw = true;
+            }
+            Focus::Entry => {
+                // self.force_draw = true;
+                self.dirty = true;
+                let coordinates = (
+                    self.cursor_pos.0,
+                    self.cursor_pos.1,
+                    self.get_env_under_cursor(self.cursor_pos.2, context),
+                );
+
+                if let Some(ref mut v) = self.view {
+                    v.update(coordinates, context);
+                } else {
+                    self.view = Some(MailView::new(coordinates, None, None, context));
+                }
+
+                if let Some(ref mut s) = self.view {
+                    s.set_dirty(true);
+                }
+            }
+            Focus::EntryFullscreen => {
+                if let Some(ref mut s) = self.view {
+                    s.set_dirty(true);
+                }
+            }
+        }
+        self.focus = new_value;
+    }
+
+    fn focus(&self) -> Focus {
+        self.focus
     }
 }
 
@@ -772,7 +815,7 @@ impl ThreadListing {
             selection: HashMap::default(),
             order: HashMap::default(),
             dirty: true,
-            unfocused: false,
+            focus: Focus::None,
             view: None,
             initialised: false,
             movement: None,
@@ -1092,10 +1135,17 @@ impl Component for ThreadListing {
             }
         }
         */
-        if !self.unfocused {
-            if !self.is_dirty() {
-                return;
+        if !self.is_dirty() {
+            return;
+        }
+
+        if matches!(self.focus, Focus::EntryFullscreen) {
+            if let Some(v) = self.view.as_mut() {
+                return v.draw(grid, area, context);
             }
+        }
+
+        if !self.unfocused() {
             self.dirty = false;
             /* Draw the entire list */
             self.draw_list(grid, area, context);
@@ -1198,12 +1248,38 @@ impl Component for ThreadListing {
             self.dirty = false;
         }
     }
+
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+        let shortcuts = self.get_shortcuts(context);
+
+        match (&event, self.focus) {
+            (UIEvent::Input(ref k), Focus::Entry)
+                if shortcut!(k == shortcuts[Listing::DESCRIPTION]["focus_right"]) =>
+            {
+                self.set_focus(Focus::EntryFullscreen, context);
+                return true;
+            }
+            (UIEvent::Input(ref k), Focus::EntryFullscreen)
+                if shortcut!(k == shortcuts[Listing::DESCRIPTION]["focus_left"]) =>
+            {
+                self.set_focus(Focus::Entry, context);
+                return true;
+            }
+            (UIEvent::Input(ref k), Focus::Entry)
+                if shortcut!(k == shortcuts[Listing::DESCRIPTION]["focus_left"]) =>
+            {
+                self.set_focus(Focus::None, context);
+                return true;
+            }
+            _ => {}
+        }
+
         if let Some(ref mut v) = self.view {
-            if v.process_event(event, context) {
+            if !matches!(self.focus, Focus::None) && v.process_event(event, context) {
                 return true;
             }
         }
+
         match *event {
             UIEvent::ConfigReload { old_settings: _ } => {
                 self.color_cache = ColorCache {
@@ -1238,18 +1314,43 @@ impl Component for ThreadListing {
                 }
                 self.set_dirty(true);
             }
-            UIEvent::Input(Key::Char('\n')) if !self.unfocused => {
-                self.unfocused = true;
-                self.dirty = true;
+            UIEvent::Input(ref k)
+                if matches!(self.focus, Focus::None)
+                    && (shortcut!(k == shortcuts[Listing::DESCRIPTION]["open_entry"])
+                        || shortcut!(k == shortcuts[Listing::DESCRIPTION]["focus_right"])) =>
+            {
+                self.set_focus(Focus::Entry, context);
                 return true;
             }
-            UIEvent::Input(Key::Char('i')) if self.unfocused => {
-                self.unfocused = false;
-                if let Some(ref mut s) = self.view {
-                    s.process_event(&mut UIEvent::VisibilityChange(false), context);
+            UIEvent::Input(ref k)
+                if !matches!(self.focus, Focus::None)
+                    && shortcut!(k == shortcuts[Listing::DESCRIPTION]["exit_entry"]) =>
+            {
+                self.set_focus(Focus::None, context);
+                return true;
+            }
+            UIEvent::Input(ref k)
+                if !matches!(self.focus, Focus::Entry)
+                    && shortcut!(k == shortcuts[Listing::DESCRIPTION]["focus_right"]) =>
+            {
+                self.set_focus(Focus::EntryFullscreen, context);
+                return true;
+            }
+            UIEvent::Input(ref k)
+                if !matches!(self.focus, Focus::None)
+                    && shortcut!(k == shortcuts[Listing::DESCRIPTION]["focus_left"]) =>
+            {
+                match self.focus {
+                    Focus::Entry => {
+                        self.set_focus(Focus::None, context);
+                    }
+                    Focus::EntryFullscreen => {
+                        self.set_focus(Focus::Entry, context);
+                    }
+                    Focus::None => {
+                        unreachable!();
+                    }
                 }
-                self.dirty = true;
-                self.view = None;
                 return true;
             }
             UIEvent::MailboxUpdate((ref idxa, ref idxf))
@@ -1275,7 +1376,7 @@ impl Component for ThreadListing {
 
                 self.dirty = true;
 
-                if self.unfocused {
+                if self.unfocused() {
                     if let Some(v) = self.view.as_mut() {
                         v.process_event(
                             &mut UIEvent::EnvelopeRename(*old_hash, *new_hash),
@@ -1301,7 +1402,7 @@ impl Component for ThreadListing {
 
                 self.dirty = true;
 
-                if self.unfocused {
+                if self.unfocused() {
                     if let Some(v) = self.view.as_mut() {
                         v.process_event(&mut UIEvent::EnvelopeUpdate(*env_hash), context);
                     }
@@ -1328,7 +1429,7 @@ impl Component for ThreadListing {
                     self.refresh_mailbox(context, false);
                     return true;
                 }
-                Action::Listing(Search(ref filter_term)) if !self.unfocused => {
+                Action::Listing(Search(ref filter_term)) if !self.unfocused() => {
                     match context.accounts[&self.cursor_pos.0].search(
                         filter_term,
                         self.sort,
@@ -1379,20 +1480,36 @@ impl Component for ThreadListing {
         }
         false
     }
+
     fn is_dirty(&self) -> bool {
-        self.dirty || self.view.as_ref().map(|p| p.is_dirty()).unwrap_or(false)
+        match self.focus {
+            Focus::None => self.dirty,
+            Focus::Entry => self.dirty || self.view.as_ref().map(|p| p.is_dirty()).unwrap_or(false),
+            Focus::EntryFullscreen => self.view.as_ref().map(|p| p.is_dirty()).unwrap_or(false),
+        }
     }
+
     fn set_dirty(&mut self, value: bool) {
         if let Some(p) = self.view.as_mut() {
             p.set_dirty(value);
         };
         self.dirty = value;
     }
+
     fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
-        self.view
-            .as_ref()
-            .map(|p| p.get_shortcuts(context))
-            .unwrap_or_default()
+        let mut map = if self.unfocused() {
+            self.view
+                .as_ref()
+                .map(|p| p.get_shortcuts(context))
+                .unwrap_or_default()
+        } else {
+            ShortcutMaps::default()
+        };
+
+        let config_map = context.settings.shortcuts.listing.key_values();
+        map.insert(Listing::DESCRIPTION, config_map);
+
+        map
     }
 
     fn id(&self) -> ComponentId {

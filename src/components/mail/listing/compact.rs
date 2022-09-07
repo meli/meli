@@ -187,7 +187,7 @@ pub struct CompactListing {
     dirty: bool,
     force_draw: bool,
     /// If `self.view` exists or not.
-    unfocused: bool,
+    focus: Focus,
     view: ThreadView,
     row_updates: SmallVec<[ThreadHash; 8]>,
     color_cache: ColorCache,
@@ -304,7 +304,7 @@ impl MailListingTrait for CompactListing {
 
         if !force && old_cursor_pos == self.new_cursor_pos {
             self.view.update(context);
-        } else if self.unfocused {
+        } else if self.unfocused() {
             let thread = self.get_thread_under_cursor(self.cursor_pos.2);
 
             self.view = ThreadView::new(self.new_cursor_pos, thread, None, context);
@@ -490,7 +490,7 @@ impl ListingTrait for CompactListing {
 
     fn set_coordinates(&mut self, coordinates: (AccountHash, MailboxHash)) {
         self.new_cursor_pos = (coordinates.0, coordinates.1, 0);
-        self.unfocused = false;
+        self.focus = Focus::None;
         self.view = ThreadView::default();
         self.filtered_selection.clear();
         self.filtered_order.clear();
@@ -818,7 +818,7 @@ impl ListingTrait for CompactListing {
     }
 
     fn unfocused(&self) -> bool {
-        self.unfocused
+        !matches!(self.focus, Focus::None)
     }
 
     fn set_modifier_active(&mut self, new_val: bool) {
@@ -836,6 +836,33 @@ impl ListingTrait for CompactListing {
     fn set_movement(&mut self, mvm: PageMovement) {
         self.movement = Some(mvm);
         self.set_dirty(true);
+    }
+
+    fn set_focus(&mut self, new_value: Focus, context: &mut Context) {
+        match new_value {
+            Focus::None => {
+                self.view
+                    .process_event(&mut UIEvent::VisibilityChange(false), context);
+                self.dirty = true;
+                /* If self.row_updates is not empty and we exit a thread, the row_update events
+                 * will be performed but the list will not be drawn. So force a draw in any case.
+                 * */
+                self.force_draw = true;
+            }
+            Focus::Entry => {
+                self.force_draw = true;
+                self.dirty = true;
+                self.view.set_dirty(true);
+            }
+            Focus::EntryFullscreen => {
+                self.view.set_dirty(true);
+            }
+        }
+        self.focus = new_value;
+    }
+
+    fn focus(&self) -> Focus {
+        self.focus
     }
 }
 
@@ -863,13 +890,13 @@ impl CompactListing {
             filtered_selection: Vec::new(),
             filtered_order: HashMap::default(),
             selection: HashMap::default(),
+            focus: Focus::None,
             row_updates: SmallVec::new(),
             data_columns: DataColumns::default(),
             rows_drawn: SegmentTree::default(),
             rows: vec![],
             dirty: true,
             force_draw: true,
-            unfocused: false,
             view: ThreadView::default(),
             color_cache: ColorCache::default(),
             movement: None,
@@ -1465,10 +1492,15 @@ impl CompactListing {
 
 impl Component for CompactListing {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        if !self.unfocused {
-            if !self.is_dirty() {
-                return;
-            }
+        if !self.is_dirty() {
+            return;
+        }
+
+        if matches!(self.focus, Focus::EntryFullscreen) {
+            return self.view.draw(grid, area, context);
+        }
+
+        if !self.unfocused() {
             let mut area = area;
             if !self.filter_term.is_empty() {
                 let (upper_left, bottom_right) = area;
@@ -1715,40 +1747,81 @@ impl Component for CompactListing {
         }
         self.dirty = false;
     }
+
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
-        if self.unfocused && self.view.process_event(event, context) {
+        let shortcuts = self.get_shortcuts(context);
+
+        match (&event, self.focus) {
+            (UIEvent::Input(ref k), Focus::Entry)
+                if shortcut!(k == shortcuts[Listing::DESCRIPTION]["focus_right"]) =>
+            {
+                self.set_focus(Focus::EntryFullscreen, context);
+                return true;
+            }
+            (UIEvent::Input(ref k), Focus::EntryFullscreen)
+                if shortcut!(k == shortcuts[Listing::DESCRIPTION]["focus_left"]) =>
+            {
+                self.set_focus(Focus::Entry, context);
+                return true;
+            }
+            (UIEvent::Input(ref k), Focus::Entry)
+                if shortcut!(k == shortcuts[Listing::DESCRIPTION]["focus_left"]) =>
+            {
+                self.set_focus(Focus::None, context);
+                return true;
+            }
+            _ => {}
+        }
+
+        if self.unfocused() && self.view.process_event(event, context) {
             return true;
         }
 
-        let shortcuts = self.get_shortcuts(context);
         if self.length > 0 {
             match *event {
                 UIEvent::Input(ref k)
-                    if !self.unfocused
-                        && shortcut!(k == shortcuts[Listing::DESCRIPTION]["open_entry"]) =>
+                    if matches!(self.focus, Focus::None)
+                        && (shortcut!(k == shortcuts[Listing::DESCRIPTION]["open_entry"])
+                            || shortcut!(k == shortcuts[Listing::DESCRIPTION]["focus_right"])) =>
                 {
                     let thread = self.get_thread_under_cursor(self.cursor_pos.2);
                     self.view = ThreadView::new(self.cursor_pos, thread, None, context);
-                    self.unfocused = true;
-                    self.dirty = true;
+                    self.set_focus(Focus::Entry, context);
                     return true;
                 }
                 UIEvent::Input(ref k)
-                    if self.unfocused
+                    if matches!(self.focus, Focus::Entry)
                         && shortcut!(k == shortcuts[Listing::DESCRIPTION]["exit_entry"]) =>
                 {
-                    self.unfocused = false;
-                    self.view
-                        .process_event(&mut UIEvent::VisibilityChange(false), context);
-                    self.dirty = true;
-                    /* If self.row_updates is not empty and we exit a thread, the row_update events
-                     * will be performed but the list will not be drawn. So force a draw in any case.
-                     * */
-                    self.force_draw = true;
+                    self.set_focus(Focus::None, context);
+                    return true;
+                }
+                UIEvent::Input(ref k)
+                    if matches!(self.focus, Focus::None)
+                        && shortcut!(k == shortcuts[Listing::DESCRIPTION]["focus_right"]) =>
+                {
+                    self.set_focus(Focus::Entry, context);
+                    return true;
+                }
+                UIEvent::Input(ref k)
+                    if !matches!(self.focus, Focus::None)
+                        && shortcut!(k == shortcuts[Listing::DESCRIPTION]["focus_left"]) =>
+                {
+                    match self.focus {
+                        Focus::Entry => {
+                            self.set_focus(Focus::None, context);
+                        }
+                        Focus::EntryFullscreen => {
+                            self.set_focus(Focus::Entry, context);
+                        }
+                        Focus::None => {
+                            unreachable!();
+                        }
+                    }
                     return true;
                 }
                 UIEvent::Input(ref key)
-                    if !self.unfocused
+                    if !self.unfocused()
                         && shortcut!(key == shortcuts[Listing::DESCRIPTION]["select_entry"]) =>
                 {
                     if self.modifier_active && self.modifier_command.is_none() {
@@ -1762,7 +1835,7 @@ impl Component for CompactListing {
                 }
                 UIEvent::Action(ref action) => {
                     match action {
-                        Action::Sort(field, order) if !self.unfocused => {
+                        Action::Sort(field, order) if !self.unfocused() => {
                             debug!("Sort {:?} , {:?}", field, order);
                             self.sort = (*field, *order);
                             self.sortcmd = true;
@@ -1774,13 +1847,13 @@ impl Component for CompactListing {
                             }
                             return true;
                         }
-                        Action::SubSort(field, order) if !self.unfocused => {
+                        Action::SubSort(field, order) if !self.unfocused() => {
                             debug!("SubSort {:?} , {:?}", field, order);
                             self.subsort = (*field, *order);
                             // FIXME: perform subsort.
                             return true;
                         }
-                        Action::Listing(ToggleThreadSnooze) if !self.unfocused => {
+                        Action::Listing(ToggleThreadSnooze) if !self.unfocused() => {
                             let thread = self.get_thread_under_cursor(self.cursor_pos.2);
                             let account = &mut context.accounts[&self.cursor_pos.0];
                             account
@@ -1871,7 +1944,7 @@ impl Component for CompactListing {
 
                 self.dirty = true;
 
-                if self.unfocused {
+                if self.unfocused() {
                     self.view
                         .process_event(&mut UIEvent::EnvelopeRename(*old_hash, *new_hash), context);
                 }
@@ -1901,7 +1974,7 @@ impl Component for CompactListing {
 
                 self.dirty = true;
 
-                if self.unfocused {
+                if self.unfocused() {
                     self.view
                         .process_event(&mut UIEvent::EnvelopeUpdate(*env_hash), context);
                 }
@@ -1913,7 +1986,7 @@ impl Component for CompactListing {
                 self.dirty = true;
             }
             UIEvent::Input(Key::Esc)
-                if !self.unfocused
+                if !self.unfocused()
                     && self.selection.values().cloned().any(std::convert::identity) =>
             {
                 for v in self.selection.values_mut() {
@@ -1922,13 +1995,13 @@ impl Component for CompactListing {
                 self.dirty = true;
                 return true;
             }
-            UIEvent::Input(Key::Esc) if !self.unfocused && !self.filter_term.is_empty() => {
+            UIEvent::Input(Key::Esc) if !self.unfocused() && !self.filter_term.is_empty() => {
                 self.set_coordinates((self.new_cursor_pos.0, self.new_cursor_pos.1));
                 self.refresh_mailbox(context, false);
                 self.set_dirty(true);
                 return true;
             }
-            UIEvent::Action(Action::Listing(Search(ref filter_term))) if !self.unfocused => {
+            UIEvent::Action(Action::Listing(Search(ref filter_term))) if !self.unfocused() => {
                 match context.accounts[&self.cursor_pos.0].search(
                     filter_term,
                     self.sort,
@@ -1950,7 +2023,7 @@ impl Component for CompactListing {
                 };
                 self.set_dirty(true);
             }
-            UIEvent::Action(Action::Listing(Select(ref search_term))) if !self.unfocused => {
+            UIEvent::Action(Action::Listing(Select(ref search_term))) if !self.unfocused() => {
                 match context.accounts[&self.cursor_pos.0].search(
                     search_term,
                     self.sort,
@@ -2017,23 +2090,24 @@ impl Component for CompactListing {
         }
         false
     }
+
     fn is_dirty(&self) -> bool {
-        self.dirty
-            || if self.unfocused {
-                self.view.is_dirty()
-            } else {
-                false
-            }
+        match self.focus {
+            Focus::None => self.dirty,
+            Focus::Entry => self.dirty || self.view.is_dirty(),
+            Focus::EntryFullscreen => self.view.is_dirty(),
+        }
     }
+
     fn set_dirty(&mut self, value: bool) {
         self.dirty = value;
-        if self.unfocused {
+        if self.unfocused() {
             self.view.set_dirty(value);
         }
     }
 
     fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
-        let mut map = if self.unfocused {
+        let mut map = if self.unfocused() {
             self.view.get_shortcuts(context)
         } else {
             ShortcutMaps::default()
