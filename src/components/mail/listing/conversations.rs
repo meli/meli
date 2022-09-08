@@ -22,6 +22,7 @@
 use super::*;
 use crate::components::PageMovement;
 use crate::jobs::JoinHandle;
+use indexmap::IndexSet;
 use std::iter::FromIterator;
 
 macro_rules! row_attr {
@@ -240,6 +241,7 @@ impl MailListingTrait for ConversationsListing {
         }
         let mut max_entry_columns = 0;
 
+        let mut other_subjects = IndexSet::new();
         let mut from_address_list = Vec::new();
         let mut from_address_set: std::collections::HashSet<Vec<u8>> =
             std::collections::HashSet::new();
@@ -273,17 +275,30 @@ impl MailListingTrait for ConversationsListing {
 
                 panic!();
             }
+            other_subjects.clear();
             from_address_list.clear();
             from_address_set.clear();
-            for envelope in threads
+            for (envelope, show_subject) in threads
                 .thread_group_iter(thread)
-                .filter_map(|(_, h)| threads.thread_nodes()[&h].message())
-                .map(|env_hash| {
-                    context.accounts[&self.cursor_pos.0]
-                        .collection
-                        .get_env(env_hash)
+                .filter_map(|(_, h)| {
+                    Some((
+                        threads.thread_nodes()[&h].message()?,
+                        threads.thread_nodes()[&h].show_subject(),
+                    ))
+                })
+                .map(|(env_hash, show_subject)| {
+                    (
+                        context.accounts[&self.cursor_pos.0]
+                            .collection
+                            .get_env(env_hash),
+                        show_subject,
+                    )
                 })
             {
+                if show_subject {
+                    other_subjects.insert(envelope.subject().to_string());
+                }
+
                 for addr in envelope.from().iter() {
                     if from_address_set.contains(addr.address_spec_raw()) {
                         continue;
@@ -313,6 +328,7 @@ impl MailListingTrait for ConversationsListing {
                 context,
                 &from_address_list,
                 &threads,
+                &other_subjects,
                 thread,
             );
             max_entry_columns = std::cmp::max(
@@ -627,8 +643,9 @@ impl ConversationsListing {
         &self,
         e: &Envelope,
         context: &Context,
-        from: &Vec<Address>,
+        from: &[Address],
         threads: &Threads,
+        other_subjects: &IndexSet<String>,
         hash: ThreadHash,
     ) -> EntryStrings {
         let thread = threads.thread_ref(hash);
@@ -669,8 +686,24 @@ impl ConversationsListing {
                 tags.pop();
             }
         }
-        let mut subject = e.subject().to_string();
-        subject.truncate_at_boundary(150);
+        let mut subject = if *mailbox_settings!(
+            context[self.cursor_pos.0][&self.cursor_pos.1]
+                .listing
+                .thread_subject_pack
+        ) {
+            other_subjects
+                .into_iter()
+                .fold(String::new(), |mut acc, s| {
+                    if !acc.is_empty() {
+                        acc.push_str(", ");
+                    }
+                    acc.push_str(&s);
+                    acc
+                })
+        } else {
+            e.subject().to_string()
+        };
+        subject.truncate_at_boundary(100);
         if thread.len() > 1 {
             EntryStrings {
                 date: DateString(ConversationsListing::format_date(context, thread.date())),
@@ -755,18 +788,29 @@ impl ConversationsListing {
         let idx: usize = self.order[&thread_hash];
         let env_hash = threads.thread_nodes()[&thread_node_hash].message().unwrap();
 
+        let mut other_subjects = IndexSet::new();
         let mut from_address_list = Vec::new();
         let mut from_address_set: std::collections::HashSet<Vec<u8>> =
             std::collections::HashSet::new();
-        for envelope in threads
+        for (envelope, show_subject) in threads
             .thread_group_iter(thread_hash)
-            .filter_map(|(_, h)| threads.thread_nodes()[&h].message())
-            .map(|env_hash| {
-                context.accounts[&self.cursor_pos.0]
-                    .collection
-                    .get_env(env_hash)
+            .filter_map(|(_, h)| {
+                threads.thread_nodes()[&h]
+                    .message()
+                    .map(|env_hash| (env_hash, threads.thread_nodes()[&h].show_subject()))
+            })
+            .map(|(env_hash, show_subject)| {
+                (
+                    context.accounts[&self.cursor_pos.0]
+                        .collection
+                        .get_env(env_hash),
+                    show_subject,
+                )
             })
         {
+            if show_subject {
+                other_subjects.insert(envelope.subject().to_string());
+            }
             for addr in envelope.from().iter() {
                 if from_address_set.contains(addr.address_spec_raw()) {
                     continue;
@@ -781,6 +825,7 @@ impl ConversationsListing {
             context,
             &from_address_list,
             &threads,
+            &other_subjects,
             thread_hash,
         );
         drop(envelope);

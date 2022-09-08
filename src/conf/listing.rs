@@ -129,6 +129,12 @@ pub struct ListingSettings {
     /// Default: "📎"
     #[serde(default)]
     pub attachment_flag: Option<String>,
+
+    /// Should threads with differentiating Subjects show a list of those subjects on the entry
+    /// title?
+    /// Default: "true"
+    #[serde(default = "true_val")]
+    pub thread_subject_pack: bool,
 }
 
 const fn default_divider() -> char {
@@ -158,6 +164,7 @@ impl Default for ListingSettings {
             thread_snoozed_flag: None,
             selected_flag: None,
             attachment_flag: None,
+            thread_subject_pack: true,
         }
     }
 }
@@ -192,6 +199,7 @@ impl DotAddressable for ListingSettings {
                     "thread_snoozed_flag" => self.thread_snoozed_flag.lookup(field, tail),
                     "selected_flag" => self.selected_flag.lookup(field, tail),
                     "attachment_flag" => self.attachment_flag.lookup(field, tail),
+                    "thread_subject_pack" => self.thread_subject_pack.lookup(field, tail),
                     other => Err(MeliError::new(format!(
                         "{} has no field named {}",
                         parent_field, other

@@ -1059,6 +1059,11 @@ The URL will be given as the first argument of the command.
 .El
 .Sh LISTING
 .Bl -tag -width 36n
+.It Ic show_menu_scrollbar Ar boolean
+.Pq Em optional
+ Show auto-hiding scrollbar in accounts sidebar menu.
+.\" default value
+.Pq Em true
 .It Ic datetime_fmt Ar String
 .Pq Em optional
 Datetime formatting passed verbatim to strftime(3).
@@ -1106,11 +1111,26 @@ Sets the character to print as the divider between the accounts list and the mes
 This is the width of the right container to the entire screen width.
 .\" default value
 .Pq Em 90
-.It Ic show_menu_scrollbar Ar boolean
-.Pq Em optional
- Show auto-hiding scrollbar in accounts sidebar menu.
+.It Ic unseen_flag Ar Option<String>
+Flag to show if thread entry contains unseen mail.
 .\" default value
-.Pq Em true
+.Pq Em "●"
+.It Ic thread_snoozed_flag Ar Option<String>
+Flag to show if thread has been snoozed.
+.\" default value
+.Pq Em "💤"
+.It Ic selected_flag Ar Option<String>
+Flag to show if thread entry has been selected.
+.\" default value
+.Pq Em "☑️"
+.It Ic attachment_flag Ar Option<String>
+Flag to show if thread entry contains attachments.
+.\" default value
+.Pq Em "📎"
+.It Ic thread_subject_pack Ar bool
+Should threads with differentiating Subjects show a list of those subjects on the entry title?
+.\" default value
+.Pq Em "true"
 .El
 .Ss Examples of sidebar mailbox tree customization
 The default values

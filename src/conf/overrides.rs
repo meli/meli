@@ -171,6 +171,11 @@ pub struct ListingSettingsOverride {
     #[doc = " Default: \"📎\""]
     #[serde(default)]
     pub attachment_flag: Option<Option<String>>,
+    #[doc = " Should threads with differentiating Subjects show a list of those subjects on the entry"]
+    #[doc = " title?"]
+    #[doc = " Default: \"true\""]
+    #[serde(default)]
+    pub thread_subject_pack: Option<bool>,
 }
 impl Default for ListingSettingsOverride {
     fn default() -> Self {
@@ -191,6 +196,7 @@ impl Default for ListingSettingsOverride {
             thread_snoozed_flag: None,
             selected_flag: None,
             attachment_flag: None,
+            thread_subject_pack: None,
         }
     }
 }

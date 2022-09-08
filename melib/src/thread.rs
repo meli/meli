@@ -834,6 +834,7 @@ impl Threads {
                 }
             }
         }
+
         for i in 0..self.thread_nodes[&id].children.len() {
             let child_hash = self.thread_nodes[&id].children[i];
             if let Some(child_env_hash) = self.thread_nodes[&child_hash].message() {

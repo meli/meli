@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added listing configuration setting `thread_subject_pack` (see meli.conf.5)
 - Added shortcuts for focusing to sidebar menu and back to the e-mail view (`focus_left` and `focus_right`)
 - `f76f4ea3` A new manual page, `meli.7` which contains a general tutorial for using meli.
 - `cbe593cf` add configurable header preample suffix and prefix for editing
