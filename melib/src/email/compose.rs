@@ -24,7 +24,7 @@ use super::*;
 use crate::email::attachment_types::{
     Charset, ContentTransferEncoding, ContentType, MultipartType,
 };
-use crate::email::attachments::{decode, decode_rec, AttachmentBuilder};
+use crate::email::attachments::AttachmentBuilder;
 use crate::shellexpand::ShellExpandTrait;
 use data_encoding::BASE64_MIME;
 use std::ffi::OsStr;
@@ -92,7 +92,7 @@ impl FromStr for Draft {
         }
         let body = Envelope::new(0).body_bytes(s.as_bytes());
 
-        ret.body = String::from_utf8(decode(&body, None))?;
+        ret.body = String::from_utf8(body.decode(Default::default()))?;
 
         Ok(ret)
     }
@@ -207,7 +207,7 @@ impl Draft {
         );
         let body = envelope.body_bytes(bytes);
         ret.body = {
-            let reply_body_bytes = decode_rec(&body, None);
+            let reply_body_bytes = body.decode_rec(Default::default());
             let reply_body = String::from_utf8_lossy(&reply_body_bytes);
             let lines: Vec<&str> = reply_body.lines().collect();
             let mut ret = format!(

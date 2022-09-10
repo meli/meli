@@ -554,7 +554,7 @@ impl Attachment {
     fn get_text_recursive(&self, text: &mut Vec<u8>) {
         match self.content_type {
             ContentType::Text { .. } | ContentType::PGPSignature | ContentType::CMSSignature => {
-                text.extend(decode(self, None));
+                text.extend(self.decode(Default::default()));
             }
             ContentType::Multipart {
                 ref kind,
@@ -798,119 +798,129 @@ impl Attachment {
         })
         .map(|n| n.replace(|c| std::path::is_separator(c) || c.is_ascii_control(), "_"))
     }
+
+    fn decode_rec_helper<'a, 'b>(&'a self, options: &mut DecodeOptions<'b>) -> Vec<u8> {
+        match self.content_type {
+            ContentType::Other { .. } => Vec::new(),
+            ContentType::Text { .. } => self.decode_helper(options),
+            ContentType::OctetStream { ref name } => name
+                .clone()
+                .unwrap_or_else(|| self.mime_type())
+                .into_bytes(),
+            ContentType::CMSSignature | ContentType::PGPSignature => Vec::new(),
+            ContentType::MessageRfc822 => {
+                if self.content_disposition.kind.is_inline() {
+                    let b = AttachmentBuilder::new(self.body()).build();
+                    let ret = b.decode_rec_helper(options);
+                    ret
+                } else {
+                    b"message/rfc822 attachment".to_vec()
+                }
+            }
+            ContentType::Multipart {
+                ref kind,
+                ref parts,
+                ..
+            } => match kind {
+                MultipartType::Alternative => {
+                    for a in parts {
+                        if let ContentType::Text {
+                            kind: Text::Plain, ..
+                        } = a.content_type
+                        {
+                            return a.decode_helper(options);
+                        }
+                    }
+                    self.decode_helper(options)
+                }
+                MultipartType::Signed => {
+                    let mut vec = Vec::new();
+                    for a in parts {
+                        vec.extend(a.decode_rec_helper(options));
+                    }
+                    vec.extend(self.decode_helper(options));
+                    vec
+                }
+                MultipartType::Encrypted => {
+                    let mut vec = Vec::new();
+                    for a in parts {
+                        if a.content_type == "application/octet-stream" {
+                            vec.extend(a.decode_rec_helper(options));
+                        }
+                    }
+                    vec.extend(self.decode_helper(options));
+                    vec
+                }
+                _ => {
+                    let mut vec = Vec::new();
+                    for a in parts {
+                        if a.content_disposition.kind.is_inline() {
+                            vec.extend(a.decode_rec_helper(options));
+                        }
+                    }
+                    vec
+                }
+            },
+        }
+    }
+
+    pub fn decode_rec<'a, 'b>(&'a self, mut options: DecodeOptions<'b>) -> Vec<u8> {
+        self.decode_rec_helper(&mut options)
+    }
+
+    fn decode_helper<'a, 'b>(&'a self, options: &mut DecodeOptions<'b>) -> Vec<u8> {
+        let charset = options
+            .force_charset
+            .unwrap_or_else(|| match self.content_type {
+                ContentType::Text { charset, .. } => charset,
+                _ => Default::default(),
+            });
+
+        let bytes = match self.content_transfer_encoding {
+            ContentTransferEncoding::Base64 => match BASE64_MIME.decode(self.body()) {
+                Ok(v) => v,
+                _ => self.body().to_vec(),
+            },
+            ContentTransferEncoding::QuotedPrintable => {
+                parser::encodings::quoted_printable_bytes(self.body())
+                    .unwrap()
+                    .1
+            }
+            ContentTransferEncoding::_7Bit
+            | ContentTransferEncoding::_8Bit
+            | ContentTransferEncoding::Other { .. } => self.body().to_vec(),
+        };
+
+        let mut ret = if self.content_type.is_text() {
+            if let Ok(v) = parser::encodings::decode_charset(&bytes, charset) {
+                v.into_bytes()
+            } else {
+                self.body().to_vec()
+            }
+        } else {
+            bytes.to_vec()
+        };
+
+        if let Some(filter) = options.filter.as_mut() {
+            filter(self, &mut ret);
+        }
+
+        ret
+    }
+
+    pub fn decode<'a, 'b>(&'a self, mut options: DecodeOptions<'b>) -> Vec<u8> {
+        self.decode_helper(&mut options)
+    }
 }
 
 pub fn interpret_format_flowed(_t: &str) -> String {
     unimplemented!()
 }
 
-type Filter<'a> = Box<dyn FnMut(&Attachment, &mut Vec<u8>) + 'a>;
+pub type Filter<'a> = Box<dyn FnMut(&Attachment, &mut Vec<u8>) + 'a>;
 
-fn decode_rec_helper<'a, 'b>(a: &'a Attachment, filter: &mut Option<Filter<'b>>) -> Vec<u8> {
-    match a.content_type {
-        ContentType::Other { .. } => Vec::new(),
-        ContentType::Text { .. } => decode_helper(a, filter),
-        ContentType::OctetStream { ref name } => {
-            name.clone().unwrap_or_else(|| a.mime_type()).into_bytes()
-        }
-        ContentType::CMSSignature | ContentType::PGPSignature => Vec::new(),
-        ContentType::MessageRfc822 => {
-            if a.content_disposition.kind.is_inline() {
-                let b = AttachmentBuilder::new(a.body()).build();
-                let ret = decode_rec_helper(&b, filter);
-                ret
-            } else {
-                b"message/rfc822 attachment".to_vec()
-            }
-        }
-        ContentType::Multipart {
-            ref kind,
-            ref parts,
-            ..
-        } => match kind {
-            MultipartType::Alternative => {
-                for a in parts {
-                    if let ContentType::Text {
-                        kind: Text::Plain, ..
-                    } = a.content_type
-                    {
-                        return decode_helper(a, filter);
-                    }
-                }
-                decode_helper(a, filter)
-            }
-            MultipartType::Signed => {
-                let mut vec = Vec::new();
-                for a in parts {
-                    vec.extend(decode_rec_helper(a, filter));
-                }
-                vec.extend(decode_helper(a, filter));
-                vec
-            }
-            MultipartType::Encrypted => {
-                let mut vec = Vec::new();
-                for a in parts {
-                    if a.content_type == "application/octet-stream" {
-                        vec.extend(decode_rec_helper(a, filter));
-                    }
-                }
-                vec.extend(decode_helper(a, filter));
-                vec
-            }
-            _ => {
-                let mut vec = Vec::new();
-                for a in parts {
-                    if a.content_disposition.kind.is_inline() {
-                        vec.extend(decode_rec_helper(a, filter));
-                    }
-                }
-                vec
-            }
-        },
-    }
-}
-
-pub fn decode_rec<'a, 'b>(a: &'a Attachment, mut filter: Option<Filter<'b>>) -> Vec<u8> {
-    decode_rec_helper(a, &mut filter)
-}
-
-fn decode_helper<'a, 'b>(a: &'a Attachment, filter: &mut Option<Filter<'b>>) -> Vec<u8> {
-    let charset = match a.content_type {
-        ContentType::Text { charset: c, .. } => c,
-        _ => Default::default(),
-    };
-
-    let bytes = match a.content_transfer_encoding {
-        ContentTransferEncoding::Base64 => match BASE64_MIME.decode(a.body()) {
-            Ok(v) => v,
-            _ => a.body().to_vec(),
-        },
-        ContentTransferEncoding::QuotedPrintable => {
-            parser::encodings::quoted_printable_bytes(a.body())
-                .unwrap()
-                .1
-        }
-        ContentTransferEncoding::_7Bit
-        | ContentTransferEncoding::_8Bit
-        | ContentTransferEncoding::Other { .. } => a.body().to_vec(),
-    };
-
-    let mut ret = if a.content_type.is_text() {
-        if let Ok(v) = parser::encodings::decode_charset(&bytes, charset) {
-            v.into_bytes()
-        } else {
-            a.body().to_vec()
-        }
-    } else {
-        bytes.to_vec()
-    };
-    if let Some(filter) = filter {
-        filter(a, &mut ret);
-    }
-
-    ret
-}
-
-pub fn decode<'a, 'b>(a: &'a Attachment, mut filter: Option<Filter<'b>>) -> Vec<u8> {
-    decode_helper(a, &mut filter)
+#[derive(Default)]
+pub struct DecodeOptions<'att> {
+    pub filter: Option<Filter<'att>>,
+    pub force_charset: Option<Charset>,
 }

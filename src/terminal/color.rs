@@ -34,7 +34,7 @@ use termion::color::{AnsiValue, Rgb as TermionRgb};
 ///
 /// # Examples
 ///
-/// ```
+/// ```no_run
 /// use meli::Color;
 ///
 /// // The default color.

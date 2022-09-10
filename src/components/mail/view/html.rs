@@ -33,7 +33,7 @@ pub struct HtmlView {
 impl HtmlView {
     pub fn new(body: &Attachment, context: &mut Context) -> Self {
         let id = ComponentId::new_v4();
-        let bytes: Vec<u8> = decode_rec(body, None);
+        let bytes: Vec<u8> = body.decode_rec(Default::default());
 
         let settings = &context.settings;
         let mut display_text = if let Some(filter_invocation) = settings.pager.html_filter.as_ref()

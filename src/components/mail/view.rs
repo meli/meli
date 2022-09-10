@@ -733,7 +733,7 @@ impl MailView {
                     inner: Box::new(a.clone()),
                 });
             } else if a.content_type().is_text_html() {
-                let bytes = decode(a, None);
+                let bytes = a.decode(Default::default());
                 let filter_invocation =
                     mailbox_settings!(context[coordinates.0][&coordinates.1].pager.html_filter)
                         .as_ref()
@@ -788,7 +788,7 @@ impl MailView {
                     }
                 }
             } else if a.is_text() {
-                let bytes = decode(a, None);
+                let bytes = a.decode(Default::default());
                 acc.push(AttachmentDisplay::InlineText {
                     inner: Box::new(a.clone()),
                     comment: None,
@@ -810,7 +810,7 @@ impl MailView {
                         if let Some(text_attachment_pos) =
                             parts.iter().position(|a| a.content_type == "text/plain")
                         {
-                            let bytes = decode(&parts[text_attachment_pos], None);
+                            let bytes = &parts[text_attachment_pos].decode(Default::default());
                             if bytes.trim().is_empty()
                                 && mailbox_settings!(
                                     context[coordinates.0][&coordinates.1]
@@ -2211,7 +2211,7 @@ impl Component for MailView {
                                     let filename = attachment.filename();
                                     if let Ok(command) = query_default_app(&attachment_type) {
                                         let p = create_temp_file(
-                                            &decode(attachment, None),
+                                            &attachment.decode(Default::default()),
                                             filename.as_deref(),
                                             None,
                                             true,
@@ -2466,7 +2466,7 @@ impl Component for MailView {
                             path.push(u.as_hyphenated().to_string());
                         }
                     }
-                    match save_attachment(&path, &decode(u, None)) {
+                    match save_attachment(&path, &u.decode(Default::default())) {
                         Err(err) => {
                             context.replies.push_back(UIEvent::Notification(
                                 Some(format!("Failed to create file at {}", path.display())),

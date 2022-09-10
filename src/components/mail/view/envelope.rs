@@ -83,9 +83,8 @@ impl EnvelopeView {
     /// Returns the string to be displayed in the Viewer
     fn attachment_to_text(&self, body: &Attachment, context: &mut Context) -> String {
         let finder = LinkFinder::new();
-        let body_text = String::from_utf8_lossy(&decode_rec(
-            body,
-            Some(Box::new(|a: &Attachment, v: &mut Vec<u8>| {
+        let body_text = String::from_utf8_lossy(&body.decode_rec(DecodeOptions {
+            filter: Some(Box::new(|a: &Attachment, v: &mut Vec<u8>| {
                 if a.content_type().is_text_html() {
                     let settings = &context.settings;
                     if let Some(filter_invocation) = settings.pager.html_filter.as_ref() {
@@ -123,7 +122,8 @@ impl EnvelopeView {
                     }
                 }
             })),
-        ))
+            ..Default::default()
+        }))
         .into_owned();
         match self.mode {
             ViewMode::Normal | ViewMode::Subview => {
@@ -370,7 +370,8 @@ impl Component for EnvelopeView {
                             self.mode = ViewMode::Subview;
                             let colors = crate::conf::value(context, "mail.view.body");
                             self.subview = Some(Box::new(Pager::from_string(
-                                String::from_utf8_lossy(&decode_rec(u, None)).to_string(),
+                                String::from_utf8_lossy(&u.decode_rec(Default::default()))
+                                    .to_string(),
                                 Some(context),
                                 None,
                                 None,
@@ -397,7 +398,7 @@ impl Component for EnvelopeView {
                             let filename = u.filename();
                             if let Ok(command) = query_default_app(&attachment_type) {
                                 let p = create_temp_file(
-                                    &decode(u, None),
+                                    &u.decode(Default::default()),
                                     filename.as_deref(),
                                     None,
                                     true,

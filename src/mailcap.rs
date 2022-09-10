@@ -23,7 +23,6 @@
  */
 use crate::state::Context;
 use crate::types::{create_temp_file, ForkType, UIEvent};
-use melib::attachments::decode;
 use melib::text_processing::GlobMatch;
 use melib::{email::Attachment, MeliError, Result};
 use std::collections::HashMap;
@@ -159,7 +158,8 @@ impl MailcapEntry {
                     .map(|arg| match *arg {
                         "%s" => {
                             needs_stdin = false;
-                            let _f = create_temp_file(&decode(a, None), None, None, true);
+                            let _f =
+                                create_temp_file(&a.decode(Default::default()), None, None, true);
                             let p = _f.path().display().to_string();
                             f = Some(_f);
                             p
@@ -191,7 +191,11 @@ impl MailcapEntry {
                             .stdout(Stdio::piped())
                             .spawn()?;
 
-                        child.stdin.as_mut().unwrap().write_all(&decode(a, None))?;
+                        child
+                            .stdin
+                            .as_mut()
+                            .unwrap()
+                            .write_all(&a.decode(Default::default()))?;
                         child.wait_with_output()?.stdout
                     } else {
                         let child = Command::new("sh")
@@ -221,7 +225,11 @@ impl MailcapEntry {
                         .stdout(Stdio::inherit())
                         .spawn()?;
 
-                    child.stdin.as_mut().unwrap().write_all(&decode(a, None))?;
+                    child
+                        .stdin
+                        .as_mut()
+                        .unwrap()
+                        .write_all(&a.decode(Default::default()))?;
                     debug!(child.wait_with_output()?.stdout);
                 } else {
                     let child = Command::new("sh")
