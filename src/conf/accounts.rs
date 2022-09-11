@@ -489,6 +489,31 @@ impl Account {
                     .unwrap();
             }
         }
+
+        #[cfg(feature = "sqlite3")]
+        if settings.conf.search_backend == crate::conf::SearchBackend::Sqlite3 {
+            let db_path = match crate::sqlite3::db_path() {
+                Err(err) => {
+                    sender
+                        .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
+                            StatusEvent::DisplayMessage(format!("Error with setting up an sqlite3 search database for account `{}`: {}", name, err))
+                        )))
+                        .unwrap();
+                    None
+                }
+                Ok(path) => Some(path),
+            };
+            if let Some(db_path) = db_path {
+                if !db_path.exists() {
+                    sender
+                        .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
+                            StatusEvent::DisplayMessage(format!("An sqlite3 search database for account `{}` seems to be missing, a new one must be created with the `reindex` command.", name))
+                        )))
+                        .unwrap();
+                }
+            }
+        }
+
         Ok(Account {
             hash,
             name,

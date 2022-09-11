@@ -725,7 +725,12 @@ impl<'de> Deserialize<'de> for SearchBackend {
         let s = <String>::deserialize(deserializer)?;
         match s.as_str() {
             #[cfg(feature = "sqlite3")]
-            sqlite3 if sqlite3.eq_ignore_ascii_case("sqlite3") => Ok(SearchBackend::Sqlite3),
+            sqlite3
+                if sqlite3.eq_ignore_ascii_case("sqlite3")
+                    || sqlite3.eq_ignore_ascii_case("sqlite") =>
+            {
+                Ok(SearchBackend::Sqlite3)
+            }
             none if none.eq_ignore_ascii_case("none")
                 || none.eq_ignore_ascii_case("nothing")
                 || none.is_empty() =>
