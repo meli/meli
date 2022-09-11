@@ -39,6 +39,7 @@ use super::command::Action;
 use super::jobs::{JobExecutor, JobId};
 use super::terminal::*;
 use crate::components::{Component, ComponentId, ScrollUpdate};
+use std::borrow::Cow;
 use std::sync::Arc;
 
 use melib::backends::{AccountHash, BackendEvent, MailboxHash};
@@ -134,7 +135,7 @@ pub enum UIEvent {
     MailboxUpdate((AccountHash, MailboxHash)), // (account_idx, mailbox_idx)
     MailboxDelete((AccountHash, MailboxHash)),
     MailboxCreate((AccountHash, MailboxHash)),
-    AccountStatusChange(AccountHash),
+    AccountStatusChange(AccountHash, Option<Cow<'static, str>>),
     ComponentKill(Uuid),
     BackendEvent(AccountHash, BackendEvent),
     StartupCheck(MailboxHash),

@@ -236,6 +236,10 @@ fn unlink_attrs<'k, 't: 'k>(theme: &'t Theme, mut key: &'k str) -> Attr {
 
 const DEFAULT_KEYS: &[&str] = &[
     "theme_default",
+    "text.normal",
+    "text.unfocused",
+    "text.error",
+    "text.highlight",
     "error_message",
     "email_header",
     "highlight",
@@ -1295,11 +1299,22 @@ impl Default for Themes {
                 light.insert($key.into(), ThemeAttributeInner::default());
                 dark.insert($key.into(), ThemeAttributeInner::default());
             };
+            ($key:literal, $copy_from:literal) => {
+                light.insert($key.into(), light[$copy_from].clone());
+                dark.insert($key.into(), dark[$copy_from].clone());
+            };
         }
         add!("theme_default", dark = { fg: Color::Default, bg: Color::Default, attrs: Attr::DEFAULT }, light = { fg: Color::Default, bg: Color::Default, attrs: Attr::DEFAULT });
 
-        add!("error_message", dark = { fg: Color::Byte(243), bg: Color::Default, attrs: Attr::DEFAULT }, light = { fg: Color::Byte(243), bg: Color::Default, attrs: Attr::DEFAULT });
+        add!("error_message", dark = { fg: Color::Red, bg: "theme_default", attrs: "theme_default" }, light = { fg: Color::Red, bg: "theme_default", attrs: "theme_default" });
 
+        /* text palettes */
+        add!("text.normal", "theme_default");
+        add!("text.unfocused", dark = { fg: Color::GREY, bg: "theme_default", attrs: Attr::DIM }, light = { fg: Color::GREY, bg: "theme_default", attrs: Attr::DIM });
+        add!("text.error", "error_message");
+        add!("text.highlight", dark = { fg: Color::Blue, bg: "theme_default", attrs: Attr::REVERSE }, light = { fg: Color::Blue, bg: "theme_default", attrs: Attr::REVERSE });
+
+        /* rest */
         add!("email_header", dark = { fg: Color::Byte(33), bg: Color::Default, attrs: Attr::DEFAULT }, light = { fg: Color::Byte(33), bg: Color::Default, attrs: Attr::DEFAULT });
 
         add!("highlight", dark = { fg: Color::Byte(240), bg: Color::Byte(237), attrs: Attr::BOLD }, light = { fg: Color::Byte(240), bg: Color::Byte(237), attrs: Attr::BOLD });

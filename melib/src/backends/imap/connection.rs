@@ -115,12 +115,19 @@ pub struct ImapConnection {
 impl ImapStream {
     pub async fn new_connection(
         server_conf: &ImapServerConf,
+        uid_store: &UIDStore,
     ) -> Result<(Capabilities, ImapStream)> {
         use std::net::TcpStream;
         let path = &server_conf.server_hostname;
 
         let cmd_id = 1;
         let stream = if server_conf.use_tls {
+            (uid_store.event_consumer)(
+                uid_store.account_hash,
+                crate::backends::BackendEvent::AccountStateChange {
+                    message: "Establishing TLS connection.".into(),
+                },
+            );
             let mut connector = TlsConnector::builder();
             if server_conf.danger_accept_invalid_certs {
                 connector.danger_accept_invalid_certs(true);
@@ -312,6 +319,12 @@ impl ImapStream {
             return Ok((Default::default(), ret));
         }
 
+        (uid_store.event_consumer)(
+            uid_store.account_hash,
+            crate::backends::BackendEvent::AccountStateChange {
+                message: "Negotiating server capabilities.".into(),
+            },
+        );
         ret.send_command(b"CAPABILITY").await?;
         ret.read_response(&mut res).await?;
         let capabilities: std::result::Result<Vec<&[u8]>, _> = res
@@ -353,6 +366,12 @@ impl ImapStream {
             .set_err_kind(crate::error::ErrorKind::Authentication));
         }
 
+        (uid_store.event_consumer)(
+            uid_store.account_hash,
+            crate::backends::BackendEvent::AccountStateChange {
+                message: "Attempting authentication.".into(),
+            },
+        );
         match server_conf.protocol {
             ImapProtocol::IMAP {
                 extension_use: ImapExtensionUse { oauth2, .. },
@@ -601,7 +620,11 @@ impl ImapConnection {
                 if SystemTime::now().duration_since(time).unwrap_or_default()
                     >= IMAP_PROTOCOL_TIMEOUT
                 {
-                    let err = MeliError::new("Connection timed out").set_kind(ErrorKind::Timeout);
+                    let err = MeliError::new(format!(
+                        "Connection timed out after {} seconds",
+                        IMAP_PROTOCOL_TIMEOUT.as_secs()
+                    ))
+                    .set_kind(ErrorKind::Timeout);
                     *status = Err(err.clone());
                     self.stream = Err(err);
                 }
@@ -624,7 +647,7 @@ impl ImapConnection {
                     return Ok(());
                 }
             }
-            let new_stream = ImapStream::new_connection(&self.server_conf).await;
+            let new_stream = ImapStream::new_connection(&self.server_conf, &self.uid_store).await;
             if let Err(err) = new_stream.as_ref() {
                 self.uid_store.is_online.lock().unwrap().1 = Err(err.clone());
             } else {

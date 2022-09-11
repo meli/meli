@@ -145,10 +145,16 @@ impl Context {
             }
             accounts[account_pos].watch();
 
-            replies.push_back(UIEvent::AccountStatusChange(accounts[account_pos].hash()));
+            replies.push_back(UIEvent::AccountStatusChange(
+                accounts[account_pos].hash(),
+                None,
+            ));
         }
         if ret.is_ok() != was_online {
-            replies.push_back(UIEvent::AccountStatusChange(accounts[account_pos].hash()));
+            replies.push_back(UIEvent::AccountStatusChange(
+                accounts[account_pos].hash(),
+                None,
+            ));
         }
         ret
     }
@@ -1013,6 +1019,10 @@ impl State {
                 self.rcv_event(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
                     description.to_string(),
                 )));
+                return;
+            }
+            UIEvent::BackendEvent(account_hash, BackendEvent::AccountStateChange { message }) => {
+                self.rcv_event(UIEvent::AccountStatusChange(account_hash, Some(message)));
                 return;
             }
             UIEvent::BackendEvent(_, BackendEvent::Refresh(refresh_event)) => {

@@ -206,7 +206,7 @@ impl MeliError {
 
 impl fmt::Display for MeliError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, "Summary: {}", self.summary)?;
+        writeln!(f, "{}", self.summary)?;
         if let Some(details) = self.details.as_ref() {
             write!(f, "{}", details)?;
         }

@@ -21,12 +21,14 @@
 
 use super::*;
 use crate::components::PageMovement;
+use std::borrow::Cow;
 
 #[derive(Debug)]
 pub struct OfflineListing {
     cursor_pos: (AccountHash, MailboxHash),
     _row_updates: SmallVec<[ThreadHash; 8]>,
     _selection: HashMap<ThreadHash, bool>,
+    messages: Vec<Cow<'static, str>>,
     dirty: bool,
     id: ComponentId,
 }
@@ -104,6 +106,7 @@ impl OfflineListing {
             cursor_pos,
             _row_updates: SmallVec::new(),
             _selection: HashMap::default(),
+            messages: vec![],
             dirty: true,
             id: ComponentId::new_v4(),
         })
@@ -117,26 +120,50 @@ impl Component for OfflineListing {
         }
         self.dirty = false;
         let theme_default = conf::value(context, "theme_default");
+        let text_unfocused = conf::value(context, "text.unfocused");
+        let error_message = conf::value(context, "error_message");
         clear_area(grid, area, theme_default);
         if let Err(err) = context.is_online(self.cursor_pos.0) {
             let (x, _) = write_string_to_grid(
                 "offline: ",
                 grid,
-                conf::value(context, "error_message").fg,
-                conf::value(context, "error_message").bg,
-                conf::value(context, "error_message").attrs,
+                error_message.fg,
+                error_message.bg,
+                error_message.attrs,
                 area,
                 None,
             );
             write_string_to_grid(
                 &err.to_string(),
                 grid,
-                Color::Red,
-                theme_default.bg,
-                theme_default.attrs,
+                error_message.fg,
+                error_message.bg,
+                error_message.attrs,
                 (set_x(upper_left!(area), x + 1), bottom_right!(area)),
                 None,
             );
+            if let Some(msg) = self.messages.last() {
+                write_string_to_grid(
+                    msg,
+                    grid,
+                    text_unfocused.fg,
+                    text_unfocused.bg,
+                    Attr::BOLD,
+                    (pos_inc((0, 1), upper_left!(area)), bottom_right!(area)),
+                    None,
+                );
+            }
+            for (i, msg) in self.messages.iter().rev().skip(1).enumerate() {
+                write_string_to_grid(
+                    msg,
+                    grid,
+                    text_unfocused.fg,
+                    text_unfocused.bg,
+                    text_unfocused.attrs,
+                    (pos_inc((0, 2 + i), upper_left!(area)), bottom_right!(area)),
+                    None,
+                );
+            }
         } else {
             let (_, mut y) = write_string_to_grid(
                 "loading...",
@@ -156,9 +183,9 @@ impl Component for OfflineListing {
                 write_string_to_grid(
                     &format!("{}: {:?}", job_id, j),
                     grid,
-                    theme_default.fg,
-                    theme_default.bg,
-                    theme_default.attrs,
+                    text_unfocused.fg,
+                    text_unfocused.bg,
+                    text_unfocused.attrs,
                     (set_y(upper_left!(area), y + 1), bottom_right!(area)),
                     None,
                 );
@@ -167,19 +194,26 @@ impl Component for OfflineListing {
 
             context
                 .replies
-                .push_back(UIEvent::AccountStatusChange(self.cursor_pos.0));
+                .push_back(UIEvent::AccountStatusChange(self.cursor_pos.0, None));
         }
         context.dirty_areas.push_back(area);
     }
+
     fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {
         match event {
-            UIEvent::AccountStatusChange(account_hash) if *account_hash == self.cursor_pos.0 => {
+            UIEvent::AccountStatusChange(account_hash, msg)
+                if *account_hash == self.cursor_pos.0 =>
+            {
+                if let Some(msg) = msg.clone() {
+                    self.messages.push(msg);
+                }
                 self.dirty = true
             }
             _ => {}
         }
         false
     }
+
     fn is_dirty(&self) -> bool {
         self.dirty
     }
@@ -191,6 +225,7 @@ impl Component for OfflineListing {
     fn id(&self) -> ComponentId {
         self.id
     }
+
     fn set_id(&mut self, id: ComponentId) {
         self.id = id;
     }

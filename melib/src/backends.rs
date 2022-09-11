@@ -57,18 +57,17 @@ use self::maildir::MaildirType;
 #[cfg(feature = "mbox_backend")]
 use self::mbox::MboxType;
 use super::email::{Envelope, EnvelopeHash, Flag};
+use futures::stream::Stream;
 use std::any::Any;
+use std::borrow::Cow;
 use std::collections::BTreeSet;
+use std::collections::HashMap;
 use std::fmt;
 use std::fmt::Debug;
-use std::ops::Deref;
-use std::sync::{Arc, RwLock};
-
-use futures::stream::Stream;
 use std::future::Future;
+use std::ops::Deref;
 use std::pin::Pin;
-
-use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
 
 #[macro_export]
 macro_rules! get_path_hash {
@@ -265,6 +264,9 @@ pub enum BackendEvent {
         level: crate::LoggingLevel,
     },
     Refresh(RefreshEvent),
+    AccountStateChange {
+        message: Cow<'static, str>,
+    },
     //Job(Box<Future<Output = Result<()>> + Send + 'static>)
 }
 

@@ -1612,6 +1612,7 @@ impl Account {
                         self.sender
                             .send(ThreadEvent::UIEvent(UIEvent::AccountStatusChange(
                                 self.hash,
+                                Some("Loaded mailboxes.".into()),
                             )))
                             .unwrap();
                         if let Err(err) = mailboxes.and_then(|mailboxes| self.init(mailboxes)) {
@@ -1730,7 +1731,7 @@ impl Account {
                     if let Ok(Some(is_online)) = handle.chan.try_recv() {
                         self.sender
                             .send(ThreadEvent::UIEvent(UIEvent::AccountStatusChange(
-                                self.hash,
+                                self.hash, None,
                             )))
                             .unwrap();
                         if is_online.is_ok() {
@@ -1785,7 +1786,7 @@ impl Account {
                                 self.is_online = Ok(());
                                 self.sender
                                     .send(ThreadEvent::UIEvent(UIEvent::AccountStatusChange(
-                                        self.hash,
+                                        self.hash, None,
                                     )))
                                     .unwrap();
                             }
@@ -1805,7 +1806,7 @@ impl Account {
                             self.is_online = Err(err);
                             self.sender
                                 .send(ThreadEvent::UIEvent(UIEvent::AccountStatusChange(
-                                    self.hash,
+                                    self.hash, None,
                                 )))
                                 .unwrap();
                         }

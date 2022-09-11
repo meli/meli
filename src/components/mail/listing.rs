@@ -703,13 +703,10 @@ impl Component for Listing {
 
         let account_hash = self.accounts[self.cursor_pos.0].hash;
         if right_component_width == total_cols {
-            if context.is_online(account_hash).is_err() {
-                match self.component {
-                    ListingComponent::Offline(_) => {}
-                    _ => {
-                        self.component = Offline(OfflineListing::new((account_hash, 0)));
-                    }
-                }
+            if context.is_online(account_hash).is_err()
+                && !matches!(self.component, ListingComponent::Offline(_))
+            {
+                self.component = Offline(OfflineListing::new((account_hash, 0)));
             }
 
             if let Some(s) = self.status.as_mut() {
@@ -725,13 +722,10 @@ impl Component for Listing {
                 (upper_left, (mid.saturating_sub(1), get_y(bottom_right))),
                 context,
             );
-            if context.is_online(account_hash).is_err() {
-                match self.component {
-                    ListingComponent::Offline(_) => {}
-                    _ => {
-                        self.component = Offline(OfflineListing::new((account_hash, 0)));
-                    }
-                }
+            if context.is_online(account_hash).is_err()
+                && !matches!(self.component, ListingComponent::Offline(_))
+            {
+                self.component = Offline(OfflineListing::new((account_hash, 0)));
             }
             if let Some(s) = self.status.as_mut() {
                 s.draw(grid, (set_x(upper_left, mid + 1), bottom_right), context);
@@ -776,7 +770,7 @@ impl Component for Listing {
                     );
                 }
             }
-            UIEvent::AccountStatusChange(account_hash) => {
+            UIEvent::AccountStatusChange(account_hash, msg) => {
                 let account_index: usize = context
                     .accounts
                     .get_index_of(account_hash)
@@ -821,11 +815,11 @@ impl Component for Listing {
                     self.menu_content.empty();
                     context
                         .replies
-                        .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
-                            self.get_status(context),
-                        )));
+                        .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(match msg {
+                            Some(msg) => format!("{} {}", self.get_status(context), msg),
+                            None => self.get_status(context),
+                        })));
                 }
-                return true;
             }
             UIEvent::MailboxDelete((account_hash, mailbox_hash))
             | UIEvent::MailboxCreate((account_hash, mailbox_hash)) => {
@@ -2348,8 +2342,7 @@ impl Listing {
                     let index_style =
                         mailbox_settings!(context[account_hash][mailbox_hash].listing.index_style);
                     self.component.set_style(*index_style);
-                } else {
-                    /* Set to dummy */
+                } else if !matches!(self.component, ListingComponent::Offline(_)) {
                     self.component = Offline(OfflineListing::new((account_hash, 0)));
                 }
                 self.status = None;
