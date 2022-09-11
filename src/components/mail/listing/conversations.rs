@@ -376,11 +376,17 @@ impl ListingTrait for ConversationsListing {
         self.row_updates.clear();
     }
 
-    fn highlight_line(&mut self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context) {
+    fn highlight_line(&mut self, grid: &mut CellBuffer, area: Area, row: usize, context: &Context) {
         if self.length == 0 {
             return;
         }
-        self.draw_rows(grid, area, context, idx);
+        let (upper_left, bottom_right) = area;
+        let rows = (get_y(bottom_right) - get_y(upper_left) + 1) / 3;
+        let area = (
+            set_y(upper_left, get_y(upper_left) + (3 * (row % rows))),
+            set_y(bottom_right, get_y(upper_left) + (3 * (row % rows) + 2)),
+        );
+        self.draw_rows(grid, area, context, row);
     }
 
     /// Draw the list of `Envelope`s.
@@ -985,7 +991,7 @@ impl Component for ConversationsListing {
         }
 
         let (upper_left, bottom_right) = area;
-        {
+        if !self.unfocused() {
             let mut area = area;
 
             if !self.filter_term.is_empty() {
