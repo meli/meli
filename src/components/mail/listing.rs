@@ -68,7 +68,7 @@ pub enum Focus {
     EntryFullscreen,
 }
 
-#[derive(Debug, Copy, PartialEq, Clone)]
+#[derive(Debug, Copy, PartialEq, Eq, Clone)]
 pub enum Modifier {
     SymmetricDifference,
     Union,
@@ -594,19 +594,19 @@ impl ListingComponent {
     }
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 enum ListingFocus {
     Menu,
     Mailbox,
 }
 
-#[derive(PartialEq, Copy, Clone, Debug)]
+#[derive(PartialEq, Eq, Copy, Clone, Debug)]
 enum MenuEntryCursor {
     Status,
     Mailbox(usize),
 }
 
-#[derive(PartialEq, Copy, Clone, Debug)]
+#[derive(PartialEq, Eq, Copy, Clone, Debug)]
 enum ShowMenuScrollbar {
     Never,
     True,

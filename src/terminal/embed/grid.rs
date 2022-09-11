@@ -179,7 +179,7 @@ impl EmbedTerminal {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 enum CodepointBuf {
     None,
     TwoCodepoints(u8),

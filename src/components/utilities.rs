@@ -1547,7 +1547,7 @@ impl Component for Tabbed {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RawBuffer {
     pub buf: CellBuffer,
     title: Option<String>,

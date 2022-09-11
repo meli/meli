@@ -697,7 +697,7 @@ impl ConversationsListing {
                     if !acc.is_empty() {
                         acc.push_str(", ");
                     }
-                    acc.push_str(&s);
+                    acc.push_str(s);
                     acc
                 })
         } else {

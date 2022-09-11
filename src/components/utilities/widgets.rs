@@ -26,7 +26,7 @@ use std::time::Duration;
 
 type AutoCompleteFn = Box<dyn Fn(&Context, &str) -> Vec<AutoCompleteEntry> + Send + Sync>;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 enum FormFocus {
     Fields,
     Buttons,
@@ -390,7 +390,7 @@ impl fmt::Display for Field {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum FormButtonActions {
     Accept,
     Reset,
@@ -870,7 +870,7 @@ where
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct AutoCompleteEntry {
     pub entry: String,
     pub description: String,
@@ -911,7 +911,7 @@ impl From<(String, String)> for AutoCompleteEntry {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct AutoComplete {
     entries: Vec<AutoCompleteEntry>,
     content: CellBuffer,

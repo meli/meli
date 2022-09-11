@@ -1204,11 +1204,11 @@ impl Account {
                 ),
                 melib::INFO,
             );
-            return Err(MeliError::new(format!(
+            Err(MeliError::new(format!(
                 "Message was stored in {} so that you can restore it manually.",
                 file.path.display()
             ))
-            .set_summary("Could not save in any mailbox"));
+            .set_summary("Could not save in any mailbox"))
         }
     }
 

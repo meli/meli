@@ -36,7 +36,7 @@ pub use rpc::*;
 pub const BACKEND_FN: i8 = 0;
 pub const BACKEND_OP_FN: i8 = 1;
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PluginKind {
     LongLived,
     Filter,

@@ -151,13 +151,14 @@ mod dbus {
                 '"' => ret.push_str("&quot;"),
                 _ => {
                     let i = c as u32;
-                    if (0x1 <= i && i <= 0x8)
-                        || (0xb <= i && i <= 0xc)
-                        || (0xe <= i && i <= 0x1f)
-                        || (0x7f <= i && i <= 0x84)
-                        || (0x86 <= i && i <= 0x9f)
+                    if (0x1..=0x8).contains(&i)
+                        || (0xb..=0xc).contains(&i)
+                        || (0xe..=0x1f).contains(&i)
+                        || (0x7f..=0x84).contains(&i)
+                        || (0x86..=0x9f).contains(&i)
                     {
-                        ret.push_str(&format!("&#{:x}%{:x};", i, i));
+                        use std::fmt::Write;
+                        let _ = write!(ret, "&#{:x}%{:x};", i, i);
                     } else {
                         ret.push(c);
                     }

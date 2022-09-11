@@ -25,7 +25,7 @@ use std::process::{Command, Stdio};
 
 use xdg_utils::query_default_app;
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 enum ViewMode {
     Normal,
     Url,
@@ -134,7 +134,7 @@ impl EnvelopeView {
                         .iter()
                         .enumerate()
                         .fold(t, |mut s, (idx, a)| {
-                            s.push_str(&format!("[{}] {}\n\n", idx, a));
+                            let _ = writeln!(s, "[{}] {}\n", idx, a);
                             s
                         });
                 }
@@ -161,7 +161,7 @@ impl EnvelopeView {
                         .iter()
                         .enumerate()
                         .fold(t, |mut s, (idx, a)| {
-                            s.push_str(&format!("[{}] {}\n\n", idx, a));
+                            let _ = writeln!(s, "[{}] {}\n", idx, a);
                             s
                         });
                 }

@@ -573,7 +573,7 @@ impl Settings {
     }
 }
 
-#[derive(Copy, Debug, Clone, Hash, PartialEq)]
+#[derive(Copy, Debug, Clone, Hash, PartialEq, Eq)]
 pub enum IndexStyle {
     Plain,
     Threaded,
@@ -703,7 +703,7 @@ impl Serialize for IndexStyle {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum SearchBackend {
     None,
     Auto,

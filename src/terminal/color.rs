@@ -456,7 +456,7 @@ impl<'de> Deserialize<'de> for Color {
 
 #[test]
 fn test_color_de() {
-    #[derive(Debug, Deserialize, PartialEq)]
+    #[derive(Debug, Deserialize, PartialEq, Eq)]
     struct V {
         k: Color,
     }

@@ -27,6 +27,7 @@ use melib::list_management;
 use melib::parser::BytesExt;
 use smallvec::SmallVec;
 use std::collections::HashSet;
+use std::fmt::Write as _;
 use std::io::Write;
 
 use std::convert::TryFrom;
@@ -44,7 +45,7 @@ pub use self::envelope::*;
 use linkify::LinkFinder;
 use xdg_utils::query_default_app;
 
-#[derive(PartialEq, Copy, Clone, Debug)]
+#[derive(PartialEq, Eq, Copy, Clone, Debug)]
 enum Source {
     Decoded,
     Raw,
@@ -530,7 +531,7 @@ impl MailView {
                     error,
                 } => {
                     if show_comments {
-                        acc.push_str(&format!("Failed to verify signature: {}.\n\n", error));
+                        let _ = writeln!(acc, "Failed to verify signature: {}.\n", error);
                     }
                     acc.push_str(&self.attachment_displays_to_text(
                         display,
@@ -559,7 +560,7 @@ impl MailView {
                 }
                 EncryptedPending { .. } => acc.push_str("Waiting for decryption result."),
                 EncryptedFailed { inner: _, error } => {
-                    acc.push_str(&format!("Decryption failed: {}.", &error))
+                    let _ = write!(acc, "Decryption failed: {}.", &error);
                 }
                 EncryptedSuccess {
                     inner: _,

@@ -105,7 +105,7 @@ impl HtmlView {
                     .iter()
                     .enumerate()
                     .fold(display_text, |mut s, (idx, a)| {
-                        s.push_str(&format!("[{}] {}\n\n\n", idx, a));
+                        let _ = writeln!(s, "[{}] {}\n\n", idx, a);
                         s
                     });
         }

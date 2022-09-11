@@ -66,7 +66,7 @@ pub enum PageMovement {
     End,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ScrollContext {
     shown_lines: usize,
     total_lines: usize,

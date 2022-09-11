@@ -36,6 +36,7 @@ use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use smallvec::SmallVec;
 use std::borrow::Cow;
 use std::collections::HashSet;
+use std::fmt::Write;
 
 #[inline(always)]
 pub fn value(context: &Context, key: &'static str) -> ThemeAttribute {
@@ -1240,26 +1241,28 @@ impl Themes {
             t => self.other_themes.get(t).unwrap_or(&self.dark),
         };
         let mut ret = String::new();
-        ret.push_str(&format!("[terminal.themes.{}]\n", key));
+        let _ = writeln!(ret, "[terminal.themes.{}]", key);
         if unlink {
             for k in theme.keys() {
-                ret.push_str(&format!(
-                    "\"{}\" = {{ fg = {}, bg = {}, attrs = {} }}\n",
+                let _ = writeln!(
+                    ret,
+                    "\"{}\" = {{ fg = {}, bg = {}, attrs = {} }}",
                     k,
                     toml::to_string(&unlink_fg(theme, &ColorField::Fg, k)).unwrap(),
                     toml::to_string(&unlink_bg(theme, &ColorField::Bg, k)).unwrap(),
                     toml::to_string(&unlink_attrs(theme, k)).unwrap(),
-                ));
+                );
             }
         } else {
             for k in theme.keys() {
-                ret.push_str(&format!(
-                    "\"{}\" = {{ fg = {}, bg = {}, attrs = {} }}\n",
+                let _ = writeln!(
+                    ret,
+                    "\"{}\" = {{ fg = {}, bg = {}, attrs = {} }}",
                     k,
                     toml::to_string(&theme[k].fg).unwrap(),
                     toml::to_string(&theme[k].bg).unwrap(),
                     toml::to_string(&theme[k].attrs).unwrap(),
-                ));
+                );
             }
         }
         ret

@@ -169,7 +169,7 @@ impl From<RefreshEvent> for UIEvent {
     }
 }
 
-#[derive(Debug, PartialEq, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum UIMode {
     Normal,
     Insert,

@@ -23,6 +23,7 @@ use super::*;
 use crate::components::PageMovement;
 use std::cmp;
 use std::convert::TryInto;
+use std::fmt::Write;
 
 macro_rules! row_attr {
     ($color_cache:expr, $even: expr, $unseen:expr, $highlighted:expr, $selected:expr  $(,)*) => {{
@@ -883,7 +884,7 @@ impl ThreadListing {
         });
         */
         if show_subject {
-            s.push_str(&format!("{:.85}", envelope.subject()));
+            let _ = write!(s, "{:.85}", envelope.subject());
         }
         s
     }

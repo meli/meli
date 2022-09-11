@@ -170,7 +170,7 @@ pub fn center_area(area: Area, (width, height): (usize, usize)) -> Area {
     )
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Alignment {
     /// Stretch to fill all space if possible, center if no meaningful way to stretch.
     Fill,

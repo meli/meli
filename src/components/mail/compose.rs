@@ -41,7 +41,7 @@ mod gpg;
 mod edit_attachments;
 use edit_attachments::*;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 enum Cursor {
     Headers,
     Body,
@@ -227,7 +227,7 @@ impl Composer {
             )
             .as_ref()
             .map(|v| v.iter().map(String::as_str).collect::<Vec<&str>>())
-            .unwrap_or(vec![]);
+            .unwrap_or_default();
             let subject = subject
                 .as_ref()
                 .strip_prefixes_from_list(if prefix_list.is_empty() {
@@ -242,7 +242,7 @@ impl Composer {
             if !subject.starts_with(prefix) {
                 format!("{prefix} {subject}", prefix = prefix, subject = subject)
             } else {
-                subject.to_string()
+                subject
             }
         };
         ret.draft.set_header("Subject", subject);
@@ -1114,7 +1114,7 @@ impl Component for Composer {
                                     Some(Box::new(move |id: ComponentId, results: &[char]| {
                                         Some(UIEvent::FinishedUIDialog(
                                                 id,
-                                                Box::new(results.get(0).cloned().unwrap_or('c')),
+                                                Box::new(results.first().cloned().unwrap_or('c')),
                                         ))
                                     })),
                                     context,
@@ -2044,7 +2044,7 @@ impl Component for Composer {
                 Some(Box::new(move |id: ComponentId, results: &[char]| {
                     Some(UIEvent::FinishedUIDialog(
                         id,
-                        Box::new(results.get(0).copied().unwrap_or('n')),
+                        Box::new(results.first().copied().unwrap_or('n')),
                     ))
                 })),
                 context,
@@ -2093,7 +2093,7 @@ impl Component for Composer {
                 Some(Box::new(move |id: ComponentId, results: &[char]| {
                     Some(UIEvent::FinishedUIDialog(
                         id,
-                        Box::new(results.get(0).copied().unwrap_or('n')),
+                        Box::new(results.first().copied().unwrap_or('n')),
                     ))
                 })),
                 context,

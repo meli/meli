@@ -139,7 +139,7 @@ impl PartialEq<Key> for &Key {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Eq)]
 /// Keep track of whether we're accepting normal user input or a pasted string.
 enum InputMode {
     Normal,
@@ -359,7 +359,7 @@ impl Serialize for Key {
 
 #[test]
 fn test_key_serde() {
-    #[derive(Debug, Deserialize, PartialEq)]
+    #[derive(Debug, Deserialize, PartialEq, Eq)]
     struct V {
         k: Key,
     }

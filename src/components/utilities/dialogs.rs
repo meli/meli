@@ -27,7 +27,7 @@ const OK_LENGTH: usize = "OK".len();
 const CANCEL_OFFSET: usize = "OK    ".len();
 const CANCEL_LENGTH: usize = "Cancel".len();
 
-#[derive(Debug, Copy, PartialEq, Clone)]
+#[derive(Debug, Copy, PartialEq, Eq, Clone)]
 enum SelectorCursor {
     Unfocused,
     /// Cursor is at an entry

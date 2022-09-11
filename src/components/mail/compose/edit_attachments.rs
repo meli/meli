@@ -21,7 +21,7 @@
 
 use super::*;
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum EditAttachmentCursor {
     AttachmentNo(usize),
     Buttons,

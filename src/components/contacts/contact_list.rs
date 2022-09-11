@@ -25,7 +25,7 @@ use melib::CardId;
 
 use std::cmp;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 enum ViewMode {
     List,
     View(ComponentId),
