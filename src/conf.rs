@@ -762,15 +762,26 @@ pub fn create_config_file(p: &Path) -> Result<()> {
         .write(true)
         .create_new(true)
         .open(p)
-        .expect("Could not create config file.");
+        .chain_err_summary(|| format!("Cannot create configuration file in {}", p.display()))?;
     file.write_all(include_bytes!("../docs/samples/sample-config.toml"))
-        .expect("Could not write to config file.");
+        .and_then(|()| file.flush())
+        .chain_err_summary(|| format!("Could not write to configuration file  {}", p.display()))?;
     println!("Written example configuration to {}", p.display());
-    let metadata = file.metadata()?;
-    let mut permissions = metadata.permissions();
+    let set_permissions = |file: std::fs::File| -> Result<()> {
+        let metadata = file.metadata()?;
+        let mut permissions = metadata.permissions();
 
-    permissions.set_mode(0o600); // Read/write for owner only.
-    file.set_permissions(permissions)?;
+        permissions.set_mode(0o600); // Read/write for owner only.
+        file.set_permissions(permissions)?;
+        Ok(())
+    };
+    if let Err(err) = set_permissions(file) {
+        println!(
+            "Warning: Could not set permissions of {} to 0o600: {}",
+            p.display(),
+            err
+        );
+    }
     Ok(())
 }
 
