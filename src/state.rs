@@ -97,7 +97,7 @@ impl InputHandler {
 /// A context container for loaded settings, accounts, UI changes, etc.
 pub struct Context {
     pub accounts: IndexMap<AccountHash, Account>,
-    pub settings: Settings,
+    pub settings: Box<Settings>,
 
     /// Areas of the screen that must be redrawn in the next render
     pub dirty_areas: VecDeque<Area>,
@@ -168,13 +168,13 @@ impl Context {
 /// A State object to manage and own components and components of the UI. `State` is responsible for
 /// managing the terminal and interfacing with `melib`
 pub struct State {
-    screen: Screen,
+    screen: Box<Screen>,
     draw_rate_limit: RateLimit,
     child: Option<ForkType>,
     pub mode: UIMode,
     overlay: Vec<Box<dyn Component>>,
     components: Vec<Box<dyn Component>>,
-    pub context: Context,
+    pub context: Box<Context>,
     timer: thread::JoinHandle<()>,
 
     display_messages: SmallVec<[DisplayMessage; 8]>,
@@ -228,11 +228,11 @@ impl State {
         let input_thread_pipe = nix::unistd::pipe()
             .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send + Sync + 'static>)?;
         let backends = Backends::new();
-        let settings = if let Some(settings) = settings {
+        let settings = Box::new(if let Some(settings) = settings {
             settings
         } else {
             Settings::new()?
-        };
+        });
         /*
         let mut plugin_manager = PluginManager::new();
         for (_, p) in settings.plugins.clone() {
@@ -307,7 +307,7 @@ impl State {
         let working = Arc::new(());
         let control = Arc::downgrade(&working);
         let mut s = State {
-            screen: Screen {
+            screen: Box::new(Screen {
                 cols,
                 rows,
                 grid: CellBuffer::new(cols, rows, Cell::with_char(' ')),
@@ -319,7 +319,7 @@ impl State {
                 } else {
                     Screen::draw_horizontal_segment_no_color
                 },
-            },
+            }),
             child: None,
             mode: UIMode::Normal,
             components: Vec::with_capacity(8),
@@ -333,7 +333,7 @@ impl State {
             display_messages_dirty: false,
             display_messages_initialised: false,
             display_messages_area: ((0, 0), (0, 0)),
-            context: Context {
+            context: Box::new(Context {
                 accounts,
                 settings,
                 dirty_areas: VecDeque::with_capacity(5),
@@ -351,7 +351,7 @@ impl State {
                 },
                 sender,
                 receiver,
-            },
+            }),
         };
         if s.context.settings.terminal.ascii_drawing {
             s.screen.grid.set_ascii_drawing(true);
@@ -395,7 +395,7 @@ impl State {
             }
             let Context {
                 ref mut accounts, ..
-            } = &mut self.context;
+            } = &mut *self.context;
 
             if let Some(notification) = accounts[&account_hash].reload(event, mailbox_hash) {
                 if let UIEvent::Notification(_, _, _) = notification {
@@ -948,10 +948,10 @@ impl State {
                             if toml::Value::try_from(&new_settings) == toml::Value::try_from(&self.context.settings) {
                                 return Err("No changes detected.".into());
                             }
-                            Ok(new_settings)
+                            Ok(Box::new(new_settings))
                         }) {
                             Ok(new_settings) => {
-                                let old_settings = Box::new(std::mem::replace(&mut self.context.settings, new_settings));
+                                let old_settings = std::mem::replace(&mut self.context.settings, new_settings);
                                 self.context.replies.push_back(UIEvent::ConfigReload {
                                     old_settings
                                 });

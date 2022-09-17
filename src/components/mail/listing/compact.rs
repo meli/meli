@@ -188,7 +188,7 @@ pub struct CompactListing {
     force_draw: bool,
     /// If `self.view` exists or not.
     focus: Focus,
-    view: ThreadView,
+    view: Box<ThreadView>,
     row_updates: SmallVec<[ThreadHash; 8]>,
     color_cache: ColorCache,
 
@@ -307,7 +307,7 @@ impl MailListingTrait for CompactListing {
         } else if self.unfocused() {
             let thread = self.get_thread_under_cursor(self.cursor_pos.2);
 
-            self.view = ThreadView::new(self.new_cursor_pos, thread, None, context);
+            self.view = Box::new(ThreadView::new(self.new_cursor_pos, thread, None, context));
         }
     }
 
@@ -491,7 +491,7 @@ impl ListingTrait for CompactListing {
     fn set_coordinates(&mut self, coordinates: (AccountHash, MailboxHash)) {
         self.new_cursor_pos = (coordinates.0, coordinates.1, 0);
         self.focus = Focus::None;
-        self.view = ThreadView::default();
+        self.view = Box::new(ThreadView::default());
         self.filtered_selection.clear();
         self.filtered_order.clear();
         self.filter_term.clear();
@@ -897,7 +897,7 @@ impl CompactListing {
             rows: vec![],
             dirty: true,
             force_draw: true,
-            view: ThreadView::default(),
+            view: Box::new(ThreadView::default()),
             color_cache: ColorCache::default(),
             movement: None,
             modifier_active: false,
@@ -1785,7 +1785,7 @@ impl Component for CompactListing {
                             || shortcut!(k == shortcuts[Listing::DESCRIPTION]["focus_right"])) =>
                 {
                     let thread = self.get_thread_under_cursor(self.cursor_pos.2);
-                    self.view = ThreadView::new(self.cursor_pos, thread, None, context);
+                    self.view = Box::new(ThreadView::new(self.cursor_pos, thread, None, context));
                     self.set_focus(Focus::Entry, context);
                     return true;
                 }

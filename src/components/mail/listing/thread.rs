@@ -131,7 +131,7 @@ pub struct ThreadListing {
     /// If `self.view` is focused or not.
     focus: Focus,
     initialised: bool,
-    view: Option<MailView>,
+    view: Option<Box<MailView>>,
     movement: Option<PageMovement>,
     id: ComponentId,
 }
@@ -773,7 +773,7 @@ impl ListingTrait for ThreadListing {
                 if let Some(ref mut v) = self.view {
                     v.update(coordinates, context);
                 } else {
-                    self.view = Some(MailView::new(coordinates, None, None, context));
+                    self.view = Some(Box::new(MailView::new(coordinates, None, None, context)));
                 }
 
                 if let Some(ref mut s) = self.view {
@@ -1239,7 +1239,7 @@ impl Component for ThreadListing {
             if let Some(ref mut v) = self.view {
                 v.update(coordinates, context);
             } else {
-                self.view = Some(MailView::new(coordinates, None, None, context));
+                self.view = Some(Box::new(MailView::new(coordinates, None, None, context)));
             }
 
             if let Some(v) = self.view.as_mut() {

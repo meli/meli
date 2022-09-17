@@ -463,6 +463,7 @@ pub mod screen {
     use termion::{clear, cursor};
     pub type StateStdout =
         termion::screen::AlternateScreen<termion::raw::RawTerminal<BufWriter<std::io::Stdout>>>;
+
     pub struct Screen {
         pub cols: usize,
         pub rows: usize,

@@ -84,9 +84,9 @@ impl Default for Modifier {
 
 #[derive(Debug, Default, Clone)]
 pub struct DataColumns {
-    pub columns: [CellBuffer; 12],
+    pub columns: Box<[CellBuffer; 12]>,
     pub widths: [usize; 12], // widths of columns calculated in first draw and after size changes
-    pub segment_tree: [SegmentTree; 12],
+    pub segment_tree: Box<[SegmentTree; 12]>,
 }
 
 #[derive(Debug, Default)]
