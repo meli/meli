@@ -233,9 +233,7 @@ fn year_to_secs(year: i64, is_leap: &mut bool) -> std::result::Result<i64, ()> {
     let cycles = (year - 100) / 400;
     let centuries;
     let mut leaps;
-    let mut rem;
-
-    rem = (year - 100) % 400;
+    let mut rem = (year - 100) % 400;
 
     if rem == 0 {
         *is_leap = true;

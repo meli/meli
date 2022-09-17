@@ -423,10 +423,10 @@ impl SmtpConnection {
                 ref mut auth_type, ..
             } = ret.server_conf.auth
             {
-                for l in pre_auth_extensions_reply
+                if let Some(l) = pre_auth_extensions_reply
                     .lines
                     .iter()
-                    .filter(|l| l.starts_with("AUTH"))
+                    .find(|l| l.starts_with("AUTH"))
                 {
                     let l = l["AUTH ".len()..].trim();
                     for _type in l.split_whitespace() {
@@ -436,7 +436,6 @@ impl SmtpConnection {
                             auth_type.login = true;
                         }
                     }
-                    break;
                 }
             }
         }
@@ -661,9 +660,9 @@ impl SmtpConnection {
         //the client tries to send the same address again) or temporary (i.e., the address might
         //be accepted if the client tries again later).
         for addr in tos
-            .into_iter()
-            .chain(envelope.cc().into_iter())
-            .chain(envelope.bcc().into_iter())
+            .iter()
+            .chain(envelope.cc().iter())
+            .chain(envelope.bcc().iter())
         {
             current_command.clear();
             current_command.push(b"RCPT TO:<");
@@ -900,11 +899,26 @@ impl ReplyCode {
 
     fn is_err(&self) -> bool {
         use ReplyCode::*;
-        match self {
-            _421 | _450 | _451 | _452 | _455 | _500 | _501 | _502 | _503 | _504 | _535 | _550
-            | _551 | _552 | _553 | _554 | _555 | _530 => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            _421 | _450
+                | _451
+                | _452
+                | _455
+                | _500
+                | _501
+                | _502
+                | _503
+                | _504
+                | _535
+                | _550
+                | _551
+                | _552
+                | _553
+                | _554
+                | _555
+                | _530
+        )
     }
 }
 

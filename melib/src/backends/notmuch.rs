@@ -102,7 +102,7 @@ impl DbConnection {
             *self.revision_uuid.read().unwrap(),
             new_revision_uuid
         );
-        let query: Query = Query::new(&self, &query_str)?;
+        let query: Query = Query::new(self, &query_str)?;
         let iter = query.search()?;
         let mailbox_index_lck = mailbox_index.write().unwrap();
         let mailboxes_lck = mailboxes.read().unwrap();
@@ -156,7 +156,7 @@ impl DbConnection {
         }
         drop(query);
         index.write().unwrap().retain(|&env_hash, msg_id| {
-            if Message::find_message(&self, &msg_id).is_err() {
+            if Message::find_message(self, msg_id).is_err() {
                 if let Some(mailbox_hashes) = mailbox_index_lck.get(&env_hash) {
                     for &mailbox_hash in mailbox_hashes {
                         let m = &mailboxes_lck[&mailbox_hash];
@@ -224,7 +224,7 @@ pub struct NotmuchDb {
     mailbox_index: Arc<RwLock<HashMap<EnvelopeHash, SmallVec<[MailboxHash; 16]>>>>,
     collection: Collection,
     path: PathBuf,
-    account_name: Arc<String>,
+    _account_name: Arc<String>,
     account_hash: AccountHash,
     event_consumer: BackendEventConsumer,
     save_messages_to: Option<PathBuf>,
@@ -408,7 +408,7 @@ impl NotmuchDb {
 
             mailboxes: Arc::new(RwLock::new(mailboxes)),
             save_messages_to: None,
-            account_name: Arc::new(s.name().to_string()),
+            _account_name: Arc::new(s.name().to_string()),
             account_hash,
             event_consumer,
         }))
@@ -694,7 +694,7 @@ impl MailBackend for NotmuchDb {
                             index.clone(),
                             mailbox_index.clone(),
                             collection.tag_index.clone(),
-                            account_hash.clone(),
+                            account_hash,
                             event_consumer.clone(),
                             new_revision_uuid,
                         )?;
@@ -728,7 +728,6 @@ impl MailBackend for NotmuchDb {
             hash,
             index: self.index.clone(),
             bytes: None,
-            collection: self.collection.clone(),
         }))
     }
 
@@ -932,7 +931,6 @@ impl MailBackend for NotmuchDb {
 struct NotmuchOp {
     hash: EnvelopeHash,
     index: Arc<RwLock<HashMap<EnvelopeHash, CString>>>,
-    collection: Collection,
     database: Arc<DbConnection>,
     bytes: Option<Vec<u8>>,
     #[allow(dead_code)]
@@ -1061,7 +1059,7 @@ impl MelibQueryToNotmuchQuery for crate::search::Query {
                         ret.push(c);
                     }
                 }
-                ret.push_str("\"");
+                ret.push('"');
             }
             To(s) | Cc(s) | Bcc(s) => {
                 ret.push_str("to:\"");
@@ -1072,7 +1070,7 @@ impl MelibQueryToNotmuchQuery for crate::search::Query {
                         ret.push(c);
                     }
                 }
-                ret.push_str("\"");
+                ret.push('"');
             }
             InReplyTo(_s) | References(_s) | AllAddresses(_s) => {}
             /* * * * */
@@ -1085,7 +1083,7 @@ impl MelibQueryToNotmuchQuery for crate::search::Query {
                         ret.push(c);
                     }
                 }
-                ret.push_str("\"");
+                ret.push('"');
             }
             Subject(s) => {
                 ret.push_str("subject:\"");
@@ -1096,10 +1094,10 @@ impl MelibQueryToNotmuchQuery for crate::search::Query {
                         ret.push(c);
                     }
                 }
-                ret.push_str("\"");
+                ret.push('"');
             }
             AllText(s) => {
-                ret.push_str("\"");
+                ret.push('"');
                 for c in s.chars() {
                     if c == '"' {
                         ret.push_str("\\\"");
@@ -1107,7 +1105,7 @@ impl MelibQueryToNotmuchQuery for crate::search::Query {
                         ret.push(c);
                     }
                 }
-                ret.push_str("\"");
+                ret.push('"');
             }
             /* * * * */
             Flags(v) => {

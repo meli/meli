@@ -111,7 +111,7 @@ impl Read for Data {
         if result >= 0 {
             Ok(result as usize)
         } else {
-            Err(io::Error::last_os_error().into())
+            Err(io::Error::last_os_error())
         }
     }
 }
@@ -126,7 +126,7 @@ impl Write for Data {
         if result >= 0 {
             Ok(result as usize)
         } else {
-            Err(io::Error::last_os_error().into())
+            Err(io::Error::last_os_error())
         }
     }
 
@@ -149,7 +149,7 @@ impl Seek for Data {
         if result >= 0 {
             Ok(result as u64)
         } else {
-            Err(io::Error::last_os_error().into())
+            Err(io::Error::last_os_error())
         }
     }
 }

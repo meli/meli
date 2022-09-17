@@ -202,23 +202,19 @@ impl ToggleFlag {
         ToggleFlag::Unset == *self
     }
     pub fn is_internal(&self) -> bool {
-        if let ToggleFlag::InternalVal(_) = *self {
-            true
-        } else {
-            false
-        }
+        matches!(self, ToggleFlag::InternalVal(_))
     }
 
     pub fn is_ask(&self) -> bool {
-        *self == ToggleFlag::Ask
+        matches!(self, ToggleFlag::Ask)
     }
 
     pub fn is_false(&self) -> bool {
-        ToggleFlag::False == *self || ToggleFlag::InternalVal(false) == *self
+        matches!(self, ToggleFlag::False | ToggleFlag::InternalVal(false))
     }
 
     pub fn is_true(&self) -> bool {
-        ToggleFlag::True == *self || ToggleFlag::InternalVal(true) == *self
+        matches!(self, ToggleFlag::True | ToggleFlag::InternalVal(true))
     }
 }
 

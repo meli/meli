@@ -77,10 +77,7 @@ impl Truncate for &str {
 
         extern crate unicode_segmentation;
         use unicode_segmentation::UnicodeSegmentation;
-        if let Some((first, _)) = UnicodeSegmentation::grapheme_indices(*self, true)
-            .skip(skip_len)
-            .next()
-        {
+        if let Some((first, _)) = UnicodeSegmentation::grapheme_indices(*self, true).nth(skip_len) {
             &self[first..]
         } else {
             self
@@ -95,10 +92,7 @@ impl Truncate for &str {
 
         extern crate unicode_segmentation;
         use unicode_segmentation::UnicodeSegmentation;
-        if let Some((first, _)) = UnicodeSegmentation::grapheme_indices(*self, true)
-            .skip(skip_len)
-            .next()
-        {
+        if let Some((first, _)) = UnicodeSegmentation::grapheme_indices(*self, true).nth(skip_len) {
             *self = &self[first..];
         }
     }
@@ -144,9 +138,8 @@ impl Truncate for String {
 
         extern crate unicode_segmentation;
         use unicode_segmentation::UnicodeSegmentation;
-        if let Some((first, _)) = UnicodeSegmentation::grapheme_indices(self.as_str(), true)
-            .skip(skip_len)
-            .next()
+        if let Some((first, _)) =
+            UnicodeSegmentation::grapheme_indices(self.as_str(), true).nth(skip_len)
         {
             &self[first..]
         } else {
@@ -162,9 +155,8 @@ impl Truncate for String {
 
         extern crate unicode_segmentation;
         use unicode_segmentation::UnicodeSegmentation;
-        if let Some((first, _)) = UnicodeSegmentation::grapheme_indices(self.as_str(), true)
-            .skip(skip_len)
-            .next()
+        if let Some((first, _)) =
+            UnicodeSegmentation::grapheme_indices(self.as_str(), true).nth(skip_len)
         {
             *self = self[first..].to_string();
         }

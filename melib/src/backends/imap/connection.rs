@@ -398,7 +398,7 @@ impl ImapStream {
                         r#"LOGIN "{}" {{{}}}"#,
                         &server_conf
                             .server_username
-                            .replace(r#"\"#, r#"\\"#)
+                            .replace('\\', r#"\\"#)
                             .replace('"', r#"\""#)
                             .replace('{', r#"\{"#)
                             .replace('}', r#"\}"#),

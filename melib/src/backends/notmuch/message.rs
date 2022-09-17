@@ -247,7 +247,7 @@ impl<'m> Message<'m> {
     pub fn get_filename(&self) -> &OsStr {
         let fs_path = unsafe { call!(self.lib, notmuch_message_get_filename)(self.message) };
         let c_str = unsafe { CStr::from_ptr(fs_path) };
-        &OsStr::from_bytes(c_str.to_bytes())
+        OsStr::from_bytes(c_str.to_bytes())
     }
 }
 

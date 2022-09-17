@@ -149,7 +149,7 @@ impl AttachmentBuilder {
                         }
                     }
                     if let Some(boundary) = boundary {
-                        let parts = Self::parts(self.body(), &boundary);
+                        let parts = Self::parts(self.body(), boundary);
 
                         let boundary = boundary.to_vec();
                         self.content_type = ContentType::Multipart {
@@ -259,7 +259,7 @@ impl AttachmentBuilder {
                 let mut vec = Vec::with_capacity(attachments.len());
                 for a in attachments {
                     let mut builder = AttachmentBuilder::default();
-                    let (headers, body) = match parser::attachments::attachment(&a) {
+                    let (headers, body) = match parser::attachments::attachment(a) {
                         Ok((_, v)) => v,
                         Err(_) => {
                             debug!("error in parsing attachment");
@@ -516,20 +516,19 @@ impl Attachment {
                         .iter()
                         .find(|(n, _)| n.eq_ignore_ascii_case(b"content-type"))
                         .and_then(|(_, v)| {
-                            match parser::attachments::content_type(v) {
-                                Ok((_, (ct, _cst, params))) => {
-                                    if ct.eq_ignore_ascii_case(b"multipart") {
-                                        let mut boundary = None;
-                                        for (n, v) in params {
-                                            if n.eq_ignore_ascii_case(b"boundary") {
-                                                boundary = Some(v);
-                                                break;
-                                            }
+                            if let Ok((_, (ct, _cst, params))) =
+                                parser::attachments::content_type(v)
+                            {
+                                if ct.eq_ignore_ascii_case(b"multipart") {
+                                    let mut boundary = None;
+                                    for (n, v) in params {
+                                        if n.eq_ignore_ascii_case(b"boundary") {
+                                            boundary = Some(v);
+                                            break;
                                         }
-                                        return boundary;
                                     }
+                                    return boundary;
                                 }
-                                _ => {}
                             }
                             None
                         })
@@ -585,6 +584,7 @@ impl Attachment {
             _ => {}
         }
     }
+
     pub fn text(&self) -> String {
         let mut text = Vec::with_capacity(self.body.length);
         self.get_text_recursive(&mut text);
@@ -594,6 +594,7 @@ impl Attachment {
     pub fn mime_type(&self) -> String {
         self.content_type.to_string()
     }
+
     pub fn attachments(&self) -> Vec<Attachment> {
         let mut ret = Vec::new();
         fn count_recursive(att: &Attachment, ret: &mut Vec<Attachment>) {
@@ -612,24 +613,26 @@ impl Attachment {
             }
         }
 
-        count_recursive(&self, &mut ret);
+        count_recursive(self, &mut ret);
         ret
     }
+
     pub fn count_attachments(&self) -> usize {
         self.attachments().len()
     }
+
     pub fn content_type(&self) -> &ContentType {
         &self.content_type
     }
+
     pub fn content_transfer_encoding(&self) -> &ContentTransferEncoding {
         &self.content_transfer_encoding
     }
+
     pub fn is_text(&self) -> bool {
-        match self.content_type {
-            ContentType::Text { .. } => true,
-            _ => false,
-        }
+        matches!(self.content_type, ContentType::Text { .. })
     }
+
     pub fn is_html(&self) -> bool {
         match self.content_type {
             ContentType::Text {
@@ -650,23 +653,23 @@ impl Attachment {
     }
 
     pub fn is_encrypted(&self) -> bool {
-        match self.content_type {
+        matches!(
+            self.content_type,
             ContentType::Multipart {
                 kind: MultipartType::Encrypted,
                 ..
-            } => true,
-            _ => false,
-        }
+            }
+        )
     }
 
     pub fn is_signed(&self) -> bool {
-        match self.content_type {
+        matches!(
+            self.content_type,
             ContentType::Multipart {
                 kind: MultipartType::Signed,
                 ..
-            } => true,
-            _ => false,
-        }
+            }
+        )
     }
 
     pub fn into_raw(&self) -> String {
@@ -689,13 +692,13 @@ impl Attachment {
                     for (n, v) in parameters {
                         ret.push_str("; ");
                         ret.push_str(&String::from_utf8_lossy(n));
-                        ret.push_str("=");
+                        ret.push('=');
                         if v.contains(&b' ') {
-                            ret.push_str("\"");
+                            ret.push('"');
                         }
                         ret.push_str(&String::from_utf8_lossy(v));
                         if v.contains(&b' ') {
-                            ret.push_str("\"");
+                            ret.push('"');
                         }
                     }
 
@@ -738,7 +741,7 @@ impl Attachment {
                     } else {
                         ret.push_str(&format!("Content-Type: {}\r\n\r\n", a.content_type));
                     }
-                    ret.push_str(&BASE64_MIME.encode(a.body()).trim());
+                    ret.push_str(BASE64_MIME.encode(a.body()).trim());
                 }
                 _ => {
                     ret.push_str(&format!("Content-Type: {}\r\n\r\n", a.content_type));
@@ -758,11 +761,8 @@ impl Attachment {
         };
         for (name, value) in headers {
             if name.eq_ignore_ascii_case(b"content-type") {
-                match parser::attachments::content_type(value) {
-                    Ok((_, (_, _, params))) => {
-                        ret = params;
-                    }
-                    _ => {}
+                if let Ok((_, (_, _, params))) = parser::attachments::content_type(value) {
+                    ret = params;
                 }
                 break;
             }
@@ -794,7 +794,7 @@ impl Attachment {
                 .map(|(_, v)| v)
                 .ok()
                 .and_then(|n| String::from_utf8(n).ok())
-                .unwrap_or_else(|| s)
+                .unwrap_or(s)
         })
         .map(|n| n.replace(|c| std::path::is_separator(c) || c.is_ascii_control(), "_"))
     }
@@ -810,9 +810,9 @@ impl Attachment {
             ContentType::CMSSignature | ContentType::PGPSignature => Vec::new(),
             ContentType::MessageRfc822 => {
                 if self.content_disposition.kind.is_inline() {
-                    let b = AttachmentBuilder::new(self.body()).build();
-                    let ret = b.decode_rec_helper(options);
-                    ret
+                    AttachmentBuilder::new(self.body())
+                        .build()
+                        .decode_rec_helper(options)
                 } else {
                     b"message/rfc822 attachment".to_vec()
                 }

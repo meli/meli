@@ -271,7 +271,7 @@ impl BackendMailbox for MboxMailbox {
 /// `BackendOp` implementor for Mbox
 #[derive(Debug, Default)]
 pub struct MboxOp {
-    hash: EnvelopeHash,
+    _hash: EnvelopeHash,
     path: PathBuf,
     offset: Offset,
     length: Length,
@@ -279,9 +279,9 @@ pub struct MboxOp {
 }
 
 impl MboxOp {
-    pub fn new(hash: EnvelopeHash, path: &Path, offset: Offset, length: Length) -> Self {
+    pub fn new(_hash: EnvelopeHash, path: &Path, offset: Offset, length: Length) -> Self {
         MboxOp {
-            hash,
+            _hash,
             path: path.to_path_buf(),
             slice: std::cell::RefCell::new(None),
             offset,
@@ -883,7 +883,7 @@ impl MailBackend for MboxType {
                 drop(mailboxes_lck);
                 let mut message_iter = MessageIterator {
                     index,
-                    input: &self.contents.as_slice(),
+                    input: self.contents.as_slice(),
                     offset: self.offset,
                     file_offset: self.file_offset,
                     format: self.prefer_mbox_type,

@@ -34,9 +34,9 @@ pub struct DatabaseDescription {
 pub fn db_path(name: &str) -> Result<PathBuf> {
     let data_dir =
         xdg::BaseDirectories::with_prefix("meli").map_err(|e| MeliError::new(e.to_string()))?;
-    Ok(data_dir
+    data_dir
         .place_data_file(name)
-        .map_err(|e| MeliError::new(e.to_string()))?)
+        .map_err(|err| MeliError::new(err.to_string()))
 }
 
 pub fn open_db(db_path: PathBuf) -> Result<Connection> {
@@ -149,13 +149,13 @@ impl FromSql for Envelope {
 
         let b: Vec<u8> = FromSql::column_result(value)?;
 
-        Ok(bincode::Options::deserialize(
+        bincode::Options::deserialize(
             bincode::Options::with_limit(
                 bincode::config::DefaultOptions::new(),
                 2 * u64::try_from(b.len()).map_err(|e| FromSqlError::Other(Box::new(e)))?,
             ),
             &b,
         )
-        .map_err(|e| FromSqlError::Other(Box::new(e)))?)
+        .map_err(|e| FromSqlError::Other(Box::new(e)))
     }
 }

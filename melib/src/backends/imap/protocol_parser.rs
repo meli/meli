@@ -257,7 +257,7 @@ pub enum ImapResponse {
 impl TryFrom<&'_ [u8]> for ImapResponse {
     type Error = MeliError;
     fn try_from(val: &'_ [u8]) -> Result<ImapResponse> {
-        let val: &[u8] = val.split_rn().last().unwrap_or_else(|| val.as_ref());
+        let val: &[u8] = val.split_rn().last().unwrap_or(val);
         let mut val = val[val.find(b" ").ok_or_else(|| {
             MeliError::new(format!(
                 "Expected tagged IMAP response (OK,NO,BAD, etc) but found {:?}",
@@ -664,7 +664,7 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
             i += b"BODY[HEADER.FIELDS (REFERENCES)] ".len();
             if let Ok((rest, mut references)) = astring_token(&input[i..]) {
                 if !references.trim().is_empty() {
-                    if let Ok((_, (_, v))) = crate::email::parser::headers::header(&references) {
+                    if let Ok((_, (_, v))) = crate::email::parser::headers::header(references) {
                         references = v;
                     }
                     ret.references = Some(references);
@@ -680,7 +680,7 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
             i += b"BODY[HEADER.FIELDS (\"REFERENCES\")] ".len();
             if let Ok((rest, mut references)) = astring_token(&input[i..]) {
                 if !references.trim().is_empty() {
-                    if let Ok((_, (_, v))) = crate::email::parser::headers::header(&references) {
+                    if let Ok((_, (_, v))) = crate::email::parser::headers::header(references) {
                         references = v;
                     }
                     ret.references = Some(references);
@@ -737,7 +737,7 @@ pub fn fetch_responses(mut input: &[u8]) -> ImapParseResult<Vec<FetchResponse<'_
             Err(err) => {
                 return Err(MeliError::new(format!(
                     "Unexpected input while parsing UID FETCH responses: `{:.40}`, {}",
-                    String::from_utf8_lossy(&input),
+                    String::from_utf8_lossy(input),
                     err
                 )));
             }
@@ -749,7 +749,7 @@ pub fn fetch_responses(mut input: &[u8]) -> ImapParseResult<Vec<FetchResponse<'_
         } else {
             return Err(MeliError::new(format!(
                 "310Unexpected input while parsing UID FETCH responses: `{:.40}`",
-                String::from_utf8_lossy(&input)
+                String::from_utf8_lossy(input)
             )));
         }
     }
@@ -923,7 +923,7 @@ pub fn untagged_responses(input: &[u8]) -> ImapParseResult<Option<UntaggedRespon
                 _ => {
                     debug!(
                         "unknown untagged_response: {}",
-                        String::from_utf8_lossy(&_tag)
+                        String::from_utf8_lossy(_tag)
                     );
                     None
                 }
@@ -1617,7 +1617,7 @@ pub fn status_response(input: &[u8]) -> IResult<&[u8], StatusResponse> {
 //           ; is considered to be INBOX and not an astring.
 //           ; Refer to section 5.1 for further
 //           ; semantic details of mailbox names.
-pub fn mailbox_token<'i>(input: &'i [u8]) -> IResult<&'i [u8], std::borrow::Cow<'i, str>> {
+pub fn mailbox_token(input: &'_ [u8]) -> IResult<&'_ [u8], std::borrow::Cow<'_, str>> {
     let (input, astring) = astring_token(input)?;
     if astring.eq_ignore_ascii_case(b"INBOX") {
         return Ok((input, "INBOX".into()));

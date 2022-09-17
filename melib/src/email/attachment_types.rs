@@ -348,7 +348,7 @@ impl PartialEq<&str> for ContentType {
             (ContentType::CMSSignature, "application/pkcs7-signature") => true,
             (ContentType::MessageRfc822, "message/rfc822") => true,
             (ContentType::Other { tag, .. }, _) => {
-                other.eq_ignore_ascii_case(&String::from_utf8_lossy(&tag))
+                other.eq_ignore_ascii_case(&String::from_utf8_lossy(tag))
             }
             (ContentType::OctetStream { .. }, "application/octet-stream") => true,
             _ => false,
@@ -372,22 +372,17 @@ impl Display for ContentType {
 
 impl ContentType {
     pub fn is_text(&self) -> bool {
-        if let ContentType::Text { .. } = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, ContentType::Text { .. })
     }
 
     pub fn is_text_html(&self) -> bool {
-        if let ContentType::Text {
-            kind: Text::Html, ..
-        } = self
-        {
-            true
-        } else {
-            false
-        }
+        matches!(
+            self,
+            ContentType::Text {
+                kind: Text::Html,
+                ..
+            }
+        )
     }
 
     pub fn make_boundary(parts: &[AttachmentBuilder]) -> String {
@@ -453,11 +448,7 @@ pub enum Text {
 
 impl Text {
     pub fn is_html(&self) -> bool {
-        if let Text::Html = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Text::Html)
     }
 }
 
@@ -537,11 +528,11 @@ pub enum ContentDispositionKind {
 
 impl ContentDispositionKind {
     pub fn is_inline(&self) -> bool {
-        *self == ContentDispositionKind::Inline
+        matches!(self, ContentDispositionKind::Inline)
     }
 
     pub fn is_attachment(&self) -> bool {
-        *self == ContentDispositionKind::Attachment
+        matches!(self, ContentDispositionKind::Attachment)
     }
 }
 

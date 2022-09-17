@@ -131,9 +131,9 @@ impl LocateKey {
             s if s.eq_ignore_ascii_case("keyserver") => LocateKey::KEYSERVER,
             s if s.eq_ignore_ascii_case("keyserver-url") => LocateKey::KEYSERVER_URL,
             s if s.eq_ignore_ascii_case("local") => LocateKey::LOCAL,
-            combination if combination.contains(",") => {
+            combination if combination.contains(',') => {
                 let mut ret = LocateKey::NODEFAULT;
-                for c in combination.trim().split(",") {
+                for c in combination.trim().split(',') {
                     ret |= Self::from_string_de::<'de, D, &str>(c.trim())?;
                 }
                 ret
@@ -157,7 +157,7 @@ impl std::fmt::Display for LocateKey {
                 ($flag:expr, $string:literal) => {{
                     if self.intersects($flag) {
                         accum.push_str($string);
-                        accum.push_str(",");
+                        accum.push(',');
                     }
                 }};
             }
@@ -360,7 +360,7 @@ impl Context {
             self.set_flag_inner(
                 auto_key_locate,
                 CStr::from_bytes_with_nul(accum.as_bytes())
-                    .expect(accum.as_str())
+                    .map_err(|err| format!("Expected `{}`: {}", accum.as_str(), err))?
                     .as_ptr() as *const _,
             )
         }
@@ -372,7 +372,7 @@ impl Context {
             unsafe { CStr::from_ptr(self.get_flag_inner(auto_key_locate)) }.to_string_lossy();
         let mut val = LocateKey::NODEFAULT;
         if !raw_value.contains("nodefault") {
-            for mechanism in raw_value.split(",") {
+            for mechanism in raw_value.split(',') {
                 match mechanism {
                     "cert" => val.set(LocateKey::CERT, true),
                     "pka" => {
@@ -538,7 +538,7 @@ impl Context {
             };
             let _ = rcv.recv().await;
             {
-                let verify_result =
+                let verify_result: gpgme_verify_result_t =
                     unsafe { call!(&ctx.lib, gpgme_op_verify_result)(ctx.inner.as_ptr()) };
                 if verify_result.is_null() {
                     return Err(MeliError::new(
@@ -546,7 +546,7 @@ impl Context {
                     )
                     .set_err_kind(ErrorKind::External));
                 }
-                drop(verify_result);
+                unsafe { call!(&ctx.lib, gpgme_free)(verify_result as *mut ::libc::c_void) };
             }
             let io_state_lck = io_state.lock().unwrap();
             let ret = io_state_lck
@@ -792,7 +792,7 @@ impl Context {
                 .chain_err_summary(|| {
                     "libgpgme error: could not perform seek on signature data object"
                 })?;
-            Ok(sig.into_bytes()?)
+            sig.into_bytes()
         })
     }
 
@@ -1118,7 +1118,7 @@ impl Context {
             cipher
                 .seek(std::io::SeekFrom::Start(0))
                 .chain_err_summary(|| "libgpgme error: could not perform seek on plain text")?;
-            Ok(cipher.into_bytes()?)
+            cipher.into_bytes()
         })
     }
 }

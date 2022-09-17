@@ -161,7 +161,7 @@ fn main() -> Result<(), std::io::Error> {
             }
         }
 
-        fn set_general_categories<'u>(codepoints: &mut Vec<Codepoint<'u>>, unicode_data: &'u str) {
+        fn set_general_categories<'u>(codepoints: &mut [Codepoint<'u>], unicode_data: &'u str) {
             for line in unicode_data.lines() {
                 let fields = line.trim().split(';').collect::<Vec<_>>();
                 if fields.len() > FIELD_CATEGORY {
@@ -172,7 +172,7 @@ fn main() -> Result<(), std::io::Error> {
             }
         }
 
-        fn set_eaw_widths(codepoints: &mut Vec<Codepoint<'_>>, eaw_data_lines: &str) {
+        fn set_eaw_widths(codepoints: &mut [Codepoint<'_>], eaw_data_lines: &str) {
             //  Read from EastAsianWidth.txt, set width values on the codepoints
             for line in eaw_data_lines.lines() {
                 let line = line.trim().split('#').next().unwrap_or(line);
@@ -220,7 +220,8 @@ fn main() -> Result<(), std::io::Error> {
                 }
             }
         }
-        fn set_emoji_widths(codepoints: &mut Vec<Codepoint<'_>>, emoji_data_lines: &str) {
+
+        fn set_emoji_widths(codepoints: &mut [Codepoint<'_>], emoji_data_lines: &str) {
             // Read from emoji-data.txt, set codepoint widths
             for line in emoji_data_lines.lines() {
                 if !line.contains('#') || line.trim().starts_with('#') {
@@ -302,7 +303,7 @@ fn main() -> Result<(), std::io::Error> {
                 }
             }
         }
-        fn set_hardcoded_ranges(codepoints: &mut Vec<Codepoint<'_>>) {
+        fn set_hardcoded_ranges(codepoints: &mut [Codepoint<'_>]) {
             // Mark private use and surrogate codepoints
             // Private use can be determined awkwardly from UnicodeData.txt,
             // but we just hard-code them.

@@ -385,15 +385,15 @@ impl SubjectPrefix for &str {
                     slice = &slice[4..];
                     continue;
                 }
-                if slice.starts_with(" ") || slice.starts_with("\t") || slice.starts_with("\r") {
+                if slice.starts_with(' ') || slice.starts_with('\t') || slice.starts_with('\r') {
                     //FIXME just trim whitespace
                     slice = &slice[1..];
                     continue;
                 }
-                if slice.starts_with("[")
+                if slice.starts_with('[')
                     && !(slice.starts_with("[PATCH") || slice.starts_with("[RFC"))
                 {
-                    if let Some(pos) = slice.find("]") {
+                    if let Some(pos) = slice.find(']') {
                         slice = &slice[pos..];
                         continue;
                     }
@@ -868,7 +868,6 @@ impl Threads {
             {
                 let thread_hash = self.message_ids[message_id];
                 let node = self.thread_nodes.entry(thread_hash).or_default();
-                drop(message_id);
                 drop(envelopes_lck);
                 envelopes
                     .write()
@@ -879,7 +878,7 @@ impl Threads {
 
                 /* If thread node currently has a message from a foreign mailbox and env_hash is
                  * from current mailbox we want to update it, otherwise return */
-                if !(node.other_mailbox && !other_mailbox) {
+                if !node.other_mailbox || other_mailbox {
                     return false;
                 }
             }
@@ -1223,18 +1222,18 @@ impl Threads {
         let envelopes = envelopes.read().unwrap();
         vec.sort_by(|a, b| match sort {
             (SortField::Date, SortOrder::Desc) => {
-                let a = self.thread_ref(self.thread_nodes[&a].group).date();
-                let b = self.thread_ref(self.thread_nodes[&b].group).date();
+                let a = self.thread_ref(self.thread_nodes[a].group).date();
+                let b = self.thread_ref(self.thread_nodes[b].group).date();
                 b.cmp(&a)
             }
             (SortField::Date, SortOrder::Asc) => {
-                let a = self.thread_ref(self.thread_nodes[&a].group).date();
-                let b = self.thread_ref(self.thread_nodes[&b].group).date();
+                let a = self.thread_ref(self.thread_nodes[a].group).date();
+                let b = self.thread_ref(self.thread_nodes[b].group).date();
                 a.cmp(&b)
             }
             (SortField::Subject, SortOrder::Desc) => {
-                let a = &self.thread_nodes[&a].message();
-                let b = &self.thread_nodes[&b].message();
+                let a = &self.thread_nodes[a].message();
+                let b = &self.thread_nodes[b].message();
 
                 match (a, b) {
                     (Some(_), Some(_)) => {}
@@ -1262,8 +1261,8 @@ impl Threads {
                 }
             }
             (SortField::Subject, SortOrder::Asc) => {
-                let a = &self.thread_nodes[&a].message();
-                let b = &self.thread_nodes[&b].message();
+                let a = &self.thread_nodes[a].message();
+                let b = &self.thread_nodes[b].message();
 
                 match (a, b) {
                     (Some(_), Some(_)) => {}
@@ -1299,18 +1298,18 @@ impl Threads {
         let envelopes = envelopes.read().unwrap();
         tree.sort_by(|a, b| match sort {
             (SortField::Date, SortOrder::Desc) => {
-                let a = self.thread_ref(self.thread_nodes[&a].group).date();
-                let b = self.thread_ref(self.thread_nodes[&b].group).date();
+                let a = self.thread_ref(self.thread_nodes[a].group).date();
+                let b = self.thread_ref(self.thread_nodes[b].group).date();
                 b.cmp(&a)
             }
             (SortField::Date, SortOrder::Asc) => {
-                let a = self.thread_ref(self.thread_nodes[&a].group).date();
-                let b = self.thread_ref(self.thread_nodes[&b].group).date();
+                let a = self.thread_ref(self.thread_nodes[a].group).date();
+                let b = self.thread_ref(self.thread_nodes[b].group).date();
                 a.cmp(&b)
             }
             (SortField::Subject, SortOrder::Desc) => {
-                let a = &self.thread_nodes[&a].message();
-                let b = &self.thread_nodes[&b].message();
+                let a = &self.thread_nodes[a].message();
+                let b = &self.thread_nodes[b].message();
 
                 match (a, b) {
                     (Some(_), Some(_)) => {}
@@ -1338,8 +1337,8 @@ impl Threads {
                 }
             }
             (SortField::Subject, SortOrder::Asc) => {
-                let a = &self.thread_nodes[&a].message();
-                let b = &self.thread_nodes[&b].message();
+                let a = &self.thread_nodes[a].message();
+                let b = &self.thread_nodes[b].message();
 
                 match (a, b) {
                     (Some(_), Some(_)) => {}

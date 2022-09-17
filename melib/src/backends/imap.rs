@@ -52,7 +52,6 @@ use futures::stream::Stream;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::convert::TryFrom;
-use std::convert::TryInto;
 use std::hash::Hasher;
 use std::pin::Pin;
 use std::str::FromStr;
@@ -192,7 +191,7 @@ impl UIDStore {
 
 #[derive(Debug)]
 pub struct ImapType {
-    is_subscribed: Arc<IsSubscribedFn>,
+    _is_subscribed: Arc<IsSubscribedFn>,
     connection: Arc<FutureMutex<ImapConnection>>,
     server_conf: ImapServerConf,
     uid_store: Arc<UIDStore>,
@@ -274,7 +273,7 @@ impl MailBackend for ImapType {
                     _ => {
                         if SUPPORTED_CAPABILITIES
                             .iter()
-                            .any(|c| c.eq_ignore_ascii_case(&name.as_str()))
+                            .any(|c| c.eq_ignore_ascii_case(name.as_str()))
                         {
                             *status = MailBackendExtensionStatus::Enabled { comment: None };
                         }
@@ -1121,32 +1120,32 @@ impl MailBackend for ImapType {
                 Subject(t) => {
                     s.push_str(" SUBJECT \"");
                     s.extend(escape_double_quote(t).chars());
-                    s.push_str("\"");
+                    s.push('"');
                 }
                 From(t) => {
                     s.push_str(" FROM \"");
                     s.extend(escape_double_quote(t).chars());
-                    s.push_str("\"");
+                    s.push('"');
                 }
                 To(t) => {
                     s.push_str(" TO \"");
                     s.extend(escape_double_quote(t).chars());
-                    s.push_str("\"");
+                    s.push('"');
                 }
                 Cc(t) => {
                     s.push_str(" CC \"");
                     s.extend(escape_double_quote(t).chars());
-                    s.push_str("\"");
+                    s.push('"');
                 }
                 Bcc(t) => {
                     s.push_str(" BCC \"");
                     s.extend(escape_double_quote(t).chars());
-                    s.push_str("\"");
+                    s.push('"');
                 }
                 AllText(t) => {
                     s.push_str(" TEXT \"");
                     s.extend(escape_double_quote(t).chars());
-                    s.push_str("\"");
+                    s.push('"');
                 }
                 Flags(v) => {
                     for f in v {
@@ -1280,7 +1279,7 @@ impl ImapType {
         };
         let server_port = get_conf_val!(s["server_port"], 143)?;
         let use_tls = get_conf_val!(s["use_tls"], true)?;
-        let use_starttls = use_tls && get_conf_val!(s["use_starttls"], !(server_port == 993))?;
+        let use_starttls = use_tls && get_conf_val!(s["use_starttls"], server_port != 993)?;
         let danger_accept_invalid_certs: bool =
             get_conf_val!(s["danger_accept_invalid_certs"], false)?;
         #[cfg(feature = "sqlite3")]
@@ -1338,7 +1337,7 @@ impl ImapType {
 
         Ok(Box::new(ImapType {
             server_conf,
-            is_subscribed: Arc::new(IsSubscribedFn(is_subscribed)),
+            _is_subscribed: Arc::new(IsSubscribedFn(is_subscribed)),
             connection: Arc::new(FutureMutex::new(connection)),
             uid_store,
         }))
@@ -1459,7 +1458,7 @@ impl ImapType {
                 } else {
                     mailboxes.insert(mailbox.hash, mailbox);
                 }
-            } else if let Ok(status) = protocol_parser::status_response(&l).map(|(_, v)| v) {
+            } else if let Ok(status) = protocol_parser::status_response(l).map(|(_, v)| v) {
                 if let Some(mailbox_hash) = status.mailbox {
                     if mailboxes.contains_key(&mailbox_hash) {
                         let entry = mailboxes.entry(mailbox_hash).or_default();
@@ -1484,7 +1483,7 @@ impl ImapType {
             if !l.starts_with(b"*") {
                 continue;
             }
-            if let Ok(subscription) = protocol_parser::list_mailbox_result(&l).map(|(_, v)| v) {
+            if let Ok(subscription) = protocol_parser::list_mailbox_result(l).map(|(_, v)| v) {
                 if let Some(f) = mailboxes.get_mut(&subscription.hash()) {
                     if f.special_usage() == SpecialUsageMailbox::Normal
                         && subscription.special_usage() != SpecialUsageMailbox::Normal
@@ -1862,7 +1861,7 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
                             .unwrap()
                             .entry(mailbox_hash)
                             .or_default()
-                            .insert((message_sequence_number - 1).try_into().unwrap(), uid);
+                            .insert(message_sequence_number - 1, uid);
                         uid_store
                             .hash_index
                             .lock()

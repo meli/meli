@@ -112,7 +112,7 @@ impl Address {
             }
         } else {
             MailboxAddress {
-                raw: format!("{}", address).into_bytes(),
+                raw: address.to_string().into_bytes(),
                 display_name: StrBuilder {
                     offset: 0,
                     length: 0,
@@ -262,7 +262,7 @@ impl Address {
                 let email = self.get_email();
                 let (local_part, domain) =
                     match super::parser::address::addr_spec_raw(email.as_bytes())
-                        .map_err(|err| Into::<MeliError>::into(err))
+                        .map_err(Into::<MeliError>::into)
                         .and_then(|(_, (l, d))| {
                             Ok((String::from_utf8(l.into())?, String::from_utf8(d.into())?))
                         }) {
@@ -325,7 +325,7 @@ impl core::fmt::Display for Address {
         match self {
             Address::Mailbox(m) if m.display_name.length > 0 => {
                 match m.display_name.display(&m.raw) {
-                    d if d.contains(".") || d.contains(",") => {
+                    d if d.contains('.') || d.contains(',') => {
                         write!(f, "\"{}\" <{}>", d, m.address_spec.display(&m.raw))
                     }
                     d => write!(f, "{} <{}>", d, m.address_spec.display(&m.raw)),
@@ -392,7 +392,7 @@ pub trait StrBuild {
 }
 
 impl StrBuilder {
-    pub fn display<'a>(&self, s: &'a [u8]) -> String {
+    pub fn display(&self, s: &[u8]) -> String {
         let offset = self.offset;
         let length = self.length;
         String::from_utf8_lossy(&s[offset..offset + length]).to_string()

@@ -109,7 +109,7 @@ where
         }
     }
 }
-pub const GPGME_VERSION: &'static str = "1.12.0\0";
+pub const GPGME_VERSION: &str = "1.12.0\0";
 pub const GPGME_VERSION_NUMBER: u32 = 68608;
 pub const GPGME_KEYLIST_MODE_LOCAL: u32 = 1;
 pub const GPGME_KEYLIST_MODE_EXTERN: u32 = 2;
@@ -175,20 +175,11 @@ pub type gpg_strerror_r = unsafe extern "C" fn(
     buf: *mut ::std::os::raw::c_char,
     buflen: usize,
 ) -> ::std::os::raw::c_int;
-extern "C" {
-    pub fn gpg_err_code_from_errno(err: ::std::os::raw::c_int) -> gpg_err_code_t;
-}
-extern "C" {
-    pub fn gpg_err_code_to_errno(code: gpg_err_code_t) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn gpg_err_code_from_syserror() -> gpg_err_code_t;
-}
-extern "C" {
-    pub fn gpg_error_check_version(
-        req_version: *const ::std::os::raw::c_char,
-    ) -> *const ::std::os::raw::c_char;
-}
+pub type gpg_err_code_from_errno = extern "C" fn(err: ::std::os::raw::c_int) -> gpg_err_code_t;
+pub type gpg_err_code_to_errno = extern "C" fn(code: gpg_err_code_t) -> ::std::os::raw::c_int;
+pub type gpg_err_code_from_syserror = extern "C" fn() -> gpg_err_code_t;
+pub type gpg_error_check_version =
+    extern "C" fn(req_version: *const ::std::os::raw::c_char) -> *const ::std::os::raw::c_char;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct gpgme_context {
@@ -204,38 +195,20 @@ pub type gpgme_data_t = *mut gpgme_data;
 pub type gpgme_error_t = gpg_error_t;
 pub use self::gpg_err_code_t as gpgme_err_code_t;
 pub use self::gpg_err_source_t as gpgme_err_source_t;
-extern "C" {
-    pub fn gpgme_strerror(err: gpgme_error_t) -> *const ::std::os::raw::c_char;
-}
+pub type gpgme_strerror = extern "C" fn(err: gpgme_error_t) -> *const ::std::os::raw::c_char;
 pub type gpgme_strerror_r = unsafe extern "C" fn(
     err: gpg_error_t,
     buf: *mut ::std::os::raw::c_char,
     buflen: usize,
 ) -> ::std::os::raw::c_int;
-extern "C" {
-    pub fn gpgme_strsource(err: gpgme_error_t) -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn gpgme_err_code_from_errno(err: ::std::os::raw::c_int) -> gpgme_err_code_t;
-}
-extern "C" {
-    pub fn gpgme_err_code_to_errno(code: gpgme_err_code_t) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn gpgme_err_code_from_syserror() -> gpgme_err_code_t;
-}
-extern "C" {
-    pub fn gpgme_err_set_errno(err: ::std::os::raw::c_int);
-}
-extern "C" {
-    pub fn gpgme_err_make_from_errno(
-        source: gpgme_err_source_t,
-        err: ::std::os::raw::c_int,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_error_from_errno(err: ::std::os::raw::c_int) -> gpgme_error_t;
-}
+pub type gpgme_strsource = extern "C" fn(err: gpgme_error_t) -> *const ::std::os::raw::c_char;
+pub type gpgme_err_code_from_errno = extern "C" fn(err: ::std::os::raw::c_int) -> gpgme_err_code_t;
+pub type gpgme_err_code_to_errno = extern "C" fn(code: gpgme_err_code_t) -> ::std::os::raw::c_int;
+pub type gpgme_err_code_from_syserror = extern "C" fn() -> gpgme_err_code_t;
+pub type gpgme_err_set_errno = extern "C" fn(err: ::std::os::raw::c_int);
+pub type gpgme_err_make_from_errno =
+    extern "C" fn(source: gpgme_err_source_t, err: ::std::os::raw::c_int) -> gpgme_error_t;
+pub type gpgme_error_from_errno = extern "C" fn(err: ::std::os::raw::c_int) -> gpgme_error_t;
 pub const gpgme_data_encoding_t_GPGME_DATA_ENCODING_NONE: gpgme_data_encoding_t = 0;
 pub const gpgme_data_encoding_t_GPGME_DATA_ENCODING_BINARY: gpgme_data_encoding_t = 1;
 pub const gpgme_data_encoding_t_GPGME_DATA_ENCODING_BASE64: gpgme_data_encoding_t = 2;
@@ -2023,139 +1996,83 @@ pub type gpgme_get_ctx_flag = unsafe extern "C" fn(
     ctx: gpgme_ctx_t,
     name: *const ::std::os::raw::c_char,
 ) -> *const ::std::os::raw::c_char;
-extern "C" {
-    pub fn gpgme_set_protocol(ctx: gpgme_ctx_t, proto: gpgme_protocol_t) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_get_protocol(ctx: gpgme_ctx_t) -> gpgme_protocol_t;
-}
-extern "C" {
-    pub fn gpgme_set_sub_protocol(ctx: gpgme_ctx_t, proto: gpgme_protocol_t) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_get_sub_protocol(ctx: gpgme_ctx_t) -> gpgme_protocol_t;
-}
-extern "C" {
-    pub fn gpgme_get_protocol_name(proto: gpgme_protocol_t) -> *const ::std::os::raw::c_char;
-}
+pub type gpgme_set_protocol =
+    extern "C" fn(ctx: gpgme_ctx_t, proto: gpgme_protocol_t) -> gpgme_error_t;
+pub type gpgme_get_protocol = extern "C" fn(ctx: gpgme_ctx_t) -> gpgme_protocol_t;
+pub type gpgme_set_sub_protocol =
+    extern "C" fn(ctx: gpgme_ctx_t, proto: gpgme_protocol_t) -> gpgme_error_t;
+pub type gpgme_get_sub_protocol = extern "C" fn(ctx: gpgme_ctx_t) -> gpgme_protocol_t;
+pub type gpgme_get_protocol_name =
+    extern "C" fn(proto: gpgme_protocol_t) -> *const ::std::os::raw::c_char;
 pub type gpgme_set_armor = unsafe extern "C" fn(ctx: gpgme_ctx_t, yes: ::std::os::raw::c_int);
 pub type gpgme_get_armor = unsafe extern "C" fn(ctx: gpgme_ctx_t) -> ::std::os::raw::c_int;
-extern "C" {
-    pub fn gpgme_set_textmode(ctx: gpgme_ctx_t, yes: ::std::os::raw::c_int);
-}
-extern "C" {
-    pub fn gpgme_get_textmode(ctx: gpgme_ctx_t) -> ::std::os::raw::c_int;
-}
+pub type gpgme_set_textmode = extern "C" fn(ctx: gpgme_ctx_t, yes: ::std::os::raw::c_int);
+pub type gpgme_get_textmode = extern "C" fn(ctx: gpgme_ctx_t) -> ::std::os::raw::c_int;
 pub type gpgme_set_offline = extern "C" fn(ctx: gpgme_ctx_t, yes: ::std::os::raw::c_int);
 pub type gpgme_get_offline = extern "C" fn(ctx: gpgme_ctx_t) -> ::std::os::raw::c_int;
-extern "C" {
-    pub fn gpgme_set_include_certs(ctx: gpgme_ctx_t, nr_of_certs: ::std::os::raw::c_int);
-}
-extern "C" {
-    pub fn gpgme_get_include_certs(ctx: gpgme_ctx_t) -> ::std::os::raw::c_int;
-}
+pub type gpgme_set_include_certs =
+    extern "C" fn(ctx: gpgme_ctx_t, nr_of_certs: ::std::os::raw::c_int);
+pub type gpgme_get_include_certs = extern "C" fn(ctx: gpgme_ctx_t) -> ::std::os::raw::c_int;
 pub type gpgme_set_keylist_mode =
     unsafe extern "C" fn(ctx: gpgme_ctx_t, mode: gpgme_keylist_mode_t) -> gpgme_error_t;
 pub type gpgme_get_keylist_mode = unsafe extern "C" fn(ctx: gpgme_ctx_t) -> gpgme_keylist_mode_t;
-extern "C" {
-    pub fn gpgme_set_pinentry_mode(ctx: gpgme_ctx_t, mode: gpgme_pinentry_mode_t) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_get_pinentry_mode(ctx: gpgme_ctx_t) -> gpgme_pinentry_mode_t;
-}
-extern "C" {
-    pub fn gpgme_set_passphrase_cb(
-        ctx: gpgme_ctx_t,
-        cb: gpgme_passphrase_cb_t,
-        hook_value: *mut ::std::os::raw::c_void,
-    );
-}
-extern "C" {
-    pub fn gpgme_get_passphrase_cb(
-        ctx: gpgme_ctx_t,
-        cb: *mut gpgme_passphrase_cb_t,
-        hook_value: *mut *mut ::std::os::raw::c_void,
-    );
-}
-extern "C" {
-    pub fn gpgme_set_progress_cb(
-        c: gpgme_ctx_t,
-        cb: gpgme_progress_cb_t,
-        hook_value: *mut ::std::os::raw::c_void,
-    );
-}
-extern "C" {
-    pub fn gpgme_get_progress_cb(
-        ctx: gpgme_ctx_t,
-        cb: *mut gpgme_progress_cb_t,
-        hook_value: *mut *mut ::std::os::raw::c_void,
-    );
-}
-extern "C" {
-    pub fn gpgme_set_status_cb(
-        c: gpgme_ctx_t,
-        cb: gpgme_status_cb_t,
-        hook_value: *mut ::std::os::raw::c_void,
-    );
-}
-extern "C" {
-    pub fn gpgme_get_status_cb(
-        ctx: gpgme_ctx_t,
-        cb: *mut gpgme_status_cb_t,
-        hook_value: *mut *mut ::std::os::raw::c_void,
-    );
-}
-extern "C" {
-    pub fn gpgme_set_locale(
-        ctx: gpgme_ctx_t,
-        category: ::std::os::raw::c_int,
-        value: *const ::std::os::raw::c_char,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_ctx_get_engine_info(ctx: gpgme_ctx_t) -> gpgme_engine_info_t;
-}
-extern "C" {
-    pub fn gpgme_ctx_set_engine_info(
-        ctx: gpgme_ctx_t,
-        proto: gpgme_protocol_t,
-        file_name: *const ::std::os::raw::c_char,
-        home_dir: *const ::std::os::raw::c_char,
-    ) -> gpgme_error_t;
-}
+pub type gpgme_set_pinentry_mode =
+    extern "C" fn(ctx: gpgme_ctx_t, mode: gpgme_pinentry_mode_t) -> gpgme_error_t;
+pub type gpgme_get_pinentry_mode = extern "C" fn(ctx: gpgme_ctx_t) -> gpgme_pinentry_mode_t;
+pub type gpgme_set_passphrase_cb = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    cb: gpgme_passphrase_cb_t,
+    hook_value: *mut ::std::os::raw::c_void,
+);
+pub type gpgme_get_passphrase_cb = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    cb: *mut gpgme_passphrase_cb_t,
+    hook_value: *mut *mut ::std::os::raw::c_void,
+);
+pub type gpgme_set_progress_cb =
+    extern "C" fn(c: gpgme_ctx_t, cb: gpgme_progress_cb_t, hook_value: *mut ::std::os::raw::c_void);
+pub type gpgme_get_progress_cb = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    cb: *mut gpgme_progress_cb_t,
+    hook_value: *mut *mut ::std::os::raw::c_void,
+);
+pub type gpgme_set_status_cb =
+    extern "C" fn(c: gpgme_ctx_t, cb: gpgme_status_cb_t, hook_value: *mut ::std::os::raw::c_void);
+pub type gpgme_get_status_cb = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    cb: *mut gpgme_status_cb_t,
+    hook_value: *mut *mut ::std::os::raw::c_void,
+);
+pub type gpgme_set_locale = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    category: ::std::os::raw::c_int,
+    value: *const ::std::os::raw::c_char,
+) -> gpgme_error_t;
+pub type gpgme_ctx_get_engine_info = extern "C" fn(ctx: gpgme_ctx_t) -> gpgme_engine_info_t;
+pub type gpgme_ctx_set_engine_info = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    proto: gpgme_protocol_t,
+    file_name: *const ::std::os::raw::c_char,
+    home_dir: *const ::std::os::raw::c_char,
+) -> gpgme_error_t;
 pub type gpgme_signers_clear = unsafe extern "C" fn(ctx: gpgme_ctx_t);
 
 pub type gpgme_signers_add =
     unsafe extern "C" fn(ctx: gpgme_ctx_t, key: gpgme_key_t) -> gpgme_error_t;
-extern "C" {
-    pub fn gpgme_signers_count(ctx: gpgme_ctx_t) -> ::std::os::raw::c_uint;
-}
-extern "C" {
-    pub fn gpgme_signers_enum(ctx: gpgme_ctx_t, seq: ::std::os::raw::c_int) -> gpgme_key_t;
-}
-extern "C" {
-    pub fn gpgme_sig_notation_clear(ctx: gpgme_ctx_t);
-}
-extern "C" {
-    pub fn gpgme_sig_notation_add(
-        ctx: gpgme_ctx_t,
-        name: *const ::std::os::raw::c_char,
-        value: *const ::std::os::raw::c_char,
-        flags: gpgme_sig_notation_flags_t,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_sig_notation_get(ctx: gpgme_ctx_t) -> gpgme_sig_notation_t;
-}
-extern "C" {
-    pub fn gpgme_set_sender(
-        ctx: gpgme_ctx_t,
-        address: *const ::std::os::raw::c_char,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_get_sender(ctx: gpgme_ctx_t) -> *const ::std::os::raw::c_char;
-}
+pub type gpgme_signers_count = extern "C" fn(ctx: gpgme_ctx_t) -> ::std::os::raw::c_uint;
+pub type gpgme_signers_enum =
+    extern "C" fn(ctx: gpgme_ctx_t, seq: ::std::os::raw::c_int) -> gpgme_key_t;
+pub type gpgme_sig_notation_clear = extern "C" fn(ctx: gpgme_ctx_t);
+pub type gpgme_sig_notation_add = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    name: *const ::std::os::raw::c_char,
+    value: *const ::std::os::raw::c_char,
+    flags: gpgme_sig_notation_flags_t,
+) -> gpgme_error_t;
+pub type gpgme_sig_notation_get = extern "C" fn(ctx: gpgme_ctx_t) -> gpgme_sig_notation_t;
+pub type gpgme_set_sender =
+    extern "C" fn(ctx: gpgme_ctx_t, address: *const ::std::os::raw::c_char) -> gpgme_error_t;
+pub type gpgme_get_sender = extern "C" fn(ctx: gpgme_ctx_t) -> *const ::std::os::raw::c_char;
 pub type gpgme_io_cb_t = ::std::option::Option<
     unsafe extern "C" fn(
         data: *mut ::std::os::raw::c_void,
@@ -2300,51 +2217,35 @@ fn bindgen_test_layout_gpgme_io_cbs() {
 }
 pub type gpgme_io_cbs_t = *mut gpgme_io_cbs;
 pub type gpgme_set_io_cbs = unsafe extern "C" fn(ctx: gpgme_ctx_t, io_cbs: gpgme_io_cbs_t);
-extern "C" {
-    pub fn gpgme_get_io_cbs(ctx: gpgme_ctx_t, io_cbs: gpgme_io_cbs_t);
-}
-extern "C" {
-    pub fn gpgme_io_read(
-        fd: ::std::os::raw::c_int,
-        buffer: *mut ::std::os::raw::c_void,
-        count: usize,
-    ) -> isize;
-}
-extern "C" {
-    pub fn gpgme_io_write(
-        fd: ::std::os::raw::c_int,
-        buffer: *const ::std::os::raw::c_void,
-        count: usize,
-    ) -> isize;
-}
-extern "C" {
-    pub fn gpgme_io_writen(
-        fd: ::std::os::raw::c_int,
-        buffer: *const ::std::os::raw::c_void,
-        count: usize,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn gpgme_wait(
-        ctx: gpgme_ctx_t,
-        status: *mut gpgme_error_t,
-        hang: ::std::os::raw::c_int,
-    ) -> gpgme_ctx_t;
-}
-extern "C" {
-    pub fn gpgme_wait_ext(
-        ctx: gpgme_ctx_t,
-        status: *mut gpgme_error_t,
-        op_err: *mut gpgme_error_t,
-        hang: ::std::os::raw::c_int,
-    ) -> gpgme_ctx_t;
-}
-extern "C" {
-    pub fn gpgme_cancel(ctx: gpgme_ctx_t) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_cancel_async(ctx: gpgme_ctx_t) -> gpgme_error_t;
-}
+pub type gpgme_get_io_cbs = extern "C" fn(ctx: gpgme_ctx_t, io_cbs: gpgme_io_cbs_t);
+pub type gpgme_io_read = extern "C" fn(
+    fd: ::std::os::raw::c_int,
+    buffer: *mut ::std::os::raw::c_void,
+    count: usize,
+) -> isize;
+pub type gpgme_io_write = extern "C" fn(
+    fd: ::std::os::raw::c_int,
+    buffer: *const ::std::os::raw::c_void,
+    count: usize,
+) -> isize;
+pub type gpgme_io_writen = extern "C" fn(
+    fd: ::std::os::raw::c_int,
+    buffer: *const ::std::os::raw::c_void,
+    count: usize,
+) -> ::std::os::raw::c_int;
+pub type gpgme_wait = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    status: *mut gpgme_error_t,
+    hang: ::std::os::raw::c_int,
+) -> gpgme_ctx_t;
+pub type gpgme_wait_ext = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    status: *mut gpgme_error_t,
+    op_err: *mut gpgme_error_t,
+    hang: ::std::os::raw::c_int,
+) -> gpgme_ctx_t;
+pub type gpgme_cancel = extern "C" fn(ctx: gpgme_ctx_t) -> gpgme_error_t;
+pub type gpgme_cancel_async = extern "C" fn(ctx: gpgme_ctx_t) -> gpgme_error_t;
 pub type gpgme_data_read_cb_t = ::std::option::Option<
     unsafe extern "C" fn(
         handle: *mut ::std::os::raw::c_void,
@@ -2450,88 +2351,54 @@ pub type gpgme_data_new_from_mem = unsafe extern "C" fn(
     size: usize,
     copy: ::std::os::raw::c_int,
 ) -> gpgme_error_t;
-extern "C" {
-    pub fn gpgme_data_release_and_get_mem(
-        dh: gpgme_data_t,
-        r_len: *mut usize,
-    ) -> *mut ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn gpgme_free(buffer: *mut ::std::os::raw::c_void);
-}
-extern "C" {
-    pub fn gpgme_data_new_from_cbs(
-        dh: *mut gpgme_data_t,
-        cbs: gpgme_data_cbs_t,
-        handle: *mut ::std::os::raw::c_void,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_data_new_from_fd(
-        dh: *mut gpgme_data_t,
-        fd: ::std::os::raw::c_int,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_data_get_encoding(dh: gpgme_data_t) -> gpgme_data_encoding_t;
-}
-extern "C" {
-    pub fn gpgme_data_set_encoding(dh: gpgme_data_t, enc: gpgme_data_encoding_t) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_data_get_file_name(dh: gpgme_data_t) -> *mut ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn gpgme_data_set_file_name(
-        dh: gpgme_data_t,
-        file_name: *const ::std::os::raw::c_char,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_data_set_flag(
-        dh: gpgme_data_t,
-        name: *const ::std::os::raw::c_char,
-        value: *const ::std::os::raw::c_char,
-    ) -> gpg_error_t;
-}
-extern "C" {
-    pub fn gpgme_data_identify(
-        dh: gpgme_data_t,
-        reserved: ::std::os::raw::c_int,
-    ) -> gpgme_data_type_t;
-}
+
+pub type gpgme_data_release_and_get_mem =
+    unsafe extern "C" fn(dh: gpgme_data_t, r_len: *mut usize) -> *mut ::std::os::raw::c_char;
+
+pub type gpgme_free = unsafe extern "C" fn(buffer: *mut ::std::os::raw::c_void);
+
+pub type gpgme_data_new_from_cbs = extern "C" fn(
+    dh: *mut gpgme_data_t,
+    cbs: gpgme_data_cbs_t,
+    handle: *mut ::std::os::raw::c_void,
+) -> gpgme_error_t;
+pub type gpgme_data_new_from_fd =
+    extern "C" fn(dh: *mut gpgme_data_t, fd: ::std::os::raw::c_int) -> gpgme_error_t;
+pub type gpgme_data_get_encoding = extern "C" fn(dh: gpgme_data_t) -> gpgme_data_encoding_t;
+pub type gpgme_data_set_encoding =
+    extern "C" fn(dh: gpgme_data_t, enc: gpgme_data_encoding_t) -> gpgme_error_t;
+pub type gpgme_data_get_file_name = extern "C" fn(dh: gpgme_data_t) -> *mut ::std::os::raw::c_char;
+pub type gpgme_data_set_file_name =
+    extern "C" fn(dh: gpgme_data_t, file_name: *const ::std::os::raw::c_char) -> gpgme_error_t;
+pub type gpgme_data_set_flag = extern "C" fn(
+    dh: gpgme_data_t,
+    name: *const ::std::os::raw::c_char,
+    value: *const ::std::os::raw::c_char,
+) -> gpg_error_t;
+pub type gpgme_data_identify =
+    extern "C" fn(dh: gpgme_data_t, reserved: ::std::os::raw::c_int) -> gpgme_data_type_t;
 pub type gpgme_data_new_from_file = unsafe extern "C" fn(
     r_dh: *mut gpgme_data_t,
     fname: *const ::std::os::raw::c_char,
     copy: ::std::os::raw::c_int,
 ) -> gpgme_error_t;
 
-extern "C" {
-    pub fn gpgme_data_new_from_filepart(
-        r_dh: *mut gpgme_data_t,
-        fname: *const ::std::os::raw::c_char,
-        fp: *mut FILE,
-        offset: off_t,
-        length: usize,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_data_rewind(dh: gpgme_data_t) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_get_key(
-        ctx: gpgme_ctx_t,
-        fpr: *const ::std::os::raw::c_char,
-        r_key: *mut gpgme_key_t,
-        secret: ::std::os::raw::c_int,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_key_from_uid(
-        key: *mut gpgme_key_t,
-        name: *const ::std::os::raw::c_char,
-    ) -> gpgme_error_t;
-}
+pub type gpgme_data_new_from_filepart = extern "C" fn(
+    r_dh: *mut gpgme_data_t,
+    fname: *const ::std::os::raw::c_char,
+    fp: *mut FILE,
+    offset: off_t,
+    length: usize,
+) -> gpgme_error_t;
+pub type gpgme_data_rewind = extern "C" fn(dh: gpgme_data_t) -> gpgme_error_t;
+pub type gpgme_get_key = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    fpr: *const ::std::os::raw::c_char,
+    r_key: *mut gpgme_key_t,
+    secret: ::std::os::raw::c_int,
+) -> gpgme_error_t;
+pub type gpgme_key_from_uid =
+    extern "C" fn(key: *mut gpgme_key_t, name: *const ::std::os::raw::c_char) -> gpgme_error_t;
 pub type gpgme_key_ref = unsafe extern "C" fn(key: gpgme_key_t);
 pub type gpgme_key_unref = unsafe extern "C" fn(key: gpgme_key_t);
 #[repr(C)]
@@ -2584,35 +2451,29 @@ pub type gpgme_op_encrypt_start = unsafe extern "C" fn(
     plain: gpgme_data_t,
     cipher: gpgme_data_t,
 ) -> gpgme_error_t;
-extern "C" {
-    pub fn gpgme_op_encrypt(
-        ctx: gpgme_ctx_t,
-        recp: *mut gpgme_key_t,
-        flags: gpgme_encrypt_flags_t,
-        plain: gpgme_data_t,
-        cipher: gpgme_data_t,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_encrypt_ext_start(
-        ctx: gpgme_ctx_t,
-        recp: *mut gpgme_key_t,
-        recpstring: *const ::std::os::raw::c_char,
-        flags: gpgme_encrypt_flags_t,
-        plain: gpgme_data_t,
-        cipher: gpgme_data_t,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_encrypt_ext(
-        ctx: gpgme_ctx_t,
-        recp: *mut gpgme_key_t,
-        recpstring: *const ::std::os::raw::c_char,
-        flags: gpgme_encrypt_flags_t,
-        plain: gpgme_data_t,
-        cipher: gpgme_data_t,
-    ) -> gpgme_error_t;
-}
+pub type gpgme_op_encrypt = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    recp: *mut gpgme_key_t,
+    flags: gpgme_encrypt_flags_t,
+    plain: gpgme_data_t,
+    cipher: gpgme_data_t,
+) -> gpgme_error_t;
+pub type gpgme_op_encrypt_ext_start = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    recp: *mut gpgme_key_t,
+    recpstring: *const ::std::os::raw::c_char,
+    flags: gpgme_encrypt_flags_t,
+    plain: gpgme_data_t,
+    cipher: gpgme_data_t,
+) -> gpgme_error_t;
+pub type gpgme_op_encrypt_ext = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    recp: *mut gpgme_key_t,
+    recpstring: *const ::std::os::raw::c_char,
+    flags: gpgme_encrypt_flags_t,
+    plain: gpgme_data_t,
+    cipher: gpgme_data_t,
+) -> gpgme_error_t;
 pub type gpgme_op_encrypt_sign_start = unsafe extern "C" fn(
     ctx: gpgme_ctx_t,
     recp: *mut gpgme_key_t,
@@ -2620,35 +2481,29 @@ pub type gpgme_op_encrypt_sign_start = unsafe extern "C" fn(
     plain: gpgme_data_t,
     cipher: gpgme_data_t,
 ) -> gpgme_error_t;
-extern "C" {
-    pub fn gpgme_op_encrypt_sign(
-        ctx: gpgme_ctx_t,
-        recp: *mut gpgme_key_t,
-        flags: gpgme_encrypt_flags_t,
-        plain: gpgme_data_t,
-        cipher: gpgme_data_t,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_encrypt_sign_ext_start(
-        ctx: gpgme_ctx_t,
-        recp: *mut gpgme_key_t,
-        recpstring: *const ::std::os::raw::c_char,
-        flags: gpgme_encrypt_flags_t,
-        plain: gpgme_data_t,
-        cipher: gpgme_data_t,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_encrypt_sign_ext(
-        ctx: gpgme_ctx_t,
-        recp: *mut gpgme_key_t,
-        recpstring: *const ::std::os::raw::c_char,
-        flags: gpgme_encrypt_flags_t,
-        plain: gpgme_data_t,
-        cipher: gpgme_data_t,
-    ) -> gpgme_error_t;
-}
+pub type gpgme_op_encrypt_sign = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    recp: *mut gpgme_key_t,
+    flags: gpgme_encrypt_flags_t,
+    plain: gpgme_data_t,
+    cipher: gpgme_data_t,
+) -> gpgme_error_t;
+pub type gpgme_op_encrypt_sign_ext_start = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    recp: *mut gpgme_key_t,
+    recpstring: *const ::std::os::raw::c_char,
+    flags: gpgme_encrypt_flags_t,
+    plain: gpgme_data_t,
+    cipher: gpgme_data_t,
+) -> gpgme_error_t;
+pub type gpgme_op_encrypt_sign_ext = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    recp: *mut gpgme_key_t,
+    recpstring: *const ::std::os::raw::c_char,
+    flags: gpgme_encrypt_flags_t,
+    plain: gpgme_data_t,
+    cipher: gpgme_data_t,
+) -> gpgme_error_t;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct _gpgme_recipient {
@@ -2905,43 +2760,24 @@ pub type gpgme_op_decrypt_start = unsafe extern "C" fn(
     cipher: gpgme_data_t,
     plain: gpgme_data_t,
 ) -> gpgme_error_t;
-extern "C" {
-    pub fn gpgme_op_decrypt(
-        ctx: gpgme_ctx_t,
-        cipher: gpgme_data_t,
-        plain: gpgme_data_t,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_decrypt_verify_start(
-        ctx: gpgme_ctx_t,
-        cipher: gpgme_data_t,
-        plain: gpgme_data_t,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_decrypt_verify(
-        ctx: gpgme_ctx_t,
-        cipher: gpgme_data_t,
-        plain: gpgme_data_t,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_decrypt_ext_start(
-        ctx: gpgme_ctx_t,
-        flags: gpgme_decrypt_flags_t,
-        cipher: gpgme_data_t,
-        plain: gpgme_data_t,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_decrypt_ext(
-        ctx: gpgme_ctx_t,
-        flags: gpgme_decrypt_flags_t,
-        cipher: gpgme_data_t,
-        plain: gpgme_data_t,
-    ) -> gpgme_error_t;
-}
+pub type gpgme_op_decrypt =
+    extern "C" fn(ctx: gpgme_ctx_t, cipher: gpgme_data_t, plain: gpgme_data_t) -> gpgme_error_t;
+pub type gpgme_op_decrypt_verify_start =
+    extern "C" fn(ctx: gpgme_ctx_t, cipher: gpgme_data_t, plain: gpgme_data_t) -> gpgme_error_t;
+pub type gpgme_op_decrypt_verify =
+    extern "C" fn(ctx: gpgme_ctx_t, cipher: gpgme_data_t, plain: gpgme_data_t) -> gpgme_error_t;
+pub type gpgme_op_decrypt_ext_start = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    flags: gpgme_decrypt_flags_t,
+    cipher: gpgme_data_t,
+    plain: gpgme_data_t,
+) -> gpgme_error_t;
+pub type gpgme_op_decrypt_ext = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    flags: gpgme_decrypt_flags_t,
+    cipher: gpgme_data_t,
+    plain: gpgme_data_t,
+) -> gpgme_error_t;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct _gpgme_new_signature {
@@ -3107,23 +2943,19 @@ fn bindgen_test_layout__gpgme_op_sign_result() {
     );
 }
 pub type gpgme_sign_result_t = *mut _gpgme_op_sign_result;
-extern "C" {
-    pub fn gpgme_op_sign_result(ctx: gpgme_ctx_t) -> gpgme_sign_result_t;
-}
+pub type gpgme_op_sign_result = extern "C" fn(ctx: gpgme_ctx_t) -> gpgme_sign_result_t;
 pub type gpgme_op_sign_start = unsafe extern "C" fn(
     ctx: gpgme_ctx_t,
     plain: gpgme_data_t,
     sig: gpgme_data_t,
     mode: gpgme_sig_mode_t,
 ) -> gpgme_error_t;
-extern "C" {
-    pub fn gpgme_op_sign(
-        ctx: gpgme_ctx_t,
-        plain: gpgme_data_t,
-        sig: gpgme_data_t,
-        mode: gpgme_sig_mode_t,
-    ) -> gpgme_error_t;
-}
+pub type gpgme_op_sign = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    plain: gpgme_data_t,
+    sig: gpgme_data_t,
+    mode: gpgme_sig_mode_t,
+) -> gpgme_error_t;
 pub const gpgme_sigsum_t_GPGME_SIGSUM_VALID: gpgme_sigsum_t = 1;
 pub const gpgme_sigsum_t_GPGME_SIGSUM_GREEN: gpgme_sigsum_t = 2;
 pub const gpgme_sigsum_t_GPGME_SIGSUM_RED: gpgme_sigsum_t = 4;
@@ -3484,14 +3316,12 @@ pub type gpgme_op_verify_start = unsafe extern "C" fn(
     signed_text: gpgme_data_t,
     plaintext: gpgme_data_t,
 ) -> gpgme_error_t;
-extern "C" {
-    pub fn gpgme_op_verify(
-        ctx: gpgme_ctx_t,
-        sig: gpgme_data_t,
-        signed_text: gpgme_data_t,
-        plaintext: gpgme_data_t,
-    ) -> gpgme_error_t;
-}
+pub type gpgme_op_verify = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    sig: gpgme_data_t,
+    signed_text: gpgme_data_t,
+    plaintext: gpgme_data_t,
+) -> gpgme_error_t;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct _gpgme_import_status {
@@ -3780,69 +3610,50 @@ fn bindgen_test_layout__gpgme_op_import_result() {
     );
 }
 pub type gpgme_import_result_t = *mut _gpgme_op_import_result;
-extern "C" {
-    pub fn gpgme_op_import_result(ctx: gpgme_ctx_t) -> gpgme_import_result_t;
-}
-extern "C" {
-    pub fn gpgme_op_import_start(ctx: gpgme_ctx_t, keydata: gpgme_data_t) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_import(ctx: gpgme_ctx_t, keydata: gpgme_data_t) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_import_keys_start(ctx: gpgme_ctx_t, keys: *mut gpgme_key_t) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_import_keys(ctx: gpgme_ctx_t, keys: *mut gpgme_key_t) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_export_start(
-        ctx: gpgme_ctx_t,
-        pattern: *const ::std::os::raw::c_char,
-        mode: gpgme_export_mode_t,
-        keydata: gpgme_data_t,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_export(
-        ctx: gpgme_ctx_t,
-        pattern: *const ::std::os::raw::c_char,
-        mode: gpgme_export_mode_t,
-        keydata: gpgme_data_t,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_export_ext_start(
-        ctx: gpgme_ctx_t,
-        pattern: *mut *const ::std::os::raw::c_char,
-        mode: gpgme_export_mode_t,
-        keydata: gpgme_data_t,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_export_ext(
-        ctx: gpgme_ctx_t,
-        pattern: *mut *const ::std::os::raw::c_char,
-        mode: gpgme_export_mode_t,
-        keydata: gpgme_data_t,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_export_keys_start(
-        ctx: gpgme_ctx_t,
-        keys: *mut gpgme_key_t,
-        mode: gpgme_export_mode_t,
-        keydata: gpgme_data_t,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_export_keys(
-        ctx: gpgme_ctx_t,
-        keys: *mut gpgme_key_t,
-        mode: gpgme_export_mode_t,
-        keydata: gpgme_data_t,
-    ) -> gpgme_error_t;
-}
+pub type gpgme_op_import_result = extern "C" fn(ctx: gpgme_ctx_t) -> gpgme_import_result_t;
+pub type gpgme_op_import_start =
+    extern "C" fn(ctx: gpgme_ctx_t, keydata: gpgme_data_t) -> gpgme_error_t;
+pub type gpgme_op_import = extern "C" fn(ctx: gpgme_ctx_t, keydata: gpgme_data_t) -> gpgme_error_t;
+pub type gpgme_op_import_keys_start =
+    extern "C" fn(ctx: gpgme_ctx_t, keys: *mut gpgme_key_t) -> gpgme_error_t;
+pub type gpgme_op_import_keys =
+    extern "C" fn(ctx: gpgme_ctx_t, keys: *mut gpgme_key_t) -> gpgme_error_t;
+pub type gpgme_op_export_start = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    pattern: *const ::std::os::raw::c_char,
+    mode: gpgme_export_mode_t,
+    keydata: gpgme_data_t,
+) -> gpgme_error_t;
+pub type gpgme_op_export = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    pattern: *const ::std::os::raw::c_char,
+    mode: gpgme_export_mode_t,
+    keydata: gpgme_data_t,
+) -> gpgme_error_t;
+pub type gpgme_op_export_ext_start = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    pattern: *mut *const ::std::os::raw::c_char,
+    mode: gpgme_export_mode_t,
+    keydata: gpgme_data_t,
+) -> gpgme_error_t;
+pub type gpgme_op_export_ext = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    pattern: *mut *const ::std::os::raw::c_char,
+    mode: gpgme_export_mode_t,
+    keydata: gpgme_data_t,
+) -> gpgme_error_t;
+pub type gpgme_op_export_keys_start = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    keys: *mut gpgme_key_t,
+    mode: gpgme_export_mode_t,
+    keydata: gpgme_data_t,
+) -> gpgme_error_t;
+pub type gpgme_op_export_keys = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    keys: *mut gpgme_key_t,
+    mode: gpgme_export_mode_t,
+    keydata: gpgme_data_t,
+) -> gpgme_error_t;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct _gpgme_op_genkey_result {
@@ -3968,197 +3779,145 @@ impl _gpgme_op_genkey_result {
     }
 }
 pub type gpgme_genkey_result_t = *mut _gpgme_op_genkey_result;
-extern "C" {
-    pub fn gpgme_op_genkey_start(
-        ctx: gpgme_ctx_t,
-        parms: *const ::std::os::raw::c_char,
-        pubkey: gpgme_data_t,
-        seckey: gpgme_data_t,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_genkey(
-        ctx: gpgme_ctx_t,
-        parms: *const ::std::os::raw::c_char,
-        pubkey: gpgme_data_t,
-        seckey: gpgme_data_t,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_createkey_start(
-        ctx: gpgme_ctx_t,
-        userid: *const ::std::os::raw::c_char,
-        algo: *const ::std::os::raw::c_char,
-        reserved: ::std::os::raw::c_ulong,
-        expires: ::std::os::raw::c_ulong,
-        certkey: gpgme_key_t,
-        flags: ::std::os::raw::c_uint,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_createkey(
-        ctx: gpgme_ctx_t,
-        userid: *const ::std::os::raw::c_char,
-        algo: *const ::std::os::raw::c_char,
-        reserved: ::std::os::raw::c_ulong,
-        expires: ::std::os::raw::c_ulong,
-        certkey: gpgme_key_t,
-        flags: ::std::os::raw::c_uint,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_createsubkey_start(
-        ctx: gpgme_ctx_t,
-        key: gpgme_key_t,
-        algo: *const ::std::os::raw::c_char,
-        reserved: ::std::os::raw::c_ulong,
-        expires: ::std::os::raw::c_ulong,
-        flags: ::std::os::raw::c_uint,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_createsubkey(
-        ctx: gpgme_ctx_t,
-        key: gpgme_key_t,
-        algo: *const ::std::os::raw::c_char,
-        reserved: ::std::os::raw::c_ulong,
-        expires: ::std::os::raw::c_ulong,
-        flags: ::std::os::raw::c_uint,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_adduid_start(
-        ctx: gpgme_ctx_t,
-        key: gpgme_key_t,
-        userid: *const ::std::os::raw::c_char,
-        reserved: ::std::os::raw::c_uint,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_adduid(
-        ctx: gpgme_ctx_t,
-        key: gpgme_key_t,
-        userid: *const ::std::os::raw::c_char,
-        reserved: ::std::os::raw::c_uint,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_revuid_start(
-        ctx: gpgme_ctx_t,
-        key: gpgme_key_t,
-        userid: *const ::std::os::raw::c_char,
-        reserved: ::std::os::raw::c_uint,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_revuid(
-        ctx: gpgme_ctx_t,
-        key: gpgme_key_t,
-        userid: *const ::std::os::raw::c_char,
-        reserved: ::std::os::raw::c_uint,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_set_uid_flag_start(
-        ctx: gpgme_ctx_t,
-        key: gpgme_key_t,
-        userid: *const ::std::os::raw::c_char,
-        name: *const ::std::os::raw::c_char,
-        value: *const ::std::os::raw::c_char,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_set_uid_flag(
-        ctx: gpgme_ctx_t,
-        key: gpgme_key_t,
-        userid: *const ::std::os::raw::c_char,
-        name: *const ::std::os::raw::c_char,
-        value: *const ::std::os::raw::c_char,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_genkey_result(ctx: gpgme_ctx_t) -> gpgme_genkey_result_t;
-}
-extern "C" {
-    pub fn gpgme_op_delete_start(
-        ctx: gpgme_ctx_t,
-        key: gpgme_key_t,
-        allow_secret: ::std::os::raw::c_int,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_delete(
-        ctx: gpgme_ctx_t,
-        key: gpgme_key_t,
-        allow_secret: ::std::os::raw::c_int,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_delete_ext_start(
-        ctx: gpgme_ctx_t,
-        key: gpgme_key_t,
-        flags: ::std::os::raw::c_uint,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_delete_ext(
-        ctx: gpgme_ctx_t,
-        key: gpgme_key_t,
-        flags: ::std::os::raw::c_uint,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_keysign_start(
-        ctx: gpgme_ctx_t,
-        key: gpgme_key_t,
-        userid: *const ::std::os::raw::c_char,
-        expires: ::std::os::raw::c_ulong,
-        flags: ::std::os::raw::c_uint,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_keysign(
-        ctx: gpgme_ctx_t,
-        key: gpgme_key_t,
-        userid: *const ::std::os::raw::c_char,
-        expires: ::std::os::raw::c_ulong,
-        flags: ::std::os::raw::c_uint,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_interact_start(
-        ctx: gpgme_ctx_t,
-        key: gpgme_key_t,
-        flags: ::std::os::raw::c_uint,
-        fnc: gpgme_interact_cb_t,
-        fnc_value: *mut ::std::os::raw::c_void,
-        out: gpgme_data_t,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_interact(
-        ctx: gpgme_ctx_t,
-        key: gpgme_key_t,
-        flags: ::std::os::raw::c_uint,
-        fnc: gpgme_interact_cb_t,
-        fnc_value: *mut ::std::os::raw::c_void,
-        out: gpgme_data_t,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_tofu_policy_start(
-        ctx: gpgme_ctx_t,
-        key: gpgme_key_t,
-        policy: gpgme_tofu_policy_t,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_tofu_policy(
-        ctx: gpgme_ctx_t,
-        key: gpgme_key_t,
-        policy: gpgme_tofu_policy_t,
-    ) -> gpgme_error_t;
-}
+pub type gpgme_op_genkey_start = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    parms: *const ::std::os::raw::c_char,
+    pubkey: gpgme_data_t,
+    seckey: gpgme_data_t,
+) -> gpgme_error_t;
+pub type gpgme_op_genkey = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    parms: *const ::std::os::raw::c_char,
+    pubkey: gpgme_data_t,
+    seckey: gpgme_data_t,
+) -> gpgme_error_t;
+pub type gpgme_op_createkey_start = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    userid: *const ::std::os::raw::c_char,
+    algo: *const ::std::os::raw::c_char,
+    reserved: ::std::os::raw::c_ulong,
+    expires: ::std::os::raw::c_ulong,
+    certkey: gpgme_key_t,
+    flags: ::std::os::raw::c_uint,
+) -> gpgme_error_t;
+pub type gpgme_op_createkey = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    userid: *const ::std::os::raw::c_char,
+    algo: *const ::std::os::raw::c_char,
+    reserved: ::std::os::raw::c_ulong,
+    expires: ::std::os::raw::c_ulong,
+    certkey: gpgme_key_t,
+    flags: ::std::os::raw::c_uint,
+) -> gpgme_error_t;
+pub type gpgme_op_createsubkey_start = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    key: gpgme_key_t,
+    algo: *const ::std::os::raw::c_char,
+    reserved: ::std::os::raw::c_ulong,
+    expires: ::std::os::raw::c_ulong,
+    flags: ::std::os::raw::c_uint,
+) -> gpgme_error_t;
+pub type gpgme_op_createsubkey = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    key: gpgme_key_t,
+    algo: *const ::std::os::raw::c_char,
+    reserved: ::std::os::raw::c_ulong,
+    expires: ::std::os::raw::c_ulong,
+    flags: ::std::os::raw::c_uint,
+) -> gpgme_error_t;
+pub type gpgme_op_adduid_start = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    key: gpgme_key_t,
+    userid: *const ::std::os::raw::c_char,
+    reserved: ::std::os::raw::c_uint,
+) -> gpgme_error_t;
+pub type gpgme_op_adduid = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    key: gpgme_key_t,
+    userid: *const ::std::os::raw::c_char,
+    reserved: ::std::os::raw::c_uint,
+) -> gpgme_error_t;
+pub type gpgme_op_revuid_start = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    key: gpgme_key_t,
+    userid: *const ::std::os::raw::c_char,
+    reserved: ::std::os::raw::c_uint,
+) -> gpgme_error_t;
+pub type gpgme_op_revuid = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    key: gpgme_key_t,
+    userid: *const ::std::os::raw::c_char,
+    reserved: ::std::os::raw::c_uint,
+) -> gpgme_error_t;
+pub type gpgme_op_set_uid_flag_start = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    key: gpgme_key_t,
+    userid: *const ::std::os::raw::c_char,
+    name: *const ::std::os::raw::c_char,
+    value: *const ::std::os::raw::c_char,
+) -> gpgme_error_t;
+pub type gpgme_op_set_uid_flag = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    key: gpgme_key_t,
+    userid: *const ::std::os::raw::c_char,
+    name: *const ::std::os::raw::c_char,
+    value: *const ::std::os::raw::c_char,
+) -> gpgme_error_t;
+pub type gpgme_op_genkey_result = extern "C" fn(ctx: gpgme_ctx_t) -> gpgme_genkey_result_t;
+pub type gpgme_op_delete_start = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    key: gpgme_key_t,
+    allow_secret: ::std::os::raw::c_int,
+) -> gpgme_error_t;
+pub type gpgme_op_delete = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    key: gpgme_key_t,
+    allow_secret: ::std::os::raw::c_int,
+) -> gpgme_error_t;
+pub type gpgme_op_delete_ext_start = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    key: gpgme_key_t,
+    flags: ::std::os::raw::c_uint,
+) -> gpgme_error_t;
+pub type gpgme_op_delete_ext = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    key: gpgme_key_t,
+    flags: ::std::os::raw::c_uint,
+) -> gpgme_error_t;
+pub type gpgme_op_keysign_start = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    key: gpgme_key_t,
+    userid: *const ::std::os::raw::c_char,
+    expires: ::std::os::raw::c_ulong,
+    flags: ::std::os::raw::c_uint,
+) -> gpgme_error_t;
+pub type gpgme_op_keysign = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    key: gpgme_key_t,
+    userid: *const ::std::os::raw::c_char,
+    expires: ::std::os::raw::c_ulong,
+    flags: ::std::os::raw::c_uint,
+) -> gpgme_error_t;
+pub type gpgme_op_interact_start = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    key: gpgme_key_t,
+    flags: ::std::os::raw::c_uint,
+    fnc: gpgme_interact_cb_t,
+    fnc_value: *mut ::std::os::raw::c_void,
+    out: gpgme_data_t,
+) -> gpgme_error_t;
+pub type gpgme_op_interact = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    key: gpgme_key_t,
+    flags: ::std::os::raw::c_uint,
+    fnc: gpgme_interact_cb_t,
+    fnc_value: *mut ::std::os::raw::c_void,
+    out: gpgme_data_t,
+) -> gpgme_error_t;
+pub type gpgme_op_tofu_policy_start =
+    extern "C" fn(ctx: gpgme_ctx_t, key: gpgme_key_t, policy: gpgme_tofu_policy_t) -> gpgme_error_t;
+pub type gpgme_op_tofu_policy =
+    extern "C" fn(ctx: gpgme_ctx_t, key: gpgme_key_t, policy: gpgme_tofu_policy_t) -> gpgme_error_t;
 #[repr(C)]
 #[repr(align(4))]
 #[derive(Debug, Copy, Clone)]
@@ -4220,46 +3979,36 @@ impl _gpgme_op_keylist_result {
     }
 }
 pub type gpgme_keylist_result_t = *mut _gpgme_op_keylist_result;
-extern "C" {
-    pub fn gpgme_op_keylist_result(ctx: gpgme_ctx_t) -> gpgme_keylist_result_t;
-}
+pub type gpgme_op_keylist_result = extern "C" fn(ctx: gpgme_ctx_t) -> gpgme_keylist_result_t;
 pub type gpgme_op_keylist_start = unsafe extern "C" fn(
     ctx: gpgme_ctx_t,
     pattern: *const ::std::os::raw::c_char,
     secret_only: ::std::os::raw::c_int,
 ) -> gpgme_error_t;
-extern "C" {
-    pub fn gpgme_op_keylist_ext_start(
-        ctx: gpgme_ctx_t,
-        pattern: *mut *const ::std::os::raw::c_char,
-        secret_only: ::std::os::raw::c_int,
-        reserved: ::std::os::raw::c_int,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_keylist_from_data_start(
-        ctx: gpgme_ctx_t,
-        data: gpgme_data_t,
-        reserved: ::std::os::raw::c_int,
-    ) -> gpgme_error_t;
-}
+pub type gpgme_op_keylist_ext_start = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    pattern: *mut *const ::std::os::raw::c_char,
+    secret_only: ::std::os::raw::c_int,
+    reserved: ::std::os::raw::c_int,
+) -> gpgme_error_t;
+pub type gpgme_op_keylist_from_data_start = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    data: gpgme_data_t,
+    reserved: ::std::os::raw::c_int,
+) -> gpgme_error_t;
 pub type gpgme_op_keylist_next =
     unsafe extern "C" fn(ctx: gpgme_ctx_t, r_key: *mut gpgme_key_t) -> gpgme_error_t;
 pub type gpgme_op_keylist_end = unsafe extern "C" fn(ctx: gpgme_ctx_t) -> gpgme_error_t;
-extern "C" {
-    pub fn gpgme_op_passwd_start(
-        ctx: gpgme_ctx_t,
-        key: gpgme_key_t,
-        flags: ::std::os::raw::c_uint,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_passwd(
-        ctx: gpgme_ctx_t,
-        key: gpgme_key_t,
-        flags: ::std::os::raw::c_uint,
-    ) -> gpgme_error_t;
-}
+pub type gpgme_op_passwd_start = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    key: gpgme_key_t,
+    flags: ::std::os::raw::c_uint,
+) -> gpgme_error_t;
+pub type gpgme_op_passwd = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    key: gpgme_key_t,
+    flags: ::std::os::raw::c_uint,
+) -> gpgme_error_t;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct _gpgme_trust_item {
@@ -4388,64 +4137,44 @@ fn bindgen_test_layout__gpgme_trust_item() {
     );
 }
 pub type gpgme_trust_item_t = *mut _gpgme_trust_item;
-extern "C" {
-    pub fn gpgme_op_trustlist_start(
-        ctx: gpgme_ctx_t,
-        pattern: *const ::std::os::raw::c_char,
-        max_level: ::std::os::raw::c_int,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_trustlist_next(
-        ctx: gpgme_ctx_t,
-        r_item: *mut gpgme_trust_item_t,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_trustlist_end(ctx: gpgme_ctx_t) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_trust_item_ref(item: gpgme_trust_item_t);
-}
-extern "C" {
-    pub fn gpgme_trust_item_unref(item: gpgme_trust_item_t);
-}
-extern "C" {
-    pub fn gpgme_op_getauditlog_start(
-        ctx: gpgme_ctx_t,
-        output: gpgme_data_t,
-        flags: ::std::os::raw::c_uint,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_getauditlog(
-        ctx: gpgme_ctx_t,
-        output: gpgme_data_t,
-        flags: ::std::os::raw::c_uint,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_spawn_start(
-        ctx: gpgme_ctx_t,
-        file: *const ::std::os::raw::c_char,
-        argv: *mut *const ::std::os::raw::c_char,
-        datain: gpgme_data_t,
-        dataout: gpgme_data_t,
-        dataerr: gpgme_data_t,
-        flags: ::std::os::raw::c_uint,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_spawn(
-        ctx: gpgme_ctx_t,
-        file: *const ::std::os::raw::c_char,
-        argv: *mut *const ::std::os::raw::c_char,
-        datain: gpgme_data_t,
-        dataout: gpgme_data_t,
-        dataerr: gpgme_data_t,
-        flags: ::std::os::raw::c_uint,
-    ) -> gpgme_error_t;
-}
+pub type gpgme_op_trustlist_start = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    pattern: *const ::std::os::raw::c_char,
+    max_level: ::std::os::raw::c_int,
+) -> gpgme_error_t;
+pub type gpgme_op_trustlist_next =
+    extern "C" fn(ctx: gpgme_ctx_t, r_item: *mut gpgme_trust_item_t) -> gpgme_error_t;
+pub type gpgme_op_trustlist_end = extern "C" fn(ctx: gpgme_ctx_t) -> gpgme_error_t;
+pub type gpgme_trust_item_ref = extern "C" fn(item: gpgme_trust_item_t);
+pub type gpgme_trust_item_unref = extern "C" fn(item: gpgme_trust_item_t);
+pub type gpgme_op_getauditlog_start = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    output: gpgme_data_t,
+    flags: ::std::os::raw::c_uint,
+) -> gpgme_error_t;
+pub type gpgme_op_getauditlog = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    output: gpgme_data_t,
+    flags: ::std::os::raw::c_uint,
+) -> gpgme_error_t;
+pub type gpgme_op_spawn_start = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    file: *const ::std::os::raw::c_char,
+    argv: *mut *const ::std::os::raw::c_char,
+    datain: gpgme_data_t,
+    dataout: gpgme_data_t,
+    dataerr: gpgme_data_t,
+    flags: ::std::os::raw::c_uint,
+) -> gpgme_error_t;
+pub type gpgme_op_spawn = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    file: *const ::std::os::raw::c_char,
+    argv: *mut *const ::std::os::raw::c_char,
+    datain: gpgme_data_t,
+    dataout: gpgme_data_t,
+    dataerr: gpgme_data_t,
+    flags: ::std::os::raw::c_uint,
+) -> gpgme_error_t;
 pub type gpgme_assuan_data_cb_t = ::std::option::Option<
     unsafe extern "C" fn(
         opaque: *mut ::std::os::raw::c_void,
@@ -4468,31 +4197,27 @@ pub type gpgme_assuan_status_cb_t = ::std::option::Option<
         args: *const ::std::os::raw::c_char,
     ) -> gpgme_error_t,
 >;
-extern "C" {
-    pub fn gpgme_op_assuan_transact_start(
-        ctx: gpgme_ctx_t,
-        command: *const ::std::os::raw::c_char,
-        data_cb: gpgme_assuan_data_cb_t,
-        data_cb_value: *mut ::std::os::raw::c_void,
-        inq_cb: gpgme_assuan_inquire_cb_t,
-        inq_cb_value: *mut ::std::os::raw::c_void,
-        stat_cb: gpgme_assuan_status_cb_t,
-        stat_cb_value: *mut ::std::os::raw::c_void,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_assuan_transact_ext(
-        ctx: gpgme_ctx_t,
-        command: *const ::std::os::raw::c_char,
-        data_cb: gpgme_assuan_data_cb_t,
-        data_cb_value: *mut ::std::os::raw::c_void,
-        inq_cb: gpgme_assuan_inquire_cb_t,
-        inq_cb_value: *mut ::std::os::raw::c_void,
-        stat_cb: gpgme_assuan_status_cb_t,
-        stat_cb_value: *mut ::std::os::raw::c_void,
-        op_err: *mut gpgme_error_t,
-    ) -> gpgme_error_t;
-}
+pub type gpgme_op_assuan_transact_start = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    command: *const ::std::os::raw::c_char,
+    data_cb: gpgme_assuan_data_cb_t,
+    data_cb_value: *mut ::std::os::raw::c_void,
+    inq_cb: gpgme_assuan_inquire_cb_t,
+    inq_cb_value: *mut ::std::os::raw::c_void,
+    stat_cb: gpgme_assuan_status_cb_t,
+    stat_cb_value: *mut ::std::os::raw::c_void,
+) -> gpgme_error_t;
+pub type gpgme_op_assuan_transact_ext = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    command: *const ::std::os::raw::c_char,
+    data_cb: gpgme_assuan_data_cb_t,
+    data_cb_value: *mut ::std::os::raw::c_void,
+    inq_cb: gpgme_assuan_inquire_cb_t,
+    inq_cb_value: *mut ::std::os::raw::c_void,
+    stat_cb: gpgme_assuan_status_cb_t,
+    stat_cb_value: *mut ::std::os::raw::c_void,
+    op_err: *mut gpgme_error_t,
+) -> gpgme_error_t;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct _gpgme_op_vfs_mount_result {
@@ -4524,27 +4249,21 @@ fn bindgen_test_layout__gpgme_op_vfs_mount_result() {
     );
 }
 pub type gpgme_vfs_mount_result_t = *mut _gpgme_op_vfs_mount_result;
-extern "C" {
-    pub fn gpgme_op_vfs_mount_result(ctx: gpgme_ctx_t) -> gpgme_vfs_mount_result_t;
-}
-extern "C" {
-    pub fn gpgme_op_vfs_mount(
-        ctx: gpgme_ctx_t,
-        container_file: *const ::std::os::raw::c_char,
-        mount_dir: *const ::std::os::raw::c_char,
-        flags: ::std::os::raw::c_uint,
-        op_err: *mut gpgme_error_t,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_vfs_create(
-        ctx: gpgme_ctx_t,
-        recp: *mut gpgme_key_t,
-        container_file: *const ::std::os::raw::c_char,
-        flags: ::std::os::raw::c_uint,
-        op_err: *mut gpgme_error_t,
-    ) -> gpgme_error_t;
-}
+pub type gpgme_op_vfs_mount_result = extern "C" fn(ctx: gpgme_ctx_t) -> gpgme_vfs_mount_result_t;
+pub type gpgme_op_vfs_mount = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    container_file: *const ::std::os::raw::c_char,
+    mount_dir: *const ::std::os::raw::c_char,
+    flags: ::std::os::raw::c_uint,
+    op_err: *mut gpgme_error_t,
+) -> gpgme_error_t;
+pub type gpgme_op_vfs_create = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    recp: *mut gpgme_key_t,
+    container_file: *const ::std::os::raw::c_char,
+    flags: ::std::os::raw::c_uint,
+    op_err: *mut gpgme_error_t,
+) -> gpgme_error_t;
 pub const gpgme_conf_level_t_GPGME_CONF_BASIC: gpgme_conf_level_t = 0;
 pub const gpgme_conf_level_t_GPGME_CONF_ADVANCED: gpgme_conf_level_t = 1;
 pub const gpgme_conf_level_t_GPGME_CONF_EXPERT: gpgme_conf_level_t = 2;
@@ -4965,39 +4684,27 @@ fn bindgen_test_layout_gpgme_conf_comp() {
     );
 }
 pub type gpgme_conf_comp_t = *mut gpgme_conf_comp;
-extern "C" {
-    pub fn gpgme_conf_arg_new(
-        arg_p: *mut gpgme_conf_arg_t,
-        type_: gpgme_conf_type_t,
-        value: *const ::std::os::raw::c_void,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_conf_arg_release(arg: gpgme_conf_arg_t, type_: gpgme_conf_type_t);
-}
-extern "C" {
-    pub fn gpgme_conf_opt_change(
-        opt: gpgme_conf_opt_t,
-        reset: ::std::os::raw::c_int,
-        arg: gpgme_conf_arg_t,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_conf_release(conf: gpgme_conf_comp_t);
-}
-extern "C" {
-    pub fn gpgme_op_conf_load(ctx: gpgme_ctx_t, conf_p: *mut gpgme_conf_comp_t) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_conf_save(ctx: gpgme_ctx_t, comp: gpgme_conf_comp_t) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_conf_dir(
-        ctx: gpgme_ctx_t,
-        what: *const ::std::os::raw::c_char,
-        result: *mut *mut ::std::os::raw::c_char,
-    ) -> gpgme_error_t;
-}
+pub type gpgme_conf_arg_new = extern "C" fn(
+    arg_p: *mut gpgme_conf_arg_t,
+    type_: gpgme_conf_type_t,
+    value: *const ::std::os::raw::c_void,
+) -> gpgme_error_t;
+pub type gpgme_conf_arg_release = extern "C" fn(arg: gpgme_conf_arg_t, type_: gpgme_conf_type_t);
+pub type gpgme_conf_opt_change = extern "C" fn(
+    opt: gpgme_conf_opt_t,
+    reset: ::std::os::raw::c_int,
+    arg: gpgme_conf_arg_t,
+) -> gpgme_error_t;
+pub type gpgme_conf_release = extern "C" fn(conf: gpgme_conf_comp_t);
+pub type gpgme_op_conf_load =
+    extern "C" fn(ctx: gpgme_ctx_t, conf_p: *mut gpgme_conf_comp_t) -> gpgme_error_t;
+pub type gpgme_op_conf_save =
+    extern "C" fn(ctx: gpgme_ctx_t, comp: gpgme_conf_comp_t) -> gpgme_error_t;
+pub type gpgme_op_conf_dir = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    what: *const ::std::os::raw::c_char,
+    result: *mut *mut ::std::os::raw::c_char,
+) -> gpgme_error_t;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct _gpgme_op_query_swdb_result {
@@ -5245,68 +4952,44 @@ impl _gpgme_op_query_swdb_result {
     }
 }
 pub type gpgme_query_swdb_result_t = *mut _gpgme_op_query_swdb_result;
-extern "C" {
-    pub fn gpgme_op_query_swdb(
-        ctx: gpgme_ctx_t,
-        name: *const ::std::os::raw::c_char,
-        iversion: *const ::std::os::raw::c_char,
-        reserved: ::std::os::raw::c_uint,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_query_swdb_result(ctx: gpgme_ctx_t) -> gpgme_query_swdb_result_t;
-}
-extern "C" {
-    pub fn gpgme_set_global_flag(
-        name: *const ::std::os::raw::c_char,
-        value: *const ::std::os::raw::c_char,
-    ) -> ::std::os::raw::c_int;
-}
+pub type gpgme_op_query_swdb = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    name: *const ::std::os::raw::c_char,
+    iversion: *const ::std::os::raw::c_char,
+    reserved: ::std::os::raw::c_uint,
+) -> gpgme_error_t;
+pub type gpgme_op_query_swdb_result = extern "C" fn(ctx: gpgme_ctx_t) -> gpgme_query_swdb_result_t;
+pub type gpgme_set_global_flag = extern "C" fn(
+    name: *const ::std::os::raw::c_char,
+    value: *const ::std::os::raw::c_char,
+) -> ::std::os::raw::c_int;
 pub type gpgme_check_version = unsafe extern "C" fn(
     req_version: *const ::std::os::raw::c_char,
 ) -> *const ::std::os::raw::c_char;
-extern "C" {
-    pub fn gpgme_check_version_internal(
-        req_version: *const ::std::os::raw::c_char,
-        offset_sig_validity: usize,
-    ) -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn gpgme_get_dirinfo(what: *const ::std::os::raw::c_char) -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn gpgme_get_engine_info(engine_info: *mut gpgme_engine_info_t) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_set_engine_info(
-        proto: gpgme_protocol_t,
-        file_name: *const ::std::os::raw::c_char,
-        home_dir: *const ::std::os::raw::c_char,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_engine_check_version(proto: gpgme_protocol_t) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_result_ref(result: *mut ::std::os::raw::c_void);
-}
-extern "C" {
-    pub fn gpgme_result_unref(result: *mut ::std::os::raw::c_void);
-}
-extern "C" {
-    pub fn gpgme_pubkey_algo_string(subkey: gpgme_subkey_t) -> *mut ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn gpgme_pubkey_algo_name(algo: gpgme_pubkey_algo_t) -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn gpgme_hash_algo_name(algo: gpgme_hash_algo_t) -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn gpgme_addrspec_from_uid(
-        uid: *const ::std::os::raw::c_char,
-    ) -> *mut ::std::os::raw::c_char;
-}
+pub type gpgme_check_version_internal = extern "C" fn(
+    req_version: *const ::std::os::raw::c_char,
+    offset_sig_validity: usize,
+) -> *const ::std::os::raw::c_char;
+pub type gpgme_get_dirinfo =
+    extern "C" fn(what: *const ::std::os::raw::c_char) -> *const ::std::os::raw::c_char;
+pub type gpgme_get_engine_info =
+    extern "C" fn(engine_info: *mut gpgme_engine_info_t) -> gpgme_error_t;
+pub type gpgme_set_engine_info = extern "C" fn(
+    proto: gpgme_protocol_t,
+    file_name: *const ::std::os::raw::c_char,
+    home_dir: *const ::std::os::raw::c_char,
+) -> gpgme_error_t;
+pub type gpgme_engine_check_version = extern "C" fn(proto: gpgme_protocol_t) -> gpgme_error_t;
+pub type gpgme_result_ref = extern "C" fn(result: *mut ::std::os::raw::c_void);
+pub type gpgme_result_unref = extern "C" fn(result: *mut ::std::os::raw::c_void);
+pub type gpgme_pubkey_algo_string =
+    extern "C" fn(subkey: gpgme_subkey_t) -> *mut ::std::os::raw::c_char;
+pub type gpgme_pubkey_algo_name =
+    extern "C" fn(algo: gpgme_pubkey_algo_t) -> *const ::std::os::raw::c_char;
+pub type gpgme_hash_algo_name =
+    extern "C" fn(algo: gpgme_hash_algo_t) -> *const ::std::os::raw::c_char;
+pub type gpgme_addrspec_from_uid =
+    extern "C" fn(uid: *const ::std::os::raw::c_char) -> *mut ::std::os::raw::c_char;
 pub const gpgme_status_code_t_GPGME_STATUS_EOF: gpgme_status_code_t = 0;
 pub const gpgme_status_code_t_GPGME_STATUS_ENTER: gpgme_status_code_t = 1;
 pub const gpgme_status_code_t_GPGME_STATUS_LEAVE: gpgme_status_code_t = 2;
@@ -5417,42 +5100,34 @@ pub type gpgme_edit_cb_t = ::std::option::Option<
         fd: ::std::os::raw::c_int,
     ) -> gpgme_error_t,
 >;
-extern "C" {
-    pub fn gpgme_op_edit_start(
-        ctx: gpgme_ctx_t,
-        key: gpgme_key_t,
-        fnc: gpgme_edit_cb_t,
-        fnc_value: *mut ::std::os::raw::c_void,
-        out: gpgme_data_t,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_edit(
-        ctx: gpgme_ctx_t,
-        key: gpgme_key_t,
-        fnc: gpgme_edit_cb_t,
-        fnc_value: *mut ::std::os::raw::c_void,
-        out: gpgme_data_t,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_card_edit_start(
-        ctx: gpgme_ctx_t,
-        key: gpgme_key_t,
-        fnc: gpgme_edit_cb_t,
-        fnc_value: *mut ::std::os::raw::c_void,
-        out: gpgme_data_t,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_op_card_edit(
-        ctx: gpgme_ctx_t,
-        key: gpgme_key_t,
-        fnc: gpgme_edit_cb_t,
-        fnc_value: *mut ::std::os::raw::c_void,
-        out: gpgme_data_t,
-    ) -> gpgme_error_t;
-}
+pub type gpgme_op_edit_start = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    key: gpgme_key_t,
+    fnc: gpgme_edit_cb_t,
+    fnc_value: *mut ::std::os::raw::c_void,
+    out: gpgme_data_t,
+) -> gpgme_error_t;
+pub type gpgme_op_edit = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    key: gpgme_key_t,
+    fnc: gpgme_edit_cb_t,
+    fnc_value: *mut ::std::os::raw::c_void,
+    out: gpgme_data_t,
+) -> gpgme_error_t;
+pub type gpgme_op_card_edit_start = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    key: gpgme_key_t,
+    fnc: gpgme_edit_cb_t,
+    fnc_value: *mut ::std::os::raw::c_void,
+    out: gpgme_data_t,
+) -> gpgme_error_t;
+pub type gpgme_op_card_edit = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    key: gpgme_key_t,
+    fnc: gpgme_edit_cb_t,
+    fnc_value: *mut ::std::os::raw::c_void,
+    out: gpgme_data_t,
+) -> gpgme_error_t;
 pub const _gpgme_sig_stat_t_GPGME_SIG_STAT_NONE: _gpgme_sig_stat_t = 0;
 pub const _gpgme_sig_stat_t_GPGME_SIG_STAT_GOOD: _gpgme_sig_stat_t = 1;
 pub const _gpgme_sig_stat_t_GPGME_SIG_STAT_BAD: _gpgme_sig_stat_t = 2;
@@ -5498,111 +5173,85 @@ pub const _gpgme_attr_t_GPGME_ATTR_SIG_SUMMARY: _gpgme_attr_t = 31;
 pub const _gpgme_attr_t_GPGME_ATTR_SIG_CLASS: _gpgme_attr_t = 32;
 pub type _gpgme_attr_t = u32;
 pub use self::_gpgme_attr_t as gpgme_attr_t;
-extern "C" {
-    pub fn gpgme_get_sig_status(
-        ctx: gpgme_ctx_t,
-        idx: ::std::os::raw::c_int,
-        r_stat: *mut _gpgme_sig_stat_t,
-        r_created: *mut time_t,
-    ) -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn gpgme_get_sig_ulong_attr(
-        c: gpgme_ctx_t,
-        idx: ::std::os::raw::c_int,
-        what: _gpgme_attr_t,
-        whatidx: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_ulong;
-}
-extern "C" {
-    pub fn gpgme_get_sig_string_attr(
-        c: gpgme_ctx_t,
-        idx: ::std::os::raw::c_int,
-        what: _gpgme_attr_t,
-        whatidx: ::std::os::raw::c_int,
-    ) -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn gpgme_get_sig_key(
-        ctx: gpgme_ctx_t,
-        idx: ::std::os::raw::c_int,
-        r_key: *mut gpgme_key_t,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_data_new_with_read_cb(
-        r_dh: *mut gpgme_data_t,
-        read_cb: ::std::option::Option<
-            unsafe extern "C" fn(
-                arg1: *mut ::std::os::raw::c_void,
-                arg2: *mut ::std::os::raw::c_char,
-                arg3: usize,
-                arg4: *mut usize,
-            ) -> ::std::os::raw::c_int,
-        >,
-        read_cb_value: *mut ::std::os::raw::c_void,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_key_get_string_attr(
-        key: gpgme_key_t,
-        what: _gpgme_attr_t,
-        reserved: *const ::std::os::raw::c_void,
-        idx: ::std::os::raw::c_int,
-    ) -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn gpgme_key_get_ulong_attr(
-        key: gpgme_key_t,
-        what: _gpgme_attr_t,
-        reserved: *const ::std::os::raw::c_void,
-        idx: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_ulong;
-}
-extern "C" {
-    pub fn gpgme_key_sig_get_string_attr(
-        key: gpgme_key_t,
-        uid_idx: ::std::os::raw::c_int,
-        what: _gpgme_attr_t,
-        reserved: *const ::std::os::raw::c_void,
-        idx: ::std::os::raw::c_int,
-    ) -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn gpgme_key_sig_get_ulong_attr(
-        key: gpgme_key_t,
-        uid_idx: ::std::os::raw::c_int,
-        what: _gpgme_attr_t,
-        reserved: *const ::std::os::raw::c_void,
-        idx: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_ulong;
-}
-extern "C" {
-    pub fn gpgme_op_import_ext(
-        ctx: gpgme_ctx_t,
-        keydata: gpgme_data_t,
-        nr: *mut ::std::os::raw::c_int,
-    ) -> gpgme_error_t;
-}
-extern "C" {
-    pub fn gpgme_trust_item_release(item: gpgme_trust_item_t);
-}
-extern "C" {
-    pub fn gpgme_trust_item_get_string_attr(
-        item: gpgme_trust_item_t,
-        what: _gpgme_attr_t,
-        reserved: *const ::std::os::raw::c_void,
-        idx: ::std::os::raw::c_int,
-    ) -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn gpgme_trust_item_get_int_attr(
-        item: gpgme_trust_item_t,
-        what: _gpgme_attr_t,
-        reserved: *const ::std::os::raw::c_void,
-        idx: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
-}
+pub type gpgme_get_sig_status = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    idx: ::std::os::raw::c_int,
+    r_stat: *mut _gpgme_sig_stat_t,
+    r_created: *mut time_t,
+) -> *const ::std::os::raw::c_char;
+pub type gpgme_get_sig_ulong_attr = extern "C" fn(
+    c: gpgme_ctx_t,
+    idx: ::std::os::raw::c_int,
+    what: _gpgme_attr_t,
+    whatidx: ::std::os::raw::c_int,
+) -> ::std::os::raw::c_ulong;
+pub type gpgme_get_sig_string_attr = extern "C" fn(
+    c: gpgme_ctx_t,
+    idx: ::std::os::raw::c_int,
+    what: _gpgme_attr_t,
+    whatidx: ::std::os::raw::c_int,
+) -> *const ::std::os::raw::c_char;
+pub type gpgme_get_sig_key = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    idx: ::std::os::raw::c_int,
+    r_key: *mut gpgme_key_t,
+) -> gpgme_error_t;
+pub type gpgme_data_new_with_read_cb = extern "C" fn(
+    r_dh: *mut gpgme_data_t,
+    read_cb: ::std::option::Option<
+        unsafe extern "C" fn(
+            arg1: *mut ::std::os::raw::c_void,
+            arg2: *mut ::std::os::raw::c_char,
+            arg3: usize,
+            arg4: *mut usize,
+        ) -> ::std::os::raw::c_int,
+    >,
+    read_cb_value: *mut ::std::os::raw::c_void,
+) -> gpgme_error_t;
+pub type gpgme_key_get_string_attr = extern "C" fn(
+    key: gpgme_key_t,
+    what: _gpgme_attr_t,
+    reserved: *const ::std::os::raw::c_void,
+    idx: ::std::os::raw::c_int,
+) -> *const ::std::os::raw::c_char;
+pub type gpgme_key_get_ulong_attr = extern "C" fn(
+    key: gpgme_key_t,
+    what: _gpgme_attr_t,
+    reserved: *const ::std::os::raw::c_void,
+    idx: ::std::os::raw::c_int,
+) -> ::std::os::raw::c_ulong;
+pub type gpgme_key_sig_get_string_attr = extern "C" fn(
+    key: gpgme_key_t,
+    uid_idx: ::std::os::raw::c_int,
+    what: _gpgme_attr_t,
+    reserved: *const ::std::os::raw::c_void,
+    idx: ::std::os::raw::c_int,
+) -> *const ::std::os::raw::c_char;
+pub type gpgme_key_sig_get_ulong_attr = extern "C" fn(
+    key: gpgme_key_t,
+    uid_idx: ::std::os::raw::c_int,
+    what: _gpgme_attr_t,
+    reserved: *const ::std::os::raw::c_void,
+    idx: ::std::os::raw::c_int,
+) -> ::std::os::raw::c_ulong;
+pub type gpgme_op_import_ext = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    keydata: gpgme_data_t,
+    nr: *mut ::std::os::raw::c_int,
+) -> gpgme_error_t;
+pub type gpgme_trust_item_release = extern "C" fn(item: gpgme_trust_item_t);
+pub type gpgme_trust_item_get_string_attr = extern "C" fn(
+    item: gpgme_trust_item_t,
+    what: _gpgme_attr_t,
+    reserved: *const ::std::os::raw::c_void,
+    idx: ::std::os::raw::c_int,
+) -> *const ::std::os::raw::c_char;
+pub type gpgme_trust_item_get_int_attr = extern "C" fn(
+    item: gpgme_trust_item_t,
+    what: _gpgme_attr_t,
+    reserved: *const ::std::os::raw::c_void,
+    idx: ::std::os::raw::c_int,
+) -> ::std::os::raw::c_int;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct _gpgme_op_assuan_result {
@@ -5632,21 +5281,17 @@ fn bindgen_test_layout__gpgme_op_assuan_result() {
     );
 }
 pub type gpgme_assuan_result_t = *mut _gpgme_op_assuan_result;
-extern "C" {
-    pub fn gpgme_op_assuan_result(ctx: gpgme_ctx_t) -> gpgme_assuan_result_t;
-}
-extern "C" {
-    pub fn gpgme_op_assuan_transact(
-        ctx: gpgme_ctx_t,
-        command: *const ::std::os::raw::c_char,
-        data_cb: gpgme_assuan_data_cb_t,
-        data_cb_value: *mut ::std::os::raw::c_void,
-        inq_cb: gpgme_assuan_inquire_cb_t,
-        inq_cb_value: *mut ::std::os::raw::c_void,
-        status_cb: gpgme_assuan_status_cb_t,
-        status_cb_value: *mut ::std::os::raw::c_void,
-    ) -> gpgme_error_t;
-}
+pub type gpgme_op_assuan_result = extern "C" fn(ctx: gpgme_ctx_t) -> gpgme_assuan_result_t;
+pub type gpgme_op_assuan_transact = extern "C" fn(
+    ctx: gpgme_ctx_t,
+    command: *const ::std::os::raw::c_char,
+    data_cb: gpgme_assuan_data_cb_t,
+    data_cb_value: *mut ::std::os::raw::c_void,
+    inq_cb: gpgme_assuan_inquire_cb_t,
+    inq_cb_value: *mut ::std::os::raw::c_void,
+    status_cb: gpgme_assuan_status_cb_t,
+    status_cb_value: *mut ::std::os::raw::c_void,
+) -> gpgme_error_t;
 pub type GpgmeCtx = gpgme_ctx_t;
 pub type GpgmeData = gpgme_data_t;
 pub type GpgmeError = gpgme_error_t;

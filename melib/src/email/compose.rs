@@ -101,7 +101,7 @@ impl FromStr for Draft {
 impl Draft {
     pub fn edit(envelope: &Envelope, bytes: &[u8]) -> Result<Self> {
         let mut ret = Draft::default();
-        for (k, v) in envelope.headers(&bytes).unwrap_or_else(|_| Vec::new()) {
+        for (k, v) in envelope.headers(bytes).unwrap_or_else(|_| Vec::new()) {
             ret.headers.insert(k.try_into()?, v.into());
         }
 
@@ -257,7 +257,7 @@ impl Draft {
 
         if let Some((pre, _)) = self.wrap_header_preamble.as_ref() {
             if !pre.is_empty() {
-                ret.push_str(&pre);
+                ret.push_str(pre);
                 if !pre.ends_with('\n') {
                     ret.push('\n');
                 }
@@ -273,7 +273,7 @@ impl Draft {
                 if !post.starts_with('\n') && !ret.ends_with('\n') {
                     ret.push('\n');
                 }
-                ret.push_str(&post);
+                ret.push_str(post);
                 ret.push('\n');
             }
         }
@@ -324,11 +324,11 @@ impl Draft {
                 ret.push_str("\r\n");
             }
         } else if self.body.is_empty() && self.attachments.len() == 1 {
-            let attachment = std::mem::replace(&mut self.attachments, Vec::new()).remove(0);
+            let attachment = std::mem::take(&mut self.attachments).remove(0);
             print_attachment(&mut ret, attachment);
         } else {
             let mut parts = Vec::with_capacity(self.attachments.len() + 1);
-            let attachments = std::mem::replace(&mut self.attachments, Vec::new());
+            let attachments = std::mem::take(&mut self.attachments);
             if !self.body.is_empty() {
                 let mut body_attachment = AttachmentBuilder::default();
                 body_attachment.set_raw(self.body.as_bytes().to_vec());

@@ -84,7 +84,7 @@ impl From<PathBuf> for MaildirPath {
 #[derive(Debug, Default)]
 pub struct HashIndex {
     index: HashMap<EnvelopeHash, MaildirPath>,
-    hash: MailboxHash,
+    _hash: MailboxHash,
 }
 
 impl Deref for HashIndex {
@@ -516,7 +516,7 @@ impl MailBackend for MaildirType {
                                     PathMod::Hash(hash) => debug!(
                                         "envelope {} has modified path set {}",
                                         hash,
-                                        &index_lock[&hash].buf.display()
+                                        &index_lock[hash].buf.display()
                                     ),
                                 }
                                 index_lock.entry(hash).and_modify(|e| {
@@ -854,7 +854,7 @@ impl MailBackend for MaildirType {
                     if let Some(modif) = &hash_index[&env_hash].modified {
                         match modif {
                             PathMod::Path(ref path) => path.clone(),
-                            PathMod::Hash(hash) => hash_index[&hash].to_path_buf(),
+                            PathMod::Hash(hash) => hash_index[hash].to_path_buf(),
                         }
                     } else {
                         hash_index[&env_hash].to_path_buf()
@@ -919,7 +919,7 @@ impl MailBackend for MaildirType {
                     if let Some(modif) = &hash_index[&env_hash].modified {
                         match modif {
                             PathMod::Path(ref path) => path.clone(),
-                            PathMod::Hash(hash) => hash_index[&hash].to_path_buf(),
+                            PathMod::Hash(hash) => hash_index[hash].to_path_buf(),
                         }
                     } else {
                         hash_index[&env_hash].to_path_buf()
@@ -959,15 +959,15 @@ impl MailBackend for MaildirType {
                     if let Some(modif) = &hash_index[&env_hash].modified {
                         match modif {
                             PathMod::Path(ref path) => path.clone(),
-                            PathMod::Hash(hash) => hash_index[&hash].to_path_buf(),
+                            PathMod::Hash(hash) => hash_index[hash].to_path_buf(),
                         }
                     } else {
                         hash_index[&env_hash].to_path_buf()
                     }
                 };
-                let filename = path_src
-                    .file_name()
-                    .expect(&format!("Could not get filename of {}", path_src.display()));
+                let filename = path_src.file_name().ok_or_else(|| {
+                    format!("Could not get filename of `{}`", path_src.display(),)
+                })?;
                 dest_path.push(filename);
                 hash_index.entry(env_hash).or_default().modified =
                     Some(PathMod::Path(dest_path.clone()));
@@ -1114,7 +1114,7 @@ impl MaildirType {
                                 None,
                                 Vec::new(),
                                 false,
-                                &settings,
+                                settings,
                             ) {
                                 f.children = recurse_mailboxes(mailboxes, settings, &path)?;
                                 for c in &f.children {
@@ -1137,7 +1137,7 @@ impl MaildirType {
                                         None,
                                         subdirs,
                                         true,
-                                        &settings,
+                                        settings,
                                     ) {
                                         for c in &f.children {
                                             if let Some(f) = mailboxes.get_mut(c) {
@@ -1213,7 +1213,7 @@ impl MaildirType {
                 fh,
                 HashIndex {
                     index: HashMap::with_capacity_and_hasher(0, Default::default()),
-                    hash: fh,
+                    _hash: fh,
                 },
             );
         }
@@ -1319,25 +1319,17 @@ impl MaildirType {
     pub fn list_mail_in_maildir_fs(mut path: PathBuf, read_only: bool) -> Result<Vec<PathBuf>> {
         let mut files: Vec<PathBuf> = vec![];
         path.push("new");
-        for d in path.read_dir()? {
-            if let Ok(p) = d {
-                if !read_only {
-                    move_to_cur(p.path()).ok().take();
-                } else {
-                    files.push(p.path());
-                }
+        for p in path.read_dir()?.flatten() {
+            if !read_only {
+                move_to_cur(p.path()).ok().take();
+            } else {
+                files.push(p.path());
             }
         }
         path.pop();
-
         path.push("cur");
-        let iter = path.read_dir()?;
-        for e in iter {
-            let e = e.and_then(|x| {
-                let path = x.path();
-                Ok(path)
-            })?;
-            files.push(e);
+        for e in path.read_dir()?.flatten() {
+            files.push(e.path());
         }
         Ok(files)
     }

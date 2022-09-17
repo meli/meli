@@ -49,7 +49,7 @@ pub struct ParsingError<I> {
 impl core::fmt::Debug for ParsingError<&'_ [u8]> {
     fn fmt(&self, fmt: &mut core::fmt::Formatter) -> core::fmt::Result {
         fmt.debug_struct("ParsingError")
-            .field("input", &to_str!(&self.input))
+            .field("input", &to_str!(self.input))
             .field("error", &self.error)
             .finish()
     }
@@ -415,22 +415,22 @@ pub mod dates {
             accum.extend_from_slice(&day_of_week);
             accum.extend_from_slice(b", ");
         }
-        accum.extend_from_slice(&day);
+        accum.extend_from_slice(day);
         accum.extend_from_slice(b" ");
-        accum.extend_from_slice(&month);
+        accum.extend_from_slice(month);
         accum.extend_from_slice(b" ");
-        accum.extend_from_slice(&year);
+        accum.extend_from_slice(year);
         accum.extend_from_slice(b" ");
-        accum.extend_from_slice(&hour);
+        accum.extend_from_slice(hour);
         accum.extend_from_slice(b":");
-        accum.extend_from_slice(&minute);
+        accum.extend_from_slice(minute);
         if let Some(second) = second {
             accum.extend_from_slice(b":");
-            accum.extend_from_slice(&second);
+            accum.extend_from_slice(second);
         }
         accum.extend_from_slice(b" ");
-        accum.extend_from_slice(&sign);
-        accum.extend_from_slice(&zone);
+        accum.extend_from_slice(sign);
+        accum.extend_from_slice(zone);
         match crate::datetime::rfc822_to_timestamp(accum.to_vec()) {
             Ok(t) => Ok((input, t)),
             Err(_err) => Err(nom::Err::Error(
@@ -472,23 +472,23 @@ pub mod dates {
         let (input, year) = year(input)?;
         accum.extend_from_slice(&day_of_week);
         accum.extend_from_slice(b", ");
-        accum.extend_from_slice(&day);
+        accum.extend_from_slice(day);
         accum.extend_from_slice(b" ");
-        accum.extend_from_slice(&month);
+        accum.extend_from_slice(month);
         accum.extend_from_slice(b" ");
-        accum.extend_from_slice(&year);
+        accum.extend_from_slice(year);
         accum.extend_from_slice(b" ");
-        accum.extend_from_slice(&hour);
+        accum.extend_from_slice(hour);
         accum.extend_from_slice(b":");
-        accum.extend_from_slice(&minute);
+        accum.extend_from_slice(minute);
         if let Some(second) = second {
             accum.extend_from_slice(b":");
-            accum.extend_from_slice(&second);
+            accum.extend_from_slice(second);
         }
         if let Some((sign, zone)) = zone {
             accum.extend_from_slice(b" ");
-            accum.extend_from_slice(&sign);
-            accum.extend_from_slice(&zone);
+            accum.extend_from_slice(sign);
+            accum.extend_from_slice(zone);
         }
         match crate::datetime::rfc822_to_timestamp(accum.to_vec()) {
             Ok(t) => Ok((input, t)),
@@ -571,7 +571,7 @@ pub mod dates {
                 Ok((rest, ret))
             })
             .or_else(|_| {
-                let (rest, ret) = match mbox_date_time(&input) {
+                let (rest, ret) = match mbox_date_time(input) {
                     Ok(v) => v,
                     Err(_) => {
                         return Err(nom::Err::Error(
@@ -861,12 +861,12 @@ pub mod generic {
             |input| {
                 let (input, pr) = many1(terminated(opt(fws), comment))(input)?;
                 let (input, end) = opt(fws)(input)?;
-                let mut pr = pr.into_iter().filter_map(|s| s).fold(vec![], |mut acc, x| {
+                let mut pr = pr.into_iter().flatten().fold(vec![], |mut acc, x| {
                     acc.extend_from_slice(&x);
                     acc
                 });
                 if pr.is_empty() {
-                    Ok((input, end.unwrap_or((&b""[..]).into())))
+                    Ok((input, end.unwrap_or_else(|| (&b""[..]).into())))
                 } else {
                     if let Some(end) = end {
                         pr.extend_from_slice(&end);
@@ -1219,7 +1219,7 @@ pub mod generic {
         {
             Ok((&input[1..], input[0..1].into()))
         } else {
-            return Err(nom::Err::Error((input, "atext(): invalid byte").into()));
+            Err(nom::Err::Error((input, "atext(): invalid byte").into()))
         }
     }
 
@@ -1232,7 +1232,7 @@ pub mod generic {
         let (input, _) = opt(cfws)(input)?;
         let (input, ret) = dot_atom_text(input)?;
         let (input, _) = opt(cfws)(input)?;
-        Ok((input, ret.into()))
+        Ok((input, ret))
     }
 
     ///```text
@@ -2064,7 +2064,7 @@ pub mod encodings {
             input,
             list.iter()
                 .fold(SmallVec::with_capacity(list_len), |mut acc, x| {
-                    acc.extend(x.into_iter().cloned());
+                    acc.extend(x.iter().cloned());
                     acc
                 }),
         ))
@@ -2113,7 +2113,7 @@ pub mod encodings {
             }
             let end = input[ptr..].find(b"=?");
 
-            let end = end.unwrap_or_else(|| input.len() - ptr) + ptr;
+            let end = end.unwrap_or(input.len() - ptr) + ptr;
             let ascii_s = ptr;
             let mut ascii_e = 0;
 
@@ -2378,7 +2378,7 @@ pub mod address {
     ///`name-addr       =   [display-name] angle-addr`
     pub fn name_addr(input: &[u8]) -> IResult<&[u8], Address> {
         let (input, (display_name, angle_addr)) = alt((
-            pair(map(display_name, |s| Some(s)), angle_addr),
+            pair(map(display_name, Some), angle_addr),
             map(angle_addr, |r| (None, r)),
         ))(input)?;
         Ok((
@@ -2475,7 +2475,7 @@ pub mod address {
                                 .trim(),
                         );
                     if i != list_len - 1 {
-                        acc.push_str(" ");
+                        acc.push(' ');
                         i += 1;
                     }
                     acc

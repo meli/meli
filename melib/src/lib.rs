@@ -41,8 +41,8 @@ pub mod dbg {
         () => {
             eprint!(
                 "[{}][{:?}] {}:{}_{}: ",
-                crate::datetime::timestamp_to_string(
-                    crate::datetime::now(),
+                $crate::datetime::timestamp_to_string(
+                    $crate::datetime::now(),
                     Some("%Y-%m-%d %T"),
                     false
                 ),
@@ -340,7 +340,7 @@ pub mod shellexpand {
                         .components()
                         .last()
                         .map(|c| c.as_os_str())
-                        .unwrap_or(OsStr::from_bytes(b""));
+                        .unwrap_or_else(|| OsStr::from_bytes(b""));
                     let prefix = if let Some(p) = self.parent() {
                         p
                     } else {
@@ -354,37 +354,33 @@ pub mod shellexpand {
             }
 
             if let Ok(iter) = std::fs::read_dir(&prefix) {
-                for entry in iter {
-                    if let Ok(entry) = entry {
-                        if entry.path().as_os_str().as_bytes() != b"."
-                            && entry.path().as_os_str().as_bytes() != b".."
-                            && entry
-                                .path()
-                                .as_os_str()
-                                .as_bytes()
-                                .starts_with(_match.as_bytes())
+                for entry in iter.flatten() {
+                    if entry.path().as_os_str().as_bytes() != b"."
+                        && entry.path().as_os_str().as_bytes() != b".."
+                        && entry
+                            .path()
+                            .as_os_str()
+                            .as_bytes()
+                            .starts_with(_match.as_bytes())
+                    {
+                        if entry.path().is_dir()
+                            && !entry.path().as_os_str().as_bytes().ends_with(b"/")
                         {
-                            if entry.path().is_dir()
-                                && !entry.path().as_os_str().as_bytes().ends_with(b"/")
-                            {
-                                let mut s = unsafe {
-                                    String::from_utf8_unchecked(
-                                        entry.path().as_os_str().as_bytes()
-                                            [_match.as_bytes().len()..]
-                                            .to_vec(),
-                                    )
-                                };
-                                s.push('/');
-                                entries.push(s);
-                            } else {
-                                entries.push(unsafe {
-                                    String::from_utf8_unchecked(
-                                        entry.path().as_os_str().as_bytes()
-                                            [_match.as_bytes().len()..]
-                                            .to_vec(),
-                                    )
-                                });
-                            }
+                            let mut s = unsafe {
+                                String::from_utf8_unchecked(
+                                    entry.path().as_os_str().as_bytes()[_match.as_bytes().len()..]
+                                        .to_vec(),
+                                )
+                            };
+                            s.push('/');
+                            entries.push(s);
+                        } else {
+                            entries.push(unsafe {
+                                String::from_utf8_unchecked(
+                                    entry.path().as_os_str().as_bytes()[_match.as_bytes().len()..]
+                                        .to_vec(),
+                                )
+                            });
                         }
                     }
                 }

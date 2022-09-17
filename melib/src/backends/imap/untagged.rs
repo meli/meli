@@ -222,7 +222,7 @@ impl ImapConnection {
                     }
                     let uid = uid.unwrap();
                     let env = envelope.as_mut().unwrap();
-                    env.set_hash(generate_envelope_hash(&mailbox.imap_path(), &uid));
+                    env.set_hash(generate_envelope_hash(mailbox.imap_path(), &uid));
                     if let Some(value) = references {
                         env.set_references(value);
                     }
@@ -317,9 +317,10 @@ impl ImapConnection {
                         let command = {
                             let mut iter = v.split(u8::is_ascii_whitespace);
                             let first = iter.next().unwrap_or(v);
-                            let mut accum = format!("{}", to_str!(first).trim());
+                            let mut accum = to_str!(first).trim().to_string();
                             for ms in iter {
-                                accum = format!("{},{}", accum, to_str!(ms).trim());
+                                accum.push(',');
+                                accum.push_str(to_str!(ms).trim());
                             }
                             format!("UID FETCH {} (UID FLAGS ENVELOPE BODY.PEEK[HEADER.FIELDS (REFERENCES)] BODYSTRUCTURE)", accum)
                         };
@@ -352,7 +353,7 @@ impl ImapConnection {
                             }
                             let uid = uid.unwrap();
                             let env = envelope.as_mut().unwrap();
-                            env.set_hash(generate_envelope_hash(&mailbox.imap_path(), &uid));
+                            env.set_hash(generate_envelope_hash(mailbox.imap_path(), &uid));
                             if let Some(value) = references {
                                 env.set_references(value);
                             }

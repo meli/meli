@@ -50,7 +50,7 @@ impl MboxFormat {
         writer.write_all(&b" "[..])?;
         writer.write_all(
             crate::datetime::timestamp_to_string(
-                delivery_date.unwrap_or_else(|| crate::datetime::now()),
+                delivery_date.unwrap_or_else(crate::datetime::now),
                 Some(crate::datetime::ASCTIME_FMT),
                 true,
             )

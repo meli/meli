@@ -178,7 +178,7 @@ mod sqlite3_m {
 
             let mut ret: Vec<UID> = stmt
                 .query_map(sqlite3::params![mailbox_hash as i64], |row| {
-                    Ok(row.get(0).map(|i: Sqlite3UID| i as UID)?)
+                    row.get(0).map(|i: Sqlite3UID| i as UID)
                 })?
                 .collect::<std::result::Result<_, _>>()?;
             Ok(ret.pop().unwrap_or(0))
@@ -231,7 +231,7 @@ mod sqlite3_m {
                     .unwrap()
                     .entry(mailbox_hash)
                     .and_modify(|entry| *entry = highestmodseq.ok_or(()))
-                    .or_insert(highestmodseq.ok_or(()));
+                    .or_insert_with(|| highestmodseq.ok_or(()));
                 self.uid_store
                     .uidvalidity
                     .lock()
@@ -483,7 +483,7 @@ mod sqlite3_m {
             for (uid, event) in refresh_events {
                 match &event.kind {
                     RefreshEventKind::Remove(env_hash) => {
-                        hash_index_lck.remove(&env_hash);
+                        hash_index_lck.remove(env_hash);
                         tx.execute(
                             "DELETE FROM envelopes WHERE mailbox_hash = ?1 AND uid = ?2;",
                             sqlite3::params![mailbox_hash as i64, *uid as Sqlite3UID],
@@ -503,7 +503,7 @@ mod sqlite3_m {
                         let mut ret: Vec<Envelope> = stmt
                             .query_map(
                                 sqlite3::params![mailbox_hash as i64, *uid as Sqlite3UID],
-                                |row| Ok(row.get(0)?),
+                                |row| row.get(0),
                             )?
                             .collect::<std::result::Result<_, _>>()?;
                         if let Some(mut env) = ret.pop() {
@@ -592,12 +592,12 @@ mod sqlite3_m {
                 return Ok(None);
             }
             let (uid, inner, modsequence) = ret.pop().unwrap();
-            return Ok(Some(CachedEnvelope {
+            Ok(Some(CachedEnvelope {
                 inner,
                 uid,
                 mailbox_hash,
                 modsequence,
-            }));
+            }))
         }
 
         fn rfc822(
@@ -613,7 +613,7 @@ mod sqlite3_m {
                     let x = stmt
                         .query_map(
                             sqlite3::params![mailbox_hash as i64, uid as Sqlite3UID],
-                            |row| Ok(row.get(0)?),
+                            |row| row.get(0),
                         )?
                         .collect::<std::result::Result<_, _>>()?;
                     x
@@ -625,7 +625,7 @@ mod sqlite3_m {
                     let x = stmt
                         .query_map(
                             sqlite3::params![mailbox_hash as i64, env_hash as i64],
-                            |row| Ok(row.get(0)?),
+                            |row| row.get(0),
                         )?
                         .collect::<std::result::Result<_, _>>()?;
                     x
@@ -655,19 +655,19 @@ pub(super) async fn fetch_cached_envs(state: &mut FetchState) -> Result<Option<V
     {
         let mut conn = connection.lock().await;
         match conn.load_cache(mailbox_hash).await {
-            None => return Ok(None),
+            None => Ok(None),
             Some(Ok(env_hashes)) => {
                 let env_lck = uid_store.envelopes.lock().unwrap();
-                return Ok(Some(
+                Ok(Some(
                     env_hashes
                         .into_iter()
                         .filter_map(|env_hash| {
                             env_lck.get(&env_hash).map(|c_env| c_env.inner.clone())
                         })
                         .collect::<Vec<Envelope>>(),
-                ));
+                ))
             }
-            Some(Err(err)) => return Err(err),
+            Some(Err(err)) => Err(err),
         }
     }
 }

@@ -972,7 +972,8 @@ mod alg {
             );
             let x = minima[r - 1 + offset];
             let mut for_was_broken = false;
-            for j in i..(r - 1) {
+            let i_copy = i;
+            for j in i_copy..(r - 1) {
                 let y = cost(j + offset, r - 1 + offset, width, &minima, &offsets);
                 if y <= x {
                     n -= j;
@@ -1179,8 +1180,8 @@ fn reflow_helper(
         let paragraph = paragraph
             .trim_start_matches(&quotes)
             .replace(&format!("\n{}", &quotes), "")
-            .replace("\n", "")
-            .replace("\r", "");
+            .replace('\n', "")
+            .replace('\r', "");
         if in_paragraph {
             if let Some(width) = width {
                 ret.extend(
@@ -1195,7 +1196,7 @@ fn reflow_helper(
             ret.push(format!("{}{}", &quotes, &paragraph));
         }
     } else {
-        let paragraph = paragraph.replace("\n", "").replace("\r", "");
+        let paragraph = paragraph.replace('\n', "").replace('\r', "");
 
         if in_paragraph {
             if let Some(width) = width {
@@ -1573,7 +1574,7 @@ impl Iterator for LineBreakText {
                     );
                     self.paragraph = paragraph;
                 }
-                return self.paragraph.pop_front();
+                self.paragraph.pop_front()
             }
             ReflowState::AllWidth {
                 width,
@@ -1746,7 +1747,7 @@ impl Iterator for LineBreakText {
                     *cur_index += line.len() + 2;
                     return Some(ret);
                 }
-                return None;
+                None
             }
         }
     }
@@ -1764,8 +1765,8 @@ fn reflow_helper2(
         let paragraph = paragraph
             .trim_start_matches(&quotes)
             .replace(&format!("\n{}", &quotes), "")
-            .replace("\n", "")
-            .replace("\r", "");
+            .replace('\n', "")
+            .replace('\r', "");
         if in_paragraph {
             if let Some(width) = width {
                 ret.extend(
@@ -1780,7 +1781,7 @@ fn reflow_helper2(
             ret.push_back(format!("{}{}", &quotes, &paragraph));
         }
     } else {
-        let paragraph = paragraph.replace("\n", "").replace("\r", "");
+        let paragraph = paragraph.replace('\n', "").replace('\r', "");
 
         if in_paragraph {
             if let Some(width) = width {

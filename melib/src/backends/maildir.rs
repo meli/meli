@@ -82,7 +82,7 @@ impl MaildirOp {
         Ok(if let Some(modif) = &map[&self.hash].modified {
             match modif {
                 PathMod::Path(ref path) => path.clone(),
-                PathMod::Hash(hash) => map[&hash].to_path_buf(),
+                PathMod::Hash(hash) => map[hash].to_path_buf(),
             }
         } else {
             map.get(&self.hash).unwrap().to_path_buf()
@@ -148,7 +148,7 @@ impl MaildirMailbox {
                 PathBuf::from(&settings.root_mailbox)
                     .expand()
                     .parent()
-                    .unwrap_or_else(|| &Path::new("/")),
+                    .unwrap_or_else(|| Path::new("/")),
             )
             .ok();
 
@@ -217,7 +217,7 @@ impl BackendMailbox for MaildirMailbox {
     }
 
     fn path(&self) -> &str {
-        self.path.to_str().unwrap_or(self.name())
+        self.path.to_str().unwrap_or_else(|| self.name())
     }
 
     fn change_name(&mut self, s: &str) {

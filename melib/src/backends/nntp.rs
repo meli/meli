@@ -108,7 +108,6 @@ type Capabilities = HashSet<String>;
 pub struct UIDStore {
     account_hash: AccountHash,
     account_name: Arc<String>,
-    offline_cache: bool,
     capabilities: Arc<Mutex<Capabilities>>,
     message_id_index: Arc<Mutex<HashMap<String, EnvelopeHash>>>,
     hash_index: Arc<Mutex<HashMap<EnvelopeHash, (UID, MailboxHash)>>>,
@@ -130,7 +129,6 @@ impl UIDStore {
             account_hash,
             account_name,
             event_consumer,
-            offline_cache: false,
             capabilities: Default::default(),
             message_id_index: Default::default(),
             hash_index: Default::default(),
@@ -147,11 +145,11 @@ impl UIDStore {
 
 #[derive(Debug)]
 pub struct NntpType {
-    is_subscribed: Arc<IsSubscribedFn>,
+    _is_subscribed: Arc<IsSubscribedFn>,
     connection: Arc<FutureMutex<NntpConnection>>,
     server_conf: NntpServerConf,
     uid_store: Arc<UIDStore>,
-    can_create_flags: Arc<Mutex<bool>>,
+    _can_create_flags: Arc<Mutex<bool>>,
 }
 
 impl MailBackend for NntpType {
@@ -251,8 +249,7 @@ impl MailBackend for NntpType {
             /* To get updates, either issue NEWNEWS if it's supported by the server, and fallback
              * to OVER otherwise */
             let mbox: NntpMailbox = uid_store.mailboxes.lock().await.get(&mailbox_hash).map(std::clone::Clone::clone).ok_or_else(|| MeliError::new(format!("Mailbox with hash {} not found in NNTP connection, this could possibly be a bug or it was deleted.", mailbox_hash)))?;
-            let latest_article: Option<crate::UnixTimestamp> =
-                mbox.latest_article.lock().unwrap().clone();
+            let latest_article: Option<crate::UnixTimestamp> = *mbox.latest_article.lock().unwrap();
             let (over_msgid_support, newnews_support): (bool, bool) = {
                 let caps = uid_store.capabilities.lock().unwrap();
 
@@ -599,7 +596,6 @@ impl NntpType {
             )));
         }
         let uid_store: Arc<UIDStore> = Arc::new(UIDStore {
-            offline_cache: false, //get_conf_val!(s["X_header_caching"], false)?,
             mailboxes: Arc::new(FutureMutex::new(mailboxes)),
             ..UIDStore::new(account_hash, account_name, event_consumer)
         });
@@ -607,8 +603,8 @@ impl NntpType {
 
         Ok(Box::new(NntpType {
             server_conf,
-            is_subscribed: Arc::new(IsSubscribedFn(is_subscribed)),
-            can_create_flags: Arc::new(Mutex::new(false)),
+            _is_subscribed: Arc::new(IsSubscribedFn(is_subscribed)),
+            _can_create_flags: Arc::new(Mutex::new(false)),
             connection: Arc::new(FutureMutex::new(connection)),
             uid_store,
         }))
@@ -699,7 +695,7 @@ impl NntpType {
         let _ = get_conf_val!(s["server_password_command"]);
         let server_port = get_conf_val!(s["server_port"], 119)?;
         let use_tls = get_conf_val!(s["use_tls"], server_port == 563)?;
-        let use_starttls = get_conf_val!(s["use_starttls"], !(server_port == 563))?;
+        let use_starttls = get_conf_val!(s["use_starttls"], server_port != 563)?;
         if !use_tls && use_starttls {
             return Err(MeliError::new(format!(
                 "Configuration error ({}): incompatible use_tls and use_starttls values: use_tls = false, use_starttls = true",

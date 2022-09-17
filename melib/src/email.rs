@@ -391,7 +391,7 @@ impl Envelope {
         if let Some(x) = self.in_reply_to.clone() {
             self.push_references(x);
         }
-        if let Ok(d) = parser::dates::rfc5322_date(&self.date.as_bytes()) {
+        if let Ok(d) = parser::dates::rfc5322_date(self.date.as_bytes()) {
             self.set_datetime(d);
         }
         if self.message_id.raw().is_empty() {

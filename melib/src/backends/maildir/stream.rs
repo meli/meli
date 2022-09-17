@@ -52,23 +52,16 @@ impl MaildirStream {
     ) -> Result<Pin<Box<dyn Stream<Item = Result<Vec<Envelope>>> + Send + 'static>>> {
         let chunk_size = 2048;
         path.push("new");
-        for d in path.read_dir()? {
-            if let Ok(p) = d {
-                move_to_cur(p.path()).ok().take();
-            }
+        for p in path.read_dir()?.flatten() {
+            move_to_cur(p.path()).ok().take();
         }
         path.pop();
         path.push("cur");
-        let iter = path.read_dir()?;
-        let count = path.read_dir()?.count();
-        let mut files: Vec<PathBuf> = Vec::with_capacity(count);
-        for e in iter {
-            let e = e.and_then(|x| {
-                let path = x.path();
-                Ok(path)
-            })?;
-            files.push(e);
-        }
+        let files: Vec<PathBuf> = path
+            .read_dir()?
+            .flatten()
+            .map(|e| e.path())
+            .collect::<Vec<_>>();
         let payloads = Box::pin(if !files.is_empty() {
             files
                 .chunks(chunk_size)
