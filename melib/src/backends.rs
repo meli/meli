@@ -663,6 +663,12 @@ impl std::convert::TryFrom<&[EnvelopeHash]> for EnvelopeHashBatch {
     }
 }
 
+impl Into<BTreeSet<EnvelopeHash>> for &EnvelopeHashBatch {
+    fn into(self) -> BTreeSet<EnvelopeHash> {
+        self.iter().collect::<BTreeSet<EnvelopeHash>>()
+    }
+}
+
 impl EnvelopeHashBatch {
     pub fn iter(&self) -> impl std::iter::Iterator<Item = EnvelopeHash> + '_ {
         std::iter::once(self.first).chain(self.rest.iter().cloned())
@@ -670,6 +676,10 @@ impl EnvelopeHashBatch {
 
     pub fn len(&self) -> usize {
         1 + self.rest.len()
+    }
+
+    pub fn to_set(&self) -> BTreeSet<EnvelopeHash> {
+        self.into()
     }
 }
 
