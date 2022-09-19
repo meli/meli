@@ -200,7 +200,14 @@ impl Component for NotificationCommand {
                     }
                 }
 
-                if let Some(ref bin) = context.settings.notifications.script {
+                let mut script = context.settings.notifications.script.as_ref();
+                if *kind == Some(NotificationType::NewMail)
+                    && context.settings.notifications.new_mail_script.is_some()
+                {
+                    script = context.settings.notifications.new_mail_script.as_ref();
+                }
+
+                if let Some(ref bin) = script {
                     match Command::new(bin)
                         .arg(&kind.map(|k| k.to_string()).unwrap_or_default())
                         .arg(title.as_ref().map(String::as_str).unwrap_or("meli"))

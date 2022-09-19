@@ -990,8 +990,14 @@ Enable notifications.
 .Pq Em optional
 Script to pass notifications to, with title as 1st arg and body as 2nd
 .\" default value
-.Pq Em none Ns
-\&.
+.Pq Em none
+.It Ic new_mail_script Ar String
+.Pq Em optional
+A command to pipe new mail notifications through (preferred over
+.Ic script Ns
+), with title as 1st arg and body as 2nd.
+.\" default value
+.Pq Em none
 .It Ic xbiff_file_path Ar String
 .Pq Em optional
 File that gets its size updated when new mail arrives.

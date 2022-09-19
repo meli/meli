@@ -31,17 +31,26 @@ pub struct NotificationsSettings {
     /// Default: True
     #[serde(default = "true_val")]
     pub enable: bool,
-    /// A command to pipe notifications through
+
+    /// A command to pipe notifications through.
     /// Default: None
     #[serde(default = "none")]
     pub script: Option<String>,
+
+    /// A command to pipe new mail notifications through (preferred over `script`).
+    /// Default: None
+    #[serde(default = "none")]
+    pub new_mail_script: Option<String>,
+
     /// A file location which has its size changed when new mail arrives (max 128 bytes). Can be
-    /// used to trigger new mail notifications eg with `xbiff(1)`
+    /// used to trigger new mail notifications eg with `xbiff(1)`.
     /// Default: None
     #[serde(default = "none", alias = "xbiff-file-path")]
     pub xbiff_file_path: Option<String>,
+
     #[serde(default = "internal_value_false", alias = "play-sound")]
     pub play_sound: ToggleFlag,
+
     #[serde(default = "none", alias = "sound-file")]
     pub sound_file: Option<String>,
 }
@@ -51,6 +60,7 @@ impl Default for NotificationsSettings {
         Self {
             enable: true,
             script: None,
+            new_mail_script: None,
             xbiff_file_path: None,
             play_sound: ToggleFlag::InternalVal(false),
             sound_file: None,
@@ -65,6 +75,7 @@ impl DotAddressable for NotificationsSettings {
                 match *field {
                     "enable" => self.enable.lookup(field, tail),
                     "script" => self.script.lookup(field, tail),
+                    "new_mail_script" => self.new_mail_script.lookup(field, tail),
                     "xbiff_file_path" => self.xbiff_file_path.lookup(field, tail),
                     "play_sound" => self.play_sound.lookup(field, tail),
                     "sound_file" => self.sound_file.lookup(field, tail),

@@ -214,12 +214,16 @@ pub struct NotificationsSettingsOverride {
     #[doc = " Default: True"]
     #[serde(default)]
     pub enable: Option<bool>,
-    #[doc = " A command to pipe notifications through"]
+    #[doc = " A command to pipe notifications through."]
     #[doc = " Default: None"]
     #[serde(default)]
     pub script: Option<Option<String>>,
+    #[doc = " A command to pipe new mail notifications through (preferred over `script`)."]
+    #[doc = " Default: None"]
+    #[serde(default)]
+    pub new_mail_script: Option<Option<String>>,
     #[doc = " A file location which has its size changed when new mail arrives (max 128 bytes). Can be"]
-    #[doc = " used to trigger new mail notifications eg with `xbiff(1)`"]
+    #[doc = " used to trigger new mail notifications eg with `xbiff(1)`."]
     #[doc = " Default: None"]
     #[serde(alias = "xbiff-file-path")]
     #[serde(default)]
@@ -236,6 +240,7 @@ impl Default for NotificationsSettingsOverride {
         NotificationsSettingsOverride {
             enable: None,
             script: None,
+            new_mail_script: None,
             xbiff_file_path: None,
             play_sound: None,
             sound_file: None,
