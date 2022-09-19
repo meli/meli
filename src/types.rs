@@ -195,14 +195,6 @@ impl fmt::Display for UIMode {
     }
 }
 
-/// An event notification that is passed to Entities for handling.
-pub struct Notification {
-    _title: String,
-    _content: String,
-
-    _timestamp: std::time::Instant,
-}
-
 pub mod segment_tree {
     /*! Simple segment tree implementation for maximum in range queries. This is useful if given an
      *  array of numbers you want to get the maximum value inside an interval quickly.
