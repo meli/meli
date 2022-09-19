@@ -42,6 +42,10 @@ impl<'q> Thread<'q> {
         (unsafe { call!(self.lib, notmuch_thread_get_total_messages)(self.ptr) }) as usize
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     pub fn iter(&'q self) -> MessageIterator<'q> {
         let ptr = unsafe { call!(self.lib, notmuch_thread_get_messages)(self.ptr) };
         MessageIterator {

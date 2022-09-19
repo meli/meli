@@ -33,7 +33,7 @@ pub struct Message<'m> {
 impl<'m> Message<'m> {
     pub fn find_message(db: &'m DbConnection, msg_id: &CStr) -> Result<Message<'m>> {
         let mut message: *mut notmuch_message_t = std::ptr::null_mut();
-        let lib = db.lib.clone();
+        let lib = db.state.lib.clone();
         unsafe {
             call!(lib, notmuch_database_find_message)(
                 *db.inner.read().unwrap(),
@@ -89,26 +89,14 @@ impl<'m> Message<'m> {
         (unsafe { call!(self.lib, notmuch_message_get_date)(self.message) }) as u64
     }
 
-    pub fn into_envelope(
-        self,
-        index: &RwLock<HashMap<EnvelopeHash, CString>>,
-        tag_index: &RwLock<BTreeMap<u64, String>>,
-    ) -> Envelope {
+    pub fn into_envelope(self) -> Envelope {
         let env_hash = self.env_hash();
         let mut env = Envelope::new(env_hash);
-        index
-            .write()
-            .unwrap()
-            .insert(env_hash, self.msg_id_cstr().into());
-        let mut tag_lock = tag_index.write().unwrap();
         let (flags, tags) = TagIterator::new(&self).collect_flags_and_tags();
         for tag in tags {
             let mut hasher = DefaultHasher::new();
             hasher.write(tag.as_bytes());
             let num = hasher.finish();
-            if !tag_lock.contains_key(&num) {
-                tag_lock.insert(num, tag);
-            }
             env.labels_mut().push(num);
         }
         unsafe {

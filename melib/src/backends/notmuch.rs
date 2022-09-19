@@ -25,10 +25,7 @@ use crate::error::{MeliError, Result};
 use crate::shellexpand::ShellExpandTrait;
 use crate::{backends::*, Collection};
 use smallvec::SmallVec;
-use std::collections::{
-    hash_map::{DefaultHasher, HashMap},
-    BTreeMap,
-};
+use std::collections::hash_map::{DefaultHasher, HashMap};
 use std::error::Error;
 use std::ffi::{CStr, CString, OsStr};
 use std::hash::{Hash, Hasher};
@@ -66,117 +63,38 @@ mod tags;
 pub use tags::*;
 mod thread;
 pub use thread::*;
+mod query;
+pub use query::*;
 
 #[derive(Debug)]
 pub struct DbConnection {
-    #[allow(dead_code)]
-    pub lib: Arc<libloading::Library>,
+    pub state: Arc<NotmuchState>,
     pub inner: Arc<RwLock<*mut notmuch_database_t>>,
-    pub revision_uuid: Arc<RwLock<u64>>,
     pub database_ph: std::marker::PhantomData<&'static mut notmuch_database_t>,
 }
 
 impl DbConnection {
     pub fn get_revision_uuid(&self) -> u64 {
         unsafe {
-            call!(self.lib, notmuch_database_get_revision)(
+            call!(self.state.lib, notmuch_database_get_revision)(
                 *self.inner.read().unwrap(),
                 std::ptr::null_mut(),
             )
         }
     }
 
-    fn refresh(
-        &mut self,
-        mailboxes: Arc<RwLock<HashMap<MailboxHash, NotmuchMailbox>>>,
-        index: Arc<RwLock<HashMap<EnvelopeHash, CString>>>,
-        mailbox_index: Arc<RwLock<HashMap<EnvelopeHash, SmallVec<[MailboxHash; 16]>>>>,
-        tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
-        account_hash: AccountHash,
-        event_consumer: BackendEventConsumer,
-        new_revision_uuid: u64,
-    ) -> Result<()> {
-        use RefreshEventKind::*;
+    fn refresh(&mut self, new_revision_uuid: u64) -> Result<()> {
         let query_str = format!(
             "lastmod:{}..{}",
-            *self.revision_uuid.read().unwrap(),
+            *self.state.revision_uuid.read().unwrap(),
             new_revision_uuid
         );
         let query: Query = Query::new(self, &query_str)?;
         let iter = query.search()?;
-        let mailbox_index_lck = mailbox_index.write().unwrap();
-        let mailboxes_lck = mailboxes.read().unwrap();
         for message in iter {
-            let env_hash = message.env_hash();
-            if let Some(mailbox_hashes) = mailbox_index_lck.get(&env_hash) {
-                let tags: (Flag, Vec<String>) = message.tags().collect_flags_and_tags();
-                let mut tag_lock = tag_index.write().unwrap();
-                for tag in tags.1.iter() {
-                    let mut hasher = DefaultHasher::new();
-                    hasher.write(tag.as_bytes());
-                    let num = hasher.finish();
-                    if !tag_lock.contains_key(&num) {
-                        tag_lock.insert(num, tag.clone());
-                    }
-                }
-                for &mailbox_hash in mailbox_hashes {
-                    (event_consumer)(
-                        account_hash,
-                        BackendEvent::Refresh(RefreshEvent {
-                            account_hash,
-                            mailbox_hash,
-                            kind: NewFlags(env_hash, tags.clone()),
-                        }),
-                    );
-                }
-            } else {
-                let message_id = message.msg_id_cstr().to_string_lossy().to_string();
-                let env = message.into_envelope(&index, &tag_index);
-                for (&mailbox_hash, m) in mailboxes_lck.iter() {
-                    let query_str = format!("{} id:{}", m.query_str.as_str(), &message_id);
-                    let query: Query = Query::new(self, &query_str)?;
-                    if query.count().unwrap_or(0) > 0 {
-                        let mut total_lck = m.total.lock().unwrap();
-                        let mut unseen_lck = m.unseen.lock().unwrap();
-                        *total_lck += 1;
-                        if !env.is_seen() {
-                            *unseen_lck += 1;
-                        }
-                        (event_consumer)(
-                            account_hash,
-                            BackendEvent::Refresh(RefreshEvent {
-                                account_hash,
-                                mailbox_hash,
-                                kind: Create(Box::new(env.clone())),
-                            }),
-                        );
-                    }
-                }
-            }
+            self.state.update_message_status(self, message)?;
         }
         drop(query);
-        index.write().unwrap().retain(|&env_hash, msg_id| {
-            if Message::find_message(self, msg_id).is_err() {
-                if let Some(mailbox_hashes) = mailbox_index_lck.get(&env_hash) {
-                    for &mailbox_hash in mailbox_hashes {
-                        let m = &mailboxes_lck[&mailbox_hash];
-                        let mut total_lck = m.total.lock().unwrap();
-                        *total_lck = total_lck.saturating_sub(1);
-                        (event_consumer)(
-                            account_hash,
-                            BackendEvent::Refresh(RefreshEvent {
-                                account_hash,
-                                mailbox_hash,
-                                kind: Remove(env_hash),
-                            }),
-                        );
-                    }
-                }
-                false
-            } else {
-                true
-            }
-        });
         Ok(())
     }
 }
@@ -202,12 +120,17 @@ impl Drop for DbConnection {
     fn drop(&mut self) {
         let inner = self.inner.write().unwrap();
         unsafe {
-            if let Err(err) = try_call!(self.lib, call!(self.lib, notmuch_database_close)(*inner)) {
+            if let Err(err) = try_call!(
+                self.state.lib,
+                call!(self.state.lib, notmuch_database_close)(*inner)
+            ) {
                 debug!(err);
                 return;
             }
-            if let Err(err) = try_call!(self.lib, call!(self.lib, notmuch_database_destroy)(*inner))
-            {
+            if let Err(err) = try_call!(
+                self.state.lib,
+                call!(self.state.lib, notmuch_database_destroy)(*inner)
+            ) {
                 debug!(err);
             }
         }
@@ -218,20 +141,180 @@ impl Drop for DbConnection {
 pub struct NotmuchDb {
     #[allow(dead_code)]
     lib: Arc<libloading::Library>,
-    revision_uuid: Arc<RwLock<u64>>,
-    mailboxes: Arc<RwLock<HashMap<MailboxHash, NotmuchMailbox>>>,
-    index: Arc<RwLock<HashMap<EnvelopeHash, CString>>>,
-    mailbox_index: Arc<RwLock<HashMap<EnvelopeHash, SmallVec<[MailboxHash; 16]>>>>,
+    state: Arc<NotmuchState>,
     collection: Collection,
     path: PathBuf,
-    _account_name: Arc<String>,
+    #[allow(dead_code)]
+    account_name: Arc<String>,
+    #[allow(dead_code)]
     account_hash: AccountHash,
+    #[allow(dead_code)]
     event_consumer: BackendEventConsumer,
     save_messages_to: Option<PathBuf>,
 }
 
 unsafe impl Send for NotmuchDb {}
 unsafe impl Sync for NotmuchDb {}
+
+#[derive(Debug, Clone)]
+pub struct NotmuchState {
+    #[allow(dead_code)]
+    lib: Arc<libloading::Library>,
+    revision_uuid: Arc<RwLock<u64>>,
+    mailboxes: Arc<RwLock<HashMap<MailboxHash, NotmuchMailbox>>>,
+    index: Arc<RwLock<HashMap<EnvelopeHash, CString>>>,
+    collection: Collection,
+    path: PathBuf,
+    #[allow(dead_code)]
+    account_name: Arc<String>,
+    #[allow(dead_code)]
+    account_hash: AccountHash,
+    event_consumer: BackendEventConsumer,
+    #[allow(dead_code)]
+    save_messages_to: Option<PathBuf>,
+}
+
+impl NotmuchState {
+    pub fn into_envelope(&self, message: Message<'_>) -> Envelope {
+        let env_hash = message.env_hash();
+        self.index
+            .write()
+            .unwrap()
+            .insert(env_hash, message.msg_id_cstr().into());
+        let mut tag_lock = self.collection.tag_index.write().unwrap();
+        let (_, tags) = TagIterator::new(&message).collect_flags_and_tags();
+        for tag in tags {
+            let mut hasher = DefaultHasher::new();
+            hasher.write(tag.as_bytes());
+            let num = hasher.finish();
+            tag_lock.entry(num).or_insert(tag);
+        }
+        message.into_envelope()
+    }
+
+    pub fn new_flags(&self, message: &Message<'_>) -> Result<()> {
+        let (_, tags): (Flag, Vec<String>) = message.tags().collect_flags_and_tags();
+        {
+            let mut tag_lock = self.collection.tag_index.write().unwrap();
+            for tag in tags.iter() {
+                let mut hasher = DefaultHasher::new();
+                hasher.write(tag.as_bytes());
+                let num = hasher.finish();
+                tag_lock.entry(num).or_insert_with(|| tag.clone());
+            }
+        }
+        Ok(())
+    }
+
+    pub fn update_message_status(
+        &self,
+        database: &DbConnection,
+        message: Message<'_>,
+    ) -> Result<()> {
+        use RefreshEventKind::*;
+
+        self.new_flags(&message)?;
+        let account_hash = self.account_hash;
+        let message_id = message.msg_id_cstr().to_string_lossy();
+        let env_hash = message.env_hash();
+
+        for (&mailbox_hash, m) in self.mailboxes.read().unwrap().iter() {
+            let query_str = format!("{} id:{}", m.query_str.as_str(), &message_id);
+            let query: Query = Query::new(database, &query_str)?;
+            if query.count().unwrap_or(0) > 0 {
+                if m.contains(&env_hash) {
+                    let tags: (Flag, Vec<String>) = message.tags().collect_flags_and_tags();
+                    (self.event_consumer)(
+                        account_hash,
+                        BackendEvent::Refresh(RefreshEvent {
+                            account_hash,
+                            mailbox_hash,
+                            kind: RefreshEventKind::NewFlags(env_hash, tags.clone()),
+                        }),
+                    );
+                } else {
+                    let env = self.into_envelope(message.clone());
+                    let mut total_lck = m.total.lock().unwrap();
+                    let mut unseen_lck = m.unseen.lock().unwrap();
+                    *total_lck += 1;
+                    if !env.is_seen() {
+                        *unseen_lck += 1;
+                    }
+                    m.insert(env.hash());
+                    (self.event_consumer)(
+                        account_hash,
+                        BackendEvent::Refresh(RefreshEvent {
+                            account_hash,
+                            mailbox_hash,
+                            kind: Create(Box::new(env)),
+                        }),
+                    );
+                }
+            } else if m.remove(&env_hash) {
+                (self.event_consumer)(
+                    account_hash,
+                    BackendEvent::Refresh(RefreshEvent {
+                        account_hash,
+                        mailbox_hash,
+                        kind: Remove(env_hash),
+                    }),
+                );
+            }
+        }
+        Ok(())
+    }
+
+    pub fn new_message(&self, database: &DbConnection, message: Message<'_>) -> Result<()> {
+        use RefreshEventKind::*;
+        let account_hash = self.account_hash;
+        let message_id = message.msg_id_cstr().to_string_lossy().to_string();
+        let env = self.into_envelope(message);
+        for (&mailbox_hash, m) in self.mailboxes.read().unwrap().iter() {
+            let query_str = format!("{} id:{}", m.query_str.as_str(), &message_id);
+            let query: Query = Query::new(database, &query_str)?;
+            if query.count().unwrap_or(0) > 0 {
+                let mut total_lck = m.total.lock().unwrap();
+                let mut unseen_lck = m.unseen.lock().unwrap();
+                *total_lck += 1;
+                if !env.is_seen() {
+                    *unseen_lck += 1;
+                }
+                m.insert(env.hash());
+                (self.event_consumer)(
+                    account_hash,
+                    BackendEvent::Refresh(RefreshEvent {
+                        account_hash,
+                        mailbox_hash,
+                        kind: Create(Box::new(env.clone())),
+                    }),
+                );
+            }
+        }
+        Ok(())
+    }
+
+    pub fn remove(&self, env_hash: EnvelopeHash) {
+        use RefreshEventKind::*;
+        let account_hash = self.account_hash;
+        self.index.write().unwrap().remove(&env_hash);
+
+        for (&mailbox_hash, m) in self.mailboxes.write().unwrap().iter_mut() {
+            if m.remove(&env_hash) {
+                let mut total_lck = m.total.lock().unwrap();
+                //let mut unseen_lck = m.unseen.lock().unwrap();
+                *total_lck = total_lck.saturating_sub(1);
+                (self.event_consumer)(
+                    account_hash,
+                    BackendEvent::Refresh(RefreshEvent {
+                        account_hash,
+                        mailbox_hash,
+                        kind: Remove(env_hash),
+                    }),
+                );
+            }
+        }
+    }
+}
 
 #[derive(Debug, Clone, Default)]
 struct NotmuchMailbox {
@@ -242,7 +325,7 @@ struct NotmuchMailbox {
     path: String,
     query_str: String,
     usage: Arc<RwLock<SpecialUsageMailbox>>,
-
+    envelopes: Arc<RwLock<BTreeSet<EnvelopeHash>>>,
     total: Arc<Mutex<usize>>,
     unseen: Arc<Mutex<usize>>,
 }
@@ -302,6 +385,20 @@ impl BackendMailbox for NotmuchMailbox {
 
 unsafe impl Send for NotmuchMailbox {}
 unsafe impl Sync for NotmuchMailbox {}
+
+impl NotmuchMailbox {
+    pub fn contains(&self, env_hash: &EnvelopeHash) -> bool {
+        self.envelopes.read().unwrap().contains(env_hash)
+    }
+
+    pub fn insert(&self, env_hash: EnvelopeHash) {
+        self.envelopes.write().unwrap().insert(env_hash);
+    }
+
+    pub fn remove(&self, env_hash: &EnvelopeHash) -> bool {
+        self.envelopes.write().unwrap().remove(env_hash)
+    }
+}
 
 impl NotmuchDb {
     pub fn new(
@@ -379,6 +476,7 @@ impl NotmuchDb {
                         parent: None,
                         query_str: query_str.to_string(),
                         usage: Arc::new(RwLock::new(SpecialUsageMailbox::Normal)),
+                        envelopes: Arc::new(RwLock::new(BTreeSet::default())),
                         total: Arc::new(Mutex::new(0)),
                         unseen: Arc::new(Mutex::new(0)),
                     },
@@ -398,19 +496,30 @@ impl NotmuchDb {
             hasher.write(s.name().as_bytes());
             hasher.finish()
         };
+        let account_name = Arc::new(s.name().to_string());
+
+        let collection = Collection::default();
+        let state = Arc::new(NotmuchState {
+            lib: lib.clone(),
+            revision_uuid: Arc::new(RwLock::new(0)),
+            mailboxes: Arc::new(RwLock::new(mailboxes)),
+            index: Arc::new(RwLock::new(Default::default())),
+            collection: collection.clone(),
+            path: path.clone(),
+            account_name: account_name.clone(),
+            account_hash,
+            event_consumer: event_consumer.clone(),
+            save_messages_to: None,
+        });
         Ok(Box::new(NotmuchDb {
             lib,
-            revision_uuid: Arc::new(RwLock::new(0)),
+            state,
+            collection,
             path,
-            index: Arc::new(RwLock::new(Default::default())),
-            mailbox_index: Arc::new(RwLock::new(Default::default())),
-            collection: Collection::default(),
-
-            mailboxes: Arc::new(RwLock::new(mailboxes)),
-            save_messages_to: None,
-            _account_name: Arc::new(s.name().to_string()),
+            account_name,
             account_hash,
             event_consumer,
+            save_messages_to: None,
         }))
     }
 
@@ -465,17 +574,12 @@ impl NotmuchDb {
         Ok(())
     }
 
-    fn new_connection(
-        path: &Path,
-        revision_uuid: Arc<RwLock<u64>>,
-        lib: Arc<libloading::Library>,
-        write: bool,
-    ) -> Result<DbConnection> {
-        let path_c = std::ffi::CString::new(path.to_str().unwrap()).unwrap();
+    fn new_connection(state: Arc<NotmuchState>, write: bool) -> Result<DbConnection> {
+        let path_c = std::ffi::CString::new(state.path.to_str().unwrap()).unwrap();
         let path_ptr = path_c.as_ptr();
         let mut database: *mut notmuch_database_t = std::ptr::null_mut();
         let status = unsafe {
-            call!(lib, notmuch_database_open)(
+            call!(state.lib, notmuch_database_open)(
                 path_ptr,
                 if write {
                     notmuch_database_mode_t_NOTMUCH_DATABASE_MODE_READ_WRITE
@@ -488,20 +592,19 @@ impl NotmuchDb {
         if status != 0 {
             return Err(MeliError::new(format!(
                 "Could not open notmuch database at path {}. notmuch_database_open returned {}.",
-                path.display(),
+                state.path.display(),
                 status
             )));
         }
         assert!(!database.is_null());
         let ret = DbConnection {
-            lib,
-            revision_uuid,
+            state,
             inner: Arc::new(RwLock::new(database)),
             database_ph: std::marker::PhantomData,
         };
-        if *ret.revision_uuid.read().unwrap() == 0 {
+        if *ret.state.revision_uuid.read().unwrap() == 0 {
             let new = ret.get_revision_uuid();
-            *ret.revision_uuid.write().unwrap() = new;
+            *ret.state.revision_uuid.write().unwrap() = new;
         }
         Ok(ret)
     }
@@ -531,17 +634,13 @@ impl MailBackend for NotmuchDb {
         struct FetchState {
             mailbox_hash: MailboxHash,
             database: Arc<DbConnection>,
-            index: Arc<RwLock<HashMap<EnvelopeHash, CString>>>,
-            mailbox_index: Arc<RwLock<HashMap<EnvelopeHash, SmallVec<[MailboxHash; 16]>>>>,
-            mailboxes: Arc<RwLock<HashMap<u64, NotmuchMailbox>>>,
-            tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
+            state: Arc<NotmuchState>,
             iter: std::vec::IntoIter<CString>,
         }
         impl FetchState {
             async fn fetch(&mut self) -> Result<Option<Vec<Envelope>>> {
                 let mut unseen_count = 0;
                 let chunk_size = 250;
-                let mut mailbox_index_lck = self.mailbox_index.write().unwrap();
                 let mut ret: Vec<Envelope> = Vec::with_capacity(chunk_size);
                 let mut done: bool = false;
                 for _ in 0..chunk_size {
@@ -552,11 +651,7 @@ impl MailBackend for NotmuchDb {
                             } else {
                                 continue;
                             };
-                        let env = message.into_envelope(&self.index, &self.tag_index);
-                        mailbox_index_lck
-                            .entry(env.hash())
-                            .or_default()
-                            .push(self.mailbox_hash);
+                        let env = self.state.into_envelope(message);
                         if !env.is_seen() {
                             unseen_count += 1;
                         }
@@ -567,7 +662,7 @@ impl MailBackend for NotmuchDb {
                     }
                 }
                 {
-                    let mailboxes_lck = self.mailboxes.read().unwrap();
+                    let mailboxes_lck = self.state.mailboxes.read().unwrap();
                     let mailbox = mailboxes_lck.get(&self.mailbox_hash).unwrap();
                     let mut unseen_lck = mailbox.unseen.lock().unwrap();
                     *unseen_lck += unseen_count;
@@ -579,19 +674,11 @@ impl MailBackend for NotmuchDb {
                 }
             }
         }
-        let database = Arc::new(NotmuchDb::new_connection(
-            self.path.as_path(),
-            self.revision_uuid.clone(),
-            self.lib.clone(),
-            false,
-        )?);
-        let index = self.index.clone();
-        let mailbox_index = self.mailbox_index.clone();
-        let tag_index = self.collection.tag_index.clone();
-        let mailboxes = self.mailboxes.clone();
+        let database = Arc::new(NotmuchDb::new_connection(self.state.clone(), false)?);
         let v: Vec<CString>;
+        let state = self.state.clone();
         {
-            let mailboxes_lck = mailboxes.read().unwrap();
+            let mailboxes_lck = state.mailboxes.read().unwrap();
             let mailbox = mailboxes_lck.get(&mailbox_hash).unwrap();
             let query: Query = Query::new(&database, mailbox.query_str.as_str())?;
             {
@@ -600,7 +687,7 @@ impl MailBackend for NotmuchDb {
                 *total_lck = query.count()? as usize;
                 *unseen_lck = 0;
             }
-            let mut index_lck = index.write().unwrap();
+            let mut index_lck = state.index.write().unwrap();
             v = query
                 .search()?
                 .into_iter()
@@ -611,48 +698,27 @@ impl MailBackend for NotmuchDb {
                 .collect();
         }
 
-        let mut state = FetchState {
+        let mut fetch_state = FetchState {
             mailbox_hash,
-            mailboxes,
+            state,
             database,
-            index,
-            mailbox_index,
-            tag_index,
             iter: v.into_iter(),
         };
         Ok(Box::pin(async_stream::try_stream! {
-            while let Some(res) = state.fetch().await.map_err(|err| { debug!("fetch err {:?}", &err); err})? {
+            while let Some(res) = fetch_state.fetch().await.map_err(|err| { debug!("fetch err {:?}", &err); err})? {
                 yield res;
             }
         }))
     }
 
     fn refresh(&mut self, _mailbox_hash: MailboxHash) -> ResultFuture<()> {
-        let account_hash = self.account_hash;
-        let mut database = NotmuchDb::new_connection(
-            self.path.as_path(),
-            self.revision_uuid.clone(),
-            self.lib.clone(),
-            false,
-        )?;
-        let mailboxes = self.mailboxes.clone();
-        let index = self.index.clone();
-        let mailbox_index = self.mailbox_index.clone();
-        let tag_index = self.collection.tag_index.clone();
-        let event_consumer = self.event_consumer.clone();
+        let mut database = NotmuchDb::new_connection(self.state.clone(), false)?;
+        let state = self.state.clone();
         Ok(Box::pin(async move {
             let new_revision_uuid = database.get_revision_uuid();
-            if new_revision_uuid > *database.revision_uuid.read().unwrap() {
-                database.refresh(
-                    mailboxes,
-                    index,
-                    mailbox_index,
-                    tag_index,
-                    account_hash,
-                    event_consumer,
-                    new_revision_uuid,
-                )?;
-                *database.revision_uuid.write().unwrap() = new_revision_uuid;
+            if new_revision_uuid > *state.revision_uuid.read().unwrap() {
+                database.refresh(new_revision_uuid)?;
+                *state.revision_uuid.write().unwrap() = new_revision_uuid;
             }
             Ok(())
         }))
@@ -662,15 +728,7 @@ impl MailBackend for NotmuchDb {
         extern crate notify;
         use notify::{watcher, RecursiveMode, Watcher};
 
-        let account_hash = self.account_hash;
-        let collection = self.collection.clone();
-        let lib = self.lib.clone();
-        let path = self.path.clone();
-        let revision_uuid = self.revision_uuid.clone();
-        let mailboxes = self.mailboxes.clone();
-        let index = self.index.clone();
-        let mailbox_index = self.mailbox_index.clone();
-        let event_consumer = self.event_consumer.clone();
+        let state = self.state.clone();
 
         let (tx, rx) = std::sync::mpsc::channel();
         let mut watcher = watcher(tx, std::time::Duration::from_secs(2)).unwrap();
@@ -681,24 +739,11 @@ impl MailBackend for NotmuchDb {
             loop {
                 let _ = rx.recv().map_err(|err| err.to_string())?;
                 {
-                    let mut database = NotmuchDb::new_connection(
-                        path.as_path(),
-                        revision_uuid.clone(),
-                        lib.clone(),
-                        false,
-                    )?;
+                    let mut database = NotmuchDb::new_connection(state.clone(), false)?;
                     let new_revision_uuid = database.get_revision_uuid();
-                    if new_revision_uuid > *database.revision_uuid.read().unwrap() {
-                        database.refresh(
-                            mailboxes.clone(),
-                            index.clone(),
-                            mailbox_index.clone(),
-                            collection.tag_index.clone(),
-                            account_hash,
-                            event_consumer.clone(),
-                            new_revision_uuid,
-                        )?;
-                        *revision_uuid.write().unwrap() = new_revision_uuid;
+                    if new_revision_uuid > *state.revision_uuid.read().unwrap() {
+                        database.refresh(new_revision_uuid)?;
+                        *state.revision_uuid.write().unwrap() = new_revision_uuid;
                     }
                 }
             }
@@ -707,6 +752,7 @@ impl MailBackend for NotmuchDb {
 
     fn mailboxes(&self) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
         let ret = Ok(self
+            .state
             .mailboxes
             .read()
             .unwrap()
@@ -718,15 +764,8 @@ impl MailBackend for NotmuchDb {
 
     fn operation(&self, hash: EnvelopeHash) -> Result<Box<dyn BackendOp>> {
         Ok(Box::new(NotmuchOp {
-            database: Arc::new(Self::new_connection(
-                self.path.as_path(),
-                self.revision_uuid.clone(),
-                self.lib.clone(),
-                true,
-            )?),
-            lib: self.lib.clone(),
+            database: Arc::new(Self::new_connection(self.state.clone(), true)?),
             hash,
-            index: self.index.clone(),
             bytes: None,
         }))
     }
@@ -763,28 +802,23 @@ impl MailBackend for NotmuchDb {
         _mailbox_hash: MailboxHash,
         flags: SmallVec<[(std::result::Result<Flag, String>, bool); 8]>,
     ) -> ResultFuture<()> {
-        let database = Self::new_connection(
-            self.path.as_path(),
-            self.revision_uuid.clone(),
-            self.lib.clone(),
-            true,
-        )?;
-        let collection = self.collection.clone();
-        let index = self.index.clone();
+        let database = Self::new_connection(self.state.clone(), true)?;
+        let state = self.state.clone();
 
         Ok(Box::pin(async move {
-            let mut index_lck = index.write().unwrap();
             for env_hash in env_hashes.iter() {
                 debug!(&env_hash);
-                let message = match Message::find_message(&database, &index_lck[&env_hash]) {
-                    Ok(v) => v,
-                    Err(err) => {
-                        debug!("not found {}", err);
-                        continue;
-                    }
-                };
+                let message =
+                    match Message::find_message(&database, &state.index.read().unwrap()[&env_hash])
+                    {
+                        Ok(v) => v,
+                        Err(err) => {
+                            debug!("not found {}", err);
+                            continue;
+                        }
+                    };
 
-                let tags = debug!(message.tags().collect::<Vec<&CStr>>());
+                let tags = message.tags().collect::<Vec<&CStr>>();
                 //flags.set(f, value);
 
                 macro_rules! cstr {
@@ -819,8 +853,6 @@ impl MailBackend for NotmuchDb {
 
                 for (f, v) in flags.iter() {
                     let value = *v;
-                    debug!(&f);
-                    debug!(&value);
                     match f {
                         Ok(Flag::DRAFT) if value => add_tag!(b"draft\0"),
                         Ok(Flag::DRAFT) => remove_tag!(b"draft\0"),
@@ -848,21 +880,7 @@ impl MailBackend for NotmuchDb {
 
                 /* Update message filesystem path. */
                 message.tags_to_maildir_flags()?;
-
-                let msg_id = message.msg_id_cstr();
-                if let Some(p) = index_lck.get_mut(&env_hash) {
-                    *p = msg_id.into();
-                }
-            }
-            for (f, v) in flags.iter() {
-                if let (Err(tag), true) = (f, v) {
-                    let hash = tag_hash!(tag);
-                    collection
-                        .tag_index
-                        .write()
-                        .unwrap()
-                        .insert(hash, tag.to_string());
-                }
+                state.update_message_status(&database, message)?;
             }
 
             Ok(())
@@ -882,17 +900,12 @@ impl MailBackend for NotmuchDb {
         melib_query: crate::search::Query,
         mailbox_hash: Option<MailboxHash>,
     ) -> ResultFuture<SmallVec<[EnvelopeHash; 512]>> {
-        let database = NotmuchDb::new_connection(
-            self.path.as_path(),
-            self.revision_uuid.clone(),
-            self.lib.clone(),
-            false,
-        )?;
-        let mailboxes = self.mailboxes.clone();
+        let database = NotmuchDb::new_connection(self.state.clone(), false)?;
+        let state = self.state.clone();
         Ok(Box::pin(async move {
             let mut ret = SmallVec::new();
             let mut query_s = if let Some(mailbox_hash) = mailbox_hash {
-                if let Some(m) = mailboxes.read().unwrap().get(&mailbox_hash) {
+                if let Some(m) = state.mailboxes.read().unwrap().get(&mailbox_hash) {
                     let mut s = m.query_str.clone();
                     s.push(' ');
                     s
@@ -930,17 +943,16 @@ impl MailBackend for NotmuchDb {
 #[derive(Debug)]
 struct NotmuchOp {
     hash: EnvelopeHash,
-    index: Arc<RwLock<HashMap<EnvelopeHash, CString>>>,
     database: Arc<DbConnection>,
     bytes: Option<Vec<u8>>,
-    #[allow(dead_code)]
-    lib: Arc<libloading::Library>,
 }
 
 impl BackendOp for NotmuchOp {
     fn as_bytes(&mut self) -> ResultFuture<Vec<u8>> {
-        let index_lck = self.index.write().unwrap();
-        let message = Message::find_message(&self.database, &index_lck[&self.hash])?;
+        let message = Message::find_message(
+            &self.database,
+            &self.database.state.index.write().unwrap()[&self.hash],
+        )?;
         let mut f = std::fs::File::open(message.get_filename())?;
         let mut response = Vec::new();
         f.read_to_end(&mut response)?;
@@ -950,202 +962,11 @@ impl BackendOp for NotmuchOp {
     }
 
     fn fetch_flags(&self) -> ResultFuture<Flag> {
-        let index_lck = self.index.write().unwrap();
-        let message = Message::find_message(&self.database, &index_lck[&self.hash])?;
+        let message = Message::find_message(
+            &self.database,
+            &self.database.state.index.write().unwrap()[&self.hash],
+        )?;
         let (flags, _tags) = message.tags().collect_flags_and_tags();
         Ok(Box::pin(async move { Ok(flags) }))
-    }
-}
-
-pub struct Query<'s> {
-    #[allow(dead_code)]
-    lib: Arc<libloading::Library>,
-    ptr: *mut notmuch_query_t,
-    query_str: &'s str,
-}
-
-impl<'s> Query<'s> {
-    fn new(database: &DbConnection, query_str: &'s str) -> Result<Self> {
-        let lib: Arc<libloading::Library> = database.lib.clone();
-        let query_cstr = std::ffi::CString::new(query_str)?;
-        let query: *mut notmuch_query_t = unsafe {
-            call!(lib, notmuch_query_create)(*database.inner.read().unwrap(), query_cstr.as_ptr())
-        };
-        if query.is_null() {
-            return Err(MeliError::new("Could not create query. Out of memory?"));
-        }
-        Ok(Query {
-            lib,
-            ptr: query,
-            query_str,
-        })
-    }
-
-    fn count(&self) -> Result<u32> {
-        let mut count = 0_u32;
-        unsafe {
-            try_call!(
-                self.lib,
-                call!(self.lib, notmuch_query_count_messages)(self.ptr, &mut count as *mut _)
-            )
-            .map_err(|err| err.0)?;
-        }
-        Ok(count)
-    }
-
-    fn search(&'s self) -> Result<MessageIterator<'s>> {
-        let mut messages: *mut notmuch_messages_t = std::ptr::null_mut();
-        let status = unsafe {
-            call!(self.lib, notmuch_query_search_messages)(self.ptr, &mut messages as *mut _)
-        };
-        if status != 0 {
-            return Err(MeliError::new(format!(
-                "Search for {} returned {}",
-                self.query_str, status,
-            )));
-        }
-        assert!(!messages.is_null());
-        Ok(MessageIterator {
-            messages,
-            lib: self.lib.clone(),
-            _ph: std::marker::PhantomData,
-            is_from_thread: false,
-        })
-    }
-}
-
-impl Drop for Query<'_> {
-    fn drop(&mut self) {
-        unsafe {
-            call!(self.lib, notmuch_query_destroy)(self.ptr);
-        }
-    }
-}
-
-pub trait MelibQueryToNotmuchQuery {
-    fn query_to_string(&self, ret: &mut String);
-}
-
-impl MelibQueryToNotmuchQuery for crate::search::Query {
-    fn query_to_string(&self, ret: &mut String) {
-        use crate::search::Query::*;
-        match self {
-            Before(timestamp) => {
-                ret.push_str("date:..@");
-                ret.push_str(&timestamp.to_string());
-            }
-            After(timestamp) => {
-                ret.push_str("date:@");
-                ret.push_str(&timestamp.to_string());
-                ret.push_str("..");
-            }
-            Between(a, b) => {
-                ret.push_str("date:@");
-                ret.push_str(&a.to_string());
-                ret.push_str("..@");
-                ret.push_str(&b.to_string());
-            }
-            On(timestamp) => {
-                ret.push_str("date:@");
-                ret.push_str(&timestamp.to_string());
-            }
-            /* * * * */
-            From(s) => {
-                ret.push_str("from:\"");
-                for c in s.chars() {
-                    if c == '"' {
-                        ret.push_str("\\\"");
-                    } else {
-                        ret.push(c);
-                    }
-                }
-                ret.push('"');
-            }
-            To(s) | Cc(s) | Bcc(s) => {
-                ret.push_str("to:\"");
-                for c in s.chars() {
-                    if c == '"' {
-                        ret.push_str("\\\"");
-                    } else {
-                        ret.push(c);
-                    }
-                }
-                ret.push('"');
-            }
-            InReplyTo(_s) | References(_s) | AllAddresses(_s) => {}
-            /* * * * */
-            Body(s) => {
-                ret.push_str("body:\"");
-                for c in s.chars() {
-                    if c == '"' {
-                        ret.push_str("\\\"");
-                    } else {
-                        ret.push(c);
-                    }
-                }
-                ret.push('"');
-            }
-            Subject(s) => {
-                ret.push_str("subject:\"");
-                for c in s.chars() {
-                    if c == '"' {
-                        ret.push_str("\\\"");
-                    } else {
-                        ret.push(c);
-                    }
-                }
-                ret.push('"');
-            }
-            AllText(s) => {
-                ret.push('"');
-                for c in s.chars() {
-                    if c == '"' {
-                        ret.push_str("\\\"");
-                    } else {
-                        ret.push(c);
-                    }
-                }
-                ret.push('"');
-            }
-            /* * * * */
-            Flags(v) => {
-                for f in v {
-                    ret.push_str("tag:\"");
-                    for c in f.chars() {
-                        if c == '"' {
-                            ret.push_str("\\\"");
-                        } else {
-                            ret.push(c);
-                        }
-                    }
-                    ret.push_str("\" ");
-                }
-                if !v.is_empty() {
-                    ret.pop();
-                }
-            }
-            HasAttachment => {
-                ret.push_str("tag:attachment");
-            }
-            And(q1, q2) => {
-                ret.push('(');
-                q1.query_to_string(ret);
-                ret.push_str(") AND (");
-                q2.query_to_string(ret);
-                ret.push(')');
-            }
-            Or(q1, q2) => {
-                ret.push('(');
-                q1.query_to_string(ret);
-                ret.push_str(") OR (");
-                q2.query_to_string(ret);
-                ret.push(')');
-            }
-            Not(q) => {
-                ret.push_str("(NOT (");
-                q.query_to_string(ret);
-                ret.push_str("))");
-            }
-        }
     }
 }
