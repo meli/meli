@@ -1431,7 +1431,9 @@ impl Component for MailView {
                     let mut text = "Viewing attachment. Press `r` to return \n".to_string();
                     if let Some(attachment) = self.open_attachment(aidx, context) {
                         if attachment.is_html() {
-                            self.subview = Some(Box::new(HtmlView::new(attachment, context)));
+                            let mut subview = Box::new(HtmlView::new(attachment, context));
+                            subview.set_coordinates(Some(self.coordinates));
+                            self.subview = Some(subview);
                             self.mode = ViewMode::Subview;
                         } else {
                             text.push_str(&attachment.text());
@@ -1462,7 +1464,9 @@ impl Component for MailView {
                     }
                 }
                 ViewMode::Normal if body.is_html() => {
-                    self.subview = Some(Box::new(HtmlView::new(body, context)));
+                    let mut subview = Box::new(HtmlView::new(body, context));
+                    subview.set_coordinates(Some(self.coordinates));
+                    self.subview = Some(subview);
                     self.mode = ViewMode::Subview;
                 }
                 ViewMode::Normal
@@ -1483,7 +1487,7 @@ impl Component for MailView {
                             _ => false,
                         } =>
                 {
-                    self.subview = Some(Box::new(HtmlView::new(
+                    let mut subview = Box::new(HtmlView::new(
                         body.content_type
                             .parts()
                             .unwrap()
@@ -1491,7 +1495,9 @@ impl Component for MailView {
                             .find(|a| a.is_html())
                             .unwrap_or(body),
                         context,
-                    )));
+                    ));
+                    subview.set_coordinates(Some(self.coordinates));
+                    self.subview = Some(subview);
                     self.mode = ViewMode::Subview;
                     self.initialised = false;
                 }

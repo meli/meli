@@ -88,6 +88,11 @@ pub struct PagerSettingsOverride {
     #[serde(deserialize_with = "non_empty_string")]
     #[serde(default)]
     pub url_launcher: Option<Option<String>>,
+    #[doc = " A command to open html files."]
+    #[doc = " Default: None"]
+    #[serde(deserialize_with = "non_empty_string", alias = "html-open")]
+    #[serde(default)]
+    pub html_open: Option<Option<String>>,
 }
 impl Default for PagerSettingsOverride {
     fn default() -> Self {
@@ -104,6 +109,7 @@ impl Default for PagerSettingsOverride {
             auto_choose_multipart_alternative: None,
             show_date_in_my_timezone: None,
             url_launcher: None,
+            html_open: None,
         }
     }
 }

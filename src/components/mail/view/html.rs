@@ -27,6 +27,7 @@ use std::process::{Command, Stdio};
 pub struct HtmlView {
     pager: Pager,
     bytes: Vec<u8>,
+    coordinates: Option<(AccountHash, MailboxHash, EnvelopeHash)>,
     id: ComponentId,
 }
 
@@ -111,7 +112,16 @@ impl HtmlView {
         }
         let colors = crate::conf::value(context, "mail.view.body");
         let pager = Pager::from_string(display_text, None, None, None, colors);
-        HtmlView { pager, bytes, id }
+        HtmlView {
+            pager,
+            bytes,
+            id,
+            coordinates: None,
+        }
+    }
+
+    pub fn set_coordinates(&mut self, new_value: Option<(AccountHash, MailboxHash, EnvelopeHash)>) {
+        self.coordinates = new_value;
     }
 }
 
@@ -131,7 +141,15 @@ impl Component for HtmlView {
         }
 
         if let UIEvent::Input(Key::Char('v')) = event {
-            if let Ok(command) = query_default_app("text/html") {
+            let command = if let Some(coordinates) = self.coordinates {
+                mailbox_settings!(context[coordinates.0][&coordinates.1].pager.html_open)
+                    .as_ref()
+                    .map(|s| s.to_string())
+                    .or_else(|| query_default_app("text/html").ok())
+            } else {
+                query_default_app("text/html").ok()
+            };
+            if let Some(command) = command {
                 let p = create_temp_file(&self.bytes, None, None, true);
                 let (exec_cmd, argument) =
                     super::desktop_exec_to_command(&command, p.path.display().to_string(), false);

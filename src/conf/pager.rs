@@ -87,14 +87,25 @@ pub struct PagerSettings {
         alias = "auto-choose-multipart-alternative"
     )]
     pub auto_choose_multipart_alternative: ToggleFlag,
+
     /// Show Date: in my timezone
     /// Default: true
     #[serde(default = "internal_value_true", alias = "show-date-in-my-timezone")]
     pub show_date_in_my_timezone: ToggleFlag,
+
     /// A command to launch URLs with. The URL will be given as the first argument of the command.
     /// Default: None
     #[serde(default = "none", deserialize_with = "non_empty_string")]
     pub url_launcher: Option<String>,
+
+    /// A command to open html files.
+    /// Default: None
+    #[serde(
+        default = "none",
+        deserialize_with = "non_empty_string",
+        alias = "html-open"
+    )]
+    pub html_open: Option<String>,
 }
 
 impl Default for PagerSettings {
@@ -106,6 +117,7 @@ impl Default for PagerSettings {
             pager_ratio: 80,
             filter: None,
             html_filter: None,
+            html_open: None,
             format_flowed: true,
             split_long_lines: true,
             minimum_width: 80,
@@ -128,6 +140,7 @@ impl DotAddressable for PagerSettings {
                     "pager_ratio" => self.pager_ratio.lookup(field, tail),
                     "filter" => self.filter.lookup(field, tail),
                     "html_filter" => self.html_filter.lookup(field, tail),
+                    "html_open" => self.html_open.lookup(field, tail),
                     "format_flowed" => self.format_flowed.lookup(field, tail),
                     "split_long_lines" => self.split_long_lines.lookup(field, tail),
                     "minimum_width" => self.minimum_width.lookup(field, tail),
