@@ -96,8 +96,7 @@ macro_rules! shortcut_key_values {
         pub struct $name:ident { $($fname:ident |> $fdesc:literal |> $default:expr),* }) => {
         $(#[$outer])*
         #[derive(Debug, Clone, Serialize, Deserialize)]
-        #[serde(default)]
-        #[serde(rename = $cname)]
+        #[serde(default, deny_unknown_fields, rename = $cname)]
         pub struct $name {
             $(pub $fname : Key),*
         }
@@ -110,11 +109,27 @@ macro_rules! shortcut_key_values {
                         _ => unreachable!()
                 }
             }
+
             /// Returns a hashmap of all shortcuts and their values
             pub fn key_values(&self) -> IndexMap<&'static str, Key> {
                 [
                 $((stringify!($fname),(self.$fname).clone()),)*
                 ].iter().cloned().collect()
+            }
+
+            /// Returns a slice of all shortcuts.
+            pub fn key_slice(&self) -> &'static [&'static str] {
+                use std::sync::Once;
+
+                static mut VAL: Vec<&'static str> = vec![];
+                static INIT: Once = Once::new();
+
+                unsafe {
+                    INIT.call_once(|| {
+                        $(VAL.push(stringify!($fname));)*
+                    });
+                    VAL.as_ref()
+                }
             }
         }
 
