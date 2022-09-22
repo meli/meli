@@ -110,4 +110,6 @@ pub trait Component: Display + Debug + Send + Sync {
     fn get_status(&self, _context: &Context) -> String {
         String::new()
     }
+
+    fn perform(&mut self, _action: &str, _context: &mut Context) -> Result<()>;
 }

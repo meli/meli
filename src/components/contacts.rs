@@ -295,4 +295,8 @@ impl Component for ContactManager {
         self.set_dirty(true);
         false
     }
+
+    fn perform(&mut self, _action: &str, _context: &mut Context) -> Result<()> {
+        Err("No actions available.".into())
+    }
 }

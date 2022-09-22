@@ -971,6 +971,30 @@ impl State {
                     )))
                     .unwrap();
             }
+            DoShortcut(action) => {
+                let Self {
+                    ref mut components,
+                    ref mut context,
+                    ref mut overlay,
+                    ..
+                } = self;
+                let mut failure: Option<MeliError> = None;
+                for c in overlay.iter_mut().chain(components.iter_mut()) {
+                    if let Err(err) = c.perform(action.as_str(), context) {
+                        failure = Some(err);
+                    } else {
+                        failure = None;
+                        break;
+                    }
+                }
+                if let Some(err) = failure {
+                    context.replies.push_back(UIEvent::Notification(
+                        None,
+                        err.to_string(),
+                        Some(NotificationType::Error(ErrorKind::None)),
+                    ));
+                }
+            }
             v => {
                 self.rcv_event(UIEvent::Action(v));
             }

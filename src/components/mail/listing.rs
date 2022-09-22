@@ -1935,6 +1935,10 @@ impl Component for Listing {
             MailboxStatus::Failed(_) | MailboxStatus::None => account[&mailbox_hash].status(),
         }
     }
+
+    fn perform(&mut self, action: &str, context: &mut Context) -> Result<()> {
+        self.component.perform(action, context)
+    }
 }
 
 impl Listing {

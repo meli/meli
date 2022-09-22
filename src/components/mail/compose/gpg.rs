@@ -264,6 +264,10 @@ impl Component for KeySelection {
             KeySelection::Loaded { ref mut widget, .. } => widget.set_id(new_id),
         }
     }
+
+    fn perform(&mut self, _action: &str, _context: &mut Context) -> Result<()> {
+        Err("No actions available.".into())
+    }
 }
 
 #[derive(Debug, Clone)]

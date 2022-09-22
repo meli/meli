@@ -1179,4 +1179,11 @@ impl Component for ThreadView {
             .replies
             .push_back(UIEvent::Action(Tab(Kill(self.id))));
     }
+
+    fn perform(&mut self, action: &str, context: &mut Context) -> Result<()> {
+        if self.show_mailview {
+            return self.mailview.perform(action, context);
+        }
+        Err("No actions available.".into())
+    }
 }

@@ -851,6 +851,19 @@ Alternatives(&[to_stream!(One(Literal("add-attachment")), One(Filepath)), to_str
                       }
                   )
                 },
+                { tags: ["do"],
+                  desc: "perform a shortcut",
+                  tokens: &[One(Literal("do"))],
+                  parser:(
+                      fn do_shortcut(input: &[u8]) -> IResult<&[u8], Action> {
+                          let (input, _) = tag("do")(input.trim())?;
+                          let (input, _) = is_a(" ")(input)?;
+                          let (input, shortcut) = map_res(not_line_ending, std::str::from_utf8)(input.trim())?;
+                          let (input, _) = eof(input.trim())?;
+                          Ok((input, DoShortcut(shortcut.to_string())))
+                      }
+                  )
+                },
                 { tags: ["quit"],
                   desc: "quit meli",
                   tokens: &[One(Literal("quit"))],
@@ -952,7 +965,7 @@ fn view(input: &[u8]) -> IResult<&[u8], Action> {
     ))(input)
 }
 
-pub fn parse_command(input: &[u8]) -> Result<Action, MeliError> {
+fn split_parse_command_1(input: &[u8]) -> IResult<&[u8], Action> {
     alt((
         goto,
         listing_action,
@@ -964,6 +977,11 @@ pub fn parse_command(input: &[u8]) -> Result<Action, MeliError> {
         printenv,
         view,
         compose_action,
+    ))(input)
+}
+
+fn split_parse_command_2(input: &[u8]) -> IResult<&[u8], Action> {
+    alt((
         create_mailbox,
         sub_mailbox,
         unsub_mailbox,
@@ -973,11 +991,16 @@ pub fn parse_command(input: &[u8]) -> Result<Action, MeliError> {
         account_action,
         print_setting,
         toggle_mouse,
+        do_shortcut,
         reload_config,
         quit,
     ))(input)
-    .map(|(_, v)| v)
-    .map_err(|err| err.into())
+}
+
+pub fn parse_command(input: &[u8]) -> Result<Action, MeliError> {
+    alt((split_parse_command_1, split_parse_command_2))(input)
+        .map(|(_, v)| v)
+        .map_err(|err| err.into())
 }
 
 #[test]

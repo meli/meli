@@ -110,8 +110,13 @@ impl Component for HSplit {
     fn id(&self) -> ComponentId {
         self.id
     }
+
     fn set_id(&mut self, id: ComponentId) {
         self.id = id;
+    }
+
+    fn perform(&mut self, _action: &str, _context: &mut Context) -> Result<()> {
+        Err("No actions available.".into())
     }
 }
 
@@ -250,7 +255,12 @@ impl Component for VSplit {
     fn id(&self) -> ComponentId {
         self.id
     }
+
     fn set_id(&mut self, id: ComponentId) {
         self.id = id;
+    }
+
+    fn perform(&mut self, _action: &str, _context: &mut Context) -> Result<()> {
+        Err("No actions available.".into())
     }
 }

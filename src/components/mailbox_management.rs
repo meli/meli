@@ -433,53 +433,91 @@ impl Component for MailboxManager {
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_up"]) =>
             {
-                let amount = 1;
-                self.movement = Some(PageMovement::Up(amount));
-                self.set_dirty(true);
+                let _ret = self.perform("scroll_up", context);
+                debug_assert!(_ret.is_ok());
                 return true;
             }
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_down"])
                     && self.cursor_pos < self.length.saturating_sub(1) =>
             {
-                let amount = 1;
-                self.set_dirty(true);
-                self.movement = Some(PageMovement::Down(amount));
+                let _ret = self.perform("scroll_down", context);
+                debug_assert!(_ret.is_ok());
                 return true;
             }
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Shortcuts::GENERAL]["prev_page"]) =>
             {
-                let mult = 1;
-                self.set_dirty(true);
-                self.movement = Some(PageMovement::PageUp(mult));
+                let _ret = self.perform("prev_page", context);
+                debug_assert!(_ret.is_ok());
                 return true;
             }
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Shortcuts::GENERAL]["next_page"]) =>
             {
-                let mult = 1;
-                self.set_dirty(true);
-                self.movement = Some(PageMovement::PageDown(mult));
+                let _ret = self.perform("next_page", context);
+                debug_assert!(_ret.is_ok());
                 return true;
             }
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Shortcuts::GENERAL]["home_page"]) =>
             {
-                self.set_dirty(true);
-                self.movement = Some(PageMovement::Home);
+                let _ret = self.perform("home_page", context);
+                debug_assert!(_ret.is_ok());
                 return true;
             }
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Shortcuts::GENERAL]["end_page"]) =>
             {
-                self.set_dirty(true);
-                self.movement = Some(PageMovement::End);
+                let _ret = self.perform("end_page", context);
+                debug_assert!(_ret.is_ok());
                 return true;
             }
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Shortcuts::GENERAL]["open_entry"]) =>
             {
+                let _ret = self.perform("open_entry", context);
+                debug_assert!(_ret.is_ok());
+                return true;
+            }
+            _ => {}
+        }
+        false
+    }
+
+    fn perform(&mut self, action: &str, context: &mut Context) -> Result<()> {
+        match action {
+            "scroll_up" => {
+                let amount = 1;
+                self.movement = Some(PageMovement::Up(amount));
+                self.set_dirty(true);
+            }
+            "scroll_down" => {
+                if self.cursor_pos < self.length.saturating_sub(1) {
+                    let amount = 1;
+                    self.set_dirty(true);
+                    self.movement = Some(PageMovement::Down(amount));
+                }
+            }
+            "prev_page" => {
+                let mult = 1;
+                self.set_dirty(true);
+                self.movement = Some(PageMovement::PageUp(mult));
+            }
+            "next_page" => {
+                let mult = 1;
+                self.set_dirty(true);
+                self.movement = Some(PageMovement::PageDown(mult));
+            }
+            "home_page" => {
+                self.set_dirty(true);
+                self.movement = Some(PageMovement::Home);
+            }
+            "end_page" => {
+                self.set_dirty(true);
+                self.movement = Some(PageMovement::End);
+            }
+            "open_entry" => {
                 self.set_dirty(true);
                 self.mode = ViewMode::Action(UIDialog::new(
                     "select action",
@@ -497,11 +535,13 @@ impl Component for MailboxManager {
                     )),
                     context,
                 ));
-                return true;
             }
-            _ => {}
+            other => {
+                return Err(format!("Mailbox manager doesn't have an `{}` action.", other).into())
+            }
         }
-        false
+
+        Ok(())
     }
 
     fn is_dirty(&self) -> bool {

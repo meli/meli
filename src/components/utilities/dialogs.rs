@@ -423,8 +423,13 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
     fn id(&self) -> ComponentId {
         self.id
     }
+
     fn set_id(&mut self, id: ComponentId) {
         self.id = id;
+    }
+
+    fn perform(&mut self, _action: &str, _context: &mut Context) -> Result<()> {
+        Err("No actions available.".into())
     }
 }
 
@@ -755,6 +760,10 @@ impl Component for UIConfirmationDialog {
 
     fn set_id(&mut self, id: ComponentId) {
         self.id = id;
+    }
+
+    fn perform(&mut self, _action: &str, _context: &mut Context) -> Result<()> {
+        Err("No actions available.".into())
     }
 }
 

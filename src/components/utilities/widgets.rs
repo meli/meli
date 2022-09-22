@@ -366,15 +366,22 @@ impl Component for Field {
         self.set_dirty(true);
         true
     }
+
     fn is_dirty(&self) -> bool {
         false
     }
+
     fn set_dirty(&mut self, _value: bool) {}
 
     fn id(&self) -> ComponentId {
         ComponentId::nil()
     }
+
     fn set_id(&mut self, _id: ComponentId) {}
+
+    fn perform(&mut self, _action: &str, _context: &mut Context) -> Result<()> {
+        Err("No actions available.".into())
+    }
 }
 
 impl fmt::Display for Field {
@@ -714,9 +721,11 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> Component for 
         }
         false
     }
+
     fn is_dirty(&self) -> bool {
         self.dirty || self.buttons.is_dirty()
     }
+
     fn set_dirty(&mut self, value: bool) {
         self.dirty = value;
         self.buttons.set_dirty(value);
@@ -725,8 +734,13 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> Component for 
     fn id(&self) -> ComponentId {
         self.id
     }
+
     fn set_id(&mut self, id: ComponentId) {
         self.id = id;
+    }
+
+    fn perform(&mut self, _action: &str, _context: &mut Context) -> Result<()> {
+        Err("No actions available.".into())
     }
 }
 
@@ -855,9 +869,11 @@ where
         }
         false
     }
+
     fn is_dirty(&self) -> bool {
         self.dirty
     }
+
     fn set_dirty(&mut self, value: bool) {
         self.dirty = value;
     }
@@ -865,8 +881,13 @@ where
     fn id(&self) -> ComponentId {
         self.id
     }
+
     fn set_id(&mut self, id: ComponentId) {
         self.id = id;
+    }
+
+    fn perform(&mut self, _action: &str, _context: &mut Context) -> Result<()> {
+        Err("No actions available.".into())
     }
 }
 
@@ -988,12 +1009,15 @@ impl Component for AutoComplete {
         }
         context.dirty_areas.push_back(area);
     }
+
     fn process_event(&mut self, _event: &mut UIEvent, _context: &mut Context) -> bool {
         false
     }
+
     fn is_dirty(&self) -> bool {
         self.dirty
     }
+
     fn set_dirty(&mut self, value: bool) {
         self.dirty = value;
     }
@@ -1001,8 +1025,13 @@ impl Component for AutoComplete {
     fn id(&self) -> ComponentId {
         self.id
     }
+
     fn set_id(&mut self, id: ComponentId) {
         self.id = id;
+    }
+
+    fn perform(&mut self, _action: &str, _context: &mut Context) -> Result<()> {
+        Err("No actions available.".into())
     }
 }
 
@@ -1453,5 +1482,9 @@ impl Component for ProgressSpinner {
 
     fn set_id(&mut self, id: ComponentId) {
         self.id = id;
+    }
+
+    fn perform(&mut self, _action: &str, _context: &mut Context) -> Result<()> {
+        Err("No actions available.".into())
     }
 }

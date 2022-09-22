@@ -138,6 +138,9 @@ mod dbus {
         }
 
         fn set_id(&mut self, _id: ComponentId) {}
+        fn perform(&mut self, _action: &str, _context: &mut Context) -> Result<()> {
+            Err("No actions available.".into())
+        }
     }
 
     fn escape_str(s: &str) -> String {
@@ -274,6 +277,9 @@ impl Component for NotificationCommand {
     }
     fn set_dirty(&mut self, _value: bool) {}
     fn set_id(&mut self, _id: ComponentId) {}
+    fn perform(&mut self, _action: &str, _context: &mut Context) -> Result<()> {
+        Err("No actions available.".into())
+    }
 }
 
 fn update_xbiff(path: &str) -> Result<()> {

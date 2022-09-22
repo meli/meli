@@ -125,34 +125,22 @@ pub enum Action {
     PrintSetting(String),
     ReloadConfiguration,
     ToggleMouse,
+    DoShortcut(String),
     Quit,
 }
 
 impl Action {
     pub fn needs_confirmation(&self) -> bool {
-        match self {
-            Action::Listing(ListingAction::Delete) => true,
-            Action::Listing(_) => false,
-            Action::ViewMailbox(_) => false,
-            Action::Sort(_, _) => false,
-            Action::SubSort(_, _) => false,
-            Action::Tab(_) => false,
-            Action::MailingListAction(_) => true,
-            Action::View(_) => false,
-            Action::SetEnv(_, _) => false,
-            Action::PrintEnv(_) => false,
-            Action::Compose(_) => false,
-            Action::Mailbox(_, _) => true,
-            Action::AccountAction(_, _) => false,
-            Action::PrintSetting(_) => false,
-            Action::ToggleMouse => false,
-            Action::ManageMailboxes => false,
-            Action::Quit => true,
-            Action::ReloadConfiguration => false,
-        }
+        matches!(
+            self,
+            Action::Listing(ListingAction::Delete)
+                | Action::MailingListAction(_)
+                | Action::Mailbox(_, _)
+                | Action::Quit
+        )
     }
 }
 
-type AccountName = String;
-type MailboxPath = String;
-type NewMailboxPath = String;
+pub type AccountName = String;
+pub type MailboxPath = String;
+pub type NewMailboxPath = String;

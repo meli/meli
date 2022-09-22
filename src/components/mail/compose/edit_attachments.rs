@@ -309,4 +309,8 @@ impl Component for EditAttachmentsRefMut<'_, '_> {
     fn set_id(&mut self, new_id: ComponentId) {
         self.inner.id = new_id;
     }
+
+    fn perform(&mut self, _action: &str, _context: &mut Context) -> Result<()> {
+        Err("No actions available.".into())
+    }
 }

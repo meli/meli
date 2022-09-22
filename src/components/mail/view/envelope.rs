@@ -525,11 +525,13 @@ impl Component for EnvelopeView {
         }
         false
     }
+
     fn is_dirty(&self) -> bool {
         self.dirty
             || self.pager.as_ref().map(|p| p.is_dirty()).unwrap_or(false)
             || self.subview.as_ref().map(|p| p.is_dirty()).unwrap_or(false)
     }
+
     fn set_dirty(&mut self, value: bool) {
         self.dirty = value;
     }
@@ -547,5 +549,9 @@ impl Component for EnvelopeView {
 
     fn set_id(&mut self, id: ComponentId) {
         self.id = id;
+    }
+
+    fn perform(&mut self, _action: &str, _context: &mut Context) -> Result<()> {
+        Err("No actions available.".into())
     }
 }

@@ -799,6 +799,10 @@ impl Component for StatusBar {
     fn can_quit_cleanly(&mut self, context: &Context) -> bool {
         self.container.can_quit_cleanly(context)
     }
+
+    fn perform(&mut self, action: &str, context: &mut Context) -> Result<()> {
+        self.container.perform(action, context)
+    }
 }
 
 #[derive(Debug)]
@@ -1559,6 +1563,14 @@ impl Component for Tabbed {
         }
         true
     }
+
+    fn perform(&mut self, action: &str, context: &mut Context) -> Result<()> {
+        if !self.children.is_empty() {
+            self.children[self.cursor_pos].perform(action, context)
+        } else {
+            Ok(())
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1640,6 +1652,10 @@ impl Component for RawBuffer {
 
     fn id(&self) -> ComponentId {
         ComponentId::nil()
+    }
+
+    fn perform(&mut self, _action: &str, _context: &mut Context) -> Result<()> {
+        Err("No actions available.".into())
     }
 }
 

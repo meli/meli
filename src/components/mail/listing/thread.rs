@@ -1615,4 +1615,13 @@ impl Component for ThreadListing {
     fn set_id(&mut self, id: ComponentId) {
         self.id = id;
     }
+
+    fn perform(&mut self, action: &str, context: &mut Context) -> Result<()> {
+        if self.unfocused() {
+            if let Some(p) = self.view.as_mut() {
+                return p.perform(action, context);
+            };
+        }
+        Ok(())
+    }
 }

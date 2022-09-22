@@ -1927,60 +1927,29 @@ impl Component for MailView {
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Shortcuts::ENVELOPE_VIEW]["reply"]) =>
             {
-                self.perform_action(PendingReplyAction::Reply, context);
+                let _ret = self.perform("reply", context);
+                debug_assert!(_ret.is_ok());
                 return true;
             }
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Shortcuts::ENVELOPE_VIEW]["reply_to_all"]) =>
             {
-                self.perform_action(PendingReplyAction::ReplyToAll, context);
+                let _ret = self.perform("reply_to_all", context);
+                debug_assert!(_ret.is_ok());
                 return true;
             }
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Shortcuts::ENVELOPE_VIEW]["reply_to_author"]) =>
             {
-                self.perform_action(PendingReplyAction::ReplyToAuthor, context);
+                let _ret = self.perform("reply_to_author", context);
+                debug_assert!(_ret.is_ok());
                 return true;
             }
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Shortcuts::ENVELOPE_VIEW]["forward"]) =>
             {
-                match mailbox_settings!(
-                    context[self.coordinates.0][&self.coordinates.1]
-                        .composing
-                        .forward_as_attachment
-                ) {
-                    f if f.is_ask() => {
-                        let id = self.id;
-                        context.replies.push_back(UIEvent::GlobalUIDialog(Box::new(
-                            UIConfirmationDialog::new(
-                                "How do you want the email to be forwarded?",
-                                vec![
-                                    (true, "inline".to_string()),
-                                    (false, "as attachment".to_string()),
-                                ],
-                                true,
-                                Some(Box::new(move |_: ComponentId, result: bool| {
-                                    Some(UIEvent::FinishedUIDialog(
-                                        id,
-                                        Box::new(if result {
-                                            PendingReplyAction::ForwardInline
-                                        } else {
-                                            PendingReplyAction::ForwardAttachment
-                                        }),
-                                    ))
-                                })),
-                                context,
-                            ),
-                        )));
-                    }
-                    f if f.is_true() => {
-                        self.perform_action(PendingReplyAction::ForwardAttachment, context);
-                    }
-                    _ => {
-                        self.perform_action(PendingReplyAction::ForwardInline, context);
-                    }
-                }
+                let _ret = self.perform("forward", context);
+                debug_assert!(_ret.is_ok());
                 return true;
             }
             UIEvent::FinishedUIDialog(id, ref result) if id == self.id() => {
@@ -1992,76 +1961,13 @@ impl Component for MailView {
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Shortcuts::ENVELOPE_VIEW]["edit"]) =>
             {
-                let account_hash = self.coordinates.0;
-                let env_hash = self.coordinates.2;
-                let (sender, mut receiver) = crate::jobs::oneshot::channel();
-                let operation = context.accounts[&account_hash].operation(env_hash);
-                let bytes_job = async move {
-                    let _ = sender.send(operation?.as_bytes()?.await);
-                    Ok(())
-                };
-                let handle = if context.accounts[&account_hash]
-                    .backend_capabilities
-                    .is_async
-                {
-                    context.accounts[&account_hash]
-                        .job_executor
-                        .spawn_specialized(bytes_job)
-                } else {
-                    context.accounts[&account_hash]
-                        .job_executor
-                        .spawn_blocking(bytes_job)
-                };
-                context.accounts[&account_hash].insert_job(
-                    handle.job_id,
-                    crate::conf::accounts::JobRequest::Generic {
-                        name: "fetch envelope".into(),
-                        handle,
-                        on_finish: Some(CallbackFn(Box::new(move |context: &mut Context| {
-                            match receiver.try_recv() {
-                                Err(_) => { /* Job was canceled */ }
-                                Ok(None) => { /* something happened, perhaps a worker thread panicked */
-                                }
-                                Ok(Some(result)) => {
-                                    match result.and_then(|bytes| {
-                                        Composer::edit(account_hash, env_hash, &bytes, context)
-                                    }) {
-                                        Ok(composer) => {
-                                            context.replies.push_back(UIEvent::Action(Tab(New(Some(
-                                                                Box::new(composer),
-                                            )))));
-                                        }
-                                        Err(err) => {
-                                            let err_string = format!(
-                                                "Failed to open envelope {}: {}",
-                                                context.accounts[&account_hash]
-                                                .collection
-                                                .envelopes
-                                                .read()
-                                                .unwrap()
-                                                .get(&env_hash)
-                                                .map(|env| env.message_id_display())
-                                                .unwrap_or_else(|| "Not found".into()),
-                                                err
-                                            );
-                                            log(&err_string, ERROR);
-                                            context.replies.push_back(UIEvent::Notification(
-                                                    Some("Failed to open e-mail".to_string()),
-                                                    err_string,
-                                                    Some(NotificationType::Error(err.kind)),
-                                            ));
-                                        }
-                                    }
-                                }
-                            }
-                        }))),
-                        logging_level: melib::LoggingLevel::DEBUG,
-                    },
-                );
+                let _ret = self.perform("edit", context);
+                debug_assert!(_ret.is_ok());
                 return true;
             }
             UIEvent::Action(View(ViewAction::AddAddressesToContacts)) => {
-                self.start_contact_selector(context);
+                let _ret = self.perform("add_addresses_to_contacts", context);
+                debug_assert!(_ret.is_ok());
                 return true;
             }
             UIEvent::Input(ref key)
@@ -2070,7 +1976,8 @@ impl Component for MailView {
                         key == shortcuts[Shortcuts::ENVELOPE_VIEW]["add_addresses_to_contacts"]
                     ) =>
             {
-                self.start_contact_selector(context);
+                let _ret = self.perform("add_addresses_to_contacts", context);
+                debug_assert!(_ret.is_ok());
                 return true;
             }
             UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Alt(''))
@@ -2104,12 +2011,8 @@ impl Component for MailView {
                     || self.mode == ViewMode::Source(Source::Raw))
                     && shortcut!(key == shortcuts[Shortcuts::ENVELOPE_VIEW]["view_raw_source"]) =>
             {
-                self.mode = match self.mode {
-                    ViewMode::Source(Source::Decoded) => ViewMode::Source(Source::Raw),
-                    _ => ViewMode::Source(Source::Decoded),
-                };
-                self.set_dirty(true);
-                self.initialised = false;
+                let _ret = self.perform("view_raw_source", context);
+                debug_assert!(_ret.is_ok());
                 return true;
             }
             UIEvent::Input(ref key)
@@ -2123,9 +2026,8 @@ impl Component for MailView {
                         key == shortcuts[Shortcuts::ENVELOPE_VIEW]["return_to_normal_view"]
                     ) =>
             {
-                self.mode = ViewMode::Normal;
-                self.set_dirty(true);
-                self.initialised = false;
+                let _ret = self.perform("return_to_normal_view", context);
+                debug_assert!(_ret.is_ok());
                 return true;
             }
             UIEvent::Input(ref key)
@@ -2133,33 +2035,8 @@ impl Component for MailView {
                     && !self.cmd_buf.is_empty()
                     && shortcut!(key == shortcuts[Shortcuts::ENVELOPE_VIEW]["open_mailcap"]) =>
             {
-                let lidx = self.cmd_buf.parse::<usize>().unwrap();
-                self.cmd_buf.clear();
-                context
-                    .replies
-                    .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                match self.state {
-                    MailViewState::Error { .. } | MailViewState::LoadingBody { .. } => {}
-                    MailViewState::Loaded { .. } => {
-                        if let Some(attachment) = self.open_attachment(lidx, context) {
-                            if let Ok(()) =
-                                crate::mailcap::MailcapEntry::execute(attachment, context)
-                            {
-                                self.set_dirty(true);
-                            } else {
-                                context.replies.push_back(UIEvent::StatusEvent(
-                                    StatusEvent::DisplayMessage(format!(
-                                        "no mailcap entry found for {}",
-                                        attachment.content_type()
-                                    )),
-                                ));
-                            }
-                        }
-                    }
-                    MailViewState::Init { .. } => {
-                        self.init_futures(context);
-                    }
-                }
+                let _ret = self.perform("open_mailcap", context);
+                debug_assert!(_ret.is_ok());
                 return true;
             }
             UIEvent::Input(ref key)
@@ -2167,117 +2044,8 @@ impl Component for MailView {
                     && !self.cmd_buf.is_empty()
                     && (self.mode == ViewMode::Normal || self.mode == ViewMode::Subview) =>
             {
-                let lidx = self.cmd_buf.parse::<usize>().unwrap();
-                self.cmd_buf.clear();
-                context
-                    .replies
-                    .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                match self.state {
-                    MailViewState::Error { .. } | MailViewState::LoadingBody { .. } => {}
-                    MailViewState::Loaded { .. } => {
-                        if let Some(attachment) = self.open_attachment(lidx, context) {
-                            match attachment.content_type() {
-                                ContentType::MessageRfc822 => {
-                                    match Mail::new(attachment.body().to_vec(), Some(Flag::SEEN)) {
-                                        Ok(wrapper) => {
-                                            context.replies.push_back(UIEvent::Action(Tab(New(
-                                                Some(Box::new(EnvelopeView::new(
-                                                    wrapper,
-                                                    None,
-                                                    None,
-                                                    self.coordinates.0,
-                                                ))),
-                                            ))));
-                                        }
-                                        Err(e) => {
-                                            context.replies.push_back(UIEvent::StatusEvent(
-                                                StatusEvent::DisplayMessage(format!("{}", e)),
-                                            ));
-                                        }
-                                    }
-                                }
-
-                                ContentType::Text { .. }
-                                | ContentType::PGPSignature
-                                | ContentType::CMSSignature => {
-                                    self.mode = ViewMode::Attachment(lidx);
-                                    self.initialised = false;
-                                    self.dirty = true;
-                                }
-                                ContentType::Multipart { .. } => {
-                                    context.replies.push_back(UIEvent::StatusEvent(
-                                        StatusEvent::DisplayMessage(
-                                            "Multipart attachments are not supported yet."
-                                                .to_string(),
-                                        ),
-                                    ));
-                                }
-                                ContentType::Other { .. } => {
-                                    let attachment_type = attachment.mime_type();
-                                    let filename = attachment.filename();
-                                    if let Ok(command) = query_default_app(&attachment_type) {
-                                        let p = create_temp_file(
-                                            &attachment.decode(Default::default()),
-                                            filename.as_deref(),
-                                            None,
-                                            true,
-                                        );
-                                        let exec_cmd = desktop_exec_to_command(
-                                            &command,
-                                            p.path.display().to_string(),
-                                            false,
-                                        );
-                                        match Command::new("sh")
-                                            .args(&["-c", &exec_cmd])
-                                            .stdin(Stdio::piped())
-                                            .stdout(Stdio::piped())
-                                            .spawn()
-                                        {
-                                            Ok(child) => {
-                                                context.temp_files.push(p);
-                                                context.children.push(child);
-                                            }
-                                            Err(err) => {
-                                                context.replies.push_back(UIEvent::StatusEvent(
-                                                    StatusEvent::DisplayMessage(format!(
-                                                        "Failed to start `{}`: {}",
-                                                        &exec_cmd, err
-                                                    )),
-                                                ));
-                                            }
-                                        }
-                                    } else {
-                                        context.replies.push_back(UIEvent::StatusEvent(
-                                        StatusEvent::DisplayMessage(if let Some(filename) = filename.as_ref() {
-                                            format!(
-                                                "Couldn't find a default application for file {} (type {})",
-                                                filename,
-                                                attachment_type
-                                            )
-                                        } else {
-                                            format!(
-                                                "Couldn't find a default application for type {}",
-                                                attachment_type
-                                            )
-                                        }),
-                                ));
-                                    }
-                                }
-                                ContentType::OctetStream { ref name } => {
-                                    context.replies.push_back(UIEvent::StatusEvent(
-                                        StatusEvent::DisplayMessage(format!(
-                                "Failed to open {}. application/octet-stream isn't supported yet",
-                                name.as_ref().map(|n| n.as_str()).unwrap_or("file")
-                            )),
-                                    ));
-                                }
-                            }
-                        }
-                    }
-                    MailViewState::Init { .. } => {
-                        self.init_futures(context);
-                    }
-                }
+                let _ret = self.perform("open_attachment", context);
+                debug_assert!(_ret.is_ok());
                 return true;
             }
             UIEvent::Input(ref key)
@@ -2286,8 +2054,8 @@ impl Component for MailView {
                         key == shortcuts[Shortcuts::ENVELOPE_VIEW]["toggle_expand_headers"]
                     ) =>
             {
-                self.expand_headers = !self.expand_headers;
-                self.set_dirty(true);
+                let _ret = self.perform("toggle_expand_headers", context);
+                debug_assert!(_ret.is_ok());
                 return true;
             }
             UIEvent::Input(ref key)
@@ -2295,90 +2063,16 @@ impl Component for MailView {
                     && self.mode == ViewMode::Url
                     && shortcut!(key == shortcuts[Shortcuts::ENVELOPE_VIEW]["go_to_url"]) =>
             {
-                let lidx = self.cmd_buf.parse::<usize>().unwrap();
-                self.cmd_buf.clear();
-                context
-                    .replies
-                    .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                match self.state {
-                    MailViewState::Init { .. } => {
-                        self.init_futures(context);
-                    }
-                    MailViewState::Error { .. } | MailViewState::LoadingBody { .. } => {}
-                    MailViewState::Loaded {
-                        body: _,
-                        bytes: _,
-                        display: _,
-                        env: _,
-                        ref body_text,
-                        ref links,
-                    } => {
-                        let (_kind, url) = {
-                            if let Some(l) = links
-                                .get(lidx)
-                                .and_then(|l| Some((l.kind, body_text.get(l.start..l.end)?)))
-                            {
-                                l
-                            } else {
-                                context.replies.push_back(UIEvent::StatusEvent(
-                                    StatusEvent::DisplayMessage(format!(
-                                        "Link `{}` not found.",
-                                        lidx
-                                    )),
-                                ));
-                                return true;
-                            }
-                        };
-
-                        let url_launcher = mailbox_settings!(
-                            context[self.coordinates.0][&self.coordinates.1]
-                                .pager
-                                .url_launcher
-                        )
-                        .as_ref()
-                        .map(|s| s.as_str())
-                        .unwrap_or(
-                            #[cfg(target_os = "macos")]
-                            {
-                                "open"
-                            },
-                            #[cfg(not(target_os = "macos"))]
-                            {
-                                "xdg-open"
-                            },
-                        );
-                        match Command::new(url_launcher)
-                            .arg(url)
-                            .stdin(Stdio::piped())
-                            .stdout(Stdio::piped())
-                            .spawn()
-                        {
-                            Ok(child) => {
-                                context.children.push(child);
-                            }
-                            Err(err) => {
-                                context.replies.push_back(UIEvent::Notification(
-                                    Some(format!("Failed to launch {:?}", url_launcher)),
-                                    err.to_string(),
-                                    Some(NotificationType::Error(melib::ErrorKind::External)),
-                                ));
-                            }
-                        }
-                    }
-                }
+                let _ret = self.perform("go_to_url", context);
+                debug_assert!(_ret.is_ok());
                 return true;
             }
             UIEvent::Input(ref key)
                 if (self.mode == ViewMode::Normal || self.mode == ViewMode::Url)
                     && shortcut!(key == shortcuts[Shortcuts::ENVELOPE_VIEW]["toggle_url_mode"]) =>
             {
-                match self.mode {
-                    ViewMode::Normal => self.mode = ViewMode::Url,
-                    ViewMode::Url => self.mode = ViewMode::Normal,
-                    _ => {}
-                }
-                self.initialised = false;
-                self.dirty = true;
+                let _ret = self.perform("toggle_url_mode", context);
+                debug_assert!(_ret.is_ok());
                 return true;
             }
             UIEvent::EnvelopeRename(old_hash, new_hash) if self.coordinates.2 == old_hash => {
@@ -2776,6 +2470,414 @@ impl Component for MailView {
                 .replies
                 .push_back(UIEvent::Action(Tab(Kill(self.id))));
         }
+    }
+
+    fn perform(&mut self, action: &str, context: &mut Context) -> Result<()> {
+        match action {
+            "reply" => {
+                self.perform_action(PendingReplyAction::Reply, context);
+            }
+            "reply_to_all" => {
+                self.perform_action(PendingReplyAction::ReplyToAll, context);
+            }
+            "reply_to_author" => {
+                self.perform_action(PendingReplyAction::ReplyToAuthor, context);
+            }
+            "forward" => {
+                match mailbox_settings!(
+                    context[self.coordinates.0][&self.coordinates.1]
+                        .composing
+                        .forward_as_attachment
+                ) {
+                    f if f.is_ask() => {
+                        let id = self.id;
+                        context.replies.push_back(UIEvent::GlobalUIDialog(Box::new(
+                            UIConfirmationDialog::new(
+                                "How do you want the email to be forwarded?",
+                                vec![
+                                    (true, "inline".to_string()),
+                                    (false, "as attachment".to_string()),
+                                ],
+                                true,
+                                Some(Box::new(move |_: ComponentId, result: bool| {
+                                    Some(UIEvent::FinishedUIDialog(
+                                        id,
+                                        Box::new(if result {
+                                            PendingReplyAction::ForwardInline
+                                        } else {
+                                            PendingReplyAction::ForwardAttachment
+                                        }),
+                                    ))
+                                })),
+                                context,
+                            ),
+                        )));
+                    }
+                    f if f.is_true() => {
+                        self.perform_action(PendingReplyAction::ForwardAttachment, context);
+                    }
+                    _ => {
+                        self.perform_action(PendingReplyAction::ForwardInline, context);
+                    }
+                }
+            }
+            "edit" => {
+                let account_hash = self.coordinates.0;
+                let env_hash = self.coordinates.2;
+                let (sender, mut receiver) = crate::jobs::oneshot::channel();
+                let operation = context.accounts[&account_hash].operation(env_hash);
+                let bytes_job = async move {
+                    let _ = sender.send(operation?.as_bytes()?.await);
+                    Ok(())
+                };
+                let handle = if context.accounts[&account_hash]
+                    .backend_capabilities
+                    .is_async
+                {
+                    context.accounts[&account_hash]
+                        .job_executor
+                        .spawn_specialized(bytes_job)
+                } else {
+                    context.accounts[&account_hash]
+                        .job_executor
+                        .spawn_blocking(bytes_job)
+                };
+                context.accounts[&account_hash].insert_job(
+                    handle.job_id,
+                    crate::conf::accounts::JobRequest::Generic {
+                        name: "fetch envelope".into(),
+                        handle,
+                        on_finish: Some(CallbackFn(Box::new(move |context: &mut Context| {
+                            match receiver.try_recv() {
+                                Err(_) => { /* Job was canceled */ }
+                                Ok(None) => { /* something happened, perhaps a worker thread panicked */
+                                }
+                                Ok(Some(result)) => {
+                                    match result.and_then(|bytes| {
+                                        Composer::edit(account_hash, env_hash, &bytes, context)
+                                    }) {
+                                        Ok(composer) => {
+                                            context.replies.push_back(UIEvent::Action(Tab(New(Some(
+                                                                Box::new(composer),
+                                            )))));
+                                        }
+                                        Err(err) => {
+                                            let err_string = format!(
+                                                "Failed to open envelope {}: {}",
+                                                context.accounts[&account_hash]
+                                                .collection
+                                                .envelopes
+                                                .read()
+                                                .unwrap()
+                                                .get(&env_hash)
+                                                .map(|env| env.message_id_display())
+                                                .unwrap_or_else(|| "Not found".into()),
+                                                err
+                                            );
+                                            log(&err_string, ERROR);
+                                            context.replies.push_back(UIEvent::Notification(
+                                                    Some("Failed to open e-mail".to_string()),
+                                                    err_string,
+                                                    Some(NotificationType::Error(err.kind)),
+                                            ));
+                                        }
+                                    }
+                                }
+                            }
+                        }))),
+                        logging_level: melib::LoggingLevel::DEBUG,
+                    },
+                );
+            }
+            "add_addresses_to_contacts" => {
+                if !self.mode.is_contact_selector() {
+                    self.start_contact_selector(context);
+                }
+            }
+            "view_raw_source" => {
+                if matches!(
+                    self.mode,
+                    ViewMode::Normal
+                        | ViewMode::Subview
+                        | ViewMode::Source(Source::Decoded)
+                        | ViewMode::Source(Source::Raw)
+                ) {
+                    self.mode = match self.mode {
+                        ViewMode::Source(Source::Decoded) => ViewMode::Source(Source::Raw),
+                        _ => ViewMode::Source(Source::Decoded),
+                    };
+                    self.set_dirty(true);
+                    self.initialised = false;
+                }
+            }
+            "return_to_normal_view" => {
+                if self.mode.is_attachment()
+                    || matches!(
+                        self.mode,
+                        ViewMode::Subview
+                            | ViewMode::Url
+                            | ViewMode::Source(Source::Decoded)
+                            | ViewMode::Source(Source::Raw)
+                    )
+                {
+                    self.mode = ViewMode::Normal;
+                    self.set_dirty(true);
+                    self.initialised = false;
+                }
+            }
+            "open_mailcap" => {
+                if (self.mode == ViewMode::Normal || self.mode == ViewMode::Subview)
+                    && !self.cmd_buf.is_empty()
+                {
+                    let lidx = self.cmd_buf.parse::<usize>().unwrap();
+                    self.cmd_buf.clear();
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                    match self.state {
+                        MailViewState::Error { .. } | MailViewState::LoadingBody { .. } => {}
+                        MailViewState::Loaded { .. } => {
+                            if let Some(attachment) = self.open_attachment(lidx, context) {
+                                if let Ok(()) =
+                                    crate::mailcap::MailcapEntry::execute(attachment, context)
+                                {
+                                    self.set_dirty(true);
+                                } else {
+                                    context.replies.push_back(UIEvent::StatusEvent(
+                                        StatusEvent::DisplayMessage(format!(
+                                            "no mailcap entry found for {}",
+                                            attachment.content_type()
+                                        )),
+                                    ));
+                                }
+                            }
+                        }
+                        MailViewState::Init { .. } => {
+                            self.init_futures(context);
+                        }
+                    }
+                }
+            }
+            "open_attachment" => {
+                if self.cmd_buf.is_empty()
+                    && (self.mode == ViewMode::Normal || self.mode == ViewMode::Subview)
+                {
+                    let lidx = self.cmd_buf.parse::<usize>().unwrap();
+                    self.cmd_buf.clear();
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                    match self.state {
+                        MailViewState::Error { .. } | MailViewState::LoadingBody { .. } => {}
+                        MailViewState::Loaded { .. } => {
+                            if let Some(attachment) = self.open_attachment(lidx, context) {
+                                match attachment.content_type() {
+                                    ContentType::MessageRfc822 => {
+                                        match Mail::new(
+                                            attachment.body().to_vec(),
+                                            Some(Flag::SEEN),
+                                        ) {
+                                            Ok(wrapper) => {
+                                                context.replies.push_back(UIEvent::Action(Tab(
+                                                    New(Some(Box::new(EnvelopeView::new(
+                                                        wrapper,
+                                                        None,
+                                                        None,
+                                                        self.coordinates.0,
+                                                    )))),
+                                                )));
+                                            }
+                                            Err(e) => {
+                                                context.replies.push_back(UIEvent::StatusEvent(
+                                                    StatusEvent::DisplayMessage(format!("{}", e)),
+                                                ));
+                                            }
+                                        }
+                                    }
+
+                                    ContentType::Text { .. }
+                                    | ContentType::PGPSignature
+                                    | ContentType::CMSSignature => {
+                                        self.mode = ViewMode::Attachment(lidx);
+                                        self.initialised = false;
+                                        self.dirty = true;
+                                    }
+                                    ContentType::Multipart { .. } => {
+                                        context.replies.push_back(UIEvent::StatusEvent(
+                                            StatusEvent::DisplayMessage(
+                                                "Multipart attachments are not supported yet."
+                                                    .to_string(),
+                                            ),
+                                        ));
+                                    }
+                                    ContentType::Other { .. } => {
+                                        let attachment_type = attachment.mime_type();
+                                        let filename = attachment.filename();
+                                        if let Ok(command) = query_default_app(&attachment_type) {
+                                            let p = create_temp_file(
+                                                &attachment.decode(Default::default()),
+                                                filename.as_deref(),
+                                                None,
+                                                true,
+                                            );
+                                            let exec_cmd = desktop_exec_to_command(
+                                                &command,
+                                                p.path.display().to_string(),
+                                                false,
+                                            );
+                                            match Command::new("sh")
+                                                .args(&["-c", &exec_cmd])
+                                                .stdin(Stdio::piped())
+                                                .stdout(Stdio::piped())
+                                                .spawn()
+                                            {
+                                                Ok(child) => {
+                                                    context.temp_files.push(p);
+                                                    context.children.push(child);
+                                                }
+                                                Err(err) => {
+                                                    context.replies.push_back(
+                                                        UIEvent::StatusEvent(
+                                                            StatusEvent::DisplayMessage(format!(
+                                                                "Failed to start `{}`: {}",
+                                                                &exec_cmd, err
+                                                            )),
+                                                        ),
+                                                    );
+                                                }
+                                            }
+                                        } else {
+                                            context.replies.push_back(UIEvent::StatusEvent(
+                                        StatusEvent::DisplayMessage(if let Some(filename) = filename.as_ref() {
+                                            format!(
+                                                "Couldn't find a default application for file {} (type {})",
+                                                filename,
+                                                attachment_type
+                                            )
+                                        } else {
+                                            format!(
+                                                "Couldn't find a default application for type {}",
+                                                attachment_type
+                                            )
+                                        }),
+                                ));
+                                        }
+                                    }
+                                    ContentType::OctetStream { ref name } => {
+                                        context.replies.push_back(UIEvent::StatusEvent(
+                                            StatusEvent::DisplayMessage(format!(
+                                "Failed to open {}. application/octet-stream isn't supported yet",
+                                name.as_ref().map(|n| n.as_str()).unwrap_or("file")
+                            )),
+                                        ));
+                                    }
+                                }
+                            }
+                        }
+                        MailViewState::Init { .. } => {
+                            self.init_futures(context);
+                        }
+                    }
+                }
+            }
+            "toggle_expand_headers" => {
+                if self.mode == ViewMode::Normal || self.mode == ViewMode::Url {
+                    self.expand_headers = !self.expand_headers;
+                    self.set_dirty(true);
+                }
+            }
+            "go_to_url" => {
+                if !self.cmd_buf.is_empty() && self.mode == ViewMode::Url {
+                    let lidx = self.cmd_buf.parse::<usize>().unwrap();
+                    self.cmd_buf.clear();
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                    match self.state {
+                        MailViewState::Init { .. } => {
+                            self.init_futures(context);
+                        }
+                        MailViewState::Error { .. } | MailViewState::LoadingBody { .. } => {}
+                        MailViewState::Loaded {
+                            body: _,
+                            bytes: _,
+                            display: _,
+                            env: _,
+                            ref body_text,
+                            ref links,
+                        } => {
+                            let (_kind, url) = {
+                                if let Some(l) = links
+                                    .get(lidx)
+                                    .and_then(|l| Some((l.kind, body_text.get(l.start..l.end)?)))
+                                {
+                                    l
+                                } else {
+                                    context.replies.push_back(UIEvent::StatusEvent(
+                                        StatusEvent::DisplayMessage(format!(
+                                            "Link `{}` not found.",
+                                            lidx
+                                        )),
+                                    ));
+                                    return Ok(());
+                                }
+                            };
+
+                            let url_launcher = mailbox_settings!(
+                                context[self.coordinates.0][&self.coordinates.1]
+                                    .pager
+                                    .url_launcher
+                            )
+                            .as_ref()
+                            .map(|s| s.as_str())
+                            .unwrap_or(
+                                #[cfg(target_os = "macos")]
+                                {
+                                    "open"
+                                },
+                                #[cfg(not(target_os = "macos"))]
+                                {
+                                    "xdg-open"
+                                },
+                            );
+                            match Command::new(url_launcher)
+                                .arg(url)
+                                .stdin(Stdio::piped())
+                                .stdout(Stdio::piped())
+                                .spawn()
+                            {
+                                Ok(child) => {
+                                    context.children.push(child);
+                                }
+                                Err(err) => {
+                                    context.replies.push_back(UIEvent::Notification(
+                                        Some(format!("Failed to launch {:?}", url_launcher)),
+                                        err.to_string(),
+                                        Some(NotificationType::Error(melib::ErrorKind::External)),
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            "toggle_url_mode" => {
+                if matches!(self.mode, ViewMode::Normal | ViewMode::Url) {
+                    match self.mode {
+                        ViewMode::Normal => self.mode = ViewMode::Url,
+                        ViewMode::Url => self.mode = ViewMode::Normal,
+                        _ => {}
+                    }
+                    self.initialised = false;
+                    self.dirty = true;
+                }
+            }
+            other => {
+                return Err(format!("Envelope view doesn't have an `{}` action.", other).into())
+            }
+        }
+
+        Ok(())
     }
 }
 

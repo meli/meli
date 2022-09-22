@@ -637,18 +637,8 @@ impl Component for ContactList {
                 UIEvent::Input(ref key)
                     if shortcut!(key == shortcuts[Shortcuts::CONTACT_LIST]["create_contact"]) =>
                 {
-                    let mut manager = ContactManager::new(context);
-                    manager.set_parent_id(self.id);
-                    manager.account_pos = self.account_pos;
-
-                    self.mode = ViewMode::View(manager.id());
-                    self.view = Some(manager);
-                    context
-                        .replies
-                        .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
-                            ScrollUpdate::End(self.id),
-                        )));
-
+                    let _ret = self.perform("create_contact", context);
+                    debug_assert!(_ret.is_ok());
                     return true;
                 }
 
@@ -656,114 +646,30 @@ impl Component for ContactList {
                     if shortcut!(key == shortcuts[Shortcuts::CONTACT_LIST]["edit_contact"])
                         && self.length > 0 =>
                 {
-                    let account = &mut context.accounts[self.account_pos];
-                    let book = &mut account.address_book;
-                    let card = book[&self.id_positions[self.cursor_pos]].clone();
-                    let mut manager = ContactManager::new(context);
-                    manager.set_parent_id(self.id);
-                    manager.card = card;
-                    manager.account_pos = self.account_pos;
-
-                    self.mode = ViewMode::View(manager.id());
-                    self.view = Some(manager);
-                    context
-                        .replies
-                        .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
-                            ScrollUpdate::End(self.id),
-                        )));
-
+                    let _ret = self.perform("edit_contact", context);
+                    debug_assert!(_ret.is_ok());
                     return true;
                 }
                 UIEvent::Input(ref key)
                     if shortcut!(key == shortcuts[Shortcuts::CONTACT_LIST]["mail_contact"])
                         && self.length > 0 =>
                 {
-                    let account = &context.accounts[self.account_pos];
-                    let account_hash = account.hash();
-                    let book = &account.address_book;
-                    let card = &book[&self.id_positions[self.cursor_pos]];
-                    let mut draft: Draft = Draft::default();
-                    *draft.headers_mut().get_mut("To").unwrap() =
-                        format!("{} <{}>", &card.name(), &card.email());
-                    let mut composer = Composer::with_account(account_hash, context);
-                    composer.set_draft(draft);
-                    context
-                        .replies
-                        .push_back(UIEvent::Action(Tab(New(Some(Box::new(composer))))));
-
+                    let _ret = self.perform("mail_contact", context);
+                    debug_assert!(_ret.is_ok());
                     return true;
                 }
                 UIEvent::Input(ref key)
                     if shortcut!(key == shortcuts[Shortcuts::CONTACT_LIST]["next_account"]) =>
                 {
-                    let amount = if self.cmd_buf.is_empty() {
-                        1
-                    } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
-                        self.cmd_buf.clear();
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                        amount
-                    } else {
-                        self.cmd_buf.clear();
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                        return true;
-                    };
-                    if self.accounts.is_empty() {
-                        return true;
-                    }
-                    if self.account_pos + amount < self.accounts.len() {
-                        self.account_pos += amount;
-                        self.set_dirty(true);
-                        self.initialized = false;
-                        self.cursor_pos = 0;
-                        self.new_cursor_pos = 0;
-                        self.length = 0;
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
-                                self.get_status(context),
-                            )));
-                    }
-
+                    let _ret = self.perform("next_account", context);
+                    debug_assert!(_ret.is_ok());
                     return true;
                 }
                 UIEvent::Input(ref key)
                     if shortcut!(key == shortcuts[Shortcuts::CONTACT_LIST]["prev_account"]) =>
                 {
-                    let amount = if self.cmd_buf.is_empty() {
-                        1
-                    } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
-                        self.cmd_buf.clear();
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                        amount
-                    } else {
-                        self.cmd_buf.clear();
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                        return true;
-                    };
-                    if self.accounts.is_empty() {
-                        return true;
-                    }
-                    if self.account_pos >= amount {
-                        self.account_pos -= amount;
-                        self.set_dirty(true);
-                        self.cursor_pos = 0;
-                        self.new_cursor_pos = 0;
-                        self.length = 0;
-                        self.initialized = false;
-                        context
-                            .replies
-                            .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
-                                self.get_status(context),
-                            )));
-                    }
+                    let _ret = self.perform("prev_account", context);
+                    debug_assert!(_ret.is_ok());
                     return true;
                 }
                 UIEvent::Input(ref k)
@@ -771,8 +677,9 @@ impl Component for ContactList {
                         k == shortcuts[Shortcuts::CONTACT_LIST]["toggle_menu_visibility"]
                     ) =>
                 {
-                    self.menu_visibility = !self.menu_visibility;
-                    self.set_dirty(true);
+                    let _ret = self.perform("toggle_menu_visibility", context);
+                    debug_assert!(_ret.is_ok());
+                    return true;
                 }
                 UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Alt(''))
                     if !self.cmd_buf.is_empty() =>
@@ -971,5 +878,143 @@ impl Component for ContactList {
             "{} entries",
             context.accounts[self.account_pos].address_book.len()
         )
+    }
+
+    fn perform(&mut self, mut action: &str, context: &mut Context) -> Result<()> {
+        if let Some(stripped) = action.strip_prefix("contact_list.") {
+            action = stripped;
+        }
+        match action {
+            "scroll_up" => Ok(()),
+            "scroll_down" => Ok(()),
+            "create_contact" => {
+                if self.view.is_none() {
+                    let mut manager = ContactManager::new(context);
+                    manager.set_parent_id(self.id);
+                    manager.account_pos = self.account_pos;
+
+                    self.mode = ViewMode::View(manager.id());
+                    self.view = Some(manager);
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
+                            ScrollUpdate::End(self.id),
+                        )));
+                }
+                Ok(())
+            }
+            "edit_contact" => {
+                if self.length > 0 {
+                    let account = &mut context.accounts[self.account_pos];
+                    let book = &mut account.address_book;
+                    let card = book[&self.id_positions[self.cursor_pos]].clone();
+                    let mut manager = ContactManager::new(context);
+                    manager.set_parent_id(self.id);
+                    manager.card = card;
+                    manager.account_pos = self.account_pos;
+
+                    self.mode = ViewMode::View(manager.id());
+                    self.view = Some(manager);
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
+                            ScrollUpdate::End(self.id),
+                        )));
+                }
+                Ok(())
+            }
+            "mail_contact" => {
+                if self.length > 0 {
+                    let account = &context.accounts[self.account_pos];
+                    let account_hash = account.hash();
+                    let book = &account.address_book;
+                    let card = &book[&self.id_positions[self.cursor_pos]];
+                    let mut draft: Draft = Draft::default();
+                    *draft.headers_mut().get_mut("To").unwrap() =
+                        format!("{} <{}>", &card.name(), &card.email());
+                    let mut composer = Composer::with_account(account_hash, context);
+                    composer.set_draft(draft);
+                    context
+                        .replies
+                        .push_back(UIEvent::Action(Tab(New(Some(Box::new(composer))))));
+                }
+                Ok(())
+            }
+            "next_account" => {
+                let amount = if self.cmd_buf.is_empty() {
+                    1
+                } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
+                    self.cmd_buf.clear();
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                    amount
+                } else {
+                    self.cmd_buf.clear();
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                    return Ok(());
+                };
+                if self.accounts.is_empty() {
+                    return Ok(());
+                }
+                if self.account_pos + amount < self.accounts.len() {
+                    self.account_pos += amount;
+                    self.set_dirty(true);
+                    self.initialized = false;
+                    self.cursor_pos = 0;
+                    self.new_cursor_pos = 0;
+                    self.length = 0;
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
+                            self.get_status(context),
+                        )));
+                }
+
+                Ok(())
+            }
+            "prev_account" => {
+                let amount = if self.cmd_buf.is_empty() {
+                    1
+                } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
+                    self.cmd_buf.clear();
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                    amount
+                } else {
+                    self.cmd_buf.clear();
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                    return Ok(());
+                };
+                if self.accounts.is_empty() {
+                    return Ok(());
+                }
+                if self.account_pos >= amount {
+                    self.account_pos -= amount;
+                    self.set_dirty(true);
+                    self.cursor_pos = 0;
+                    self.new_cursor_pos = 0;
+                    self.length = 0;
+                    self.initialized = false;
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
+                            self.get_status(context),
+                        )));
+                }
+                Ok(())
+            }
+            "toggle_menu_visibility" => {
+                self.menu_visibility = !self.menu_visibility;
+                self.set_dirty(true);
+                Ok(())
+            }
+            other => Err(format!("`{}` is not a valid contact list shortcut.", other).into()),
+        }
     }
 }

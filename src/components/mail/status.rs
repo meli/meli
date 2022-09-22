@@ -469,4 +469,8 @@ impl Component for AccountStatus {
     fn set_id(&mut self, id: ComponentId) {
         self.id = id;
     }
+
+    fn perform(&mut self, _action: &str, _context: &mut Context) -> Result<()> {
+        Err("No actions available.".into())
+    }
 }

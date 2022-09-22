@@ -389,6 +389,10 @@ impl Component for EmbedContainer {
     fn id(&self) -> ComponentId {
         self.id
     }
+
+    fn perform(&mut self, _action: &str, _context: &mut Context) -> Result<()> {
+        Err("No actions available.".into())
+    }
 }
 
 fn main() -> std::io::Result<()> {

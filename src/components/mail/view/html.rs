@@ -135,6 +135,7 @@ impl Component for HtmlView {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         self.pager.draw(grid, area, context);
     }
+
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         if self.pager.process_event(event, context) {
             return true;
@@ -183,12 +184,15 @@ impl Component for HtmlView {
         }
         false
     }
+
     fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
         self.pager.get_shortcuts(context)
     }
+
     fn is_dirty(&self) -> bool {
         self.pager.is_dirty()
     }
+
     fn set_dirty(&mut self, value: bool) {
         self.pager.set_dirty(value);
     }
@@ -196,7 +200,12 @@ impl Component for HtmlView {
     fn id(&self) -> ComponentId {
         self.id
     }
+
     fn set_id(&mut self, id: ComponentId) {
         self.id = id;
+    }
+
+    fn perform(&mut self, action: &str, context: &mut Context) -> Result<()> {
+        self.pager.perform(action, context)
     }
 }

@@ -1530,4 +1530,11 @@ impl Component for PlainListing {
     fn set_id(&mut self, id: ComponentId) {
         self.id = id;
     }
+
+    fn perform(&mut self, action: &str, context: &mut Context) -> Result<()> {
+        if self.unfocused() {
+            return self.view.perform(action, context);
+        }
+        Ok(())
+    }
 }
