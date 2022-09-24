@@ -245,7 +245,7 @@ impl Backends {
                         ""
                     },
                     key,
-                    if cfg!(feature = "notmuch_backend") {
+                    if cfg!(feature = "notmuch_backend") && key == "notmuch" {
                         NOTMUCH_ERROR_DETAILS
                     } else {
                         ""
