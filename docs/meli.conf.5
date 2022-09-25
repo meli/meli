@@ -199,11 +199,19 @@ property to each of them.
 .It Ic library_file_path Ar Path
 Use an arbitrary location of libnotmuch by specifying its full filesystem path.
 .Pq Em optional
+.It Ic sent_mailbox_path Ar Path
+Where to store sent e-mail in the filesystem.
+Defaults to
+.Ic root_mailbox Ns
+\&.
+.Pq Em optional
 .El
 Example:
 .Bd -literal
 [accounts.notmuch]
+root_mailbox = "/path/to/notmuch/folder"
 format = "notmuch"
+sent_mailbox_path = "/path/to/notmuch/folder/Sent/cur"
 #library_file_path = "/opt/homebrew/lib/libnotmuch.5.dylib"
 \&...
   [accounts.notmuch.mailboxes]

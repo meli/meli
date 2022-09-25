@@ -490,6 +490,18 @@ impl NotmuchDb {
                 .set_kind(ErrorKind::Configuration));
             }
         }
+        let save_messages_to = if let Some(sent_path) = s.extra.get("sent_mailbox_path") {
+            if !Path::new(&sent_path).exists() || !Path::new(&sent_path).is_dir() {
+                return Err(MeliError::new(format!(
+                            "Notmuch `sent_mailbox_path` setting value `{}` for account {} does not exist or is not a directory.",
+                            &sent_path,
+                            s.name()
+                )).set_kind(ErrorKind::Configuration));
+            }
+            Some(Path::new(&sent_path).to_path_buf())
+        } else {
+            None
+        };
 
         let account_hash = {
             let mut hasher = DefaultHasher::new();
@@ -509,7 +521,7 @@ impl NotmuchDb {
             account_name: account_name.clone(),
             account_hash,
             event_consumer: event_consumer.clone(),
-            save_messages_to: None,
+            save_messages_to: save_messages_to.clone(),
         });
         Ok(Box::new(NotmuchDb {
             lib,
@@ -519,7 +531,7 @@ impl NotmuchDb {
             account_name,
             account_hash,
             event_consumer,
-            save_messages_to: None,
+            save_messages_to,
         }))
     }
 
@@ -569,6 +581,15 @@ impl NotmuchDb {
                     account_name,
                 ))
                 .set_kind(ErrorKind::Configuration));
+            }
+        }
+        if let Some(sent_path) = s.extra.remove("sent_mailbox_path") {
+            if !Path::new(&sent_path).exists() || !Path::new(&sent_path).is_dir() {
+                return Err(MeliError::new(format!(
+                            "Notmuch `sent_mailbox_path` setting value `{}` for account {} does not exist or is not a directory.",
+                            &sent_path,
+                            s.name()
+                )).set_kind(ErrorKind::Configuration));
             }
         }
         Ok(())
