@@ -444,6 +444,7 @@ pub mod dates {
     }
 
     ///e.g Wed Sep  9 00:27:54 2020
+    ///```text
     ///day-of-week month day time year
     ///date-time       =   [ day-of-week "," ] date time [CFWS]
     ///date            =   day month year
@@ -452,6 +453,7 @@ pub mod dates {
     ///hour            =   2DIGIT / obs-hour
     ///minute          =   2DIGIT / obs-minute
     ///second          =   2DIGIT / obs-second
+    ///```
     pub fn mbox_date_time(input: &[u8]) -> IResult<&[u8], UnixTimestamp> {
         let orig_input = input;
         let mut accum: SmallVec<[u8; 32]> = SmallVec::new();
@@ -1227,7 +1229,7 @@ pub mod generic {
         alt((atext_ascii, utf8_non_ascii))(input)
     }
 
-    ///dot-atom        =   [CFWS] dot-atom-text [CFWS]
+    ///`dot-atom        =   [CFWS] dot-atom-text [CFWS]`
     pub fn dot_atom(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
         let (input, _) = opt(cfws)(input)?;
         let (input, ret) = dot_atom_text(input)?;

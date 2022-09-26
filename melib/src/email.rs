@@ -25,7 +25,7 @@
  * # Parsing bytes into an `Envelope`
  *
  * An [`Envelope`](Envelope) represents the information you can get from an email's headers and body
- * structure. Addresses in `To`, `From` fields etc are parsed into [`Address`](email::address::Address) types.
+ * structure. Addresses in `To`, `From` fields etc are parsed into [`Address`](crate::email::Address) types.
  *
  * ```
  * use melib::{Attachment, Envelope};

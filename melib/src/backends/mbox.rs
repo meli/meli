@@ -23,16 +23,17 @@
 //!
 //! ## Resources
 //!
-//! - [0] <https://web.archive.org/web/20160812091518/https://jdebp.eu./FGA/mail-mbox-formats.html>
-//! - [1] <https://wiki2.dovecot.org/MailboxFormat/mbox>
-//! - [2] <https://manpages.debian.org/buster/mutt/mbox.5.en.html>
+//! [^0]: <https://web.archive.org/web/20160812091518/https://jdebp.eu./FGA/mail-mbox-formats.html>
+//! [^1]: <https://wiki2.dovecot.org/MailboxFormat/mbox>
+//! [^2]: <https://manpages.debian.org/buster/mutt/mbox.5.en.html>
 //!
 //! ## `mbox` format
+//!
 //! `mbox` describes a family of incompatible legacy formats.
 //!
-//! "All of the 'mbox' formats store all of the messages in the mailbox in a single file. Delivery appends new messages to the end of the file." [0]
+//! "All of the 'mbox' formats store all of the messages in the mailbox in a single file. Delivery appends new messages to the end of the file." [^0]
 //!
-//! "Each message is preceded by a From_ line and followed by a blank line. A From_ line is a line that begins with the five characters 'F', 'r', 'o', 'm', and ' '." [0]
+//! "Each message is preceded by a From_ line and followed by a blank line. A From_ line is a line that begins with the five characters 'F', 'r', 'o', 'm', and ' '." [^0]
 //!
 //! ## `From ` / postmark line
 //!
@@ -59,7 +60,7 @@
 //!
 //! "In order to avoid misinterpretation of lines in message bodies which begin with the four
 //! characters 'From', followed by a space character, the mail delivery agent must quote
-//! any occurrence of 'From ' at the start of a body line." [2]
+//! any occurrence of 'From ' at the start of a body line." [^2]
 //!
 //! ## Metadata
 //!

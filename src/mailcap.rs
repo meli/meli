@@ -19,8 +19,10 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*! Find mailcap entries to execute attachments.
- */
+//! # mailcap file - Find mailcap entries to execute attachments.
+//!
+//! Implements [RFC 1524 A User Agent Configuration Mechanism For Multimedia Mail Format
+//! Information](https://www.rfc-editor.org/rfc/inline-errata/rfc1524.html)
 use crate::state::Context;
 use crate::types::{create_temp_file, ForkType, UIEvent};
 use melib::text_processing::GlobMatch;

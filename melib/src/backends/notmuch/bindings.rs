@@ -16,9 +16,11 @@ pub const _notmuch_status_NOTMUCH_STATUS_OUT_OF_MEMORY: _notmuch_status = 1;
 pub const _notmuch_status_NOTMUCH_STATUS_READ_ONLY_DATABASE: _notmuch_status = 2;
 /// A Xapian exception occurred.
 ///
+/// ```text
 /// @todo We don't really want to expose this lame XAPIAN_EXCEPTION
 /// value. Instead we should map to things like DATABASE_LOCKED or
 /// whatever.
+/// ```
 pub const _notmuch_status_NOTMUCH_STATUS_XAPIAN_EXCEPTION: _notmuch_status = 3;
 /// An error occurred trying to read or write to a file (this could
 /// be file not found, permission denied, etc.)
@@ -466,6 +468,7 @@ pub type notmuch_database_get_directory = unsafe extern "C" fn(
 ///
 /// Return value:
 ///
+/// ```text
 /// NOTMUCH_STATUS_SUCCESS: Message successfully added to database.
 ///
 /// NOTMUCH_STATUS_XAPIAN_EXCEPTION: A Xapian exception occurred,
@@ -490,6 +493,7 @@ pub type notmuch_database_get_directory = unsafe extern "C" fn(
 ///      database to use this function.
 ///
 /// @since libnotmuch 5.1 (notmuch 0.26)
+/// ```
 pub type notmuch_database_index_file = unsafe extern "C" fn(
     database: *mut notmuch_database_t,
     filename: *const ::std::os::raw::c_char,
@@ -501,8 +505,10 @@ extern "C" {
     /// Deprecated alias for notmuch_database_index_file called with
     /// NULL indexopts.
     ///
+    /// ```text
     /// @deprecated Deprecated as of libnotmuch 5.1 (notmuch 0.26). Please
     /// use notmuch_database_index_file instead.
+    /// ```
     ///
     pub fn notmuch_database_add_message(
         database: *mut notmuch_database_t,
@@ -616,7 +622,7 @@ pub type notmuch_database_get_all_tags =
 /// completely in the future, but it's likely to be a specialized
 /// version of the general Xapian query syntax:
 ///
-/// https://xapian.org/docs/queryparser.html
+/// <https://xapian.org/docs/queryparser.html>
 ///
 /// As a special case, passing either a length-zero string, (that is ""),
 /// or a string consisting of a single asterisk (that is "*"), will
@@ -703,7 +709,9 @@ pub type notmuch_query_get_sort =
 /// This exclusion will be ignored if this tag appears explicitly in
 /// the query.
 ///
+/// ```text
 /// @returns
+/// ```
 ///
 /// NOTMUCH_STATUS_SUCCESS: excluded was added successfully.
 ///
@@ -757,7 +765,9 @@ pub type notmuch_query_add_tag_exclude = unsafe extern "C" fn(
 /// notmuch_threads_destroy function, but there's no good reason
 /// to call it if the query is about to be destroyed).
 ///
+/// ```text
 /// @since libnotmuch 5.0 (notmuch 0.25)
+/// ```
 pub type notmuch_query_search_threads = unsafe extern "C" fn(
     query: *mut notmuch_query_t,
     out: *mut *mut notmuch_threads_t,
@@ -765,7 +775,9 @@ pub type notmuch_query_search_threads = unsafe extern "C" fn(
 
 /// Deprecated alias for notmuch_query_search_threads.
 ///
+/// ```text
 /// @deprecated Deprecated as of libnotmuch 5 (notmuch 0.25). Please
+/// ```
 /// use notmuch_query_search_threads instead.
 ///
 pub type notmuch_query_search_threads_st = unsafe extern "C" fn(
@@ -813,7 +825,9 @@ pub type notmuch_query_search_threads_st = unsafe extern "C" fn(
 ///
 /// If a Xapian exception occurs this function will return NULL.
 ///
+/// ```text
 /// @since libnotmuch 5 (notmuch 0.25)
+/// ```
 pub type notmuch_query_search_messages = unsafe extern "C" fn(
     query: *mut notmuch_query_t,
     out: *mut *mut notmuch_messages_t,
@@ -821,7 +835,9 @@ pub type notmuch_query_search_messages = unsafe extern "C" fn(
 
 /// Deprecated alias for notmuch_query_search_messages
 ///
+/// ```text
 /// @deprecated Deprecated as of libnotmuch 5 (notmuch 0.25). Please use
+/// ```
 /// notmuch_query_search_messages instead.
 ///
 pub type notmuch_query_search_messages_st = unsafe extern "C" fn(
@@ -887,6 +903,7 @@ pub type notmuch_threads_destroy = unsafe extern "C" fn(threads: *mut notmuch_th
 /// This function performs a search and returns the number of matching
 /// messages.
 ///
+/// ```text
 /// @returns
 ///
 /// NOTMUCH_STATUS_SUCCESS: query completed successfully.
@@ -895,6 +912,7 @@ pub type notmuch_threads_destroy = unsafe extern "C" fn(threads: *mut notmuch_th
 ///      value of *count is not defined.
 ///
 /// @since libnotmuch 5 (notmuch 0.25)
+/// ```
 pub type notmuch_query_count_messages = unsafe extern "C" fn(
     query: *mut notmuch_query_t,
     count: *mut ::std::os::raw::c_uint,
@@ -902,9 +920,10 @@ pub type notmuch_query_count_messages = unsafe extern "C" fn(
 
 /// Deprecated alias for notmuch_query_count_messages
 ///
-///
+/// ```text
 /// @deprecated Deprecated since libnotmuch 5.0 (notmuch 0.25). Please
 /// use notmuch_query_count_messages instead.
+/// ```
 pub type notmuch_query_count_messages_st = unsafe extern "C" fn(
     query: *mut notmuch_query_t,
     count: *mut ::std::os::raw::c_uint,
@@ -919,6 +938,7 @@ pub type notmuch_query_count_messages_st = unsafe extern "C" fn(
 /// Note that this is a significantly heavier operation than
 /// notmuch_query_count_messages{_st}().
 ///
+/// ```text
 /// @returns
 ///
 /// NOTMUCH_STATUS_OUT_OF_MEMORY: Memory allocation failed. The value
@@ -930,6 +950,7 @@ pub type notmuch_query_count_messages_st = unsafe extern "C" fn(
 ///      value of *count is not defined.
 ///
 /// @since libnotmuch 5 (notmuch 0.25)
+/// ```
 pub type notmuch_query_count_threads = unsafe extern "C" fn(
     query: *mut notmuch_query_t,
     count: *mut ::std::os::raw::c_uint,
@@ -937,8 +958,10 @@ pub type notmuch_query_count_threads = unsafe extern "C" fn(
 
 /// Deprecated alias for notmuch_query_count_threads
 ///
+/// ```text
 /// @deprecated Deprecated as of libnotmuch 5.0 (notmuch 0.25). Please
 /// use notmuch_query_count_threads_st instead.
+/// ```
 pub type notmuch_query_count_threads_st = unsafe extern "C" fn(
     query: *mut notmuch_query_t,
     count: *mut ::std::os::raw::c_uint,
@@ -964,8 +987,10 @@ pub type notmuch_thread_get_total_messages =
 ///
 /// This sums notmuch_message_count_files over all messages in the
 /// thread
+/// ```text
 /// @returns Non-negative integer
 /// @since libnotmuch 5.0 (notmuch 0.25)
+/// ```
 pub type notmuch_thread_get_total_files =
     unsafe extern "C" fn(thread: *mut notmuch_thread_t) -> ::std::os::raw::c_int;
 
@@ -1136,7 +1161,9 @@ pub type notmuch_messages_collect_tags =
 
 /// Get the database associated with this message.
 ///
+/// ```text
 /// @since libnotmuch 5.2 (notmuch 0.27)
+/// ```
 pub type notmuch_message_get_database =
     unsafe extern "C" fn(message: *const notmuch_message_t) -> *mut notmuch_database_t;
 
@@ -1188,8 +1215,10 @@ pub type notmuch_message_get_replies =
     unsafe extern "C" fn(message: *mut notmuch_message_t) -> *mut notmuch_messages_t;
 
 /// Get the total number of files associated with a message.
+/// ```text
 /// @returns Non-negative integer
 /// @since libnotmuch 5.0 (notmuch 0.25)
+/// ```
 pub type notmuch_message_count_files =
     unsafe extern "C" fn(message: *mut notmuch_message_t) -> ::std::os::raw::c_int;
 
@@ -1450,6 +1479,7 @@ pub type notmuch_message_tags_to_maildir_flags =
 /// change tag values. For example, explicitly setting a message to
 /// have a given set of tags might look like this:
 ///
+/// ```c
 ///    notmuch_message_freeze (message);
 ///
 ///    notmuch_message_remove_all_tags (message);
@@ -1458,6 +1488,7 @@ pub type notmuch_message_tags_to_maildir_flags =
 ///        notmuch_message_add_tag (message, tags[i]);
 ///
 ///    notmuch_message_thaw (message);
+/// ```
 ///
 /// With freeze/thaw used like this, the message in the database is
 /// guaranteed to have either the full set of original tag values, or
@@ -1508,7 +1539,9 @@ pub type notmuch_message_thaw =
 /// the messages get reclaimed when the containing query is destroyed.)
 pub type notmuch_message_destroy = unsafe extern "C" fn(message: *mut notmuch_message_t);
 
+/// ```text
 /// @name Message Properties
+/// ```
 ///
 /// This interface provides the ability to attach arbitrary (key,value)
 /// string pairs to a message, to remove such pairs, and to iterate
@@ -1525,10 +1558,12 @@ pub type notmuch_message_destroy = unsafe extern "C" fn(message: *mut notmuch_me
 /// no such key. In the case of multiple values for the given key, the
 /// first one is retrieved.
 ///
+/// ```text
 /// @returns
 /// - NOTMUCH_STATUS_NULL_POINTER: *value* may not be NULL.
 /// - NOTMUCH_STATUS_SUCCESS: No error occurred.
 /// @since libnotmuch 4.4 (notmuch 0.23)
+/// ```
 pub type notmuch_message_get_property = unsafe extern "C" fn(
     message: *mut notmuch_message_t,
     key: *const ::std::os::raw::c_char,
@@ -1537,11 +1572,13 @@ pub type notmuch_message_get_property = unsafe extern "C" fn(
 
 /// Add a (key,value) pair to a message
 ///
+/// ```text
 /// @returns
 /// - NOTMUCH_STATUS_ILLEGAL_ARGUMENT: *key* may not contain an '=' character.
 /// - NOTMUCH_STATUS_NULL_POINTER: Neither *key* nor *value* may be NULL.
 /// - NOTMUCH_STATUS_SUCCESS: No error occurred.
 /// @since libnotmuch 4.4 (notmuch 0.23)
+/// ```
 pub type notmuch_message_add_property = unsafe extern "C" fn(
     message: *mut notmuch_message_t,
     key: *const ::std::os::raw::c_char,
@@ -1552,11 +1589,13 @@ pub type notmuch_message_add_property = unsafe extern "C" fn(
 ///
 /// It is not an error to remove a non-existant (key,value) pair
 ///
+/// ```text
 /// @returns
 /// - NOTMUCH_STATUS_ILLEGAL_ARGUMENT: *key* may not contain an '=' character.
 /// - NOTMUCH_STATUS_NULL_POINTER: Neither *key* nor *value* may be NULL.
 /// - NOTMUCH_STATUS_SUCCESS: No error occurred.
 /// @since libnotmuch 4.4 (notmuch 0.23)
+/// ```
 pub type notmuch_message_remove_property = unsafe extern "C" fn(
     message: *mut notmuch_message_t,
     key: *const ::std::os::raw::c_char,
@@ -1565,6 +1604,7 @@ pub type notmuch_message_remove_property = unsafe extern "C" fn(
 
 /// Remove all (key,value) pairs from the given message.
 ///
+/// ```text
 /// @param[in,out] message  message to operate on.
 /// @param[in]     key      key to delete properties for. If NULL, delete
 ///      properties for all keys
@@ -1574,6 +1614,7 @@ pub type notmuch_message_remove_property = unsafe extern "C" fn(
 /// - NOTMUCH_STATUS_SUCCESS: No error occurred.
 ///
 /// @since libnotmuch 4.4 (notmuch 0.23)
+/// ```
 pub type notmuch_message_remove_all_properties = unsafe extern "C" fn(
     message: *mut notmuch_message_t,
     key: *const ::std::os::raw::c_char,
@@ -1581,6 +1622,7 @@ pub type notmuch_message_remove_all_properties = unsafe extern "C" fn(
 
 /// Remove all (prefix*,value) pairs from the given message
 ///
+/// ```text
 /// @param[in,out] message  message to operate on.
 /// @param[in]     prefix   delete properties with keys that start with prefix.
 ///      If NULL, delete all properties
@@ -1590,6 +1632,7 @@ pub type notmuch_message_remove_all_properties = unsafe extern "C" fn(
 /// - NOTMUCH_STATUS_SUCCESS: No error occurred.
 ///
 /// @since libnotmuch 5.1 (notmuch 0.26)
+/// ```
 pub type notmuch_message_remove_all_properties_with_prefix =
     unsafe extern "C" fn(
         message: *mut notmuch_message_t,
@@ -1612,10 +1655,12 @@ extern "C" {
     /// as such, will only be valid for as long as the message is valid,
     /// (which is until the query from which it derived is destroyed).
     ///
+    /// ```text
     /// @param[in] message  The message to examine
     /// @param[in] key      key or key prefix
     /// @param[in] exact    if TRUE, require exact match with key. Otherwise
     ///         treat as prefix.
+    /// ```
     ///
     /// Typical usage might be:
     ///
@@ -1635,7 +1680,9 @@ extern "C" {
     /// provide a notmuch_message_properities_destroy function, but there's
     /// no good reason to call it if the message is about to be destroyed).
     ///
+    /// ```text
     /// @since libnotmuch 4.4 (notmuch 0.23)
+    /// ```
     pub fn notmuch_message_get_properties(
         message: *mut notmuch_message_t,
         key: *const ::std::os::raw::c_char,
@@ -1644,6 +1691,7 @@ extern "C" {
 }
 /// Return the number of properties named "key" belonging to the specific message.
 ///
+/// ```text
 /// @param[in] message  The message to examine
 /// @param[in] key      key to count
 /// @param[out] count   The number of matching properties associated with this message.
@@ -1653,6 +1701,7 @@ extern "C" {
 /// NOTMUCH_STATUS_SUCCESS: successful count, possibly some other error.
 ///
 /// @since libnotmuch 5.2 (notmuch 0.27)
+/// ```
 pub type notmuch_message_count_properties = unsafe extern "C" fn(
     message: *mut notmuch_message_t,
     key: *const ::std::os::raw::c_char,
@@ -1672,7 +1721,9 @@ pub type notmuch_message_count_properties = unsafe extern "C" fn(
 /// code showing how to iterate over a notmuch_message_properties_t
 /// object.
 ///
+/// ```text
 /// @since libnotmuch 4.4 (notmuch 0.23)
+/// ```
 pub type notmuch_message_properties_valid =
     unsafe extern "C" fn(properties: *mut notmuch_message_properties_t) -> notmuch_bool_t;
 
@@ -1685,7 +1736,9 @@ pub type notmuch_message_properties_valid =
 /// See the documentation of notmuch_message_get_properties for example
 /// code showing how to iterate over a notmuch_message_properties_t object.
 ///
+/// ```text
 /// @since libnotmuch 4.4 (notmuch 0.23)
+/// ```
 pub type notmuch_message_properties_move_to_next =
     unsafe extern "C" fn(properties: *mut notmuch_message_properties_t);
 
@@ -1693,7 +1746,9 @@ pub type notmuch_message_properties_move_to_next =
 ///
 /// this could be useful if iterating for a prefix
 ///
+/// ```text
 /// @since libnotmuch 4.4 (notmuch 0.23)
+/// ```
 pub type notmuch_message_properties_key = unsafe extern "C" fn(
     properties: *mut notmuch_message_properties_t,
 ) -> *const ::std::os::raw::c_char;
@@ -1702,7 +1757,9 @@ pub type notmuch_message_properties_key = unsafe extern "C" fn(
 ///
 /// This could be useful if iterating for a prefix.
 ///
+/// ```text
 /// @since libnotmuch 4.4 (notmuch 0.23)
+/// ```
 pub type notmuch_message_properties_value = unsafe extern "C" fn(
     properties: *mut notmuch_message_properties_t,
 ) -> *const ::std::os::raw::c_char;
@@ -1713,7 +1770,9 @@ pub type notmuch_message_properties_value = unsafe extern "C" fn(
 /// the notmuch_message_properties_t object will be reclaimed when the
 /// containing message object is destroyed.
 ///
+/// ```text
 /// @since libnotmuch 4.4 (notmuch 0.23)
+/// ```
 pub type notmuch_message_properties_destroy =
     unsafe extern "C" fn(properties: *mut notmuch_message_properties_t);
 
@@ -1821,7 +1880,9 @@ pub type notmuch_directory_get_child_directories =
 /// notmuch_directory_t object. Assumes any child directories and files
 /// have been deleted by the caller.
 ///
+/// ```text
 /// @since libnotmuch 4.3 (notmuch 0.21)
+/// ```
 pub type notmuch_directory_delete =
     unsafe extern "C" fn(directory: *mut notmuch_directory_t) -> notmuch_status_t;
 
@@ -1872,7 +1933,9 @@ pub type notmuch_filenames_destroy = unsafe extern "C" fn(filenames: *mut notmuc
 
 /// set config 'key' to 'value'
 ///
+/// ```text
 /// @since libnotmuch 4.4 (notmuch 0.23)
+/// ```
 pub type notmuch_database_set_config = unsafe extern "C" fn(
     db: *mut notmuch_database_t,
     key: *const ::std::os::raw::c_char,
@@ -1887,7 +1950,9 @@ pub type notmuch_database_set_config = unsafe extern "C" fn(
 /// return value is allocated by malloc and should be freed by the
 /// caller.
 ///
+/// ```text
 /// @since libnotmuch 4.4 (notmuch 0.23)
+/// ```
 pub type notmuch_database_get_config = unsafe extern "C" fn(
     db: *mut notmuch_database_t,
     key: *const ::std::os::raw::c_char,
@@ -1896,7 +1961,9 @@ pub type notmuch_database_get_config = unsafe extern "C" fn(
 
 /// Create an iterator for all config items with keys matching a given prefix
 ///
+/// ```text
 /// @since libnotmuch 4.4 (notmuch 0.23)
+/// ```
 pub type notmuch_database_get_config_list = unsafe extern "C" fn(
     db: *mut notmuch_database_t,
     prefix: *const ::std::os::raw::c_char,
@@ -1905,7 +1972,9 @@ pub type notmuch_database_get_config_list = unsafe extern "C" fn(
 
 /// Is 'config_list' iterator valid (i.e. _key, _value, _move_to_next can be called).
 ///
+/// ```text
 /// @since libnotmuch 4.4 (notmuch 0.23)
+/// ```
 pub type notmuch_config_list_valid =
     unsafe extern "C" fn(config_list: *mut notmuch_config_list_t) -> notmuch_bool_t;
 
@@ -1914,7 +1983,9 @@ pub type notmuch_config_list_valid =
 /// return value is owned by the iterator, and will be destroyed by the
 /// next call to notmuch_config_list_key or notmuch_config_list_destroy.
 ///
+/// ```text
 /// @since libnotmuch 4.4 (notmuch 0.23)
+/// ```
 pub type notmuch_config_list_key =
     unsafe extern "C" fn(config_list: *mut notmuch_config_list_t) -> *const ::std::os::raw::c_char;
 
@@ -1923,19 +1994,25 @@ pub type notmuch_config_list_key =
 /// return value is owned by the iterator, and will be destroyed by the
 /// next call to notmuch_config_list_value or notmuch config_list_destroy
 ///
+/// ```text
 /// @since libnotmuch 4.4 (notmuch 0.23)
+/// ```
 pub type notmuch_config_list_value =
     unsafe extern "C" fn(config_list: *mut notmuch_config_list_t) -> *const ::std::os::raw::c_char;
 
 /// move 'config_list' iterator to the next pair
 ///
+/// ```text
 /// @since libnotmuch 4.4 (notmuch 0.23)
+/// ```
 pub type notmuch_config_list_move_to_next =
     unsafe extern "C" fn(config_list: *mut notmuch_config_list_t);
 
 /// free any resources held by 'config_list'
 ///
+/// ```text
 /// @since libnotmuch 4.4 (notmuch 0.23)
+/// ```
 pub type notmuch_config_list_destroy =
     unsafe extern "C" fn(config_list: *mut notmuch_config_list_t);
 
@@ -1948,7 +2025,9 @@ pub type notmuch_config_list_destroy =
 /// This object represents a set of options on how a message can be
 /// added to the index.  At the moment it is a featureless stub.
 ///
+/// ```text
 /// @since libnotmuch 5.1 (notmuch 0.26)
+/// ```
 pub type notmuch_database_get_default_indexopts =
     unsafe extern "C" fn(db: *mut notmuch_database_t) -> *mut notmuch_indexopts_t;
 
@@ -1967,7 +2046,9 @@ pub type notmuch_decryption_policy_t = u32;
 /// message index is adequately protected. DO NOT SET THIS FLAG TO TRUE
 /// without considering the security of your index.
 ///
+/// ```text
 /// @since libnotmuch 5.1 (notmuch 0.26)
+/// ```
 pub type notmuch_indexopts_set_decrypt_policy = unsafe extern "C" fn(
     indexopts: *mut notmuch_indexopts_t,
     decrypt_policy: notmuch_decryption_policy_t,
@@ -1976,17 +2057,23 @@ pub type notmuch_indexopts_set_decrypt_policy = unsafe extern "C" fn(
 /// Return whether to decrypt encrypted parts while indexing.
 /// see notmuch_indexopts_set_decrypt_policy.
 ///
+/// ```text
 /// @since libnotmuch 5.1 (notmuch 0.26)
+/// ```
 pub type notmuch_indexopts_get_decrypt_policy =
     unsafe extern "C" fn(indexopts: *const notmuch_indexopts_t) -> notmuch_decryption_policy_t;
 
 /// Destroy a notmuch_indexopts_t object.
 ///
+/// ```text
 /// @since libnotmuch 5.1 (notmuch 0.26)
+/// ```
 pub type notmuch_indexopts_destroy = unsafe extern "C" fn(options: *mut notmuch_indexopts_t);
 
 /// interrogate the library for compile time features
 ///
+/// ```text
 /// @since libnotmuch 4.4 (notmuch 0.23)
+/// ```
 pub type notmuch_built_with =
     unsafe extern "C" fn(name: *const ::std::os::raw::c_char) -> notmuch_bool_t;

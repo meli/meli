@@ -25,15 +25,6 @@ use melib::error::{MeliError, Result};
 use melib::text_processing::wcwidth;
 use nix::sys::wait::WaitStatus;
 use nix::sys::wait::{waitpid, WaitPidFlag};
-/**
- * `EmbedGrid` manages the terminal grid state of the embed process.
- *
- * The embed process sends bytes to the master end (see super mod) and interprets them in a state
- * machine stored in `State`. Escape codes are translated as changes to the grid, eg changes in a
- * cell's colors.
- *
- * The main process copies the grid whenever the actual terminal is redrawn.
- **/
 
 #[derive(Debug)]
 enum ScreenBuffer {
@@ -41,10 +32,17 @@ enum ScreenBuffer {
     Alternate,
 }
 
+/// `EmbedGrid` manages the terminal grid state of the embed process.
+///
+/// The embed process sends bytes to the master end (see super mod) and interprets them in a state
+/// machine stored in `State`. Escape codes are translated as changes to the grid, eg changes in a
+/// cell's colors.
+///
+/// The main process copies the grid whenever the actual terminal is redrawn.
 #[derive(Debug)]
 pub struct EmbedGrid {
     cursor: (usize, usize),
-    /// [top;bottom]
+    /// `[top;bottom]`
     scroll_region: ScrollRegion,
     pub alternate_screen: CellBuffer,
     pub state: State,

@@ -25,6 +25,9 @@
 /*!
  * SMTP client support
  *
+ * This module implements a client for the SMTP protocol as specified by [RFC 5321 Simple Mail
+ * Transfer Protocol](https://www.rfc-editor.org/rfc/rfc5321).
+ *
  * The connection and methods are `async` and uses the `smol` runtime.
  *# Example
  *
@@ -195,6 +198,7 @@ pub struct SmtpExtensionSupport {
     pipelining: bool,
     #[serde(default = "crate::conf::true_val")]
     chunking: bool,
+    /// [RFC 6152: SMTP Service Extension for 8-bit MIME Transport](https://www.rfc-editor.org/rfc/rfc6152)
     #[serde(default = "crate::conf::true_val")]
     _8bitmime: bool,
     //Essentially, the PRDR extension to SMTP allows (but does not require) an SMTP server to

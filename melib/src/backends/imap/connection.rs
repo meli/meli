@@ -44,7 +44,7 @@ use super::{Capabilities, ImapServerConf, UIDStore};
 #[derive(Debug, Clone, Copy)]
 pub enum SyncPolicy {
     None,
-    ///rfc4549 `Synch Ops for Disconnected IMAP4 Clients` https://tools.ietf.org/html/rfc4549
+    ///rfc4549 `Synch Ops for Disconnected IMAP4 Clients` <https://tools.ietf.org/html/rfc4549>
     Basic,
     ///rfc7162 `IMAP Extensions: Quick Flag Changes Resynchronization (CONDSTORE) and Quick Mailbox Resynchronization (QRESYNC)`
     Condstore,

@@ -19,6 +19,11 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+//! # Maildir Backend
+//!
+//! This module implements a maildir backend according to the maildir specification.
+//! <https://cr.yp.to/proto/maildir.html>
+
 use super::{MaildirMailbox, MaildirOp, MaildirPathTrait};
 use crate::backends::{RefreshEventKind::*, *};
 use crate::conf::AccountSettings;
@@ -102,7 +107,7 @@ impl DerefMut for HashIndex {
 
 pub type HashIndexes = Arc<Mutex<HashMap<MailboxHash, HashIndex>>>;
 
-/// Maildir backend https://cr.yp.to/proto/maildir.html
+/// The maildir backend instance type.
 #[derive(Debug)]
 pub struct MaildirType {
     name: String,

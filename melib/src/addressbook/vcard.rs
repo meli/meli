@@ -19,7 +19,14 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/// Convert VCard strings to meli Cards (contacts).
+//! # vCard format
+//!
+//! This module implements the standards:
+//!
+//! - Version 3 (read-only) [RFC 2426: vCard MIME Directory Profile](https://datatracker.ietf.org/doc/2426)
+//! - Version 4 [RFC 6350: vCard Format Specification](https://datatracker.ietf.org/doc/rfc6350/)
+//! - Parameter escaping [RFC 6868 Parameter Value Encoding in iCalendar and vCard](https://datatracker.ietf.org/doc/rfc6868/)
+
 use super::*;
 use crate::error::{MeliError, Result};
 use crate::parsec::{match_literal_anycase, one_or_more, peek, prefix, take_until, Parser};
@@ -33,12 +40,12 @@ pub trait VCardVersion: core::fmt::Debug {}
 pub struct VCardVersionUnknown;
 impl VCardVersion for VCardVersionUnknown {}
 
-/// https://tools.ietf.org/html/rfc6350
+/// Version 4 <https://tools.ietf.org/html/rfc6350>
 #[derive(Debug)]
 pub struct VCardVersion4;
 impl VCardVersion for VCardVersion4 {}
 
-/// https://tools.ietf.org/html/rfc2426
+/// <https://tools.ietf.org/html/rfc2426>
 #[derive(Debug)]
 pub struct VCardVersion3;
 impl VCardVersion for VCardVersion3 {}

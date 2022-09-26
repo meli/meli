@@ -19,6 +19,13 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+//! # NNTP backend / client
+//!
+//! Implements an NNTP client as specified by [RFC 3977: Network News Transfer Protocol
+//! (NNTP)](https://datatracker.ietf.org/doc/html/rfc3977). Also implements [RFC 6048: Network News
+//! Transfer Protocol (NNTP) Additions to LIST
+//! Command](https://datatracker.ietf.org/doc/html/rfc6048).
+
 use crate::get_conf_val;
 use crate::get_path_hash;
 use smallvec::SmallVec;
