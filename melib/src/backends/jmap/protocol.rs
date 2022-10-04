@@ -108,6 +108,16 @@ pub async fn get_mailboxes(conn: &JmapConnection) -> Result<HashMap<MailboxHash,
     let GetResponse::<MailboxObject> {
         list, account_id, ..
     } = m;
+    // Is account set as `personal`? (`isPersonal` property). Then, even if `isSubscribed` is false
+    // on a mailbox, it should be regarded as subscribed.
+    let is_personal: bool = {
+        let session = conn.session_guard();
+        session
+            .accounts
+            .get(&account_id)
+            .map(|acc| acc.is_personal)
+            .unwrap_or(false)
+    };
     *conn.store.account_id.lock().unwrap() = account_id;
     let mut ret: HashMap<MailboxHash, JmapMailbox> = list
         .into_iter()
@@ -141,7 +151,7 @@ pub async fn get_mailboxes(conn: &JmapConnection) -> Result<HashMap<MailboxHash,
                     path: name,
                     children: Vec::new(),
                     id,
-                    is_subscribed,
+                    is_subscribed: is_subscribed || is_personal,
                     my_rights,
                     parent_id,
                     parent_hash,

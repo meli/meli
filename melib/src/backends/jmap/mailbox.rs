@@ -95,9 +95,11 @@ impl BackendMailbox for JmapMailbox {
             None => SpecialUsageMailbox::Normal,
         }
     }
+
     fn is_subscribed(&self) -> bool {
         self.is_subscribed
     }
+
     fn set_is_subscribed(&mut self, new_val: bool) -> Result<()> {
         self.is_subscribed = new_val;
         // FIXME: jmap subscribe

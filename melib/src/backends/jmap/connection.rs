@@ -21,6 +21,7 @@
 
 use super::*;
 use isahc::config::Configurable;
+use std::sync::MutexGuard;
 
 #[derive(Debug)]
 pub struct JmapConnection {
@@ -56,19 +57,31 @@ impl JmapConnection {
         if self.store.online_status.lock().await.1.is_ok() {
             return Ok(());
         }
-        let mut jmap_session_resource_url =
-            if self.server_conf.server_hostname.starts_with("https://") {
-                self.server_conf.server_hostname.to_string()
-            } else {
-                format!("https://{}", &self.server_conf.server_hostname)
-            };
+        let mut jmap_session_resource_url = self.server_conf.server_hostname.to_string();
         if self.server_conf.server_port != 443 {
             jmap_session_resource_url.push(':');
             jmap_session_resource_url.push_str(&self.server_conf.server_port.to_string());
         }
         jmap_session_resource_url.push_str("/.well-known/jmap");
 
-        let mut req = self.client.get_async(&jmap_session_resource_url).await?;
+        let mut req = self.client.get_async(&jmap_session_resource_url).await.map_err(|err| {
+                let err = MeliError::new(format!("Could not connect to JMAP server endpoint for {}. Is your server hostname setting correct? (i.e. \"jmap.mailserver.org\") (Note: only session resource discovery via /.well-known/jmap is supported. DNS SRV records are not suppported.)\nError connecting to server: {}", &self.server_conf.server_hostname, &err)).set_source(Some(Arc::new(err)));
+                //*self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
+                err
+        })?;
+
+        if !req.status().is_success() {
+            let kind: crate::error::NetworkErrorKind = req.status().into();
+            let res_text = req.text().await.unwrap_or_default();
+            let err = MeliError::new(format!(
+                "Could not connect to JMAP server endpoint for {}. Reply from server: {}",
+                &self.server_conf.server_hostname, res_text
+            ))
+            .set_kind(kind.into());
+            *self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
+            return Err(err);
+        }
+
         let res_text = req.text().await?;
 
         let session: JmapSession = match serde_json::from_str(&res_text) {
@@ -103,6 +116,10 @@ impl JmapConnection {
 
     pub fn mail_account_id(&self) -> Id<Account> {
         self.session.lock().unwrap().primary_accounts["urn:ietf:params:jmap:mail"].clone()
+    }
+
+    pub fn session_guard(&'_ self) -> MutexGuard<'_, JmapSession> {
+        self.session.lock().unwrap()
     }
 
     pub fn add_refresh_event(&self, event: RefreshEvent) {
