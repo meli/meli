@@ -337,6 +337,9 @@ impl MailBackend for JmapType {
                 &store,
                 mailbox_hash,
             ).await?;
+            if res.is_empty() {
+                return;
+            }
             yield res;
         }))
     }

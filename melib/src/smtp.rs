@@ -268,16 +268,13 @@ impl SmtpConnection {
                 if danger_accept_invalid_certs {
                     connector.danger_accept_invalid_certs(true);
                 }
-                let connector = connector
-                    .build()
-                    .chain_err_kind(crate::error::ErrorKind::Network)?;
+                let connector = connector.build()?;
 
                 let addr = lookup_ipv4(path, server_conf.port)?;
-                let mut socket = AsyncWrapper::new(Connection::Tcp(
-                    TcpStream::connect_timeout(&addr, std::time::Duration::new(4, 0))
-                        .chain_err_kind(crate::error::ErrorKind::Network)?,
-                ))
-                .chain_err_kind(crate::error::ErrorKind::Network)?;
+                let mut socket = AsyncWrapper::new(Connection::Tcp(TcpStream::connect_timeout(
+                    &addr,
+                    std::time::Duration::new(4, 0),
+                )?))?;
                 let pre_ehlo_extensions_reply = read_lines(
                     &mut socket,
                     &mut res,
@@ -300,10 +297,7 @@ impl SmtpConnection {
                         return Err(MeliError::new("Please specify what SMTP security transport to use explicitly instead of `auto`."));
                     }
                 }
-                socket
-                    .write_all(b"EHLO meli.delivery\r\n")
-                    .await
-                    .chain_err_kind(crate::error::ErrorKind::Network)?;
+                socket.write_all(b"EHLO meli.delivery\r\n").await?;
                 if let SmtpSecurity::StartTLS { .. } = server_conf.security {
                     let pre_tls_extensions_reply = read_lines(
                         &mut socket,
@@ -314,10 +308,7 @@ impl SmtpConnection {
                     .await?;
                     drop(pre_tls_extensions_reply);
                     //debug!(pre_tls_extensions_reply);
-                    socket
-                        .write_all(b"STARTTLS\r\n")
-                        .await
-                        .chain_err_kind(crate::error::ErrorKind::Network)?;
+                    socket.write_all(b"STARTTLS\r\n").await?;
                     let _post_starttls_extensions_reply = read_lines(
                         &mut socket,
                         &mut res,
@@ -329,15 +320,11 @@ impl SmtpConnection {
                 }
 
                 let mut ret = {
-                    let socket = socket
-                        .into_inner()
-                        .chain_err_kind(crate::error::ErrorKind::Network)?;
+                    let socket = socket.into_inner()?;
                     let _path = path.clone();
 
                     socket.set_nonblocking(false)?;
-                    let conn = unblock(move || connector.connect(&_path, socket))
-                        .await
-                        .chain_err_kind(crate::error::ErrorKind::Network)?;
+                    let conn = unblock(move || connector.connect(&_path, socket)).await?;
                     /*
                     if let Err(native_tls::HandshakeError::WouldBlock(midhandshake_stream)) =
                         conn_result
@@ -359,21 +346,17 @@ impl SmtpConnection {
                         }
                     }
                         */
-                    AsyncWrapper::new(Connection::Tls(conn))
-                        .chain_err_kind(crate::error::ErrorKind::Network)?
+                    AsyncWrapper::new(Connection::Tls(conn))?
                 };
-                ret.write_all(b"EHLO meli.delivery\r\n")
-                    .await
-                    .chain_err_kind(crate::error::ErrorKind::Network)?;
+                ret.write_all(b"EHLO meli.delivery\r\n").await?;
                 ret
             }
             SmtpSecurity::None => {
                 let addr = lookup_ipv4(path, server_conf.port)?;
-                let mut ret = AsyncWrapper::new(Connection::Tcp(
-                    TcpStream::connect_timeout(&addr, std::time::Duration::new(4, 0))
-                        .chain_err_kind(crate::error::ErrorKind::Network)?,
-                ))
-                .chain_err_kind(crate::error::ErrorKind::Network)?;
+                let mut ret = AsyncWrapper::new(Connection::Tcp(TcpStream::connect_timeout(
+                    &addr,
+                    std::time::Duration::new(4, 0),
+                )?))?;
                 res.clear();
                 let reply = read_lines(
                     &mut ret,
@@ -391,9 +374,7 @@ impl SmtpConnection {
                         Reply::new(&res, code)
                     )));
                 }
-                ret.write_all(b"EHLO meli.delivery\r\n")
-                    .await
-                    .chain_err_kind(crate::error::ErrorKind::Network)?;
+                ret.write_all(b"EHLO meli.delivery\r\n").await?;
                 ret
             }
         };
@@ -601,15 +582,10 @@ impl SmtpConnection {
         //        .trim()
         //);
         for c in command {
-            self.stream
-                .write_all(c)
-                .await
-                .chain_err_kind(crate::error::ErrorKind::Network)?;
+            self.stream.write_all(c).await?;
         }
-        self.stream
-            .write_all(b"\r\n")
-            .await
-            .chain_err_kind(crate::error::ErrorKind::Network)
+        self.stream.write_all(b"\r\n").await?;
+        Ok(())
     }
 
     /// Sends mail
@@ -697,10 +673,7 @@ impl SmtpConnection {
             let mail_length = format!("{}", mail.as_bytes().len());
             self.send_command(&[b"BDAT", mail_length.as_bytes(), b"LAST"])
                 .await?;
-            self.stream
-                .write_all(mail.as_bytes())
-                .await
-                .chain_err_kind(crate::error::ErrorKind::Network)?;
+            self.stream.write_all(mail.as_bytes()).await?;
         } else {
             //The third step in the procedure is the DATA command
             //(or some alternative specified in a service extension).
@@ -737,35 +710,20 @@ impl SmtpConnection {
             //line.If it is a period, one additional period is inserted at the beginning of the line.
             for line in mail.lines() {
                 if line.starts_with('.') {
-                    self.stream
-                        .write_all(b".")
-                        .await
-                        .chain_err_kind(crate::error::ErrorKind::Network)?;
+                    self.stream.write_all(b".").await?;
                 }
-                self.stream
-                    .write_all(line.as_bytes())
-                    .await
-                    .chain_err_kind(crate::error::ErrorKind::Network)?;
-                self.stream
-                    .write_all(b"\r\n")
-                    .await
-                    .chain_err_kind(crate::error::ErrorKind::Network)?;
+                self.stream.write_all(line.as_bytes()).await?;
+                self.stream.write_all(b"\r\n").await?;
             }
 
             if !mail.ends_with('\n') {
-                self.stream
-                    .write_all(b".\r\n")
-                    .await
-                    .chain_err_kind(crate::error::ErrorKind::Network)?;
+                self.stream.write_all(b".\r\n").await?;
             }
 
             //The mail data are terminated by a line containing only a period, that is, the character
             //sequence "<CRLF>.<CRLF>", where the first <CRLF> is actually the terminator of the
             //previous line (see Section 4.5.2). This is the end of mail data indication.
-            self.stream
-                .write_all(b".\r\n")
-                .await
-                .chain_err_kind(crate::error::ErrorKind::Network)?;
+            self.stream.write_all(b".\r\n").await?;
         }
 
         //The end of mail data indicator also confirms the mail transaction and tells the SMTP
@@ -1041,8 +999,8 @@ async fn read_lines<'r>(
             Ok(b) => {
                 ret.push_str(unsafe { std::str::from_utf8_unchecked(&buf[0..b]) });
             }
-            Err(e) => {
-                return Err(MeliError::from(e).set_kind(crate::error::ErrorKind::Network));
+            Err(err) => {
+                return Err(MeliError::from(err));
             }
         }
     }

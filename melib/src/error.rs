@@ -35,13 +35,291 @@ use std::sync::Arc;
 pub type Result<T> = result::Result<T, MeliError>;
 
 #[derive(Debug, Copy, PartialEq, Clone)]
+pub enum NetworkErrorKind {
+    /// Unspecified
+    None,
+    /// Name lookup of host failed.
+    HostLookupFailed,
+    /// Bad client Certificate
+    BadClientCertificate,
+    /// Bad server certificate
+    BadServerCertificate,
+    /// Client initialization
+    ClientInitialization,
+    /// Connection failed
+    ConnectionFailed,
+    /// Invalid content encoding
+    InvalidContentEncoding,
+    /// Invalid credentials
+    InvalidCredentials,
+    /// Invalid request
+    InvalidRequest,
+    /// IO Error
+    Io,
+    /// Name resolution
+    NameResolution,
+    /// Protocol violation
+    ProtocolViolation,
+    /// Request body not rewindable
+    RequestBodyNotRewindable,
+    /// Connection (not request) timeout.
+    Timeout,
+    /// TooManyRedirects
+    TooManyRedirects,
+    /// Invalid TLS connection
+    InvalidTLSConnection,
+    /// Equivalent to HTTP status code 400 Bad Request
+    /// [[RFC7231, Section 6.5.1](https://tools.ietf.org/html/rfc7231#section-6.5.1)]
+    BadRequest,
+    /// Equivalent to HTTP status code 401 Unauthorized
+    /// [[RFC7235, Section 3.1](https://tools.ietf.org/html/rfc7235#section-3.1)]
+    Unauthorized,
+    /// Equivalent to HTTP status code 402 Payment Required
+    /// [[RFC7231, Section 6.5.2](https://tools.ietf.org/html/rfc7231#section-6.5.2)]
+    PaymentRequired,
+    /// Equivalent to HTTP status code 403 Forbidden
+    /// [[RFC7231, Section 6.5.3](https://tools.ietf.org/html/rfc7231#section-6.5.3)]
+    Forbidden,
+    /// Equivalent to HTTP status code 404 Not Found
+    /// [[RFC7231, Section 6.5.4](https://tools.ietf.org/html/rfc7231#section-6.5.4)]
+    NotFound,
+    /// Equivalent to HTTP status code 405 Method Not Allowed
+    /// [[RFC7231, Section 6.5.5](https://tools.ietf.org/html/rfc7231#section-6.5.5)]
+    MethodNotAllowed,
+    /// Equivalent to HTTP status code 406 Not Acceptable
+    /// [[RFC7231, Section 6.5.6](https://tools.ietf.org/html/rfc7231#section-6.5.6)]
+    NotAcceptable,
+    /// Equivalent to HTTP status code 407 Proxy Authentication Required
+    /// [[RFC7235, Section 3.2](https://tools.ietf.org/html/rfc7235#section-3.2)]
+    ProxyAuthenticationRequired,
+    /// Equivalent to HTTP status code 408 Request Timeout
+    /// [[RFC7231, Section 6.5.7](https://tools.ietf.org/html/rfc7231#section-6.5.7)]
+    RequestTimeout,
+    /// Equivalent to HTTP status code 409 Conflict
+    /// [[RFC7231, Section 6.5.8](https://tools.ietf.org/html/rfc7231#section-6.5.8)]
+    Conflict,
+    /// Equivalent to HTTP status code 410 Gone
+    /// [[RFC7231, Section 6.5.9](https://tools.ietf.org/html/rfc7231#section-6.5.9)]
+    Gone,
+    /// Equivalent to HTTP status code 411 Length Required
+    /// [[RFC7231, Section 6.5.10](https://tools.ietf.org/html/rfc7231#section-6.5.10)]
+    LengthRequired,
+    /// Equivalent to HTTP status code 412 Precondition Failed
+    /// [[RFC7232, Section 4.2](https://tools.ietf.org/html/rfc7232#section-4.2)]
+    PreconditionFailed,
+    /// Equivalent to HTTP status code 413 Payload Too Large
+    /// [[RFC7231, Section 6.5.11](https://tools.ietf.org/html/rfc7231#section-6.5.11)]
+    PayloadTooLarge,
+    /// Equivalent to HTTP status code 414 URI Too Long
+    /// [[RFC7231, Section 6.5.12](https://tools.ietf.org/html/rfc7231#section-6.5.12)]
+    URITooLong,
+    /// Equivalent to HTTP status code 415 Unsupported Media Type
+    /// [[RFC7231, Section 6.5.13](https://tools.ietf.org/html/rfc7231#section-6.5.13)]
+    UnsupportedMediaType,
+    /// Equivalent to HTTP status code 416 Range Not Satisfiable
+    /// [[RFC7233, Section 4.4](https://tools.ietf.org/html/rfc7233#section-4.4)]
+    RangeNotSatisfiable,
+    /// Equivalent to HTTP status code 417 Expectation Failed
+    /// [[RFC7231, Section 6.5.14](https://tools.ietf.org/html/rfc7231#section-6.5.14)]
+    ExpectationFailed,
+    /// Equivalent to HTTP status code 421 Misdirected Request
+    /// [RFC7540, Section 9.1.2](http://tools.ietf.org/html/rfc7540#section-9.1.2)
+    MisdirectedRequest,
+    /// Equivalent to HTTP status code 422 Unprocessable Entity
+    /// [[RFC4918](https://tools.ietf.org/html/rfc4918)]
+    UnprocessableEntity,
+    /// Equivalent to HTTP status code 423 Locked
+    /// [[RFC4918](https://tools.ietf.org/html/rfc4918)]
+    Locked,
+    /// Equivalent to HTTP status code 424 Failed Dependency
+    /// [[RFC4918](https://tools.ietf.org/html/rfc4918)]
+    FailedDependency,
+
+    /// Equivalent to HTTP status code 426 Upgrade Required
+    /// [[RFC7231, Section 6.5.15](https://tools.ietf.org/html/rfc7231#section-6.5.15)]
+    UpgradeRequired,
+
+    /// Equivalent to HTTP status code 428 Precondition Required
+    /// [[RFC6585](https://tools.ietf.org/html/rfc6585)]
+    PreconditionRequired,
+    /// Equivalent to HTTP status code 429 Too Many Requests
+    /// [[RFC6585](https://tools.ietf.org/html/rfc6585)]
+    TooManyRequests,
+
+    /// Equivalent to HTTP status code 431 Request Header Fields Too Large
+    /// [[RFC6585](https://tools.ietf.org/html/rfc6585)]
+    RequestHeaderFieldsTooLarge,
+
+    /// Equivalent to HTTP status code 451 Unavailable For Legal Reasons
+    /// [[RFC7725](http://tools.ietf.org/html/rfc7725)]
+    UnavailableForLegalReasons,
+
+    /// Equivalent to HTTP status code 500 Internal Server Error
+    /// [[RFC7231, Section 6.6.1](https://tools.ietf.org/html/rfc7231#section-6.6.1)]
+    InternalServerError,
+    /// Equivalent to HTTP status code 501 Not Implemented
+    /// [[RFC7231, Section 6.6.2](https://tools.ietf.org/html/rfc7231#section-6.6.2)]
+    NotImplemented,
+    /// Equivalent to HTTP status code 502 Bad Gateway
+    /// [[RFC7231, Section 6.6.3](https://tools.ietf.org/html/rfc7231#section-6.6.3)]
+    BadGateway,
+    /// Equivalent to HTTP status code 503 Service Unavailable
+    /// [[RFC7231, Section 6.6.4](https://tools.ietf.org/html/rfc7231#section-6.6.4)]
+    ServiceUnavailable,
+    /// Equivalent to HTTP status code 504 Gateway Timeout
+    /// [[RFC7231, Section 6.6.5](https://tools.ietf.org/html/rfc7231#section-6.6.5)]
+    GatewayTimeout,
+    /// Equivalent to HTTP status code 505 HTTP Version Not Supported
+    /// [[RFC7231, Section 6.6.6](https://tools.ietf.org/html/rfc7231#section-6.6.6)]
+    HTTPVersionNotSupported,
+    /// Equivalent to HTTP status code 506 Variant Also Negotiates
+    /// [[RFC2295](https://tools.ietf.org/html/rfc2295)]
+    VariantAlsoNegotiates,
+    /// Equivalent to HTTP status code 507 Insufficient Storage
+    /// [[RFC4918](https://tools.ietf.org/html/rfc4918)]
+    InsufficientStorage,
+    /// Equivalent to HTTP status code 508 Loop Detected
+    /// [[RFC5842](https://tools.ietf.org/html/rfc5842)]
+    LoopDetected,
+    /// Equivalent to HTTP status code 510 Not Extended
+    /// [[RFC2774](https://tools.ietf.org/html/rfc2774)]
+    NotExtended,
+    /// Equivalent to HTTP status code 511 Network Authentication Required
+    /// [[RFC6585](https://tools.ietf.org/html/rfc6585)]
+    NetworkAuthenticationRequired,
+}
+
+impl NetworkErrorKind {
+    pub fn as_str(&self) -> &'static str {
+        use NetworkErrorKind::*;
+        match self {
+            None => "Network",
+            HostLookupFailed => "Name lookup of host failed.",
+            BadClientCertificate => "Bad client Certificate",
+            BadServerCertificate => "Bad server certificate",
+            ClientInitialization => "Client initialization",
+            ConnectionFailed => "Connection failed",
+            InvalidContentEncoding => "Invalid content encoding",
+            InvalidCredentials => "Invalid credentials",
+            InvalidRequest => "Invalid request",
+            Io => "IO Error",
+            NameResolution => "Name resolution",
+            ProtocolViolation => "Protocol violation",
+            RequestBodyNotRewindable => "Request body not rewindable",
+            Timeout => "Connection (not request) timeout.",
+            TooManyRedirects => "TooManyRedirects",
+            InvalidTLSConnection => "Invalid TLS connection",
+            BadRequest => "Bad Request",
+            Unauthorized => "Unauthorized",
+            PaymentRequired => "Payment Required",
+            Forbidden => "Forbidden",
+            NotFound => "Not Found",
+            MethodNotAllowed => "Method Not Allowed",
+            NotAcceptable => "Not Acceptable",
+            ProxyAuthenticationRequired => "Proxy Authentication Required",
+            RequestTimeout => "Request Timeout",
+            Conflict => "Conflict",
+            Gone => "Gone",
+            LengthRequired => "Length Required",
+            PreconditionFailed => "Precondition Failed",
+            PayloadTooLarge => "Payload Too Large",
+            URITooLong => "URI Too Long",
+            UnsupportedMediaType => "Unsupported Media Type",
+            RangeNotSatisfiable => "Range Not Satisfiable",
+            ExpectationFailed => "Expectation Failed",
+            MisdirectedRequest => "Misdirected Request",
+            UnprocessableEntity => "Unprocessable Entity",
+            Locked => "Locked",
+            FailedDependency => "Failed Dependency",
+            UpgradeRequired => "Upgrade Required",
+            PreconditionRequired => "Precondition Required",
+            TooManyRequests => "Too Many Requests",
+            RequestHeaderFieldsTooLarge => "Request Header Fields Too Large",
+            UnavailableForLegalReasons => "Unavailable For Legal Reasons",
+            InternalServerError => "Internal Server Error",
+            NotImplemented => "Not Implemented",
+            BadGateway => "Bad Gateway",
+            ServiceUnavailable => "Service Unavailable",
+            GatewayTimeout => "Gateway Timeout",
+            HTTPVersionNotSupported => "HTTP Version Not Supported",
+            VariantAlsoNegotiates => "Variant Also Negotiates",
+            InsufficientStorage => "Insufficient Storage",
+            LoopDetected => "Loop Detected",
+            NotExtended => "Not Extended",
+            NetworkAuthenticationRequired => "Network Authentication Required",
+        }
+    }
+}
+
+impl Default for NetworkErrorKind {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+#[cfg(feature = "http")]
+impl From<isahc::http::StatusCode> for NetworkErrorKind {
+    fn from(val: isahc::http::StatusCode) -> Self {
+        match val {
+            isahc::http::StatusCode::BAD_REQUEST => Self::BadRequest,
+            isahc::http::StatusCode::UNAUTHORIZED => Self::Unauthorized,
+            isahc::http::StatusCode::PAYMENT_REQUIRED => Self::PaymentRequired,
+            isahc::http::StatusCode::FORBIDDEN => Self::Forbidden,
+            isahc::http::StatusCode::NOT_FOUND => Self::NotFound,
+            isahc::http::StatusCode::METHOD_NOT_ALLOWED => Self::MethodNotAllowed,
+            isahc::http::StatusCode::NOT_ACCEPTABLE => Self::NotAcceptable,
+            isahc::http::StatusCode::PROXY_AUTHENTICATION_REQUIRED => {
+                Self::ProxyAuthenticationRequired
+            }
+            isahc::http::StatusCode::REQUEST_TIMEOUT => Self::RequestTimeout,
+            isahc::http::StatusCode::CONFLICT => Self::Conflict,
+            isahc::http::StatusCode::GONE => Self::Gone,
+            isahc::http::StatusCode::LENGTH_REQUIRED => Self::LengthRequired,
+            isahc::http::StatusCode::PRECONDITION_FAILED => Self::PreconditionFailed,
+            isahc::http::StatusCode::PAYLOAD_TOO_LARGE => Self::PayloadTooLarge,
+            isahc::http::StatusCode::URI_TOO_LONG => Self::URITooLong,
+            isahc::http::StatusCode::UNSUPPORTED_MEDIA_TYPE => Self::UnsupportedMediaType,
+            isahc::http::StatusCode::RANGE_NOT_SATISFIABLE => Self::RangeNotSatisfiable,
+            isahc::http::StatusCode::EXPECTATION_FAILED => Self::ExpectationFailed,
+            isahc::http::StatusCode::MISDIRECTED_REQUEST => Self::MisdirectedRequest,
+            isahc::http::StatusCode::UNPROCESSABLE_ENTITY => Self::UnprocessableEntity,
+            isahc::http::StatusCode::LOCKED => Self::Locked,
+            isahc::http::StatusCode::FAILED_DEPENDENCY => Self::FailedDependency,
+            isahc::http::StatusCode::UPGRADE_REQUIRED => Self::UpgradeRequired,
+            isahc::http::StatusCode::PRECONDITION_REQUIRED => Self::PreconditionRequired,
+            isahc::http::StatusCode::TOO_MANY_REQUESTS => Self::TooManyRequests,
+            isahc::http::StatusCode::REQUEST_HEADER_FIELDS_TOO_LARGE => {
+                Self::RequestHeaderFieldsTooLarge
+            }
+            isahc::http::StatusCode::UNAVAILABLE_FOR_LEGAL_REASONS => {
+                Self::UnavailableForLegalReasons
+            }
+            isahc::http::StatusCode::INTERNAL_SERVER_ERROR => Self::InternalServerError,
+            isahc::http::StatusCode::NOT_IMPLEMENTED => Self::NotImplemented,
+            isahc::http::StatusCode::BAD_GATEWAY => Self::BadGateway,
+            isahc::http::StatusCode::SERVICE_UNAVAILABLE => Self::ServiceUnavailable,
+            isahc::http::StatusCode::GATEWAY_TIMEOUT => Self::GatewayTimeout,
+            isahc::http::StatusCode::HTTP_VERSION_NOT_SUPPORTED => Self::HTTPVersionNotSupported,
+            isahc::http::StatusCode::VARIANT_ALSO_NEGOTIATES => Self::VariantAlsoNegotiates,
+            isahc::http::StatusCode::INSUFFICIENT_STORAGE => Self::InsufficientStorage,
+            isahc::http::StatusCode::LOOP_DETECTED => Self::LoopDetected,
+            isahc::http::StatusCode::NOT_EXTENDED => Self::NotExtended,
+            isahc::http::StatusCode::NETWORK_AUTHENTICATION_REQUIRED => {
+                Self::NetworkAuthenticationRequired
+            }
+            _ => Self::default(),
+        }
+    }
+}
+
+#[derive(Debug, Copy, PartialEq, Clone)]
 pub enum ErrorKind {
     None,
     External,
     Authentication,
     Configuration,
     Bug,
-    Network,
+    Network(NetworkErrorKind),
     Timeout,
     OSError,
     NotImplemented,
@@ -58,7 +336,7 @@ impl fmt::Display for ErrorKind {
                 ErrorKind::External => "External",
                 ErrorKind::Authentication => "Authentication",
                 ErrorKind::Bug => "Bug, please report this!",
-                ErrorKind::Network => "Network",
+                ErrorKind::Network(ref inner) => inner.as_str(),
                 ErrorKind::Timeout => "Timeout",
                 ErrorKind::OSError => "OS Error",
                 ErrorKind::Configuration => "Configuration",
@@ -71,7 +349,7 @@ impl fmt::Display for ErrorKind {
 
 impl ErrorKind {
     pub fn is_network(&self) -> bool {
-        matches!(self, ErrorKind::Network)
+        matches!(self, ErrorKind::Network(_))
     }
 
     pub fn is_timeout(&self) -> bool {
@@ -279,7 +557,7 @@ impl<T: Sync + Send + 'static + core::fmt::Debug> From<native_tls::HandshakeErro
     fn from(kind: native_tls::HandshakeError<T>) -> MeliError {
         MeliError::new(kind.to_string())
             .set_source(Some(Arc::new(kind)))
-            .set_kind(ErrorKind::Network)
+            .set_kind(ErrorKind::Network(NetworkErrorKind::InvalidTLSConnection))
     }
 }
 
@@ -289,7 +567,7 @@ impl From<native_tls::Error> for MeliError {
     fn from(kind: native_tls::Error) -> MeliError {
         MeliError::new(kind.to_string())
             .set_source(Some(Arc::new(kind)))
-            .set_kind(ErrorKind::Network)
+            .set_kind(ErrorKind::Network(NetworkErrorKind::InvalidTLSConnection))
     }
 }
 
@@ -300,11 +578,46 @@ impl From<std::num::ParseIntError> for MeliError {
     }
 }
 
-#[cfg(feature = "jmap_backend")]
+#[cfg(feature = "http")]
+impl From<&isahc::error::ErrorKind> for NetworkErrorKind {
+    #[inline]
+    fn from(val: &isahc::error::ErrorKind) -> NetworkErrorKind {
+        use isahc::error::ErrorKind::*;
+        match val {
+            BadClientCertificate => NetworkErrorKind::BadClientCertificate,
+            BadServerCertificate => NetworkErrorKind::BadServerCertificate,
+            ClientInitialization => NetworkErrorKind::ClientInitialization,
+            ConnectionFailed => NetworkErrorKind::ConnectionFailed,
+            InvalidContentEncoding => NetworkErrorKind::InvalidContentEncoding,
+            InvalidCredentials => NetworkErrorKind::InvalidCredentials,
+            InvalidRequest => NetworkErrorKind::BadRequest,
+            Io => NetworkErrorKind::Io,
+            NameResolution => NetworkErrorKind::HostLookupFailed,
+            ProtocolViolation => NetworkErrorKind::ProtocolViolation,
+            RequestBodyNotRewindable => NetworkErrorKind::RequestBodyNotRewindable,
+            Timeout => NetworkErrorKind::Timeout,
+            TlsEngine => NetworkErrorKind::InvalidTLSConnection,
+            TooManyRedirects => NetworkErrorKind::TooManyRedirects,
+            _ => NetworkErrorKind::None,
+        }
+    }
+}
+
+impl From<NetworkErrorKind> for ErrorKind {
+    #[inline]
+    fn from(kind: NetworkErrorKind) -> ErrorKind {
+        ErrorKind::Network(kind)
+    }
+}
+
+#[cfg(feature = "http")]
 impl From<isahc::Error> for MeliError {
     #[inline]
-    fn from(kind: isahc::Error) -> MeliError {
-        MeliError::new(kind.to_string()).set_source(Some(Arc::new(kind)))
+    fn from(val: isahc::Error) -> MeliError {
+        let kind: NetworkErrorKind = val.kind().into();
+        MeliError::new(val.to_string())
+            .set_source(Some(Arc::new(val)))
+            .set_kind(ErrorKind::Network(kind))
     }
 }
 

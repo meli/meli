@@ -100,7 +100,7 @@ mod dbus {
                     | Some(NotificationType::Error(melib::ErrorKind::External)) => {
                         notification.icon("dialog-error");
                     }
-                    Some(NotificationType::Error(melib::ErrorKind::Network)) => {
+                    Some(NotificationType::Error(melib::ErrorKind::Network(_))) => {
                         notification.icon("network-error");
                     }
                     Some(NotificationType::Error(melib::ErrorKind::Timeout)) => {

@@ -134,26 +134,19 @@ impl ImapStream {
             }
             let connector = connector
                 .build()
-                .chain_err_kind(crate::error::ErrorKind::Network)?;
+                .chain_err_kind(crate::error::ErrorKind::Network(
+                    crate::error::NetworkErrorKind::InvalidTLSConnection,
+                ))?;
 
-            let addr = if let Ok(a) = lookup_ipv4(path, server_conf.server_port) {
-                a
-            } else {
-                return Err(MeliError::new(format!(
-                    "Could not lookup address {}",
-                    &path
-                )));
-            };
+            let addr = lookup_ipv4(path, server_conf.server_port)?;
 
             let mut socket = AsyncWrapper::new(Connection::Tcp(
                 if let Some(timeout) = server_conf.timeout {
-                    TcpStream::connect_timeout(&addr, timeout)
-                        .chain_err_kind(crate::error::ErrorKind::Network)?
+                    TcpStream::connect_timeout(&addr, timeout)?
                 } else {
-                    TcpStream::connect(&addr).chain_err_kind(crate::error::ErrorKind::Network)?
+                    TcpStream::connect(&addr)?
                 },
-            ))
-            .chain_err_kind(crate::error::ErrorKind::Network)?;
+            ))?;
             if server_conf.use_starttls {
                 let err_fn = || {
                     if server_conf.server_port == 993 {
@@ -167,36 +160,22 @@ impl ImapStream {
                     ImapProtocol::IMAP { .. } => socket
                         .write_all(format!("M{} STARTTLS\r\n", cmd_id).as_bytes())
                         .await
-                        .chain_err_summary(err_fn)
-                        .chain_err_kind(crate::error::ErrorKind::Network)?,
+                        .chain_err_summary(err_fn)?,
                     ImapProtocol::ManageSieve => {
-                        socket
-                            .read(&mut buf)
-                            .await
-                            .chain_err_summary(err_fn)
-                            .chain_err_kind(crate::error::ErrorKind::Network)?;
+                        socket.read(&mut buf).await.chain_err_summary(err_fn)?;
                         socket
                             .write_all(b"STARTTLS\r\n")
                             .await
-                            .chain_err_summary(err_fn)
-                            .chain_err_kind(crate::error::ErrorKind::Network)?;
+                            .chain_err_summary(err_fn)?;
                     }
                 }
-                socket
-                    .flush()
-                    .await
-                    .chain_err_summary(err_fn)
-                    .chain_err_kind(crate::error::ErrorKind::Network)?;
+                socket.flush().await.chain_err_summary(err_fn)?;
                 let mut response = Vec::with_capacity(1024);
                 let mut broken = false;
                 let now = Instant::now();
 
                 while now.elapsed().as_secs() < 3 {
-                    let len = socket
-                        .read(&mut buf)
-                        .await
-                        .chain_err_summary(err_fn)
-                        .chain_err_kind(crate::error::ErrorKind::Network)?;
+                    let len = socket.read(&mut buf).await.chain_err_summary(err_fn)?;
                     response.extend_from_slice(&buf[0..len]);
                     match server_conf.protocol {
                         ImapProtocol::IMAP { .. } => {
@@ -229,9 +208,7 @@ impl ImapStream {
 
             {
                 // FIXME: This is blocking
-                let socket = socket
-                    .into_inner()
-                    .chain_err_kind(crate::error::ErrorKind::Network)?;
+                let socket = socket.into_inner()?;
                 let mut conn_result = connector.connect(path, socket);
                 if let Err(native_tls::HandshakeError::WouldBlock(midhandshake_stream)) =
                     conn_result
@@ -247,20 +224,17 @@ impl ImapStream {
                                 midhandshake_stream = Some(stream);
                             }
                             p => {
-                                p.chain_err_kind(crate::error::ErrorKind::Network)?;
+                                p.chain_err_kind(crate::error::ErrorKind::Network(
+                                    crate::error::NetworkErrorKind::InvalidTLSConnection,
+                                ))?;
                             }
                         }
                     }
                 }
-                AsyncWrapper::new(Connection::Tls(
-                    conn_result
-                        .chain_err_summary(|| {
-                            format!("Could not initiate TLS negotiation to {}.", path)
-                        })
-                        .chain_err_kind(crate::error::ErrorKind::Network)?,
-                ))
-                .chain_err_summary(|| format!("Could not initiate TLS negotiation to {}.", path))
-                .chain_err_kind(crate::error::ErrorKind::Network)?
+                AsyncWrapper::new(Connection::Tls(conn_result.chain_err_summary(|| {
+                    format!("Could not initiate TLS negotiation to {}.", path)
+                })?))
+                .chain_err_summary(|| format!("Could not initiate TLS negotiation to {}.", path))?
             }
         } else {
             let addr = if let Ok(a) = lookup_ipv4(path, server_conf.server_port) {
@@ -273,13 +247,11 @@ impl ImapStream {
             };
             AsyncWrapper::new(Connection::Tcp(
                 if let Some(timeout) = server_conf.timeout {
-                    TcpStream::connect_timeout(&addr, timeout)
-                        .chain_err_kind(crate::error::ErrorKind::Network)?
+                    TcpStream::connect_timeout(&addr, timeout)?
                 } else {
-                    TcpStream::connect(&addr).chain_err_kind(crate::error::ErrorKind::Network)?
+                    TcpStream::connect(&addr)?
                 },
-            ))
-            .chain_err_kind(crate::error::ErrorKind::Network)?
+            ))?
         };
         if let Err(err) = stream
             .get_ref()
@@ -507,8 +479,8 @@ impl ImapStream {
                         last_line_idx += pos + b"\r\n".len();
                     }
                 }
-                Err(e) => {
-                    return Err(MeliError::from(e).set_err_kind(crate::error::ErrorKind::Network));
+                Err(err) => {
+                    return Err(MeliError::from(err));
                 }
             }
         }
@@ -524,7 +496,7 @@ impl ImapStream {
     }
 
     pub async fn send_command(&mut self, command: &[u8]) -> Result<()> {
-        if let Err(err) = timeout(
+        _ = timeout(
             self.timeout,
             try_await(async move {
                 let command = command.trim();
@@ -558,42 +530,22 @@ impl ImapStream {
                 Ok(())
             }),
         )
-        .await
-        {
-            Err(err.set_err_kind(crate::error::ErrorKind::Network))
-        } else {
-            Ok(())
-        }
+        .await?;
+        Ok(())
     }
 
     pub async fn send_literal(&mut self, data: &[u8]) -> Result<()> {
-        if let Err(err) = try_await(async move {
-            self.stream.write_all(data).await?;
-            self.stream.write_all(b"\r\n").await?;
-            self.stream.flush().await?;
-            Ok(())
-        })
-        .await
-        {
-            Err(err.set_err_kind(crate::error::ErrorKind::Network))
-        } else {
-            Ok(())
-        }
+        self.stream.write_all(data).await?;
+        self.stream.write_all(b"\r\n").await?;
+        self.stream.flush().await?;
+        Ok(())
     }
 
     pub async fn send_raw(&mut self, raw: &[u8]) -> Result<()> {
-        if let Err(err) = try_await(async move {
-            self.stream.write_all(raw).await?;
-            self.stream.write_all(b"\r\n").await?;
-            self.stream.flush().await?;
-            Ok(())
-        })
-        .await
-        {
-            Err(err.set_err_kind(crate::error::ErrorKind::Network))
-        } else {
-            Ok(())
-        }
+        self.stream.write_all(raw).await?;
+        self.stream.write_all(b"\r\n").await?;
+        self.stream.flush().await?;
+        Ok(())
     }
 }
 
@@ -1152,7 +1104,7 @@ async fn read(
             *prev_failure = None;
         }
         Err(_err) => {
-            *err = Some(Into::<MeliError>::into(_err).set_kind(crate::error::ErrorKind::Network));
+            *err = Some(Into::<MeliError>::into(_err));
             *break_flag = true;
             *prev_failure = Some(SystemTime::now());
         }

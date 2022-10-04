@@ -90,11 +90,10 @@ impl NntpStream {
 
         let stream = {
             let addr = lookup_ipv4(path, server_conf.server_port)?;
-            AsyncWrapper::new(Connection::Tcp(
-                TcpStream::connect_timeout(&addr, std::time::Duration::new(16, 0))
-                    .chain_err_kind(crate::error::ErrorKind::Network)?,
-            ))
-            .chain_err_kind(crate::error::ErrorKind::Network)?
+            AsyncWrapper::new(Connection::Tcp(TcpStream::connect_timeout(
+                &addr,
+                std::time::Duration::new(16, 0),
+            )?))?
         };
         let mut res = String::with_capacity(8 * 1024);
         let mut ret = NntpStream {
@@ -109,9 +108,7 @@ impl NntpStream {
             if server_conf.danger_accept_invalid_certs {
                 connector.danger_accept_invalid_certs(true);
             }
-            let connector = connector
-                .build()
-                .chain_err_kind(crate::error::ErrorKind::Network)?;
+            let connector = connector.build()?;
 
             if server_conf.use_starttls {
                 ret.read_response(&mut res, false, &["200 ", "201 "])
@@ -147,14 +144,8 @@ impl NntpStream {
                         &server_conf.server_hostname
                     )));
                 }
-                ret.stream
-                    .write_all(b"STARTTLS\r\n")
-                    .await
-                    .chain_err_kind(crate::error::ErrorKind::Network)?;
-                ret.stream
-                    .flush()
-                    .await
-                    .chain_err_kind(crate::error::ErrorKind::Network)?;
+                ret.stream.write_all(b"STARTTLS\r\n").await?;
+                ret.stream.flush().await?;
                 ret.read_response(&mut res, false, command_to_replycodes("STARTTLS"))
                     .await?;
                 if !res.starts_with("382 ") {
@@ -167,10 +158,7 @@ impl NntpStream {
 
             {
                 // FIXME: This is blocking
-                let socket = ret
-                    .stream
-                    .into_inner()
-                    .chain_err_kind(crate::error::ErrorKind::Network)?;
+                let socket = ret.stream.into_inner()?;
                 let mut conn_result = connector.connect(path, socket);
                 if let Err(native_tls::HandshakeError::WouldBlock(midhandshake_stream)) =
                     conn_result
@@ -186,16 +174,17 @@ impl NntpStream {
                                 midhandshake_stream = Some(stream);
                             }
                             p => {
-                                p.chain_err_kind(crate::error::ErrorKind::Network)?;
+                                p.chain_err_kind(crate::error::ErrorKind::Network(
+                                    crate::error::NetworkErrorKind::InvalidTLSConnection,
+                                ))?;
                             }
                         }
                     }
                 }
-                ret.stream = AsyncWrapper::new(Connection::Tls(
-                    conn_result.chain_err_kind(crate::error::ErrorKind::Network)?,
-                ))
-                .chain_err_summary(|| format!("Could not initiate TLS negotiation to {}.", path))
-                .chain_err_kind(crate::error::ErrorKind::Network)?;
+                ret.stream =
+                    AsyncWrapper::new(Connection::Tls(conn_result?)).chain_err_summary(|| {
+                        format!("Could not initiate TLS negotiation to {}.", path)
+                    })?;
             }
         }
         //ret.send_command(
@@ -367,8 +356,8 @@ impl NntpStream {
                         last_line_idx += pos + "\r\n".len();
                     }
                 }
-                Err(e) => {
-                    return Err(MeliError::from(e).set_err_kind(crate::error::ErrorKind::Network));
+                Err(err) => {
+                    return Err(MeliError::from(err));
                 }
             }
         }
@@ -393,7 +382,7 @@ impl NntpStream {
         .await
         {
             debug!("stream send_command err {:?}", err);
-            Err(err.set_err_kind(crate::error::ErrorKind::Network))
+            Err(err)
         } else {
             Ok(())
         }
@@ -427,7 +416,7 @@ impl NntpStream {
         .await
         {
             debug!("stream send_multiline_data_block err {:?}", err);
-            Err(err.set_err_kind(crate::error::ErrorKind::Network))
+            Err(err)
         } else {
             Ok(())
         }
