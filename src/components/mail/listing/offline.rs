@@ -140,7 +140,7 @@ impl Component for OfflineListing {
                 error_message.bg,
                 error_message.attrs,
                 (set_x(upper_left!(area), x + 1), bottom_right!(area)),
-                None,
+                Some(get_x(upper_left!(area))),
             );
             if let Some(msg) = self.messages.last() {
                 write_string_to_grid(
