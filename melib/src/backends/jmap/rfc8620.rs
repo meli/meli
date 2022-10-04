@@ -227,32 +227,32 @@ impl Object for JmapSession {
 #[serde(rename_all = "camelCase")]
 pub struct CapabilitiesObject {
     #[serde(default)]
-    max_size_upload: u64,
+    pub max_size_upload: u64,
     #[serde(default)]
-    max_concurrent_upload: u64,
+    pub max_concurrent_upload: u64,
     #[serde(default)]
-    max_size_request: u64,
+    pub max_size_request: u64,
     #[serde(default)]
-    max_concurrent_requests: u64,
+    pub max_concurrent_requests: u64,
     #[serde(default)]
-    max_calls_in_request: u64,
+    pub max_calls_in_request: u64,
     #[serde(default)]
-    max_objects_in_get: u64,
+    pub max_objects_in_get: u64,
     #[serde(default)]
-    max_objects_in_set: u64,
+    pub max_objects_in_set: u64,
     #[serde(default)]
-    collation_algorithms: Vec<String>,
+    pub collation_algorithms: Vec<String>,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Account {
-    name: String,
-    is_personal: bool,
-    is_read_only: bool,
-    account_capabilities: HashMap<String, Value>,
+    pub name: String,
+    pub is_personal: bool,
+    pub is_read_only: bool,
+    pub account_capabilities: HashMap<String, Value>,
     #[serde(flatten)]
-    extra_properties: HashMap<String, Value>,
+    pub extra_properties: HashMap<String, Value>,
 }
 
 impl Object for Account {
@@ -440,20 +440,20 @@ pub struct Query<F: FilterTrait<OBJ>, OBJ: Object>
 where
     OBJ: std::fmt::Debug + Serialize,
 {
-    account_id: Id<Account>,
-    filter: Option<F>,
-    sort: Option<Comparator<OBJ>>,
+    pub account_id: Id<Account>,
+    pub filter: Option<F>,
+    pub sort: Option<Comparator<OBJ>>,
     #[serde(default)]
-    position: u64,
+    pub position: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
-    anchor: Option<String>,
+    pub anchor: Option<String>,
     #[serde(default)]
     #[serde(skip_serializing_if = "u64_zero")]
-    anchor_offset: u64,
+    pub anchor_offset: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
-    limit: Option<u64>,
+    pub limit: Option<u64>,
     #[serde(default = "bool_false")]
-    calculate_total: bool,
+    pub calculate_total: bool,
     #[serde(skip)]
     _ph: PhantomData<fn() -> OBJ>,
 }
