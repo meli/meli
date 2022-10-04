@@ -644,7 +644,8 @@ impl Account {
                     acc.push_str(", ");
                     acc
                 });
-            mailbox_comma_sep_list_string.drain(mailbox_comma_sep_list_string.len() - 2..);
+            mailbox_comma_sep_list_string
+                .drain(mailbox_comma_sep_list_string.len().saturating_sub(2)..);
             melib::log(
                 format!(
                     "Account `{}` has the following mailboxes: [{}]",
@@ -652,6 +653,14 @@ impl Account {
                 ),
                 melib::WARN,
             );
+            self.sender
+                .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
+                    StatusEvent::DisplayMessage(format!(
+                        "Account `{}` has the following mailboxes: [{}]",
+                        &self.name, mailbox_comma_sep_list_string,
+                    )),
+                )))
+                .unwrap();
         }
 
         let mut tree: Vec<MailboxNode> = Vec::new();
@@ -1634,12 +1643,6 @@ impl Account {
             match job {
                 JobRequest::Mailboxes { ref mut handle } => {
                     if let Ok(Some(mailboxes)) = handle.chan.try_recv() {
-                        self.sender
-                            .send(ThreadEvent::UIEvent(UIEvent::AccountStatusChange(
-                                self.hash,
-                                Some("Loaded mailboxes.".into()),
-                            )))
-                            .unwrap();
                         if let Err(err) = mailboxes.and_then(|mailboxes| self.init(mailboxes)) {
                             if err.kind.is_authentication() {
                                 self.sender
@@ -1661,6 +1664,13 @@ impl Account {
                                 };
                                 self.insert_job(handle.job_id, JobRequest::Mailboxes { handle });
                             };
+                        } else {
+                            self.sender
+                                .send(ThreadEvent::UIEvent(UIEvent::AccountStatusChange(
+                                    self.hash,
+                                    Some("Loaded mailboxes.".into()),
+                                )))
+                                .unwrap();
                         }
                     }
                 }
