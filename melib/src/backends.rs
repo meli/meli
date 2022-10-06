@@ -105,6 +105,12 @@ impl Default for Backends {
     }
 }
 
+#[cfg(feature = "jmap_backend")]
+pub const JMAP_ERROR_MSG: &str = "";
+
+#[cfg(not(feature = "jmap_backend"))]
+pub const JMAP_ERROR_MSG: &str = "This library build lacks JMAP support. JMAP requires an HTTP client dependency and thus is turned off by default when compiling.";
+
 #[cfg(feature = "notmuch_backend")]
 pub const NOTMUCH_ERROR_MSG: &str =
     "libnotmuch5 was not found in your system. Make sure it is installed and in the library paths. For a custom file path, use `library_file_path` setting in your notmuch account.\n";
@@ -219,6 +225,11 @@ impl Backends {
                 {
                     eprint!("{}", NOTMUCH_ERROR_DETAILS);
                 }
+            } else if key == "jmap" {
+                #[cfg(not(feature = "jmap_backend"))]
+                {
+                    eprintln!("{}", JMAP_ERROR_MSG);
+                }
             }
             panic!("{} is not a valid mail backend", key);
         }
@@ -247,6 +258,8 @@ impl Backends {
                     key,
                     if cfg!(feature = "notmuch_backend") && key == "notmuch" {
                         NOTMUCH_ERROR_DETAILS
+                    } else if !cfg!(feature = "jmap_backend") && key == "jmap" {
+                        JMAP_ERROR_MSG
                     } else {
                         ""
                     },

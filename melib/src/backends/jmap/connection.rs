@@ -20,6 +20,7 @@
  */
 
 use super::*;
+use crate::error::IntoMeliError;
 use isahc::config::Configurable;
 use std::sync::MutexGuard;
 
@@ -34,6 +35,12 @@ pub struct JmapConnection {
 
 impl JmapConnection {
     pub fn new(server_conf: &JmapServerConf, store: Arc<Store>) -> Result<Self> {
+        (store.event_consumer)(
+            store.account_hash,
+            crate::backends::BackendEvent::AccountStateChange {
+                message: "Creating connection.".into(),
+            },
+        );
         let client = HttpClient::builder()
             .timeout(std::time::Duration::from_secs(10))
             .redirect_policy(RedirectPolicy::Limit(10))
@@ -53,6 +60,15 @@ impl JmapConnection {
         })
     }
 
+    #[inline(always)]
+    pub(crate) fn account_state_change(&self, message: impl Into<std::borrow::Cow<'static, str>>) {
+        let message = message.into();
+        (self.store.event_consumer)(
+            self.store.account_hash,
+            crate::backends::BackendEvent::AccountStateChange { message },
+        );
+    }
+
     pub async fn connect(&mut self) -> Result<()> {
         if self.store.online_status.lock().await.1.is_ok() {
             return Ok(());
@@ -63,12 +79,16 @@ impl JmapConnection {
             jmap_session_resource_url.push_str(&self.server_conf.server_port.to_string());
         }
         jmap_session_resource_url.push_str("/.well-known/jmap");
+        self.account_state_change(format!("Requesting {}…", &jmap_session_resource_url));
 
-        let mut req = self.client.get_async(&jmap_session_resource_url).await.map_err(|err| {
-                let err = MeliError::new(format!("Could not connect to JMAP server endpoint for {}. Is your server hostname setting correct? (i.e. \"jmap.mailserver.org\") (Note: only session resource discovery via /.well-known/jmap is supported. DNS SRV records are not suppported.)\nError connecting to server: {}", &self.server_conf.server_hostname, &err)).set_source(Some(Arc::new(err)));
-                //*self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
-                err
-        })?;
+        let mut req = match self.client.get_async(&jmap_session_resource_url).await {
+            Err(err) => {
+                let err = err.set_err_summary(format!("Could not connect to JMAP server endpoint for {}. Is your server hostname setting correct? (i.e. \"jmap.mailserver.org\") (Note: only session resource discovery via /.well-known/jmap is supported. DNS SRV records are not suppported.)\nError connecting to server.", &self.server_conf.server_hostname));
+                *self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
+                return Err(err);
+            }
+            Ok(r) => r,
+        };
 
         if !req.status().is_success() {
             let kind: crate::error::NetworkErrorKind = req.status().into();
@@ -86,7 +106,7 @@ impl JmapConnection {
 
         let session: JmapSession = match serde_json::from_str(&res_text) {
             Err(err) => {
-                let err = MeliError::new(format!("Could not connect to JMAP server endpoint for {}. Is your server hostname setting correct? (i.e. \"jmap.mailserver.org\") (Note: only session resource discovery via /.well-known/jmap is supported. DNS SRV records are not suppported.)\nReply from server: {}", &self.server_conf.server_hostname, &res_text)).set_source(Some(Arc::new(err)));
+                let err = err.set_err_summary(format!("Could not connect to JMAP server endpoint for {}. Is your server hostname setting correct? (i.e. \"jmap.mailserver.org\") (Note: only session resource discovery via /.well-known/jmap is supported. DNS SRV records are not suppported.)\nReply from server: {}", &self.server_conf.server_hostname, &res_text));
                 *self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
                 return Err(err);
             }

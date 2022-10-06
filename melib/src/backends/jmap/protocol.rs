@@ -85,6 +85,7 @@ pub struct JsonResponse<'a> {
 }
 
 pub async fn get_mailboxes(conn: &JmapConnection) -> Result<HashMap<MailboxHash, JmapMailbox>> {
+    conn.account_state_change("Fetching mailbox list…");
     let seq = get_request_no!(conn.request_no);
     let api_url = conn.session.lock().unwrap().api_url.clone();
     let mut res = conn
@@ -180,6 +181,7 @@ pub async fn get_message_list(
     conn: &JmapConnection,
     mailbox: &JmapMailbox,
 ) -> Result<Vec<Id<EmailObject>>> {
+    conn.account_state_change(format!("Fetching email list for {}…", mailbox.name()));
     let email_call: EmailQuery = EmailQuery::new(
         Query::new()
             .account_id(conn.mail_account_id().clone())
