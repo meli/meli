@@ -22,6 +22,11 @@
 use super::*;
 use melib::text_processing::LineBreakText;
 
+use syntect::easy::HighlightLines;
+use syntect::parsing::SyntaxSet;
+use syntect::highlighting::{ThemeSet, Style};
+use syntect::util::{LinesWithEndings};
+
 /// A pager for text.
 /// `Pager` holds its own content in its own `CellBuffer` and when `draw` is called, it draws the
 /// current view of the text. It is responsible for scrolling etc.
@@ -164,9 +169,44 @@ impl Pager {
 
         if let Some(bin) = pager_filter {
             ret.filter(bin);
+        } else {
+            ret.filter_internal();
         }
 
         ret
+    }
+
+    pub fn filter_internal(&mut self) {
+        let ps = SyntaxSet::load_defaults_newlines();
+        let ts = ThemeSet::load_defaults();
+
+        let syntax = ps.find_syntax_by_extension("diff").unwrap();
+        let mut h = HighlightLines::new(syntax, &ts.themes["base16-ocean.dark"]);
+        let mut cb = CellBuffer::default();
+        cb.set_growable(true);
+        let mut i = 0;
+        let mut j = 0;
+        let mut max_w = 0;
+        for line in LinesWithEndings::from(&self.text) { // LinesWithEndings enables use of newlines mode
+            let ranges: Vec<(Style, &str)> = h.highlight_line(line, &ps).unwrap();
+            for &(ref style, s) in &ranges {
+                write_string_to_grid(s, &mut cb,
+                            Color::Rgb(style.foreground.r, style.foreground.g, style.foreground.b),
+                            Color::Rgb(style.background.r, style.background.g, style.background.b),
+                            Attr::DEFAULT,
+                            ((j, i), (0, 0)),
+                            None,
+                            );
+                j = j + s.len();
+            }
+            max_w = std::cmp::max(j, max_w);
+            j = 0;
+            i+=1;
+        }
+
+        self.height = i;
+        self.width = max_w;
+        self.filtered_content = Some(("Internal Syntax highligthing with syntect".to_string(), Ok(cb)));
     }
 
     pub fn filter(&mut self, cmd: &str) {
