@@ -316,6 +316,7 @@ pub struct RateLimit {
     pub timer: crate::jobs::Timer,
     rate: std::time::Duration,
     pub active: bool,
+    retries: Option<u8>,
 }
 
 impl RateLimit {
@@ -328,7 +329,18 @@ impl RateLimit {
             ),
             rate: std::time::Duration::from_millis(millis / reqs),
             active: false,
+            retries: None,
         }
+    }
+
+    pub fn once(mut self) -> Self {
+        self.retries = Some(1);
+        self
+    }
+
+    pub fn exponential_backoff(mut self, n: u8) -> Self {
+        self.retries = Some(n);
+        self
     }
 
     pub fn reset(&mut self) {
@@ -341,9 +353,22 @@ impl RateLimit {
         if self.last_tick + self.rate > now {
             self.active = false;
         } else {
-            self.timer.rearm();
-            self.last_tick = now;
-            self.active = true;
+            let jitter = if self.retries.is_some() {
+                Some(melib::email::compose::random::random_u64() % 1000)
+            } else {
+                None
+            };
+            if let Some(v) = self.retries {
+                self.retries = Some(v.saturating_sub(1));
+            }
+            self.active = self.retries.is_none() || self.retries != Some(0);
+            if self.active {
+                self.timer.rearm();
+                self.last_tick = now;
+                if let Some(jitter) = jitter {
+                    self.last_tick += std::time::Duration::from_millis(jitter);
+                }
+            }
         }
         self.active
     }

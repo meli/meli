@@ -25,6 +25,7 @@
 
 use super::{AccountConf, FileMailboxConf};
 use crate::jobs::{JobExecutor, JobId, JoinHandle};
+use crate::RateLimit;
 use indexmap::IndexMap;
 use melib::backends::*;
 use melib::email::*;
@@ -131,10 +132,46 @@ impl MailboxEntry {
 }
 
 #[derive(Debug)]
+pub enum IsOnline {
+    Unitialized {
+        last_activity: std::time::Instant,
+        rate_limit: RateLimit,
+    },
+    Yes {
+        last_activity: std::time::Instant,
+    },
+    No {
+        last_activity: std::time::Instant,
+        err: MeliError,
+    },
+    NoWillRetry {
+        last_activity: std::time::Instant,
+        err: MeliError,
+        rate_limit: RateLimit,
+    },
+}
+
+impl IsOnline {
+    #[inline(always)]
+    pub fn as_err(&self) -> Option<&MeliError> {
+        if let IsOnline::No { ref err, .. } | IsOnline::NoWillRetry { ref err, .. } = self {
+            Some(err)
+        } else {
+            None
+        }
+    }
+
+    #[inline(always)]
+    pub fn is_ok(&self) -> bool {
+        matches!(&self, IsOnline::Yes { .. })
+    }
+}
+
+#[derive(Debug)]
 pub struct Account {
     name: String,
     hash: AccountHash,
-    pub is_online: Result<()>,
+    pub is_online: IsOnline,
     pub(crate) mailbox_entries: IndexMap<MailboxHash, MailboxEntry>,
     pub(crate) mailboxes_order: Vec<MailboxHash>,
     tree: Vec<MailboxNode>,
@@ -338,6 +375,10 @@ impl core::fmt::Display for JobRequest {
 }
 
 impl JobRequest {
+    pub fn is_mailboxes(&self) -> bool {
+        matches!(self, JobRequest::Mailboxes { .. })
+    }
+
     pub fn is_watch(&self) -> bool {
         matches!(self, JobRequest::Watch { .. })
     }
@@ -518,9 +559,14 @@ impl Account {
             hash,
             name,
             is_online: if !backend.capabilities().is_remote {
-                Ok(())
+                IsOnline::Yes {
+                    last_activity: std::time::Instant::now(),
+                }
             } else {
-                Err(MeliError::new("Attempting connection."))
+                IsOnline::Unitialized {
+                    last_activity: std::time::Instant::now(),
+                    rate_limit: RateLimit::new(1, 1, job_executor.clone()).exponential_backoff(5),
+                }
             },
             mailbox_entries: Default::default(),
             mailboxes_order: Default::default(),
@@ -1555,36 +1601,25 @@ impl Account {
 
     /* Call only in Context::is_online, since only Context can launch the watcher threads if an
      * account goes from offline to online. */
-    pub fn is_online(&mut self) -> Result<()> {
-        if !self.backend_capabilities.is_remote && !self.backend_capabilities.is_async {
-            return Ok(());
-        }
-
-        if self.is_online.is_err()
-            && self
-                .is_online
-                .as_ref()
-                .unwrap_err()
-                .kind
-                .is_authentication()
-        {
-            return self.is_online.clone();
-        }
-        if self.is_online.is_ok() {
-            return Ok(());
-        }
-        if !self.active_jobs.values().any(JobRequest::is_online) {
-            let online_job = self.backend.read().unwrap().is_online();
-            if let Ok(online_job) = online_job {
-                let handle = if self.backend_capabilities.is_async {
-                    self.job_executor.spawn_specialized(online_job)
-                } else {
-                    self.job_executor.spawn_blocking(online_job)
-                };
-                self.insert_job(handle.job_id, JobRequest::IsOnline { handle });
+    pub fn is_online(&mut self) -> &IsOnline {
+        match &self.is_online {
+            _ if !self.backend_capabilities.is_remote && !self.backend_capabilities.is_async => {}
+            IsOnline::Unitialized { .. } | IsOnline::No { .. } | IsOnline::Yes { .. } => {}
+            IsOnline::NoWillRetry { .. }
+                if self.active_jobs.values().any(JobRequest::is_online) => {}
+            IsOnline::NoWillRetry { .. } => {
+                let online_job = self.backend.read().unwrap().is_online();
+                if let Ok(online_job) = online_job {
+                    let handle = if self.backend_capabilities.is_async {
+                        self.job_executor.spawn_specialized(online_job)
+                    } else {
+                        self.job_executor.spawn_blocking(online_job)
+                    };
+                    self.insert_job(handle.job_id, JobRequest::IsOnline { handle });
+                }
             }
         }
-        self.is_online.clone()
+        &self.is_online
     }
 
     pub fn search(
@@ -1632,6 +1667,135 @@ impl Account {
         }
     }
 
+    pub fn update_status(&mut self, result: Result<()>) {
+        if let Err(err) = result {
+            if err.kind.is_authentication() {
+                self.sender
+                    .send(ThreadEvent::UIEvent(UIEvent::Notification(
+                        Some(format!("{}: authentication error", &self.name)),
+                        err.to_string(),
+                        Some(crate::types::NotificationType::Error(err.kind)),
+                    )))
+                    .expect("Could not send event on main channel");
+                self.is_online = IsOnline::No {
+                    last_activity: std::time::Instant::now(),
+                    err,
+                };
+                return;
+            }
+            if let IsOnline::NoWillRetry {
+                ref mut last_activity,
+                err: ref mut err_ptr,
+                ref mut rate_limit,
+            } = self.is_online
+            {
+                if rate_limit.active {
+                    *last_activity = std::time::Instant::now();
+                    *err_ptr = err;
+                } else {
+                    self.is_online = IsOnline::No {
+                        last_activity: std::time::Instant::now(),
+                        err,
+                    };
+                }
+            } else {
+                self.is_online = IsOnline::NoWillRetry {
+                    last_activity: std::time::Instant::now(),
+                    err,
+                    rate_limit: RateLimit::new(1, 1, self.job_executor.clone())
+                        .exponential_backoff(5),
+                };
+            }
+        } else {
+            if self.mailbox_entries.is_empty() {
+                let backend = self.backend.read().unwrap();
+                if let Ok(mailboxes_job) = backend.mailboxes() {
+                    if let Ok(online_job) = backend.is_online() {
+                        let handle = if backend.capabilities().is_async {
+                            self.job_executor
+                                .spawn_specialized(online_job.then(|_| mailboxes_job))
+                        } else {
+                            self.job_executor
+                                .spawn_blocking(online_job.then(|_| mailboxes_job))
+                        };
+                        let job_id = handle.job_id;
+                        self.active_jobs
+                            .insert(job_id, JobRequest::Mailboxes { handle });
+                        self.active_job_instants
+                            .insert(std::time::Instant::now(), job_id);
+                        self.sender
+                            .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
+                                StatusEvent::NewJob(job_id),
+                            )))
+                            .unwrap();
+                    }
+                }
+                self.is_online = IsOnline::Unitialized {
+                    last_activity: std::time::Instant::now(),
+                    rate_limit: RateLimit::new(1, 1, self.job_executor.clone())
+                        .exponential_backoff(5),
+                };
+            } else {
+                if let IsOnline::Yes {
+                    ref mut last_activity,
+                } = self.is_online
+                {
+                    *last_activity = std::time::Instant::now();
+                } else {
+                    self.is_online = IsOnline::Yes {
+                        last_activity: std::time::Instant::now(),
+                    };
+                }
+            }
+        }
+        self.sender
+            .send(ThreadEvent::UIEvent(UIEvent::AccountStatusChange(
+                self.hash, None,
+            )))
+            .unwrap();
+    }
+
+    pub fn retry_mailboxes(&mut self) {
+        match self.is_online {
+            IsOnline::NoWillRetry {
+                ref rate_limit,
+                ref err,
+                last_activity,
+            } if !rate_limit.active => {
+                self.is_online = IsOnline::No {
+                    err: err.clone(),
+                    last_activity,
+                };
+                return;
+            }
+            IsOnline::NoWillRetry { .. } | IsOnline::Unitialized { .. } => {}
+            _ => return,
+        }
+
+        let backend = self.backend.read().unwrap();
+        if let Ok(mailboxes_job) = backend.mailboxes() {
+            if let Ok(online_job) = backend.is_online() {
+                let handle = if backend.capabilities().is_async {
+                    self.job_executor
+                        .spawn_specialized(online_job.then(|_| mailboxes_job))
+                } else {
+                    self.job_executor
+                        .spawn_blocking(online_job.then(|_| mailboxes_job))
+                };
+                let job_id = handle.job_id;
+                self.active_jobs
+                    .insert(job_id, JobRequest::Mailboxes { handle });
+                self.active_job_instants
+                    .insert(std::time::Instant::now(), job_id);
+                self.sender
+                    .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
+                        StatusEvent::NewJob(job_id),
+                    )))
+                    .unwrap();
+            }
+        }
+    }
+
     pub fn process_event(&mut self, job_id: &JobId) -> bool {
         self.sender
             .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
@@ -1644,26 +1808,8 @@ impl Account {
                 JobRequest::Mailboxes { ref mut handle } => {
                     if let Ok(Some(mailboxes)) = handle.chan.try_recv() {
                         if let Err(err) = mailboxes.and_then(|mailboxes| self.init(mailboxes)) {
-                            if err.kind.is_authentication() {
-                                self.sender
-                                    .send(ThreadEvent::UIEvent(UIEvent::Notification(
-                                        Some(format!("{}: authentication error", &self.name)),
-                                        err.to_string(),
-                                        Some(crate::types::NotificationType::Error(err.kind)),
-                                    )))
-                                    .expect("Could not send event on main channel");
-                                self.is_online = Err(err);
-                                return true;
-                            }
-                            let mailboxes_job = self.backend.read().unwrap().mailboxes();
-                            if let Ok(mailboxes_job) = mailboxes_job {
-                                let handle = if self.backend_capabilities.is_async {
-                                    self.job_executor.spawn_specialized(mailboxes_job)
-                                } else {
-                                    self.job_executor.spawn_blocking(mailboxes_job)
-                                };
-                                self.insert_job(handle.job_id, JobRequest::Mailboxes { handle });
-                            };
+                            self.update_status(Err(err));
+                            return true;
                         } else {
                             self.sender
                                 .send(ThreadEvent::UIEvent(UIEvent::AccountStatusChange(
@@ -1770,20 +1916,13 @@ impl Account {
                             )))
                             .unwrap();
                         if is_online.is_ok() {
-                            if self.is_online.is_err()
-                                && !self
-                                    .is_online
-                                    .as_ref()
-                                    .unwrap_err()
-                                    .kind
-                                    .is_authentication()
-                            {
+                            if self.is_online.as_err().is_none() {
                                 self.watch();
                             }
-                            self.is_online = Ok(());
+                            self.update_status(Ok(()));
                             return true;
                         }
-                        self.is_online = is_online;
+                        self.update_status(is_online);
                     }
                     let online_job = self.backend.read().unwrap().is_online();
                     if let Ok(online_job) = online_job {
@@ -1800,30 +1939,9 @@ impl Account {
                         Err(_) => { /* canceled */ }
                         Ok(None) => {}
                         Ok(Some(Ok(()))) => {
-                            if self.is_online.is_err()
-                                && !self
-                                    .is_online
-                                    .as_ref()
-                                    .unwrap_err()
-                                    .kind
-                                    .is_authentication()
-                            {
+                            self.update_status(Ok(()));
+                            if self.is_online.as_err().is_none() {
                                 self.watch();
-                            }
-                            if !(self.is_online.is_err()
-                                && self
-                                    .is_online
-                                    .as_ref()
-                                    .unwrap_err()
-                                    .kind
-                                    .is_authentication())
-                            {
-                                self.is_online = Ok(());
-                                self.sender
-                                    .send(ThreadEvent::UIEvent(UIEvent::AccountStatusChange(
-                                        self.hash, None,
-                                    )))
-                                    .unwrap();
                             }
                         }
                         Ok(Some(Err(err))) => {
@@ -1838,7 +1956,7 @@ impl Account {
                                     self.insert_job(handle.job_id, JobRequest::IsOnline { handle });
                                 };
                             }
-                            self.is_online = Err(err);
+                            self.update_status(Err(err));
                             self.sender
                                 .send(ThreadEvent::UIEvent(UIEvent::AccountStatusChange(
                                     self.hash, None,

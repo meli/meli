@@ -24,7 +24,7 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::time::SystemTime;
 
-fn random_u64() -> u64 {
+pub fn random_u64() -> u64 {
     let mut f = File::open("/dev/urandom").unwrap();
     let mut buffer = [0; 8];
 

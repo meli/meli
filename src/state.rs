@@ -134,6 +134,11 @@ impl Context {
         } = self;
         let was_online = accounts[account_pos].is_online.is_ok();
         let ret = accounts[account_pos].is_online();
+        let ret = if let Some(err) = ret.as_err() {
+            Err(err.clone())
+        } else {
+            Ok(())
+        };
         if ret.is_ok() && !was_online {
             debug!("inserting mailbox hashes:");
             for mailbox_node in accounts[account_pos].list_mailboxes() {
@@ -1039,6 +1044,22 @@ impl State {
                 self.draw_rate_limit.reset();
                 self.redraw();
                 return;
+            }
+            UIEvent::Timer(id) => {
+                for i in 0..self.context.accounts.len() {
+                    use crate::conf::accounts::IsOnline;
+
+                    match self.context.accounts[i].is_online {
+                        IsOnline::Unitialized { ref rate_limit, .. }
+                        | IsOnline::NoWillRetry { ref rate_limit, .. }
+                            if rate_limit.id() == id =>
+                        {
+                            self.context.accounts[i].retry_mailboxes();
+                            return;
+                        }
+                        _ => {}
+                    }
+                }
             }
             UIEvent::Input(ref key)
                 if *key
