@@ -155,24 +155,24 @@ impl FileMailboxConf {
 use crate::conf::deserializers::extra_settings;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct FileAccount {
-    root_mailbox: String,
-    format: String,
-    identity: String,
+    pub root_mailbox: String,
+    pub format: String,
+    pub identity: String,
     #[serde(default)]
-    extra_identities: Vec<String>,
+    pub extra_identities: Vec<String>,
     #[serde(default = "none")]
-    display_name: Option<String>,
+    pub display_name: Option<String>,
 
     #[serde(default = "false_val")]
-    read_only: bool,
+    pub read_only: bool,
     #[serde(default)]
-    subscribed_mailboxes: Vec<String>,
+    pub subscribed_mailboxes: Vec<String>,
     #[serde(default)]
-    mailboxes: IndexMap<String, FileMailboxConf>,
+    pub mailboxes: IndexMap<String, FileMailboxConf>,
     #[serde(default)]
-    search_backend: SearchBackend,
+    pub search_backend: SearchBackend,
     #[serde(default)]
-    order: (SortField, SortOrder),
+    pub order: (SortField, SortOrder),
     #[serde(default = "false_val")]
     pub manual_refresh: bool,
     #[serde(default = "none")]
@@ -920,9 +920,9 @@ mod pp {
 #[serde(deny_unknown_fields)]
 pub struct LogSettings {
     #[serde(default)]
-    log_file: Option<PathBuf>,
+    pub log_file: Option<PathBuf>,
     #[serde(default)]
-    maximum_level: melib::LoggingLevel,
+    pub maximum_level: melib::LoggingLevel,
 }
 
 pub use dotaddressable::*;
