@@ -475,7 +475,7 @@ impl<K: std::cmp::Eq + std::hash::Hash, V> Deref for RwRef<'_, K, V> {
     type Target = V;
 
     fn deref(&self) -> &V {
-        self.guard.get(&self.hash).unwrap()
+        self.guard.get(&self.hash).expect("Hash was not found")
     }
 }
 
@@ -486,7 +486,7 @@ pub struct RwRefMut<'g, K: std::cmp::Eq + std::hash::Hash, V> {
 
 impl<K: std::cmp::Eq + std::hash::Hash, V> DerefMut for RwRefMut<'_, K, V> {
     fn deref_mut(&mut self) -> &mut V {
-        self.guard.get_mut(&self.hash).unwrap()
+        self.guard.get_mut(&self.hash).expect("Hash was not found")
     }
 }
 
@@ -494,6 +494,6 @@ impl<K: std::cmp::Eq + std::hash::Hash, V> Deref for RwRefMut<'_, K, V> {
     type Target = V;
 
     fn deref(&self) -> &V {
-        self.guard.get(&self.hash).unwrap()
+        self.guard.get(&self.hash).expect("Hash was not found")
     }
 }
