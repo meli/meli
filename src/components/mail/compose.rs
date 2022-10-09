@@ -228,21 +228,21 @@ impl Composer {
             .as_ref()
             .map(|v| v.iter().map(String::as_str).collect::<Vec<&str>>())
             .unwrap_or_default();
-            let subject = subject
-                .as_ref()
-                .strip_prefixes_from_list(if prefix_list.is_empty() {
+            let subject_stripped = subject.as_ref().strip_prefixes_from_list(
+                if prefix_list.is_empty() {
                     <&str>::USUAL_PREFIXES
                 } else {
                     &prefix_list
-                })
-                .to_string();
+                },
+                Some(1),
+            ) == &subject.as_ref();
 
             let prefix =
                 account_settings!(context[ret.account_hash].composing.reply_prefix).as_str();
-            if !subject.starts_with(prefix) {
+            if subject_stripped {
                 format!("{prefix} {subject}", prefix = prefix, subject = subject)
             } else {
-                subject
+                subject.to_string()
             }
         };
         ret.draft.set_header("Subject", subject);
@@ -2389,4 +2389,62 @@ fn attribution_string(
             .unwrap_or_else(|| "\"\"".to_string()),
     );
     melib::datetime::timestamp_to_string(date, Some(fmt.as_str()), posix)
+}
+
+#[test]
+fn test_compose_reply_subject_prefix() {
+    let raw_mail = r#"From: "some name" <some@example.com>
+To: "me" <myself@example.com>
+Cc:
+Subject: RE: your e-mail
+Message-ID: <h2g7f.z0gy2pgaen5m@example.com>
+Content-Type: text/plain
+
+hello world.
+"#;
+
+    let envelope = Envelope::from_bytes(raw_mail.as_bytes(), None).expect("Could not parse mail");
+    let mut context = Context::new_mock();
+    let account_hash = context.accounts[0].hash();
+    let mailbox_hash = 0;
+    let envelope_hash = envelope.hash();
+    context.accounts[0]
+        .collection
+        .insert(envelope, mailbox_hash);
+    let composer = Composer::reply_to(
+        (account_hash, mailbox_hash, envelope_hash),
+        String::new(),
+        &mut context,
+        false,
+    );
+    assert_eq!(&composer.draft.headers()["Subject"], "RE: your e-mail");
+    assert_eq!(
+        &composer.draft.headers()["To"],
+        r#"some name <some@example.com>"#
+    );
+    let raw_mail = r#"From: "some name" <some@example.com>
+To: "me" <myself@example.com>
+Cc:
+Subject: your e-mail
+Message-ID: <h2g7f.z0gy2pgaen5m@example.com>
+Content-Type: text/plain
+
+hello world.
+"#;
+    let envelope = Envelope::from_bytes(raw_mail.as_bytes(), None).expect("Could not parse mail");
+    let envelope_hash = envelope.hash();
+    context.accounts[0]
+        .collection
+        .insert(envelope, mailbox_hash);
+    let composer = Composer::reply_to(
+        (account_hash, mailbox_hash, envelope_hash),
+        String::new(),
+        &mut context,
+        false,
+    );
+    assert_eq!(&composer.draft.headers()["Subject"], "Re: your e-mail");
+    assert_eq!(
+        &composer.draft.headers()["To"],
+        r#"some name <some@example.com>"#
+    );
 }

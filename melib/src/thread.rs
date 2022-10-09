@@ -179,7 +179,9 @@ macro_rules! make {
 /// use melib::thread::SubjectPrefix;
 ///
 /// let mut subject = "Re: RE: Res: Re: Res: Subject";
-/// assert_eq!(subject.strip_prefixes_from_list(<&str>::USUAL_PREFIXES), &"Subject");
+/// assert_eq!(subject.strip_prefixes_from_list(<&str>::USUAL_PREFIXES, None), &"Subject");
+/// let mut subject = "Re: RE: Res: Re: Res: Subject";
+/// assert_eq!(subject.strip_prefixes_from_list(<&str>::USUAL_PREFIXES, Some(1)), &"RE: Res: Re: Res: Subject");
 /// ```
 pub trait SubjectPrefix {
     const USUAL_PREFIXES: &'static [&'static str] = &[
@@ -279,7 +281,7 @@ pub trait SubjectPrefix {
     ];
     fn is_a_reply(&self) -> bool;
     fn strip_prefixes(&mut self) -> &mut Self;
-    fn strip_prefixes_from_list(&mut self, list: &[&str]) -> &mut Self;
+    fn strip_prefixes_from_list(&mut self, list: &[&str], times: Option<u8>) -> &mut Self;
 }
 
 impl SubjectPrefix for &[u8] {
@@ -335,10 +337,10 @@ impl SubjectPrefix for &[u8] {
         self
     }
 
-    fn strip_prefixes_from_list(&mut self, list: &[&str]) -> &mut Self {
+    fn strip_prefixes_from_list(&mut self, list: &[&str], mut times: Option<u8>) -> &mut Self {
         let result = {
             let mut slice = self.trim();
-            loop {
+            'outer: loop {
                 let len = slice.len();
                 for prefix in list.iter() {
                     if slice
@@ -347,10 +349,14 @@ impl SubjectPrefix for &[u8] {
                         .unwrap_or(false)
                     {
                         slice = &slice[prefix.len()..];
+                        slice = slice.trim();
+                        times = times.map(|u| u.saturating_sub(1));
+                        if times == Some(0) {
+                            break 'outer;
+                        }
                     }
-                    slice = slice.trim();
                 }
-                if slice.len() == len {
+                if slice.len() == len || times == Some(0) {
                     break;
                 }
             }
@@ -408,10 +414,10 @@ impl SubjectPrefix for &str {
         self
     }
 
-    fn strip_prefixes_from_list(&mut self, list: &[&str]) -> &mut Self {
+    fn strip_prefixes_from_list(&mut self, list: &[&str], mut times: Option<u8>) -> &mut Self {
         let result = {
             let mut slice = self.trim();
-            loop {
+            'outer: loop {
                 let len = slice.len();
                 for prefix in list.iter() {
                     if slice
@@ -420,10 +426,14 @@ impl SubjectPrefix for &str {
                         .unwrap_or(false)
                     {
                         slice = &slice[prefix.len()..];
+                        slice = slice.trim();
+                        times = times.map(|u| u.saturating_sub(1));
+                        if times == Some(0) {
+                            break 'outer;
+                        }
                     }
-                    slice = slice.trim();
                 }
-                if slice.len() == len {
+                if slice.len() == len || times == Some(0) {
                     break;
                 }
             }

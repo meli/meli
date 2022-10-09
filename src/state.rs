@@ -163,6 +163,75 @@ impl Context {
         let idx = self.accounts.get_index_of(&account_hash).unwrap();
         self.is_online_idx(idx)
     }
+
+    #[cfg(test)]
+    pub fn new_mock() -> Self {
+        let (sender, receiver) =
+            crossbeam::channel::bounded(32 * ::std::mem::size_of::<ThreadEvent>());
+        let job_executor = Arc::new(JobExecutor::new(sender.clone()));
+        let input_thread = unbounded();
+        let input_thread_pipe = nix::unistd::pipe()
+            .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send + Sync + 'static>)
+            .unwrap();
+        let backends = Backends::new();
+        let settings = Box::new(Settings::new().unwrap());
+        let accounts = vec![{
+            let name = "test".to_string();
+            let mut account_conf = AccountConf::default();
+            account_conf.conf.format = "maildir".to_string();
+            account_conf.account.format = "maildir".to_string();
+            account_conf.account.root_mailbox = "/tmp/".to_string();
+            let sender = sender.clone();
+            let account_hash = {
+                use std::collections::hash_map::DefaultHasher;
+                use std::hash::Hasher;
+                let mut hasher = DefaultHasher::new();
+                hasher.write(name.as_bytes());
+                hasher.finish()
+            };
+            Account::new(
+                account_hash,
+                name,
+                account_conf,
+                &backends,
+                job_executor.clone(),
+                sender.clone(),
+                BackendEventConsumer::new(Arc::new(
+                    move |account_hash: AccountHash, ev: BackendEvent| {
+                        sender
+                            .send(ThreadEvent::UIEvent(UIEvent::BackendEvent(
+                                account_hash,
+                                ev,
+                            )))
+                            .unwrap();
+                    },
+                )),
+            )
+            .unwrap()
+        }];
+        let accounts = accounts.into_iter().map(|acc| (acc.hash(), acc)).collect();
+        let working = Arc::new(());
+        let control = Arc::downgrade(&working);
+        Context {
+            accounts,
+            settings,
+            dirty_areas: VecDeque::with_capacity(0),
+            replies: VecDeque::with_capacity(0),
+            temp_files: Vec::new(),
+            job_executor,
+            children: vec![],
+
+            input_thread: InputHandler {
+                pipe: input_thread_pipe,
+                rx: input_thread.1,
+                tx: input_thread.0,
+                control,
+                state_tx: sender.clone(),
+            },
+            sender,
+            receiver,
+        }
+    }
 }
 
 /// A State object to manage and own components and components of the UI. `State` is responsible for
