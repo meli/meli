@@ -345,18 +345,22 @@ impl FileSettings {
             if path_string.is_empty() {
                 return Err(MeliError::new("No configuration found."));
             }
+            #[cfg(not(test))]
             let ask = Ask {
                 message: format!(
                     "No configuration found. Would you like to generate one in {}?",
                     path_string
                 ),
             };
+            #[cfg(not(test))]
             if ask.run() {
                 create_config_file(&config_path)?;
                 return Err(MeliError::new(
                     "Edit the sample configuration and relaunch meli.",
                 ));
             }
+            #[cfg(test)]
+            return Ok(FileSettings::default());
             return Err(MeliError::new("No configuration file found."));
         }
 
