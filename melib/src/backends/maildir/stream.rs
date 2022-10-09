@@ -46,7 +46,7 @@ impl MaildirStream {
         unseen: Arc<Mutex<usize>>,
         total: Arc<Mutex<usize>>,
         mut path: PathBuf,
-        root_path: PathBuf,
+        root_mailbox: PathBuf,
         map: HashIndexes,
         mailbox_index: Arc<Mutex<HashMap<EnvelopeHash, MailboxHash>>>,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<Vec<Envelope>>> + Send + 'static>>> {
@@ -73,7 +73,7 @@ impl MaildirStream {
                         mailbox_hash,
                         unseen.clone(),
                         total.clone(),
-                        root_path.clone(),
+                        root_mailbox.clone(),
                         map.clone(),
                         mailbox_index.clone(),
                     )) as Pin<Box<dyn Future<Output = _> + Send + 'static>>
@@ -91,7 +91,7 @@ impl MaildirStream {
         mailbox_hash: MailboxHash,
         unseen: Arc<Mutex<usize>>,
         total: Arc<Mutex<usize>>,
-        root_path: PathBuf,
+        root_mailbox: PathBuf,
         map: HashIndexes,
         mailbox_index: Arc<Mutex<HashMap<EnvelopeHash, MailboxHash>>>,
     ) -> Result<Vec<Envelope>> {
@@ -102,7 +102,7 @@ impl MaildirStream {
             /* Check if we have a cache file with this email's
              * filename */
             let file_name = PathBuf::from(&file)
-                .strip_prefix(&root_path)
+                .strip_prefix(&root_mailbox)
                 .unwrap()
                 .to_path_buf();
             if let Some(cached) = cache_dir.find_cache_file(&file_name) {

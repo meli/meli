@@ -205,7 +205,7 @@ impl MailBackend for MaildirType {
         let unseen = mailbox.unseen.clone();
         let total = mailbox.total.clone();
         let path: PathBuf = mailbox.fs_path().into();
-        let root_path = self.path.to_path_buf();
+        let root_mailbox = self.path.to_path_buf();
         let map = self.hash_indexes.clone();
         let mailbox_index = self.mailbox_index.clone();
         super::stream::MaildirStream::new(
@@ -214,7 +214,7 @@ impl MailBackend for MaildirType {
             unseen,
             total,
             path,
-            root_path,
+            root_mailbox,
             map,
             mailbox_index,
         )
@@ -231,7 +231,7 @@ impl MailBackend for MaildirType {
 
         let mailbox: &MaildirMailbox = &self.mailboxes[&mailbox_hash];
         let path: PathBuf = mailbox.fs_path().into();
-        let root_path = self.path.to_path_buf();
+        let root_mailbox = self.path.to_path_buf();
         let map = self.hash_indexes.clone();
         let mailbox_index = self.mailbox_index.clone();
 
@@ -266,7 +266,7 @@ impl MailBackend for MaildirType {
                             .lock()
                             .unwrap()
                             .insert(env.hash(), mailbox_hash);
-                        let file_name = file.strip_prefix(&root_path).unwrap().to_path_buf();
+                        let file_name = file.strip_prefix(&root_mailbox).unwrap().to_path_buf();
                         if let Ok(cached) = cache_dir.place_cache_file(file_name) {
                             /* place result in cache directory */
                             let f = fs::File::create(cached)?;
@@ -334,10 +334,12 @@ impl MailBackend for MaildirType {
             hasher.write(self.name.as_bytes());
             hasher.finish()
         };
-        let root_path = self.path.to_path_buf();
-        watcher.watch(&root_path, RecursiveMode::Recursive).unwrap();
+        let root_mailbox = self.path.to_path_buf();
+        watcher
+            .watch(&root_mailbox, RecursiveMode::Recursive)
+            .unwrap();
         let cache_dir = xdg::BaseDirectories::with_profile("meli", &self.name).unwrap();
-        debug!("watching {:?}", root_path);
+        debug!("watching {:?}", root_mailbox);
         let hash_indexes = self.hash_indexes.clone();
         let mailbox_index = self.mailbox_index.clone();
         let root_mailbox_hash: MailboxHash = self
@@ -385,7 +387,7 @@ impl MailBackend for MaildirType {
                             let mailbox_hash = get_path_hash!(pathbuf);
                             let file_name = pathbuf
                                 .as_path()
-                                .strip_prefix(&root_path)
+                                .strip_prefix(&root_mailbox)
                                 .unwrap()
                                 .to_path_buf();
                             if let Ok(env) = add_path_to_index(
@@ -429,7 +431,7 @@ impl MailBackend for MaildirType {
                                 &mut hash_indexes_lock.entry(mailbox_hash).or_default();
                             let file_name = pathbuf
                                 .as_path()
-                                .strip_prefix(&root_path)
+                                .strip_prefix(&root_mailbox)
                                 .unwrap()
                                 .to_path_buf();
                             /* Linear search in hash_index to find old hash */
@@ -591,7 +593,7 @@ impl MailBackend for MaildirType {
                                     );
                                     let file_name = dest
                                         .as_path()
-                                        .strip_prefix(&root_path)
+                                        .strip_prefix(&root_mailbox)
                                         .unwrap()
                                         .to_path_buf();
                                     drop(hash_indexes_lock);
@@ -681,7 +683,7 @@ impl MailBackend for MaildirType {
                                 }
                                 let file_name = dest
                                     .as_path()
-                                    .strip_prefix(&root_path)
+                                    .strip_prefix(&root_mailbox)
                                     .unwrap()
                                     .to_path_buf();
                                 debug!("filename = {:?}", file_name);
@@ -730,7 +732,7 @@ impl MailBackend for MaildirType {
                                 drop(hash_indexes_lock);
                                 let file_name = dest
                                     .as_path()
-                                    .strip_prefix(&root_path)
+                                    .strip_prefix(&root_mailbox)
                                     .unwrap()
                                     .to_path_buf();
                                 if let Ok(env) = add_path_to_index(
@@ -1160,24 +1162,29 @@ impl MaildirType {
             }
             Ok(children)
         }
-        let root_path = PathBuf::from(settings.root_mailbox()).expand();
-        if !root_path.exists() {
+        let root_mailbox = PathBuf::from(settings.root_mailbox()).expand();
+        if !root_mailbox.exists() {
             return Err(MeliError::new(format!(
-                "Configuration error ({}): root_path `{}` is not a valid directory.",
+                "Configuration error ({}): root_mailbox `{}` is not a valid directory.",
                 settings.name(),
                 settings.root_mailbox.as_str()
             )));
-        } else if !root_path.is_dir() {
+        } else if !root_mailbox.is_dir() {
             return Err(MeliError::new(format!(
-                "Configuration error ({}): root_path `{}` is not a directory.",
+                "Configuration error ({}): root_mailbox `{}` is not a directory.",
                 settings.name(),
                 settings.root_mailbox.as_str()
             )));
         }
 
         if let Ok(f) = MaildirMailbox::new(
-            root_path.to_str().unwrap().to_string(),
-            root_path.file_name().unwrap().to_str().unwrap().to_string(),
+            root_mailbox.to_str().unwrap().to_string(),
+            root_mailbox
+                .file_name()
+                .unwrap_or_default()
+                .to_str()
+                .unwrap_or_default()
+                .to_string(),
             None,
             Vec::with_capacity(0),
             false,
@@ -1187,7 +1194,7 @@ impl MaildirType {
         }
 
         if mailboxes.is_empty() {
-            let children = recurse_mailboxes(&mut mailboxes, settings, &root_path)?;
+            let children = recurse_mailboxes(&mut mailboxes, settings, &root_mailbox)?;
             for c in &children {
                 if let Some(f) = mailboxes.get_mut(c) {
                     f.parent = None;
@@ -1195,7 +1202,7 @@ impl MaildirType {
             }
         } else {
             let root_hash = *mailboxes.keys().next().unwrap();
-            let children = recurse_mailboxes(&mut mailboxes, settings, &root_path)?;
+            let children = recurse_mailboxes(&mut mailboxes, settings, &root_mailbox)?;
             for c in &children {
                 if let Some(f) = mailboxes.get_mut(c) {
                     f.parent = Some(root_hash);
@@ -1229,7 +1236,7 @@ impl MaildirType {
             mailbox_index: Default::default(),
             event_consumer,
             collection: Default::default(),
-            path: root_path,
+            path: root_mailbox,
         }))
     }
 
@@ -1303,16 +1310,16 @@ impl MaildirType {
     }
 
     pub fn validate_config(s: &mut AccountSettings) -> Result<()> {
-        let root_path = PathBuf::from(s.root_mailbox()).expand();
-        if !root_path.exists() {
+        let root_mailbox = PathBuf::from(s.root_mailbox()).expand();
+        if !root_mailbox.exists() {
             return Err(MeliError::new(format!(
-                "Configuration error ({}): root_path `{}` is not a valid directory.",
+                "Configuration error ({}): root_mailbox `{}` is not a valid directory.",
                 s.name(),
                 s.root_mailbox.as_str()
             )));
-        } else if !root_path.is_dir() {
+        } else if !root_mailbox.is_dir() {
             return Err(MeliError::new(format!(
-                "Configuration error ({}): root_path `{}` is not a directory.",
+                "Configuration error ({}): root_mailbox `{}` is not a directory.",
                 s.name(),
                 s.root_mailbox.as_str()
             )));

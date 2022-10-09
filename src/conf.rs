@@ -1261,7 +1261,7 @@ send_mail = '/bin/false'
         .write_all("[composing]\nsend_mail = '/bin/false'\n".as_bytes())
         .unwrap();
     let err = FileSettings::validate(new_file.path.clone(), false, true).unwrap_err();
-    assert_eq!(err.summary.as_ref(), "Configuration error (account-name): root_path `/path/to/root/mailbox` is not a valid directory.");
+    assert_eq!(err.summary.as_ref(), "Configuration error (account-name): root_mailbox `/path/to/root/mailbox` is not a valid directory.");
 
     /* Test unrecognised configuration entries error */
 
