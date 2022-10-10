@@ -345,6 +345,9 @@ fn run_app(opt: Opt) -> Result<()> {
         state.register_component(Box::new(
             components::notifications::NotificationCommand::new(),
         ));
+        state.register_component(Box::new(
+            components::notifications::NotificationHistory::new(),
+        ));
     }
     let enter_command_mode: Key = state
         .context

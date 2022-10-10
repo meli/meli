@@ -23,6 +23,7 @@
 Notification handling components.
 */
 use std::process::{Command, Stdio};
+use std::sync::{Arc, Mutex};
 
 use super::*;
 
@@ -180,6 +181,19 @@ impl NotificationCommand {
     pub fn new() -> Self {
         NotificationCommand {}
     }
+
+    fn update_xbiff(path: &str) -> Result<()> {
+        let mut file = std::fs::OpenOptions::new()
+        .append(true) /* writes will append to a file instead of overwriting previous contents */
+        .create(true) /* a new file will be created if the file does not yet already exist.*/
+        .open(path)?;
+        if file.metadata()?.len() > 128 {
+            file.set_len(0)?;
+        } else {
+            std::io::Write::write_all(&mut file, b"z")?;
+        }
+        Ok(())
+    }
 }
 
 impl fmt::Display for NotificationCommand {
@@ -196,7 +210,7 @@ impl Component for NotificationCommand {
             if context.settings.notifications.enable {
                 if *kind == Some(NotificationType::NewMail) {
                     if let Some(ref path) = context.settings.notifications.xbiff_file_path {
-                        if let Err(err) = update_xbiff(path) {
+                        if let Err(err) = Self::update_xbiff(path) {
                             debug!("Could not update xbiff file: {:?}", &err);
                             melib::log(format!("Could not update xbiff file: {}.", err), ERROR);
                         }
@@ -282,15 +296,286 @@ impl Component for NotificationCommand {
     }
 }
 
-fn update_xbiff(path: &str) -> Result<()> {
-    let mut file = std::fs::OpenOptions::new()
-        .append(true) /* writes will append to a file instead of overwriting previous contents */
-        .create(true) /* a new file will be created if the file does not yet already exist.*/
-        .open(path)?;
-    if file.metadata()?.len() > 128 {
-        file.set_len(0)?;
-    } else {
-        std::io::Write::write_all(&mut file, b"z")?;
+#[derive(Debug)]
+struct NotificationLog {
+    title: Option<String>,
+    body: String,
+    kind: Option<NotificationType>,
+}
+
+/// Notification history
+#[derive(Debug)]
+pub struct NotificationHistory {
+    history: Arc<Mutex<IndexMap<std::time::Instant, NotificationLog>>>,
+    last_update: Arc<Mutex<std::time::Instant>>,
+    id: ComponentId,
+}
+
+/// Notification history view
+#[derive(Debug)]
+pub struct NotificationHistoryView {
+    theme_default: ThemeAttribute,
+    history: Arc<Mutex<IndexMap<std::time::Instant, NotificationLog>>>,
+    last_update: Arc<Mutex<std::time::Instant>>,
+    my_last_update: std::time::Instant,
+    cursor_pos: usize,
+    dirty: bool,
+    id: ComponentId,
+}
+
+impl Default for NotificationHistory {
+    fn default() -> Self {
+        Self::new()
     }
-    Ok(())
+}
+
+impl NotificationHistory {
+    pub fn new() -> Self {
+        NotificationHistory {
+            history: Arc::new(Mutex::new(IndexMap::default())),
+            last_update: Arc::new(Mutex::new(std::time::Instant::now())),
+            id: ComponentId::new_v4(),
+        }
+    }
+
+    fn new_view(&self, context: &Context) -> NotificationHistoryView {
+        NotificationHistoryView {
+            theme_default: crate::conf::value(context, "theme_default"),
+            history: self.history.clone(),
+            last_update: self.last_update.clone(),
+            my_last_update: std::time::Instant::now(),
+            cursor_pos: 0,
+            dirty: true,
+            id: ComponentId::new_v4(),
+        }
+    }
+}
+
+impl fmt::Display for NotificationHistory {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "")
+    }
+}
+
+impl fmt::Display for NotificationHistoryView {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "notifications")
+    }
+}
+
+impl Component for NotificationHistory {
+    fn draw(&mut self, _grid: &mut CellBuffer, _area: Area, _context: &mut Context) {}
+
+    fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {
+        if let UIEvent::Notification(ref title, ref body, ref kind) = event {
+            self.history.lock().unwrap().insert(
+                std::time::Instant::now(),
+                NotificationLog {
+                    title: title.clone(),
+                    body: body.to_string(),
+                    kind: *kind,
+                },
+            );
+            *self.last_update.lock().unwrap() = std::time::Instant::now();
+        }
+
+        false
+    }
+
+    fn id(&self) -> ComponentId {
+        self.id
+    }
+
+    fn is_dirty(&self) -> bool {
+        false
+    }
+
+    fn set_dirty(&mut self, _value: bool) {}
+
+    fn set_id(&mut self, id: ComponentId) {
+        self.id = id;
+    }
+
+    fn perform(&mut self, action: &str, context: &mut Context) -> Result<()> {
+        match action {
+            "clear_history" => {
+                self.history.lock().unwrap().clear();
+                *self.last_update.lock().unwrap() = std::time::Instant::now();
+                Ok(())
+            }
+            "open_notification_log" => {
+                context
+                    .replies
+                    .push_back(UIEvent::Action(Tab(New(Some(Box::new(
+                        self.new_view(context),
+                    ))))));
+                Ok(())
+            }
+            _ => Err("No actions available.".into()),
+        }
+    }
+}
+
+impl Component for NotificationHistoryView {
+    fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        if !self.is_dirty() {
+            return;
+        }
+        self.set_dirty(false);
+        self.my_last_update = std::time::Instant::now();
+        clear_area(grid, area, self.theme_default);
+        context.dirty_areas.push_back(area);
+
+        /* reserve top row for column headers */
+        let upper_left = pos_inc(upper_left!(area), (0, 1));
+        let bottom_right = bottom_right!(area);
+
+        if get_y(bottom_right) < get_y(upper_left) {
+            return;
+        }
+        let rows = get_y(bottom_right) - get_y(upper_left) + 1;
+        let page_no = (self.cursor_pos).wrapping_div(rows);
+
+        let top_idx = page_no * rows;
+        for (i, (instant, log)) in self
+            .history
+            .lock()
+            .unwrap()
+            .iter()
+            .rev()
+            .skip(top_idx)
+            .enumerate()
+        {
+            let (x, _) = write_string_to_grid(
+                &i.to_string(),
+                grid,
+                self.theme_default.fg,
+                self.theme_default.bg,
+                self.theme_default.attrs,
+                (pos_inc(upper_left, (0, i)), bottom_right),
+                None,
+            );
+            let (x, _) = write_string_to_grid(
+                &format!("{:#?}", instant),
+                grid,
+                self.theme_default.fg,
+                self.theme_default.bg,
+                self.theme_default.attrs,
+                (pos_inc(upper_left, (x + 2, i)), bottom_right),
+                None,
+            );
+            let (x, _) = write_string_to_grid(
+                &format!("{:?}", log.kind),
+                grid,
+                self.theme_default.fg,
+                self.theme_default.bg,
+                self.theme_default.attrs,
+                (pos_inc(upper_left, (x + 2, i)), bottom_right),
+                None,
+            );
+
+            let (x, _) = write_string_to_grid(
+                log.title.as_deref().unwrap_or_default(),
+                grid,
+                self.theme_default.fg,
+                self.theme_default.bg,
+                self.theme_default.attrs,
+                (pos_inc(upper_left, (x + 2, i)), bottom_right),
+                None,
+            );
+            write_string_to_grid(
+                &log.body,
+                grid,
+                self.theme_default.fg,
+                self.theme_default.bg,
+                self.theme_default.attrs,
+                (pos_inc(upper_left, (x + 2, i)), bottom_right),
+                None,
+            );
+        }
+    }
+
+    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+        let shortcuts = self.get_shortcuts(context);
+        match event {
+            UIEvent::ConfigReload { old_settings: _ } => {
+                self.theme_default = crate::conf::value(context, "theme_default");
+                self.set_dirty(true);
+            }
+            UIEvent::Input(ref key) if shortcut!(key == shortcuts["general"]["scroll_up"]) => {
+                let _ret = self.perform("scroll_up", context);
+                debug_assert!(_ret.is_ok());
+                return true;
+            }
+            UIEvent::Input(ref key) if shortcut!(key == shortcuts["general"]["scroll_down"]) => {
+                let _ret = self.perform("scroll_down", context);
+                debug_assert!(_ret.is_ok());
+                return true;
+            }
+            UIEvent::Input(ref key) if shortcut!(key == shortcuts["general"]["scroll_right"]) => {
+                let _ret = self.perform("scroll_right", context);
+                debug_assert!(_ret.is_ok());
+                return true;
+            }
+            UIEvent::Input(ref key) if shortcut!(key == shortcuts["general"]["scroll_left"]) => {
+                let _ret = self.perform("scroll_left", context);
+                debug_assert!(_ret.is_ok());
+                return true;
+            }
+            _ => {}
+        }
+
+        false
+    }
+
+    fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
+        let mut map: ShortcutMaps = Default::default();
+
+        let config_map = context.settings.shortcuts.general.key_values();
+        map.insert("general", config_map);
+
+        map
+    }
+
+    fn id(&self) -> ComponentId {
+        self.id
+    }
+
+    fn is_dirty(&self) -> bool {
+        *self.last_update.lock().unwrap() > self.my_last_update || self.dirty
+    }
+
+    fn set_dirty(&mut self, value: bool) {
+        self.dirty = value;
+        if value {
+            self.my_last_update = *self.last_update.lock().unwrap();
+        }
+    }
+
+    fn set_id(&mut self, id: ComponentId) {
+        self.id = id;
+    }
+
+    fn kill(&mut self, uuid: Uuid, context: &mut Context) {
+        debug_assert!(uuid == self.id);
+        context.replies.push_back(UIEvent::Action(Tab(Kill(uuid))));
+    }
+
+    fn perform(&mut self, action: &str, _context: &mut Context) -> Result<()> {
+        match action {
+            "scroll_up" | "scroll_down" | "scroll_right" | "scroll_left" => {
+                if action == "scroll_up" {
+                    self.cursor_pos = self.cursor_pos.saturating_sub(1);
+                } else if action == "scroll_down" {
+                    self.cursor_pos = std::cmp::min(
+                        self.cursor_pos + 1,
+                        self.history.lock().unwrap().len().saturating_sub(1),
+                    );
+                }
+                self.set_dirty(true);
+                Ok(())
+            }
+            _ => Err("No actions available.".into()),
+        }
+    }
 }
