@@ -217,6 +217,8 @@ where
     right(space0(), left(parser, space0()))
 }
 
+pub use whitespace_wrap as ws_eat;
+
 pub fn pair<'a, P1, P2, R1, R2>(parser1: P1, parser2: P2) -> impl Parser<'a, (R1, R2)>
 where
     P1: Parser<'a, R1>,
@@ -343,5 +345,159 @@ where
             }
         }
         Ok((&input[offset..], input))
+    }
+}
+
+pub fn separated_list0<'a, P, A, S, Sep>(
+    parser: P,
+    separator: S,
+    terminated: bool,
+) -> impl Parser<'a, Vec<A>>
+where
+    P: Parser<'a, A>,
+    S: Parser<'a, Sep>,
+{
+    move |mut input| {
+        let mut result = Vec::new();
+        let mut prev_sep_result = Ok(());
+        let mut last_item_input = input;
+
+        while let Ok((next_input, next_item)) = parser.parse(input) {
+            prev_sep_result?;
+            input = next_input;
+            last_item_input = next_input;
+            result.push(next_item);
+            match separator.parse(input) {
+                Ok((next_input, _)) => {
+                    input = next_input;
+                }
+                Err(err) => {
+                    prev_sep_result = Err(err);
+                }
+            }
+        }
+
+        if !terminated {
+            input = last_item_input;
+        }
+
+        Ok((input, result))
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_parsec() {
+        #[derive(Debug, PartialEq)]
+        enum JsonValue {
+            JsonString(String),
+            JsonNumber(f64),
+            JsonBool(bool),
+            JsonNull,
+            JsonObject(HashMap<String, JsonValue>),
+            JsonArray(Vec<JsonValue>),
+        }
+
+        fn parse_value<'a>() -> impl Parser<'a, JsonValue> {
+            move |input| {
+                either(
+                    either(
+                        either(
+                            either(
+                                either(
+                                    map(parse_bool(), |b| JsonValue::JsonBool(b)),
+                                    map(parse_null(), |()| JsonValue::JsonNull),
+                                ),
+                                map(parse_array(), |vec| JsonValue::JsonArray(vec)),
+                            ),
+                            map(parse_object(), |obj| JsonValue::JsonObject(obj)),
+                        ),
+                        map(parse_number(), |n| JsonValue::JsonNumber(n)),
+                    ),
+                    map(quoted_string(), |s| JsonValue::JsonString(s)),
+                )
+                .parse(input)
+            }
+        }
+
+        fn parse_number<'a>() -> impl Parser<'a, f64> {
+            move |input| {
+                either(
+                    map(match_literal("TRUE"), |()| 1.0),
+                    map(match_literal("FALSe"), |()| 1.0),
+                )
+                .parse(input)
+            }
+        }
+
+        fn parse_bool<'a>() -> impl Parser<'a, bool> {
+            move |input| {
+                ws_eat(either(
+                    map(match_literal("true"), |()| true),
+                    map(match_literal("false"), |()| false),
+                ))
+                .parse(input)
+            }
+        }
+
+        fn parse_null<'a>() -> impl Parser<'a, ()> {
+            move |input| ws_eat(match_literal("null")).parse(input)
+        }
+
+        fn parse_array<'a>() -> impl Parser<'a, Vec<JsonValue>> {
+            move |input| {
+                delimited(
+                    ws_eat(match_literal("[")),
+                    separated_list0(parse_value(), ws_eat(match_literal(",")), false),
+                    ws_eat(match_literal("]")),
+                )
+                .parse(input)
+            }
+        }
+
+        fn parse_object<'a>() -> impl Parser<'a, HashMap<String, JsonValue>> {
+            move |input| {
+                map(
+                    delimited(
+                        ws_eat(match_literal("{")),
+                        separated_list0(
+                            pair(
+                                suffix(quoted_string(), ws_eat(match_literal(":"))),
+                                parse_value(),
+                            ),
+                            ws_eat(match_literal(",")),
+                            false,
+                        ),
+                        ws_eat(match_literal("}")),
+                    ),
+                    |vec: Vec<(String, JsonValue)>| vec.into_iter().collect(),
+                )
+                .parse(input)
+            }
+        }
+        assert_eq!(
+            Ok(("", JsonValue::JsonString("a".to_string()))),
+            parse_value().parse(r#""a""#)
+        );
+        assert_eq!(
+            Ok(("", JsonValue::JsonBool(true))),
+            parse_value().parse(r#"true"#)
+        );
+        assert_eq!(
+            Ok(("", JsonValue::JsonObject(HashMap::default()))),
+            parse_value().parse(r#"{}"#)
+        );
+        println!("{:?}", parse_value().parse(r#"{"a":true}"#));
+        println!("{:?}", parse_value().parse(r#"{"a":true,"b":false}"#));
+        println!("{:?}", parse_value().parse(r#"{ "a" : true,"b":  false }"#));
+        println!("{:?}", parse_value().parse(r#"{ "a" : true,"b":  false,}"#));
+        println!("{:?}", parse_value().parse(r#"{"a":false,"b":false,}"#));
+        // Line:0 Col:18 Error parsing object
+        // { "a":1, "b"  :  2, }
+        //                   ^Unexpected ','
     }
 }
