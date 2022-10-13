@@ -303,18 +303,15 @@ On startup, meli should evaluate this command which if successful must only retu
 .Ss JMAP only
 JMAP specific options
 .Bl -tag -width 36n
-.It Ic server_hostname Ar String
+.It Ic server_url Ar String
 example:
-.Qq mail.example.com
+.Qq http://mail.example.com
+.Qq http://mail.example.com:8080
+.Qq https://mail.example.com
 .It Ic server_username Ar String
 Server username
 .It Ic server_password Ar String
 Server password
-.It Ic server_port Ar number
-.Pq Em optional
-The port to connect to
-.\" default value
-.Pq Em 443
 .It Ic danger_accept_invalid_certs Ar boolean
 .Pq Em optional
 Do not validate TLS certificates.

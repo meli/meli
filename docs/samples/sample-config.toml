@@ -77,6 +77,16 @@
 ### Gmail auto saves sent mail to Sent folder, so don't duplicate the effort:
 #composing.store_sent_mail = false
 #
+##[accounts."jmap account"]
+##root_mailbox = "INBOX"
+##format = "jmap"
+##server_url="http://localhost:8080"
+##server_username="user@hostname.local"
+##server_password="changeme"
+##listing.index_style = "Conversations"
+##identity = "user@hostname.local"
+##subscribed_mailboxes = ["*", ]
+##composing.send_mail = 'server_submission'
 #
 #[pager]
 #filter = "COLUMNS=72 /usr/local/bin/pygmentize -l email"

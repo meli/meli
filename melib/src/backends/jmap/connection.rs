@@ -57,15 +57,11 @@ impl JmapConnection {
         if self.store.online_status.lock().await.1.is_ok() {
             return Ok(());
         }
-        let mut jmap_session_resource_url = self.server_conf.server_hostname.to_string();
-        if self.server_conf.server_port != 443 {
-            jmap_session_resource_url.push(':');
-            jmap_session_resource_url.push_str(&self.server_conf.server_port.to_string());
-        }
+        let mut jmap_session_resource_url = self.server_conf.server_url.to_string();
         jmap_session_resource_url.push_str("/.well-known/jmap");
 
         let mut req = self.client.get_async(&jmap_session_resource_url).await.map_err(|err| {
-                let err = MeliError::new(format!("Could not connect to JMAP server endpoint for {}. Is your server hostname setting correct? (i.e. \"jmap.mailserver.org\") (Note: only session resource discovery via /.well-known/jmap is supported. DNS SRV records are not suppported.)\nError connecting to server: {}", &self.server_conf.server_hostname, &err)).set_source(Some(Arc::new(err)));
+                let err = MeliError::new(format!("Could not connect to JMAP server endpoint for {}. Is your server url setting correct? (i.e. \"jmap.mailserver.org\") (Note: only session resource discovery via /.well-known/jmap is supported. DNS SRV records are not suppported.)\nError connecting to server: {}", &self.server_conf.server_url, &err)).set_source(Some(Arc::new(err)));
                 //*self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
                 err
         })?;
@@ -75,7 +71,7 @@ impl JmapConnection {
             let res_text = req.text().await.unwrap_or_default();
             let err = MeliError::new(format!(
                 "Could not connect to JMAP server endpoint for {}. Reply from server: {}",
-                &self.server_conf.server_hostname, res_text
+                &self.server_conf.server_url, res_text
             ))
             .set_kind(kind.into());
             *self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
@@ -86,7 +82,7 @@ impl JmapConnection {
 
         let session: JmapSession = match serde_json::from_str(&res_text) {
             Err(err) => {
-                let err = MeliError::new(format!("Could not connect to JMAP server endpoint for {}. Is your server hostname setting correct? (i.e. \"jmap.mailserver.org\") (Note: only session resource discovery via /.well-known/jmap is supported. DNS SRV records are not suppported.)\nReply from server: {}", &self.server_conf.server_hostname, &res_text)).set_source(Some(Arc::new(err)));
+                let err = MeliError::new(format!("Could not connect to JMAP server endpoint for {}. Is your server url setting correct? (i.e. \"jmap.mailserver.org\") (Note: only session resource discovery via /.well-known/jmap is supported. DNS SRV records are not suppported.)\nReply from server: {}", &self.server_conf.server_url, &res_text)).set_source(Some(Arc::new(err)));
                 *self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
                 return Err(err);
             }
@@ -96,7 +92,7 @@ impl JmapConnection {
             .capabilities
             .contains_key("urn:ietf:params:jmap:core")
         {
-            let err = MeliError::new(format!("Server {} did not return JMAP Core capability (urn:ietf:params:jmap:core). Returned capabilities were: {}", &self.server_conf.server_hostname, session.capabilities.keys().map(String::as_str).collect::<Vec<&str>>().join(", ")));
+            let err = MeliError::new(format!("Server {} did not return JMAP Core capability (urn:ietf:params:jmap:core). Returned capabilities were: {}", &self.server_conf.server_url, session.capabilities.keys().map(String::as_str).collect::<Vec<&str>>().join(", ")));
             *self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
             return Err(err);
         }
@@ -104,7 +100,7 @@ impl JmapConnection {
             .capabilities
             .contains_key("urn:ietf:params:jmap:mail")
         {
-            let err = MeliError::new(format!("Server {} does not support JMAP Mail capability (urn:ietf:params:jmap:mail). Returned capabilities were: {}", &self.server_conf.server_hostname, session.capabilities.keys().map(String::as_str).collect::<Vec<&str>>().join(", ")));
+            let err = MeliError::new(format!("Server {} does not support JMAP Mail capability (urn:ietf:params:jmap:mail). Returned capabilities were: {}", &self.server_conf.server_url, session.capabilities.keys().map(String::as_str).collect::<Vec<&str>>().join(", ")));
             *self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
             return Err(err);
         }

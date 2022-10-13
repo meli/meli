@@ -100,10 +100,9 @@ pub struct EnvelopeCache {
 
 #[derive(Debug, Clone)]
 pub struct JmapServerConf {
-    pub server_hostname: String,
+    pub server_url: String,
     pub server_username: String,
     pub server_password: String,
-    pub server_port: u16,
     pub danger_accept_invalid_certs: bool,
     pub timeout: Option<Duration>,
 }
@@ -139,10 +138,9 @@ macro_rules! get_conf_val {
 impl JmapServerConf {
     pub fn new(s: &AccountSettings) -> Result<Self> {
         Ok(JmapServerConf {
-            server_hostname: get_conf_val!(s["server_hostname"])?.to_string(),
+            server_url: get_conf_val!(s["server_url"])?.to_string(),
             server_username: get_conf_val!(s["server_username"])?.to_string(),
             server_password: get_conf_val!(s["server_password"])?.to_string(),
-            server_port: get_conf_val!(s["server_port"], 443)?,
             danger_accept_invalid_certs: get_conf_val!(s["danger_accept_invalid_certs"], false)?,
             timeout: get_conf_val!(s["timeout"], 16_u64).map(|t| {
                 if t == 0 {
@@ -904,10 +902,9 @@ impl JmapType {
                     .unwrap_or_else(|| Ok($default))
             };
         }
-        get_conf_val!(s["server_hostname"])?;
+        get_conf_val!(s["server_url"])?;
         get_conf_val!(s["server_username"])?;
         get_conf_val!(s["server_password"])?;
-        get_conf_val!(s["server_port"], 443)?;
         get_conf_val!(s["danger_accept_invalid_certs"], false)?;
         Ok(())
     }
