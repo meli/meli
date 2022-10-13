@@ -453,7 +453,14 @@ impl MailBackend for JmapType {
             };
             let res_text = res.text().await?;
 
-            let upload_response: UploadResponse = serde_json::from_str(&res_text)?;
+            let upload_response: UploadResponse = match serde_json::from_str(&res_text) {
+                Err(err) => {
+                    let err = MeliError::new(format!("BUG: Could not deserialize {} server JSON response properly, please report this!\nReply from server: {}", &conn.server_conf.server_url, &res_text)).set_source(Some(Arc::new(err))).set_kind(ErrorKind::Bug);
+                    *conn.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
+                    return Err(err);
+                }
+                Ok(s) => s,
+            };
             let mut req = Request::new(conn.request_no.clone());
             let creation_id: Id<EmailObject> = "1".to_string().into();
             let mut email_imports = HashMap::default();
@@ -477,7 +484,14 @@ impl MailBackend for JmapType {
                 .await?;
             let res_text = res.text().await?;
 
-            let mut v: MethodResponse = serde_json::from_str(&res_text)?;
+            let mut v: MethodResponse = match serde_json::from_str(&res_text) {
+                Err(err) => {
+                    let err = MeliError::new(format!("BUG: Could not deserialize {} server JSON response properly, please report this!\nReply from server: {}", &conn.server_conf.server_url, &res_text)).set_source(Some(Arc::new(err))).set_kind(ErrorKind::Bug);
+                    *conn.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
+                    return Err(err);
+                }
+                Ok(s) => s,
+            };
             let m = ImportResponse::try_from(v.method_responses.remove(0)).or_else(|err| {
                 let ierr: Result<ImportError> =
                     serde_json::from_str(&res_text).map_err(|err| err.into());
@@ -551,7 +565,14 @@ impl MailBackend for JmapType {
                 .await?;
 
             let res_text = res.text().await?;
-            let mut v: MethodResponse = serde_json::from_str(&res_text).unwrap();
+            let mut v: MethodResponse = match serde_json::from_str(&res_text) {
+                Err(err) => {
+                    let err = MeliError::new(format!("BUG: Could not deserialize {} server JSON response properly, please report this!\nReply from server: {}", &conn.server_conf.server_url, &res_text)).set_source(Some(Arc::new(err))).set_kind(ErrorKind::Bug);
+                    *conn.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
+                    return Err(err);
+                }
+                Ok(s) => s,
+            };
             *store.online_status.lock().await = (std::time::Instant::now(), Ok(()));
             let m = QueryResponse::<EmailObject>::try_from(v.method_responses.remove(0))?;
             let QueryResponse::<EmailObject> { ids, .. } = m;
@@ -647,7 +668,14 @@ impl MailBackend for JmapType {
 
             let res_text = res.text().await?;
 
-            let mut v: MethodResponse = serde_json::from_str(&res_text).unwrap();
+            let mut v: MethodResponse = match serde_json::from_str(&res_text) {
+                Err(err) => {
+                    let err = MeliError::new(format!("BUG: Could not deserialize {} server JSON response properly, please report this!\nReply from server: {}", &conn.server_conf.server_url, &res_text)).set_source(Some(Arc::new(err))).set_kind(ErrorKind::Bug);
+                    *conn.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
+                    return Err(err);
+                }
+                Ok(s) => s,
+            };
             *store.online_status.lock().await = (std::time::Instant::now(), Ok(()));
             let m = SetResponse::<EmailObject>::try_from(v.method_responses.remove(0))?;
             if let Some(ids) = m.not_updated {
@@ -752,7 +780,14 @@ impl MailBackend for JmapType {
              *{"methodResponses":[["Email/set",{"notUpdated":null,"notDestroyed":null,"oldState":"86","newState":"87","accountId":"u148940c7","updated":{"M045926eed54b11423918f392":{"id":"M045926eed54b11423918f392"}},"created":null,"destroyed":null,"notCreated":null},"m3"]],"sessionState":"cyrus-0;p-5;vfs-0"}
              */
             //debug!("res_text = {}", &res_text);
-            let mut v: MethodResponse = serde_json::from_str(&res_text).unwrap();
+            let mut v: MethodResponse = match serde_json::from_str(&res_text) {
+                Err(err) => {
+                    let err = MeliError::new(format!("BUG: Could not deserialize {} server JSON response properly, please report this!\nReply from server: {}", &conn.server_conf.server_url, &res_text)).set_source(Some(Arc::new(err))).set_kind(ErrorKind::Bug);
+                    *conn.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
+                    return Err(err);
+                }
+                Ok(s) => s,
+            };
             *store.online_status.lock().await = (std::time::Instant::now(), Ok(()));
             let m = SetResponse::<EmailObject>::try_from(v.method_responses.remove(0))?;
             if let Some(ids) = m.not_updated {

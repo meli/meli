@@ -192,7 +192,14 @@ impl JmapConnection {
 
             let res_text = res.text().await?;
             debug!(&res_text);
-            let mut v: MethodResponse = serde_json::from_str(&res_text).unwrap();
+            let mut v: MethodResponse = match serde_json::from_str(&res_text) {
+                Err(err) => {
+                    let err = MeliError::new(format!("BUG: Could not deserialize {} server JSON response properly, please report this!\nReply from server: {}", &self.server_conf.server_url, &res_text)).set_source(Some(Arc::new(err))).set_kind(ErrorKind::Bug);
+                    *self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
+                    return Err(err);
+                }
+                Ok(s) => s,
+            };
             let changes_response =
                 ChangesResponse::<EmailObject>::try_from(v.method_responses.remove(0))?;
             if changes_response.new_state == current_state {

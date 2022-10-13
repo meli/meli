@@ -184,7 +184,8 @@ pub struct ImportResponse {
 impl std::convert::TryFrom<&RawValue> for ImportResponse {
     type Error = crate::error::MeliError;
     fn try_from(t: &RawValue) -> Result<ImportResponse> {
-        let res: (String, ImportResponse, String) = serde_json::from_str(t.get())?;
+        let res: (String, ImportResponse, String) =
+            serde_json::from_str(t.get()).map_err(|err| crate::error::MeliError::new(format!("BUG: Could not deserialize server JSON response properly, please report this!\nReply from server: {}", &t)).set_source(Some(Arc::new(err))).set_kind(ErrorKind::Bug))?;
         assert_eq!(&res.0, &ImportCall::NAME);
         Ok(res.1)
     }
