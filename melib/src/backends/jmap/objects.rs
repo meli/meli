@@ -26,3 +26,6 @@ pub use email::*;
 
 mod mailbox;
 pub use mailbox::*;
+
+mod thread;
+pub use thread::*;

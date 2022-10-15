@@ -202,7 +202,7 @@ impl<OBJ> State<OBJ> {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug, Default)]
+#[derive(Deserialize, Serialize, Debug, Clone, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct JmapSession {
     pub capabilities: HashMap<String, CapabilitiesObject>,
@@ -223,7 +223,7 @@ impl Object for JmapSession {
     const NAME: &'static str = "Session";
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Clone, Default, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct CapabilitiesObject {
     #[serde(default)]
@@ -244,7 +244,7 @@ pub struct CapabilitiesObject {
     pub collation_algorithms: Vec<String>,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Account {
     pub name: String,
@@ -259,7 +259,7 @@ impl Object for Account {
     const NAME: &'static str = "Account";
 }
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct BlobObject;
 
 impl Object for BlobObject {
@@ -276,7 +276,7 @@ impl Object for BlobObject {
 ///
 ///       The id of the account to use.
 ///
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Get<OBJ: Object>
 where
@@ -389,7 +389,7 @@ impl<OBJ: Object + Serialize + std::fmt::Debug> Serialize for Get<OBJ> {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct MethodResponse<'a> {
     #[serde(borrow)]
@@ -400,7 +400,7 @@ pub struct MethodResponse<'a> {
     pub session_state: State<JmapSession>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct GetResponse<OBJ: Object> {
     pub account_id: Id<Account>,
@@ -427,7 +427,7 @@ impl<OBJ: Object> GetResponse<OBJ> {
     _impl!(get_mut  not_found_mut, not_found: Vec<Id<OBJ>>);
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Clone, Copy, Debug)]
 #[serde(rename_all = "camelCase")]
 enum JmapError {
     RequestTooLarge,
@@ -435,7 +435,7 @@ enum JmapError {
     InvalidResultReference,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Query<F: FilterTrait<OBJ>, OBJ: Object>
 where
@@ -499,7 +499,7 @@ pub fn bool_true() -> bool {
     true
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct QueryResponse<OBJ: Object> {
     pub account_id: Id<Account>,
@@ -580,7 +580,7 @@ impl<M: Method<OBJ>, OBJ: Object> ResultField<M, OBJ> {
 ///     positive integer greater than 0. If a value outside of this range
 ///     is given, the server MUST re
 ///
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 /* ch-ch-ch-ch-ch-Changes */
 pub struct Changes<OBJ: Object>
@@ -636,7 +636,7 @@ where
     );
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ChangesResponse<OBJ: Object> {
     pub account_id: Id<Account>,
@@ -678,7 +678,7 @@ impl<OBJ: Object> ChangesResponse<OBJ> {
 ///and dependencies that may exist if doing multiple operations at once
 ///(for example, to ensure there is always a minimum number of a certain
 ///record type).
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Set<OBJ: Object>
 where
@@ -788,7 +788,7 @@ where
     _impl!(update: Option<HashMap<Id<OBJ>, Value>>);
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct SetResponse<OBJ: Object> {
     ///o  accountId: "Id"
@@ -859,7 +859,7 @@ impl<OBJ: Object + DeserializeOwned> std::convert::TryFrom<&RawValue> for SetRes
     }
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 #[serde(tag = "type", content = "description")]
 pub enum SetError {
@@ -992,7 +992,7 @@ pub fn upload_request_format(upload_url: &str, account_id: &Id<Account>) -> Stri
     ret
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct UploadResponse {
     ///o  accountId: "Id"
@@ -1024,7 +1024,7 @@ pub struct UploadResponse {
 ///   The "Foo/queryChanges" method allows a client to efficiently update
 ///   the state of a cached query to match the new state on the server.  It
 ///   takes the following arguments:
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct QueryChanges<F: FilterTrait<OBJ>, OBJ: Object>
 where
@@ -1093,7 +1093,7 @@ where
     _impl!(calculate_total: bool);
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct QueryChangesResponse<OBJ: Object> {
     /// The id of the account used for the call.
@@ -1170,7 +1170,7 @@ pub struct QueryChangesResponse<OBJ: Object> {
     pub added: Vec<AddedItem<OBJ>>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct AddedItem<OBJ: Object> {
     pub id: Id<OBJ>,

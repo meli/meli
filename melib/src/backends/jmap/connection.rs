@@ -88,19 +88,15 @@ impl JmapConnection {
             }
             Ok(s) => s,
         };
-        if !session
-            .capabilities
-            .contains_key("urn:ietf:params:jmap:core")
-        {
-            let err = MeliError::new(format!("Server {} did not return JMAP Core capability (urn:ietf:params:jmap:core). Returned capabilities were: {}", &self.server_conf.server_url, session.capabilities.keys().map(String::as_str).collect::<Vec<&str>>().join(", ")));
+        if !session.capabilities.contains_key(JMAP_CORE_CAPABILITY) {
+            let err = MeliError::new(format!("Server {} did not return JMAP Core capability ({core_capability}). Returned capabilities were: {}", &self.server_conf.server_url, session.capabilities.keys().map(String::as_str).collect::<Vec<&str>>().join(", "), core_capability=JMAP_CORE_CAPABILITY));
             *self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
             return Err(err);
         }
-        if !session
-            .capabilities
-            .contains_key("urn:ietf:params:jmap:mail")
-        {
-            let err = MeliError::new(format!("Server {} does not support JMAP Mail capability (urn:ietf:params:jmap:mail). Returned capabilities were: {}", &self.server_conf.server_url, session.capabilities.keys().map(String::as_str).collect::<Vec<&str>>().join(", ")));
+        *self.store.core_capabilities.lock().unwrap() =
+            session.capabilities["urn:ietf:params:jmap:core"].clone();
+        if !session.capabilities.contains_key(JMAP_MAIL_CAPABILITY) {
+            let err = MeliError::new(format!("Server {} does not support JMAP Mail capability ({mail_capability}). Returned capabilities were: {}", &self.server_conf.server_url, session.capabilities.keys().map(String::as_str).collect::<Vec<&str>>().join(", "), mail_capability=JMAP_MAIL_CAPABILITY));
             *self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
             return Err(err);
         }
@@ -111,7 +107,7 @@ impl JmapConnection {
     }
 
     pub fn mail_account_id(&self) -> Id<Account> {
-        self.session.lock().unwrap().primary_accounts["urn:ietf:params:jmap:mail"].clone()
+        self.session.lock().unwrap().primary_accounts[JMAP_MAIL_CAPABILITY].clone()
     }
 
     pub fn session_guard(&'_ self) -> MutexGuard<'_, JmapSession> {
@@ -358,5 +354,30 @@ impl JmapConnection {
         }
 
         Ok(())
+    }
+
+    pub async fn send_request(&self, request: String) -> Result<String> {
+        let api_url = self.session.lock().unwrap().api_url.clone();
+        let mut res = self.client.post_async(api_url.as_str(), request).await?;
+
+        let res_text = res.text().await?;
+        debug!(&res_text);
+        let _: MethodResponse = match serde_json::from_str(&res_text) {
+            Err(err) => {
+                let err = MeliError::new(format!("BUG: Could not deserialize {} server JSON response properly, please report this!\nReply from server: {}", &self.server_conf.server_url, &res_text)).set_source(Some(Arc::new(err))).set_kind(ErrorKind::Bug);
+                *self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
+                crate::log(err.to_string(), crate::ERROR);
+                crate::log(
+                    format!(
+                        "Tried to deserialize this server response as a MethodResponse json:\n{}",
+                        &res_text
+                    ),
+                    crate::DEBUG,
+                );
+                return Err(err);
+            }
+            Ok(s) => s,
+        };
+        Ok(res_text)
     }
 }

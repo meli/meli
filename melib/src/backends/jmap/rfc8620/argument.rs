@@ -23,9 +23,9 @@ use crate::backends::jmap::protocol::Method;
 use crate::backends::jmap::rfc8620::Object;
 use crate::backends::jmap::rfc8620::ResultField;
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
-pub enum JmapArgument<T> {
+pub enum JmapArgument<T: Clone> {
     Value(T),
     ResultReference {
         result_of: String,
@@ -34,7 +34,7 @@ pub enum JmapArgument<T> {
     },
 }
 
-impl<T> JmapArgument<T> {
+impl<T: Clone> JmapArgument<T> {
     pub fn value(v: T) -> Self {
         JmapArgument::Value(v)
     }

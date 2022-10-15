@@ -33,13 +33,6 @@ use std::hash::Hasher;
 mod import;
 pub use import::*;
 
-#[derive(Debug)]
-pub struct ThreadObject;
-
-impl Object for ThreadObject {
-    const NAME: &'static str = "Thread";
-}
-
 impl Id<EmailObject> {
     pub fn into_hash(&self) -> EnvelopeHash {
         let mut h = DefaultHasher::new();
