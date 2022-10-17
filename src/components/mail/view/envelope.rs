@@ -403,13 +403,13 @@ impl Component for EnvelopeView {
                                     None,
                                     true,
                                 );
-                                let (exec_cmd, argument) = super::desktop_exec_to_command(
+                                let exec_cmd = super::desktop_exec_to_command(
                                     &command,
                                     p.path.display().to_string(),
                                     false,
                                 );
-                                match Command::new(&exec_cmd)
-                                    .arg(&argument)
+                                match Command::new("sh")
+                                    .args(&["-c", &exec_cmd])
                                     .stdin(Stdio::piped())
                                     .stdout(Stdio::piped())
                                     .spawn()
@@ -421,8 +421,8 @@ impl Component for EnvelopeView {
                                     Err(err) => {
                                         context.replies.push_back(UIEvent::StatusEvent(
                                             StatusEvent::DisplayMessage(format!(
-                                                "Failed to start `{} {}`: {}",
-                                                &exec_cmd, &argument, err
+                                                "Failed to start `{}`: {}",
+                                                &exec_cmd, err
                                             )),
                                         ));
                                     }

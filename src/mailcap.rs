@@ -214,7 +214,8 @@ impl MailcapEntry {
                         std::borrow::Cow::from("less")
                     };
 
-                    let mut pager = Command::new(pager_cmd.as_ref())
+                    let mut pager = Command::new("sh")
+                        .args(["-c", pager_cmd.as_ref()])
                         .stdin(Stdio::piped())
                         .stdout(Stdio::inherit())
                         .spawn()?;

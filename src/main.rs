@@ -233,12 +233,13 @@ fn run_app(opt: Opt) -> Result<()> {
             }
 
             use std::process::{Command, Stdio};
-            let mut handle =
-                Command::new(std::env::var("PAGER").unwrap_or_else(|_| "more".to_string()))
-                    .stdin(Stdio::piped())
-                    .stdout(Stdio::inherit())
-                    .stderr(Stdio::inherit())
-                    .spawn()?;
+            let mut handle = Command::new("sh")
+                .arg("-c")
+                .arg(std::env::var("PAGER").unwrap_or_else(|_| "more".to_string()))
+                .stdin(Stdio::piped())
+                .stdout(Stdio::inherit())
+                .stderr(Stdio::inherit())
+                .spawn()?;
             handle.stdin.take().unwrap().write_all(v.as_bytes())?;
             handle.wait()?;
 

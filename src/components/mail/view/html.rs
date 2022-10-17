@@ -151,10 +151,10 @@ impl Component for HtmlView {
             };
             if let Some(command) = command {
                 let p = create_temp_file(&self.bytes, None, None, true);
-                let (exec_cmd, argument) =
+                let exec_cmd =
                     super::desktop_exec_to_command(&command, p.path.display().to_string(), false);
-                match Command::new(&exec_cmd)
-                    .arg(&argument)
+                match Command::new("sh")
+                    .args(&["-c", &exec_cmd])
                     .stdin(Stdio::piped())
                     .stdout(Stdio::piped())
                     .spawn()
@@ -166,8 +166,8 @@ impl Component for HtmlView {
                     Err(err) => {
                         context.replies.push_back(UIEvent::StatusEvent(
                             StatusEvent::DisplayMessage(format!(
-                                "Failed to start `{} {}`: {}",
-                                &exec_cmd, &argument, err
+                                "Failed to start `{}`: {}",
+                                &exec_cmd, err
                             )),
                         ));
                     }

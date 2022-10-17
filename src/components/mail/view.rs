@@ -2223,13 +2223,13 @@ impl Component for MailView {
                                             None,
                                             true,
                                         );
-                                        let (exec_cmd, argument) = desktop_exec_to_command(
+                                        let exec_cmd = desktop_exec_to_command(
                                             &command,
                                             p.path.display().to_string(),
                                             false,
                                         );
-                                        match Command::new(&exec_cmd)
-                                            .arg(&argument)
+                                        match Command::new("sh")
+                                            .args(&["-c", &exec_cmd])
                                             .stdin(Stdio::piped())
                                             .stdout(Stdio::piped())
                                             .spawn()
@@ -2241,8 +2241,8 @@ impl Component for MailView {
                                             Err(err) => {
                                                 context.replies.push_back(UIEvent::StatusEvent(
                                                     StatusEvent::DisplayMessage(format!(
-                                                        "Failed to start `{} {}`: {}",
-                                                        &exec_cmd, &argument, err
+                                                        "Failed to start `{}`: {}",
+                                                        &exec_cmd, err
                                                     )),
                                                 ));
                                             }
@@ -2790,49 +2790,66 @@ fn save_attachment(path: &std::path::Path, bytes: &[u8]) -> Result<()> {
     Ok(())
 }
 
-fn desktop_exec_to_command(command: &str, path: String, is_url: bool) -> (String, String) {
+fn desktop_exec_to_command(command: &str, path: String, is_url: bool) -> String {
     /* Purge unused field codes */
     let command = command
         .replace("%i", "")
         .replace("%c", "")
         .replace("%k", "");
-    if let Some(pos) = command.find("%f").or_else(|| command.find("%F")) {
-        (command[0..pos].trim().to_string(), path)
-    } else if let Some(pos) = command.find("%u").or_else(|| command.find("%U")) {
+    if command.contains("%f") {
+        command.replacen("%f", &path.replace(' ', "\\ "), 1)
+    } else if command.contains("%F") {
+        command.replacen("%F", &path.replace(' ', "\\ "), 1)
+    } else if command.contains("%u") || command.contains("%U") {
+        let from_pattern = if command.contains("%u") { "%u" } else { "%U" };
         if is_url {
-            (command[0..pos].trim().to_string(), path)
+            command.replacen(from_pattern, &path, 1)
         } else {
-            (
-                command[0..pos].trim().to_string(),
-                format!("file://{}", path),
+            command.replacen(
+                from_pattern,
+                &format!("file://{}", path).replace(' ', "\\ "),
+                1,
             )
         }
+    } else if is_url {
+        format!("{} {}", command, path)
     } else {
-        (command, path)
+        format!("{} {}", command, path.replace(' ', "\\ "))
     }
 }
 
-/*
 #[test]
 fn test_desktop_exec() {
-    for cmd in [
-        "ristretto %F",
-        "/usr/lib/firefox-esr/firefox-esr %u",
-        "/usr/bin/vlc --started-from-file %U",
-        "zathura %U",
-    ]
-    .iter()
-    {
-        println!(
-            "cmd = {} output = {:?}, is_url = false",
-            cmd,
-            desktop_exec_to_command(cmd, "/tmp/file".to_string(), false)
-        );
-        println!(
-            "cmd = {} output = {:?}, is_url = true",
-            cmd,
-            desktop_exec_to_command(cmd, "www.example.com".to_string(), true)
-        );
-    }
+    assert_eq!(
+        "ristretto /tmp/file".to_string(),
+        desktop_exec_to_command("ristretto %F", "/tmp/file".to_string(), false)
+    );
+    assert_eq!(
+        "/usr/lib/firefox-esr/firefox-esr file:///tmp/file".to_string(),
+        desktop_exec_to_command(
+            "/usr/lib/firefox-esr/firefox-esr %u",
+            "/tmp/file".to_string(),
+            false
+        )
+    );
+    assert_eq!(
+        "/usr/lib/firefox-esr/firefox-esr www.example.com".to_string(),
+        desktop_exec_to_command(
+            "/usr/lib/firefox-esr/firefox-esr %u",
+            "www.example.com".to_string(),
+            true
+        )
+    );
+    assert_eq!(
+        "/usr/bin/vlc --started-from-file www.example.com".to_string(),
+        desktop_exec_to_command(
+            "/usr/bin/vlc --started-from-file %U",
+            "www.example.com".to_string(),
+            true
+        )
+    );
+    assert_eq!(
+        "zathura --fork file:///tmp/file".to_string(),
+        desktop_exec_to_command("zathura --fork %U", "file:///tmp/file".to_string(), true)
+    );
 }
-*/
