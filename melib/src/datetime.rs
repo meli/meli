@@ -41,6 +41,7 @@ use crate::error::{Result, ResultIntoMeliError};
 use std::borrow::Cow;
 use std::convert::TryInto;
 use std::ffi::{CStr, CString};
+use std::os::raw::c_int;
 
 pub type UnixTimestamp = u64;
 pub const RFC3339_FMT_WITH_TIME: &str = "%Y-%m-%dT%H:%M:%S\0";
@@ -74,14 +75,36 @@ extern "C" {
     fn gettimeofday(tv: *mut libc::timeval, tz: *mut libc::timezone) -> i32;
 }
 
+#[repr(i32)]
+#[derive(Copy, Clone)]
+#[allow(dead_code)]
+enum LocaleCategoryMask {
+    Time = libc::LC_TIME_MASK,
+    All = libc::LC_ALL_MASK,
+}
+
+#[repr(i32)]
+#[derive(Copy, Clone)]
+#[allow(dead_code)]
+enum LocaleCategory {
+    Time = libc::LC_TIME,
+    All = libc::LC_ALL,
+}
+
 #[cfg(not(target_os = "netbsd"))]
+#[allow(dead_code)]
 struct Locale {
+    mask: LocaleCategoryMask,
+    category: LocaleCategory,
     new_locale: libc::locale_t,
     old_locale: libc::locale_t,
 }
+
 #[cfg(target_os = "netbsd")]
+#[allow(dead_code)]
 struct Locale {
-    mask: std::os::raw::c_int,
+    mask: LocaleCategoryMask,
+    category: LocaleCategory,
     old_locale: *const std::os::raw::c_char,
 }
 
@@ -94,7 +117,7 @@ impl Drop for Locale {
         }
         #[cfg(target_os = "netbsd")]
         unsafe {
-            let _ = libc::setlocale(self.mask, self.old_locale);
+            let _ = libc::setlocale(self.category as c_int, self.old_locale);
         }
     }
 }
@@ -103,11 +126,12 @@ impl Drop for Locale {
 impl Locale {
     #[cfg(not(target_os = "netbsd"))]
     fn new(
-        mask: std::os::raw::c_int,
+        mask: LocaleCategoryMask,
+        category: LocaleCategory,
         locale: *const std::os::raw::c_char,
         base: libc::locale_t,
     ) -> Result<Self> {
-        let new_locale = unsafe { libc::newlocale(mask, locale, base) };
+        let new_locale = unsafe { libc::newlocale(mask as c_int, locale, base) };
         if new_locale.is_null() {
             return Err(nix::Error::last().into());
         }
@@ -117,25 +141,32 @@ impl Locale {
             return Err(nix::Error::last().into());
         }
         Ok(Locale {
+            mask,
+            category,
             new_locale,
             old_locale,
         })
     }
     #[cfg(target_os = "netbsd")]
     fn new(
-        mask: std::os::raw::c_int,
+        mask: LocaleCategoryMask,
+        category: LocaleCategory,
         locale: *const std::os::raw::c_char,
         _base: libc::locale_t,
     ) -> Result<Self> {
-        let old_locale = unsafe { libc::setlocale(mask, std::ptr::null_mut()) };
+        let old_locale = unsafe { libc::setlocale(category as c_int, std::ptr::null_mut()) };
         if old_locale.is_null() {
             return Err(nix::Error::last().into());
         }
-        let new_locale = unsafe { libc::setlocale(mask, locale) };
+        let new_locale = unsafe { libc::setlocale(category as c_int, locale) };
         if new_locale.is_null() {
             return Err(nix::Error::last().into());
         }
-        Ok(Locale { mask, old_locale })
+        Ok(Locale {
+            mask,
+            category,
+            old_locale,
+        })
     }
 }
 
@@ -166,7 +197,8 @@ pub fn timestamp_to_string(timestamp: UnixTimestamp, fmt: Option<&str>, posix: b
         let _with_locale: Option<Result<Locale>> = if posix {
             Some(
                 Locale::new(
-                    libc::LC_TIME,
+                    LocaleCategoryMask::Time,
+                    LocaleCategory::Time,
                     b"C\0".as_ptr() as *const std::os::raw::c_char,
                     std::ptr::null_mut(),
                 )
@@ -304,7 +336,8 @@ where
         let fmt = unsafe { CStr::from_bytes_with_nul_unchecked(fmt.as_bytes()) };
         let ret = {
             let _with_locale = Locale::new(
-                libc::LC_TIME,
+                LocaleCategoryMask::Time,
+                LocaleCategory::Time,
                 b"C\0".as_ptr() as *const std::os::raw::c_char,
                 std::ptr::null_mut(),
             )
@@ -365,7 +398,8 @@ where
         let fmt = unsafe { CStr::from_bytes_with_nul_unchecked(fmt.as_bytes()) };
         let ret = {
             let _with_locale = Locale::new(
-                libc::LC_TIME,
+                LocaleCategoryMask::Time,
+                LocaleCategory::Time,
                 b"C\0".as_ptr() as *const std::os::raw::c_char,
                 std::ptr::null_mut(),
             )
