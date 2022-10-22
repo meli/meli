@@ -93,6 +93,22 @@ where
     }
 }
 
+pub fn map_res<'a, P, F, E, A, B>(parser: P, map_fn: F) -> impl Parser<'a, B>
+where
+    P: Parser<'a, A>,
+    F: Fn(A) -> std::result::Result<B, E>,
+{
+    move |input| {
+        parser.parse(input).and_then(|(next_input, result)| {
+            if let Ok(res) = map_fn(result) {
+                Ok((next_input, res))
+            } else {
+                Err(next_input)
+            }
+        })
+    }
+}
+
 pub fn match_literal<'a>(expected: &'static str) -> impl Parser<'a, ()> {
     move |input: &'a str| match input.get(0..expected.len()) {
         Some(next) if next == expected => Ok((&input[expected.len()..], ())),
@@ -176,6 +192,24 @@ pub fn quoted_string<'a>() -> impl Parser<'a, String> {
         ),
         |chars| chars.into_iter().collect(),
     )
+}
+
+pub fn quoted_slice<'a>() -> impl Parser<'a, &'a str> {
+    move |input: &'a str| {
+        if input.is_empty() || !input.starts_with('"') {
+            return Err(input);
+        }
+
+        let mut i = 1;
+        while i < input.len() {
+            if input[i..].starts_with('\"') && !input[i - 1..].starts_with('\\') {
+                return Ok((&input[i + 1..], &input[1..i]));
+            }
+            i += 1;
+        }
+
+        Err(input)
+    }
 }
 
 pub struct BoxedParser<'a, Output> {
@@ -292,6 +326,69 @@ pub fn space0<'a>() -> impl Parser<'a, Vec<char>> {
     zero_or_more(whitespace_char())
 }
 
+pub fn is_a<'a>(slice: &'static [u8]) -> impl Parser<'a, &'a str> {
+    move |input: &'a str| {
+        let mut i = 0;
+        for byte in input.as_bytes().iter() {
+            if !slice.contains(byte) {
+                break;
+            }
+            i += 1;
+        }
+        if i == 0 {
+            return Err("");
+        }
+        let (b, a) = input.split_at(i);
+        Ok((a, b))
+    }
+}
+
+/// Try alternative parsers in order until one succeeds.
+///
+/// ```rust
+/// # use melib::parsec::{Parser, quoted_slice, match_literal, alt, delimited, prefix};
+///
+/// let parser = |input| {
+///     alt([
+///         delimited(
+///             match_literal("{"),
+///             quoted_slice(),
+///             match_literal("}"),
+///         ),
+///         delimited(
+///             match_literal("["),
+///             quoted_slice(),
+///             match_literal("]"),
+///         ),
+///     ]).parse(input)
+/// };
+///
+/// let input1: &str = "{\"quoted\"}";
+/// let input2: &str = "[\"quoted\"]";
+/// assert_eq!(
+///     Ok(("", "quoted")),
+///     parser.parse(input1)
+/// );
+///
+/// assert_eq!(
+///     Ok(("", "quoted")),
+///     parser.parse(input2)
+/// );
+/// ```
+pub fn alt<'a, P, A, const N: usize>(parsers: [P; N]) -> impl Parser<'a, A>
+where
+    P: Parser<'a, A>,
+{
+    move |input| {
+        for parser in parsers.iter() {
+            if let Ok(res) = parser.parse(input) {
+                return Ok(res);
+            }
+        }
+        Err(input)
+    }
+}
+
 pub fn and_then<'a, P, F, A, B, NextP>(parser: P, f: F) -> impl Parser<'a, B>
 where
     P: Parser<'a, A>,
@@ -382,6 +479,47 @@ where
         }
 
         Ok((input, result))
+    }
+}
+
+/// Take `count` bytes
+pub fn take<'a>(count: usize) -> impl Parser<'a, &'a str> {
+    move |i: &'a str| {
+        if i.len() < count || !i.is_char_boundary(count) {
+            Err("")
+        } else {
+            let (b, a) = i.split_at(count);
+            Ok((a, b))
+        }
+    }
+}
+
+/// Take a literal
+///
+///```rust
+///  # use std::str::FromStr;
+///  # use melib::parsec::{Parser, delimited, match_literal, map_res, is_a, take_literal};
+///  let lit: &str = "{31}\r\nThere is no script by that name\r\n";
+///  assert_eq!(
+///      take_literal(delimited(
+///                 match_literal("{"),
+///                 map_res(is_a(b"0123456789"), |s| usize::from_str(s)),
+///                 match_literal("}\r\n"),
+///             ))
+///             .parse(lit),
+///      Ok((
+///          "\r\n",
+///          "There is no script by that name",
+///      ))
+///  );
+///```
+pub fn take_literal<'a, P>(parser: P) -> impl Parser<'a, &'a str>
+where
+    P: Parser<'a, usize>,
+{
+    move |input: &'a str| {
+        let (rest, length) = parser.parse(input)?;
+        take(length).parse(rest)
     }
 }
 
