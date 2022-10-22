@@ -1626,12 +1626,12 @@ pub fn mailbox_token(input: &'_ [u8]) -> IResult<&'_ [u8], std::borrow::Cow<'_, 
 }
 
 // astring = 1*ASTRING-CHAR / string
-fn astring_token(input: &[u8]) -> IResult<&[u8], &[u8]> {
+pub fn astring_token(input: &[u8]) -> IResult<&[u8], &[u8]> {
     alt((string_token, astring_char))(input)
 }
 
 // string = quoted / literal
-fn string_token(input: &[u8]) -> IResult<&[u8], &[u8]> {
+pub fn string_token(input: &[u8]) -> IResult<&[u8], &[u8]> {
     if let Ok((r, o)) = literal(input) {
         return Ok((r, o));
     }

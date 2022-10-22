@@ -24,17 +24,15 @@ extern crate melib;
 use melib::*;
 
 use std::collections::VecDeque;
-extern crate xdg_utils;
 #[macro_use]
 extern crate serde_derive;
 extern crate linkify;
-extern crate uuid;
 
 extern crate serde_json;
 extern crate smallvec;
 extern crate termion;
 
-use melib::backends::imap::managesieve::new_managesieve_connection;
+use melib::backends::imap::managesieve::ManageSieveConnection;
 use melib::Result;
 
 #[macro_use]
@@ -64,7 +62,7 @@ pub mod sqlite3;
 
 pub mod jobs;
 pub mod mailcap;
-pub mod plugins;
+//pub mod plugins;
 
 use futures::executor::block_on;
 
@@ -84,10 +82,7 @@ fn main() -> Result<()> {
         std::process::exit(1);
     }
 
-    let (config_path, account_name) = (
-        std::mem::replace(&mut args[0], String::new()),
-        std::mem::replace(&mut args[1], String::new()),
-    );
+    let (config_path, account_name) = (std::mem::take(&mut args[0]), std::mem::take(&mut args[1]));
     std::env::set_var("MELI_CONFIG", config_path);
     let settings = conf::Settings::new()?;
     if !settings.accounts.contains_key(&account_name) {
@@ -102,12 +97,47 @@ fn main() -> Result<()> {
         );
         std::process::exit(1);
     }
-    let mut conn = new_managesieve_connection(&settings.accounts[&account_name].account)?;
-    block_on(conn.connect())?;
-    let mut res = String::with_capacity(8 * 1024);
+    let account = &settings.accounts[&account_name].account;
+    let mut conn = ManageSieveConnection::new(
+        0,
+        account_name.clone(),
+        account,
+        melib::backends::BackendEventConsumer::new(std::sync::Arc::new(|_, _| {})),
+    )?;
+    block_on(conn.inner.connect())?;
 
     let mut input = String::new();
-    println!("managesieve shell: use 'logout'");
+    const AVAILABLE_COMMANDS: &[&str] = &[
+        "help",
+        "logout",
+        "listscripts",
+        "checkscript",
+        "putscript",
+        "setactive",
+        "getscript",
+        "deletescript",
+    ];
+    const COMMANDS_HELP: &[&str] = &[
+        "help",
+        "logout",
+        "listscripts and whether they are active",
+        "paste a script to check for validity without uploading it",
+        "upload a script",
+        "set a script as active",
+        "get a script by its name",
+        "delete a script by its name",
+    ];
+    println!("managesieve shell: use 'help' for available commands");
+    enum PrevCmd {
+        None,
+        Checkscript,
+        PutscriptName,
+        PutscriptString(String),
+        SetActiveName,
+        GetScriptName,
+    }
+    use PrevCmd::*;
+    let mut prev_cmd: PrevCmd = None;
     loop {
         use std::io;
         use std::io::Write;
@@ -116,12 +146,85 @@ fn main() -> Result<()> {
         io::stdout().flush().unwrap();
         match io::stdin().read_line(&mut input) {
             Ok(_) => {
-                if input.trim().eq_ignore_ascii_case("logout") {
+                let input = input.trim();
+                if input.eq_ignore_ascii_case("logout") {
                     break;
                 }
-                block_on(conn.send_command(input.as_bytes()))?;
-                block_on(conn.read_lines(&mut res, String::new()))?;
-                println!("out: {}", res.trim());
+                if input.eq_ignore_ascii_case("help") {
+                    println!("available commands: [{}]", AVAILABLE_COMMANDS.join(", "));
+                    continue;
+                }
+                if input.len() >= "help ".len()
+                    && input[0.."help ".len()].eq_ignore_ascii_case("help ")
+                {
+                    if let Some(i) = AVAILABLE_COMMANDS
+                        .iter()
+                        .position(|cmd| cmd.eq_ignore_ascii_case(&input["help ".len()..]))
+                    {
+                        println!("{}", COMMANDS_HELP[i]);
+                    } else {
+                        println!("invalid command `{}`", &input["help ".len()..]);
+                    }
+                    continue;
+                }
+                if input.eq_ignore_ascii_case("listscripts") {
+                    let scripts = block_on(conn.listscripts())?;
+                    println!("Got {} scripts:", scripts.len());
+                    for (script, active) in scripts {
+                        println!(
+                            "{}active: {}",
+                            if active { "" } else { "in" },
+                            String::from_utf8_lossy(&script)
+                        );
+                    }
+                } else if input.eq_ignore_ascii_case("checkscript") {
+                    prev_cmd = Checkscript;
+                    println!("insert file path of script");
+                } else if input.eq_ignore_ascii_case("putscript") {
+                    prev_cmd = PutscriptName;
+                    println!("Insert script name");
+                } else if input.eq_ignore_ascii_case("setactive") {
+                    prev_cmd = SetActiveName;
+                } else if input.eq_ignore_ascii_case("getscript") {
+                    prev_cmd = GetScriptName;
+                } else if input.eq_ignore_ascii_case("deletescript") {
+                    println!("unimplemented `{}`", input);
+                } else {
+                    match prev_cmd {
+                        None => println!("invalid command `{}`", input),
+                        Checkscript => {
+                            let content = std::fs::read_to_string(&input).unwrap();
+                            let result = block_on(conn.checkscript(content.as_bytes()));
+                            println!("Got {:?}", result);
+                            prev_cmd = None;
+                        }
+                        PutscriptName => {
+                            prev_cmd = PutscriptString(input.to_string());
+                            println!("insert file path of script");
+                        }
+                        PutscriptString(name) => {
+                            prev_cmd = None;
+                            let content = std::fs::read_to_string(&input).unwrap();
+                            let result =
+                                block_on(conn.putscript(name.as_bytes(), content.as_bytes()));
+                            println!("Got {:?}", result);
+                        }
+                        SetActiveName => {
+                            prev_cmd = None;
+                            let result = block_on(conn.setactive(input.as_bytes()));
+                            println!("Got {:?}", result);
+                        }
+                        GetScriptName => {
+                            prev_cmd = None;
+                            let result = block_on(conn.getscript(input.as_bytes()));
+                            println!("Got {:?}", result);
+                        }
+                    }
+                }
+
+                //block_on(conn.send_command(input.as_bytes()))?;
+                //block_on(conn.read_lines(&mut res, String::new()))?;
+                //println!("out: {}", res.trim());
             }
             Err(error) => println!("error: {}", error),
         }

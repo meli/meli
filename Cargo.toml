@@ -21,9 +21,9 @@ path = "src/main.rs"
 name = "meli"
 path = "src/lib.rs"
 
-#[[bin]]
-#name = "managesieve-meli"
-#path = "src/managesieve.rs"
+[[bin]]
+name = "managesieve-client"
+path = "src/managesieve.rs"
 
 #[[bin]]
 #name = "async"
