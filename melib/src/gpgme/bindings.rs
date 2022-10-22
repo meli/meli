@@ -316,6 +316,7 @@ pub struct _gpgme_sig_notation {
     pub _bitfield_1: __BindgenBitfieldUnit<[u8; 4usize], u32>,
 }
 #[test]
+#[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_sig_notation() {
     assert_eq!(
         ::std::mem::size_of::<_gpgme_sig_notation>(),
@@ -457,6 +458,7 @@ pub struct _gpgme_engine_info {
     pub home_dir: *mut ::std::os::raw::c_char,
 }
 #[test]
+#[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_engine_info() {
     assert_eq!(
         ::std::mem::size_of::<_gpgme_engine_info>(),
@@ -544,6 +546,7 @@ pub struct _gpgme_tofu_info {
     pub description: *mut ::std::os::raw::c_char,
 }
 #[test]
+#[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_tofu_info() {
     assert_eq!(
         ::std::mem::size_of::<_gpgme_tofu_info>(),
@@ -711,6 +714,7 @@ pub struct _gpgme_subkey {
     pub keygrip: *mut ::std::os::raw::c_char,
 }
 #[test]
+#[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_subkey() {
     assert_eq!(
         ::std::mem::size_of::<_gpgme_subkey>(),
@@ -1072,6 +1076,7 @@ pub struct _gpgme_key_sig {
     pub _last_notation: gpgme_sig_notation_t,
 }
 #[test]
+#[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_key_sig() {
     assert_eq!(
         ::std::mem::size_of::<_gpgme_key_sig>(),
@@ -1341,6 +1346,7 @@ pub struct _gpgme_user_id {
     pub last_update: ::std::os::raw::c_ulong,
 }
 #[test]
+#[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_user_id() {
     assert_eq!(
         ::std::mem::size_of::<_gpgme_user_id>(),
@@ -1556,6 +1562,7 @@ pub struct _gpgme_key {
     pub last_update: ::std::os::raw::c_ulong,
 }
 #[test]
+#[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_key() {
     assert_eq!(
         ::std::mem::size_of::<_gpgme_key>(),
@@ -1908,6 +1915,7 @@ pub struct _gpgme_invalid_key {
     pub reason: gpgme_error_t,
 }
 #[test]
+#[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_invalid_key() {
     assert_eq!(
         ::std::mem::size_of::<_gpgme_invalid_key>(),
@@ -2103,6 +2111,7 @@ pub struct gpgme_io_event_done_data {
     pub op_err: gpgme_error_t,
 }
 #[test]
+#[allow(deref_nullptr)]
 fn bindgen_test_layout_gpgme_io_event_done_data() {
     assert_eq!(
         ::std::mem::size_of::<gpgme_io_event_done_data>(),
@@ -2153,6 +2162,7 @@ pub struct gpgme_io_cbs {
     pub event_priv: *mut ::std::os::raw::c_void,
 }
 #[test]
+#[allow(deref_nullptr)]
 fn bindgen_test_layout_gpgme_io_cbs() {
     assert_eq!(
         ::std::mem::size_of::<gpgme_io_cbs>(),
@@ -2278,6 +2288,7 @@ pub struct gpgme_data_cbs {
     pub release: gpgme_data_release_cb_t,
 }
 #[test]
+#[allow(deref_nullptr)]
 fn bindgen_test_layout_gpgme_data_cbs() {
     assert_eq!(
         ::std::mem::size_of::<gpgme_data_cbs>(),
@@ -2407,6 +2418,7 @@ pub struct _gpgme_op_encrypt_result {
     pub invalid_recipients: gpgme_invalid_key_t,
 }
 #[test]
+#[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_op_encrypt_result() {
     assert_eq!(
         ::std::mem::size_of::<_gpgme_op_encrypt_result>(),
@@ -2514,6 +2526,7 @@ pub struct _gpgme_recipient {
     pub status: gpgme_error_t,
 }
 #[test]
+#[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_recipient() {
     assert_eq!(
         ::std::mem::size_of::<_gpgme_recipient>(),
@@ -2588,6 +2601,7 @@ pub struct _gpgme_op_decrypt_result {
     pub symkey_algo: *mut ::std::os::raw::c_char,
 }
 #[test]
+#[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_op_decrypt_result() {
     assert_eq!(
         ::std::mem::size_of::<_gpgme_op_decrypt_result>(),
@@ -2792,6 +2806,7 @@ pub struct _gpgme_new_signature {
     pub sig_class: ::std::os::raw::c_uint,
 }
 #[test]
+#[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_new_signature() {
     assert_eq!(
         ::std::mem::size_of::<_gpgme_new_signature>(),
@@ -2906,6 +2921,7 @@ pub struct _gpgme_op_sign_result {
     pub signatures: gpgme_new_signature_t,
 }
 #[test]
+#[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_op_sign_result() {
     assert_eq!(
         ::std::mem::size_of::<_gpgme_op_sign_result>(),
@@ -2988,6 +3004,7 @@ pub struct _gpgme_signature {
     pub key: gpgme_key_t,
 }
 #[test]
+#[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_signature() {
     assert_eq!(
         ::std::mem::size_of::<_gpgme_signature>(),
@@ -3231,6 +3248,7 @@ pub struct _gpgme_op_verify_result {
     pub __bindgen_padding_0: u32,
 }
 #[test]
+#[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_op_verify_result() {
     assert_eq!(
         ::std::mem::size_of::<_gpgme_op_verify_result>(),
@@ -3331,6 +3349,7 @@ pub struct _gpgme_import_status {
     pub status: ::std::os::raw::c_uint,
 }
 #[test]
+#[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_import_status() {
     assert_eq!(
         ::std::mem::size_of::<_gpgme_import_status>(),
@@ -3405,6 +3424,7 @@ pub struct _gpgme_op_import_result {
     pub skipped_v3_keys: ::std::os::raw::c_int,
 }
 #[test]
+#[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_op_import_result() {
     assert_eq!(
         ::std::mem::size_of::<_gpgme_op_import_result>(),
@@ -3663,6 +3683,7 @@ pub struct _gpgme_op_genkey_result {
     pub seckey: gpgme_data_t,
 }
 #[test]
+#[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_op_genkey_result() {
     assert_eq!(
         ::std::mem::size_of::<_gpgme_op_genkey_result>(),
@@ -4024,6 +4045,7 @@ pub struct _gpgme_trust_item {
     pub name: *mut ::std::os::raw::c_char,
 }
 #[test]
+#[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_trust_item() {
     assert_eq!(
         ::std::mem::size_of::<_gpgme_trust_item>(),
@@ -4224,6 +4246,7 @@ pub struct _gpgme_op_vfs_mount_result {
     pub mount_dir: *mut ::std::os::raw::c_char,
 }
 #[test]
+#[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_op_vfs_mount_result() {
     assert_eq!(
         ::std::mem::size_of::<_gpgme_op_vfs_mount_result>(),
@@ -4298,6 +4321,7 @@ pub union gpgme_conf_arg__bindgen_ty_1 {
     _bindgen_union_align: u64,
 }
 #[test]
+#[allow(deref_nullptr)]
 fn bindgen_test_layout_gpgme_conf_arg__bindgen_ty_1() {
     assert_eq!(
         ::std::mem::size_of::<gpgme_conf_arg__bindgen_ty_1>(),
@@ -4359,6 +4383,7 @@ fn bindgen_test_layout_gpgme_conf_arg__bindgen_ty_1() {
     );
 }
 #[test]
+#[allow(deref_nullptr)]
 fn bindgen_test_layout_gpgme_conf_arg() {
     assert_eq!(
         ::std::mem::size_of::<gpgme_conf_arg>(),
@@ -4423,6 +4448,7 @@ pub struct gpgme_conf_opt {
     pub user_data: *mut ::std::os::raw::c_void,
 }
 #[test]
+#[allow(deref_nullptr)]
 fn bindgen_test_layout_gpgme_conf_opt() {
     assert_eq!(
         ::std::mem::size_of::<gpgme_conf_opt>(),
@@ -4611,6 +4637,7 @@ pub struct gpgme_conf_comp {
     pub options: *mut gpgme_conf_opt,
 }
 #[test]
+#[allow(deref_nullptr)]
 fn bindgen_test_layout_gpgme_conf_comp() {
     assert_eq!(
         ::std::mem::size_of::<gpgme_conf_comp>(),
@@ -4718,6 +4745,7 @@ pub struct _gpgme_op_query_swdb_result {
     pub reldate: ::std::os::raw::c_ulong,
 }
 #[test]
+#[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_op_query_swdb_result() {
     assert_eq!(
         ::std::mem::size_of::<_gpgme_op_query_swdb_result>(),
@@ -5258,6 +5286,7 @@ pub struct _gpgme_op_assuan_result {
     pub err: gpgme_error_t,
 }
 #[test]
+#[allow(deref_nullptr)]
 fn bindgen_test_layout__gpgme_op_assuan_result() {
     assert_eq!(
         ::std::mem::size_of::<_gpgme_op_assuan_result>(),
@@ -5338,6 +5367,7 @@ pub struct __va_list_tag {
     pub reg_save_area: *mut ::std::os::raw::c_void,
 }
 #[test]
+#[allow(deref_nullptr)]
 fn bindgen_test_layout___va_list_tag() {
     assert_eq!(
         ::std::mem::size_of::<__va_list_tag>(),
