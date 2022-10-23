@@ -150,8 +150,9 @@ fn test_imap_required_responses() {
     assert_eq!(v.len(), 1);
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Alert(String);
+
 pub type ImapParseResult<'a, T> = Result<(&'a [u8], T, Option<Alert>)>;
 pub struct ImapLineIterator<'a> {
     slice: &'a [u8],
@@ -604,8 +605,8 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
                 i += (input.len() - i - rest.len()) + 1;
             } else {
                 return debug!(Err(MeliError::new(format!(
-                    "Unexpected input while parsing UID FETCH response. Got: `{:.40}`",
-                    String::from_utf8_lossy(input)
+                    "Unexpected input while parsing UID FETCH response. Could not parse FLAGS: {:.40}.",
+                    String::from_utf8_lossy(&input[i..])
                 ))));
             }
         } else if input[i..].starts_with(b"MODSEQ (") {
@@ -639,8 +640,8 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
                 i += input.len() - i - rest.len();
             } else {
                 return debug!(Err(MeliError::new(format!(
-                    "Unexpected input while parsing UID FETCH response. Got: `{:.40}`",
-                    String::from_utf8_lossy(input)
+                    "Unexpected input while parsing UID FETCH response. Could not parse RFC822: {:.40}",
+                    String::from_utf8_lossy(&input[i..])
                 ))));
             }
         } else if input[i..].starts_with(b"ENVELOPE (") {
@@ -650,7 +651,7 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
                 i += input.len() - i - rest.len();
             } else {
                 return debug!(Err(MeliError::new(format!(
-                    "Unexpected input while parsing UID FETCH response. Got: `{:.40}`",
+                    "Unexpected input while parsing UID FETCH response. Could not parse ENVELOPE: {:.40}",
                     String::from_utf8_lossy(&input[i..])
                 ))));
             }
@@ -672,7 +673,7 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
                 i += input.len() - i - rest.len();
             } else {
                 return debug!(Err(MeliError::new(format!(
-                    "Unexpected input while parsing UID FETCH response. Got: `{:.40}`",
+                    "Unexpected input while parsing UID FETCH response. Could not parse BODY[HEADER.FIELDS (REFERENCES)]: {:.40}",
                     String::from_utf8_lossy(&input[i..])
                 ))));
             }
@@ -688,7 +689,7 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
                 i += input.len() - i - rest.len();
             } else {
                 return debug!(Err(MeliError::new(format!(
-                    "Unexpected input while parsing UID FETCH response. Got: `{:.40}`",
+                    "Unexpected input while parsing UID FETCH response. Could not parse BODY[HEADER.FIELDS (\"REFERENCES\"): {:.40}",
                     String::from_utf8_lossy(&input[i..])
                 ))));
             }
@@ -736,9 +737,9 @@ pub fn fetch_responses(mut input: &[u8]) -> ImapParseResult<Vec<FetchResponse<'_
             }
             Err(err) => {
                 return Err(MeliError::new(format!(
-                    "Unexpected input while parsing UID FETCH responses: `{:.40}`, {}",
+                    "Unexpected input while parsing UID FETCH responses: {} `{:.40}`",
+                    err,
                     String::from_utf8_lossy(input),
-                    err
                 )));
             }
         }
@@ -934,7 +935,7 @@ pub fn untagged_responses(input: &[u8]) -> ImapParseResult<Option<UntaggedRespon
 }
 
 #[test]
-fn test_untagged_responses() {
+fn test_imap_untagged_responses() {
     use UntaggedResponse::*;
     assert_eq!(
         untagged_responses(b"* 2 EXISTS\r\n")
@@ -974,6 +975,37 @@ fn test_untagged_responses() {
             envelope: None,
             raw_fetch_value: &b"* 1 FETCH (FLAGS (\\Seen))\r\n"[..],
         })
+    );
+}
+
+#[test]
+fn test_imap_fetch_response() {
+    let input: &[u8] = b"* 198 FETCH (UID 7608 FLAGS (\\Seen) ENVELOPE (\"Fri, 24 Jun 2011 10:09:10 +0000\" \"xxxx/xxxx\" ((\"xx@xx.com\" NIL \"xx\" \"xx.com\")) NIL NIL ((\"xx@xx\" NIL \"xx\" \"xx.com\")) ((\"'xx, xx'\" NIL \"xx.xx\" \"xx.com\") (\"xx.xx@xx.com\" NIL \"xx.xx\" \"xx.com\") (\"'xx'\" NIL \"xx.xx\" \"xx.com\") (\"'xx xx'\" NIL \"xx.xx\" \"xx.com\") (\"xx.xx@xx.com\" NIL \"xx.xx\" \"xx.com\")) NIL NIL \"<xx@xx.com>\") BODY[HEADER.FIELDS (REFERENCES)] {2}\r\n\r\nBODYSTRUCTURE ((\"text\" \"html\" (\"charset\" \"us-ascii\") \"<xx@xx>\" NIL \"7BIT\" 17236 232 NIL NIL NIL NIL)(\"image\" \"jpeg\" (\"name\" \"image001.jpg\") \"<image001.jpg@xx.xx>\" \"image001.jpg\" \"base64\" 1918 NIL (\"inline\" (\"filename\" \"image001.jpg\" \"size\" \"1650\" \"creation-date\" \"Sun, 09 Aug 2015 20:56:04 GMT\" \"modification-date\" \"Sun, 14 Aug 2022 22:11:45 GMT\")) NIL NIL) \"related\" (\"boundary\" \"xx--xx\" \"type\" \"text/html\") NIL \"en-US\"))\r\n";
+
+    let mut address = SmallVec::new();
+    address.push(Address::new(None, "xx@xx.com".to_string()));
+    let mut env = Envelope::new(0);
+    env.set_subject("xxxx/xxxx".as_bytes().to_vec());
+    env.set_date("Fri, 24 Jun 2011 10:09:10 +0000".as_bytes());
+    env.set_from(address.clone());
+    env.set_to(address);
+    env.set_message_id("<xx@xx.com>".as_bytes());
+    assert_eq!(
+        fetch_response(input).unwrap(),
+        (
+            &b""[..],
+            FetchResponse {
+                uid: Some(7608),
+                message_sequence_number: 198,
+                flags: Some((Flag::SEEN, vec![])),
+                modseq: None,
+                body: None,
+                references: None,
+                envelope: Some(env),
+                raw_fetch_value: input,
+            },
+            None
+        )
     );
 }
 
@@ -1127,7 +1159,7 @@ pub fn select_response(input: &[u8]) -> Result<SelectResponse> {
 }
 
 #[test]
-fn test_select_response() {
+fn test_imap_select_response() {
     let r = b"* FLAGS (\\Answered \\Flagged \\Deleted \\Seen \\Draft)\r\n* OK [PERMANENTFLAGS (\\Answered \\Flagged \\Deleted \\Seen \\Draft \\*)] Flags permitted.\r\n* 45 EXISTS\r\n* 0 RECENT\r\n* OK [UNSEEN 16] First unseen.\r\n* OK [UIDVALIDITY 1554422056] UIDs valid\r\n* OK [UIDNEXT 50] Predicted next UID\r\n";
 
     assert_eq!(
@@ -1347,6 +1379,12 @@ pub fn envelope(input: &[u8]) -> IResult<&[u8], Envelope> {
     ))
 }
 
+#[test]
+fn test_imap_envelope() {
+    let input: &[u8] = b"(\"Fri, 24 Jun 2011 10:09:10 +0000\" \"xxxx/xxxx\" ((\"xx@xx.com\" NIL \"xx\" \"xx.com\")) NIL NIL ((\"xx@xx\" NIL \"xx\" \"xx.com\")) ((\"'xx, xx'\" NIL \"xx.xx\" \"xx.com\") (\"xx.xx@xx.com\" NIL \"xx.xx\" \"xx.com\") (\"'xx'\" NIL \"xx.xx\" \"xx.com\") (\"'xx xx'\" NIL \"xx.xx\" \"xx.com\") (\"xx.xx@xx.com\" NIL \"xx.xx\" \"xx.com\")) NIL NIL \"<xx@xx.com>\")";
+    _ = envelope(input).unwrap();
+}
+
 /* Helper to build StrBuilder for Address structs */
 macro_rules! str_builder {
     ($offset:expr, $length:expr) => {
@@ -1366,7 +1404,7 @@ pub fn envelope_addresses<'a>(
         |input: &'a [u8]| -> IResult<&'a [u8], Option<SmallVec<[Address; 1]>>> {
             let (input, _) = tag("(")(input)?;
             let (input, envelopes) = fold_many1(
-                delimited(tag("("), envelope_address, tag(")")),
+                delimited(tag("("), envelope_address, alt((tag(") "), tag(")")))),
                 SmallVec::new,
                 |mut acc, item| {
                     acc.push(item);
