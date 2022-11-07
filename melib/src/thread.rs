@@ -120,6 +120,12 @@ macro_rules! make {
         let old_group_hash = $threads.find_group($threads.thread_nodes[&$c].group);
         let parent_group_hash = $threads.find_group($threads.thread_nodes[&$p].group);
         if old_group_hash != parent_group_hash {
+            if let Some(old_env_hashes) = $threads.thread_to_envelope.get(&old_group_hash).cloned() {
+                for &env_hash in &old_env_hashes {
+                    *$threads.envelope_to_thread.entry(env_hash).or_default() = parent_group_hash;
+                }
+                $threads.thread_to_envelope.entry(parent_group_hash).or_default().extend(old_env_hashes.into_iter());
+            }
             let prev_parent = remove_from_parent!(&mut $threads.thread_nodes, $c);
             if !($threads.thread_nodes[&$p]).children.contains(&$c) {
                 /* Pruned nodes keep their children in case they show up in a later merge, so do not panic
@@ -633,6 +639,8 @@ pub struct Threads {
     pub message_ids_set: HashSet<Vec<u8>>,
     pub missing_message_ids: HashSet<Vec<u8>>,
     pub hash_set: HashSet<EnvelopeHash>,
+    pub thread_to_envelope: HashMap<ThreadHash, Vec<EnvelopeHash>>,
+    pub envelope_to_thread: HashMap<EnvelopeHash, ThreadHash>,
     sort: Arc<RwLock<(SortField, SortOrder)>>,
     subsort: Arc<RwLock<(SortField, SortOrder)>>,
 }
@@ -698,6 +706,10 @@ impl Threads {
             HashSet::with_capacity_and_hasher(length, Default::default());
         let hash_set: HashSet<EnvelopeHash> =
             HashSet::with_capacity_and_hasher(length, Default::default());
+        let thread_to_envelope: HashMap<ThreadHash, Vec<EnvelopeHash>> =
+            HashMap::with_capacity_and_hasher(length, Default::default());
+        let envelope_to_thread: HashMap<EnvelopeHash, ThreadHash> =
+            HashMap::with_capacity_and_hasher(length, Default::default());
 
         Threads {
             thread_nodes,
@@ -705,6 +717,8 @@ impl Threads {
             message_ids_set,
             missing_message_ids,
             hash_set,
+            thread_to_envelope,
+            envelope_to_thread,
             sort: Arc::new(RwLock::new((SortField::Date, SortOrder::Desc))),
             subsort: Arc::new(RwLock::new((SortField::Subject, SortOrder::Desc))),
 
@@ -743,7 +757,7 @@ impl Threads {
          * - hash_set
          * - message fields in thread_nodes
          */
-        let thread_hash = if let Some((key, _)) = self
+        let thread_node_hash = if let Some((key, _)) = self
             .thread_nodes
             .iter()
             .find(|(_, n)| n.message.map(|n| n == old_hash).unwrap_or(false))
@@ -753,21 +767,34 @@ impl Threads {
             return Err(());
         };
 
-        self.thread_nodes.get_mut(&thread_hash).unwrap().message = Some(new_hash);
-        let was_unseen = self.thread_nodes[&thread_hash].unseen;
+        self.thread_nodes
+            .get_mut(&thread_node_hash)
+            .unwrap()
+            .message = Some(new_hash);
+        let was_unseen = self.thread_nodes[&thread_node_hash].unseen;
         let is_unseen = !envelopes.read().unwrap()[&new_hash].is_seen();
         if was_unseen != is_unseen {
             let Thread { ref mut unseen, .. } =
-                self.thread_ref_mut(self.thread_nodes[&thread_hash].group);
+                self.thread_ref_mut(self.thread_nodes[&thread_node_hash].group);
             if was_unseen {
                 *unseen -= 1;
             } else {
                 *unseen += 1;
             }
         }
-        self.thread_nodes.get_mut(&thread_hash).unwrap().unseen = is_unseen;
+        self.thread_nodes.get_mut(&thread_node_hash).unwrap().unseen = is_unseen;
         self.hash_set.remove(&old_hash);
         self.hash_set.insert(new_hash);
+        let thread_hash = self.envelope_to_thread.remove(&old_hash).unwrap();
+        self.thread_to_envelope
+            .entry(thread_hash)
+            .or_default()
+            .retain(|h| *h != old_hash);
+        self.thread_to_envelope
+            .entry(thread_hash)
+            .or_default()
+            .push(new_hash);
+        *self.envelope_to_thread.entry(new_hash).or_default() = thread_hash;
         Ok(())
     }
 
@@ -888,7 +915,7 @@ impl Threads {
 
                 /* If thread node currently has a message from a foreign mailbox and env_hash is
                  * from current mailbox we want to update it, otherwise return */
-                if !node.other_mailbox || other_mailbox {
+                if node.other_mailbox || other_mailbox {
                     return false;
                 }
             }
@@ -934,9 +961,10 @@ impl Threads {
             node.unseen = !envelopes_lck[&env_hash].is_seen();
         }
 
-        if !self.groups.contains_key(&self.thread_nodes[&new_id].group) {
+        let thread_hash = self.thread_nodes[&new_id].group;
+        if !self.groups.contains_key(&thread_hash) {
             self.groups.insert(
-                self.thread_nodes[&new_id].group,
+                thread_hash,
                 ThreadGroup::Root(Thread {
                     root: new_id,
                     date: envelopes_lck[&env_hash].date(),
@@ -955,7 +983,7 @@ impl Threads {
                 }),
             );
         } else {
-            let parent_group = self.thread_ref_mut(self.thread_nodes[&new_id].group);
+            let parent_group = self.thread_ref_mut(thread_hash);
             parent_group.date = std::cmp::max(parent_group.date, envelopes_lck[&env_hash].date());
             parent_group.len += 1;
             parent_group.unseen += if !envelopes_lck[&env_hash].is_seen() {
@@ -974,6 +1002,11 @@ impl Threads {
         self.message_ids_set.insert(message_id.to_vec());
         self.missing_message_ids.remove(message_id);
         self.hash_set.insert(env_hash);
+        self.thread_to_envelope
+            .entry(thread_hash)
+            .or_default()
+            .push(env_hash);
+        *self.envelope_to_thread.entry(env_hash).or_default() = thread_hash;
         if let Some(reply_to_id) = reply_to_id {
             make!((reply_to_id) parent of (new_id), self);
         } else if let Some(r) = envelopes_lck[&env_hash].in_reply_to().map(StrBuild::raw) {
