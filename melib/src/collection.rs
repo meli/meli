@@ -479,6 +479,12 @@ impl<K: std::cmp::Eq + std::hash::Hash, V> Deref for RwRef<'_, K, V> {
     }
 }
 
+impl<K: std::cmp::Eq + std::hash::Hash, V> AsRef<V> for RwRef<'_, K, V> {
+    fn as_ref(&self) -> &V {
+        self.guard.get(&self.hash).expect("Hash was not found")
+    }
+}
+
 pub struct RwRefMut<'g, K: std::cmp::Eq + std::hash::Hash, V> {
     guard: RwLockWriteGuard<'g, HashMap<K, V>>,
     hash: K,
@@ -495,5 +501,17 @@ impl<K: std::cmp::Eq + std::hash::Hash, V> Deref for RwRefMut<'_, K, V> {
 
     fn deref(&self) -> &V {
         self.guard.get(&self.hash).expect("Hash was not found")
+    }
+}
+
+impl<K: std::cmp::Eq + std::hash::Hash, V> AsRef<V> for RwRefMut<'_, K, V> {
+    fn as_ref(&self) -> &V {
+        self.guard.get(&self.hash).expect("Hash was not found")
+    }
+}
+
+impl<K: std::cmp::Eq + std::hash::Hash, V> AsMut<V> for RwRefMut<'_, K, V> {
+    fn as_mut(&mut self) -> &mut V {
+        self.guard.get_mut(&self.hash).expect("Hash was not found")
     }
 }
