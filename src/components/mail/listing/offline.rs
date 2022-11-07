@@ -26,23 +26,23 @@ use std::borrow::Cow;
 #[derive(Debug)]
 pub struct OfflineListing {
     cursor_pos: (AccountHash, MailboxHash),
-    _row_updates: SmallVec<[ThreadHash; 8]>,
-    _selection: HashMap<ThreadHash, bool>,
+    _row_updates: SmallVec<[EnvelopeHash; 8]>,
+    _selection: HashMap<EnvelopeHash, bool>,
     messages: Vec<Cow<'static, str>>,
     dirty: bool,
     id: ComponentId,
 }
 
 impl MailListingTrait for OfflineListing {
-    fn row_updates(&mut self) -> &mut SmallVec<[ThreadHash; 8]> {
+    fn row_updates(&mut self) -> &mut SmallVec<[EnvelopeHash; 8]> {
         &mut self._row_updates
     }
 
-    fn selection(&mut self) -> &mut HashMap<ThreadHash, bool> {
+    fn selection(&mut self) -> &mut HashMap<EnvelopeHash, bool> {
         &mut self._selection
     }
 
-    fn get_focused_items(&self, _context: &Context) -> SmallVec<[ThreadHash; 8]> {
+    fn get_focused_items(&self, _context: &Context) -> SmallVec<[EnvelopeHash; 8]> {
         SmallVec::new()
     }
 
@@ -83,6 +83,14 @@ impl ListingTrait for OfflineListing {
 
     fn unfocused(&self) -> bool {
         false
+    }
+
+    fn set_modifier_active(&mut self, _: bool) {}
+
+    fn set_modifier_command(&mut self, _: Option<Modifier>) {}
+
+    fn modifier_command(&self) -> Option<Modifier> {
+        None
     }
 
     fn set_movement(&mut self, _: PageMovement) {}

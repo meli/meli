@@ -22,7 +22,7 @@
 use super::EntryStrings;
 use super::*;
 use crate::components::PageMovement;
-use crate::jobs::{JobId, JoinHandle};
+use crate::jobs::JoinHandle;
 use std::cmp;
 use std::iter::FromIterator;
 
@@ -128,8 +128,7 @@ pub struct PlainListing {
     length: usize,
     sort: (SortField, SortOrder),
     subsort: (SortField, SortOrder),
-    all_envelopes: HashSet<EnvelopeHash>,
-    order: HashMap<EnvelopeHash, usize>,
+    rows: RowsState<(ThreadHash, EnvelopeHash)>,
     /// Cache current view.
     data_columns: DataColumns,
 
@@ -138,9 +137,6 @@ pub struct PlainListing {
     filter_term: String,
     filtered_selection: Vec<EnvelopeHash>,
     filtered_order: HashMap<EnvelopeHash, usize>,
-    selection: HashMap<EnvelopeHash, bool>,
-    _selection: HashMap<ThreadHash, bool>,
-    thread_node_hashes: HashMap<EnvelopeHash, ThreadNodeHash>,
     local_collection: Vec<EnvelopeHash>,
     /// If we must redraw on next redraw event
     dirty: bool,
@@ -148,40 +144,42 @@ pub struct PlainListing {
     /// If `self.view` exists or not.
     focus: Focus,
     view: MailView,
-    row_updates: SmallVec<[EnvelopeHash; 8]>,
-    _row_updates: SmallVec<[ThreadHash; 8]>,
     color_cache: ColorCache,
-
-    active_jobs: HashMap<JobId, JoinHandle<Result<()>>>,
     movement: Option<PageMovement>,
+    modifier_active: bool,
+    modifier_command: Option<Modifier>,
     id: ComponentId,
 }
 
 impl MailListingTrait for PlainListing {
-    fn row_updates(&mut self) -> &mut SmallVec<[ThreadHash; 8]> {
-        &mut self._row_updates
+    fn row_updates(&mut self) -> &mut SmallVec<[EnvelopeHash; 8]> {
+        &mut self.rows.row_updates
     }
 
-    fn selection(&mut self) -> &mut HashMap<ThreadHash, bool> {
-        &mut self._selection
+    fn selection(&mut self) -> &mut HashMap<EnvelopeHash, bool> {
+        &mut self.rows.selection
     }
 
-    fn get_focused_items(&self, _context: &Context) -> SmallVec<[ThreadHash; 8]> {
-        SmallVec::new()
-        /*
-        let is_selection_empty = self.selection.values().cloned().any(std::convert::identity);
+    fn get_focused_items(&self, _context: &Context) -> SmallVec<[EnvelopeHash; 8]> {
+        let is_selection_empty: bool = !self
+            .rows
+            .selection
+            .values()
+            .cloned()
+            .any(std::convert::identity);
+        dbg!(is_selection_empty);
         if is_selection_empty {
-            self.selection
-                .iter()
-                .filter(|(_, v)| **v)
-                .map(|(k, _)| self.thread_node_hashes[k])
-                .collect()
-        } else {
-            let mut ret = SmallVec::new();
-            ret.push(self.get_thread_under_cursor(self.cursor_pos.2, context));
-            ret
+            return dbg!(self.get_env_under_cursor(self.cursor_pos.2))
+                .into_iter()
+                .collect::<_>();
         }
-        */
+        SmallVec::from_iter(
+            self.rows
+                .selection
+                .iter()
+                .filter(|(_, &v)| v)
+                .map(|(k, _)| *k),
+        )
     }
 
     /// Fill the `self.data_columns` `CellBuffers` with the contents of the account mailbox the user has
@@ -253,12 +251,6 @@ impl MailListingTrait for PlainListing {
             .envelopes
             .read()
             .unwrap();
-        self.thread_node_hashes = context.accounts[&self.cursor_pos.0]
-            .collection
-            .get_mailbox(self.cursor_pos.1)
-            .iter()
-            .map(|h| (*h, env_lck[h].thread()))
-            .collect();
         let sort = self.sort;
         self.local_collection.sort_by(|a, b| match sort {
             (SortField::Date, SortOrder::Desc) => {
@@ -282,17 +274,13 @@ impl MailListingTrait for PlainListing {
                 mb.subject().cmp(&ma.subject())
             }
         });
-        for &env_hash in &self.local_collection {
-            self.all_envelopes.insert(env_hash);
-        }
         let items = Box::new(self.local_collection.clone().into_iter())
             as Box<dyn Iterator<Item = EnvelopeHash>>;
 
         self.redraw_list(context, items);
         drop(env_lck);
 
-        if self.length > 0 {
-            let env_hash = self.get_env_under_cursor(self.cursor_pos.2, context);
+        if let Some(env_hash) = self.get_env_under_cursor(self.cursor_pos.2) {
             let temp = (self.new_cursor_pos.0, self.new_cursor_pos.1, env_hash);
             if !force && old_cursor_pos == self.new_cursor_pos {
                 self.view.update(temp, context);
@@ -340,14 +328,16 @@ impl ListingTrait for PlainListing {
         self.filtered_selection.clear();
         self.filtered_order.clear();
         self.filter_term.clear();
-        self.row_updates.clear();
+        self.rows.row_updates.clear();
     }
 
     fn highlight_line(&mut self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context) {
-        if self.length == 0 {
+        let i = if let Some(i) = self.get_env_under_cursor(idx) {
+            i
+        } else {
+            // self.length == 0
             return;
-        }
-        let i = self.get_env_under_cursor(idx, context);
+        };
 
         let account = &context.accounts[&self.cursor_pos.0];
         let envelope: EnvelopeRef = account.collection.get_env(i);
@@ -357,7 +347,7 @@ impl ListingTrait for PlainListing {
             idx % 2 == 0,
             !envelope.is_seen(),
             self.cursor_pos.2 == idx,
-            self.selection[&i]
+            self.rows.selection[&i]
         );
 
         let (upper_left, bottom_right) = area;
@@ -602,14 +592,12 @@ impl ListingTrait for PlainListing {
             return;
         }
 
-        self.order.clear();
-        self.selection.clear();
         self.length = 0;
         self.filtered_selection.clear();
         self.filtered_order.clear();
         self.filter_term = filter_term;
-        self.row_updates.clear();
-        for v in self.selection.values_mut() {
+        self.rows.row_updates.clear();
+        for v in self.rows.selection.values_mut() {
             *v = false;
         }
 
@@ -621,7 +609,7 @@ impl ListingTrait for PlainListing {
             if self.filtered_order.contains_key(&env_hash) {
                 continue;
             }
-            if self.all_envelopes.contains(&env_hash) {
+            if self.rows.contains_env(env_hash) {
                 self.filtered_selection.push(env_hash);
                 self.filtered_order
                     .insert(env_hash, self.filtered_selection.len() - 1);
@@ -644,6 +632,18 @@ impl ListingTrait for PlainListing {
         !matches!(self.focus, Focus::None)
     }
 
+    fn set_modifier_active(&mut self, new_val: bool) {
+        self.modifier_active = new_val;
+    }
+
+    fn set_modifier_command(&mut self, new_val: Option<Modifier>) {
+        self.modifier_command = new_val;
+    }
+
+    fn modifier_command(&self) -> Option<Modifier> {
+        self.modifier_command
+    }
+
     fn set_movement(&mut self, mvm: PageMovement) {
         self.movement = Some(mvm);
         self.set_dirty(true);
@@ -655,18 +655,19 @@ impl ListingTrait for PlainListing {
                 self.view
                     .process_event(&mut UIEvent::VisibilityChange(false), context);
                 self.dirty = true;
-                /* If self.row_updates is not empty and we exit a thread, the row_update events
+                /* If self.rows.row_updates is not empty and we exit a thread, the row_update events
                  * will be performed but the list will not be drawn. So force a draw in any case.
                  * */
                 self.force_draw = true;
             }
             Focus::Entry => {
-                let env_hash = self.get_env_under_cursor(self.cursor_pos.2, context);
-                let temp = (self.cursor_pos.0, self.cursor_pos.1, env_hash);
-                self.view = MailView::new(temp, None, None, context);
-                self.force_draw = true;
-                self.dirty = true;
-                self.view.set_dirty(true);
+                if let Some(env_hash) = self.get_env_under_cursor(self.cursor_pos.2) {
+                    let temp = (self.cursor_pos.0, self.cursor_pos.1, env_hash);
+                    self.view = MailView::new(temp, None, None, context);
+                    self.force_draw = true;
+                    self.dirty = true;
+                    self.view.set_dirty(true);
+                }
             }
             Focus::EntryFullscreen => {
                 self.dirty = true;
@@ -696,32 +697,26 @@ impl PlainListing {
             length: 0,
             sort: (Default::default(), Default::default()),
             subsort: (SortField::Date, SortOrder::Desc),
-            all_envelopes: HashSet::default(),
+            rows: RowsState::default(),
             local_collection: Vec::new(),
-            thread_node_hashes: HashMap::default(),
-            order: HashMap::default(),
             filter_term: String::new(),
             search_job: None,
             filtered_selection: Vec::new(),
             filtered_order: HashMap::default(),
-            selection: HashMap::default(),
-            _selection: HashMap::default(),
-            row_updates: SmallVec::new(),
-            _row_updates: SmallVec::new(),
             data_columns: DataColumns::default(),
             dirty: true,
             force_draw: true,
             focus: Focus::None,
             view: MailView::default(),
             color_cache: ColorCache::default(),
-            active_jobs: HashMap::default(),
-
             movement: None,
+            modifier_active: false,
+            modifier_command: None,
             id: ComponentId::new_v4(),
         })
     }
 
-    fn make_entry_string(&self, e: EnvelopeRef, context: &Context) -> EntryStrings {
+    fn make_entry_string(&self, e: &Envelope, context: &Context) -> EntryStrings {
         let mut tags = String::new();
         let mut colors = SmallVec::new();
         let account = &context.accounts[&self.cursor_pos.0];
@@ -766,7 +761,7 @@ impl PlainListing {
             subject: SubjectString(subject),
             flag: FlagString(format!(
                 "{selected}{unseen}{attachments}{whitespace}",
-                selected = if self.selection.get(&e.hash()).cloned().unwrap_or(false) {
+                selected = if self.rows.selection.get(&e.hash()).cloned().unwrap_or(false) {
                     mailbox_settings!(
                         context[self.cursor_pos.0][&self.cursor_pos.1]
                             .listing
@@ -802,7 +797,7 @@ impl PlainListing {
                 } else {
                     ""
                 },
-                whitespace = if self.selection.get(&e.hash()).cloned().unwrap_or(false)
+                whitespace = if self.rows.selection.get(&e.hash()).cloned().unwrap_or(false)
                     || !e.is_seen()
                     || e.has_attachments()
                 {
@@ -819,11 +814,10 @@ impl PlainListing {
     fn redraw_list(&mut self, context: &Context, iter: Box<dyn Iterator<Item = EnvelopeHash>>) {
         let account = &context.accounts[&self.cursor_pos.0];
         let mailbox = &account[&self.cursor_pos.1];
+        let threads = account.collection.get_threads(self.cursor_pos.1);
 
-        self.order.clear();
-        self.selection.clear();
+        self.rows.clear();
         self.length = 0;
-        let mut rows = Vec::with_capacity(1024);
         let mut min_width = (0, 0, 0, 0, 0);
 
         for i in iter {
@@ -852,7 +846,7 @@ impl PlainListing {
                 }
             }
 
-            let entry_strings = self.make_entry_string(envelope, context);
+            let entry_strings = self.make_entry_string(&envelope, context);
             min_width.1 = cmp::max(min_width.1, entry_strings.date.grapheme_width()); /* date */
             min_width.2 = cmp::max(min_width.2, entry_strings.from.grapheme_width()); /* from */
             min_width.3 = cmp::max(
@@ -862,10 +856,13 @@ impl PlainListing {
                     + 1
                     + entry_strings.tags.grapheme_width(),
             ); /* tags + subject */
-            rows.push(entry_strings);
+            self.rows.insert_thread(
+                threads.envelope_to_thread[&i],
+                (threads.envelope_to_thread[&i], i),
+                smallvec::smallvec![i],
+                entry_strings,
+            );
 
-            self.order.insert(i, self.length);
-            self.selection.insert(i, false);
             self.length += 1;
         }
 
@@ -873,16 +870,16 @@ impl PlainListing {
 
         /* index column */
         self.data_columns.columns[0] =
-            CellBuffer::new_with_context(min_width.0, rows.len(), None, context);
+            CellBuffer::new_with_context(min_width.0, self.rows.len(), None, context);
         /* date column */
         self.data_columns.columns[1] =
-            CellBuffer::new_with_context(min_width.1, rows.len(), None, context);
+            CellBuffer::new_with_context(min_width.1, self.rows.len(), None, context);
         /* from column */
         self.data_columns.columns[2] =
-            CellBuffer::new_with_context(min_width.2, rows.len(), None, context);
+            CellBuffer::new_with_context(min_width.2, self.rows.len(), None, context);
         /* subject column */
         self.data_columns.columns[3] =
-            CellBuffer::new_with_context(min_width.3, rows.len(), None, context);
+            CellBuffer::new_with_context(min_width.3, self.rows.len(), None, context);
 
         let iter = if self.filter_term.is_empty() {
             Box::new(self.local_collection.iter().cloned())
@@ -893,7 +890,7 @@ impl PlainListing {
         };
 
         let columns = &mut self.data_columns.columns;
-        for ((idx, i), strings) in iter.enumerate().zip(rows) {
+        for ((idx, i), (_, strings)) in iter.enumerate().zip(self.rows.entries.iter()) {
             if !context.accounts[&self.cursor_pos.0].contains_key(i) {
                 //debug!("key = {}", i);
                 //debug!(
@@ -1003,7 +1000,7 @@ impl PlainListing {
             }
             /* Set fg color for flags */
             let mut x = 0;
-            if self.selection.get(&i).cloned().unwrap_or(false) {
+            if self.rows.selection.get(&i).cloned().unwrap_or(false) {
                 x += 1;
             }
             if !envelope.is_seen() {
@@ -1029,11 +1026,11 @@ impl PlainListing {
         }
     }
 
-    fn get_env_under_cursor(&self, cursor: usize, _context: &Context) -> EnvelopeHash {
+    fn get_env_under_cursor(&self, cursor: usize) -> Option<EnvelopeHash> {
         if self.filter_term.is_empty() {
-            self.local_collection[cursor]
+            self.local_collection.get(cursor).cloned()
         } else {
-            self.filtered_selection[cursor]
+            self.filtered_selection.get(cursor).cloned()
         }
     }
 
@@ -1050,42 +1047,6 @@ impl PlainListing {
             }
             _ => melib::datetime::timestamp_to_string(envelope.datetime(), None, false),
         }
-    }
-
-    fn perform_action(&mut self, context: &mut Context, env_hash: EnvelopeHash, a: &ListingAction) {
-        let account = &mut context.accounts[&self.cursor_pos.0];
-        match {
-            match a {
-                ListingAction::SetSeen => account.backend.write().unwrap().set_flags(
-                    env_hash.into(),
-                    self.cursor_pos.1,
-                    smallvec::smallvec![(Ok(Flag::SEEN), true)],
-                ),
-                ListingAction::SetUnseen => account.backend.write().unwrap().set_flags(
-                    env_hash.into(),
-                    self.cursor_pos.1,
-                    smallvec::smallvec![(Ok(Flag::SEEN), false)],
-                ),
-                ListingAction::Delete => {
-                    /* do nothing */
-                    Err(MeliError::new("Delete is unimplemented"))
-                }
-                _ => unreachable!(),
-            }
-        } {
-            Err(e) => {
-                context
-                    .replies
-                    .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
-                        e.to_string(),
-                    )));
-            }
-            Ok(fut) => {
-                let handle = account.job_executor.spawn_specialized(fut);
-                self.active_jobs.insert(handle.job_id, handle);
-            }
-        }
-        self.row_updates.push(env_hash);
     }
 }
 
@@ -1128,10 +1089,10 @@ impl Component for PlainListing {
                 area = (set_y(upper_left, y + 1), bottom_right);
             }
 
-            if !self.row_updates.is_empty() {
+            if !self.rows.row_updates.is_empty() {
                 let (upper_left, bottom_right) = area;
-                while let Some(row) = self.row_updates.pop() {
-                    let row: usize = self.order[&row];
+                while let Some(row) = self.rows.row_updates.pop() {
+                    let row: usize = self.rows.env_order[&row];
                     let rows = get_y(bottom_right) - get_y(upper_left) + 1;
                     let page_no = (self.new_cursor_pos.2).wrapping_div(rows);
 
@@ -1233,8 +1194,14 @@ impl Component for PlainListing {
                     if !self.unfocused()
                         && shortcut!(key == shortcuts[Listing::DESCRIPTION]["select_entry"]) =>
                 {
-                    let env_hash = self.get_env_under_cursor(self.cursor_pos.2, context);
-                    self.selection.entry(env_hash).and_modify(|e| *e = !*e);
+                    if self.modifier_active && self.modifier_command.is_none() {
+                        self.modifier_command = Some(Modifier::default());
+                    } else {
+                        if let Some(env_hash) = self.get_env_under_cursor(self.cursor_pos.2) {
+                            self.rows.update_selection_with_env(env_hash, |e| *e = !*e);
+                        }
+                    }
+                    return true;
                 }
                 UIEvent::Action(ref action) => match action {
                     Action::SubSort(field, order) if !self.unfocused() => {
@@ -1251,37 +1218,6 @@ impl Component for PlainListing {
                     Action::Sort(field, order) if !self.unfocused() => {
                         debug!("Sort {:?} , {:?}", field, order);
                         self.sort = (*field, *order);
-                        return true;
-                    }
-                    Action::Listing(a @ ListingAction::SetSeen)
-                    | Action::Listing(a @ ListingAction::SetUnseen)
-                    | Action::Listing(a @ ListingAction::Delete)
-                        if !self.unfocused() =>
-                    {
-                        let is_selection_empty =
-                            self.selection.values().cloned().any(std::convert::identity);
-                        let i = [self.get_env_under_cursor(self.cursor_pos.2, context)];
-                        let cursor_iter;
-                        let sel_iter = if is_selection_empty {
-                            cursor_iter = None;
-                            Some(self.selection.iter().filter(|(_, v)| **v).map(|(k, _)| k))
-                        } else {
-                            cursor_iter = Some(i.iter());
-                            None
-                        };
-                        let iter = sel_iter
-                            .into_iter()
-                            .flatten()
-                            .chain(cursor_iter.into_iter().flatten())
-                            .cloned();
-                        let stack: SmallVec<[_; 8]> = SmallVec::from_iter(iter);
-                        for i in stack {
-                            self.perform_action(context, i, a);
-                        }
-                        self.dirty = true;
-                        for v in self.selection.values_mut() {
-                            *v = false;
-                        }
                         return true;
                     }
 
@@ -1347,16 +1283,11 @@ impl Component for PlainListing {
                     return false;
                 }
 
-                self.row_updates.push(*new_hash);
-                if let Some(row) = self.order.remove(old_hash) {
-                    self.order.insert(*new_hash, row);
-                    let selection_status = self.selection.remove(old_hash).unwrap();
-                    self.selection.insert(*new_hash, selection_status);
-                    for h in self.filtered_selection.iter_mut() {
-                        if *h == *old_hash {
-                            *h = *new_hash;
-                            break;
-                        }
+                self.rows.rename_env(*old_hash, *new_hash);
+                for h in self.filtered_selection.iter_mut() {
+                    if *h == *old_hash {
+                        *h = *new_hash;
+                        break;
                     }
                 }
 
@@ -1378,7 +1309,7 @@ impl Component for PlainListing {
                     return false;
                 }
 
-                self.row_updates.push(*env_hash);
+                self.rows.row_updates.push(*env_hash);
                 self.dirty = true;
 
                 if self.unfocused() {
@@ -1394,9 +1325,14 @@ impl Component for PlainListing {
             }
             UIEvent::Input(Key::Esc)
                 if !self.unfocused()
-                    && self.selection.values().cloned().any(std::convert::identity) =>
+                    && self
+                        .rows
+                        .selection
+                        .values()
+                        .cloned()
+                        .any(std::convert::identity) =>
             {
-                for v in self.selection.values_mut() {
+                for v in self.rows.selection.values_mut() {
                     *v = false;
                 }
                 self.dirty = true;

@@ -24,6 +24,7 @@ use crate::components::PageMovement;
 use std::cmp;
 use std::convert::TryInto;
 use std::fmt::Write;
+use std::iter::FromIterator;
 
 macro_rules! row_attr {
     ($color_cache:expr, $even: expr, $unseen:expr, $highlighted:expr, $selected:expr  $(,)*) => {{
@@ -122,31 +123,48 @@ pub struct ThreadListing {
 
     data_columns: DataColumns,
     rows_drawn: SegmentTree,
-    rows: Vec<((usize, bool, bool, EnvelopeHash), EntryStrings)>,
-    row_updates: SmallVec<[ThreadHash; 8]>,
-    selection: HashMap<ThreadHash, bool>,
-    order: HashMap<EnvelopeHash, usize>,
+    rows: RowsState<(bool, bool, ThreadHash, EnvelopeHash)>,
     /// If we must redraw on next redraw event
     dirty: bool,
     /// If `self.view` is focused or not.
     focus: Focus,
     initialised: bool,
     view: Option<Box<MailView>>,
+    modifier_active: bool,
+    modifier_command: Option<Modifier>,
     movement: Option<PageMovement>,
     id: ComponentId,
 }
 
 impl MailListingTrait for ThreadListing {
-    fn row_updates(&mut self) -> &mut SmallVec<[ThreadHash; 8]> {
-        &mut self.row_updates
+    fn row_updates(&mut self) -> &mut SmallVec<[EnvelopeHash; 8]> {
+        &mut self.rows.row_updates
     }
 
-    fn selection(&mut self) -> &mut HashMap<ThreadHash, bool> {
-        &mut self.selection
+    fn selection(&mut self) -> &mut HashMap<EnvelopeHash, bool> {
+        &mut self.rows.selection
     }
 
-    fn get_focused_items(&self, _context: &Context) -> SmallVec<[ThreadHash; 8]> {
-        SmallVec::new()
+    fn get_focused_items(&self, _context: &Context) -> SmallVec<[EnvelopeHash; 8]> {
+        let is_selection_empty: bool = !self
+            .rows
+            .selection
+            .values()
+            .cloned()
+            .any(std::convert::identity);
+        if is_selection_empty {
+            return self
+                .get_env_under_cursor(self.cursor_pos.2)
+                .into_iter()
+                .collect::<_>();
+        }
+        SmallVec::from_iter(
+            self.rows
+                .selection
+                .iter()
+                .filter(|(_, &v)| v)
+                .map(|(k, _)| *k),
+        )
     }
 
     /// Fill the `self.content` `CellBuffer` with the contents of the account mailbox the user has
@@ -230,7 +248,7 @@ impl MailListingTrait for ThreadListing {
         let account = &context.accounts[&self.cursor_pos.0];
         let threads = account.collection.get_threads(self.cursor_pos.1);
         self.length = 0;
-        self.order.clear();
+        self.rows.clear();
         if threads.len() == 0 {
             let message: String = account[&self.cursor_pos.1].status();
             self.data_columns.columns[0] =
@@ -246,7 +264,6 @@ impl MailListingTrait for ThreadListing {
             );
             return;
         }
-        let mut rows = Vec::with_capacity(1024);
         let mut min_width = (0, 0, 0, 0, 0);
         #[allow(clippy::type_complexity)]
         let mut row_widths: (
@@ -270,15 +287,13 @@ impl MailListingTrait for ThreadListing {
         let mut iter = threads.threads_group_iter(roots).peekable();
         let thread_nodes: &HashMap<ThreadNodeHash, ThreadNode> = threads.thread_nodes();
         /* This is just a desugared for loop so that we can use .peek() */
-        let mut idx = 0;
+        let mut idx: usize = 0;
         let mut prev_group = ThreadHash::null();
         while let Some((indentation, thread_node_hash, has_sibling)) = iter.next() {
             let thread_node = &thread_nodes[&thread_node_hash];
 
-            if thread_node.has_message() {
-                let envelope: EnvelopeRef =
-                    account.collection.get_env(thread_node.message().unwrap());
-                self.order.insert(envelope.hash(), idx);
+            if let Some(env_hash) = thread_node.message() {
+                let envelope: EnvelopeRef = account.collection.get_env(env_hash);
                 use melib::search::QueryTrait;
                 if let Some(filter_query) = mailbox_settings!(
                     context[self.cursor_pos.0][&self.cursor_pos.1]
@@ -341,15 +356,17 @@ impl MailListingTrait for ThreadListing {
                         + 1
                         + entry_strings.tags.grapheme_width(),
                 ); /* tags + subject */
-                rows.push((
+                self.rows.insert_thread(
+                    threads.envelope_to_thread[&env_hash],
                     (
-                        idx,
                         envelope.is_seen(),
                         envelope.has_attachments(),
-                        envelope.hash(),
+                        threads.envelope_to_thread[&env_hash],
+                        env_hash,
                     ),
+                    smallvec::smallvec![env_hash],
                     entry_strings,
-                ));
+                );
                 idx += 1;
             } else {
                 continue;
@@ -374,24 +391,23 @@ impl MailListingTrait for ThreadListing {
         min_width.0 = idx.saturating_sub(1).to_string().len();
         /* index column */
         self.data_columns.columns[0] =
-            CellBuffer::new_with_context(min_width.0, rows.len(), None, context);
+            CellBuffer::new_with_context(min_width.0, self.rows.len(), None, context);
 
         /* date column */
         self.data_columns.columns[1] =
-            CellBuffer::new_with_context(min_width.1, rows.len(), None, context);
+            CellBuffer::new_with_context(min_width.1, self.rows.len(), None, context);
         /* from column */
         self.data_columns.columns[2] =
-            CellBuffer::new_with_context(min_width.2, rows.len(), None, context);
+            CellBuffer::new_with_context(min_width.2, self.rows.len(), None, context);
         self.data_columns.segment_tree[2] = row_widths.2.into();
         /* flags column */
         self.data_columns.columns[3] =
-            CellBuffer::new_with_context(min_width.3, rows.len(), None, context);
+            CellBuffer::new_with_context(min_width.3, self.rows.len(), None, context);
         /* subject column */
         self.data_columns.columns[4] =
-            CellBuffer::new_with_context(min_width.4, rows.len(), None, context);
+            CellBuffer::new_with_context(min_width.4, self.rows.len(), None, context);
         self.data_columns.segment_tree[4] = row_widths.4.into();
 
-        self.rows = rows;
         self.rows_drawn = SegmentTree::from(
             std::iter::repeat(1)
                 .take(self.rows.len())
@@ -403,7 +419,7 @@ impl MailListingTrait for ThreadListing {
             0,
             std::cmp::min(80, self.rows.len().saturating_sub(1)),
         );
-        self.length = self.order.len();
+        self.length = self.rows.len();
     }
 }
 
@@ -416,8 +432,7 @@ impl ListingTrait for ThreadListing {
         self.new_cursor_pos = (coordinates.0, coordinates.1, 0);
         self.focus = Focus::None;
         self.view = None;
-        self.order.clear();
-        self.row_updates.clear();
+        self.rows.clear();
         self.initialised = false;
     }
 
@@ -620,15 +635,15 @@ impl ListingTrait for ThreadListing {
         for r in 0..cmp::min(self.length - top_idx, rows) {
             let (fg_color, bg_color) = {
                 let c = &self.data_columns.columns[0][(0, r + top_idx)];
-                /*
-                let thread_hash = self.get_thread_under_cursor(r + top_idx);
-
-                if self.selection[&thread_hash] {
-                    (c.fg(), self.color_cache.selected.bg)
+                if let Some(env_hash) = self.get_env_under_cursor(r + top_idx) {
+                    if self.rows.selection[&env_hash] {
+                        (c.fg(), self.color_cache.selected.bg)
+                    } else {
+                        (c.fg(), c.bg())
+                    }
                 } else {
+                    (c.fg(), c.bg())
                 }
-                */
-                (c.fg(), c.bg())
             };
             change_colors(
                 grid,
@@ -703,11 +718,13 @@ impl ListingTrait for ThreadListing {
     }
 
     fn highlight_line(&mut self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context) {
-        if self.length == 0 {
+        let env_hash = if let Some(i) = self.get_env_under_cursor(idx) {
+            i
+        } else {
+            // self.length == 0
             return;
-        }
+        };
 
-        let env_hash = self.get_env_under_cursor(idx, context);
         let envelope: EnvelopeRef = context.accounts[&self.cursor_pos.0]
             .collection
             .get_env(env_hash);
@@ -717,7 +734,7 @@ impl ListingTrait for ThreadListing {
             idx % 2 == 0,
             !envelope.is_seen(),
             self.cursor_pos.2 == idx,
-            false,
+            self.rows.selection[&env_hash],
         );
         for row in grid.bounds_iter(area) {
             for c in row {
@@ -746,6 +763,18 @@ impl ListingTrait for ThreadListing {
         !matches!(self.focus, Focus::None)
     }
 
+    fn set_modifier_active(&mut self, new_val: bool) {
+        self.modifier_active = new_val;
+    }
+
+    fn set_modifier_command(&mut self, new_val: Option<Modifier>) {
+        self.modifier_command = new_val;
+    }
+
+    fn modifier_command(&self) -> Option<Modifier> {
+        self.modifier_command
+    }
+
     fn set_movement(&mut self, mvm: PageMovement) {
         self.movement = Some(mvm);
         self.set_dirty(true);
@@ -756,28 +785,26 @@ impl ListingTrait for ThreadListing {
             Focus::None => {
                 self.view = None;
                 self.dirty = true;
-                /* If self.row_updates is not empty and we exit a thread, the row_update events
+                /* If self.rows.row_updates is not empty and we exit a thread, the row_update events
                  * will be performed but the list will not be drawn. So force a draw in any case.
                  * */
                 // self.force_draw = true;
             }
             Focus::Entry => {
-                // self.force_draw = true;
-                self.dirty = true;
-                let coordinates = (
-                    self.cursor_pos.0,
-                    self.cursor_pos.1,
-                    self.get_env_under_cursor(self.cursor_pos.2, context),
-                );
+                if let Some(env_hash) = self.get_env_under_cursor(self.cursor_pos.2) {
+                    // self.force_draw = true;
+                    self.dirty = true;
+                    let coordinates = (self.cursor_pos.0, self.cursor_pos.1, env_hash);
 
-                if let Some(ref mut v) = self.view {
-                    v.update(coordinates, context);
-                } else {
-                    self.view = Some(Box::new(MailView::new(coordinates, None, None, context)));
-                }
+                    if let Some(ref mut v) = self.view {
+                        v.update(coordinates, context);
+                    } else {
+                        self.view = Some(Box::new(MailView::new(coordinates, None, None, context)));
+                    }
 
-                if let Some(ref mut s) = self.view {
-                    s.set_dirty(true);
+                    if let Some(ref mut s) = self.view {
+                        s.set_dirty(true);
+                    }
                 }
             }
             Focus::EntryFullscreen => {
@@ -811,15 +838,14 @@ impl ThreadListing {
             color_cache: ColorCache::default(),
             data_columns: DataColumns::default(),
             rows_drawn: SegmentTree::default(),
-            rows: vec![],
-            row_updates: SmallVec::new(),
-            selection: HashMap::default(),
-            order: HashMap::default(),
+            rows: RowsState::default(),
             dirty: true,
             focus: Focus::None,
             view: None,
             initialised: false,
             movement: None,
+            modifier_active: false,
+            modifier_command: None,
             id: ComponentId::new_v4(),
             search_job: None,
         })
@@ -889,16 +915,13 @@ impl ThreadListing {
         s
     }
 
-    fn get_env_under_cursor(&self, cursor: usize, _context: &Context) -> EnvelopeHash {
-        *self
-            .order
+    fn get_env_under_cursor(&self, cursor: usize) -> Option<EnvelopeHash> {
+        self.rows
+            .env_order
             .iter()
             .find(|(_, &r)| r == cursor)
-            .unwrap_or_else(|| {
-                debug!("self.order empty ? cursor={} {:#?}", cursor, &self.order);
-                panic!();
-            })
-            .0
+            .map(|v| v.0)
+            .cloned()
     }
 
     fn make_entry_string(&self, e: &Envelope, context: &Context) -> EntryStrings {
@@ -971,10 +994,14 @@ impl ThreadListing {
             self.data_columns.columns[4].size().0,
         );
 
-        for ((idx, is_seen, has_attachments, env_hash), strings) in
-            self.rows.iter().skip(start).take(end - start + 1)
+        for (idx, ((is_seen, has_attachments, _thread_hash, env_hash), strings)) in self
+            .rows
+            .entries
+            .iter()
+            .enumerate()
+            .skip(start)
+            .take(end - start + 1)
         {
-            let idx = *idx;
             if !context.accounts[&self.cursor_pos.0].contains_key(*env_hash) {
                 //debug!("key = {}", root_env_hash);
                 //debug!(
@@ -986,7 +1013,13 @@ impl ThreadListing {
 
                 panic!();
             }
-            let row_attr = row_attr!(self.color_cache, idx % 2 == 0, !*is_seen, false, false);
+            let row_attr = row_attr!(
+                self.color_cache,
+                idx % 2 == 0,
+                !*is_seen,
+                self.cursor_pos.2 == idx,
+                self.rows.selection[&env_hash],
+            );
             let (x, _) = write_string_to_grid(
                 &idx.to_string(),
                 &mut self.data_columns.columns[0],
@@ -1115,27 +1148,187 @@ impl ThreadListing {
 
 impl Component for ThreadListing {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        /*
-        if !self.row_updates.is_empty() {
-            let (upper_left, bottom_right) = area;
-            while let Some(row) = self.row_updates.pop() {
-                let row: usize = self.order[&row];
+        let (upper_left, bottom_right) = area;
+        let rows = get_y(bottom_right) - get_y(upper_left) + 1;
 
-                let rows = get_y(bottom_right) - get_y(upper_left) + 1;
-                let page_no = (self.new_cursor_pos.2).wrapping_div(rows);
+        if let Some(modifier) = self.modifier_command.take() {
+            if let Some(mvm) = self.movement.as_ref() {
+                match mvm {
+                    PageMovement::Up(amount) => {
+                        for c in
+                            self.new_cursor_pos.2.saturating_sub(*amount)..=self.new_cursor_pos.2
+                        {
+                            if let Some(env_hash) = self.get_env_under_cursor(c) {
+                                self.rows.update_selection_with_env(
+                                    env_hash,
+                                    match modifier {
+                                        Modifier::SymmetricDifference => |e: &mut bool| *e = !*e,
+                                        Modifier::Union => |e: &mut bool| *e = true,
+                                        Modifier::Difference => |e: &mut bool| *e = false,
+                                        Modifier::Intersection => |_: &mut bool| {},
+                                    },
+                                );
+                            }
+                        }
+                        if modifier == Modifier::Intersection {
+                            for c in (0..self.new_cursor_pos.2.saturating_sub(*amount))
+                                .chain((self.new_cursor_pos.2 + 2)..self.length)
+                            {
+                                if let Some(env_hash) = self.get_env_under_cursor(c) {
+                                    self.rows
+                                        .update_selection_with_env(env_hash, |e| *e = false);
+                                }
+                            }
+                        }
+                    }
+                    PageMovement::PageUp(multiplier) => {
+                        for c in self.new_cursor_pos.2.saturating_sub(rows * multiplier)
+                            ..=self.new_cursor_pos.2
+                        {
+                            if let Some(env_hash) = self.get_env_under_cursor(c) {
+                                self.rows.update_selection_with_env(
+                                    env_hash,
+                                    match modifier {
+                                        Modifier::SymmetricDifference => |e: &mut bool| *e = !*e,
+                                        Modifier::Union => |e: &mut bool| *e = true,
+                                        Modifier::Difference => |e: &mut bool| *e = false,
+                                        Modifier::Intersection => |_: &mut bool| {},
+                                    },
+                                );
+                            }
+                        }
+                    }
+                    PageMovement::Down(amount) => {
+                        for c in self.new_cursor_pos.2
+                            ..std::cmp::min(self.length, self.new_cursor_pos.2 + amount + 1)
+                        {
+                            if let Some(env_hash) = self.get_env_under_cursor(c) {
+                                self.rows.update_selection_with_env(
+                                    env_hash,
+                                    match modifier {
+                                        Modifier::SymmetricDifference => |e: &mut bool| *e = !*e,
+                                        Modifier::Union => |e: &mut bool| *e = true,
+                                        Modifier::Difference => |e: &mut bool| *e = false,
+                                        Modifier::Intersection => |_: &mut bool| {},
+                                    },
+                                );
+                            }
+                        }
+                        if modifier == Modifier::Intersection {
+                            for c in (0..self.new_cursor_pos.2).chain(
+                                (std::cmp::min(self.length, self.new_cursor_pos.2 + amount + 1) + 1)
+                                    ..self.length,
+                            ) {
+                                if let Some(env_hash) = self.get_env_under_cursor(c) {
+                                    self.rows
+                                        .update_selection_with_env(env_hash, |e| *e = false);
+                                }
+                            }
+                        }
+                    }
+                    PageMovement::PageDown(multiplier) => {
+                        for c in self.new_cursor_pos.2
+                            ..std::cmp::min(
+                                self.new_cursor_pos.2 + rows * multiplier + 1,
+                                self.length,
+                            )
+                        {
+                            if let Some(env_hash) = self.get_env_under_cursor(c) {
+                                self.rows.update_selection_with_env(
+                                    env_hash,
+                                    match modifier {
+                                        Modifier::SymmetricDifference => |e: &mut bool| *e = !*e,
+                                        Modifier::Union => |e: &mut bool| *e = true,
+                                        Modifier::Difference => |e: &mut bool| *e = false,
+                                        Modifier::Intersection => |_: &mut bool| {},
+                                    },
+                                );
+                            }
+                        }
+                        if modifier == Modifier::Intersection {
+                            for c in (0..self.new_cursor_pos.2).chain(
+                                (std::cmp::min(
+                                    self.new_cursor_pos.2 + rows * multiplier + 1,
+                                    self.length,
+                                ) + 1)..self.length,
+                            ) {
+                                if let Some(env_hash) = self.get_env_under_cursor(c) {
+                                    self.rows
+                                        .update_selection_with_env(env_hash, |e| *e = false);
+                                }
+                            }
+                        }
+                    }
+                    PageMovement::Right(_) | PageMovement::Left(_) => {}
+                    PageMovement::Home => {
+                        for c in 0..=self.new_cursor_pos.2 {
+                            if let Some(env_hash) = self.get_env_under_cursor(c) {
+                                self.rows.update_selection_with_env(
+                                    env_hash,
+                                    match modifier {
+                                        Modifier::SymmetricDifference => |e: &mut bool| *e = !*e,
+                                        Modifier::Union => |e: &mut bool| *e = true,
+                                        Modifier::Difference => |e: &mut bool| *e = false,
+                                        Modifier::Intersection => |_: &mut bool| {},
+                                    },
+                                );
+                            }
+                        }
+                        if modifier == Modifier::Intersection {
+                            for c in (self.new_cursor_pos.2 + 1)..self.length {
+                                if let Some(env_hash) = self.get_env_under_cursor(c) {
+                                    self.rows
+                                        .update_selection_with_env(env_hash, |e| *e = false);
+                                }
+                            }
+                        }
+                    }
+                    PageMovement::End => {
+                        for c in self.new_cursor_pos.2..self.length {
+                            if let Some(env_hash) = self.get_env_under_cursor(c) {
+                                self.rows.update_selection_with_env(
+                                    env_hash,
+                                    match modifier {
+                                        Modifier::SymmetricDifference => |e: &mut bool| *e = !*e,
+                                        Modifier::Union => |e: &mut bool| *e = true,
+                                        Modifier::Difference => |e: &mut bool| *e = false,
+                                        Modifier::Intersection => |_: &mut bool| {},
+                                    },
+                                );
+                            }
+                        }
+                        if modifier == Modifier::Intersection {
+                            for c in 0..self.new_cursor_pos.2 {
+                                if let Some(env_hash) = self.get_env_under_cursor(c) {
+                                    self.rows
+                                        .update_selection_with_env(env_hash, |e| *e = false);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            //self.force_draw = true;
+        }
 
-                let top_idx = page_no * rows;
+        if !self.rows.row_updates.is_empty() {
+            let page_no = (self.new_cursor_pos.2).wrapping_div(rows);
+            let top_idx = page_no * rows;
+
+            while let Some(row) = self.rows.row_updates.pop() {
+                let row: usize = self.rows.env_order[&row];
+
                 if row >= top_idx && row <= top_idx + rows {
-                    let area = (
+                    let new_area = (
                         set_y(upper_left, get_y(upper_left) + (row % rows)),
                         set_y(bottom_right, get_y(upper_left) + (row % rows)),
                     );
-                    self.highlight_line(grid, area, row, context);
-                    context.dirty_areas.push_back(area);
+                    self.highlight_line(grid, new_area, row, context);
+                    context.dirty_areas.push_back(new_area);
                 }
             }
         }
-        */
+
         if !self.is_dirty() {
             return;
         }
@@ -1180,14 +1373,12 @@ impl Component for ThreadListing {
 
             /* Mark message as read */
             let must_highlight = {
-                if self.length == 0 {
-                    false
-                } else {
+                if let Some(env_hash) = self.get_env_under_cursor(idx) {
                     let account = &context.accounts[&self.cursor_pos.0];
-                    let envelope: EnvelopeRef = account
-                        .collection
-                        .get_env(self.get_env_under_cursor(idx, context));
+                    let envelope: EnvelopeRef = account.collection.get_env(env_hash);
                     envelope.is_seen()
+                } else {
+                    false
                 }
             };
 
@@ -1221,7 +1412,6 @@ impl Component for ThreadListing {
                     .dirty_areas
                     .push_back((set_y(upper_left, mid), set_y(bottom_right, mid)));
             }
-            // TODO: Make headers view configurable
 
             if !self.dirty {
                 if let Some(v) = self.view.as_mut() {
@@ -1230,16 +1420,14 @@ impl Component for ThreadListing {
                 return;
             }
 
-            let coordinates = (
-                self.cursor_pos.0,
-                self.cursor_pos.1,
-                self.get_env_under_cursor(self.cursor_pos.2, context),
-            );
+            if let Some(env_hash) = self.get_env_under_cursor(self.cursor_pos.2) {
+                let coordinates = (self.cursor_pos.0, self.cursor_pos.1, env_hash);
 
-            if let Some(ref mut v) = self.view {
-                v.update(coordinates, context);
-            } else {
-                self.view = Some(Box::new(MailView::new(coordinates, None, None, context)));
+                if let Some(ref mut v) = self.view {
+                    v.update(coordinates, context);
+                } else {
+                    self.view = Some(Box::new(MailView::new(coordinates, None, None, context)));
+                }
             }
 
             if let Some(v) = self.view.as_mut() {
@@ -1369,10 +1557,9 @@ impl Component for ThreadListing {
                 if !account.collection.contains_key(new_hash) {
                     return false;
                 }
-                if let Some(row) = self.order.remove(old_hash) {
-                    self.order.insert(*new_hash, row);
-                    (self.rows[row].0).3 = *new_hash;
-                    //self.row_updates.push(old_hash);
+                self.rows.rename_env(*old_hash, *new_hash);
+                if let Some(&row) = self.rows.env_order.get(new_hash) {
+                    (self.rows.entries[row].0).3 = *new_hash;
                 }
 
                 self.dirty = true;
@@ -1387,7 +1574,7 @@ impl Component for ThreadListing {
                 }
             }
             UIEvent::EnvelopeRemove(ref env_hash, _) => {
-                if self.order.contains_key(env_hash) {
+                if self.rows.contains_env(*env_hash) {
                     self.refresh_mailbox(context, false);
                     self.set_dirty(true);
                 }
@@ -1397,8 +1584,8 @@ impl Component for ThreadListing {
                 if !account.collection.contains_key(env_hash) {
                     return false;
                 }
-                if self.order.contains_key(env_hash) {
-                    //self.row_updates.push(*env_hash);
+                if self.rows.contains_env(*env_hash) {
+                    self.rows.row_updates.push(*env_hash);
                 }
 
                 self.dirty = true;
@@ -1414,6 +1601,34 @@ impl Component for ThreadListing {
             }
             UIEvent::Resize => {
                 self.dirty = true;
+            }
+            UIEvent::Input(Key::Esc)
+                if !self.unfocused()
+                    && self
+                        .rows
+                        .selection
+                        .values()
+                        .cloned()
+                        .any(std::convert::identity) =>
+            {
+                for v in self.rows.selection.values_mut() {
+                    *v = false;
+                }
+                self.dirty = true;
+                return true;
+            }
+            UIEvent::Input(ref key)
+                if !self.unfocused()
+                    && shortcut!(key == shortcuts[Listing::DESCRIPTION]["select_entry"]) =>
+            {
+                if self.modifier_active && self.modifier_command.is_none() {
+                    self.modifier_command = Some(Modifier::default());
+                } else {
+                    if let Some(env_hash) = self.get_env_under_cursor(self.cursor_pos.2) {
+                        self.rows.update_selection_with_env(env_hash, |e| *e = !*e);
+                    }
+                }
+                return true;
             }
             UIEvent::Action(ref action) => match action {
                 Action::SubSort(field, order) => {

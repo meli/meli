@@ -46,6 +46,156 @@ pub const DEFAULT_SELECTED_FLAG: &str = "☑️";
 pub const DEFAULT_UNSEEN_FLAG: &str = "●";
 pub const DEFAULT_SNOOZED_FLAG: &str = "💤";
 
+#[derive(Debug, Default)]
+pub struct RowsState<T> {
+    pub selection: HashMap<EnvelopeHash, bool>,
+    pub row_updates: SmallVec<[EnvelopeHash; 8]>,
+    pub thread_to_env: HashMap<ThreadHash, SmallVec<[EnvelopeHash; 8]>>,
+    pub env_to_thread: HashMap<EnvelopeHash, ThreadHash>,
+    pub thread_order: HashMap<ThreadHash, usize>,
+    pub env_order: HashMap<EnvelopeHash, usize>,
+    #[allow(clippy::type_complexity)]
+    pub entries: Vec<(T, EntryStrings)>,
+    pub all_threads: HashSet<ThreadHash>,
+    pub all_envelopes: HashSet<EnvelopeHash>,
+}
+
+impl<T> RowsState<T> {
+    #[inline(always)]
+    pub fn clear(&mut self) {
+        self.selection.clear();
+        self.row_updates.clear();
+        self.thread_to_env.clear();
+        self.env_to_thread.clear();
+        self.thread_order.clear();
+        self.env_order.clear();
+        self.entries.clear();
+        self.all_threads.clear();
+        self.all_envelopes.clear();
+    }
+
+    #[inline(always)]
+    pub fn is_thread_selected(&self, thread: ThreadHash) -> bool {
+        debug_assert!(self.all_threads.contains(&thread));
+        debug_assert!(self.thread_order.contains_key(&thread));
+        debug_assert!(self.thread_to_env.contains_key(&thread));
+        self.thread_to_env
+            .get(&thread)
+            .iter()
+            .map(|v| v.iter())
+            .flatten()
+            .any(|env_hash| self.selection[env_hash])
+    }
+
+    #[inline(always)]
+    pub fn insert_thread(
+        &mut self,
+        thread: ThreadHash,
+        metadata: T,
+        env_hashes: SmallVec<[EnvelopeHash; 8]>,
+        entry_strings: EntryStrings,
+    ) {
+        let index = self.entries.len();
+        self.thread_order.insert(thread, index);
+        self.all_threads.insert(thread);
+        for &env_hash in &env_hashes {
+            self.selection.insert(env_hash, false);
+            self.env_to_thread.insert(env_hash, thread);
+            self.env_order.insert(env_hash, index);
+            self.all_envelopes.insert(env_hash);
+        }
+        self.thread_to_env.insert(thread, env_hashes);
+        self.entries.push((metadata, entry_strings));
+    }
+
+    #[inline(always)]
+    pub fn row_update_add_thread(&mut self, thread: ThreadHash) {
+        let env_hashes = self.thread_to_env.entry(thread).or_default().clone();
+        for env_hash in env_hashes {
+            self.row_updates.push(env_hash);
+        }
+    }
+
+    #[inline(always)]
+    pub fn row_update_add_envelope(&mut self, env_hash: EnvelopeHash) {
+        self.row_updates.push(env_hash);
+    }
+
+    #[inline(always)]
+    pub fn contains_thread(&self, thread: ThreadHash) -> bool {
+        debug_assert_eq!(
+            self.all_threads.contains(&thread),
+            self.thread_order.contains_key(&thread)
+        );
+        debug_assert_eq!(
+            self.thread_order.contains_key(&thread),
+            self.thread_to_env.contains_key(&thread)
+        );
+        self.thread_order.contains_key(&thread)
+    }
+
+    #[inline(always)]
+    pub fn contains_env(&self, env_hash: EnvelopeHash) -> bool {
+        self.all_envelopes.contains(&env_hash)
+    }
+
+    #[inline(always)]
+    pub fn update_selection_with_thread(
+        &mut self,
+        thread: ThreadHash,
+        mut cl: impl FnMut(&mut bool),
+    ) {
+        let env_hashes = self.thread_to_env.entry(thread).or_default().clone();
+        for env_hash in env_hashes {
+            self.selection.entry(env_hash).and_modify(&mut cl);
+            self.row_updates.push(env_hash);
+        }
+    }
+
+    #[inline(always)]
+    pub fn update_selection_with_env(
+        &mut self,
+        env_hash: EnvelopeHash,
+        mut cl: impl FnMut(&mut bool),
+    ) {
+        self.selection.entry(env_hash).and_modify(&mut cl);
+        self.row_updates.push(env_hash);
+    }
+
+    #[inline(always)]
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    #[inline(always)]
+    pub fn clear_selection(&mut self) {
+        for (k, v) in self.selection.iter_mut() {
+            if *v {
+                *v = false;
+                self.row_updates.push(*k);
+            }
+        }
+    }
+
+    pub fn rename_env(&mut self, old_hash: EnvelopeHash, new_hash: EnvelopeHash) {
+        self.row_updates.push(new_hash);
+        if let Some(row) = self.env_order.remove(&old_hash) {
+            self.env_order.insert(new_hash, row);
+        }
+        if let Some(thread) = self.env_to_thread.remove(&old_hash) {
+            self.thread_to_env
+                .entry(thread)
+                .or_default()
+                .retain(|h| *h != old_hash);
+            self.thread_to_env.entry(thread).or_default().push(new_hash);
+        }
+        let selection_status = self.selection.remove(&old_hash).unwrap_or(false);
+        self.selection.insert(new_hash, selection_status);
+        self.all_envelopes.remove(&old_hash);
+        self.all_envelopes.insert(old_hash);
+    }
+}
+
 mod conversations;
 pub use self::conversations::*;
 
@@ -116,12 +266,12 @@ struct ColorCache {
 }
 
 #[derive(Debug)]
-pub(super) struct EntryStrings {
-    pub(super) date: DateString,
-    pub(super) subject: SubjectString,
-    pub(super) flag: FlagString,
-    pub(super) from: FromString,
-    pub(super) tags: TagString,
+pub struct EntryStrings {
+    pub date: DateString,
+    pub subject: SubjectString,
+    pub flag: FlagString,
+    pub from: FromString,
+    pub tags: TagString,
 }
 
 #[macro_export]
@@ -146,7 +296,7 @@ macro_rules! column_str {
     (
         struct $name:ident($($t:ty),+)) => {
         #[derive(Debug)]
-        pub(super) struct $name($(pub $t),+);
+        pub struct $name($(pub $t),+);
 
         impl Deref for $name {
             type Target = String;
@@ -190,14 +340,13 @@ pub trait MailListingTrait: ListingTrait {
     fn perform_action(
         &mut self,
         context: &mut Context,
-        thread_hashes: SmallVec<[ThreadHash; 8]>,
+        envs_to_set: SmallVec<[EnvelopeHash; 8]>,
         a: &ListingAction,
     ) {
         let account_hash = self.coordinates().0;
         let account = &mut context.accounts[&account_hash];
-        let mut envs_to_set: SmallVec<[EnvelopeHash; 8]> = SmallVec::new();
         let mailbox_hash = self.coordinates().1;
-        {
+        /*{
             let threads_lck = account.collection.get_threads(mailbox_hash);
             for thread_hash in thread_hashes {
                 for (_, h) in threads_lck.thread_group_iter(thread_hash) {
@@ -206,10 +355,12 @@ pub trait MailListingTrait: ListingTrait {
                 self.row_updates().push(thread_hash);
             }
         }
-        if envs_to_set.is_empty() {
+        */
+        let env_hashes = if let Ok(batch) = EnvelopeHashBatch::try_from(envs_to_set.as_slice()) {
+            batch
+        } else {
             return;
-        }
-        let env_hashes = EnvelopeHashBatch::try_from(envs_to_set.as_slice()).unwrap();
+        };
         match a {
             ListingAction::SetSeen => {
                 let job = account.backend.write().unwrap().set_flags(
@@ -484,9 +635,9 @@ pub trait MailListingTrait: ListingTrait {
         self.set_dirty(true);
     }
 
-    fn row_updates(&mut self) -> &mut SmallVec<[ThreadHash; 8]>;
-    fn selection(&mut self) -> &mut HashMap<ThreadHash, bool>;
-    fn get_focused_items(&self, _context: &Context) -> SmallVec<[ThreadHash; 8]>;
+    fn row_updates(&mut self) -> &mut SmallVec<[EnvelopeHash; 8]>;
+    fn selection(&mut self) -> &mut HashMap<EnvelopeHash, bool>;
+    fn get_focused_items(&self, _context: &Context) -> SmallVec<[EnvelopeHash; 8]>;
     fn redraw_threads_list(
         &mut self,
         context: &Context,
@@ -517,11 +668,9 @@ pub trait ListingTrait: Component {
     ) {
     }
     fn unfocused(&self) -> bool;
-    fn set_modifier_active(&mut self, _new_val: bool) {}
-    fn set_modifier_command(&mut self, _new_val: Option<Modifier>) {}
-    fn modifier_command(&self) -> Option<Modifier> {
-        None
-    }
+    fn set_modifier_active(&mut self, _new_val: bool);
+    fn set_modifier_command(&mut self, _new_val: Option<Modifier>);
+    fn modifier_command(&self) -> Option<Modifier>;
     fn set_movement(&mut self, mvm: PageMovement);
     fn focus(&self) -> Focus;
     fn set_focus(&mut self, new_value: Focus, context: &mut Context);
@@ -1161,13 +1310,14 @@ impl Component for Listing {
                         | Action::Listing(a @ ListingAction::Tag(_)) => {
                             let focused = self.component.get_focused_items(context);
                             self.component.perform_action(context, focused, a);
-                            let mut row_updates: SmallVec<[ThreadHash; 8]> = SmallVec::new();
+                            let mut row_updates: SmallVec<[EnvelopeHash; 8]> = SmallVec::new();
                             for (k, v) in self.component.selection().iter_mut() {
                                 if *v {
                                     *v = false;
                                     row_updates.push(*k);
                                 }
                             }
+                            self.component.row_updates().extend(row_updates.into_iter());
                         }
                         _ => {}
                     },

@@ -167,13 +167,10 @@ pub struct CompactListing {
     sort: (SortField, SortOrder),
     sortcmd: bool,
     subsort: (SortField, SortOrder),
-    all_threads: HashSet<ThreadHash>,
-    order: HashMap<ThreadHash, usize>,
     /// Cache current view.
     data_columns: DataColumns,
     rows_drawn: SegmentTree,
-    #[allow(clippy::type_complexity)]
-    rows: Vec<((usize, (ThreadHash, EnvelopeHash)), EntryStrings)>,
+    rows: RowsState<(ThreadHash, EnvelopeHash)>,
 
     #[allow(clippy::type_complexity)]
     search_job: Option<(String, JoinHandle<Result<SmallVec<[EnvelopeHash; 512]>>>)>,
@@ -182,14 +179,12 @@ pub struct CompactListing {
     filter_term: String,
     filtered_selection: Vec<ThreadHash>,
     filtered_order: HashMap<ThreadHash, usize>,
-    selection: HashMap<ThreadHash, bool>,
     /// If we must redraw on next redraw event
     dirty: bool,
     force_draw: bool,
     /// If `self.view` exists or not.
     focus: Focus,
     view: Box<ThreadView>,
-    row_updates: SmallVec<[ThreadHash; 8]>,
     color_cache: ColorCache,
 
     movement: Option<PageMovement>,
@@ -199,30 +194,46 @@ pub struct CompactListing {
 }
 
 impl MailListingTrait for CompactListing {
-    fn row_updates(&mut self) -> &mut SmallVec<[ThreadHash; 8]> {
-        &mut self.row_updates
+    fn row_updates(&mut self) -> &mut SmallVec<[EnvelopeHash; 8]> {
+        &mut self.rows.row_updates
     }
 
-    fn selection(&mut self) -> &mut HashMap<ThreadHash, bool> {
-        &mut self.selection
+    fn selection(&mut self) -> &mut HashMap<EnvelopeHash, bool> {
+        &mut self.rows.selection
     }
 
-    fn get_focused_items(&self, _context: &Context) -> SmallVec<[ThreadHash; 8]> {
-        let is_selection_empty = self.selection.values().cloned().any(std::convert::identity);
-        let i = [self.get_thread_under_cursor(self.cursor_pos.2)];
+    fn get_focused_items(&self, _context: &Context) -> SmallVec<[EnvelopeHash; 8]> {
+        let is_selection_empty = !self
+            .rows
+            .selection
+            .values()
+            .cloned()
+            .any(std::convert::identity);
         let cursor_iter;
-        let sel_iter = if is_selection_empty {
+        let sel_iter = if !is_selection_empty {
             cursor_iter = None;
-            Some(self.selection.iter().filter(|(_, v)| **v).map(|(k, _)| k))
+            Some(
+                self.rows
+                    .selection
+                    .iter()
+                    .filter(|(_, v)| **v)
+                    .map(|(k, _)| *k),
+            )
         } else {
-            cursor_iter = Some(i.iter());
+            if let Some(env_hashes) = self
+                .get_thread_under_cursor(self.cursor_pos.2)
+                .and_then(|thread| self.rows.thread_to_env.get(&thread).map(|v| v.clone()))
+            {
+                cursor_iter = Some(env_hashes.into_iter());
+            } else {
+                cursor_iter = None;
+            }
             None
         };
         let iter = sel_iter
             .into_iter()
             .flatten()
-            .chain(cursor_iter.into_iter().flatten())
-            .cloned();
+            .chain(cursor_iter.into_iter().flatten());
         SmallVec::from_iter(iter)
     }
 
@@ -230,8 +241,7 @@ impl MailListingTrait for CompactListing {
     /// chosen.
     fn refresh_mailbox(&mut self, context: &mut Context, force: bool) {
         self.dirty = true;
-        self.all_threads.clear();
-        self.selection.clear();
+        self.rows.clear();
         let old_cursor_pos = self.cursor_pos;
         if !(self.cursor_pos.0 == self.new_cursor_pos.0
             && self.cursor_pos.1 == self.new_cursor_pos.1)
@@ -305,9 +315,9 @@ impl MailListingTrait for CompactListing {
         if !force && old_cursor_pos == self.new_cursor_pos {
             self.view.update(context);
         } else if self.unfocused() {
-            let thread = self.get_thread_under_cursor(self.cursor_pos.2);
-
-            self.view = Box::new(ThreadView::new(self.new_cursor_pos, thread, None, context));
+            if let Some(thread) = self.get_thread_under_cursor(self.cursor_pos.2) {
+                self.view = Box::new(ThreadView::new(self.new_cursor_pos, thread, None, context));
+            }
         }
     }
 
@@ -319,13 +329,12 @@ impl MailListingTrait for CompactListing {
         let account = &context.accounts[&self.cursor_pos.0];
 
         let threads = account.collection.get_threads(self.cursor_pos.1);
-        self.order.clear();
+        self.rows.clear();
         // Use account settings only if no sortcmd has been used
         if !self.sortcmd {
             self.sort = context.accounts[&self.cursor_pos.0].settings.account.order
         }
         self.length = 0;
-        let mut rows = Vec::with_capacity(1024);
         let mut min_width = (0, 0, 0, 0);
         #[allow(clippy::type_complexity)]
         let mut row_widths: (
@@ -426,11 +435,17 @@ impl MailListingTrait for CompactListing {
                     + 1
                     + entry_strings.tags.grapheme_width(),
             ); /* subject */
-            rows.push(((self.length, (thread, root_env_hash)), entry_strings));
-            self.all_threads.insert(thread);
-
-            self.order.insert(thread, self.length);
-            self.selection.insert(thread, false);
+            self.rows.insert_thread(
+                thread,
+                (thread, root_env_hash),
+                threads
+                    .thread_to_envelope
+                    .get(&thread)
+                    .cloned()
+                    .unwrap_or_default()
+                    .into(),
+                entry_strings,
+            );
             self.length += 1;
         }
 
@@ -438,23 +453,22 @@ impl MailListingTrait for CompactListing {
 
         /* index column */
         self.data_columns.columns[0] =
-            CellBuffer::new_with_context(min_width.0, rows.len(), None, context);
+            CellBuffer::new_with_context(min_width.0, self.rows.len(), None, context);
         self.data_columns.segment_tree[0] = row_widths.0.into();
 
         /* date column */
         self.data_columns.columns[1] =
-            CellBuffer::new_with_context(min_width.1, rows.len(), None, context);
+            CellBuffer::new_with_context(min_width.1, self.rows.len(), None, context);
         self.data_columns.segment_tree[1] = row_widths.1.into();
         /* from column */
         self.data_columns.columns[2] =
-            CellBuffer::new_with_context(min_width.2, rows.len(), None, context);
+            CellBuffer::new_with_context(min_width.2, self.rows.len(), None, context);
         self.data_columns.segment_tree[2] = row_widths.2.into();
         /* subject column */
         self.data_columns.columns[3] =
-            CellBuffer::new_with_context(min_width.3, rows.len(), None, context);
+            CellBuffer::new_with_context(min_width.3, self.rows.len(), None, context);
         self.data_columns.segment_tree[3] = row_widths.3.into();
 
-        self.rows = rows;
         self.rows_drawn = SegmentTree::from(
             std::iter::repeat(1)
                 .take(self.rows.len())
@@ -495,14 +509,15 @@ impl ListingTrait for CompactListing {
         self.filtered_selection.clear();
         self.filtered_order.clear();
         self.filter_term.clear();
-        self.row_updates.clear();
+        self.rows.row_updates.clear();
     }
 
     fn highlight_line(&mut self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context) {
-        if self.length == 0 {
+        let thread_hash = if let Some(h) = self.get_thread_under_cursor(idx) {
+            h
+        } else {
             return;
-        }
-        let thread_hash = self.get_thread_under_cursor(idx);
+        };
 
         let account = &context.accounts[&self.cursor_pos.0];
         let threads = account.collection.get_threads(self.cursor_pos.1);
@@ -513,7 +528,7 @@ impl ListingTrait for CompactListing {
             idx % 2 == 0,
             thread.unseen() > 0,
             self.cursor_pos.2 == idx,
-            self.selection[&thread_hash]
+            self.rows.is_thread_selected(thread_hash)
         );
         let (upper_left, bottom_right) = area;
         let x = get_x(upper_left)
@@ -723,25 +738,26 @@ impl ListingTrait for CompactListing {
         let account = &context.accounts[&self.cursor_pos.0];
         let threads = account.collection.get_threads(self.cursor_pos.1);
         for r in 0..cmp::min(self.length - top_idx, rows) {
-            let thread_hash = self.get_thread_under_cursor(r + top_idx);
-            let row_attr = row_attr!(
-                self.color_cache,
-                (r + top_idx) % 2 == 0,
-                threads.thread_ref(thread_hash).unseen() > 0,
-                self.cursor_pos.2 == (r + top_idx),
-                self.selection[&thread_hash]
-            );
-            change_colors(
-                grid,
-                (
-                    pos_inc(upper_left, (0, r)),
-                    (flag_x.saturating_sub(1), get_y(upper_left) + r),
-                ),
-                row_attr.fg,
-                row_attr.bg,
-            );
-            for x in flag_x..get_x(bottom_right) {
-                grid[(x, get_y(upper_left) + r)].set_bg(row_attr.bg);
+            if let Some(thread_hash) = self.get_thread_under_cursor(r + top_idx) {
+                let row_attr = row_attr!(
+                    self.color_cache,
+                    (r + top_idx) % 2 == 0,
+                    threads.thread_ref(thread_hash).unseen() > 0,
+                    self.cursor_pos.2 == (r + top_idx),
+                    self.rows.is_thread_selected(thread_hash)
+                );
+                change_colors(
+                    grid,
+                    (
+                        pos_inc(upper_left, (0, r)),
+                        (flag_x.saturating_sub(1), get_y(upper_left) + r),
+                    ),
+                    row_attr.fg,
+                    row_attr.bg,
+                );
+                for x in flag_x..get_x(bottom_right) {
+                    grid[(x, get_y(upper_left) + r)].set_bg(row_attr.bg);
+                }
             }
         }
 
@@ -771,13 +787,10 @@ impl ListingTrait for CompactListing {
         results: SmallVec<[EnvelopeHash; 512]>,
         context: &Context,
     ) {
-        self.order.clear();
-        self.selection.clear();
         self.length = 0;
         self.filtered_selection.clear();
         self.filtered_order.clear();
         self.filter_term = filter_term;
-        self.row_updates.clear();
 
         let account = &context.accounts[&self.cursor_pos.0];
         let threads = account.collection.get_threads(self.cursor_pos.1);
@@ -793,7 +806,7 @@ impl ListingTrait for CompactListing {
             if self.filtered_order.contains_key(&thread) {
                 continue;
             }
-            if self.all_threads.contains(&thread) {
+            if self.rows.all_threads.contains(&thread) {
                 self.filtered_selection.push(thread);
                 self.filtered_order
                     .insert(thread, self.filtered_selection.len() - 1);
@@ -844,7 +857,7 @@ impl ListingTrait for CompactListing {
                 self.view
                     .process_event(&mut UIEvent::VisibilityChange(false), context);
                 self.dirty = true;
-                /* If self.row_updates is not empty and we exit a thread, the row_update events
+                /* If self.rows.row_updates is not empty and we exit a thread, the row_update events
                  * will be performed but the list will not be drawn. So force a draw in any case.
                  * */
                 self.force_draw = true;
@@ -882,19 +895,15 @@ impl CompactListing {
             sort: (Default::default(), Default::default()),
             sortcmd: false,
             subsort: (SortField::Date, SortOrder::Desc),
-            all_threads: HashSet::default(),
-            order: HashMap::default(),
             search_job: None,
             select_job: None,
             filter_term: String::new(),
             filtered_selection: Vec::new(),
             filtered_order: HashMap::default(),
-            selection: HashMap::default(),
             focus: Focus::None,
-            row_updates: SmallVec::new(),
             data_columns: DataColumns::default(),
             rows_drawn: SegmentTree::default(),
-            rows: vec![],
+            rows: RowsState::default(),
             dirty: true,
             force_draw: true,
             view: Box::new(ThreadView::default()),
@@ -962,7 +971,7 @@ impl CompactListing {
             },
             flag: FlagString(format!(
                 "{selected}{snoozed}{unseen}{attachments}{whitespace}",
-                selected = if self.selection.get(&hash).cloned().unwrap_or(false) {
+                selected = if self.rows.selection.get(&e.hash()).cloned().unwrap_or(false) {
                     mailbox_settings!(
                         context[self.cursor_pos.0][&self.cursor_pos.1]
                             .listing
@@ -1010,7 +1019,7 @@ impl CompactListing {
                 } else {
                     ""
                 },
-                whitespace = if self.selection.get(&hash).cloned().unwrap_or(false)
+                whitespace = if self.rows.selection.get(&e.hash()).cloned().unwrap_or(false)
                     || thread.unseen() > 0
                     || thread.snoozed()
                     || thread.has_attachments()
@@ -1025,27 +1034,21 @@ impl CompactListing {
         }
     }
 
-    fn get_thread_under_cursor(&self, cursor: usize) -> ThreadHash {
+    fn get_thread_under_cursor(&self, cursor: usize) -> Option<ThreadHash> {
         if self.filter_term.is_empty() {
-            *self
-                .order
+            self.rows
+                .thread_order
                 .iter()
                 .find(|(_, &r)| r == cursor)
-                .unwrap_or_else(|| {
-                    debug!("self.order empty ? cursor={} {:#?}", cursor, &self.order);
-                    panic!();
-                })
-                .0
+                .map(|(h, _)| h)
+                .cloned()
         } else {
-            self.filtered_selection[cursor]
+            self.filtered_selection.get(cursor).cloned()
         }
     }
 
-    fn update_line(&mut self, context: &Context, thread_hash: ThreadHash) {
+    fn update_line(&mut self, context: &Context, env_hash: EnvelopeHash) {
         let account = &context.accounts[&self.cursor_pos.0];
-        let threads = account.collection.get_threads(self.cursor_pos.1);
-        let thread = threads.thread_ref(thread_hash);
-        let thread_node_hash = threads.thread_group_iter(thread_hash).next().unwrap().1;
 
         let selected_flag_len = mailbox_settings!(
             context[self.cursor_pos.0][&self.cursor_pos.1]
@@ -1084,143 +1087,144 @@ impl CompactListing {
         .unwrap_or(super::DEFAULT_ATTACHMENT_FLAG)
         .grapheme_width();
 
-        if let Some(env_hash) = threads.thread_nodes()[&thread_node_hash].message() {
-            if !account.contains_key(env_hash) {
-                /* The envelope has been renamed or removed, so wait for the appropriate event to
-                 * arrive */
-                return;
-            }
-            let idx = self.order[&thread_hash];
-            let row_attr = row_attr!(
-                self.color_cache,
-                idx % 2 == 0,
-                thread.unseen() > 0,
-                false,
-                false,
-            );
-            let envelope: EnvelopeRef = account.collection.get_env(env_hash);
-            let strings = self.make_entry_string(&envelope, context, &threads, thread_hash);
-            drop(envelope);
-            let columns = &mut self.data_columns.columns;
-            let min_width = (
-                columns[0].size().0,
-                columns[1].size().0,
-                columns[2].size().0,
-                columns[3].size().0,
-            );
-            let (x, _) = write_string_to_grid(
-                &idx.to_string(),
-                &mut columns[0],
-                row_attr.fg,
-                row_attr.bg,
-                row_attr.attrs,
-                ((0, idx), (min_width.0, idx)),
-                None,
-            );
-            for c in columns[0].row_iter(x..min_width.0, idx) {
-                columns[0][c].set_bg(row_attr.bg).set_ch(' ');
-            }
-            let (x, _) = write_string_to_grid(
-                &strings.date,
-                &mut columns[1],
-                row_attr.fg,
-                row_attr.bg,
-                row_attr.attrs,
-                ((0, idx), (min_width.1.saturating_sub(1), idx)),
-                None,
-            );
-            for c in columns[1].row_iter(x..min_width.1, idx) {
-                columns[1][c].set_bg(row_attr.bg).set_ch(' ');
-            }
-            let (x, _) = write_string_to_grid(
-                &strings.from,
-                &mut columns[2],
-                row_attr.fg,
-                row_attr.bg,
-                row_attr.attrs,
-                ((0, idx), (min_width.2, idx)),
-                None,
-            );
-            for c in columns[2].row_iter(x..min_width.2, idx) {
-                columns[2][c].set_bg(row_attr.bg).set_ch(' ');
-            }
-            let (x, _) = write_string_to_grid(
-                &strings.flag,
-                &mut columns[3],
-                row_attr.fg,
-                row_attr.bg,
-                row_attr.attrs,
-                ((0, idx), (min_width.3, idx)),
-                None,
-            );
-            let (x, _) = write_string_to_grid(
-                &strings.subject,
-                &mut columns[3],
-                row_attr.fg,
-                row_attr.bg,
-                row_attr.attrs,
-                ((x, idx), (min_width.3, idx)),
-                None,
-            );
-            columns[3][(x, idx)].set_bg(row_attr.bg).set_ch(' ');
-            let x = {
-                let mut x = x + 1;
-                for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
-                    let color = color.unwrap_or(self.color_cache.tag_default.bg);
-                    let (_x, _) = write_string_to_grid(
-                        t,
-                        &mut columns[3],
-                        self.color_cache.tag_default.fg,
-                        color,
-                        self.color_cache.tag_default.attrs,
-                        ((x + 1, idx), (min_width.3, idx)),
-                        None,
-                    );
-                    for c in columns[3].row_iter(x..(x + 1), idx) {
-                        columns[3][c].set_bg(color);
-                    }
-                    for c in columns[3].row_iter(_x..(_x + 1), idx) {
-                        columns[3][c].set_bg(color).set_keep_bg(true);
-                    }
-                    for c in columns[3].row_iter((x + 1)..(_x + 1), idx) {
-                        columns[3][c]
-                            .set_keep_fg(true)
-                            .set_keep_bg(true)
-                            .set_keep_attrs(true);
-                    }
-                    for c in columns[3].row_iter(x..(x + 1), idx) {
-                        columns[3][c].set_keep_bg(true);
-                    }
-                    x = _x + 1;
-                    columns[3][(x, idx)].set_bg(row_attr.bg).set_ch(' ');
-                }
-                x
-            };
-            for c in columns[3].row_iter(x..min_width.3, idx) {
-                columns[3][c].set_ch(' ').set_bg(row_attr.bg);
-            }
-            /* Set fg color for flags */
-            let mut x = 0;
-            if self.selection.get(&thread_hash).cloned().unwrap_or(false) {
-                x += selected_flag_len;
-            }
-            if thread.snoozed() {
-                for x in x..(x + thread_snoozed_flag_len) {
-                    columns[3][(x, idx)].set_fg(self.color_cache.thread_snooze_flag.fg);
-                }
-                x += thread_snoozed_flag_len;
-            }
-            if thread.unseen() > 0 {
-                x += unseen_flag_len;
-            }
-            if thread.has_attachments() {
-                for x in x..(x + attachment_flag_len) {
-                    columns[3][(x, idx)].set_fg(self.color_cache.attachment_flag.fg);
-                }
-            }
-            *self.rows.get_mut(idx).unwrap() = ((idx, (thread_hash, env_hash)), strings);
-            self.rows_drawn.update(idx, 1);
+        if !account.contains_key(env_hash) {
+            /* The envelope has been renamed or removed, so wait for the appropriate event to
+             * arrive */
+            return;
         }
+        let envelope: EnvelopeRef = account.collection.get_env(env_hash);
+        let thread_hash = self.rows.env_to_thread[&env_hash];
+        let threads = account.collection.get_threads(self.cursor_pos.1);
+        let thread = threads.thread_ref(thread_hash);
+        let idx = self.rows.thread_order[&thread_hash];
+        let row_attr = row_attr!(
+            self.color_cache,
+            idx % 2 == 0,
+            thread.unseen() > 0,
+            false,
+            false,
+        );
+        let strings = self.make_entry_string(&envelope, context, &threads, thread_hash);
+        drop(envelope);
+        let columns = &mut self.data_columns.columns;
+        let min_width = (
+            columns[0].size().0,
+            columns[1].size().0,
+            columns[2].size().0,
+            columns[3].size().0,
+        );
+        let (x, _) = write_string_to_grid(
+            &idx.to_string(),
+            &mut columns[0],
+            row_attr.fg,
+            row_attr.bg,
+            row_attr.attrs,
+            ((0, idx), (min_width.0, idx)),
+            None,
+        );
+        for c in columns[0].row_iter(x..min_width.0, idx) {
+            columns[0][c].set_bg(row_attr.bg).set_ch(' ');
+        }
+        let (x, _) = write_string_to_grid(
+            &strings.date,
+            &mut columns[1],
+            row_attr.fg,
+            row_attr.bg,
+            row_attr.attrs,
+            ((0, idx), (min_width.1.saturating_sub(1), idx)),
+            None,
+        );
+        for c in columns[1].row_iter(x..min_width.1, idx) {
+            columns[1][c].set_bg(row_attr.bg).set_ch(' ');
+        }
+        let (x, _) = write_string_to_grid(
+            &strings.from,
+            &mut columns[2],
+            row_attr.fg,
+            row_attr.bg,
+            row_attr.attrs,
+            ((0, idx), (min_width.2, idx)),
+            None,
+        );
+        for c in columns[2].row_iter(x..min_width.2, idx) {
+            columns[2][c].set_bg(row_attr.bg).set_ch(' ');
+        }
+        let (x, _) = write_string_to_grid(
+            &strings.flag,
+            &mut columns[3],
+            row_attr.fg,
+            row_attr.bg,
+            row_attr.attrs,
+            ((0, idx), (min_width.3, idx)),
+            None,
+        );
+        let (x, _) = write_string_to_grid(
+            &strings.subject,
+            &mut columns[3],
+            row_attr.fg,
+            row_attr.bg,
+            row_attr.attrs,
+            ((x, idx), (min_width.3, idx)),
+            None,
+        );
+        columns[3][(x, idx)].set_bg(row_attr.bg).set_ch(' ');
+        let x = {
+            let mut x = x + 1;
+            for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
+                let color = color.unwrap_or(self.color_cache.tag_default.bg);
+                let (_x, _) = write_string_to_grid(
+                    t,
+                    &mut columns[3],
+                    self.color_cache.tag_default.fg,
+                    color,
+                    self.color_cache.tag_default.attrs,
+                    ((x + 1, idx), (min_width.3, idx)),
+                    None,
+                );
+                for c in columns[3].row_iter(x..(x + 1), idx) {
+                    columns[3][c].set_bg(color);
+                }
+                for c in columns[3].row_iter(_x..(_x + 1), idx) {
+                    columns[3][c].set_bg(color).set_keep_bg(true);
+                }
+                for c in columns[3].row_iter((x + 1)..(_x + 1), idx) {
+                    columns[3][c]
+                        .set_keep_fg(true)
+                        .set_keep_bg(true)
+                        .set_keep_attrs(true);
+                }
+                for c in columns[3].row_iter(x..(x + 1), idx) {
+                    columns[3][c].set_keep_bg(true);
+                }
+                x = _x + 1;
+                columns[3][(x, idx)].set_bg(row_attr.bg).set_ch(' ');
+            }
+            x
+        };
+        for c in columns[3].row_iter(x..min_width.3, idx) {
+            columns[3][c].set_ch(' ').set_bg(row_attr.bg);
+        }
+        /* Set fg color for flags */
+        let mut x = 0;
+        if self.rows.selection.get(&env_hash).cloned().unwrap_or(false) {
+            x += selected_flag_len;
+        }
+        if thread.snoozed() {
+            for x in x..(x + thread_snoozed_flag_len) {
+                columns[3][(x, idx)].set_fg(self.color_cache.thread_snooze_flag.fg);
+            }
+            x += thread_snoozed_flag_len;
+        }
+        if thread.unseen() > 0 {
+            x += unseen_flag_len;
+        }
+        if thread.has_attachments() {
+            for x in x..(x + attachment_flag_len) {
+                columns[3][(x, idx)].set_fg(self.color_cache.attachment_flag.fg);
+            }
+        }
+        *self.rows.entries.get_mut(idx).unwrap() = ((thread_hash, env_hash), strings);
+        self.rows_drawn.update(idx, 1);
     }
 
     fn draw_rows(&mut self, context: &Context, start: usize, end: usize) {
@@ -1283,10 +1287,14 @@ impl CompactListing {
         .unwrap_or(super::DEFAULT_ATTACHMENT_FLAG)
         .grapheme_width();
 
-        for ((idx, (thread_hash, root_env_hash)), strings) in
-            self.rows.iter().skip(start).take(end - start + 1)
+        for (idx, ((thread_hash, root_env_hash), strings)) in self
+            .rows
+            .entries
+            .iter()
+            .enumerate()
+            .skip(start)
+            .take(end - start + 1)
         {
-            let idx = *idx;
             if !context.accounts[&self.cursor_pos.0].contains_key(*root_env_hash) {
                 //debug!("key = {}", root_env_hash);
                 //debug!(
@@ -1304,7 +1312,7 @@ impl CompactListing {
                 idx % 2 == 0,
                 thread.unseen() > 0,
                 self.cursor_pos.2 == idx,
-                self.selection[thread_hash]
+                self.rows.selection[root_env_hash]
             );
             let (x, _) = write_string_to_grid(
                 &idx.to_string(),
@@ -1422,7 +1430,13 @@ impl CompactListing {
             }
             /* Set fg color for flags */
             let mut x = 0;
-            if self.selection.get(thread_hash).cloned().unwrap_or(false) {
+            if self
+                .rows
+                .selection
+                .get(root_env_hash)
+                .cloned()
+                .unwrap_or(false)
+            {
                 x += selected_flag_len;
             }
             if thread.snoozed() {
@@ -1465,9 +1479,10 @@ impl CompactListing {
                     }
                     let thread =
                         threads.find_group(threads.thread_nodes[&env_thread_node_hash].group);
-                    if self.all_threads.contains(&thread) {
-                        self.selection
-                            .entry(thread)
+                    if self.rows.all_threads.contains(&thread) {
+                        self.rows
+                            .selection
+                            .entry(env_hash)
                             .and_modify(|entry| *entry = true);
                     }
                 }
@@ -1545,28 +1560,28 @@ impl Component for CompactListing {
                             for c in self.new_cursor_pos.2.saturating_sub(*amount)
                                 ..=self.new_cursor_pos.2
                             {
-                                let thread = self.get_thread_under_cursor(c);
-                                match modifier {
-                                    Modifier::SymmetricDifference => {
-                                        self.selection.entry(thread).and_modify(|e| *e = !*e);
-                                    }
-                                    Modifier::Union => {
-                                        self.selection.entry(thread).and_modify(|e| *e = true);
-                                    }
-                                    Modifier::Difference => {
-                                        self.selection.entry(thread).and_modify(|e| *e = false);
-                                    }
-                                    Modifier::Intersection => {}
+                                if let Some(thread) = self.get_thread_under_cursor(c) {
+                                    self.rows.update_selection_with_thread(
+                                        thread,
+                                        match modifier {
+                                            Modifier::SymmetricDifference => {
+                                                |e: &mut bool| *e = !*e
+                                            }
+                                            Modifier::Union => |e: &mut bool| *e = true,
+                                            Modifier::Difference => |e: &mut bool| *e = false,
+                                            Modifier::Intersection => |_: &mut bool| {},
+                                        },
+                                    );
                                 }
-                                self.row_updates.push(thread);
                             }
                             if modifier == Modifier::Intersection {
                                 for c in (0..self.new_cursor_pos.2.saturating_sub(*amount))
                                     .chain((self.new_cursor_pos.2 + 2)..self.length)
                                 {
-                                    let thread = self.get_thread_under_cursor(c);
-                                    self.selection.entry(thread).and_modify(|e| *e = false);
-                                    self.row_updates.push(thread);
+                                    if let Some(thread) = self.get_thread_under_cursor(c) {
+                                        self.rows
+                                            .update_selection_with_thread(thread, |e| *e = false);
+                                    }
                                 }
                             }
                         }
@@ -1574,49 +1589,48 @@ impl Component for CompactListing {
                             for c in self.new_cursor_pos.2.saturating_sub(rows * multiplier)
                                 ..=self.new_cursor_pos.2
                             {
-                                let thread = self.get_thread_under_cursor(c);
-                                match modifier {
-                                    Modifier::SymmetricDifference => {
-                                        self.selection.entry(thread).and_modify(|e| *e = !*e);
-                                    }
-                                    Modifier::Union => {
-                                        self.selection.entry(thread).and_modify(|e| *e = true);
-                                    }
-                                    Modifier::Difference => {
-                                        self.selection.entry(thread).and_modify(|e| *e = false);
-                                    }
-                                    Modifier::Intersection => {}
+                                if let Some(thread) = self.get_thread_under_cursor(c) {
+                                    self.rows.update_selection_with_thread(
+                                        thread,
+                                        match modifier {
+                                            Modifier::SymmetricDifference => {
+                                                |e: &mut bool| *e = !*e
+                                            }
+                                            Modifier::Union => |e: &mut bool| *e = true,
+                                            Modifier::Difference => |e: &mut bool| *e = false,
+                                            Modifier::Intersection => |_: &mut bool| {},
+                                        },
+                                    );
                                 }
-                                self.row_updates.push(thread);
                             }
                         }
                         PageMovement::Down(amount) => {
                             for c in self.new_cursor_pos.2
                                 ..std::cmp::min(self.length, self.new_cursor_pos.2 + amount + 1)
                             {
-                                let thread = self.get_thread_under_cursor(c);
-                                match modifier {
-                                    Modifier::SymmetricDifference => {
-                                        self.selection.entry(thread).and_modify(|e| *e = !*e);
-                                    }
-                                    Modifier::Union => {
-                                        self.selection.entry(thread).and_modify(|e| *e = true);
-                                    }
-                                    Modifier::Difference => {
-                                        self.selection.entry(thread).and_modify(|e| *e = false);
-                                    }
-                                    Modifier::Intersection => {}
+                                if let Some(thread) = self.get_thread_under_cursor(c) {
+                                    self.rows.update_selection_with_thread(
+                                        thread,
+                                        match modifier {
+                                            Modifier::SymmetricDifference => {
+                                                |e: &mut bool| *e = !*e
+                                            }
+                                            Modifier::Union => |e: &mut bool| *e = true,
+                                            Modifier::Difference => |e: &mut bool| *e = false,
+                                            Modifier::Intersection => |_: &mut bool| {},
+                                        },
+                                    );
                                 }
-                                self.row_updates.push(thread);
                             }
                             if modifier == Modifier::Intersection {
                                 for c in (0..self.new_cursor_pos.2).chain(
                                     (std::cmp::min(self.length, self.new_cursor_pos.2 + amount + 1)
                                         + 1)..self.length,
                                 ) {
-                                    let thread = self.get_thread_under_cursor(c);
-                                    self.selection.entry(thread).and_modify(|e| *e = false);
-                                    self.row_updates.push(thread);
+                                    if let Some(thread) = self.get_thread_under_cursor(c) {
+                                        self.rows
+                                            .update_selection_with_thread(thread, |e| *e = false);
+                                    }
                                 }
                             }
                         }
@@ -1627,20 +1641,19 @@ impl Component for CompactListing {
                                     self.length,
                                 )
                             {
-                                let thread = self.get_thread_under_cursor(c);
-                                match modifier {
-                                    Modifier::SymmetricDifference => {
-                                        self.selection.entry(thread).and_modify(|e| *e = !*e);
-                                    }
-                                    Modifier::Union => {
-                                        self.selection.entry(thread).and_modify(|e| *e = true);
-                                    }
-                                    Modifier::Difference => {
-                                        self.selection.entry(thread).and_modify(|e| *e = false);
-                                    }
-                                    Modifier::Intersection => {}
+                                if let Some(thread) = self.get_thread_under_cursor(c) {
+                                    self.rows.update_selection_with_thread(
+                                        thread,
+                                        match modifier {
+                                            Modifier::SymmetricDifference => {
+                                                |e: &mut bool| *e = !*e
+                                            }
+                                            Modifier::Union => |e: &mut bool| *e = true,
+                                            Modifier::Difference => |e: &mut bool| *e = false,
+                                            Modifier::Intersection => |_: &mut bool| {},
+                                        },
+                                    );
                                 }
-                                self.row_updates.push(thread);
                             }
                             if modifier == Modifier::Intersection {
                                 for c in (0..self.new_cursor_pos.2).chain(
@@ -1649,60 +1662,61 @@ impl Component for CompactListing {
                                         self.length,
                                     ) + 1)..self.length,
                                 ) {
-                                    let thread = self.get_thread_under_cursor(c);
-                                    self.selection.entry(thread).and_modify(|e| *e = false);
-                                    self.row_updates.push(thread);
+                                    if let Some(thread) = self.get_thread_under_cursor(c) {
+                                        self.rows
+                                            .update_selection_with_thread(thread, |e| *e = false);
+                                    }
                                 }
                             }
                         }
                         PageMovement::Right(_) | PageMovement::Left(_) => {}
                         PageMovement::Home => {
                             for c in 0..=self.new_cursor_pos.2 {
-                                let thread = self.get_thread_under_cursor(c);
-                                match modifier {
-                                    Modifier::SymmetricDifference => {
-                                        self.selection.entry(thread).and_modify(|e| *e = !*e);
-                                    }
-                                    Modifier::Union => {
-                                        self.selection.entry(thread).and_modify(|e| *e = true);
-                                    }
-                                    Modifier::Difference => {
-                                        self.selection.entry(thread).and_modify(|e| *e = false);
-                                    }
-                                    Modifier::Intersection => {}
+                                if let Some(thread) = self.get_thread_under_cursor(c) {
+                                    self.rows.update_selection_with_thread(
+                                        thread,
+                                        match modifier {
+                                            Modifier::SymmetricDifference => {
+                                                |e: &mut bool| *e = !*e
+                                            }
+                                            Modifier::Union => |e: &mut bool| *e = true,
+                                            Modifier::Difference => |e: &mut bool| *e = false,
+                                            Modifier::Intersection => |_: &mut bool| {},
+                                        },
+                                    );
                                 }
-                                self.row_updates.push(thread);
                             }
                             if modifier == Modifier::Intersection {
                                 for c in (self.new_cursor_pos.2 + 1)..self.length {
-                                    let thread = self.get_thread_under_cursor(c);
-                                    self.selection.entry(thread).and_modify(|e| *e = false);
-                                    self.row_updates.push(thread);
+                                    if let Some(thread) = self.get_thread_under_cursor(c) {
+                                        self.rows
+                                            .update_selection_with_thread(thread, |e| *e = false);
+                                    }
                                 }
                             }
                         }
                         PageMovement::End => {
                             for c in self.new_cursor_pos.2..self.length {
-                                let thread = self.get_thread_under_cursor(c);
-                                match modifier {
-                                    Modifier::SymmetricDifference => {
-                                        self.selection.entry(thread).and_modify(|e| *e = !*e);
-                                    }
-                                    Modifier::Union => {
-                                        self.selection.entry(thread).and_modify(|e| *e = true);
-                                    }
-                                    Modifier::Difference => {
-                                        self.selection.entry(thread).and_modify(|e| *e = false);
-                                    }
-                                    Modifier::Intersection => {}
+                                if let Some(thread) = self.get_thread_under_cursor(c) {
+                                    self.rows.update_selection_with_thread(
+                                        thread,
+                                        match modifier {
+                                            Modifier::SymmetricDifference => {
+                                                |e: &mut bool| *e = !*e
+                                            }
+                                            Modifier::Union => |e: &mut bool| *e = true,
+                                            Modifier::Difference => |e: &mut bool| *e = false,
+                                            Modifier::Intersection => |_: &mut bool| {},
+                                        },
+                                    );
                                 }
-                                self.row_updates.push(thread);
                             }
                             if modifier == Modifier::Intersection {
                                 for c in 0..self.new_cursor_pos.2 {
-                                    let thread = self.get_thread_under_cursor(c);
-                                    self.selection.entry(thread).and_modify(|e| *e = false);
-                                    self.row_updates.push(thread);
+                                    if let Some(thread) = self.get_thread_under_cursor(c) {
+                                        self.rows
+                                            .update_selection_with_thread(thread, |e| *e = false);
+                                    }
                                 }
                             }
                         }
@@ -1711,10 +1725,10 @@ impl Component for CompactListing {
                 self.force_draw = true;
             }
 
-            if !self.row_updates.is_empty() {
-                while let Some(row) = self.row_updates.pop() {
+            if !self.rows.row_updates.is_empty() {
+                while let Some(row) = self.rows.row_updates.pop() {
                     self.update_line(context, row);
-                    let row: usize = self.order[&row];
+                    let row: usize = self.rows.env_order[&row];
                     let page_no = (self.new_cursor_pos.2).wrapping_div(rows);
 
                     let top_idx = page_no * rows;
@@ -1784,9 +1798,11 @@ impl Component for CompactListing {
                         && (shortcut!(k == shortcuts[Listing::DESCRIPTION]["open_entry"])
                             || shortcut!(k == shortcuts[Listing::DESCRIPTION]["focus_right"])) =>
                 {
-                    let thread = self.get_thread_under_cursor(self.cursor_pos.2);
-                    self.view = Box::new(ThreadView::new(self.cursor_pos, thread, None, context));
-                    self.set_focus(Focus::Entry, context);
+                    if let Some(thread) = self.get_thread_under_cursor(self.cursor_pos.2) {
+                        self.view =
+                            Box::new(ThreadView::new(self.cursor_pos, thread, None, context));
+                        self.set_focus(Focus::Entry, context);
+                    }
                     return true;
                 }
                 UIEvent::Input(ref k)
@@ -1827,9 +1843,10 @@ impl Component for CompactListing {
                     if self.modifier_active && self.modifier_command.is_none() {
                         self.modifier_command = Some(Modifier::default());
                     } else {
-                        let thread_hash = self.get_thread_under_cursor(self.cursor_pos.2);
-                        self.selection.entry(thread_hash).and_modify(|e| *e = !*e);
-                        self.row_updates.push(thread_hash);
+                        if let Some(thread_hash) = self.get_thread_under_cursor(self.cursor_pos.2) {
+                            self.rows
+                                .update_selection_with_thread(thread_hash, |e| *e = !*e);
+                        }
                     }
                     return true;
                 }
@@ -1854,6 +1871,7 @@ impl Component for CompactListing {
                             return true;
                         }
                         Action::Listing(ToggleThreadSnooze) if !self.unfocused() => {
+                            /*
                             let thread = self.get_thread_under_cursor(self.cursor_pos.2);
                             let account = &mut context.accounts[&self.cursor_pos.0];
                             account
@@ -1866,8 +1884,9 @@ impl Component for CompactListing {
                                     let is_snoozed = threads.thread_ref(thread).snoozed();
                                     threads.thread_ref_mut(thread).set_snoozed(!is_snoozed);
                                 });
-                            self.row_updates.push(thread);
+                            self.rows.row_updates.push(thread);
                             self.refresh_mailbox(context, false);
+                            */
                             return true;
                         }
 
@@ -1938,8 +1957,8 @@ impl Component for CompactListing {
                 let thread: ThreadHash =
                     threads.find_group(threads.thread_nodes()[&new_env_thread_node_hash].group);
                 drop(threads);
-                if self.order.contains_key(&thread) {
-                    self.row_updates.push(thread);
+                if self.rows.contains_thread(thread) {
+                    self.rows.row_update_add_thread(thread);
                 }
 
                 self.dirty = true;
@@ -1950,7 +1969,7 @@ impl Component for CompactListing {
                 }
             }
             UIEvent::EnvelopeRemove(ref _env_hash, ref thread_hash) => {
-                if self.order.contains_key(thread_hash) {
+                if self.rows.thread_order.contains_key(thread_hash) {
                     self.refresh_mailbox(context, false);
                     self.set_dirty(true);
                 }
@@ -1968,8 +1987,8 @@ impl Component for CompactListing {
                 let thread: ThreadHash =
                     threads.find_group(threads.thread_nodes()[&new_env_thread_node_hash].group);
                 drop(threads);
-                if self.order.contains_key(&thread) {
-                    self.row_updates.push(thread);
+                if self.rows.contains_thread(thread) {
+                    self.rows.row_update_add_thread(thread);
                 }
 
                 self.dirty = true;
@@ -1987,9 +2006,14 @@ impl Component for CompactListing {
             }
             UIEvent::Input(Key::Esc)
                 if !self.unfocused()
-                    && self.selection.values().cloned().any(std::convert::identity) =>
+                    && self
+                        .rows
+                        .selection
+                        .values()
+                        .cloned()
+                        .any(std::convert::identity) =>
             {
-                for v in self.selection.values_mut() {
+                for v in self.rows.selection.values_mut() {
                     *v = false;
                 }
                 self.dirty = true;

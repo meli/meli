@@ -100,24 +100,20 @@ pub struct ConversationsListing {
     length: usize,
     sort: (SortField, SortOrder),
     subsort: (SortField, SortOrder),
-    all_threads: HashSet<ThreadHash>,
-    order: HashMap<ThreadHash, usize>,
-    #[allow(clippy::type_complexity)]
-    rows: std::result::Result<Vec<((usize, (ThreadHash, EnvelopeHash)), EntryStrings)>, String>,
+    rows: RowsState<(ThreadHash, EnvelopeHash)>,
+    error: std::result::Result<(), String>,
 
     #[allow(clippy::type_complexity)]
     search_job: Option<(String, JoinHandle<Result<SmallVec<[EnvelopeHash; 512]>>>)>,
     filter_term: String,
     filtered_selection: Vec<ThreadHash>,
     filtered_order: HashMap<ThreadHash, usize>,
-    selection: HashMap<ThreadHash, bool>,
     /// If we must redraw on next redraw event
     dirty: bool,
     force_draw: bool,
     /// If `self.view` exists or not.
     focus: Focus,
     view: ThreadView,
-    row_updates: SmallVec<[ThreadHash; 8]>,
     color_cache: ColorCache,
 
     movement: Option<PageMovement>,
@@ -127,30 +123,46 @@ pub struct ConversationsListing {
 }
 
 impl MailListingTrait for ConversationsListing {
-    fn row_updates(&mut self) -> &mut SmallVec<[ThreadHash; 8]> {
-        &mut self.row_updates
+    fn row_updates(&mut self) -> &mut SmallVec<[EnvelopeHash; 8]> {
+        &mut self.rows.row_updates
     }
 
-    fn selection(&mut self) -> &mut HashMap<ThreadHash, bool> {
-        &mut self.selection
+    fn selection(&mut self) -> &mut HashMap<EnvelopeHash, bool> {
+        &mut self.rows.selection
     }
 
-    fn get_focused_items(&self, _context: &Context) -> SmallVec<[ThreadHash; 8]> {
-        let is_selection_empty = self.selection.values().cloned().any(std::convert::identity);
-        let i = [self.get_thread_under_cursor(self.cursor_pos.2)];
+    fn get_focused_items(&self, _context: &Context) -> SmallVec<[EnvelopeHash; 8]> {
+        let is_selection_empty = !self
+            .rows
+            .selection
+            .values()
+            .cloned()
+            .any(std::convert::identity);
         let cursor_iter;
-        let sel_iter = if is_selection_empty {
+        let sel_iter = if !is_selection_empty {
             cursor_iter = None;
-            Some(self.selection.iter().filter(|(_, v)| **v).map(|(k, _)| k))
+            Some(
+                self.rows
+                    .selection
+                    .iter()
+                    .filter(|(_, v)| **v)
+                    .map(|(k, _)| *k),
+            )
         } else {
-            cursor_iter = Some(i.iter());
+            if let Some(env_hashes) = self
+                .get_thread_under_cursor(self.cursor_pos.2)
+                .and_then(|thread| self.rows.thread_to_env.get(&thread).map(|v| v.clone()))
+            {
+                cursor_iter = Some(env_hashes.into_iter());
+            } else {
+                cursor_iter = None;
+            }
             None
         };
         let iter = sel_iter
             .into_iter()
             .flatten()
-            .chain(cursor_iter.into_iter().flatten())
-            .cloned();
+            .chain(cursor_iter.into_iter().flatten());
         SmallVec::from_iter(iter)
     }
 
@@ -192,7 +204,7 @@ impl MailListingTrait for ConversationsListing {
             Err(_) => {
                 let message: String =
                     context.accounts[&self.cursor_pos.0][&self.cursor_pos.1].status();
-                self.rows = Err(message);
+                self.error = Err(message);
                 return;
             }
         }
@@ -200,7 +212,6 @@ impl MailListingTrait for ConversationsListing {
         let threads = context.accounts[&self.cursor_pos.0]
             .collection
             .get_threads(self.cursor_pos.1);
-        self.all_threads.clear();
         let mut roots = threads.roots();
         threads.group_inner_sort_by(
             &mut roots,
@@ -217,9 +228,9 @@ impl MailListingTrait for ConversationsListing {
         {
             self.view.update(context);
         } else if self.unfocused() {
-            let thread_group = self.get_thread_under_cursor(self.cursor_pos.2);
-
-            self.view = ThreadView::new(self.new_cursor_pos, thread_group, None, context);
+            if let Some(thread_group) = self.get_thread_under_cursor(self.cursor_pos.2) {
+                self.view = ThreadView::new(self.new_cursor_pos, thread_group, None, context);
+            }
         }
     }
 
@@ -231,13 +242,10 @@ impl MailListingTrait for ConversationsListing {
         let account = &context.accounts[&self.cursor_pos.0];
 
         let threads = account.collection.get_threads(self.cursor_pos.1);
-        self.order.clear();
-        self.selection.clear();
+        self.rows.clear();
         self.length = 0;
-        if self.rows.is_err() {
-            self.rows = Ok(vec![]);
-        } else {
-            self.rows.as_mut().unwrap().clear();
+        if self.error.is_err() {
+            self.error = Ok(());
         }
         let mut max_entry_columns = 0;
 
@@ -343,20 +351,23 @@ impl MailListingTrait for ConversationsListing {
                 max_entry_columns,
                 strings.date.len() + 1 + strings.from.grapheme_width(),
             );
-            self.rows
-                .as_mut()
-                .unwrap()
-                .push(((self.length, (thread, root_env_hash)), strings));
-            self.all_threads.insert(thread);
-
-            self.order.insert(thread, self.length);
-            self.selection.insert(thread, false);
+            self.rows.insert_thread(
+                thread,
+                (thread, root_env_hash),
+                threads
+                    .thread_to_envelope
+                    .get(&thread)
+                    .cloned()
+                    .unwrap_or_default()
+                    .into(),
+                strings,
+            );
             self.length += 1;
         }
 
         if self.length == 0 && self.filter_term.is_empty() {
             let message: String = account[&self.cursor_pos.1].status();
-            self.rows = Err(message);
+            self.error = Err(message);
         }
     }
 }
@@ -373,7 +384,7 @@ impl ListingTrait for ConversationsListing {
         self.filtered_selection.clear();
         self.filtered_order.clear();
         self.filter_term.clear();
-        self.row_updates.clear();
+        self.rows.clear();
     }
 
     fn highlight_line(&mut self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context) {
@@ -391,7 +402,7 @@ impl ListingTrait for ConversationsListing {
         }
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
-        if let Err(message) = self.rows.as_ref() {
+        if let Err(message) = self.error.as_ref() {
             clear_area(grid, area, self.color_cache.theme_default);
             write_string_to_grid(
                 message,
@@ -503,16 +514,10 @@ impl ListingTrait for ConversationsListing {
             return;
         }
 
-        self.order.clear();
-        self.selection.clear();
         self.length = 0;
         self.filtered_selection.clear();
         self.filtered_order.clear();
         self.filter_term = filter_term;
-        self.row_updates.clear();
-        for v in self.selection.values_mut() {
-            *v = false;
-        }
 
         let account = &context.accounts[&self.cursor_pos.0];
         let threads = account.collection.get_threads(self.cursor_pos.1);
@@ -528,7 +533,7 @@ impl ListingTrait for ConversationsListing {
             if self.filtered_order.contains_key(&thread) {
                 continue;
             }
-            if self.all_threads.contains(&thread) {
+            if self.rows.all_threads.contains(&thread) {
                 self.filtered_selection.push(thread);
                 self.filtered_order
                     .insert(thread, self.filtered_selection.len().saturating_sub(1));
@@ -579,7 +584,7 @@ impl ListingTrait for ConversationsListing {
                 self.view
                     .process_event(&mut UIEvent::VisibilityChange(false), context);
                 self.dirty = true;
-                /* If self.row_updates is not empty and we exit a thread, the row_update events
+                /* If self.rows.row_updates is not empty and we exit a thread, the row_update events
                  * will be performed but the list will not be drawn. So force a draw in any case.
                  * */
                 self.force_draw = true;
@@ -618,15 +623,12 @@ impl ConversationsListing {
             length: 0,
             sort: (Default::default(), Default::default()),
             subsort: (SortField::Date, SortOrder::Desc),
-            order: HashMap::default(),
-            all_threads: HashSet::default(),
+            rows: RowsState::default(),
+            error: Ok(()),
             search_job: None,
             filter_term: String::new(),
             filtered_selection: Vec::new(),
             filtered_order: HashMap::default(),
-            selection: HashMap::default(),
-            row_updates: SmallVec::new(),
-            rows: Ok(Vec::with_capacity(1024)),
             dirty: true,
             force_draw: true,
             focus: Focus::None,
@@ -765,28 +767,23 @@ impl ConversationsListing {
         }
     }
 
-    fn get_thread_under_cursor(&self, cursor: usize) -> ThreadHash {
+    fn get_thread_under_cursor(&self, cursor: usize) -> Option<ThreadHash> {
         if self.filter_term.is_empty() {
-            *self
-                .order
+            self.rows
+                .thread_order
                 .iter()
                 .find(|(_, &r)| r == cursor)
-                .unwrap_or_else(|| {
-                    debug!("self.order empty ? cursor={} {:#?}", cursor, &self.order);
-                    panic!();
-                })
-                .0
+                .map(|(k, _)| *k)
         } else {
-            self.filtered_selection[cursor]
+            self.filtered_selection.get(cursor).cloned()
         }
     }
 
-    fn update_line(&mut self, context: &Context, thread_hash: ThreadHash) {
+    fn update_line(&mut self, context: &Context, env_hash: EnvelopeHash) {
         let account = &context.accounts[&self.cursor_pos.0];
+        let thread_hash = self.rows.env_to_thread[&env_hash];
         let threads = account.collection.get_threads(self.cursor_pos.1);
-        let thread_node_hash = threads.thread_group_iter(thread_hash).next().unwrap().1;
-        let idx: usize = self.order[&thread_hash];
-        let env_hash = threads.thread_nodes()[&thread_node_hash].message().unwrap();
+        let idx: usize = self.rows.thread_order[&thread_hash];
 
         let mut other_subjects = IndexSet::new();
         let mut from_address_list = Vec::new();
@@ -829,22 +826,18 @@ impl ConversationsListing {
             thread_hash,
         );
         drop(envelope);
-        if let Ok(rows) = self.rows.as_mut() {
-            if let Some(row) = rows.get_mut(idx) {
-                row.1 = strings;
-            }
+        if let Some(row) = self.rows.entries.get_mut(idx) {
+            row.1 = strings;
         }
     }
 
     fn draw_rows(&self, grid: &mut CellBuffer, area: Area, context: &Context, top_idx: usize) {
-        let rows_ref = match self.rows.as_ref() {
-            Ok(rows) => rows,
-            Err(_) => return,
-        };
         let account = &context.accounts[&self.cursor_pos.0];
         let threads = account.collection.get_threads(self.cursor_pos.1);
         let (mut upper_left, bottom_right) = area;
-        for ((idx, (thread_hash, root_env_hash)), strings) in rows_ref.iter().skip(top_idx) {
+        for (idx, ((thread_hash, root_env_hash), strings)) in
+            self.rows.entries.iter().enumerate().skip(top_idx)
+        {
             if !context.accounts[&self.cursor_pos.0].contains_key(*root_env_hash) {
                 panic!();
             }
@@ -853,8 +846,8 @@ impl ConversationsListing {
             let row_attr = row_attr!(
                 self.color_cache,
                 thread.unseen() > 0,
-                self.cursor_pos.2 == *idx,
-                self.selection[thread_hash]
+                self.cursor_pos.2 == idx,
+                self.rows.is_thread_selected(*thread_hash)
             );
             /* draw flags */
             let (x, _) = write_string_to_grid(
@@ -873,8 +866,8 @@ impl ConversationsListing {
                 subject,
                 self.color_cache,
                 thread.unseen() > 0,
-                self.cursor_pos.2 == *idx,
-                self.selection[thread_hash]
+                self.cursor_pos.2 == idx,
+                self.rows.is_thread_selected(*thread_hash)
             );
             /* draw subject */
             let (mut x, _) = write_string_to_grid(
@@ -919,8 +912,8 @@ impl ConversationsListing {
                 date,
                 self.color_cache,
                 thread.unseen() > 0,
-                self.cursor_pos.2 == *idx,
-                self.selection[thread_hash]
+                self.cursor_pos.2 == idx,
+                self.rows.is_thread_selected(*thread_hash)
             );
             upper_left.1 += 1;
             if upper_left.1 >= bottom_right.1 {
@@ -946,8 +939,8 @@ impl ConversationsListing {
                 from,
                 self.color_cache,
                 thread.unseen() > 0,
-                self.cursor_pos.2 == *idx,
-                self.selection[thread_hash]
+                self.cursor_pos.2 == idx,
+                self.rows.is_thread_selected(*thread_hash)
             );
             /* draw from */
             let (x, _) = write_string_to_grid(
@@ -1025,28 +1018,28 @@ impl Component for ConversationsListing {
                             for c in self.new_cursor_pos.2.saturating_sub(*amount)
                                 ..=self.new_cursor_pos.2
                             {
-                                let thread = self.get_thread_under_cursor(c);
-                                match modifier {
-                                    Modifier::SymmetricDifference => {
-                                        self.selection.entry(thread).and_modify(|e| *e = !*e);
-                                    }
-                                    Modifier::Union => {
-                                        self.selection.entry(thread).and_modify(|e| *e = true);
-                                    }
-                                    Modifier::Difference => {
-                                        self.selection.entry(thread).and_modify(|e| *e = false);
-                                    }
-                                    Modifier::Intersection => {}
+                                if let Some(thread) = self.get_thread_under_cursor(c) {
+                                    self.rows.update_selection_with_thread(
+                                        thread,
+                                        match modifier {
+                                            Modifier::SymmetricDifference => {
+                                                |e: &mut bool| *e = !*e
+                                            }
+                                            Modifier::Union => |e: &mut bool| *e = true,
+                                            Modifier::Difference => |e: &mut bool| *e = false,
+                                            Modifier::Intersection => |_: &mut bool| {},
+                                        },
+                                    );
                                 }
-                                self.row_updates.push(thread);
                             }
                             if modifier == Modifier::Intersection {
                                 for c in (0..self.new_cursor_pos.2.saturating_sub(*amount))
                                     .chain((self.new_cursor_pos.2 + 2)..self.length)
                                 {
-                                    let thread = self.get_thread_under_cursor(c);
-                                    self.selection.entry(thread).and_modify(|e| *e = false);
-                                    self.row_updates.push(thread);
+                                    if let Some(thread) = self.get_thread_under_cursor(c) {
+                                        self.rows
+                                            .update_selection_with_thread(thread, |e| *e = false);
+                                    }
                                 }
                             }
                         }
@@ -1054,49 +1047,48 @@ impl Component for ConversationsListing {
                             for c in self.new_cursor_pos.2.saturating_sub(rows * multiplier)
                                 ..=self.new_cursor_pos.2
                             {
-                                let thread = self.get_thread_under_cursor(c);
-                                match modifier {
-                                    Modifier::SymmetricDifference => {
-                                        self.selection.entry(thread).and_modify(|e| *e = !*e);
-                                    }
-                                    Modifier::Union => {
-                                        self.selection.entry(thread).and_modify(|e| *e = true);
-                                    }
-                                    Modifier::Difference => {
-                                        self.selection.entry(thread).and_modify(|e| *e = false);
-                                    }
-                                    Modifier::Intersection => {}
+                                if let Some(thread) = self.get_thread_under_cursor(c) {
+                                    self.rows.update_selection_with_thread(
+                                        thread,
+                                        match modifier {
+                                            Modifier::SymmetricDifference => {
+                                                |e: &mut bool| *e = !*e
+                                            }
+                                            Modifier::Union => |e: &mut bool| *e = true,
+                                            Modifier::Difference => |e: &mut bool| *e = false,
+                                            Modifier::Intersection => |_: &mut bool| {},
+                                        },
+                                    );
                                 }
-                                self.row_updates.push(thread);
                             }
                         }
                         PageMovement::Down(amount) => {
                             for c in self.new_cursor_pos.2
                                 ..std::cmp::min(self.length, self.new_cursor_pos.2 + amount + 1)
                             {
-                                let thread = self.get_thread_under_cursor(c);
-                                match modifier {
-                                    Modifier::SymmetricDifference => {
-                                        self.selection.entry(thread).and_modify(|e| *e = !*e);
-                                    }
-                                    Modifier::Union => {
-                                        self.selection.entry(thread).and_modify(|e| *e = true);
-                                    }
-                                    Modifier::Difference => {
-                                        self.selection.entry(thread).and_modify(|e| *e = false);
-                                    }
-                                    Modifier::Intersection => {}
+                                if let Some(thread) = self.get_thread_under_cursor(c) {
+                                    self.rows.update_selection_with_thread(
+                                        thread,
+                                        match modifier {
+                                            Modifier::SymmetricDifference => {
+                                                |e: &mut bool| *e = !*e
+                                            }
+                                            Modifier::Union => |e: &mut bool| *e = true,
+                                            Modifier::Difference => |e: &mut bool| *e = false,
+                                            Modifier::Intersection => |_: &mut bool| {},
+                                        },
+                                    );
                                 }
-                                self.row_updates.push(thread);
                             }
                             if modifier == Modifier::Intersection {
                                 for c in (0..self.new_cursor_pos.2).chain(
                                     (std::cmp::min(self.length, self.new_cursor_pos.2 + amount + 1)
                                         + 1)..self.length,
                                 ) {
-                                    let thread = self.get_thread_under_cursor(c);
-                                    self.selection.entry(thread).and_modify(|e| *e = false);
-                                    self.row_updates.push(thread);
+                                    if let Some(thread) = self.get_thread_under_cursor(c) {
+                                        self.rows
+                                            .update_selection_with_thread(thread, |e| *e = false);
+                                    }
                                 }
                             }
                         }
@@ -1107,20 +1099,19 @@ impl Component for ConversationsListing {
                                     self.length,
                                 )
                             {
-                                let thread = self.get_thread_under_cursor(c);
-                                match modifier {
-                                    Modifier::SymmetricDifference => {
-                                        self.selection.entry(thread).and_modify(|e| *e = !*e);
-                                    }
-                                    Modifier::Union => {
-                                        self.selection.entry(thread).and_modify(|e| *e = true);
-                                    }
-                                    Modifier::Difference => {
-                                        self.selection.entry(thread).and_modify(|e| *e = false);
-                                    }
-                                    Modifier::Intersection => {}
+                                if let Some(thread) = self.get_thread_under_cursor(c) {
+                                    self.rows.update_selection_with_thread(
+                                        thread,
+                                        match modifier {
+                                            Modifier::SymmetricDifference => {
+                                                |e: &mut bool| *e = !*e
+                                            }
+                                            Modifier::Union => |e: &mut bool| *e = true,
+                                            Modifier::Difference => |e: &mut bool| *e = false,
+                                            Modifier::Intersection => |_: &mut bool| {},
+                                        },
+                                    );
                                 }
-                                self.row_updates.push(thread);
                             }
                             if modifier == Modifier::Intersection {
                                 for c in (0..self.new_cursor_pos.2).chain(
@@ -1129,72 +1120,73 @@ impl Component for ConversationsListing {
                                         self.length,
                                     ) + 1)..self.length,
                                 ) {
-                                    let thread = self.get_thread_under_cursor(c);
-                                    self.selection.entry(thread).and_modify(|e| *e = false);
-                                    self.row_updates.push(thread);
+                                    if let Some(thread) = self.get_thread_under_cursor(c) {
+                                        self.rows
+                                            .update_selection_with_thread(thread, |e| *e = false);
+                                    }
                                 }
                             }
                         }
                         PageMovement::Right(_) | PageMovement::Left(_) => {}
                         PageMovement::Home => {
                             for c in 0..=self.new_cursor_pos.2 {
-                                let thread = self.get_thread_under_cursor(c);
-                                match modifier {
-                                    Modifier::SymmetricDifference => {
-                                        self.selection.entry(thread).and_modify(|e| *e = !*e);
-                                    }
-                                    Modifier::Union => {
-                                        self.selection.entry(thread).and_modify(|e| *e = true);
-                                    }
-                                    Modifier::Difference => {
-                                        self.selection.entry(thread).and_modify(|e| *e = false);
-                                    }
-                                    Modifier::Intersection => {}
+                                if let Some(thread) = self.get_thread_under_cursor(c) {
+                                    self.rows.update_selection_with_thread(
+                                        thread,
+                                        match modifier {
+                                            Modifier::SymmetricDifference => {
+                                                |e: &mut bool| *e = !*e
+                                            }
+                                            Modifier::Union => |e: &mut bool| *e = true,
+                                            Modifier::Difference => |e: &mut bool| *e = false,
+                                            Modifier::Intersection => |_: &mut bool| {},
+                                        },
+                                    );
                                 }
-                                self.row_updates.push(thread);
                             }
                             if modifier == Modifier::Intersection {
                                 for c in (self.new_cursor_pos.2 + 1)..self.length {
-                                    let thread = self.get_thread_under_cursor(c);
-                                    self.selection.entry(thread).and_modify(|e| *e = false);
-                                    self.row_updates.push(thread);
+                                    if let Some(thread) = self.get_thread_under_cursor(c) {
+                                        self.rows
+                                            .update_selection_with_thread(thread, |e| *e = false);
+                                    }
                                 }
                             }
                         }
                         PageMovement::End => {
                             for c in self.new_cursor_pos.2..self.length {
-                                let thread = self.get_thread_under_cursor(c);
-                                match modifier {
-                                    Modifier::SymmetricDifference => {
-                                        self.selection.entry(thread).and_modify(|e| *e = !*e);
-                                    }
-                                    Modifier::Union => {
-                                        self.selection.entry(thread).and_modify(|e| *e = true);
-                                    }
-                                    Modifier::Difference => {
-                                        self.selection.entry(thread).and_modify(|e| *e = false);
-                                    }
-                                    Modifier::Intersection => {}
+                                if let Some(thread) = self.get_thread_under_cursor(c) {
+                                    self.rows.update_selection_with_thread(
+                                        thread,
+                                        match modifier {
+                                            Modifier::SymmetricDifference => {
+                                                |e: &mut bool| *e = !*e
+                                            }
+                                            Modifier::Union => |e: &mut bool| *e = true,
+                                            Modifier::Difference => |e: &mut bool| *e = false,
+                                            Modifier::Intersection => |_: &mut bool| {},
+                                        },
+                                    );
                                 }
-                                self.row_updates.push(thread);
                             }
                             if modifier == Modifier::Intersection {
                                 for c in 0..self.new_cursor_pos.2 {
-                                    let thread = self.get_thread_under_cursor(c);
-                                    self.selection.entry(thread).and_modify(|e| *e = false);
-                                    self.row_updates.push(thread);
+                                    if let Some(thread) = self.get_thread_under_cursor(c) {
+                                        self.rows
+                                            .update_selection_with_thread(thread, |e| *e = false);
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
-            if !self.row_updates.is_empty() {
+            if !self.rows.row_updates.is_empty() {
                 /* certain rows need to be updated (eg an unseen message was just set seen)
                  * */
-                while let Some(row) = self.row_updates.pop() {
+                while let Some(row) = self.rows.row_updates.pop() {
                     self.update_line(context, row);
-                    let row: usize = self.order[&row];
+                    let row: usize = self.rows.env_order[&row];
 
                     let page_no = (self.cursor_pos.2).wrapping_div(rows);
 
@@ -1271,9 +1263,10 @@ impl Component for ConversationsListing {
                         && (shortcut!(k == shortcuts[Listing::DESCRIPTION]["open_entry"])
                             || shortcut!(k == shortcuts[Listing::DESCRIPTION]["focus_right"])) =>
                 {
-                    let thread = self.get_thread_under_cursor(self.cursor_pos.2);
-                    self.view = ThreadView::new(self.cursor_pos, thread, None, context);
-                    self.set_focus(Focus::Entry, context);
+                    if let Some(thread) = self.get_thread_under_cursor(self.cursor_pos.2) {
+                        self.view = ThreadView::new(self.cursor_pos, thread, None, context);
+                        self.set_focus(Focus::Entry, context);
+                    }
                     return true;
                 }
                 UIEvent::Input(ref k)
@@ -1314,9 +1307,9 @@ impl Component for ConversationsListing {
                     if self.modifier_active && self.modifier_command.is_none() {
                         self.modifier_command = Some(Modifier::default());
                     } else {
-                        let thread_hash = self.get_thread_under_cursor(self.cursor_pos.2);
-                        self.selection.entry(thread_hash).and_modify(|e| *e = !*e);
-                        self.row_updates.push(thread_hash);
+                        if let Some(thread) = self.get_thread_under_cursor(self.cursor_pos.2) {
+                            self.rows.update_selection_with_thread(thread, |e| *e = !*e);
+                        }
                     }
                     return true;
                 }
@@ -1333,8 +1326,8 @@ impl Component for ConversationsListing {
                     let thread: ThreadHash =
                         threads.find_group(threads.thread_nodes()[&env_thread_node_hash].group);
                     drop(threads);
-                    if self.order.contains_key(&thread) {
-                        self.row_updates.push(thread);
+                    if self.rows.thread_order.contains_key(&thread) {
+                        self.rows.rename_env(*old_hash, *new_hash);
                     }
 
                     self.dirty = true;
@@ -1347,7 +1340,7 @@ impl Component for ConversationsListing {
                     }
                 }
                 UIEvent::EnvelopeRemove(ref _env_hash, ref thread_hash) => {
-                    if self.order.contains_key(thread_hash) {
+                    if self.rows.thread_order.contains_key(thread_hash) {
                         self.refresh_mailbox(context, false);
                         self.set_dirty(true);
                     }
@@ -1365,8 +1358,8 @@ impl Component for ConversationsListing {
                     let thread: ThreadHash =
                         threads.find_group(threads.thread_nodes()[&env_thread_node_hash].group);
                     drop(threads);
-                    if self.order.contains_key(&thread) {
-                        self.row_updates.push(thread);
+                    if self.rows.thread_order.contains_key(&thread) {
+                        self.rows.row_updates.push(*env_hash);
                     }
 
                     self.dirty = true;
@@ -1410,20 +1403,23 @@ impl Component for ConversationsListing {
                         return true;
                     }
                     Action::Listing(ToggleThreadSnooze) if !self.unfocused() => {
-                        let thread = self.get_thread_under_cursor(self.cursor_pos.2);
-                        let account = &mut context.accounts[&self.cursor_pos.0];
-                        account
-                            .collection
-                            .threads
-                            .write()
-                            .unwrap()
-                            .entry(self.cursor_pos.1)
-                            .and_modify(|threads| {
-                                let is_snoozed = threads.thread_ref(thread).snoozed();
-                                threads.thread_ref_mut(thread).set_snoozed(!is_snoozed);
-                            });
-                        self.row_updates.push(thread);
-                        self.refresh_mailbox(context, false);
+                        /*
+                        if let Some(thread) = self.get_thread_under_cursor(self.cursor_pos.2) {
+                            let account = &mut context.accounts[&self.cursor_pos.0];
+                            account
+                                .collection
+                                .threads
+                                .write()
+                                .unwrap()
+                                .entry(self.cursor_pos.1)
+                                .and_modify(|threads| {
+                                    let is_snoozed = threads.thread_ref(thread).snoozed();
+                                    threads.thread_ref_mut(thread).set_snoozed(!is_snoozed);
+                                });
+                            self.rows.row_updates.push(thread);
+                            self.refresh_mailbox(context, false);
+                        }
+                        */
                         return true;
                     }
                     _ => {}
@@ -1504,14 +1500,14 @@ impl Component for ConversationsListing {
             },
             UIEvent::Input(Key::Esc)
                 if !self.unfocused()
-                    && self.selection.values().cloned().any(std::convert::identity) =>
+                    && self
+                        .rows
+                        .selection
+                        .values()
+                        .cloned()
+                        .any(std::convert::identity) =>
             {
-                for (k, v) in self.selection.iter_mut() {
-                    if *v {
-                        *v = false;
-                        self.row_updates.push(*k);
-                    }
-                }
+                self.rows.clear_selection();
                 self.dirty = true;
                 return true;
             }
