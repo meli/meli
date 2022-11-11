@@ -2294,7 +2294,9 @@ impl Component for MailView {
             UIEvent::Input(ref key)
                 if !self.cmd_buf.is_empty()
                     && self.mode == ViewMode::Url
-                    && shortcut!(key == shortcuts[MailView::DESCRIPTION]["go_to_url"]) =>
+                    && (shortcut!(key == shortcuts[MailView::DESCRIPTION]["go_to_url"])
+                        || shortcut!(key == shortcuts[MailView::DESCRIPTION]["copy_url"])
+                        || shortcut!(key == shortcuts[MailView::DESCRIPTION]["pipe_url"])) =>
             {
                 let lidx = self.cmd_buf.parse::<usize>().unwrap();
                 self.cmd_buf.clear();
@@ -2330,40 +2332,144 @@ impl Component for MailView {
                                 return true;
                             }
                         };
-
-                        let url_launcher = mailbox_settings!(
-                            context[self.coordinates.0][&self.coordinates.1]
-                                .pager
-                                .url_launcher
-                        )
-                        .as_ref()
-                        .map(|s| s.as_str())
-                        .unwrap_or(
-                            #[cfg(target_os = "macos")]
-                            {
-                                "open"
-                            },
-                            #[cfg(not(target_os = "macos"))]
-                            {
-                                "xdg-open"
-                            },
+                        eprintln!("key is {:?}", key);
+                        eprintln!(
+                            "shotrctu key is {:?}",
+                            shortcuts[MailView::DESCRIPTION]["pipe_url"]
                         );
-                        match Command::new(url_launcher)
-                            .arg(url)
-                            .stdin(Stdio::piped())
-                            .stdout(Stdio::piped())
-                            .spawn()
-                        {
-                            Ok(child) => {
-                                context.children.push(child);
+                        if shortcut!(key == shortcuts[MailView::DESCRIPTION]["go_to_url"]) {
+                            let url_launcher = mailbox_settings!(
+                                context[self.coordinates.0][&self.coordinates.1]
+                                    .pager
+                                    .url_launcher
+                            )
+                            .as_ref()
+                            .map(|s| s.as_str())
+                            .unwrap_or(
+                                #[cfg(target_os = "macos")]
+                                {
+                                    "open"
+                                },
+                                #[cfg(not(target_os = "macos"))]
+                                {
+                                    "xdg-open"
+                                },
+                            );
+                            match Command::new(url_launcher)
+                                .arg(url)
+                                .stdin(Stdio::piped())
+                                .stdout(Stdio::piped())
+                                .spawn()
+                            {
+                                Ok(child) => {
+                                    context.children.push(child);
+                                }
+                                Err(err) => {
+                                    context.replies.push_back(UIEvent::Notification(
+                                        Some(format!("Failed to launch {:?}", url_launcher)),
+                                        err.to_string(),
+                                        Some(NotificationType::Error(melib::ErrorKind::External)),
+                                    ));
+                                }
                             }
-                            Err(err) => {
-                                context.replies.push_back(UIEvent::Notification(
-                                    Some(format!("Failed to launch {:?}", url_launcher)),
-                                    err.to_string(),
-                                    Some(NotificationType::Error(melib::ErrorKind::External)),
-                                ));
+                        } else if shortcut!(key == shortcuts[MailView::DESCRIPTION]["copy_url"]) {
+                            let pipe_to_clipboard = context
+                                .settings
+                                .terminal
+                                .pipe_to_clipboard
+                                .as_ref()
+                                .map(|s| s.as_str())
+                                .unwrap_or(
+                                    #[cfg(target_os = "macos")]
+                                    {
+                                        "pbcopy"
+                                    },
+                                    #[cfg(not(target_os = "macos"))]
+                                    {
+                                        "xclip -selection clipboard"
+                                    },
+                                );
+                            match Command::new(pipe_to_clipboard)
+                                .stdin(Stdio::piped())
+                                .stdout(Stdio::piped())
+                                .spawn()
+                            {
+                                Ok(mut child) => {
+                                    let mut stdin = child.stdin.as_mut().unwrap();
+                                    stdin
+                                        .write_all(url.as_bytes())
+                                        .chain_err_summary(|| {
+                                            format!(
+                                                "Failed to write to stdin of `{}`",
+                                                pipe_to_clipboard
+                                            )
+                                        })
+                                        .unwrap();
+                                    stdin.flush().unwrap();
+                                    context.children.push(child);
+                                }
+                                Err(err) => {
+                                    context.replies.push_back(UIEvent::Notification(
+                                        Some(format!("Failed to launch {:?}", pipe_to_clipboard)),
+                                        err.to_string(),
+                                        Some(NotificationType::Error(melib::ErrorKind::External)),
+                                    ));
+                                }
                             }
+                        } else if shortcut!(key == shortcuts[MailView::DESCRIPTION]["pipe_url"]) {
+                            let input_window = InputWindow::new("test".into(), context);
+                            //context.replies.push_back(UIEvent::StatusEvent(
+                            //    StatusEvent::DisplayMessage(format!("Running input_window")),
+                            //));
+                            context
+                                .replies
+                                .push_back(UIEvent::GlobalUIDialog(input_window));
+                            return true;
+
+                            /*let pipe_to_clipboard = context
+                                .settings
+                                .terminal
+                                .pipe_to_clipboard
+                                .as_ref()
+                                .map(|s| s.as_str())
+                                .unwrap_or(
+                                    #[cfg(target_os = "macos")]
+                                    {
+                                        "pbcopy"
+                                    },
+                                    #[cfg(not(target_os = "macos"))]
+                                    {
+                                        "xclip -selection clipboard"
+                                    },
+                                );
+                            match Command::new(pipe_to_clipboard)
+                                .stdin(Stdio::piped())
+                                .stdout(Stdio::piped())
+                                .spawn()
+                            {
+                                Ok(mut child) => {
+                                    let mut stdin = child.stdin.as_mut().unwrap();
+                                    stdin
+                                        .write_all(url.as_bytes())
+                                        .chain_err_summary(|| {
+                                            format!(
+                                                "Failed to write to stdin of `{}`",
+                                                pipe_to_clipboard
+                                            )
+                                        })
+                                        .unwrap();
+                                    stdin.flush().unwrap();
+                                    context.children.push(child);
+                                }
+                                Err(err) => {
+                                    context.replies.push_back(UIEvent::Notification(
+                                        Some(format!("Failed to launch {:?}", pipe_to_clipboard)),
+                                        err.to_string(),
+                                        Some(NotificationType::Error(melib::ErrorKind::External)),
+                                    ));
+                                }
+                            }
+                            */
                         }
                     }
                 }

@@ -52,6 +52,8 @@ pub struct TerminalSettings {
     /// Default: 0
     #[serde(default)]
     pub progress_spinner_sequence: Option<ProgressSpinnerSequence>,
+    #[serde(deserialize_with = "non_empty_string")]
+    pub pipe_to_clipboard: Option<String>,
 }
 
 impl Default for TerminalSettings {
@@ -66,6 +68,7 @@ impl Default for TerminalSettings {
             window_title: Some("meli".to_string()),
             file_picker_command: None,
             progress_spinner_sequence: None,
+            pipe_to_clipboard: None,
         }
     }
 }
@@ -99,6 +102,7 @@ impl DotAddressable for TerminalSettings {
                     "progress_spinner_sequence" => {
                         self.progress_spinner_sequence.lookup(field, tail)
                     }
+                    "pipe_to_clipboard" => self.pipe_to_clipboard.lookup(field, tail),
                     other => Err(MeliError::new(format!(
                         "{} has no field named {}",
                         parent_field, other

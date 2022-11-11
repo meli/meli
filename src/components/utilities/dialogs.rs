@@ -969,3 +969,133 @@ impl UIConfirmationDialog {
         })
     }
 }
+
+pub struct InputWindow {
+    theme_default: ThemeAttribute,
+
+    vertical_alignment: Alignment,
+    horizontal_alignment: Alignment,
+    title: String,
+
+    mode: UIMode,
+    field: Field,
+
+    /// If true, user has finished their selection
+    done: bool,
+    done_fn:
+        Option<Box<dyn FnOnce(ComponentId, String) -> Option<UIEvent> + 'static + Sync + Send>>,
+    dirty: bool,
+    id: ComponentId,
+}
+
+impl InputWindow {
+    pub fn new(title: String, context: &Context) -> Box<dyn Component> {
+        Box::new(Self {
+            theme_default: crate::conf::value(context, "theme_default"),
+
+            vertical_alignment: Alignment::Center,
+            horizontal_alignment: Alignment::Center,
+            title,
+            mode: UIMode::Normal,
+
+            field: Field::default(),
+
+            /// If true, user has finished their selection
+            done: false,
+            done_fn: Some(Box::new(
+                |id: ComponentId, result: String| -> Option<UIEvent> {
+                    let _ = id;
+                    let _ = result;
+                    None
+                },
+            )),
+            dirty: true,
+            id: ComponentId::new_v4(),
+        })
+    }
+}
+
+impl Component for InputWindow {
+    fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        std::dbg!(area);
+        if self.dirty {
+            let height = height!(area);
+            if height < 4 {
+                return;
+            }
+            let height = std::cmp::max(4, height / 3);
+            let dialog_area = align_area(
+                area,
+                /* add box perimeter padding */
+                pos_inc((width!(area), height), (2, 2)),
+                /* vertical */
+                Alignment::Center,
+                /* horizontal */
+                Alignment::Center,
+            );
+            std::dbg!(dialog_area);
+            clear_area(grid, dialog_area, self.theme_default);
+            let inner_area = create_box(grid, dialog_area);
+            self.field.draw(grid, inner_area, context);
+            context.dirty_areas.push_back(dialog_area);
+            self.dirty = false;
+        }
+    }
+
+    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+        match (self.mode, &event) {
+            (_, UIEvent::Resize) => {
+                self.set_dirty(true);
+                false
+            }
+            (UIMode::Normal, UIEvent::Input(Key::Char('\n'))) => {
+                context
+                    .replies
+                    .push_back(UIEvent::ChangeMode(UIMode::Insert));
+                true
+            }
+            (UIMode::Insert, UIEvent::InsertInput(Key::Esc)) => {
+                context
+                    .replies
+                    .push_back(UIEvent::ChangeMode(UIMode::Normal));
+                true
+            }
+            (UIMode::Insert, _) => self.field.process_event(event, context),
+            _ => false,
+        }
+    }
+
+    fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
+        let mut map = ShortcutMaps::default();
+        map.insert("general", context.settings.shortcuts.general.key_values());
+        map
+    }
+
+    fn is_dirty(&self) -> bool {
+        self.dirty || self.field.is_dirty()
+    }
+
+    fn set_dirty(&mut self, value: bool) {
+        self.dirty = value;
+        self.field.set_dirty(value);
+    }
+
+    fn id(&self) -> ComponentId {
+        self.id
+    }
+    fn set_id(&mut self, id: ComponentId) {
+        self.id = id;
+    }
+}
+
+impl fmt::Debug for InputWindow {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Display::fmt("InputWindow", f)
+    }
+}
+
+impl fmt::Display for InputWindow {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Display::fmt("InputWindow", f)
+    }
+}

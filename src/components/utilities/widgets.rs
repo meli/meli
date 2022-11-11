@@ -225,6 +225,7 @@ impl Component for Field {
             }
         }
     }
+
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         match *event {
             UIEvent::InsertInput(Key::Char('\t')) => {

@@ -1168,6 +1168,7 @@ impl State {
                 return;
             }
             UIEvent::GlobalUIDialog(dialog) => {
+                eprint!("global ui dialog push");
                 self.overlay.push(dialog);
                 return;
             }
