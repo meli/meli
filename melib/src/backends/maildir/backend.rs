@@ -1047,7 +1047,7 @@ impl MailBackend for MaildirType {
         &mut self,
         _mailbox_hash: MailboxHash,
     ) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
-        Err(MeliError::new("Unimplemented."))
+        Err(MeliError::new("Deleting messages is currently unimplemented for maildir backend."))
     }
 
     fn set_mailbox_subscription(
@@ -1055,7 +1055,7 @@ impl MailBackend for MaildirType {
         _mailbox_hash: MailboxHash,
         _val: bool,
     ) -> ResultFuture<()> {
-        Err(MeliError::new("Unimplemented."))
+        Err(MeliError::new("Mailbox description is currently unimplemented for maildir backend."))
     }
 
     fn rename_mailbox(
@@ -1063,7 +1063,7 @@ impl MailBackend for MaildirType {
         _mailbox_hash: MailboxHash,
         _new_path: String,
     ) -> ResultFuture<Mailbox> {
-        Err(MeliError::new("Unimplemented."))
+        Err(MeliError::new("Renaming mailbox is currently unimplemented for maildir backend."))
     }
 
     fn set_mailbox_permissions(
@@ -1071,7 +1071,7 @@ impl MailBackend for MaildirType {
         _mailbox_hash: MailboxHash,
         _val: crate::backends::MailboxPermissions,
     ) -> ResultFuture<()> {
-        Err(MeliError::new("Unimplemented."))
+        Err(MeliError::new("Setting mailbox permissions is currently unimplemented for maildir backend."))
     }
 
     fn as_any(&self) -> &dyn Any {

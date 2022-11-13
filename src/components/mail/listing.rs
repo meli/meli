@@ -493,7 +493,7 @@ pub trait MailListingTrait: ListingTrait {
                 context
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
-                        "Unimplemented.".into(),
+                        "Copying to another account is currently unimplemented".into(),
                     )));
             }
             ListingAction::MoveTo(ref mailbox_path) => {
@@ -627,7 +627,7 @@ pub trait MailListingTrait: ListingTrait {
                 context
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
-                        "Unimplemented.".into(),
+                        "Moving to another account is currently unimplemented".into(),
                     )));
             }
             _ => unreachable!(),
