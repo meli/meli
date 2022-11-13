@@ -201,13 +201,13 @@ impl MailBackend for PluginBackend {
         _mailbox_hash: MailboxHash,
         _flags: Option<Flag>,
     ) -> ResultFuture<()> {
-        Err(MeliError::new("Unimplemented."))
+        Err(MeliError::new("Saving is currently unimplemented for plugins"))
     }
     fn create_mailbox(
         &mut self,
         _name: String,
     ) -> ResultFuture<(MailboxHash, HashMap<MailboxHash, Mailbox>)> {
-        Err(MeliError::new("Unimplemented."))
+        Err(MeliError::new("Creating a mailbox is currently unimplemented for plugins"))
     }
     fn collection(&self) -> melib::Collection {
         self.collection.clone()

@@ -754,7 +754,7 @@ impl MailBackend for NotmuchDb {
         _destination_mailbox_hash: MailboxHash,
         _move_: bool,
     ) -> ResultFuture<()> {
-        Err(MeliError::new("Unimplemented."))
+        Err(MeliError::new("Copying messages is currently unimplemented for notmuch backend"))
     }
 
     fn set_flags(
@@ -874,7 +874,7 @@ impl MailBackend for NotmuchDb {
         _env_hashes: EnvelopeHashBatch,
         _mailbox_hash: MailboxHash,
     ) -> ResultFuture<()> {
-        Err(MeliError::new("Unimplemented."))
+        Err(MeliError::new("Deleting messages is currently unimplemented for notmuch backend"))
     }
 
     fn search(

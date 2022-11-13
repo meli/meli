@@ -586,14 +586,14 @@ impl MailBackend for JmapType {
         _mailbox_hash: MailboxHash,
         _new_path: String,
     ) -> ResultFuture<Mailbox> {
-        Err(MeliError::new("Unimplemented."))
+        Err(MeliError::new("Renaming mailbox is currently unimplemented for jmap backend."))
     }
 
     fn create_mailbox(
         &mut self,
         _path: String,
     ) -> ResultFuture<(MailboxHash, HashMap<MailboxHash, Mailbox>)> {
-        Err(MeliError::new("Unimplemented."))
+        Err(MeliError::new("Creating mailbox is currently unimplemented for jmap backend."))
     }
 
     fn copy_messages(
@@ -860,7 +860,7 @@ impl MailBackend for JmapType {
         _env_hashes: EnvelopeHashBatch,
         _mailbox_hash: MailboxHash,
     ) -> ResultFuture<()> {
-        Err(MeliError::new("Unimplemented."))
+        Err(MeliError::new("Deleting messages is currently unimplemented for jmap backend."))
     }
 }
 

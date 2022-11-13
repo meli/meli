@@ -963,7 +963,7 @@ impl MailBackend for MboxType {
     }
 
     fn refresh(&mut self, _mailbox_hash: MailboxHash) -> ResultFuture<()> {
-        Err(MeliError::new("Unimplemented."))
+        Err(MeliError::new("Refreshing is currently unimplemented for mbox backend."))
     }
 
     fn watch(&self) -> ResultFuture<()> {
@@ -1154,7 +1154,7 @@ impl MailBackend for MboxType {
         _destination_mailbox_hash: MailboxHash,
         _move_: bool,
     ) -> ResultFuture<()> {
-        Err(MeliError::new("Unimplemented."))
+        Err(MeliError::new("Copying messages is currently unimplemented for mbox backend"))
     }
 
     fn set_flags(
@@ -1163,7 +1163,7 @@ impl MailBackend for MboxType {
         _mailbox_hash: MailboxHash,
         _flags: SmallVec<[(std::result::Result<Flag, String>, bool); 8]>,
     ) -> ResultFuture<()> {
-        Err(MeliError::new("Unimplemented."))
+        Err(MeliError::new("Settings flags is currently unimplemented for mbox backend"))
     }
 
     fn delete_messages(
@@ -1171,7 +1171,7 @@ impl MailBackend for MboxType {
         _env_hashes: EnvelopeHashBatch,
         _mailbox_hash: MailboxHash,
     ) -> ResultFuture<()> {
-        Err(MeliError::new("Unimplemented."))
+        Err(MeliError::new("Deleting messages is currently unimplemented for mbox backend"))
     }
 
     fn save(
@@ -1180,7 +1180,7 @@ impl MailBackend for MboxType {
         _mailbox_hash: MailboxHash,
         _flags: Option<Flag>,
     ) -> ResultFuture<()> {
-        Err(MeliError::new("Unimplemented."))
+        Err(MeliError::new("Saving messages is currently unimplemented for mbox backend"))
     }
 
     fn as_any(&self) -> &dyn Any {

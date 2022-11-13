@@ -400,14 +400,14 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
         &mut self,
         _path: String,
     ) -> ResultFuture<(MailboxHash, HashMap<MailboxHash, Mailbox>)> {
-        Err(MeliError::new("Unimplemented.").set_kind(ErrorKind::NotImplemented))
+        Err(MeliError::new("Creating mailbox is currently unimplemented.").set_kind(ErrorKind::NotImplemented))
     }
 
     fn delete_mailbox(
         &mut self,
         _mailbox_hash: MailboxHash,
     ) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
-        Err(MeliError::new("Unimplemented.").set_kind(ErrorKind::NotImplemented))
+        Err(MeliError::new("Deleting mailbox is currently unimplemented.").set_kind(ErrorKind::NotImplemented))
     }
 
     fn set_mailbox_subscription(
@@ -415,7 +415,7 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
         _mailbox_hash: MailboxHash,
         _val: bool,
     ) -> ResultFuture<()> {
-        Err(MeliError::new("Unimplemented.").set_kind(ErrorKind::NotImplemented))
+        Err(MeliError::new("Setting mailbox subscription is currently unimplemented.").set_kind(ErrorKind::NotImplemented))
     }
 
     fn rename_mailbox(
@@ -423,7 +423,7 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
         _mailbox_hash: MailboxHash,
         _new_path: String,
     ) -> ResultFuture<Mailbox> {
-        Err(MeliError::new("Unimplemented.").set_kind(ErrorKind::NotImplemented))
+        Err(MeliError::new("Renaming mailbox is currently unimplemented.").set_kind(ErrorKind::NotImplemented))
     }
 
     fn set_mailbox_permissions(
@@ -431,7 +431,7 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
         _mailbox_hash: MailboxHash,
         _val: MailboxPermissions,
     ) -> ResultFuture<()> {
-        Err(MeliError::new("Unimplemented.").set_kind(ErrorKind::NotImplemented))
+        Err(MeliError::new("Setting mailbox permissions is currently unimplemented.").set_kind(ErrorKind::NotImplemented))
     }
 
     fn search(
@@ -439,7 +439,7 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
         _query: crate::search::Query,
         _mailbox_hash: Option<MailboxHash>,
     ) -> ResultFuture<SmallVec<[EnvelopeHash; 512]>> {
-        Err(MeliError::new("Unimplemented.").set_kind(ErrorKind::NotImplemented))
+        Err(MeliError::new("Search is currently unimplemented.").set_kind(ErrorKind::NotImplemented))
     }
 
     fn submit(
