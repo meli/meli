@@ -754,7 +754,9 @@ impl MailBackend for NotmuchDb {
         _destination_mailbox_hash: MailboxHash,
         _move_: bool,
     ) -> ResultFuture<()> {
-        Err(MeliError::new("Copying messages is currently unimplemented for notmuch backend"))
+        Err(MeliError::new(
+            "Copying messages is currently unimplemented for notmuch backend",
+        ))
     }
 
     fn set_flags(
@@ -874,7 +876,9 @@ impl MailBackend for NotmuchDb {
         _env_hashes: EnvelopeHashBatch,
         _mailbox_hash: MailboxHash,
     ) -> ResultFuture<()> {
-        Err(MeliError::new("Deleting messages is currently unimplemented for notmuch backend"))
+        Err(MeliError::new(
+            "Deleting messages is currently unimplemented for notmuch backend",
+        ))
     }
 
     fn search(
@@ -924,6 +928,55 @@ impl MailBackend for NotmuchDb {
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
+    }
+
+    fn delete_mailbox(
+        &mut self,
+        _mailbox_hash: MailboxHash,
+    ) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
+        Err(MeliError::new(
+            "Deleting mailboxes is currently unimplemented for notmuch backend.",
+        ))
+    }
+
+    fn set_mailbox_subscription(
+        &mut self,
+        _mailbox_hash: MailboxHash,
+        _val: bool,
+    ) -> ResultFuture<()> {
+        Err(MeliError::new(
+            "Mailbox subscriptions are not possible for the notmuch backend.",
+        ))
+    }
+
+    fn rename_mailbox(
+        &mut self,
+        _mailbox_hash: MailboxHash,
+        _new_path: String,
+    ) -> ResultFuture<Mailbox> {
+        Err(MeliError::new(
+            "Renaming mailboxes is currently unimplemented for notmuch backend.",
+        ))
+    }
+
+    fn set_mailbox_permissions(
+        &mut self,
+        _mailbox_hash: MailboxHash,
+        _val: crate::backends::MailboxPermissions,
+    ) -> ResultFuture<()> {
+        Err(MeliError::new(
+            "Setting mailbox permissions is not possible for the notmuch backend.",
+        ))
+    }
+
+    fn create_mailbox(
+        &mut self,
+        _new_path: String,
+    ) -> ResultFuture<(MailboxHash, HashMap<MailboxHash, Mailbox>)> {
+        Err(
+            MeliError::new("Creating mailboxes is unimplemented for the notmuch backend.")
+                .set_kind(ErrorKind::NotImplemented),
+        )
     }
 }
 

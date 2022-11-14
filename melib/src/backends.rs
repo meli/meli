@@ -398,49 +398,37 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
 
     fn create_mailbox(
         &mut self,
-        _path: String,
-    ) -> ResultFuture<(MailboxHash, HashMap<MailboxHash, Mailbox>)> {
-        Err(MeliError::new("Creating mailbox is currently unimplemented.").set_kind(ErrorKind::NotImplemented))
-    }
+        path: String,
+    ) -> ResultFuture<(MailboxHash, HashMap<MailboxHash, Mailbox>)>;
 
     fn delete_mailbox(
         &mut self,
-        _mailbox_hash: MailboxHash,
-    ) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
-        Err(MeliError::new("Deleting mailbox is currently unimplemented.").set_kind(ErrorKind::NotImplemented))
-    }
+        mailbox_hash: MailboxHash,
+    ) -> ResultFuture<HashMap<MailboxHash, Mailbox>>;
 
     fn set_mailbox_subscription(
         &mut self,
-        _mailbox_hash: MailboxHash,
-        _val: bool,
-    ) -> ResultFuture<()> {
-        Err(MeliError::new("Setting mailbox subscription is currently unimplemented.").set_kind(ErrorKind::NotImplemented))
-    }
+        mailbox_hash: MailboxHash,
+        val: bool,
+    ) -> ResultFuture<()>;
 
     fn rename_mailbox(
         &mut self,
-        _mailbox_hash: MailboxHash,
-        _new_path: String,
-    ) -> ResultFuture<Mailbox> {
-        Err(MeliError::new("Renaming mailbox is currently unimplemented.").set_kind(ErrorKind::NotImplemented))
-    }
+        mailbox_hash: MailboxHash,
+        new_path: String,
+    ) -> ResultFuture<Mailbox>;
 
     fn set_mailbox_permissions(
         &mut self,
-        _mailbox_hash: MailboxHash,
-        _val: MailboxPermissions,
-    ) -> ResultFuture<()> {
-        Err(MeliError::new("Setting mailbox permissions is currently unimplemented.").set_kind(ErrorKind::NotImplemented))
-    }
+        mailbox_hash: MailboxHash,
+        val: MailboxPermissions,
+    ) -> ResultFuture<()>;
 
     fn search(
         &self,
-        _query: crate::search::Query,
-        _mailbox_hash: Option<MailboxHash>,
-    ) -> ResultFuture<SmallVec<[EnvelopeHash; 512]>> {
-        Err(MeliError::new("Search is currently unimplemented.").set_kind(ErrorKind::NotImplemented))
-    }
+        query: crate::search::Query,
+        mailbox_hash: Option<MailboxHash>,
+    ) -> ResultFuture<SmallVec<[EnvelopeHash; 512]>>;
 
     fn submit(
         &self,
@@ -448,7 +436,8 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
         _mailbox_hash: Option<MailboxHash>,
         _flags: Option<Flag>,
     ) -> ResultFuture<()> {
-        Err(MeliError::new("Not supported in this backend.").set_kind(ErrorKind::NotSupported))
+        Err(MeliError::new("Submission not supported in this backend.")
+            .set_kind(ErrorKind::NotSupported))
     }
 }
 
@@ -634,7 +623,7 @@ impl std::fmt::Display for MailboxPermissions {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EnvelopeHashBatch {
     pub first: EnvelopeHash,
     pub rest: SmallVec<[EnvelopeHash; 64]>,

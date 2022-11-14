@@ -367,7 +367,10 @@ impl MailBackend for NntpType {
     }
 
     fn watch(&self) -> ResultFuture<()> {
-        Err(MeliError::new("Watching is currently uniplemented for nntp backend").set_kind(ErrorKind::NotImplemented))
+        Err(
+            MeliError::new("Watching is currently uniplemented for nntp backend")
+                .set_kind(ErrorKind::NotImplemented),
+        )
     }
 
     fn operation(&self, env_hash: EnvelopeHash) -> Result<Box<dyn BackendOp>> {
@@ -440,14 +443,18 @@ impl MailBackend for NntpType {
         &mut self,
         _path: String,
     ) -> ResultFuture<(MailboxHash, HashMap<MailboxHash, Mailbox>)> {
-        Err(MeliError::new("Creating mailbox is currently unimplemented for nntp backend."))
+        Err(MeliError::new(
+            "Creating mailbox is currently unimplemented for nntp backend.",
+        ))
     }
 
     fn delete_mailbox(
         &mut self,
         _mailbox_hash: MailboxHash,
     ) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
-        Err(MeliError::new("Deleting a mailbox is currently unimplemented for nntp backend."))
+        Err(MeliError::new(
+            "Deleting a mailbox is currently unimplemented for nntp backend.",
+        ))
     }
 
     fn set_mailbox_subscription(
@@ -455,7 +462,9 @@ impl MailBackend for NntpType {
         _mailbox_hash: MailboxHash,
         _new_val: bool,
     ) -> ResultFuture<()> {
-        Err(MeliError::new("Setting mailbox description is currently unimplemented for nntp backend."))
+        Err(MeliError::new(
+            "Setting mailbox description is currently unimplemented for nntp backend.",
+        ))
     }
 
     fn rename_mailbox(
@@ -463,7 +472,9 @@ impl MailBackend for NntpType {
         _mailbox_hash: MailboxHash,
         _new_path: String,
     ) -> ResultFuture<Mailbox> {
-        Err(MeliError::new("Renaming mailbox is currently unimplemented for nntp backend."))
+        Err(MeliError::new(
+            "Renaming mailbox is currently unimplemented for nntp backend.",
+        ))
     }
 
     fn set_mailbox_permissions(
@@ -471,7 +482,9 @@ impl MailBackend for NntpType {
         _mailbox_hash: MailboxHash,
         _val: crate::backends::MailboxPermissions,
     ) -> ResultFuture<()> {
-        Err(MeliError::new("Setting mailbox permissions is currently unimplemented for nntp backend."))
+        Err(MeliError::new(
+            "Setting mailbox permissions is currently unimplemented for nntp backend.",
+        ))
     }
 
     fn search(
@@ -479,7 +492,9 @@ impl MailBackend for NntpType {
         _query: crate::search::Query,
         _mailbox_hash: Option<MailboxHash>,
     ) -> ResultFuture<SmallVec<[EnvelopeHash; 512]>> {
-        Err(MeliError::new("Searching is currently unimplemented for nntp backend."))
+        Err(MeliError::new(
+            "Searching is currently unimplemented for nntp backend.",
+        ))
     }
 
     fn submit(

@@ -56,7 +56,7 @@ impl From<String> for CardId {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct AddressBook {
     display_name: String,
     created: UnixTimestamp,
@@ -64,7 +64,7 @@ pub struct AddressBook {
     pub cards: HashMap<CardId, Card>,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Card {
     id: CardId,
     title: String,

@@ -126,13 +126,13 @@ use crate::collection::Collection;
 use crate::conf::AccountSettings;
 use crate::email::parser::BytesExt;
 use crate::email::*;
-use crate::error::{MeliError, Result};
+use crate::error::{ErrorKind, MeliError, Result};
 use crate::get_path_hash;
 use crate::shellexpand::ShellExpandTrait;
 use nom::bytes::complete::tag;
 use nom::character::complete::digit1;
 use nom::combinator::map_res;
-use nom::{self, error::Error as NomError, error::ErrorKind, IResult};
+use nom::{self, error::Error as NomError, error::ErrorKind as NomErrorKind, IResult};
 
 extern crate notify;
 use self::notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
@@ -494,7 +494,7 @@ impl MboxFormat {
                             debug!("Could not parse mail {:?}", err);
                             Err(nom::Err::Error(NomError {
                                 input,
-                                code: ErrorKind::Tag,
+                                code: NomErrorKind::Tag,
                             }))
                         }
                     }
@@ -541,7 +541,7 @@ impl MboxFormat {
                             debug!("Could not parse mail at {:?}", err);
                             Err(nom::Err::Error(NomError {
                                 input,
-                                code: ErrorKind::Tag,
+                                code: NomErrorKind::Tag,
                             }))
                         }
                     }
@@ -598,7 +598,7 @@ impl MboxFormat {
                             debug!("Could not parse mail {:?}", err);
                             Err(nom::Err::Error(NomError {
                                 input,
-                                code: ErrorKind::Tag,
+                                code: NomErrorKind::Tag,
                             }))
                         }
                     }
@@ -645,7 +645,7 @@ impl MboxFormat {
                             debug!("Could not parse mail {:?}", err);
                             Err(nom::Err::Error(NomError {
                                 input,
-                                code: ErrorKind::Tag,
+                                code: NomErrorKind::Tag,
                             }))
                         }
                     }
@@ -739,7 +739,7 @@ pub fn mbox_parse(
     if input.is_empty() {
         return Err(nom::Err::Error(NomError {
             input,
-            code: ErrorKind::Tag,
+            code: NomErrorKind::Tag,
         }));
     }
     let mut offset = 0;
@@ -963,7 +963,9 @@ impl MailBackend for MboxType {
     }
 
     fn refresh(&mut self, _mailbox_hash: MailboxHash) -> ResultFuture<()> {
-        Err(MeliError::new("Refreshing is currently unimplemented for mbox backend."))
+        Err(MeliError::new(
+            "Refreshing is currently unimplemented for mbox backend.",
+        ))
     }
 
     fn watch(&self) -> ResultFuture<()> {
@@ -1154,7 +1156,9 @@ impl MailBackend for MboxType {
         _destination_mailbox_hash: MailboxHash,
         _move_: bool,
     ) -> ResultFuture<()> {
-        Err(MeliError::new("Copying messages is currently unimplemented for mbox backend"))
+        Err(MeliError::new(
+            "Copying messages is currently unimplemented for mbox backend",
+        ))
     }
 
     fn set_flags(
@@ -1163,7 +1167,9 @@ impl MailBackend for MboxType {
         _mailbox_hash: MailboxHash,
         _flags: SmallVec<[(std::result::Result<Flag, String>, bool); 8]>,
     ) -> ResultFuture<()> {
-        Err(MeliError::new("Settings flags is currently unimplemented for mbox backend"))
+        Err(MeliError::new(
+            "Settings flags is currently unimplemented for mbox backend",
+        ))
     }
 
     fn delete_messages(
@@ -1171,7 +1177,9 @@ impl MailBackend for MboxType {
         _env_hashes: EnvelopeHashBatch,
         _mailbox_hash: MailboxHash,
     ) -> ResultFuture<()> {
-        Err(MeliError::new("Deleting messages is currently unimplemented for mbox backend"))
+        Err(MeliError::new(
+            "Deleting messages is currently unimplemented for mbox backend",
+        ))
     }
 
     fn save(
@@ -1180,7 +1188,9 @@ impl MailBackend for MboxType {
         _mailbox_hash: MailboxHash,
         _flags: Option<Flag>,
     ) -> ResultFuture<()> {
-        Err(MeliError::new("Saving messages is currently unimplemented for mbox backend"))
+        Err(MeliError::new(
+            "Saving messages is currently unimplemented for mbox backend",
+        ))
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -1193,6 +1203,66 @@ impl MailBackend for MboxType {
 
     fn collection(&self) -> Collection {
         self.collection.clone()
+    }
+
+    fn delete_mailbox(
+        &mut self,
+        _mailbox_hash: MailboxHash,
+    ) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
+        Err(MeliError::new(
+            "Deleting mailboxes is currently unimplemented for mbox backend.",
+        ))
+    }
+
+    fn set_mailbox_subscription(
+        &mut self,
+        _mailbox_hash: MailboxHash,
+        _val: bool,
+    ) -> ResultFuture<()> {
+        Err(MeliError::new(
+            "Mailbox subscriptions are not possible for the mbox backend.",
+        ))
+    }
+
+    fn rename_mailbox(
+        &mut self,
+        _mailbox_hash: MailboxHash,
+        _new_path: String,
+    ) -> ResultFuture<Mailbox> {
+        Err(MeliError::new(
+            "Renaming mailboxes is currently unimplemented for mbox backend.",
+        ))
+    }
+
+    fn set_mailbox_permissions(
+        &mut self,
+        _mailbox_hash: MailboxHash,
+        _val: crate::backends::MailboxPermissions,
+    ) -> ResultFuture<()> {
+        Err(MeliError::new(
+            "Setting mailbox permissions is not possible for the mbox backend.",
+        ))
+    }
+
+    fn search(
+        &self,
+        _query: crate::search::Query,
+        _mailbox_hash: Option<MailboxHash>,
+    ) -> ResultFuture<SmallVec<[EnvelopeHash; 512]>> {
+        Err(
+            MeliError::new("Search is unimplemented for the mbox backend.")
+                .set_kind(ErrorKind::NotImplemented),
+        )
+    }
+
+    fn create_mailbox(
+        &mut self,
+        _new_path: String,
+    ) -> ResultFuture<(MailboxHash, HashMap<MailboxHash, Mailbox>)> {
+        Err(
+            MeliError::new("Creating mailboxes is unimplemented for the mbox backend.")
+                .set_kind(ErrorKind::NotImplemented),
+        )
     }
 }
 

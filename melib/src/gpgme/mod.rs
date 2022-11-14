@@ -64,7 +64,7 @@ mod bindings;
 use bindings::*;
 mod io;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GpgmeFlag {
     ///"auto-key-retrieve"
     AutoKeyRetrieve,
@@ -1314,11 +1314,13 @@ impl std::fmt::Debug for Key {
     }
 }
 
-impl std::cmp::PartialEq for Key {
+impl PartialEq for Key {
     fn eq(&self, other: &Key) -> bool {
         self.fingerprint() == other.fingerprint()
     }
 }
+
+impl Eq for Key {}
 
 impl Drop for Key {
     #[inline]

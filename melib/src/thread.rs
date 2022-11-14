@@ -452,13 +452,13 @@ impl SubjectPrefix for &str {
 
 /* Sorting states. */
 
-#[derive(Debug, Clone, PartialEq, Copy, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy, Deserialize, Serialize)]
 pub enum SortOrder {
     Asc,
     Desc,
 }
 
-#[derive(Debug, Clone, PartialEq, Copy, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy, Deserialize, Serialize)]
 pub enum SortField {
     Subject,
     Date,
@@ -548,6 +548,10 @@ impl Thread {
 
     pub fn has_attachments(&self) -> bool {
         self.attachments > 0
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
     }
 
     pub fn set_snoozed(&mut self, val: bool) {
@@ -653,6 +657,8 @@ impl PartialEq for ThreadNode {
         }
     }
 }
+
+impl Eq for ThreadNode {}
 
 impl Threads {
     pub fn is_snoozed(&self, h: ThreadNodeHash) -> bool {
@@ -1440,6 +1446,10 @@ impl Threads {
 
     pub fn len(&self) -> usize {
         self.hash_set.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.hash_set.is_empty()
     }
 
     pub fn root_len(&self) -> usize {

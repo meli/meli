@@ -25,7 +25,7 @@ use super::Envelope;
 use smallvec::SmallVec;
 use std::convert::From;
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum ListAction<'a> {
     Url(&'a [u8]),
     Email(&'a [u8]),

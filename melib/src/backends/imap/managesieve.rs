@@ -349,10 +349,8 @@ impl ManageSieveConnection {
             ManageSieveResponse::Ok { .. } => Ok(()),
             ManageSieveResponse::NoBye { code, message } => Err(format!(
                 "Could not upload script: {} {}",
-                code.map(|b| String::from_utf8_lossy(b)).unwrap_or_default(),
-                message
-                    .map(|b| String::from_utf8_lossy(b))
-                    .unwrap_or_default()
+                code.map(String::from_utf8_lossy).unwrap_or_default(),
+                message.map(String::from_utf8_lossy).unwrap_or_default()
             )
             .into()),
         }
@@ -386,10 +384,8 @@ impl ManageSieveConnection {
             ManageSieveResponse::Ok { .. } => Ok(()),
             ManageSieveResponse::NoBye { code, message } => Err(format!(
                 "Checkscript reply: {} {}",
-                code.map(|b| String::from_utf8_lossy(b)).unwrap_or_default(),
-                message
-                    .map(|b| String::from_utf8_lossy(b))
-                    .unwrap_or_default()
+                code.map(String::from_utf8_lossy).unwrap_or_default(),
+                message.map(String::from_utf8_lossy).unwrap_or_default()
             )
             .into()),
         }
@@ -409,10 +405,8 @@ impl ManageSieveConnection {
             ManageSieveResponse::Ok { .. } => Ok(()),
             ManageSieveResponse::NoBye { code, message } => Err(format!(
                 "Could not set active script: {} {}",
-                code.map(|b| String::from_utf8_lossy(b)).unwrap_or_default(),
-                message
-                    .map(|b| String::from_utf8_lossy(b))
-                    .unwrap_or_default()
+                code.map(String::from_utf8_lossy).unwrap_or_default(),
+                message.map(String::from_utf8_lossy).unwrap_or_default()
             )
             .into()),
         }
@@ -432,10 +426,8 @@ impl ManageSieveConnection {
         {
             return Err(format!(
                 "Could not set active script: {} {}",
-                code.map(|b| String::from_utf8_lossy(b)).unwrap_or_default(),
-                message
-                    .map(|b| String::from_utf8_lossy(b))
-                    .unwrap_or_default()
+                code.map(String::from_utf8_lossy).unwrap_or_default(),
+                message.map(String::from_utf8_lossy).unwrap_or_default()
             )
             .into());
         }
@@ -460,10 +452,8 @@ impl ManageSieveConnection {
             ManageSieveResponse::Ok { .. } => Ok(()),
             ManageSieveResponse::NoBye { code, message } => Err(format!(
                 "Could not delete script: {} {}",
-                code.map(|b| String::from_utf8_lossy(b)).unwrap_or_default(),
-                message
-                    .map(|b| String::from_utf8_lossy(b))
-                    .unwrap_or_default()
+                code.map(String::from_utf8_lossy).unwrap_or_default(),
+                message.map(String::from_utf8_lossy).unwrap_or_default()
             )
             .into()),
         }

@@ -172,7 +172,7 @@ mod strings {
     named_unit_variant!(ask);
 }
 
-#[derive(Copy, Debug, Clone, PartialEq)]
+#[derive(Copy, Debug, Clone, PartialEq, Eq)]
 pub enum ToggleFlag {
     Unset,
     InternalVal(bool),

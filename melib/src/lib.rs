@@ -240,7 +240,7 @@ pub mod shellexpand {
                         .components()
                         .last()
                         .map(|c| c.as_os_str())
-                        .unwrap_or(OsStr::from_bytes(b""));
+                        .unwrap_or_else(|| OsStr::from_bytes(b""));
                     let prefix = if let Some(p) = self.parent() {
                         p
                     } else {

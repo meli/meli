@@ -34,7 +34,7 @@ use std::sync::Arc;
 
 pub type Result<T> = result::Result<T, MeliError>;
 
-#[derive(Debug, Copy, PartialEq, Clone)]
+#[derive(Debug, Copy, PartialEq, Eq, Clone)]
 pub enum NetworkErrorKind {
     /// Unspecified
     None,
@@ -312,7 +312,7 @@ impl From<isahc::http::StatusCode> for NetworkErrorKind {
     }
 }
 
-#[derive(Debug, Copy, PartialEq, Clone)]
+#[derive(Debug, Copy, PartialEq, Eq, Clone)]
 pub enum ErrorKind {
     None,
     External,

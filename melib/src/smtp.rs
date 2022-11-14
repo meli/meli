@@ -88,7 +88,7 @@ use std::net::TcpStream;
 use std::process::Command;
 
 /// Kind of server security (StartTLS/TLS/None) the client should attempt
-#[derive(Debug, Copy, PartialEq, Clone, Serialize, Deserialize)]
+#[derive(Debug, Copy, PartialEq, Eq, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum SmtpSecurity {
     #[serde(alias = "starttls", alias = "STARTTLS")]
@@ -119,7 +119,7 @@ impl Default for SmtpSecurity {
 }
 
 /// Source of user's password for SMTP authentication
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", content = "value")]
 pub enum Password {
     #[serde(alias = "raw")]
@@ -129,7 +129,7 @@ pub enum Password {
 }
 
 /// Kind of server authentication the client should attempt
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum SmtpAuth {
     #[serde(alias = "none")]
@@ -152,7 +152,7 @@ pub enum SmtpAuth {
     // md5, sasl, etc
 }
 
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize, Default)]
 pub struct SmtpAuthType {
     plain: bool,
     login: bool,
@@ -761,7 +761,7 @@ impl SmtpConnection {
 pub type ExpectedReplyCode = Option<(ReplyCode, &'static [ReplyCode])>;
 
 /// Recognized kinds of SMTP reply codes
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ReplyCode {
     ///System status, or system help reply
     _211,
