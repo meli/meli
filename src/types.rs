@@ -94,7 +94,7 @@ pub enum ForkType {
     NewDraft(File, std::process::Child),
 }
 
-#[derive(Debug, PartialEq, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum NotificationType {
     Info,
     Error(melib::error::ErrorKind),

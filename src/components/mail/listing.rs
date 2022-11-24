@@ -84,8 +84,7 @@ impl<T> RowsState<T> {
         self.thread_to_env
             .get(&thread)
             .iter()
-            .map(|v| v.iter())
-            .flatten()
+            .flat_map(|v| v.iter())
             .any(|env_hash| self.selection[env_hash])
     }
 
@@ -167,6 +166,11 @@ impl<T> RowsState<T> {
     #[inline(always)]
     pub fn len(&self) -> usize {
         self.entries.len()
+    }
+
+    #[inline(always)]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 
     #[inline(always)]

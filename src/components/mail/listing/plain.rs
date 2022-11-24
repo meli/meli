@@ -689,7 +689,7 @@ impl PlainListing {
         let mut subject = e.subject().to_string();
         subject.truncate_at_boundary(150);
         EntryStrings {
-            date: DateString(PlainListing::format_date(&e)),
+            date: DateString(PlainListing::format_date(e)),
             subject: SubjectString(subject),
             flag: FlagString(format!(
                 "{selected}{unseen}{attachments}{whitespace}",

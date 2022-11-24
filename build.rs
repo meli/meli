@@ -60,8 +60,9 @@ fn main() {
                     "could not execute `mandoc` or `man`. If the binaries are not available in the PATH, disable `cli-docs` feature to be able to continue compilation.",
                 );
 
-            let file = File::create(&out_dir_path)
-                .expect(&format!("Could not create file {}", out_dir_path.display()));
+            let file = File::create(&out_dir_path).unwrap_or_else(|err| {
+                panic!("Could not create file {}: {}", out_dir_path.display(), err)
+            });
             let mut gz = GzBuilder::new()
                 .comment(output.stdout.len().to_string().into_bytes())
                 .write(file, Compression::default());
