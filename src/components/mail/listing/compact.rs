@@ -168,7 +168,7 @@ pub struct CompactListing {
     sortcmd: bool,
     subsort: (SortField, SortOrder),
     /// Cache current view.
-    data_columns: DataColumns,
+    data_columns: DataColumns<4>,
     rows_drawn: SegmentTree,
     rows: RowsState<(ThreadHash, EnvelopeHash)>,
 
@@ -222,7 +222,7 @@ impl MailListingTrait for CompactListing {
         } else {
             if let Some(env_hashes) = self
                 .get_thread_under_cursor(self.cursor_pos.2)
-                .and_then(|thread| self.rows.thread_to_env.get(&thread).map(|v| v.clone()))
+                .and_then(|thread| self.rows.thread_to_env.get(&thread).cloned())
             {
                 cursor_iter = Some(env_hashes.into_iter());
             } else {
@@ -261,8 +261,6 @@ impl MailListingTrait for CompactListing {
             odd_highlighted: crate::conf::value(context, "mail.listing.compact.odd_highlighted"),
             even: crate::conf::value(context, "mail.listing.compact.even"),
             odd: crate::conf::value(context, "mail.listing.compact.odd"),
-            attachment_flag: crate::conf::value(context, "mail.listing.attachment_flag"),
-            thread_snooze_flag: crate::conf::value(context, "mail.listing.thread_snooze_flag"),
             tag_default: crate::conf::value(context, "mail.listing.tag_default"),
             theme_default: crate::conf::value(context, "theme_default"),
             ..self.color_cache
@@ -394,6 +392,14 @@ impl MailListingTrait for CompactListing {
                     continue;
                 }
             }
+            let row_attr = row_attr!(
+                self.color_cache,
+                self.length % 2 == 0,
+                threads.thread_ref(thread).unseen() > 0,
+                false,
+                false
+            );
+            self.rows.row_attr_cache.insert(self.length, row_attr);
 
             let entry_strings = self.make_entry_string(&root_envelope, context, &threads, thread);
             row_widths
@@ -450,6 +456,21 @@ impl MailListingTrait for CompactListing {
         }
 
         min_width.0 = self.length.saturating_sub(1).to_string().len();
+
+        self.data_columns.elasticities[0].set_rigid();
+        self.data_columns.elasticities[1].set_rigid();
+        self.data_columns.elasticities[2].set_grow(5, Some(35));
+        self.data_columns.elasticities[3].set_rigid();
+        self.data_columns
+            .cursor_config
+            .set_handle(true)
+            .set_even_odd_theme(
+                self.color_cache.even_highlighted,
+                self.color_cache.odd_highlighted,
+            );
+        self.data_columns
+            .theme_config
+            .set_even_odd_theme(self.color_cache.even, self.color_cache.odd);
 
         /* index column */
         self.data_columns.columns[0] =
@@ -629,26 +650,27 @@ impl ListingTrait for CompactListing {
         let page_no = (self.new_cursor_pos.2).wrapping_div(rows);
 
         let top_idx = page_no * rows;
-        self.draw_rows(
-            context,
-            top_idx,
-            cmp::min(self.length.saturating_sub(1), top_idx + rows - 1),
-        );
+        let end_idx = cmp::min(self.length.saturating_sub(1), top_idx + rows - 1);
+        self.draw_rows(context, top_idx, end_idx);
 
         /* If cursor position has changed, remove the highlight from the previous position and
          * apply it in the new one. */
         if self.cursor_pos.2 != self.new_cursor_pos.2 && prev_page_no == page_no {
             let old_cursor_pos = self.cursor_pos;
             self.cursor_pos = self.new_cursor_pos;
-            for idx in &[old_cursor_pos.2, self.new_cursor_pos.2] {
-                if *idx >= self.length {
+            for &(idx, highlight) in &[(old_cursor_pos.2, false), (self.new_cursor_pos.2, true)] {
+                if idx >= self.length {
                     continue; //bounds check
                 }
-                let new_area = (
-                    set_y(upper_left, get_y(upper_left) + (*idx % rows)),
-                    set_y(bottom_right, get_y(upper_left) + (*idx % rows)),
-                );
-                self.highlight_line(grid, new_area, *idx, context);
+                let new_area = nth_row_area(area, idx % rows);
+                self.data_columns
+                    .draw(grid, idx, self.cursor_pos.2, grid.bounds_iter(new_area));
+                if highlight {
+                    let row_attr = row_attr!(self.color_cache, idx % 2 == 0, false, true, false);
+                    change_colors(grid, new_area, row_attr.fg, row_attr.bg);
+                } else if let Some(row_attr) = self.rows.row_attr_cache.get(&idx) {
+                    change_colors(grid, new_area, row_attr.fg, row_attr.bg);
+                }
                 context.dirty_areas.push_back(new_area);
             }
             if !self.force_draw {
@@ -662,115 +684,37 @@ impl ListingTrait for CompactListing {
             self.cursor_pos.2 = self.new_cursor_pos.2;
         }
 
-        let width = width!(area);
-        self.data_columns.widths = Default::default();
-        self.data_columns.widths[0] = self.data_columns.columns[0].size().0;
-        self.data_columns.widths[1] = self.data_columns.columns[1].size().0; /* date*/
-        self.data_columns.widths[2] = self.data_columns.columns[2].size().0; /* from */
-        self.data_columns.widths[3] = self.data_columns.columns[3].size().0; /* subject  */
-
-        let min_col_width = std::cmp::min(
-            15,
-            std::cmp::min(self.data_columns.widths[3], self.data_columns.widths[2]),
-        );
-        if self.data_columns.widths[0] + self.data_columns.widths[1] + 2 * min_col_width + 4 > width
-        {
-            let remainder = width
-                .saturating_sub(self.data_columns.widths[0])
-                .saturating_sub(self.data_columns.widths[1])
-                .saturating_sub(2 * 2);
-            self.data_columns.widths[2] = remainder / 6;
-        } else {
-            let remainder = width
-                .saturating_sub(self.data_columns.widths[0])
-                .saturating_sub(self.data_columns.widths[1])
-                .saturating_sub(3 * 2);
-            if min_col_width + self.data_columns.widths[3] > remainder {
-                self.data_columns.widths[2] = min_col_width;
-            }
-        }
-        for i in 0..3 {
-            /* Set column widths to their maximum value width in the range
-             * [top_idx, top_idx + rows]. By using a segment tree the query is O(logn), which is
-             * great!
-             */
-            self.data_columns.widths[i] =
-                self.data_columns.segment_tree[i].get_max(top_idx, top_idx + rows - 1) as usize;
-        }
-        if self.data_columns.widths.iter().sum::<usize>() > width {
-            let diff = self.data_columns.widths.iter().sum::<usize>() - width;
-            if self.data_columns.widths[2] > 2 * diff {
-                self.data_columns.widths[2] -= diff;
-            } else {
-                self.data_columns.widths[2] = std::cmp::max(
-                    15,
-                    self.data_columns.widths[2].saturating_sub((2 * diff) / 3),
-                );
-            }
-        }
-        clear_area(grid, area, self.color_cache.theme_default);
         /* Page_no has changed, so draw new page */
-        let mut x = get_x(upper_left);
-        let mut flag_x = 0;
-        for i in 0..4 {
-            let column_width = self.data_columns.widths[i];
-            if i == 3 {
-                flag_x = x;
-            }
-            if column_width == 0 {
-                continue;
-            }
-            copy_area(
-                grid,
-                &self.data_columns.columns[i],
-                (set_x(upper_left, x), bottom_right),
-                (
-                    (0, top_idx),
-                    (column_width.saturating_sub(1), self.length - 1),
-                ),
-            );
-            x += column_width + 2; // + SEPARATOR
-            if x > get_x(bottom_right) {
-                break;
+        _ = self
+            .data_columns
+            .recalc_widths((width!(area), height!(area)), top_idx);
+        clear_area(grid, area, self.color_cache.theme_default);
+        /* copy table columns */
+        self.data_columns
+            .draw(grid, top_idx, self.cursor_pos.2, grid.bounds_iter(area));
+        /* apply each row colors separately */
+        for i in top_idx..(top_idx + height!(area)) {
+            if let Some(row_attr) = self.rows.row_attr_cache.get(&i) {
+                change_colors(grid, nth_row_area(area, i % rows), row_attr.fg, row_attr.bg);
             }
         }
 
-        let account = &context.accounts[&self.cursor_pos.0];
-        let threads = account.collection.get_threads(self.cursor_pos.1);
-        for r in 0..cmp::min(self.length - top_idx, rows) {
-            if let Some(thread_hash) = self.get_thread_under_cursor(r + top_idx) {
-                let row_attr = row_attr!(
-                    self.color_cache,
-                    (r + top_idx) % 2 == 0,
-                    threads.thread_ref(thread_hash).unseen() > 0,
-                    self.cursor_pos.2 == (r + top_idx),
-                    self.rows.is_thread_selected(thread_hash)
-                );
-                change_colors(
-                    grid,
-                    (
-                        pos_inc(upper_left, (0, r)),
-                        (flag_x.saturating_sub(1), get_y(upper_left) + r),
-                    ),
-                    row_attr.fg,
-                    row_attr.bg,
-                );
-                for x in flag_x..get_x(bottom_right) {
-                    grid[(x, get_y(upper_left) + r)].set_bg(row_attr.bg);
-                }
-            }
-        }
-
-        self.highlight_line(
+        /* highlight cursor */
+        let row_attr = row_attr!(
+            self.color_cache,
+            self.cursor_pos.2 % 2 == 0,
+            false,
+            true,
+            false
+        );
+        change_colors(
             grid,
-            (
-                set_y(upper_left, get_y(upper_left) + (self.cursor_pos.2 % rows)),
-                set_y(bottom_right, get_y(upper_left) + (self.cursor_pos.2 % rows)),
-            ),
-            self.cursor_pos.2,
-            context,
+            nth_row_area(area, self.cursor_pos.2 % rows),
+            row_attr.fg,
+            row_attr.bg,
         );
 
+        /* clear gap if available height is more than count of entries */
         if top_idx + rows > self.length {
             clear_area(
                 grid,
@@ -1050,43 +994,6 @@ impl CompactListing {
     fn update_line(&mut self, context: &Context, env_hash: EnvelopeHash) {
         let account = &context.accounts[&self.cursor_pos.0];
 
-        let selected_flag_len = mailbox_settings!(
-            context[self.cursor_pos.0][&self.cursor_pos.1]
-                .listing
-                .selected_flag
-        )
-        .as_ref()
-        .map(|s| s.as_str())
-        .unwrap_or(super::DEFAULT_SELECTED_FLAG)
-        .grapheme_width();
-        let thread_snoozed_flag_len = mailbox_settings!(
-            context[self.cursor_pos.0][&self.cursor_pos.1]
-                .listing
-                .thread_snoozed_flag
-        )
-        .as_ref()
-        .map(|s| s.as_str())
-        .unwrap_or(super::DEFAULT_SNOOZED_FLAG)
-        .grapheme_width();
-        let unseen_flag_len = mailbox_settings!(
-            context[self.cursor_pos.0][&self.cursor_pos.1]
-                .listing
-                .unseen_flag
-        )
-        .as_ref()
-        .map(|s| s.as_str())
-        .unwrap_or(super::DEFAULT_UNSEEN_FLAG)
-        .grapheme_width();
-        let attachment_flag_len = mailbox_settings!(
-            context[self.cursor_pos.0][&self.cursor_pos.1]
-                .listing
-                .attachment_flag
-        )
-        .as_ref()
-        .map(|s| s.as_str())
-        .unwrap_or(super::DEFAULT_ATTACHMENT_FLAG)
-        .grapheme_width();
-
         if !account.contains_key(env_hash) {
             /* The envelope has been renamed or removed, so wait for the appropriate event to
              * arrive */
@@ -1102,8 +1009,9 @@ impl CompactListing {
             idx % 2 == 0,
             thread.unseen() > 0,
             false,
-            false,
+            self.rows.is_thread_selected(thread_hash)
         );
+        self.rows.row_attr_cache.insert(idx, row_attr);
         let strings = self.make_entry_string(&envelope, context, &threads, thread_hash);
         drop(envelope);
         let columns = &mut self.data_columns.columns;
@@ -1204,25 +1112,6 @@ impl CompactListing {
         for c in columns[3].row_iter(x..min_width.3, idx) {
             columns[3][c].set_ch(' ').set_bg(row_attr.bg);
         }
-        /* Set fg color for flags */
-        let mut x = 0;
-        if self.rows.selection.get(&env_hash).cloned().unwrap_or(false) {
-            x += selected_flag_len;
-        }
-        if thread.snoozed() {
-            for x in x..(x + thread_snoozed_flag_len) {
-                columns[3][(x, idx)].set_fg(self.color_cache.thread_snooze_flag.fg);
-            }
-            x += thread_snoozed_flag_len;
-        }
-        if thread.unseen() > 0 {
-            x += unseen_flag_len;
-        }
-        if thread.has_attachments() {
-            for x in x..(x + attachment_flag_len) {
-                columns[3][(x, idx)].set_fg(self.color_cache.attachment_flag.fg);
-            }
-        }
         *self.rows.entries.get_mut(idx).unwrap() = ((thread_hash, env_hash), strings);
         self.rows_drawn.update(idx, 1);
     }
@@ -1246,48 +1135,8 @@ impl CompactListing {
             self.data_columns.columns[2].size().0,
             self.data_columns.columns[3].size().0,
         );
-        let account = &context.accounts[&self.cursor_pos.0];
 
-        let threads = account.collection.get_threads(self.cursor_pos.1);
-
-        let selected_flag_len = mailbox_settings!(
-            context[self.cursor_pos.0][&self.cursor_pos.1]
-                .listing
-                .selected_flag
-        )
-        .as_ref()
-        .map(|s| s.as_str())
-        .unwrap_or(super::DEFAULT_SELECTED_FLAG)
-        .grapheme_width();
-        let thread_snoozed_flag_len = mailbox_settings!(
-            context[self.cursor_pos.0][&self.cursor_pos.1]
-                .listing
-                .thread_snoozed_flag
-        )
-        .as_ref()
-        .map(|s| s.as_str())
-        .unwrap_or(super::DEFAULT_SNOOZED_FLAG)
-        .grapheme_width();
-        let unseen_flag_len = mailbox_settings!(
-            context[self.cursor_pos.0][&self.cursor_pos.1]
-                .listing
-                .unseen_flag
-        )
-        .as_ref()
-        .map(|s| s.as_str())
-        .unwrap_or(super::DEFAULT_UNSEEN_FLAG)
-        .grapheme_width();
-        let attachment_flag_len = mailbox_settings!(
-            context[self.cursor_pos.0][&self.cursor_pos.1]
-                .listing
-                .attachment_flag
-        )
-        .as_ref()
-        .map(|s| s.as_str())
-        .unwrap_or(super::DEFAULT_ATTACHMENT_FLAG)
-        .grapheme_width();
-
-        for (idx, ((thread_hash, root_env_hash), strings)) in self
+        for (idx, ((_thread_hash, root_env_hash), strings)) in self
             .rows
             .entries
             .iter()
@@ -1306,14 +1155,7 @@ impl CompactListing {
 
                 panic!();
             }
-            let thread = threads.thread_ref(*thread_hash);
-            let row_attr = row_attr!(
-                self.color_cache,
-                idx % 2 == 0,
-                thread.unseen() > 0,
-                self.cursor_pos.2 == idx,
-                self.rows.selection[root_env_hash]
-            );
+            let row_attr = self.rows.row_attr_cache[&idx];
             let (x, _) = write_string_to_grid(
                 &idx.to_string(),
                 &mut self.data_columns.columns[0],
@@ -1427,33 +1269,6 @@ impl CompactListing {
                     .set_ch(' ')
                     .set_bg(row_attr.bg)
                     .set_attrs(row_attr.attrs);
-            }
-            /* Set fg color for flags */
-            let mut x = 0;
-            if self
-                .rows
-                .selection
-                .get(root_env_hash)
-                .cloned()
-                .unwrap_or(false)
-            {
-                x += selected_flag_len;
-            }
-            if thread.snoozed() {
-                for x in x..(x + thread_snoozed_flag_len) {
-                    self.data_columns.columns[3][(x, idx)]
-                        .set_fg(self.color_cache.thread_snooze_flag.fg);
-                }
-                x += thread_snoozed_flag_len;
-            }
-            if thread.unseen() > 0 {
-                x += unseen_flag_len;
-            }
-            if thread.has_attachments() {
-                for x in x..(x + attachment_flag_len) {
-                    self.data_columns.columns[3][(x, idx)]
-                        .set_fg(self.color_cache.attachment_flag.fg);
-                }
             }
         }
     }
@@ -1726,19 +1541,23 @@ impl Component for CompactListing {
             }
 
             if !self.rows.row_updates.is_empty() {
-                while let Some(row) = self.rows.row_updates.pop() {
-                    self.update_line(context, row);
-                    let row: usize = self.rows.env_order[&row];
+                while let Some(env_hash) = self.rows.row_updates.pop() {
+                    self.update_line(context, env_hash);
+                    let row: usize = self.rows.env_order[&env_hash];
                     let page_no = (self.new_cursor_pos.2).wrapping_div(rows);
 
                     let top_idx = page_no * rows;
                     if row >= top_idx && row < top_idx + rows {
-                        let area = (
-                            set_y(upper_left, get_y(upper_left) + (row % rows)),
-                            set_y(bottom_right, get_y(upper_left) + (row % rows)),
+                        let new_area = nth_row_area(area, row % rows);
+                        self.data_columns.draw(
+                            grid,
+                            row,
+                            self.cursor_pos.2,
+                            grid.bounds_iter(new_area),
                         );
-                        self.highlight_line(grid, area, row, context);
-                        context.dirty_areas.push_back(area);
+                        let row_attr = self.rows.row_attr_cache[&row];
+                        change_colors(grid, new_area, row_attr.fg, row_attr.bg);
+                        context.dirty_areas.push_back(new_area);
                     }
                 }
                 if self.force_draw {
@@ -1842,11 +1661,11 @@ impl Component for CompactListing {
                 {
                     if self.modifier_active && self.modifier_command.is_none() {
                         self.modifier_command = Some(Modifier::default());
-                    } else {
-                        if let Some(thread_hash) = self.get_thread_under_cursor(self.cursor_pos.2) {
-                            self.rows
-                                .update_selection_with_thread(thread_hash, |e| *e = !*e);
-                        }
+                    } else if let Some(thread_hash) =
+                        self.get_thread_under_cursor(self.cursor_pos.2)
+                    {
+                        self.rows
+                            .update_selection_with_thread(thread_hash, |e| *e = !*e);
                     }
                     return true;
                 }
@@ -1916,11 +1735,6 @@ impl Component for CompactListing {
                     ),
                     even: crate::conf::value(context, "mail.listing.compact.even"),
                     odd: crate::conf::value(context, "mail.listing.compact.odd"),
-                    attachment_flag: crate::conf::value(context, "mail.listing.attachment_flag"),
-                    thread_snooze_flag: crate::conf::value(
-                        context,
-                        "mail.listing.thread_snooze_flag",
-                    ),
                     tag_default: crate::conf::value(context, "mail.listing.tag_default"),
                     theme_default: crate::conf::value(context, "theme_default"),
                     ..self.color_cache

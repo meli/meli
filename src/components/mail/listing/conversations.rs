@@ -151,7 +151,7 @@ impl MailListingTrait for ConversationsListing {
         } else {
             if let Some(env_hashes) = self
                 .get_thread_under_cursor(self.cursor_pos.2)
-                .and_then(|thread| self.rows.thread_to_env.get(&thread).map(|v| v.clone()))
+                .and_then(|thread| self.rows.thread_to_env.get(&thread).cloned())
             {
                 cursor_iter = Some(env_hashes.into_iter());
             } else {
@@ -187,8 +187,6 @@ impl MailListingTrait for ConversationsListing {
             selected: crate::conf::value(context, "mail.listing.conversations.selected"),
             unseen: crate::conf::value(context, "mail.listing.conversations.unseen"),
             highlighted: crate::conf::value(context, "mail.listing.conversations.highlighted"),
-            attachment_flag: crate::conf::value(context, "mail.listing.attachment_flag"),
-            thread_snooze_flag: crate::conf::value(context, "mail.listing.thread_snooze_flag"),
             tag_default: crate::conf::value(context, "mail.listing.tag_default"),
             ..self.color_cache
         };
@@ -1306,10 +1304,8 @@ impl Component for ConversationsListing {
                 {
                     if self.modifier_active && self.modifier_command.is_none() {
                         self.modifier_command = Some(Modifier::default());
-                    } else {
-                        if let Some(thread) = self.get_thread_under_cursor(self.cursor_pos.2) {
-                            self.rows.update_selection_with_thread(thread, |e| *e = !*e);
-                        }
+                    } else if let Some(thread) = self.get_thread_under_cursor(self.cursor_pos.2) {
+                        self.rows.update_selection_with_thread(thread, |e| *e = !*e);
                     }
                     return true;
                 }
@@ -1439,11 +1435,6 @@ impl Component for ConversationsListing {
                     highlighted: crate::conf::value(
                         context,
                         "mail.listing.conversations.highlighted",
-                    ),
-                    attachment_flag: crate::conf::value(context, "mail.listing.attachment_flag"),
-                    thread_snooze_flag: crate::conf::value(
-                        context,
-                        "mail.listing.thread_snooze_flag",
                     ),
                     tag_default: crate::conf::value(context, "mail.listing.tag_default"),
                     ..self.color_cache

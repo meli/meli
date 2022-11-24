@@ -26,6 +26,7 @@
 
 use super::{position::*, Color};
 use crate::state::Context;
+use crate::ThemeAttribute;
 use melib::text_processing::wcwidth;
 
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
@@ -57,9 +58,9 @@ pub struct ScrollRegion {
 /// index, `Cellbuffer[y][x]`, corresponds to a column within a row and thus the x-axis.
 #[derive(Clone, PartialEq, Eq)]
 pub struct CellBuffer {
-    cols: usize,
-    rows: usize,
-    buf: Vec<Cell>,
+    pub cols: usize,
+    pub rows: usize,
+    pub buf: Vec<Cell>,
     pub default_cell: Cell,
     /// ASCII-only flag.
     pub ascii_drawing: bool,
@@ -357,6 +358,8 @@ impl CellBuffer {
     /// See `BoundsIterator` documentation.
     pub fn bounds_iter(&self, area: Area) -> BoundsIterator {
         BoundsIterator {
+            width: width!(area),
+            height: height!(area),
             rows: std::cmp::min(self.rows.saturating_sub(1), get_y(upper_left!(area)))
                 ..(std::cmp::min(self.rows, get_y(bottom_right!(area)) + 1)),
             cols: (
@@ -373,9 +376,14 @@ impl CellBuffer {
                 row,
                 col: std::cmp::min(self.cols.saturating_sub(1), bounds.start)
                     ..(std::cmp::min(self.cols, bounds.end)),
+                _width: bounds.len(),
             }
         } else {
-            RowIterator { row, col: 0..0 }
+            RowIterator {
+                row,
+                col: 0..0,
+                _width: 0,
+            }
         }
     }
 
@@ -1247,8 +1255,10 @@ pub fn clear_area(grid: &mut CellBuffer, area: Area, attributes: crate::conf::Th
 ///     grid[c].set_ch('w');
 /// }
 /// ```
+#[derive(Debug)]
 pub struct RowIterator {
     row: usize,
+    _width: usize,
     col: std::ops::Range<usize>,
 }
 
@@ -1263,9 +1273,55 @@ pub struct RowIterator {
 ///     }
 /// }
 /// ```
+#[derive(Clone, Debug)]
 pub struct BoundsIterator {
     rows: std::ops::Range<usize>,
+    pub width: usize,
+    pub height: usize,
     cols: (usize, usize),
+}
+
+impl BoundsIterator {
+    const EMPTY: Self = BoundsIterator {
+        rows: 0..0,
+        width: 0,
+        height: 0,
+        cols: (0, 0),
+    };
+
+    pub fn area(&self) -> Area {
+        (
+            (self.cols.0, self.rows.start),
+            (
+                std::cmp::max(self.cols.0, self.cols.1.saturating_sub(1)),
+                std::cmp::max(self.rows.start, self.rows.end.saturating_sub(1)),
+            ),
+        )
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.width == 0 || self.height == 0 || self.rows.len() == 0
+    }
+
+    pub fn add_x(&mut self, x: usize) -> Self {
+        if x == 0 {
+            return Self::EMPTY;
+        }
+
+        let ret = Self {
+            rows: self.rows.clone(),
+            width: self.width.saturating_sub(x),
+            height: self.height,
+            cols: self.cols,
+        };
+        if self.cols.0 + x < self.cols.1 && self.width > x {
+            self.cols.0 += x;
+            self.width -= x;
+            return ret;
+        }
+        *self = Self::EMPTY;
+        ret
+    }
 }
 
 impl Iterator for BoundsIterator {
@@ -1274,6 +1330,7 @@ impl Iterator for BoundsIterator {
         if let Some(next_row) = self.rows.next() {
             Some(RowIterator {
                 row: next_row,
+                _width: self.width,
                 col: self.cols.0..self.cols.1,
             })
         } else {
@@ -1304,6 +1361,10 @@ impl RowIterator {
             self.col.start = new_val;
             self
         }
+    }
+
+    pub fn area(&self) -> Area {
+        ((self.col.start, self.row), (self.col.end, self.row))
     }
 }
 
@@ -1736,6 +1797,26 @@ impl core::cmp::Ord for FormatTag {
 impl core::cmp::PartialOrd for FormatTag {
     fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
         Some(self.cmp(other))
+    }
+}
+
+impl From<ThemeAttribute> for FormatTag {
+    fn from(val: ThemeAttribute) -> Self {
+        let ThemeAttribute { fg, bg, attrs, .. } = val;
+        Self {
+            fg: Some(fg),
+            bg: Some(bg),
+            attrs: Some(attrs),
+            priority: 0,
+        }
+    }
+}
+
+impl FormatTag {
+    #[inline(always)]
+    pub fn set_priority(mut self, new_val: u8) -> Self {
+        self.priority = new_val;
+        self
     }
 }
 

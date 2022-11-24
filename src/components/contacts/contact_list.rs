@@ -46,7 +46,7 @@ pub struct ContactList {
     new_cursor_pos: usize,
     account_pos: usize,
     length: usize,
-    data_columns: DataColumns,
+    data_columns: DataColumns<4>,
     initialized: bool,
     theme_default: ThemeAttribute,
     highlight_theme: ThemeAttribute,

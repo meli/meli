@@ -76,6 +76,7 @@ macro_rules! height {
     ($a:expr) => {
         ($crate::get_y($crate::bottom_right!($a)))
             .saturating_sub($crate::get_y($crate::upper_left!($a)))
+            + 1
     };
 }
 
@@ -93,6 +94,7 @@ macro_rules! width {
     ($a:expr) => {
         ($crate::get_x($crate::bottom_right!($a)))
             .saturating_sub($crate::get_x($crate::upper_left!($a)))
+            + 1
     };
 }
 
@@ -251,4 +253,13 @@ pub fn place_in_area(area: Area, (width, height): (usize, usize), upper: bool, l
             std::cmp::min(y + height, max_y),
         ),
     )
+}
+
+#[inline(always)]
+/// Get `n`th row of `area` or its last one.
+pub fn nth_row_area(area: Area, n: usize) -> Area {
+    let (upper_left, bottom_right) = area;
+    let (_, max_y) = bottom_right;
+    let y = std::cmp::min(max_y, get_y(upper_left) + n);
+    (set_y(upper_left, y), set_y(bottom_right, y))
 }

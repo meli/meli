@@ -36,6 +36,9 @@ pub use self::layouts::*;
 mod dialogs;
 pub use self::dialogs::*;
 
+mod tables;
+pub use self::tables::*;
+
 use crate::jobs::JobId;
 use std::collections::HashSet;
 
@@ -1048,7 +1051,10 @@ impl Component for Tabbed {
                     ScrollBar::default().set_show_arrows(true).draw(
                         grid,
                         (
-                            pos_inc(upper_left!(inner_area), (width!(inner_area), 0)),
+                            pos_inc(
+                                upper_left!(inner_area),
+                                (width!(inner_area).saturating_sub(1), 0),
+                            ),
                             bottom_right!(inner_area),
                         ),
                         context,
@@ -1300,7 +1306,10 @@ impl Component for Tabbed {
                 ScrollBar::default().set_show_arrows(true).draw(
                     grid,
                     (
-                        pos_inc(upper_left!(inner_area), (width!(inner_area), 0)),
+                        pos_inc(
+                            upper_left!(inner_area),
+                            (width!(inner_area).saturating_sub(1), 0),
+                        ),
                         bottom_right!(inner_area),
                     ),
                     context,

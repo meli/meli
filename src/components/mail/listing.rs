@@ -58,6 +58,7 @@ pub struct RowsState<T> {
     pub entries: Vec<(T, EntryStrings)>,
     pub all_threads: HashSet<ThreadHash>,
     pub all_envelopes: HashSet<EnvelopeHash>,
+    pub row_attr_cache: HashMap<usize, ThemeAttribute>,
 }
 
 impl<T> RowsState<T> {
@@ -72,6 +73,7 @@ impl<T> RowsState<T> {
         self.entries.clear();
         self.all_threads.clear();
         self.all_envelopes.clear();
+        self.row_attr_cache.clear();
     }
 
     #[inline(always)]
@@ -232,13 +234,6 @@ impl Default for Modifier {
     }
 }
 
-#[derive(Debug, Default, Clone)]
-pub struct DataColumns {
-    pub columns: Box<[CellBuffer; 12]>,
-    pub widths: [usize; 12], // widths of columns calculated in first draw and after size changes
-    pub segment_tree: Box<[SegmentTree; 12]>,
-}
-
 #[derive(Debug, Default)]
 /// Save theme colors to avoid looking them up again and again from settings
 struct ColorCache {
@@ -255,8 +250,6 @@ struct ColorCache {
     odd_unseen: ThemeAttribute,
     odd_highlighted: ThemeAttribute,
     odd_selected: ThemeAttribute,
-    attachment_flag: ThemeAttribute,
-    thread_snooze_flag: ThemeAttribute,
     tag_default: ThemeAttribute,
 
     /* Conversations */
@@ -2078,7 +2071,7 @@ impl Listing {
             ScrollBar::default().set_show_arrows(true).draw(
                 grid,
                 (
-                    pos_inc(upper_left!(area), (width!(area), 0)),
+                    pos_inc(upper_left!(area), (width!(area).saturating_sub(1), 0)),
                     bottom_right!(area),
                 ),
                 context,

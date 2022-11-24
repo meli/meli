@@ -340,7 +340,7 @@ impl Pager {
             .text_lines
             .iter()
             .skip(self.cursor.1)
-            .take(height!(area) + 1)
+            .take(height!(area))
         {
             write_string_to_grid(
                 l,

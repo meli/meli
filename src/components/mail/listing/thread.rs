@@ -121,9 +121,9 @@ pub struct ThreadListing {
         crate::jobs::JoinHandle<Result<SmallVec<[EnvelopeHash; 512]>>>,
     )>,
 
-    data_columns: DataColumns,
+    data_columns: DataColumns<5>,
     rows_drawn: SegmentTree,
-    rows: RowsState<(bool, bool, ThreadHash, EnvelopeHash)>,
+    rows: RowsState<(ThreadHash, EnvelopeHash)>,
     /// If we must redraw on next redraw event
     dirty: bool,
     /// If `self.view` is focused or not.
@@ -189,8 +189,6 @@ impl MailListingTrait for ThreadListing {
             odd_highlighted: crate::conf::value(context, "mail.listing.plain.odd_highlighted"),
             even: crate::conf::value(context, "mail.listing.plain.even"),
             odd: crate::conf::value(context, "mail.listing.plain.odd"),
-            attachment_flag: crate::conf::value(context, "mail.listing.attachment_flag"),
-            thread_snooze_flag: crate::conf::value(context, "mail.listing.thread_snooze_flag"),
             tag_default: crate::conf::value(context, "mail.listing.tag_default"),
             theme_default: crate::conf::value(context, "theme_default"),
             ..self.color_cache
@@ -358,15 +356,18 @@ impl MailListingTrait for ThreadListing {
                 ); /* tags + subject */
                 self.rows.insert_thread(
                     threads.envelope_to_thread[&env_hash],
-                    (
-                        envelope.is_seen(),
-                        envelope.has_attachments(),
-                        threads.envelope_to_thread[&env_hash],
-                        env_hash,
-                    ),
+                    (threads.envelope_to_thread[&env_hash], env_hash),
                     smallvec::smallvec![env_hash],
                     entry_strings,
                 );
+                let row_attr = row_attr!(
+                    self.color_cache,
+                    idx % 2 == 0,
+                    !envelope.is_seen(),
+                    false,
+                    false,
+                );
+                self.rows.row_attr_cache.insert(idx, row_attr);
                 idx += 1;
             } else {
                 continue;
@@ -389,6 +390,23 @@ impl MailListingTrait for ThreadListing {
             }
         }
         min_width.0 = idx.saturating_sub(1).to_string().len();
+
+        self.data_columns.elasticities[0].set_rigid();
+        self.data_columns.elasticities[1].set_rigid();
+        self.data_columns.elasticities[2].set_grow(5, Some(35));
+        self.data_columns.elasticities[3].set_rigid();
+        self.data_columns.elasticities[4].set_rigid();
+        self.data_columns
+            .cursor_config
+            .set_handle(true)
+            .set_even_odd_theme(
+                self.color_cache.even_highlighted,
+                self.color_cache.odd_highlighted,
+            );
+        self.data_columns
+            .theme_config
+            .set_even_odd_theme(self.color_cache.even, self.color_cache.odd);
+
         /* index column */
         self.data_columns.columns[0] =
             CellBuffer::new_with_context(min_width.0, self.rows.len(), None, context);
@@ -496,41 +514,24 @@ impl ListingTrait for ThreadListing {
             cmp::min(self.length.saturating_sub(1), top_idx + rows - 1),
         );
 
-        /*
-        if !self.initialised {
-            self.initialised = false;
-            copy_area(
-                grid,
-                &self.content,
-                area,
-                ((0, top_idx), (MAX_COLS - 1, self.length)),
-            );
-            self.highlight_line(
-                grid,
-                (
-                    set_y(upper_left, get_y(upper_left) + (self.cursor_pos.2 % rows)),
-                    set_y(bottom_right, get_y(upper_left) + (self.cursor_pos.2 % rows)),
-                ),
-                self.cursor_pos.2,
-                context,
-            );
-            context.dirty_areas.push_back(area);
-        }
-        */
         /* If cursor position has changed, remove the highlight from the previous position and
          * apply it in the new one. */
         if self.cursor_pos.2 != self.new_cursor_pos.2 && prev_page_no == page_no {
             let old_cursor_pos = self.cursor_pos;
             self.cursor_pos = self.new_cursor_pos;
-            for idx in &[old_cursor_pos.2, self.new_cursor_pos.2] {
-                if *idx >= self.length {
+            for &(idx, highlight) in &[(old_cursor_pos.2, false), (self.new_cursor_pos.2, true)] {
+                if idx >= self.length {
                     continue; //bounds check
                 }
-                let new_area = (
-                    set_y(upper_left, get_y(upper_left) + (*idx % rows)),
-                    set_y(bottom_right, get_y(upper_left) + (*idx % rows)),
-                );
-                self.highlight_line(grid, new_area, *idx, context);
+                let new_area = nth_row_area(area, idx % rows);
+                self.data_columns
+                    .draw(grid, idx, self.cursor_pos.2, grid.bounds_iter(new_area));
+                if highlight {
+                    let row_attr = row_attr!(self.color_cache, idx % 2 == 0, false, true, false);
+                    change_colors(grid, new_area, row_attr.fg, row_attr.bg);
+                } else if let Some(row_attr) = self.rows.row_attr_cache.get(&idx) {
+                    change_colors(grid, new_area, row_attr.fg, row_attr.bg);
+                }
                 context.dirty_areas.push_back(new_area);
             }
             return;
@@ -544,148 +545,45 @@ impl ListingTrait for ThreadListing {
             self.cursor_pos.2 = self.new_cursor_pos.2;
         }
 
-        let width = width!(area);
-        self.data_columns.widths = Default::default();
-        self.data_columns.widths[0] = self.data_columns.columns[0].size().0;
-        self.data_columns.widths[1] = self.data_columns.columns[1].size().0; /* date*/
-        self.data_columns.widths[2] = self.data_columns.columns[2].size().0; /* from */
-        self.data_columns.widths[3] = self.data_columns.columns[3].size().0; /* flags */
-        self.data_columns.widths[4] = self.data_columns.columns[4].size().0; /* subject */
-
-        let min_col_width = std::cmp::min(
-            15,
-            std::cmp::min(self.data_columns.widths[4], self.data_columns.widths[2]),
-        );
-        if self.data_columns.widths[0] + self.data_columns.widths[1] + 3 * min_col_width + 8 > width
-        {
-            let remainder = width
-                .saturating_sub(self.data_columns.widths[0])
-                .saturating_sub(self.data_columns.widths[1])
-                .saturating_sub(4);
-            self.data_columns.widths[2] = remainder / 6;
-            self.data_columns.widths[4] =
-                ((2 * remainder) / 3).saturating_sub(self.data_columns.widths[3]);
-        } else {
-            let remainder = width
-                .saturating_sub(self.data_columns.widths[0])
-                .saturating_sub(self.data_columns.widths[1])
-                .saturating_sub(8);
-            if min_col_width + self.data_columns.widths[4] > remainder {
-                self.data_columns.widths[4] =
-                    remainder.saturating_sub(min_col_width + self.data_columns.widths[3]);
-                self.data_columns.widths[2] = min_col_width;
-            }
-        }
-        for &i in &[2, 4] {
-            /* Set From and Subject column widths to their maximum value width in the range
-             * [top_idx, top_idx + rows]. By using a segment tree the query is O(logn), which is
-             * great!
-             */
-            self.data_columns.widths[i] =
-                self.data_columns.segment_tree[i].get_max(top_idx, top_idx + rows) as usize;
-        }
-        if self.data_columns.widths.iter().sum::<usize>() > width {
-            let diff = self.data_columns.widths.iter().sum::<usize>() - width;
-            if self.data_columns.widths[2] > 2 * diff {
-                self.data_columns.widths[2] -= diff;
-            } else {
-                self.data_columns.widths[2] = std::cmp::max(
-                    15,
-                    self.data_columns.widths[2].saturating_sub((2 * diff) / 3),
-                );
-                self.data_columns.widths[4] = std::cmp::max(
-                    15,
-                    self.data_columns.widths[4].saturating_sub(diff / 3 + diff % 3),
-                );
-            }
-        }
+        _ = self
+            .data_columns
+            .recalc_widths((width!(area), height!(area)), top_idx);
         clear_area(grid, area, self.color_cache.theme_default);
         /* Page_no has changed, so draw new page */
-        let mut x = get_x(upper_left);
-        let mut flag_x = 0;
-        for i in 0..self.data_columns.columns.len() {
-            let column_width = self.data_columns.columns[i].size().0;
-            if i == 3 {
-                flag_x = x;
-            }
-            if self.data_columns.widths[i] == 0 {
-                continue;
-            }
-            copy_area(
-                grid,
-                &self.data_columns.columns[i],
-                (
-                    set_x(upper_left, x),
-                    set_x(
-                        bottom_right,
-                        std::cmp::min(get_x(bottom_right), x + (self.data_columns.widths[i])),
-                    ),
-                ),
-                (
-                    (0, top_idx),
-                    (column_width.saturating_sub(1), self.length - 1),
-                ),
-            );
-            x += self.data_columns.widths[i] + 2; // + SEPARATOR
-            if x > get_x(bottom_right) {
-                break;
+        self.data_columns
+            .draw(grid, top_idx, self.cursor_pos.2, grid.bounds_iter(area));
+
+        /* Page_no has changed, so draw new page */
+        _ = self
+            .data_columns
+            .recalc_widths((width!(area), height!(area)), top_idx);
+        clear_area(grid, area, self.color_cache.theme_default);
+        /* copy table columns */
+        self.data_columns
+            .draw(grid, top_idx, self.cursor_pos.2, grid.bounds_iter(area));
+        /* apply each row colors separately */
+        for i in top_idx..(top_idx + height!(area)) {
+            if let Some(row_attr) = self.rows.row_attr_cache.get(&i) {
+                change_colors(grid, nth_row_area(area, i % rows), row_attr.fg, row_attr.bg);
             }
         }
 
-        for r in 0..cmp::min(self.length - top_idx, rows) {
-            let (fg_color, bg_color) = {
-                let c = &self.data_columns.columns[0][(0, r + top_idx)];
-                if let Some(env_hash) = self.get_env_under_cursor(r + top_idx) {
-                    if self.rows.selection[&env_hash] {
-                        (c.fg(), self.color_cache.selected.bg)
-                    } else {
-                        (c.fg(), c.bg())
-                    }
-                } else {
-                    (c.fg(), c.bg())
-                }
-            };
-            change_colors(
-                grid,
-                (
-                    pos_inc(upper_left, (0, r)),
-                    (flag_x.saturating_sub(1), get_y(upper_left) + r),
-                ),
-                fg_color,
-                bg_color,
-            );
-            for x in flag_x
-                ..std::cmp::min(
-                    get_x(bottom_right),
-                    flag_x + 2 + self.data_columns.widths[3],
-                )
-            {
-                grid[(x, get_y(upper_left) + r)].set_bg(bg_color);
-            }
-            change_colors(
-                grid,
-                (
-                    (
-                        flag_x + 2 + self.data_columns.widths[3],
-                        get_y(upper_left) + r,
-                    ),
-                    (get_x(bottom_right), get_y(upper_left) + r),
-                ),
-                fg_color,
-                bg_color,
-            );
-        }
-
-        self.highlight_line(
+        /* highlight cursor */
+        let row_attr = row_attr!(
+            self.color_cache,
+            self.cursor_pos.2 % 2 == 0,
+            false,
+            true,
+            false
+        );
+        change_colors(
             grid,
-            (
-                set_y(upper_left, get_y(upper_left) + (self.cursor_pos.2 % rows)),
-                set_y(bottom_right, get_y(upper_left) + (self.cursor_pos.2 % rows)),
-            ),
-            self.cursor_pos.2,
-            context,
+            nth_row_area(area, self.cursor_pos.2 % rows),
+            row_attr.fg,
+            row_attr.bg,
         );
 
+        /* clear gap if available height is more than count of entries */
         if top_idx + rows > self.length {
             clear_area(
                 grid,
@@ -697,24 +595,6 @@ impl ListingTrait for ThreadListing {
             );
         }
         context.dirty_areas.push_back(area);
-        /*
-        copy_area(
-            grid,
-            &self.content,
-            area,
-            ((0, top_idx), (MAX_COLS - 1, self.length)),
-        );
-        self.highlight_line(
-            grid,
-            (
-                set_y(upper_left, get_y(upper_left) + (self.cursor_pos.2 % rows)),
-                set_y(bottom_right, get_y(upper_left) + (self.cursor_pos.2 % rows)),
-            ),
-            self.cursor_pos.2,
-            context,
-        );
-        context.dirty_areas.push_back(area);
-        */
     }
 
     fn highlight_line(&mut self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context) {
@@ -994,7 +874,7 @@ impl ThreadListing {
             self.data_columns.columns[4].size().0,
         );
 
-        for (idx, ((is_seen, has_attachments, _thread_hash, env_hash), strings)) in self
+        for (idx, ((_thread_hash, env_hash), strings)) in self
             .rows
             .entries
             .iter()
@@ -1013,13 +893,7 @@ impl ThreadListing {
 
                 panic!();
             }
-            let row_attr = row_attr!(
-                self.color_cache,
-                idx % 2 == 0,
-                !*is_seen,
-                self.cursor_pos.2 == idx,
-                self.rows.selection[&env_hash],
-            );
+            let row_attr = self.rows.row_attr_cache[&idx];
             let (x, _) = write_string_to_grid(
                 &idx.to_string(),
                 &mut self.data_columns.columns[0],
@@ -1138,9 +1012,6 @@ impl ThreadListing {
                     .set_ch(' ')
                     .set_bg(row_attr.bg)
                     .set_attrs(row_attr.attrs);
-            }
-            if *has_attachments {
-                self.data_columns.columns[3][(0, idx)].set_fg(self.color_cache.attachment_flag.fg);
             }
         }
     }
@@ -1315,15 +1186,29 @@ impl Component for ThreadListing {
             let page_no = (self.new_cursor_pos.2).wrapping_div(rows);
             let top_idx = page_no * rows;
 
-            while let Some(row) = self.rows.row_updates.pop() {
-                let row: usize = self.rows.env_order[&row];
+            while let Some(env_hash) = self.rows.row_updates.pop() {
+                let row: usize = self.rows.env_order[&env_hash];
 
                 if row >= top_idx && row <= top_idx + rows {
-                    let new_area = (
-                        set_y(upper_left, get_y(upper_left) + (row % rows)),
-                        set_y(bottom_right, get_y(upper_left) + (row % rows)),
+                    let new_area = nth_row_area(area, row % rows);
+                    self.data_columns.draw(
+                        grid,
+                        row,
+                        self.cursor_pos.2,
+                        grid.bounds_iter(new_area),
                     );
-                    self.highlight_line(grid, new_area, row, context);
+                    let envelope: EnvelopeRef = context.accounts[&self.cursor_pos.0]
+                        .collection
+                        .get_env(env_hash);
+                    let row_attr = row_attr!(
+                        self.color_cache,
+                        row % 2 == 0,
+                        !envelope.is_seen(),
+                        false,
+                        self.rows.selection[&env_hash]
+                    );
+                    self.rows.row_attr_cache.insert(row, row_attr);
+                    change_colors(grid, new_area, row_attr.fg, row_attr.bg);
                     context.dirty_areas.push_back(new_area);
                 }
             }
@@ -1486,11 +1371,6 @@ impl Component for ThreadListing {
                     ),
                     even: crate::conf::value(context, "mail.listing.plain.even"),
                     odd: crate::conf::value(context, "mail.listing.plain.odd"),
-                    attachment_flag: crate::conf::value(context, "mail.listing.attachment_flag"),
-                    thread_snooze_flag: crate::conf::value(
-                        context,
-                        "mail.listing.thread_snooze_flag",
-                    ),
                     tag_default: crate::conf::value(context, "mail.listing.tag_default"),
                     theme_default: crate::conf::value(context, "theme_default"),
                     ..self.color_cache
@@ -1559,7 +1439,7 @@ impl Component for ThreadListing {
                 }
                 self.rows.rename_env(*old_hash, *new_hash);
                 if let Some(&row) = self.rows.env_order.get(new_hash) {
-                    (self.rows.entries[row].0).3 = *new_hash;
+                    (self.rows.entries[row].0).1 = *new_hash;
                 }
 
                 self.dirty = true;
@@ -1623,10 +1503,8 @@ impl Component for ThreadListing {
             {
                 if self.modifier_active && self.modifier_command.is_none() {
                     self.modifier_command = Some(Modifier::default());
-                } else {
-                    if let Some(env_hash) = self.get_env_under_cursor(self.cursor_pos.2) {
-                        self.rows.update_selection_with_env(env_hash, |e| *e = !*e);
-                    }
+                } else if let Some(env_hash) = self.get_env_under_cursor(self.cursor_pos.2) {
+                    self.rows.update_selection_with_env(env_hash, |e| *e = !*e);
                 }
                 return true;
             }

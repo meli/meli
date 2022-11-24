@@ -130,7 +130,7 @@ pub struct PlainListing {
     subsort: (SortField, SortOrder),
     rows: RowsState<(ThreadHash, EnvelopeHash)>,
     /// Cache current view.
-    data_columns: DataColumns,
+    data_columns: DataColumns<4>,
 
     #[allow(clippy::type_complexity)]
     search_job: Option<(String, JoinHandle<Result<SmallVec<[EnvelopeHash; 512]>>>)>,
@@ -167,9 +167,9 @@ impl MailListingTrait for PlainListing {
             .values()
             .cloned()
             .any(std::convert::identity);
-        dbg!(is_selection_empty);
         if is_selection_empty {
-            return dbg!(self.get_env_under_cursor(self.cursor_pos.2))
+            return self
+                .get_env_under_cursor(self.cursor_pos.2)
                 .into_iter()
                 .collect::<_>();
         }
@@ -205,8 +205,6 @@ impl MailListingTrait for PlainListing {
             odd_highlighted: crate::conf::value(context, "mail.listing.plain.odd_highlighted"),
             even_selected: crate::conf::value(context, "mail.listing.plain.even_selected"),
             odd_selected: crate::conf::value(context, "mail.listing.plain.odd_selected"),
-            attachment_flag: crate::conf::value(context, "mail.listing.attachment_flag"),
-            thread_snooze_flag: crate::conf::value(context, "mail.listing.thread_snooze_flag"),
             tag_default: crate::conf::value(context, "mail.listing.tag_default"),
             theme_default: crate::conf::value(context, "theme_default"),
             ..self.color_cache
@@ -448,15 +446,19 @@ impl ListingTrait for PlainListing {
         if self.cursor_pos.2 != self.new_cursor_pos.2 && prev_page_no == page_no {
             let old_cursor_pos = self.cursor_pos;
             self.cursor_pos = self.new_cursor_pos;
-            for idx in &[old_cursor_pos.2, self.new_cursor_pos.2] {
-                if *idx >= self.length {
+            for &(idx, highlight) in &[(old_cursor_pos.2, false), (self.new_cursor_pos.2, true)] {
+                if idx >= self.length {
                     continue; //bounds check
                 }
-                let new_area = (
-                    set_y(upper_left, get_y(upper_left) + (*idx % rows)),
-                    set_y(bottom_right, get_y(upper_left) + (*idx % rows)),
-                );
-                self.highlight_line(grid, new_area, *idx, context);
+                let new_area = nth_row_area(area, idx % rows);
+                self.data_columns
+                    .draw(grid, idx, self.cursor_pos.2, grid.bounds_iter(new_area));
+                if highlight {
+                    let row_attr = row_attr!(self.color_cache, idx % 2 == 0, false, true, false);
+                    change_colors(grid, new_area, row_attr.fg, row_attr.bg);
+                } else if let Some(row_attr) = self.rows.row_attr_cache.get(&idx) {
+                    change_colors(grid, new_area, row_attr.fg, row_attr.bg);
+                }
                 context.dirty_areas.push_back(new_area);
             }
             return;
@@ -468,107 +470,37 @@ impl ListingTrait for PlainListing {
             self.cursor_pos.2 = self.new_cursor_pos.2;
         }
 
-        let width = width!(area);
-        self.data_columns.widths = Default::default();
-        self.data_columns.widths[0] = self.data_columns.columns[0].size().0;
-        self.data_columns.widths[1] = self.data_columns.columns[1].size().0; /* date*/
-        self.data_columns.widths[2] = self.data_columns.columns[2].size().0; /* from */
-        self.data_columns.widths[3] = self.data_columns.columns[3].size().0; /* subject */
-
-        let min_col_width = std::cmp::min(
-            15,
-            std::cmp::min(self.data_columns.widths[3], self.data_columns.widths[2]),
-        );
-        if self.data_columns.widths[0] + self.data_columns.widths[1] + 2 * min_col_width + 4 > width
-        {
-            let remainder = width
-                .saturating_sub(self.data_columns.widths[0])
-                .saturating_sub(self.data_columns.widths[1])
-                .saturating_sub(2 * 2);
-            self.data_columns.widths[2] = remainder / 6;
-        } else {
-            let remainder = width
-                .saturating_sub(self.data_columns.widths[0])
-                .saturating_sub(self.data_columns.widths[1])
-                .saturating_sub(3 * 2);
-            if min_col_width + self.data_columns.widths[3] > remainder {
-                self.data_columns.widths[2] = min_col_width;
-            }
-        }
-        clear_area(grid, area, self.color_cache.theme_default);
         /* Page_no has changed, so draw new page */
-        let mut x = get_x(upper_left);
-        let mut flag_x = 0;
-        for i in 0..4 {
-            let column_width = self.data_columns.widths[i];
-            if i == 3 {
-                flag_x = x;
+        _ = self
+            .data_columns
+            .recalc_widths((width!(area), height!(area)), top_idx);
+        clear_area(grid, area, self.color_cache.theme_default);
+        /* copy table columns */
+        self.data_columns
+            .draw(grid, top_idx, self.cursor_pos.2, grid.bounds_iter(area));
+        /* apply each row colors separately */
+        for i in top_idx..(top_idx + height!(area)) {
+            if let Some(row_attr) = self.rows.row_attr_cache.get(&i) {
+                change_colors(grid, nth_row_area(area, i % rows), row_attr.fg, row_attr.bg);
             }
-            if column_width == 0 {
-                continue;
-            }
-            copy_area(
-                grid,
-                &self.data_columns.columns[i],
-                (set_x(upper_left, x), bottom_right),
-                (
-                    (0, top_idx),
-                    (column_width.saturating_sub(1), self.length - 1),
-                ),
-            );
-            x += column_width + 2; // + SEPARATOR
-            if x > get_x(bottom_right) {
-                break;
-            }
-        }
-        for r in 0..cmp::min(self.length - top_idx, rows) {
-            let (fg_color, bg_color) = {
-                let c = &self.data_columns.columns[0][(0, r + top_idx)];
-                (c.fg(), c.bg())
-            };
-            change_colors(
-                grid,
-                (
-                    pos_inc(upper_left, (0, r)),
-                    (flag_x.saturating_sub(1), get_y(upper_left) + r),
-                ),
-                fg_color,
-                bg_color,
-            );
-            for c in grid.row_iter(
-                flag_x
-                    ..std::cmp::min(
-                        get_x(bottom_right),
-                        flag_x + 2 + self.data_columns.widths[3],
-                    ),
-                get_y(upper_left) + r,
-            ) {
-                grid[c].set_bg(bg_color);
-            }
-            change_colors(
-                grid,
-                (
-                    (
-                        flag_x + 2 + self.data_columns.widths[3],
-                        get_y(upper_left) + r,
-                    ),
-                    (get_x(bottom_right), get_y(upper_left) + r),
-                ),
-                fg_color,
-                bg_color,
-            );
         }
 
-        self.highlight_line(
+        /* highlight cursor */
+        let row_attr = row_attr!(
+            self.color_cache,
+            self.cursor_pos.2 % 2 == 0,
+            false,
+            true,
+            false
+        );
+        change_colors(
             grid,
-            (
-                set_y(upper_left, get_y(upper_left) + (self.cursor_pos.2 % rows)),
-                set_y(bottom_right, get_y(upper_left) + (self.cursor_pos.2 % rows)),
-            ),
-            self.cursor_pos.2,
-            context,
+            nth_row_area(area, self.cursor_pos.2 % rows),
+            row_attr.fg,
+            row_attr.bg,
         );
 
+        /* clear gap if available height is more than count of entries */
         if top_idx + rows > self.length {
             clear_area(
                 grid,
@@ -845,6 +777,14 @@ impl PlainListing {
                     continue;
                 }
             }
+            let row_attr = row_attr!(
+                self.color_cache,
+                self.length % 2 == 0,
+                !envelope.is_seen(),
+                false,
+                false
+            );
+            self.rows.row_attr_cache.insert(self.length, row_attr);
 
             let entry_strings = self.make_entry_string(&envelope, context);
             min_width.1 = cmp::max(min_width.1, entry_strings.date.grapheme_width()); /* date */
@@ -867,6 +807,21 @@ impl PlainListing {
         }
 
         min_width.0 = self.length.saturating_sub(1).to_string().len();
+
+        self.data_columns.elasticities[0].set_rigid();
+        self.data_columns.elasticities[1].set_rigid();
+        self.data_columns.elasticities[2].set_grow(5, Some(35));
+        self.data_columns.elasticities[3].set_rigid();
+        self.data_columns
+            .cursor_config
+            .set_handle(true)
+            .set_even_odd_theme(
+                self.color_cache.even_highlighted,
+                self.color_cache.odd_highlighted,
+            );
+        self.data_columns
+            .theme_config
+            .set_even_odd_theme(self.color_cache.even, self.color_cache.odd);
 
         /* index column */
         self.data_columns.columns[0] =
@@ -903,14 +858,7 @@ impl PlainListing {
                 panic!();
             }
 
-            let envelope: EnvelopeRef = context.accounts[&self.cursor_pos.0].collection.get_env(i);
-            let row_attr = row_attr!(
-                self.color_cache,
-                idx % 2 == 0,
-                !envelope.is_seen(),
-                false,
-                false
-            );
+            let row_attr = self.rows.row_attr_cache[&idx];
 
             let (x, _) = write_string_to_grid(
                 &idx.to_string(),
@@ -998,17 +946,6 @@ impl PlainListing {
             for c in columns[3].row_iter(x..min_width.3, idx) {
                 columns[3][c].set_bg(row_attr.bg).set_attrs(row_attr.attrs);
             }
-            /* Set fg color for flags */
-            let mut x = 0;
-            if self.rows.selection.get(&i).cloned().unwrap_or(false) {
-                x += 1;
-            }
-            if !envelope.is_seen() {
-                x += 1;
-            }
-            if envelope.has_attachments() {
-                columns[3][(x, idx)].set_fg(self.color_cache.attachment_flag.fg);
-            }
         }
         if self.length == 0 && self.filter_term.is_empty() {
             let message: String = account[&self.cursor_pos.1].status();
@@ -1091,19 +1028,34 @@ impl Component for PlainListing {
 
             if !self.rows.row_updates.is_empty() {
                 let (upper_left, bottom_right) = area;
-                while let Some(row) = self.rows.row_updates.pop() {
-                    let row: usize = self.rows.env_order[&row];
+                while let Some(env_hash) = self.rows.row_updates.pop() {
+                    let row: usize = self.rows.env_order[&env_hash];
                     let rows = get_y(bottom_right) - get_y(upper_left) + 1;
                     let page_no = (self.new_cursor_pos.2).wrapping_div(rows);
 
                     let top_idx = page_no * rows;
                     if row >= top_idx && row <= top_idx + rows {
-                        let area = (
-                            set_y(upper_left, get_y(upper_left) + (row % rows)),
-                            set_y(bottom_right, get_y(upper_left) + (row % rows)),
+                        let new_area = nth_row_area(area, row % rows);
+                        self.data_columns.draw(
+                            grid,
+                            row,
+                            self.cursor_pos.2,
+                            grid.bounds_iter(new_area),
                         );
-                        self.highlight_line(grid, area, row, context);
-                        context.dirty_areas.push_back(area);
+                        let envelope: EnvelopeRef = context.accounts[&self.cursor_pos.0]
+                            .collection
+                            .get_env(env_hash);
+                        let row_attr = row_attr!(
+                            self.color_cache,
+                            row % 2 == 0,
+                            !envelope.is_seen(),
+                            false,
+                            self.rows.selection[&env_hash]
+                        );
+                        self.rows.row_attr_cache.insert(row, row_attr);
+
+                        change_colors(grid, new_area, row_attr.fg, row_attr.bg);
+                        context.dirty_areas.push_back(new_area);
                     }
                 }
                 if self.force_draw {
@@ -1196,10 +1148,8 @@ impl Component for PlainListing {
                 {
                     if self.modifier_active && self.modifier_command.is_none() {
                         self.modifier_command = Some(Modifier::default());
-                    } else {
-                        if let Some(env_hash) = self.get_env_under_cursor(self.cursor_pos.2) {
-                            self.rows.update_selection_with_env(env_hash, |e| *e = !*e);
-                        }
+                    } else if let Some(env_hash) = self.get_env_under_cursor(self.cursor_pos.2) {
+                        self.rows.update_selection_with_env(env_hash, |e| *e = !*e);
                     }
                     return true;
                 }
@@ -1243,11 +1193,6 @@ impl Component for PlainListing {
                     ),
                     even_selected: crate::conf::value(context, "mail.listing.plain.even_selected"),
                     odd_selected: crate::conf::value(context, "mail.listing.plain.odd_selected"),
-                    attachment_flag: crate::conf::value(context, "mail.listing.attachment_flag"),
-                    thread_snooze_flag: crate::conf::value(
-                        context,
-                        "mail.listing.thread_snooze_flag",
-                    ),
                     tag_default: crate::conf::value(context, "mail.listing.tag_default"),
                     theme_default: crate::conf::value(context, "theme_default"),
                     ..self.color_cache
@@ -1332,9 +1277,7 @@ impl Component for PlainListing {
                         .cloned()
                         .any(std::convert::identity) =>
             {
-                for v in self.rows.selection.values_mut() {
-                    *v = false;
-                }
+                self.rows.clear_selection();
                 self.dirty = true;
                 return true;
             }

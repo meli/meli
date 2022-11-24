@@ -564,7 +564,10 @@ impl ThreadView {
             if rows < visibles.len() {
                 ScrollBar::default().set_show_arrows(true).draw(
                     grid,
-                    (pos_inc(upper_left!(area), (width!(area), 0)), bottom_right),
+                    (
+                        pos_inc(upper_left!(area), (width!(area).saturating_sub(1), 0)),
+                        bottom_right,
+                    ),
                     context,
                     2 * self.cursor_pos,
                     rows,
@@ -618,7 +621,10 @@ impl ThreadView {
                 if rows < visibles.len() {
                     ScrollBar::default().set_show_arrows(true).draw(
                         grid,
-                        (pos_inc(upper_left!(area), (width!(area), 0)), bottom_right),
+                        (
+                            pos_inc(upper_left!(area), (width!(area).saturating_sub(1), 0)),
+                            bottom_right,
+                        ),
                         context,
                         2 * self.cursor_pos,
                         rows,
