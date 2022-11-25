@@ -72,7 +72,7 @@ macro_rules! try_recv_timeout {
     }};
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum MailboxStatus {
     Available,
     Failed(MeliError),
@@ -97,7 +97,7 @@ impl MailboxStatus {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MailboxEntry {
     pub status: MailboxStatus,
     pub name: String,
@@ -132,23 +132,23 @@ impl MailboxEntry {
 
 #[derive(Debug)]
 pub struct Account {
-    name: String,
-    hash: AccountHash,
+    pub name: String,
+    pub hash: AccountHash,
     pub is_online: Result<()>,
-    pub(crate) mailbox_entries: IndexMap<MailboxHash, MailboxEntry>,
-    pub(crate) mailboxes_order: Vec<MailboxHash>,
-    tree: Vec<MailboxNode>,
-    sent_mailbox: Option<MailboxHash>,
-    pub(crate) collection: Collection,
-    pub(crate) address_book: AddressBook,
-    pub(crate) settings: AccountConf,
-    pub(crate) backend: Arc<RwLock<Box<dyn MailBackend>>>,
+    pub mailbox_entries: IndexMap<MailboxHash, MailboxEntry>,
+    pub mailboxes_order: Vec<MailboxHash>,
+    pub tree: Vec<MailboxNode>,
+    pub sent_mailbox: Option<MailboxHash>,
+    pub collection: Collection,
+    pub address_book: AddressBook,
+    pub settings: AccountConf,
+    pub backend: Arc<RwLock<Box<dyn MailBackend>>>,
 
     pub job_executor: Arc<JobExecutor>,
     pub active_jobs: HashMap<JobId, JobRequest>,
     pub active_job_instants: BTreeMap<std::time::Instant, JobId>,
-    sender: Sender<ThreadEvent>,
-    event_queue: VecDeque<(MailboxHash, RefreshEvent)>,
+    pub sender: Sender<ThreadEvent>,
+    pub event_queue: VecDeque<(MailboxHash, RefreshEvent)>,
     pub backend_capabilities: MailBackendCapabilities,
 }
 

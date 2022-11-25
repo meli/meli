@@ -840,6 +840,17 @@ Alternatives(&[to_stream!(One(Literal("add-attachment")), One(Filepath)), to_str
                       }
                   )
                 },
+                { tags: ["manage-mailboxes"],
+                  desc: "view and manage mailbox preferences",
+                  tokens: &[One(Literal("manage-mailboxes"))],
+                  parser:(
+                      fn manage_mailboxes(input: &[u8]) -> IResult<&[u8], Action> {
+                          let (input, _) = tag("manage-mailboxes")(input.trim())?;
+                          let (input, _) = eof(input)?;
+                          Ok((input, ManageMailboxes))
+                      }
+                  )
+                },
                 { tags: ["quit"],
                   desc: "quit meli",
                   tokens: &[One(Literal("quit"))],
@@ -958,6 +969,7 @@ pub fn parse_command(input: &[u8]) -> Result<Action, MeliError> {
         unsub_mailbox,
         delete_mailbox,
         rename_mailbox,
+        manage_mailboxes,
         account_action,
         print_setting,
         toggle_mouse,

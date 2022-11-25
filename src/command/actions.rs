@@ -120,6 +120,7 @@ pub enum Action {
     PrintEnv(String),
     Compose(ComposeAction),
     Mailbox(AccountName, MailboxOperation),
+    ManageMailboxes,
     AccountAction(AccountName, AccountAction),
     PrintSetting(String),
     ReloadConfiguration,
@@ -145,6 +146,7 @@ impl Action {
             Action::AccountAction(_, _) => false,
             Action::PrintSetting(_) => false,
             Action::ToggleMouse => false,
+            Action::ManageMailboxes => false,
             Action::Quit => true,
             Action::ReloadConfiguration => false,
         }

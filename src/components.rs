@@ -40,6 +40,9 @@ pub use self::utilities::*;
 pub mod contacts;
 pub use crate::contacts::*;
 
+pub mod mailbox_management;
+pub use self::mailbox_management::*;
+
 #[cfg(feature = "svgscreenshot")]
 pub mod svg;
 

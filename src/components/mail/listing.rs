@@ -1809,6 +1809,14 @@ impl Component for Listing {
                     .push_back(UIEvent::Action(Tab(New(Some(Box::new(composer))))));
                 return true;
             }
+            UIEvent::Action(Action::ManageMailboxes) => {
+                let account_pos = self.cursor_pos.0;
+                let mgr = MailboxManager::new(context, account_pos);
+                context
+                    .replies
+                    .push_back(UIEvent::Action(Tab(New(Some(Box::new(mgr))))));
+                return true;
+            }
             UIEvent::StartupCheck(_)
             | UIEvent::MailboxUpdate(_)
             | UIEvent::EnvelopeUpdate(_)
