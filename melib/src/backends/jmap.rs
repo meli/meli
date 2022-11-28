@@ -93,9 +93,9 @@ use mailbox::*;
 #[derive(Debug, Default)]
 pub struct EnvelopeCache {
     bytes: Option<String>,
-    headers: Option<String>,
-    body: Option<String>,
-    flags: Option<Flag>,
+    // headers: Option<String>,
+    // body: Option<String>,
+    // flags: Option<Flag>,
 }
 
 #[derive(Debug, Clone)]
@@ -151,34 +151,6 @@ impl JmapServerConf {
             })?,
         })
     }
-}
-
-macro_rules! get_conf_val {
-    ($s:ident[$var:literal]) => {
-        $s.extra.get($var).ok_or_else(|| {
-            MeliError::new(format!(
-                "Configuration error ({}): JMAP connection requires the field `{}` set",
-                $s.name.as_str(),
-                $var
-            ))
-        })
-    };
-    ($s:ident[$var:literal], $default:expr) => {
-        $s.extra
-            .get($var)
-            .map(|v| {
-                <_>::from_str(v).map_err(|e| {
-                    MeliError::new(format!(
-                        "Configuration error ({}): Invalid value for field `{}`: {}\n{}",
-                        $s.name.as_str(),
-                        $var,
-                        v,
-                        e
-                    ))
-                })
-            })
-            .unwrap_or_else(|| Ok($default))
-    };
 }
 
 #[derive(Debug)]
@@ -587,7 +559,7 @@ impl MailBackend for JmapType {
         _new_path: String,
     ) -> ResultFuture<Mailbox> {
         Err(MeliError::new(
-            "Renaming mailbox is currently unimplemented for jmap backend.",
+            "Renaming mailbox is currently unimplemented for the JMAP backend.",
         ))
     }
 
@@ -596,7 +568,36 @@ impl MailBackend for JmapType {
         _path: String,
     ) -> ResultFuture<(MailboxHash, HashMap<MailboxHash, Mailbox>)> {
         Err(MeliError::new(
-            "Creating mailbox is currently unimplemented for jmap backend.",
+            "Creating mailbox is currently unimplemented for the JMAP backend.",
+        ))
+    }
+
+    fn delete_mailbox(
+        &mut self,
+        _mailbox_hash: MailboxHash,
+    ) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
+        Err(MeliError::new(
+            "Deleting a mailbox is currently unimplemented for the JMAP backend.",
+        ))
+    }
+
+    fn set_mailbox_subscription(
+        &mut self,
+        _mailbox_hash: MailboxHash,
+        _val: bool,
+    ) -> ResultFuture<()> {
+        Err(MeliError::new(
+            "Setting mailbox subscription is currently unimplemented for the JMAP backend.",
+        ))
+    }
+
+    fn set_mailbox_permissions(
+        &mut self,
+        _mailbox_hash: MailboxHash,
+        _val: MailboxPermissions,
+    ) -> ResultFuture<()> {
+        Err(MeliError::new(
+            "Setting mailbox permissions is currently unimplemented for the JMAP backend.",
         ))
     }
 
@@ -865,7 +866,7 @@ impl MailBackend for JmapType {
         _mailbox_hash: MailboxHash,
     ) -> ResultFuture<()> {
         Err(MeliError::new(
-            "Deleting messages is currently unimplemented for jmap backend.",
+            "Deleting messages is currently unimplemented for the JMAP backend.",
         ))
     }
 }

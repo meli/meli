@@ -77,13 +77,6 @@ impl Request {
     }
 }
 
-#[derive(Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct JsonResponse<'a> {
-    #[serde(borrow)]
-    method_responses: Vec<MethodResponse<'a>>,
-}
-
 pub async fn get_mailboxes(conn: &JmapConnection) -> Result<HashMap<MailboxHash, JmapMailbox>> {
     let seq = get_request_no!(conn.request_no);
     let api_url = conn.session.lock().unwrap().api_url.clone();
