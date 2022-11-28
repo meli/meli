@@ -1355,7 +1355,9 @@ impl Component for Tabbed {
                 }
                 return true;
             }
-            UIEvent::Input(ref key) if shortcut!(key == shortcuts["general"]["next_tab"]) => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["next_tab"]) =>
+            {
                 self.children[self.cursor_pos]
                     .process_event(&mut UIEvent::VisibilityChange(false), context);
                 self.cursor_pos = (self.cursor_pos + 1) % self.children.len();
@@ -1370,7 +1372,9 @@ impl Component for Tabbed {
                 self.set_dirty(true);
                 return true;
             }
-            UIEvent::Input(ref key) if shortcut!(key == shortcuts["general"]["toggle_help"]) => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["toggle_help"]) =>
+            {
                 if self.show_shortcuts {
                     /* children below the shortcut overlay must be redrawn */
                     self.set_dirty(true);
@@ -1474,9 +1478,7 @@ impl Component for Tabbed {
             }
             UIEvent::Input(ref key)
                 if self.show_shortcuts
-                    && shortcut!(
-                        key == shortcuts[super::listing::Listing::DESCRIPTION]["search"]
-                    ) =>
+                    && shortcut!(key == shortcuts[Shortcuts::LISTING]["search"]) =>
             {
                 context
                     .replies
@@ -1488,16 +1490,16 @@ impl Component for Tabbed {
             }
             UIEvent::Input(ref key) if self.show_shortcuts => {
                 match key {
-                    _ if shortcut!(key == shortcuts["general"]["scroll_up"]) => {
+                    _ if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_up"]) => {
                         self.help_screen_cursor.1 = self.help_screen_cursor.1.saturating_sub(1);
                     }
-                    _ if shortcut!(key == shortcuts["general"]["scroll_down"]) => {
+                    _ if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_down"]) => {
                         self.help_screen_cursor.1 += 1;
                     }
-                    _ if shortcut!(key == shortcuts["general"]["scroll_left"]) => {
+                    _ if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_left"]) => {
                         self.help_screen_cursor.0 = self.help_screen_cursor.0.saturating_sub(1);
                     }
-                    _ if shortcut!(key == shortcuts["general"]["scroll_right"]) => {
+                    _ if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_right"]) => {
                         self.help_screen_cursor.0 += 1;
                     }
                     _ => {
@@ -1540,7 +1542,10 @@ impl Component for Tabbed {
 
     fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut map = ShortcutMaps::default();
-        map.insert("general", context.settings.shortcuts.general.key_values());
+        map.insert(
+            Shortcuts::GENERAL,
+            context.settings.shortcuts.general.key_values(),
+        );
         map
     }
 

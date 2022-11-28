@@ -63,12 +63,11 @@ pub struct MailboxManager {
 
 impl fmt::Display for MailboxManager {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", MailboxManager::DESCRIPTION)
+        write!(f, "{}", "mailboxes")
     }
 }
 
 impl MailboxManager {
-    const DESCRIPTION: &'static str = "mailboxes";
     pub fn new(context: &Context, account_pos: usize) -> Self {
         let account_hash = context.accounts[account_pos].hash();
         let theme_default = crate::conf::value(context, "theme_default");
@@ -431,14 +430,16 @@ impl Component for MailboxManager {
                         None => self.get_status(context),
                     })));
             }
-            UIEvent::Input(ref key) if shortcut!(key == shortcuts["general"]["scroll_up"]) => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_up"]) =>
+            {
                 let amount = 1;
                 self.movement = Some(PageMovement::Up(amount));
                 self.set_dirty(true);
                 return true;
             }
             UIEvent::Input(ref key)
-                if shortcut!(key == shortcuts["general"]["scroll_down"])
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_down"])
                     && self.cursor_pos < self.length.saturating_sub(1) =>
             {
                 let amount = 1;
@@ -446,29 +447,39 @@ impl Component for MailboxManager {
                 self.movement = Some(PageMovement::Down(amount));
                 return true;
             }
-            UIEvent::Input(ref key) if shortcut!(key == shortcuts["general"]["prev_page"]) => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["prev_page"]) =>
+            {
                 let mult = 1;
                 self.set_dirty(true);
                 self.movement = Some(PageMovement::PageUp(mult));
                 return true;
             }
-            UIEvent::Input(ref key) if shortcut!(key == shortcuts["general"]["next_page"]) => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["next_page"]) =>
+            {
                 let mult = 1;
                 self.set_dirty(true);
                 self.movement = Some(PageMovement::PageDown(mult));
                 return true;
             }
-            UIEvent::Input(ref key) if shortcut!(key == shortcuts["general"]["home_page"]) => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["home_page"]) =>
+            {
                 self.set_dirty(true);
                 self.movement = Some(PageMovement::Home);
                 return true;
             }
-            UIEvent::Input(ref key) if shortcut!(key == shortcuts["general"]["end_page"]) => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["end_page"]) =>
+            {
                 self.set_dirty(true);
                 self.movement = Some(PageMovement::End);
                 return true;
             }
-            UIEvent::Input(ref key) if shortcut!(key == shortcuts["general"]["open_entry"]) => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["open_entry"]) =>
+            {
                 self.set_dirty(true);
                 self.mode = ViewMode::Action(UIDialog::new(
                     "select action",
@@ -517,8 +528,10 @@ impl Component for MailboxManager {
     fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut map = ShortcutMaps::default();
 
-        let config_map = context.settings.shortcuts.general.key_values();
-        map.insert("general", config_map);
+        map.insert(
+            Shortcuts::GENERAL,
+            context.settings.shortcuts.general.key_values(),
+        );
 
         map
     }

@@ -69,12 +69,11 @@ pub struct ContactList {
 
 impl fmt::Display for ContactList {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", ContactList::DESCRIPTION)
+        write!(f, "{}", "contact list")
     }
 }
 
 impl ContactList {
-    const DESCRIPTION: &'static str = "contact list";
     pub fn new(context: &Context) -> Self {
         let accounts = context
             .accounts
@@ -636,7 +635,7 @@ impl Component for ContactList {
         if self.view.is_none() {
             match *event {
                 UIEvent::Input(ref key)
-                    if shortcut!(key == shortcuts[Self::DESCRIPTION]["create_contact"]) =>
+                    if shortcut!(key == shortcuts[Shortcuts::CONTACT_LIST]["create_contact"]) =>
                 {
                     let mut manager = ContactManager::new(context);
                     manager.set_parent_id(self.id);
@@ -654,7 +653,7 @@ impl Component for ContactList {
                 }
 
                 UIEvent::Input(ref key)
-                    if shortcut!(key == shortcuts[Self::DESCRIPTION]["edit_contact"])
+                    if shortcut!(key == shortcuts[Shortcuts::CONTACT_LIST]["edit_contact"])
                         && self.length > 0 =>
                 {
                     let account = &mut context.accounts[self.account_pos];
@@ -676,7 +675,7 @@ impl Component for ContactList {
                     return true;
                 }
                 UIEvent::Input(ref key)
-                    if shortcut!(key == shortcuts[Self::DESCRIPTION]["mail_contact"])
+                    if shortcut!(key == shortcuts[Shortcuts::CONTACT_LIST]["mail_contact"])
                         && self.length > 0 =>
                 {
                     let account = &context.accounts[self.account_pos];
@@ -695,7 +694,7 @@ impl Component for ContactList {
                     return true;
                 }
                 UIEvent::Input(ref key)
-                    if shortcut!(key == shortcuts[Self::DESCRIPTION]["next_account"]) =>
+                    if shortcut!(key == shortcuts[Shortcuts::CONTACT_LIST]["next_account"]) =>
                 {
                     let amount = if self.cmd_buf.is_empty() {
                         1
@@ -732,7 +731,7 @@ impl Component for ContactList {
                     return true;
                 }
                 UIEvent::Input(ref key)
-                    if shortcut!(key == shortcuts[Self::DESCRIPTION]["prev_account"]) =>
+                    if shortcut!(key == shortcuts[Shortcuts::CONTACT_LIST]["prev_account"]) =>
                 {
                     let amount = if self.cmd_buf.is_empty() {
                         1
@@ -768,7 +767,9 @@ impl Component for ContactList {
                     return true;
                 }
                 UIEvent::Input(ref k)
-                    if shortcut!(k == shortcuts[Self::DESCRIPTION]["toggle_menu_visibility"]) =>
+                    if shortcut!(
+                        k == shortcuts[Shortcuts::CONTACT_LIST]["toggle_menu_visibility"]
+                    ) =>
                 {
                     self.menu_visibility = !self.menu_visibility;
                     self.set_dirty(true);
@@ -792,7 +793,7 @@ impl Component for ContactList {
                     return true;
                 }
                 UIEvent::Input(ref key)
-                    if shortcut!(key == shortcuts[Self::DESCRIPTION]["scroll_up"]) =>
+                    if shortcut!(key == shortcuts[Shortcuts::CONTACT_LIST]["scroll_up"]) =>
                 {
                     let amount = if self.cmd_buf.is_empty() {
                         1
@@ -814,7 +815,7 @@ impl Component for ContactList {
                     return true;
                 }
                 UIEvent::Input(ref key)
-                    if shortcut!(key == shortcuts[Self::DESCRIPTION]["scroll_down"])
+                    if shortcut!(key == shortcuts[Shortcuts::CONTACT_LIST]["scroll_down"])
                         && self.cursor_pos < self.length.saturating_sub(1) =>
                 {
                     let amount = if self.cmd_buf.is_empty() {
@@ -836,7 +837,9 @@ impl Component for ContactList {
                     self.movement = Some(PageMovement::Down(amount));
                     return true;
                 }
-                UIEvent::Input(Key::PageUp) => {
+                UIEvent::Input(ref key)
+                    if shortcut!(key == shortcuts[Shortcuts::GENERAL]["prev_page"]) =>
+                {
                     let mult = if self.cmd_buf.is_empty() {
                         1
                     } else if let Ok(mult) = self.cmd_buf.parse::<usize>() {
@@ -856,7 +859,9 @@ impl Component for ContactList {
                     self.movement = Some(PageMovement::PageUp(mult));
                     return true;
                 }
-                UIEvent::Input(Key::PageDown) => {
+                UIEvent::Input(ref key)
+                    if shortcut!(key == shortcuts[Shortcuts::GENERAL]["next_page"]) =>
+                {
                     let mult = if self.cmd_buf.is_empty() {
                         1
                     } else if let Ok(mult) = self.cmd_buf.parse::<usize>() {
@@ -876,12 +881,16 @@ impl Component for ContactList {
                     self.movement = Some(PageMovement::PageDown(mult));
                     return true;
                 }
-                UIEvent::Input(ref key) if *key == Key::Home => {
+                UIEvent::Input(ref key)
+                    if shortcut!(key == shortcuts[Shortcuts::GENERAL]["home_page"]) =>
+                {
                     self.set_dirty(true);
                     self.movement = Some(PageMovement::Home);
                     return true;
                 }
-                UIEvent::Input(ref key) if *key == Key::End => {
+                UIEvent::Input(ref key)
+                    if shortcut!(key == shortcuts[Shortcuts::GENERAL]["end_page"]) =>
+                {
                     self.set_dirty(true);
                     self.movement = Some(PageMovement::End);
                     return true;
@@ -930,8 +939,14 @@ impl Component for ContactList {
             .map(|p| p.get_shortcuts(context))
             .unwrap_or_default();
 
-        let config_map = context.settings.shortcuts.contact_list.key_values();
-        map.insert(Self::DESCRIPTION, config_map);
+        map.insert(
+            Shortcuts::CONTACT_LIST,
+            context.settings.shortcuts.contact_list.key_values(),
+        );
+        map.insert(
+            Shortcuts::GENERAL,
+            context.settings.shortcuts.general.key_values(),
+        );
 
         map
     }

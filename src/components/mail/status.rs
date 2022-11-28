@@ -33,12 +33,11 @@ pub struct AccountStatus {
 
 impl fmt::Display for AccountStatus {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", AccountStatus::DESCRIPTION)
+        write!(f, "{}", "status")
     }
 }
 
 impl AccountStatus {
-    pub const DESCRIPTION: &'static str = "status";
     pub fn new(account_pos: usize, theme_default: ThemeAttribute) -> AccountStatus {
         let default_cell = {
             let mut ret = Cell::with_char(' ');
@@ -407,23 +406,30 @@ impl Component for AccountStatus {
                 self.dirty = true;
             }
             UIEvent::Input(ref key)
-                if shortcut!(key == shortcuts["general"]["scroll_left"]) && self.cursor.0 != 0 =>
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_left"])
+                    && self.cursor.0 != 0 =>
             {
                 self.cursor.0 -= 1;
                 self.dirty = true;
                 return true;
             }
-            UIEvent::Input(ref key) if shortcut!(key == shortcuts["general"]["scroll_right"]) => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_right"]) =>
+            {
                 self.cursor.0 += 1;
                 self.dirty = true;
                 return true;
             }
-            UIEvent::Input(ref key) if shortcut!(key == shortcuts["general"]["scroll_up"]) => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_up"]) =>
+            {
                 self.cursor.1 = self.cursor.1.saturating_sub(1);
                 self.dirty = true;
                 return true;
             }
-            UIEvent::Input(ref key) if shortcut!(key == shortcuts["general"]["scroll_down"]) => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_down"]) =>
+            {
                 self.cursor.1 += 1;
                 self.dirty = true;
                 return true;
@@ -440,10 +446,11 @@ impl Component for AccountStatus {
     }
 
     fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
-        let config_map: IndexMap<&'static str, Key> =
-            context.settings.shortcuts.general.key_values();
-        let mut ret: ShortcutMaps = Default::default();
-        ret.insert("general", config_map);
+        let mut ret: ShortcutMaps = ShortcutMaps::default();
+        ret.insert(
+            Shortcuts::GENERAL,
+            context.settings.shortcuts.general.key_values(),
+        );
         ret
     }
 

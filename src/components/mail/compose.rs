@@ -145,7 +145,6 @@ impl fmt::Display for Composer {
 }
 
 impl Composer {
-    const DESCRIPTION: &'static str = "composing";
     pub fn new(context: &Context) -> Self {
         let mut pager = Pager::new(context);
         pager.set_show_scrollbar(true);
@@ -906,12 +905,12 @@ impl Component for Composer {
                         account_settings!(context[self.account_hash].shortcuts.composing)
                             .key_values();
                     let mut shortcuts: ShortcutMaps = Default::default();
-                    shortcuts.insert(Composer::DESCRIPTION, our_map);
+                    shortcuts.insert(Shortcuts::COMPOSING, our_map);
                     let stopped_message: String =
                         format!("Process with PID {} has stopped.", guard.child_pid);
                     let stopped_message_2: String = format!(
                         "-press '{}' (edit_mail shortcut) to re-activate.",
-                        shortcuts[Self::DESCRIPTION]["edit_mail"]
+                        shortcuts[Shortcuts::COMPOSING]["edit_mail"]
                     );
                     const STOPPED_MESSAGE_3: &str =
                         "-press Ctrl-C to forcefully kill it and return to editor.";
@@ -1349,7 +1348,7 @@ impl Component for Composer {
             }*/
             UIEvent::Input(ref key)
                 if self.mode.is_edit()
-                    && shortcut!(key == shortcuts[Self::DESCRIPTION]["scroll_up"]) =>
+                    && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["scroll_up"]) =>
             {
                 self.cursor = match self.cursor {
                     Cursor::Headers => return true,
@@ -1365,7 +1364,7 @@ impl Component for Composer {
             }
             UIEvent::Input(ref key)
                 if self.mode.is_edit()
-                    && shortcut!(key == shortcuts[Self::DESCRIPTION]["scroll_down"]) =>
+                    && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["scroll_down"]) =>
             {
                 self.cursor = match self.cursor {
                     Cursor::Headers => Cursor::Body,
@@ -1395,7 +1394,7 @@ impl Component for Composer {
                 self.dirty = true;
             }
             UIEvent::Input(ref key)
-                if shortcut!(key == shortcuts[Self::DESCRIPTION]["send_mail"])
+                if shortcut!(key == shortcuts[Shortcuts::COMPOSING]["send_mail"])
                     && self.mode.is_edit() =>
             {
                 self.update_draft();
@@ -1535,7 +1534,7 @@ impl Component for Composer {
             UIEvent::Input(ref key)
                 if self.mode.is_edit()
                     && self.cursor == Cursor::Sign
-                    && shortcut!(key == shortcuts[Self::DESCRIPTION]["edit_mail"]) =>
+                    && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["edit_mail"]) =>
             {
                 #[cfg(feature = "gpgme")]
                 match melib::email::parser::address::rfc2822address_list(
@@ -1575,7 +1574,7 @@ impl Component for Composer {
             UIEvent::Input(ref key)
                 if self.mode.is_edit()
                     && self.cursor == Cursor::Encrypt
-                    && shortcut!(key == shortcuts[Self::DESCRIPTION]["edit_mail"]) =>
+                    && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["edit_mail"]) =>
             {
                 #[cfg(feature = "gpgme")]
                 match melib::email::parser::address::rfc2822address_list(
@@ -1615,7 +1614,7 @@ impl Component for Composer {
             UIEvent::Input(ref key)
                 if self.mode.is_edit()
                     && self.cursor == Cursor::Attachments
-                    && shortcut!(key == shortcuts[Self::DESCRIPTION]["edit_mail"]) =>
+                    && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["edit_mail"]) =>
             {
                 self.mode = ViewMode::EditAttachments {
                     widget: EditAttachments::new(),
@@ -1626,7 +1625,7 @@ impl Component for Composer {
             }
             UIEvent::Input(ref key)
                 if self.embed.is_some()
-                    && shortcut!(key == shortcuts[Self::DESCRIPTION]["edit_mail"]) =>
+                    && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["edit_mail"]) =>
             {
                 self.embed.as_ref().unwrap().lock().unwrap().wake_up();
                 match self.embed.take() {
@@ -1670,7 +1669,7 @@ impl Component for Composer {
             }
             UIEvent::Input(ref key)
                 if self.mode.is_edit()
-                    && shortcut!(key == shortcuts[Self::DESCRIPTION]["edit_mail"]) =>
+                    && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["edit_mail"]) =>
             {
                 /* Edit draft in $EDITOR */
                 let editor = if let Some(editor_command) =
@@ -2061,7 +2060,7 @@ impl Component for Composer {
 
         let our_map: ShortcutMap =
             account_settings!(context[self.account_hash].shortcuts.composing).key_values();
-        map.insert(Composer::DESCRIPTION, our_map);
+        map.insert(Shortcuts::COMPOSING, our_map);
 
         map
     }

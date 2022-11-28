@@ -1115,7 +1115,7 @@ impl Component for Listing {
                 }
                 UIEvent::Input(ref k)
                     if self.is_menu_visible()
-                        && shortcut!(k == shortcuts[Listing::DESCRIPTION]["focus_left"]) =>
+                        && shortcut!(k == shortcuts[Shortcuts::LISTING]["focus_left"]) =>
                 {
                     self.focus = ListingFocus::Menu;
                     if self.show_menu_scrollbar != ShowMenuScrollbar::Never {
@@ -1127,8 +1127,8 @@ impl Component for Listing {
                     self.set_dirty(true);
                 }
                 UIEvent::Input(ref k)
-                    if shortcut!(k == shortcuts[Listing::DESCRIPTION]["next_mailbox"])
-                        || shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_mailbox"]) =>
+                    if shortcut!(k == shortcuts[Shortcuts::LISTING]["next_mailbox"])
+                        || shortcut!(k == shortcuts[Shortcuts::LISTING]["prev_mailbox"]) =>
                 {
                     let amount = if self.cmd_buf.is_empty() {
                         1
@@ -1148,13 +1148,13 @@ impl Component for Listing {
                         return true;
                     };
                     let target = match k {
-                        k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["next_mailbox"]) => {
+                        k if shortcut!(k == shortcuts[Shortcuts::LISTING]["next_mailbox"]) => {
                             match self.cursor_pos.1 {
                                 MenuEntryCursor::Status => amount.saturating_sub(1),
                                 MenuEntryCursor::Mailbox(idx) => idx + amount,
                             }
                         }
-                        k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_mailbox"]) => {
+                        k if shortcut!(k == shortcuts[Shortcuts::LISTING]["prev_mailbox"]) => {
                             match self.cursor_pos.1 {
                                 MenuEntryCursor::Status => {
                                     return true;
@@ -1183,8 +1183,8 @@ impl Component for Listing {
                     return true;
                 }
                 UIEvent::Input(ref k)
-                    if shortcut!(k == shortcuts[Listing::DESCRIPTION]["next_account"])
-                        || shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_account"]) =>
+                    if shortcut!(k == shortcuts[Shortcuts::LISTING]["next_account"])
+                        || shortcut!(k == shortcuts[Shortcuts::LISTING]["prev_account"]) =>
                 {
                     let amount = if self.cmd_buf.is_empty() {
                         1
@@ -1204,7 +1204,7 @@ impl Component for Listing {
                         return true;
                     };
                     match k {
-                        k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["next_account"]) => {
+                        k if shortcut!(k == shortcuts[Shortcuts::LISTING]["next_account"]) => {
                             if self.cursor_pos.0 + amount < self.accounts.len() {
                                 self.cursor_pos =
                                     (self.cursor_pos.0 + amount, MenuEntryCursor::Mailbox(0));
@@ -1212,7 +1212,7 @@ impl Component for Listing {
                                 return true;
                             }
                         }
-                        k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_account"]) => {
+                        k if shortcut!(k == shortcuts[Shortcuts::LISTING]["prev_account"]) => {
                             if self.cursor_pos.0 >= amount {
                                 self.cursor_pos =
                                     (self.cursor_pos.0 - amount, MenuEntryCursor::Mailbox(0));
@@ -1227,15 +1227,13 @@ impl Component for Listing {
                     return true;
                 }
                 UIEvent::Input(ref k)
-                    if shortcut!(
-                        k == shortcuts[Listing::DESCRIPTION]["toggle_menu_visibility"]
-                    ) =>
+                    if shortcut!(k == shortcuts[Shortcuts::LISTING]["toggle_menu_visibility"]) =>
                 {
                     self.menu_visibility = !self.menu_visibility;
                     self.set_dirty(true);
                 }
                 UIEvent::Input(ref k)
-                    if shortcut!(k == shortcuts[Listing::DESCRIPTION]["increase_sidebar"]) =>
+                    if shortcut!(k == shortcuts[Shortcuts::LISTING]["increase_sidebar"]) =>
                 {
                     self.ratio = self.ratio.saturating_sub(2);
                     self.prev_ratio = self.prev_ratio.saturating_sub(2);
@@ -1243,7 +1241,7 @@ impl Component for Listing {
                     self.set_dirty(true);
                 }
                 UIEvent::Input(ref k)
-                    if shortcut!(k == shortcuts[Listing::DESCRIPTION]["decrease_sidebar"]) =>
+                    if shortcut!(k == shortcuts[Shortcuts::LISTING]["decrease_sidebar"]) =>
                 {
                     self.ratio += 2;
                     self.ratio = std::cmp::min(100, self.ratio);
@@ -1319,7 +1317,7 @@ impl Component for Listing {
                         _ => {}
                     },
                     UIEvent::Input(ref key)
-                        if shortcut!(key == shortcuts[Listing::DESCRIPTION]["scroll_up"]) =>
+                        if shortcut!(key == shortcuts[Shortcuts::LISTING]["scroll_up"]) =>
                     {
                         let amount = if self.cmd_buf.is_empty() {
                             1
@@ -1342,7 +1340,7 @@ impl Component for Listing {
                         return true;
                     }
                     UIEvent::Input(ref key)
-                        if shortcut!(key == shortcuts[Listing::DESCRIPTION]["scroll_down"]) =>
+                        if shortcut!(key == shortcuts[Shortcuts::LISTING]["scroll_down"]) =>
                     {
                         let amount = if self.cmd_buf.is_empty() {
                             1
@@ -1365,7 +1363,7 @@ impl Component for Listing {
                         return true;
                     }
                     UIEvent::Input(ref key)
-                        if shortcut!(key == shortcuts[Listing::DESCRIPTION]["prev_page"]) =>
+                        if shortcut!(key == shortcuts[Shortcuts::LISTING]["prev_page"]) =>
                     {
                         let mult = if self.cmd_buf.is_empty() {
                             1
@@ -1388,7 +1386,7 @@ impl Component for Listing {
                         return true;
                     }
                     UIEvent::Input(ref key)
-                        if shortcut!(key == shortcuts[Listing::DESCRIPTION]["next_page"]) =>
+                        if shortcut!(key == shortcuts[Shortcuts::LISTING]["next_page"]) =>
                     {
                         let mult = if self.cmd_buf.is_empty() {
                             1
@@ -1419,7 +1417,7 @@ impl Component for Listing {
                         return true;
                     }
                     UIEvent::Input(ref key)
-                        if shortcut!(key == shortcuts[Listing::DESCRIPTION]["search"]) =>
+                        if shortcut!(key == shortcuts[Shortcuts::LISTING]["search"]) =>
                     {
                         context
                             .replies
@@ -1430,7 +1428,7 @@ impl Component for Listing {
                         return true;
                     }
                     UIEvent::Input(ref key)
-                        if shortcut!(key == shortcuts[Listing::DESCRIPTION]["set_seen"]) =>
+                        if shortcut!(key == shortcuts[Shortcuts::LISTING]["set_seen"]) =>
                     {
                         let mut event = UIEvent::Action(Action::Listing(ListingAction::SetSeen));
                         if self.process_event(&mut event, context) {
@@ -1438,7 +1436,7 @@ impl Component for Listing {
                         }
                     }
                     UIEvent::Input(ref key)
-                        if shortcut!(key == shortcuts[Listing::DESCRIPTION]["refresh"]) =>
+                        if shortcut!(key == shortcuts[Shortcuts::LISTING]["refresh"]) =>
                     {
                         let account = &mut context.accounts[self.cursor_pos.0];
                         if let MenuEntryCursor::Mailbox(idx) = self.cursor_pos.1 {
@@ -1457,7 +1455,7 @@ impl Component for Listing {
                     UIEvent::Input(ref key)
                         if !self.component.unfocused()
                             && shortcut!(
-                                key == shortcuts[Listing::DESCRIPTION]["union_modifier"]
+                                key == shortcuts[Shortcuts::LISTING]["union_modifier"]
                             )
                             && self.component.modifier_command().is_some() =>
                     {
@@ -1465,9 +1463,7 @@ impl Component for Listing {
                     }
                     UIEvent::Input(ref key)
                         if !self.component.unfocused()
-                            && shortcut!(
-                                key == shortcuts[Listing::DESCRIPTION]["diff_modifier"]
-                            )
+                            && shortcut!(key == shortcuts[Shortcuts::LISTING]["diff_modifier"])
                             && self.component.modifier_command().is_some() =>
                     {
                         self.component
@@ -1476,7 +1472,7 @@ impl Component for Listing {
                     UIEvent::Input(ref key)
                         if !self.component.unfocused()
                             && shortcut!(
-                                key == shortcuts[Listing::DESCRIPTION]["intersection_modifier"]
+                                key == shortcuts[Shortcuts::LISTING]["intersection_modifier"]
                             )
                             && self.component.modifier_command().is_some() =>
                     {
@@ -1489,7 +1485,7 @@ impl Component for Listing {
         } else if self.focus == ListingFocus::Menu {
             match *event {
                 UIEvent::Input(ref k)
-                    if shortcut!(k == shortcuts[Listing::DESCRIPTION]["focus_right"]) =>
+                    if shortcut!(k == shortcuts[Shortcuts::LISTING]["focus_right"]) =>
                 {
                     self.focus = ListingFocus::Mailbox;
                     context
@@ -1502,7 +1498,7 @@ impl Component for Listing {
                     return true;
                 }
                 UIEvent::Input(ref k)
-                    if shortcut!(k == shortcuts[Listing::DESCRIPTION]["open_mailbox"])
+                    if shortcut!(k == shortcuts[Shortcuts::LISTING]["open_mailbox"])
                         && self.menu_cursor_pos.1 == MenuEntryCursor::Status =>
                 {
                     self.cursor_pos = self.menu_cursor_pos;
@@ -1518,9 +1514,8 @@ impl Component for Listing {
                     return true;
                 }
                 UIEvent::Input(ref k)
-                    if shortcut!(
-                        k == shortcuts[Listing::DESCRIPTION]["toggle_mailbox_collapse"]
-                    ) && matches!(self.menu_cursor_pos.1, MenuEntryCursor::Mailbox(_)) =>
+                    if shortcut!(k == shortcuts[Shortcuts::LISTING]["toggle_mailbox_collapse"])
+                        && matches!(self.menu_cursor_pos.1, MenuEntryCursor::Mailbox(_)) =>
                 {
                     let target_mailbox_idx =
                         if let MenuEntryCursor::Mailbox(idx) = self.menu_cursor_pos.1 {
@@ -1545,7 +1540,7 @@ impl Component for Listing {
                     return false;
                 }
                 UIEvent::Input(ref k)
-                    if shortcut!(k == shortcuts[Listing::DESCRIPTION]["open_mailbox"]) =>
+                    if shortcut!(k == shortcuts[Shortcuts::LISTING]["open_mailbox"]) =>
                 {
                     self.cursor_pos = self.menu_cursor_pos;
                     self.change_account(context);
@@ -1565,8 +1560,8 @@ impl Component for Listing {
                     return true;
                 }
                 UIEvent::Input(ref k)
-                    if shortcut!(k == shortcuts[Listing::DESCRIPTION]["scroll_up"])
-                        || shortcut!(k == shortcuts[Listing::DESCRIPTION]["scroll_down"]) =>
+                    if shortcut!(k == shortcuts[Shortcuts::LISTING]["scroll_up"])
+                        || shortcut!(k == shortcuts[Shortcuts::LISTING]["scroll_down"]) =>
                 {
                     let mut amount = if self.cmd_buf.is_empty() {
                         1
@@ -1585,7 +1580,7 @@ impl Component for Listing {
                             .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
                         return true;
                     };
-                    if shortcut!(k == shortcuts[Listing::DESCRIPTION]["scroll_up"]) {
+                    if shortcut!(k == shortcuts[Shortcuts::LISTING]["scroll_up"]) {
                         while amount > 0 {
                             match self.menu_cursor_pos {
                                 (
@@ -1624,7 +1619,7 @@ impl Component for Listing {
 
                             amount -= 1;
                         }
-                    } else if shortcut!(k == shortcuts[Listing::DESCRIPTION]["scroll_down"]) {
+                    } else if shortcut!(k == shortcuts[Shortcuts::LISTING]["scroll_down"]) {
                         while amount > 0 {
                             match self.menu_cursor_pos {
                                 /* If current account has mailboxes, go to first mailbox */
@@ -1681,8 +1676,8 @@ impl Component for Listing {
                     return true;
                 }
                 UIEvent::Input(ref k)
-                    if shortcut!(k == shortcuts[Listing::DESCRIPTION]["next_mailbox"])
-                        || shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_mailbox"]) =>
+                    if shortcut!(k == shortcuts[Shortcuts::LISTING]["next_mailbox"])
+                        || shortcut!(k == shortcuts[Shortcuts::LISTING]["prev_mailbox"]) =>
                 {
                     let amount = if self.cmd_buf.is_empty() {
                         1
@@ -1702,13 +1697,13 @@ impl Component for Listing {
                         return true;
                     };
                     let target = match k {
-                        k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["next_mailbox"]) => {
+                        k if shortcut!(k == shortcuts[Shortcuts::LISTING]["next_mailbox"]) => {
                             match self.menu_cursor_pos.1 {
                                 MenuEntryCursor::Status => amount.saturating_sub(1),
                                 MenuEntryCursor::Mailbox(idx) => idx + amount,
                             }
                         }
-                        k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_mailbox"]) => {
+                        k if shortcut!(k == shortcuts[Shortcuts::LISTING]["prev_mailbox"]) => {
                             match self.menu_cursor_pos.1 {
                                 MenuEntryCursor::Status => {
                                     return true;
@@ -1741,10 +1736,10 @@ impl Component for Listing {
                     return true;
                 }
                 UIEvent::Input(ref k)
-                    if shortcut!(k == shortcuts[Listing::DESCRIPTION]["next_account"])
-                        || shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_account"])
-                        || shortcut!(k == shortcuts[Listing::DESCRIPTION]["next_page"])
-                        || shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_page"]) =>
+                    if shortcut!(k == shortcuts[Shortcuts::LISTING]["next_account"])
+                        || shortcut!(k == shortcuts[Shortcuts::LISTING]["prev_account"])
+                        || shortcut!(k == shortcuts[Shortcuts::LISTING]["next_page"])
+                        || shortcut!(k == shortcuts[Shortcuts::LISTING]["prev_page"]) =>
                 {
                     let amount = if self.cmd_buf.is_empty() {
                         1
@@ -1764,8 +1759,8 @@ impl Component for Listing {
                         return true;
                     };
                     match k {
-                        k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["next_account"])
-                            || shortcut!(k == shortcuts[Listing::DESCRIPTION]["next_page"]) =>
+                        k if shortcut!(k == shortcuts[Shortcuts::LISTING]["next_account"])
+                            || shortcut!(k == shortcuts[Shortcuts::LISTING]["next_page"]) =>
                         {
                             if self.menu_cursor_pos.0 + amount < self.accounts.len() {
                                 self.menu_cursor_pos =
@@ -1774,8 +1769,8 @@ impl Component for Listing {
                                 return true;
                             }
                         }
-                        k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_account"])
-                            || shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_page"]) =>
+                        k if shortcut!(k == shortcuts[Shortcuts::LISTING]["prev_account"])
+                            || shortcut!(k == shortcuts[Shortcuts::LISTING]["prev_page"]) =>
                         {
                             if self.menu_cursor_pos.0 >= amount {
                                 self.menu_cursor_pos =
@@ -1799,9 +1794,7 @@ impl Component for Listing {
             }
         }
         match *event {
-            UIEvent::Input(ref k)
-                if shortcut!(k == shortcuts[Listing::DESCRIPTION]["new_mail"]) =>
-            {
+            UIEvent::Input(ref k) if shortcut!(k == shortcuts[Shortcuts::LISTING]["new_mail"]) => {
                 let account_hash = context.accounts[self.cursor_pos.0].hash();
                 let composer = Composer::with_account(account_hash, context);
                 context
@@ -1889,7 +1882,7 @@ impl Component for Listing {
         if self.focus != ListingFocus::Menu {
             config_map.remove("open_mailbox");
         }
-        map.insert(Listing::DESCRIPTION, config_map);
+        map.insert(Shortcuts::LISTING, config_map);
 
         map
     }
@@ -1944,7 +1937,6 @@ impl Component for Listing {
 }
 
 impl Listing {
-    pub const DESCRIPTION: &'static str = "listing";
     pub fn new(context: &mut Context) -> Self {
         let account_entries: Vec<AccountMenuEntry> = context
             .accounts

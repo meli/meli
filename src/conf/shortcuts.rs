@@ -53,6 +53,16 @@ pub struct Shortcuts {
     pub pager: PagerShortcuts,
 }
 
+impl Shortcuts {
+    pub const GENERAL: &'static str = "general";
+    pub const LISTING: &'static str = "listing";
+    pub const COMPOSING: &'static str = "composing";
+    pub const CONTACT_LIST: &'static str = "contact_list";
+    pub const ENVELOPE_VIEW: &'static str = "envelope_view";
+    pub const THREAD_VIEW: &'static str = "thread_view";
+    pub const PAGER: &'static str = "pager";
+}
+
 impl DotAddressable for Shortcuts {
     fn lookup(&self, parent_field: &str, path: &[&str]) -> Result<String> {
         match path.first() {
@@ -202,6 +212,11 @@ shortcut_key_values! { "general",
         scroll_left |> "Generic scroll left (catch-all setting)" |> Key::Left,
         scroll_up |> "Generic scroll up (catch-all setting)" |> Key::Char('k'),
         scroll_down |> "Generic scroll down (catch-all setting)" |> Key::Char('j'),
+        next_page |> "Go to next page. (catch-all setting)" |> Key::PageDown,
+        prev_page |> "Go to previous page. (catch-all setting)" |> Key::PageUp,
+        home_page |> "Go to first page. (catch-all setting)" |> Key::Home,
+        end_page |> "Go to last page. (catch-all setting)" |> Key::End,
+        open_entry |> "Open list entry. (catch-all setting)" |> Key::Char('\n'),
         info_message_next |> "Show next info message, if any" |> Key::Alt('>'),
         info_message_previous |> "Show previous info message, if any" |> Key::Alt('<'),
         focus_in_text_field |> "Focus on a text field." |> Key::Char('\n')

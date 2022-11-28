@@ -1586,19 +1586,19 @@ impl Component for CompactListing {
 
         match (&event, self.focus) {
             (UIEvent::Input(ref k), Focus::Entry)
-                if shortcut!(k == shortcuts[Listing::DESCRIPTION]["focus_right"]) =>
+                if shortcut!(k == shortcuts[Shortcuts::LISTING]["focus_right"]) =>
             {
                 self.set_focus(Focus::EntryFullscreen, context);
                 return true;
             }
             (UIEvent::Input(ref k), Focus::EntryFullscreen)
-                if shortcut!(k == shortcuts[Listing::DESCRIPTION]["focus_left"]) =>
+                if shortcut!(k == shortcuts[Shortcuts::LISTING]["focus_left"]) =>
             {
                 self.set_focus(Focus::Entry, context);
                 return true;
             }
             (UIEvent::Input(ref k), Focus::Entry)
-                if shortcut!(k == shortcuts[Listing::DESCRIPTION]["focus_left"]) =>
+                if shortcut!(k == shortcuts[Shortcuts::LISTING]["focus_left"]) =>
             {
                 self.set_focus(Focus::None, context);
                 return true;
@@ -1614,8 +1614,8 @@ impl Component for CompactListing {
             match *event {
                 UIEvent::Input(ref k)
                     if matches!(self.focus, Focus::None)
-                        && (shortcut!(k == shortcuts[Listing::DESCRIPTION]["open_entry"])
-                            || shortcut!(k == shortcuts[Listing::DESCRIPTION]["focus_right"])) =>
+                        && (shortcut!(k == shortcuts[Shortcuts::LISTING]["open_entry"])
+                            || shortcut!(k == shortcuts[Shortcuts::LISTING]["focus_right"])) =>
                 {
                     if let Some(thread) = self.get_thread_under_cursor(self.cursor_pos.2) {
                         self.view =
@@ -1626,21 +1626,21 @@ impl Component for CompactListing {
                 }
                 UIEvent::Input(ref k)
                     if matches!(self.focus, Focus::Entry)
-                        && shortcut!(k == shortcuts[Listing::DESCRIPTION]["exit_entry"]) =>
+                        && shortcut!(k == shortcuts[Shortcuts::LISTING]["exit_entry"]) =>
                 {
                     self.set_focus(Focus::None, context);
                     return true;
                 }
                 UIEvent::Input(ref k)
                     if matches!(self.focus, Focus::None)
-                        && shortcut!(k == shortcuts[Listing::DESCRIPTION]["focus_right"]) =>
+                        && shortcut!(k == shortcuts[Shortcuts::LISTING]["focus_right"]) =>
                 {
                     self.set_focus(Focus::Entry, context);
                     return true;
                 }
                 UIEvent::Input(ref k)
                     if !matches!(self.focus, Focus::None)
-                        && shortcut!(k == shortcuts[Listing::DESCRIPTION]["focus_left"]) =>
+                        && shortcut!(k == shortcuts[Shortcuts::LISTING]["focus_left"]) =>
                 {
                     match self.focus {
                         Focus::Entry => {
@@ -1657,7 +1657,7 @@ impl Component for CompactListing {
                 }
                 UIEvent::Input(ref key)
                     if !self.unfocused()
-                        && shortcut!(key == shortcuts[Listing::DESCRIPTION]["select_entry"]) =>
+                        && shortcut!(key == shortcuts[Shortcuts::LISTING]["select_entry"]) =>
                 {
                     if self.modifier_active && self.modifier_command.is_none() {
                         self.modifier_command = Some(Modifier::default());
@@ -1951,8 +1951,10 @@ impl Component for CompactListing {
             ShortcutMaps::default()
         };
 
-        let config_map = context.settings.shortcuts.listing.key_values();
-        map.insert(Listing::DESCRIPTION, config_map);
+        map.insert(
+            Shortcuts::LISTING,
+            context.settings.shortcuts.listing.key_values(),
+        );
 
         map
     }

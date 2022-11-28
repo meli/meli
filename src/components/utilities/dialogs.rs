@@ -186,7 +186,7 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                 return true;
             }
             (UIEvent::Input(ref key), SelectorCursor::Unfocused)
-                if shortcut!(key == shortcuts["general"]["scroll_down"]) =>
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_down"]) =>
             {
                 if self.single_only {
                     for c in self.content.row_iter(0..(width - 1), 0) {
@@ -209,7 +209,7 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                 return true;
             }
             (UIEvent::Input(ref key), SelectorCursor::Entry(c))
-                if shortcut!(key == shortcuts["general"]["scroll_up"]) && c > 0 =>
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_up"]) && c > 0 =>
             {
                 if self.single_only {
                     // Redraw selection
@@ -248,7 +248,7 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
             }
             (UIEvent::Input(ref key), SelectorCursor::Ok)
             | (UIEvent::Input(ref key), SelectorCursor::Cancel)
-                if shortcut!(key == shortcuts["general"]["scroll_up"]) =>
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_up"]) =>
             {
                 for c in self
                     .content
@@ -272,7 +272,7 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
             }
             (UIEvent::Input(ref key), SelectorCursor::Entry(c))
                 if c < self.entries.len().saturating_sub(1)
-                    && shortcut!(key == shortcuts["general"]["scroll_down"]) =>
+                    && shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_down"]) =>
             {
                 if self.single_only {
                     // Redraw selection
@@ -310,7 +310,8 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                 return true;
             }
             (UIEvent::Input(ref key), SelectorCursor::Entry(c))
-                if !self.single_only && shortcut!(key == shortcuts["general"]["scroll_down"]) =>
+                if !self.single_only
+                    && shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_down"]) =>
             {
                 self.cursor = SelectorCursor::Ok;
                 for c in self.content.row_iter(0..3, c) {
@@ -333,7 +334,7 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                 return true;
             }
             (UIEvent::Input(ref key), SelectorCursor::Ok)
-                if shortcut!(key == shortcuts["general"]["scroll_right"]) =>
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_right"]) =>
             {
                 self.cursor = SelectorCursor::Cancel;
                 for c in self.content.row_iter(
@@ -360,7 +361,7 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                 return true;
             }
             (UIEvent::Input(ref key), SelectorCursor::Cancel)
-                if shortcut!(key == shortcuts["general"]["scroll_left"]) =>
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_left"]) =>
             {
                 self.cursor = SelectorCursor::Ok;
                 for c in self.content.row_iter(
@@ -389,10 +390,10 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                 return true;
             }
             (UIEvent::Input(ref key), _)
-                if shortcut!(key == shortcuts["general"]["scroll_left"])
-                    || shortcut!(key == shortcuts["general"]["scroll_right"])
-                    || shortcut!(key == shortcuts["general"]["scroll_up"])
-                    || shortcut!(key == shortcuts["general"]["scroll_down"]) =>
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_left"])
+                    || shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_right"])
+                    || shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_up"])
+                    || shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_down"]) =>
             {
                 return true
             }
@@ -404,7 +405,10 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
 
     fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut map = ShortcutMaps::default();
-        map.insert("general", context.settings.shortcuts.general.key_values());
+        map.insert(
+            Shortcuts::GENERAL,
+            context.settings.shortcuts.general.key_values(),
+        );
         map
     }
 
@@ -511,7 +515,7 @@ impl Component for UIConfirmationDialog {
                 return true;
             }
             (UIEvent::Input(ref key), SelectorCursor::Entry(c))
-                if shortcut!(key == shortcuts["general"]["scroll_up"]) && c > 0 =>
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_up"]) && c > 0 =>
             {
                 if self.single_only {
                     // Redraw selection
@@ -550,7 +554,7 @@ impl Component for UIConfirmationDialog {
             }
             (UIEvent::Input(ref key), SelectorCursor::Ok)
             | (UIEvent::Input(ref key), SelectorCursor::Cancel)
-                if shortcut!(key == shortcuts["general"]["scroll_up"]) =>
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_up"]) =>
             {
                 for c in self
                     .content
@@ -573,7 +577,7 @@ impl Component for UIConfirmationDialog {
                 return true;
             }
             (UIEvent::Input(ref key), SelectorCursor::Unfocused)
-                if shortcut!(key == shortcuts["general"]["scroll_down"]) =>
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_down"]) =>
             {
                 if self.single_only {
                     for c in self.content.row_iter(0..(width - 1), 0) {
@@ -597,7 +601,7 @@ impl Component for UIConfirmationDialog {
             }
             (UIEvent::Input(ref key), SelectorCursor::Entry(c))
                 if c < self.entries.len().saturating_sub(1)
-                    && shortcut!(key == shortcuts["general"]["scroll_down"]) =>
+                    && shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_down"]) =>
             {
                 if self.single_only {
                     // Redraw selection
@@ -635,7 +639,8 @@ impl Component for UIConfirmationDialog {
                 return true;
             }
             (UIEvent::Input(ref key), SelectorCursor::Entry(c))
-                if !self.single_only && shortcut!(key == shortcuts["general"]["scroll_down"]) =>
+                if !self.single_only
+                    && shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_down"]) =>
             {
                 self.cursor = SelectorCursor::Ok;
                 for c in self.content.row_iter(0..3, c) {
@@ -658,7 +663,7 @@ impl Component for UIConfirmationDialog {
                 return true;
             }
             (UIEvent::Input(ref key), SelectorCursor::Ok)
-                if shortcut!(key == shortcuts["general"]["scroll_right"]) =>
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_right"]) =>
             {
                 self.cursor = SelectorCursor::Cancel;
                 for c in self.content.row_iter(
@@ -685,7 +690,7 @@ impl Component for UIConfirmationDialog {
                 return true;
             }
             (UIEvent::Input(ref key), SelectorCursor::Cancel)
-                if shortcut!(key == shortcuts["general"]["scroll_left"]) =>
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_left"]) =>
             {
                 self.cursor = SelectorCursor::Ok;
                 for c in self.content.row_iter(
@@ -714,10 +719,10 @@ impl Component for UIConfirmationDialog {
                 return true;
             }
             (UIEvent::Input(ref key), _)
-                if shortcut!(key == shortcuts["general"]["scroll_left"])
-                    || shortcut!(key == shortcuts["general"]["scroll_right"])
-                    || shortcut!(key == shortcuts["general"]["scroll_up"])
-                    || shortcut!(key == shortcuts["general"]["scroll_down"]) =>
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_left"])
+                    || shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_right"])
+                    || shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_up"])
+                    || shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_down"]) =>
             {
                 return true
             }
@@ -729,7 +734,10 @@ impl Component for UIConfirmationDialog {
 
     fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut map = ShortcutMaps::default();
-        map.insert("general", context.settings.shortcuts.general.key_values());
+        map.insert(
+            Shortcuts::GENERAL,
+            context.settings.shortcuts.general.key_values(),
+        );
         map
     }
 

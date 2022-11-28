@@ -60,7 +60,6 @@ pub struct ThreadView {
 }
 
 impl ThreadView {
-    const DESCRIPTION: &'static str = "thread view";
     /*
      * coordinates: (account index, mailbox_hash, root set thread_node index)
      * expanded_hash: optional position of expanded entry when we render the threadview. Default
@@ -1006,7 +1005,7 @@ impl Component for ThreadView {
         let shortcuts = self.get_shortcuts(context);
         match *event {
             UIEvent::Input(ref key)
-                if shortcut!(key == shortcuts[ThreadView::DESCRIPTION]["scroll_up"]) =>
+                if shortcut!(key == shortcuts[Shortcuts::THREAD_VIEW]["scroll_up"]) =>
             {
                 if self.cursor_pos > 0 {
                     self.new_cursor_pos = self.new_cursor_pos.saturating_sub(1);
@@ -1015,7 +1014,7 @@ impl Component for ThreadView {
                 return true;
             }
             UIEvent::Input(ref key)
-                if shortcut!(key == shortcuts[ThreadView::DESCRIPTION]["scroll_down"]) =>
+                if shortcut!(key == shortcuts[Shortcuts::THREAD_VIEW]["scroll_down"]) =>
             {
                 let height = self.visible_entries.iter().flat_map(|v| v.iter()).count();
                 if height > 0 && self.new_cursor_pos + 1 < height {
@@ -1025,13 +1024,13 @@ impl Component for ThreadView {
                 return true;
             }
             UIEvent::Input(ref key)
-                if shortcut!(key == shortcuts[ThreadView::DESCRIPTION]["prev_page"]) =>
+                if shortcut!(key == shortcuts[Shortcuts::THREAD_VIEW]["prev_page"]) =>
             {
                 self.movement = Some(PageMovement::PageUp(1));
                 self.dirty = true;
             }
             UIEvent::Input(ref key)
-                if shortcut!(key == shortcuts[ThreadView::DESCRIPTION]["next_page"]) =>
+                if shortcut!(key == shortcuts[Shortcuts::THREAD_VIEW]["next_page"]) =>
             {
                 self.movement = Some(PageMovement::PageDown(1));
                 self.dirty = true;
@@ -1054,21 +1053,21 @@ impl Component for ThreadView {
                 return true;
             }
             UIEvent::Input(ref key)
-                if shortcut!(key == shortcuts[ThreadView::DESCRIPTION]["toggle_mailview"]) =>
+                if shortcut!(key == shortcuts[Shortcuts::THREAD_VIEW]["toggle_mailview"]) =>
             {
                 self.show_mailview = !self.show_mailview;
                 self.set_dirty(true);
                 return true;
             }
             UIEvent::Input(ref key)
-                if shortcut!(key == shortcuts[ThreadView::DESCRIPTION]["toggle_threadview"]) =>
+                if shortcut!(key == shortcuts[Shortcuts::THREAD_VIEW]["toggle_threadview"]) =>
             {
                 self.show_thread = !self.show_thread;
                 self.set_dirty(true);
                 return true;
             }
             UIEvent::Input(ref key)
-                if shortcut!(key == shortcuts[ThreadView::DESCRIPTION]["reverse_thread_order"]) =>
+                if shortcut!(key == shortcuts[Shortcuts::THREAD_VIEW]["reverse_thread_order"]) =>
             {
                 self.reversed = !self.reversed;
                 let expanded_hash = self.entries[self.expanded_pos].index.1;
@@ -1077,7 +1076,7 @@ impl Component for ThreadView {
                 return true;
             }
             UIEvent::Input(ref key)
-                if shortcut!(key == shortcuts[ThreadView::DESCRIPTION]["collapse_subtree"]) =>
+                if shortcut!(key == shortcuts[Shortcuts::THREAD_VIEW]["collapse_subtree"]) =>
             {
                 let current_pos = self.current_pos();
                 self.entries[current_pos].hidden = !self.entries[current_pos].hidden;
@@ -1157,9 +1156,11 @@ impl Component for ThreadView {
     }
     fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut map = self.mailview.get_shortcuts(context);
-        let config_map = context.settings.shortcuts.thread_view.key_values();
 
-        map.insert(ThreadView::DESCRIPTION, config_map);
+        map.insert(
+            Shortcuts::THREAD_VIEW,
+            context.settings.shortcuts.thread_view.key_values(),
+        );
 
         map
     }

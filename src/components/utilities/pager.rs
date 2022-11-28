@@ -48,13 +48,13 @@ pub struct Pager {
 
 impl fmt::Display for Pager {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", Pager::DESCRIPTION)
+        write!(f, "{}", "pager")
     }
 }
 
 impl Pager {
-    pub const DESCRIPTION: &'static str = "pager";
     const PAGES_AHEAD_TO_RENDER_NO: usize = 16;
+
     pub fn new(context: &Context) -> Self {
         let mut ret = Pager {
             minimum_width: context.settings.pager.minimum_width,
@@ -651,48 +651,54 @@ impl Component for Pager {
                 self.set_dirty(true);
             }
             UIEvent::Input(ref key)
-                if shortcut!(key == shortcuts[Self::DESCRIPTION]["scroll_up"]) =>
+                if shortcut!(key == shortcuts[Shortcuts::PAGER]["scroll_up"]) =>
             {
                 self.movement = Some(PageMovement::Up(1));
                 self.dirty = true;
                 return true;
             }
             UIEvent::Input(ref key)
-                if shortcut!(key == shortcuts[Self::DESCRIPTION]["scroll_down"]) =>
+                if shortcut!(key == shortcuts[Shortcuts::PAGER]["scroll_down"]) =>
             {
                 self.movement = Some(PageMovement::Down(1));
                 self.dirty = true;
                 return true;
             }
-            UIEvent::Input(Key::Home) => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["home_page"]) =>
+            {
                 self.movement = Some(PageMovement::Home);
                 self.dirty = true;
                 return true;
             }
-            UIEvent::Input(Key::End) => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["end_page"]) =>
+            {
                 self.movement = Some(PageMovement::End);
                 self.dirty = true;
                 return true;
             }
-            UIEvent::Input(Key::Left) => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_left"]) =>
+            {
                 self.movement = Some(PageMovement::Left(1));
                 self.dirty = true;
                 return true;
             }
-            UIEvent::Input(Key::Right) => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_right"]) =>
+            {
                 self.movement = Some(PageMovement::Right(1));
                 self.dirty = true;
                 return true;
             }
-            UIEvent::Input(ref key)
-                if shortcut!(key == shortcuts[Self::DESCRIPTION]["page_up"]) =>
-            {
+            UIEvent::Input(ref key) if shortcut!(key == shortcuts[Shortcuts::PAGER]["page_up"]) => {
                 self.movement = Some(PageMovement::PageUp(1));
                 self.dirty = true;
                 return true;
             }
             UIEvent::Input(ref key)
-                if shortcut!(key == shortcuts[Self::DESCRIPTION]["page_down"]) =>
+                if shortcut!(key == shortcuts[Shortcuts::PAGER]["page_down"]) =>
             {
                 self.movement = Some(PageMovement::PageDown(1));
                 self.dirty = true;
@@ -757,27 +763,19 @@ impl Component for Pager {
                 if let Some(ref mut search) = self.search {
                     search.movement = Some(PageMovement::Down(1));
                     search.cursor += 1;
-                } else {
-                    unsafe {
-                        std::hint::unreachable_unchecked();
-                    }
+                    self.initialised = false;
+                    self.dirty = true;
+                    return true;
                 }
-                self.initialised = false;
-                self.dirty = true;
-                return true;
             }
             UIEvent::Input(Key::Char('N')) if self.search.is_some() => {
                 if let Some(ref mut search) = self.search {
                     search.movement = Some(PageMovement::Up(1));
                     search.cursor = search.cursor.saturating_sub(1);
-                } else {
-                    unsafe {
-                        std::hint::unreachable_unchecked();
-                    }
+                    self.initialised = false;
+                    self.dirty = true;
+                    return true;
                 }
-                self.initialised = false;
-                self.dirty = true;
-                return true;
             }
             UIEvent::Input(Key::Esc) if self.search.is_some() => {
                 self.search = None;
@@ -826,9 +824,15 @@ impl Component for Pager {
     }
 
     fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
-        let config_map: IndexMap<&'static str, Key> = context.settings.shortcuts.pager.key_values();
         let mut ret: ShortcutMaps = Default::default();
-        ret.insert(Pager::DESCRIPTION, config_map);
+        ret.insert(
+            Shortcuts::PAGER,
+            context.settings.shortcuts.pager.key_values(),
+        );
+        ret.insert(
+            Shortcuts::GENERAL,
+            context.settings.shortcuts.general.key_values(),
+        );
         ret
     }
 
