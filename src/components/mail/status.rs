@@ -116,10 +116,6 @@ impl Component for AccountStatus {
             if let JobRequest::DeleteMailbox { mailbox_hash, .. }
             | JobRequest::SetMailboxPermissions { mailbox_hash, .. }
             | JobRequest::SetMailboxSubscription { mailbox_hash, .. }
-            | JobRequest::CopyTo {
-                dest_mailbox_hash: mailbox_hash,
-                ..
-            }
             | JobRequest::Refresh { mailbox_hash, .. }
             | JobRequest::Fetch { mailbox_hash, .. } = req
             {

@@ -190,10 +190,6 @@ pub enum JobRequest {
     SendMessageBackground {
         handle: JoinHandle<Result<()>>,
     },
-    CopyTo {
-        dest_mailbox_hash: MailboxHash,
-        handle: JoinHandle<Result<Vec<u8>>>,
-    },
     DeleteMessages {
         env_hashes: EnvelopeHashBatch,
         handle: JoinHandle<Result<()>>,
@@ -207,18 +203,13 @@ pub enum JobRequest {
         handle: JoinHandle<Result<HashMap<MailboxHash, Mailbox>>>,
     },
     //RenameMailbox,
-    Search {
-        handle: JoinHandle<Result<()>>,
-    },
-    AsBytes {
-        handle: JoinHandle<Result<()>>,
-    },
     SetMailboxPermissions {
         mailbox_hash: MailboxHash,
         handle: JoinHandle<Result<()>>,
     },
     SetMailboxSubscription {
         mailbox_hash: MailboxHash,
+        new_value: bool,
         handle: JoinHandle<Result<()>>,
     },
     Watch {
@@ -235,8 +226,6 @@ impl Drop for JobRequest {
             JobRequest::SetFlags { handle, .. } |
             JobRequest::SaveMessage { handle, .. } |
             //JobRequest::RenameMailbox,
-            JobRequest::Search { handle, .. } |
-            JobRequest::AsBytes { handle, .. } |
             JobRequest::SetMailboxPermissions { handle, .. } |
             JobRequest::SetMailboxSubscription { handle, .. } |
             JobRequest::Watch { handle, .. } |
@@ -258,7 +247,6 @@ impl Drop for JobRequest {
             JobRequest::Mailboxes { handle, .. } => {
                 handle.cancel();
             }
-            JobRequest::CopyTo { handle, .. } => { handle.cancel(); }
             JobRequest::SendMessage => {}
         }
     }
@@ -276,15 +264,12 @@ impl core::fmt::Debug for JobRequest {
             JobRequest::Refresh { .. } => write!(f, "JobRequest::Refresh"),
             JobRequest::SetFlags { .. } => write!(f, "JobRequest::SetFlags"),
             JobRequest::SaveMessage { .. } => write!(f, "JobRequest::SaveMessage"),
-            JobRequest::CopyTo { .. } => write!(f, "JobRequest::CopyTo"),
             JobRequest::DeleteMessages { .. } => write!(f, "JobRequest::DeleteMessages"),
             JobRequest::CreateMailbox { .. } => write!(f, "JobRequest::CreateMailbox"),
             JobRequest::DeleteMailbox { mailbox_hash, .. } => {
                 write!(f, "JobRequest::DeleteMailbox({})", mailbox_hash)
             }
             //JobRequest::RenameMailbox,
-            JobRequest::Search { .. } => write!(f, "JobRequest::Search"),
-            JobRequest::AsBytes { .. } => write!(f, "JobRequest::AsBytes"),
             JobRequest::SetMailboxPermissions { .. } => {
                 write!(f, "JobRequest::SetMailboxPermissions")
             }
@@ -315,7 +300,6 @@ impl core::fmt::Display for JobRequest {
                 if env_hashes.len() == 1 { "" } else { "s" }
             ),
             JobRequest::SaveMessage { .. } => write!(f, "Save message"),
-            JobRequest::CopyTo { .. } => write!(f, "Copy message."),
             JobRequest::DeleteMessages { env_hashes, .. } => write!(
                 f,
                 "Delete {} message{}",
@@ -325,8 +309,6 @@ impl core::fmt::Display for JobRequest {
             JobRequest::CreateMailbox { path, .. } => write!(f, "Create mailbox {}", path),
             JobRequest::DeleteMailbox { .. } => write!(f, "Delete mailbox"),
             //JobRequest::RenameMailbox,
-            JobRequest::Search { .. } => write!(f, "Search"),
-            JobRequest::AsBytes { .. } => write!(f, "Message body fetch"),
             JobRequest::SetMailboxPermissions { .. } => write!(f, "Set mailbox permissions"),
             JobRequest::SetMailboxSubscription { .. } => write!(f, "Set mailbox subscription"),
             JobRequest::Watch { .. } => write!(f, "Background watch"),
@@ -1502,42 +1484,46 @@ impl Account {
             }
             MailboxOperation::Subscribe(path) => {
                 let mailbox_hash = self.mailbox_by_path(&path)?;
-                self.backend
+                let job = self
+                    .backend
                     .write()
                     .unwrap()
                     .set_mailbox_subscription(mailbox_hash, true)?;
-                self.mailbox_entries.entry(mailbox_hash).and_modify(|m| {
-                    m.conf.mailbox_conf.subscribe = super::ToggleFlag::True;
-                    let _ = m.ref_mailbox.set_is_subscribed(true);
-                });
-
-                self.sender
-                    .send(ThreadEvent::UIEvent(UIEvent::Notification(
-                        None,
-                        format!("'`{}` has been subscribed.", &path),
-                        Some(crate::types::NotificationType::Info),
-                    )))
-                    .expect("Could not send event on main channel");
+                let handle = if self.backend_capabilities.is_async {
+                    self.job_executor.spawn_specialized(job)
+                } else {
+                    self.job_executor.spawn_blocking(job)
+                };
+                self.insert_job(
+                    handle.job_id,
+                    JobRequest::SetMailboxSubscription {
+                        mailbox_hash,
+                        new_value: true,
+                        handle,
+                    },
+                );
                 Ok(())
             }
             MailboxOperation::Unsubscribe(path) => {
                 let mailbox_hash = self.mailbox_by_path(&path)?;
-                self.backend
+                let job = self
+                    .backend
                     .write()
                     .unwrap()
                     .set_mailbox_subscription(mailbox_hash, false)?;
-                self.mailbox_entries.entry(mailbox_hash).and_modify(|m| {
-                    m.conf.mailbox_conf.subscribe = super::ToggleFlag::False;
-                    let _ = m.ref_mailbox.set_is_subscribed(false);
-                });
-
-                self.sender
-                    .send(ThreadEvent::UIEvent(UIEvent::Notification(
-                        None,
-                        format!("'`{}` has been unsubscribed.", &path),
-                        Some(crate::types::NotificationType::Info),
-                    )))
-                    .expect("Could not send event on main channel");
+                let handle = if self.backend_capabilities.is_async {
+                    self.job_executor.spawn_specialized(job)
+                } else {
+                    self.job_executor.spawn_blocking(job)
+                };
+                self.insert_job(
+                    handle.job_id,
+                    JobRequest::SetMailboxSubscription {
+                        mailbox_hash,
+                        new_value: false,
+                        handle,
+                    },
+                );
                 Ok(())
             }
             MailboxOperation::Rename(_, _) => Err(MeliError::new("Not implemented.")),
@@ -1898,30 +1884,6 @@ impl Account {
                             .expect("Could not send event on main channel");
                     }
                 }
-                JobRequest::CopyTo {
-                    dest_mailbox_hash: mailbox_hash,
-                    ref mut handle,
-                    ..
-                } => {
-                    if let Ok(Some(Err(err))) = handle
-                        .chan
-                        .try_recv()
-                        .map_err(|_: futures::channel::oneshot::Canceled| {
-                            MeliError::new("Job was canceled")
-                        })
-                        .map(|r| {
-                            r.map(|r| r.and_then(|bytes| self.save(&bytes, mailbox_hash, None)))
-                        })
-                    {
-                        self.sender
-                            .send(ThreadEvent::UIEvent(UIEvent::Notification(
-                                Some(format!("{}: could not save message", &self.name)),
-                                err.to_string(),
-                                Some(crate::types::NotificationType::Error(err.kind)),
-                            )))
-                            .expect("Could not send event on main channel");
-                    }
-                }
                 JobRequest::DeleteMessages { ref mut handle, .. } => {
                     if let Ok(Some(Err(err))) = handle.chan.try_recv() {
                         self.sender
@@ -2093,7 +2055,6 @@ impl Account {
                     }
                 }
                 //JobRequest::RenameMailbox,
-                JobRequest::Search { .. } | JobRequest::AsBytes { .. } => {}
                 JobRequest::SetMailboxPermissions { ref mut handle, .. } => {
                     match handle.chan.try_recv() {
                         Err(_) => { /* canceled */ }
@@ -2124,7 +2085,11 @@ impl Account {
                         }
                     }
                 }
-                JobRequest::SetMailboxSubscription { ref mut handle, .. } => {
+                JobRequest::SetMailboxSubscription {
+                    ref mut handle,
+                    ref mailbox_hash,
+                    ref new_value,
+                } => {
                     match handle.chan.try_recv() {
                         Err(_) => { /* canceled */ }
                         Ok(None) => {}
@@ -2140,18 +2105,29 @@ impl Account {
                                 )))
                                 .expect("Could not send event on main channel");
                         }
-                        Ok(Some(Ok(_))) => {
+                        Ok(Some(Ok(()))) if self.mailbox_entries.contains_key(mailbox_hash) => {
+                            self.mailbox_entries.entry(*mailbox_hash).and_modify(|m| {
+                                m.conf.mailbox_conf.subscribe = if *new_value {
+                                    super::ToggleFlag::True
+                                } else {
+                                    super::ToggleFlag::False
+                                };
+                                let _ = m.ref_mailbox.set_is_subscribed(*new_value);
+                            });
                             self.sender
                                 .send(ThreadEvent::UIEvent(UIEvent::Notification(
                                     Some(format!(
-                                        "{}: mailbox subscription set successfully",
-                                        &self.name
+                                        "{}: `{}` has been {}subscribed.",
+                                        &self.name,
+                                        self.mailbox_entries[mailbox_hash].name(),
+                                        if *new_value { "" } else { "un" }
                                     )),
                                     String::new(),
                                     Some(crate::types::NotificationType::Info),
                                 )))
                                 .expect("Could not send event on main channel");
                         }
+                        Ok(Some(Ok(()))) => {}
                     }
                 }
                 JobRequest::Watch { ref mut handle } => {
