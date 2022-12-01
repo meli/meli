@@ -33,7 +33,7 @@ pub use connection::*;
 mod watch;
 pub use watch::*;
 mod cache;
-use cache::ModSequence;
+use cache::{ImapCacheReset, ModSequence};
 pub mod managesieve;
 mod untagged;
 
@@ -301,14 +301,26 @@ impl MailBackend for ImapType {
             if self.uid_store.keep_offline_cache {
                 match cache::Sqlite3Cache::get(self.uid_store.clone()).chain_err_summary(|| {
                     format!(
-                        "Could not initialize cache for IMAP account {}",
+                        "Could not initialize cache for IMAP account {}. Resetting database.",
                         self.uid_store.account_name
                     )
                 }) {
                     Ok(v) => Some(v),
                     Err(err) => {
                         (self.uid_store.event_consumer)(self.uid_store.account_hash, err.into());
-                        None
+                        match cache::Sqlite3Cache::reset_db(&self.uid_store)
+                            .and_then(|()| cache::Sqlite3Cache::get(self.uid_store.clone()))
+                            .chain_err_summary(|| "Could not reset IMAP cache database.")
+                        {
+                            Ok(v) => Some(v),
+                            Err(err) => {
+                                (self.uid_store.event_consumer)(
+                                    self.uid_store.account_hash,
+                                    err.into(),
+                                );
+                                None
+                            }
+                        }
                     }
                 }
             } else {

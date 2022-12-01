@@ -93,6 +93,12 @@ pub trait ImapCache: Send + core::fmt::Debug {
     ) -> Result<Option<Vec<u8>>>;
 }
 
+pub trait ImapCacheReset: Send + core::fmt::Debug {
+    fn reset_db(uid_store: &UIDStore) -> Result<()>
+    where
+        Self: Sized;
+}
+
 #[cfg(feature = "sqlite3")]
 pub use sqlite3_m::*;
 
@@ -185,9 +191,15 @@ mod sqlite3_m {
         }
     }
 
+    impl ImapCacheReset for Sqlite3Cache {
+        fn reset_db(uid_store: &UIDStore) -> Result<()> {
+            sqlite3::reset_db(&DB_DESCRIPTION, Some(uid_store.account_name.as_str()))
+        }
+    }
+
     impl ImapCache for Sqlite3Cache {
         fn reset(&mut self) -> Result<()> {
-            sqlite3::reset_db(&DB_DESCRIPTION, Some(self.uid_store.account_name.as_str()))
+            Sqlite3Cache::reset_db(&self.uid_store)
         }
 
         fn mailbox_state(&mut self, mailbox_hash: MailboxHash) -> Result<Option<()>> {
@@ -687,9 +699,15 @@ mod default_m {
         }
     }
 
+    impl ImapCacheReset for DefaultCache {
+        fn reset_db(uid_store: &UIDStore) -> Result<()> {
+            Err(MeliError::new("melib is not built with any imap cache").set_kind(ErrorKind::Bug))
+        }
+    }
+
     impl ImapCache for DefaultCache {
         fn reset(&mut self) -> Result<()> {
-            Err(MeliError::new("melib is not built with any imap cache").set_kind(ErrorKind::Bug))
+            DefaultCache::reset_db(&self.uid_store)
         }
 
         fn mailbox_state(&mut self, _mailbox_hash: MailboxHash) -> Result<Option<()>> {
