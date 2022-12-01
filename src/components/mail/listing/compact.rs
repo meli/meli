@@ -1372,9 +1372,7 @@ impl Component for CompactListing {
                 if let Some(mvm) = self.movement.as_ref() {
                     match mvm {
                         PageMovement::Up(amount) => {
-                            for c in self.new_cursor_pos.2.saturating_sub(*amount)
-                                ..=self.new_cursor_pos.2
-                            {
+                            for c in self.cursor_pos.2.saturating_sub(*amount)..=self.cursor_pos.2 {
                                 if let Some(thread) = self.get_thread_under_cursor(c) {
                                     self.rows.update_selection_with_thread(
                                         thread,
@@ -1390,8 +1388,8 @@ impl Component for CompactListing {
                                 }
                             }
                             if modifier == Modifier::Intersection {
-                                for c in (0..self.new_cursor_pos.2.saturating_sub(*amount))
-                                    .chain((self.new_cursor_pos.2 + 2)..self.length)
+                                for c in (0..self.cursor_pos.2.saturating_sub(*amount))
+                                    .chain((self.cursor_pos.2 + 2)..self.length)
                                 {
                                     if let Some(thread) = self.get_thread_under_cursor(c) {
                                         self.rows
@@ -1401,8 +1399,8 @@ impl Component for CompactListing {
                             }
                         }
                         PageMovement::PageUp(multiplier) => {
-                            for c in self.new_cursor_pos.2.saturating_sub(rows * multiplier)
-                                ..=self.new_cursor_pos.2
+                            for c in self.cursor_pos.2.saturating_sub(rows * multiplier)
+                                ..=self.cursor_pos.2
                             {
                                 if let Some(thread) = self.get_thread_under_cursor(c) {
                                     self.rows.update_selection_with_thread(
@@ -1420,8 +1418,8 @@ impl Component for CompactListing {
                             }
                         }
                         PageMovement::Down(amount) => {
-                            for c in self.new_cursor_pos.2
-                                ..std::cmp::min(self.length, self.new_cursor_pos.2 + amount + 1)
+                            for c in self.cursor_pos.2
+                                ..std::cmp::min(self.length, self.cursor_pos.2 + amount + 1)
                             {
                                 if let Some(thread) = self.get_thread_under_cursor(c) {
                                     self.rows.update_selection_with_thread(
@@ -1438,9 +1436,9 @@ impl Component for CompactListing {
                                 }
                             }
                             if modifier == Modifier::Intersection {
-                                for c in (0..self.new_cursor_pos.2).chain(
-                                    (std::cmp::min(self.length, self.new_cursor_pos.2 + amount + 1)
-                                        + 1)..self.length,
+                                for c in (0..self.cursor_pos.2).chain(
+                                    (std::cmp::min(self.length, self.cursor_pos.2 + amount) + 1)
+                                        ..self.length,
                                 ) {
                                     if let Some(thread) = self.get_thread_under_cursor(c) {
                                         self.rows
@@ -1450,9 +1448,9 @@ impl Component for CompactListing {
                             }
                         }
                         PageMovement::PageDown(multiplier) => {
-                            for c in self.new_cursor_pos.2
+                            for c in self.cursor_pos.2
                                 ..std::cmp::min(
-                                    self.new_cursor_pos.2 + rows * multiplier + 1,
+                                    self.cursor_pos.2 + rows * multiplier + 1,
                                     self.length,
                                 )
                             {
@@ -1471,9 +1469,9 @@ impl Component for CompactListing {
                                 }
                             }
                             if modifier == Modifier::Intersection {
-                                for c in (0..self.new_cursor_pos.2).chain(
+                                for c in (0..self.cursor_pos.2).chain(
                                     (std::cmp::min(
-                                        self.new_cursor_pos.2 + rows * multiplier + 1,
+                                        self.cursor_pos.2 + rows * multiplier,
                                         self.length,
                                     ) + 1)..self.length,
                                 ) {
@@ -1486,7 +1484,7 @@ impl Component for CompactListing {
                         }
                         PageMovement::Right(_) | PageMovement::Left(_) => {}
                         PageMovement::Home => {
-                            for c in 0..=self.new_cursor_pos.2 {
+                            for c in 0..=self.cursor_pos.2 {
                                 if let Some(thread) = self.get_thread_under_cursor(c) {
                                     self.rows.update_selection_with_thread(
                                         thread,
@@ -1502,7 +1500,7 @@ impl Component for CompactListing {
                                 }
                             }
                             if modifier == Modifier::Intersection {
-                                for c in (self.new_cursor_pos.2 + 1)..self.length {
+                                for c in (self.cursor_pos.2)..self.length {
                                     if let Some(thread) = self.get_thread_under_cursor(c) {
                                         self.rows
                                             .update_selection_with_thread(thread, |e| *e = false);
@@ -1511,7 +1509,7 @@ impl Component for CompactListing {
                             }
                         }
                         PageMovement::End => {
-                            for c in self.new_cursor_pos.2..self.length {
+                            for c in self.cursor_pos.2..self.length {
                                 if let Some(thread) = self.get_thread_under_cursor(c) {
                                     self.rows.update_selection_with_thread(
                                         thread,
@@ -1527,7 +1525,7 @@ impl Component for CompactListing {
                                 }
                             }
                             if modifier == Modifier::Intersection {
-                                for c in 0..self.new_cursor_pos.2 {
+                                for c in 0..self.cursor_pos.2 {
                                     if let Some(thread) = self.get_thread_under_cursor(c) {
                                         self.rows
                                             .update_selection_with_thread(thread, |e| *e = false);
@@ -1547,18 +1545,7 @@ impl Component for CompactListing {
                     let page_no = (self.new_cursor_pos.2).wrapping_div(rows);
 
                     let top_idx = page_no * rows;
-                    if row >= top_idx && row < top_idx + rows {
-                        let new_area = nth_row_area(area, row % rows);
-                        self.data_columns.draw(
-                            grid,
-                            row,
-                            self.cursor_pos.2,
-                            grid.bounds_iter(new_area),
-                        );
-                        let row_attr = self.rows.row_attr_cache[&row];
-                        change_colors(grid, new_area, row_attr.fg, row_attr.bg);
-                        context.dirty_areas.push_back(new_area);
-                    }
+                    self.force_draw |= row >= top_idx && row < top_idx + rows;
                 }
                 if self.force_draw {
                     /* Draw the entire list */
@@ -1666,6 +1653,7 @@ impl Component for CompactListing {
                     {
                         self.rows
                             .update_selection_with_thread(thread_hash, |e| *e = !*e);
+                        self.set_dirty(true);
                     }
                     return true;
                 }

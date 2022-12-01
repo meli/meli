@@ -1505,6 +1505,7 @@ impl Component for ThreadListing {
                     self.modifier_command = Some(Modifier::default());
                 } else if let Some(env_hash) = self.get_env_under_cursor(self.cursor_pos.2) {
                     self.rows.update_selection_with_env(env_hash, |e| *e = !*e);
+                    self.set_dirty(true);
                 }
                 return true;
             }

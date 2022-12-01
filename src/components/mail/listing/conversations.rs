@@ -473,7 +473,9 @@ impl ListingTrait for ConversationsListing {
                 self.highlight_line(grid, new_area, *idx, context);
                 context.dirty_areas.push_back(new_area);
             }
-            return;
+            if !self.force_draw {
+                return;
+            }
         } else if self.cursor_pos != self.new_cursor_pos {
             self.cursor_pos = self.new_cursor_pos;
         }
@@ -1012,9 +1014,7 @@ impl Component for ConversationsListing {
                 if let Some(mvm) = self.movement.as_ref() {
                     match mvm {
                         PageMovement::Up(amount) => {
-                            for c in self.new_cursor_pos.2.saturating_sub(*amount)
-                                ..=self.new_cursor_pos.2
-                            {
+                            for c in self.cursor_pos.2.saturating_sub(*amount)..=self.cursor_pos.2 {
                                 if let Some(thread) = self.get_thread_under_cursor(c) {
                                     self.rows.update_selection_with_thread(
                                         thread,
@@ -1030,8 +1030,8 @@ impl Component for ConversationsListing {
                                 }
                             }
                             if modifier == Modifier::Intersection {
-                                for c in (0..self.new_cursor_pos.2.saturating_sub(*amount))
-                                    .chain((self.new_cursor_pos.2 + 2)..self.length)
+                                for c in (0..self.cursor_pos.2.saturating_sub(*amount))
+                                    .chain((self.cursor_pos.2 + 2)..self.length)
                                 {
                                     if let Some(thread) = self.get_thread_under_cursor(c) {
                                         self.rows
@@ -1041,8 +1041,8 @@ impl Component for ConversationsListing {
                             }
                         }
                         PageMovement::PageUp(multiplier) => {
-                            for c in self.new_cursor_pos.2.saturating_sub(rows * multiplier)
-                                ..=self.new_cursor_pos.2
+                            for c in self.cursor_pos.2.saturating_sub(rows * multiplier)
+                                ..=self.cursor_pos.2
                             {
                                 if let Some(thread) = self.get_thread_under_cursor(c) {
                                     self.rows.update_selection_with_thread(
@@ -1060,8 +1060,8 @@ impl Component for ConversationsListing {
                             }
                         }
                         PageMovement::Down(amount) => {
-                            for c in self.new_cursor_pos.2
-                                ..std::cmp::min(self.length, self.new_cursor_pos.2 + amount + 1)
+                            for c in self.cursor_pos.2
+                                ..std::cmp::min(self.length, self.cursor_pos.2 + amount + 1)
                             {
                                 if let Some(thread) = self.get_thread_under_cursor(c) {
                                     self.rows.update_selection_with_thread(
@@ -1078,9 +1078,9 @@ impl Component for ConversationsListing {
                                 }
                             }
                             if modifier == Modifier::Intersection {
-                                for c in (0..self.new_cursor_pos.2).chain(
-                                    (std::cmp::min(self.length, self.new_cursor_pos.2 + amount + 1)
-                                        + 1)..self.length,
+                                for c in (0..self.cursor_pos.2).chain(
+                                    (std::cmp::min(self.length, self.cursor_pos.2 + amount + 1) + 1)
+                                        ..self.length,
                                 ) {
                                     if let Some(thread) = self.get_thread_under_cursor(c) {
                                         self.rows
@@ -1090,9 +1090,9 @@ impl Component for ConversationsListing {
                             }
                         }
                         PageMovement::PageDown(multiplier) => {
-                            for c in self.new_cursor_pos.2
+                            for c in self.cursor_pos.2
                                 ..std::cmp::min(
-                                    self.new_cursor_pos.2 + rows * multiplier + 1,
+                                    self.cursor_pos.2 + rows * multiplier + 1,
                                     self.length,
                                 )
                             {
@@ -1111,9 +1111,9 @@ impl Component for ConversationsListing {
                                 }
                             }
                             if modifier == Modifier::Intersection {
-                                for c in (0..self.new_cursor_pos.2).chain(
+                                for c in (0..self.cursor_pos.2).chain(
                                     (std::cmp::min(
-                                        self.new_cursor_pos.2 + rows * multiplier + 1,
+                                        self.cursor_pos.2 + rows * multiplier + 1,
                                         self.length,
                                     ) + 1)..self.length,
                                 ) {
@@ -1126,7 +1126,7 @@ impl Component for ConversationsListing {
                         }
                         PageMovement::Right(_) | PageMovement::Left(_) => {}
                         PageMovement::Home => {
-                            for c in 0..=self.new_cursor_pos.2 {
+                            for c in 0..=self.cursor_pos.2 {
                                 if let Some(thread) = self.get_thread_under_cursor(c) {
                                     self.rows.update_selection_with_thread(
                                         thread,
@@ -1142,7 +1142,7 @@ impl Component for ConversationsListing {
                                 }
                             }
                             if modifier == Modifier::Intersection {
-                                for c in (self.new_cursor_pos.2 + 1)..self.length {
+                                for c in (self.cursor_pos.2 + 1)..self.length {
                                     if let Some(thread) = self.get_thread_under_cursor(c) {
                                         self.rows
                                             .update_selection_with_thread(thread, |e| *e = false);
@@ -1151,7 +1151,7 @@ impl Component for ConversationsListing {
                             }
                         }
                         PageMovement::End => {
-                            for c in self.new_cursor_pos.2..self.length {
+                            for c in self.cursor_pos.2..self.length {
                                 if let Some(thread) = self.get_thread_under_cursor(c) {
                                     self.rows.update_selection_with_thread(
                                         thread,
@@ -1167,7 +1167,7 @@ impl Component for ConversationsListing {
                                 }
                             }
                             if modifier == Modifier::Intersection {
-                                for c in 0..self.new_cursor_pos.2 {
+                                for c in 0..self.cursor_pos.2 {
                                     if let Some(thread) = self.get_thread_under_cursor(c) {
                                         self.rows
                                             .update_selection_with_thread(thread, |e| *e = false);
@@ -1177,7 +1177,9 @@ impl Component for ConversationsListing {
                         }
                     }
                 }
+                self.force_draw = true;
             }
+
             if !self.rows.row_updates.is_empty() {
                 /* certain rows need to be updated (eg an unseen message was just set seen)
                  * */
@@ -1305,6 +1307,7 @@ impl Component for ConversationsListing {
                         self.modifier_command = Some(Modifier::default());
                     } else if let Some(thread) = self.get_thread_under_cursor(self.cursor_pos.2) {
                         self.rows.update_selection_with_thread(thread, |e| *e = !*e);
+                        self.set_dirty(true);
                     }
                     return true;
                 }

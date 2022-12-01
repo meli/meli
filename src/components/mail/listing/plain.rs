@@ -461,7 +461,9 @@ impl ListingTrait for PlainListing {
                 }
                 context.dirty_areas.push_back(new_area);
             }
-            return;
+            if !self.force_draw {
+                return;
+            }
         } else if self.cursor_pos != self.new_cursor_pos {
             self.cursor_pos = self.new_cursor_pos;
         }
@@ -1025,37 +1027,194 @@ impl Component for PlainListing {
                 area = (set_y(upper_left, y + 1), bottom_right);
             }
 
+            let (upper_left, bottom_right) = area;
+            let rows = get_y(bottom_right) - get_y(upper_left) + 1;
+
+            if let Some(modifier) = self.modifier_command.take() {
+                if let Some(mvm) = self.movement.as_ref() {
+                    match mvm {
+                        PageMovement::Up(amount) => {
+                            for c in self.cursor_pos.2.saturating_sub(*amount)..=self.cursor_pos.2 {
+                                if let Some(env_hash) = self.get_env_under_cursor(c) {
+                                    self.rows.update_selection_with_env(
+                                        env_hash,
+                                        match modifier {
+                                            Modifier::SymmetricDifference => {
+                                                |e: &mut bool| *e = !*e
+                                            }
+                                            Modifier::Union => |e: &mut bool| *e = true,
+                                            Modifier::Difference => |e: &mut bool| *e = false,
+                                            Modifier::Intersection => |_: &mut bool| {},
+                                        },
+                                    );
+                                }
+                            }
+                            if modifier == Modifier::Intersection {
+                                for c in (0..self.cursor_pos.2.saturating_sub(*amount))
+                                    .chain((self.cursor_pos.2 + 2)..self.length)
+                                {
+                                    if let Some(env_hash) = self.get_env_under_cursor(c) {
+                                        self.rows
+                                            .update_selection_with_env(env_hash, |e| *e = false);
+                                    }
+                                }
+                            }
+                        }
+                        PageMovement::PageUp(multiplier) => {
+                            for c in self.cursor_pos.2.saturating_sub(rows * multiplier)
+                                ..=self.cursor_pos.2
+                            {
+                                if let Some(env_hash) = self.get_env_under_cursor(c) {
+                                    self.rows.update_selection_with_env(
+                                        env_hash,
+                                        match modifier {
+                                            Modifier::SymmetricDifference => {
+                                                |e: &mut bool| *e = !*e
+                                            }
+                                            Modifier::Union => |e: &mut bool| *e = true,
+                                            Modifier::Difference => |e: &mut bool| *e = false,
+                                            Modifier::Intersection => |_: &mut bool| {},
+                                        },
+                                    );
+                                }
+                            }
+                        }
+                        PageMovement::Down(amount) => {
+                            for c in self.cursor_pos.2
+                                ..std::cmp::min(self.length, self.cursor_pos.2 + amount + 1)
+                            {
+                                if let Some(env_hash) = self.get_env_under_cursor(c) {
+                                    self.rows.update_selection_with_env(
+                                        env_hash,
+                                        match modifier {
+                                            Modifier::SymmetricDifference => {
+                                                |e: &mut bool| *e = !*e
+                                            }
+                                            Modifier::Union => |e: &mut bool| *e = true,
+                                            Modifier::Difference => |e: &mut bool| *e = false,
+                                            Modifier::Intersection => |_: &mut bool| {},
+                                        },
+                                    );
+                                }
+                            }
+                            if modifier == Modifier::Intersection {
+                                for c in (0..self.cursor_pos.2).chain(
+                                    (std::cmp::min(self.length, self.cursor_pos.2 + amount) + 1)
+                                        ..self.length,
+                                ) {
+                                    if let Some(env_hash) = self.get_env_under_cursor(c) {
+                                        self.rows
+                                            .update_selection_with_env(env_hash, |e| *e = false);
+                                    }
+                                }
+                            }
+                        }
+                        PageMovement::PageDown(multiplier) => {
+                            for c in self.cursor_pos.2
+                                ..std::cmp::min(self.cursor_pos.2 + rows * multiplier, self.length)
+                            {
+                                if let Some(env_hash) = self.get_env_under_cursor(c) {
+                                    self.rows.update_selection_with_env(
+                                        env_hash,
+                                        match modifier {
+                                            Modifier::SymmetricDifference => {
+                                                |e: &mut bool| *e = !*e
+                                            }
+                                            Modifier::Union => |e: &mut bool| *e = true,
+                                            Modifier::Difference => |e: &mut bool| *e = false,
+                                            Modifier::Intersection => |_: &mut bool| {},
+                                        },
+                                    );
+                                }
+                            }
+                            if modifier == Modifier::Intersection {
+                                for c in (0..self.cursor_pos.2).chain(
+                                    (std::cmp::min(
+                                        self.cursor_pos.2 + rows * multiplier,
+                                        self.length,
+                                    ) + 1)..self.length,
+                                ) {
+                                    if let Some(env_hash) = self.get_env_under_cursor(c) {
+                                        self.rows
+                                            .update_selection_with_env(env_hash, |e| *e = false);
+                                    }
+                                }
+                            }
+                        }
+                        PageMovement::Right(_) | PageMovement::Left(_) => {}
+                        PageMovement::Home => {
+                            for c in 0..=self.cursor_pos.2 {
+                                if let Some(env_hash) = self.get_env_under_cursor(c) {
+                                    self.rows.update_selection_with_env(
+                                        env_hash,
+                                        match modifier {
+                                            Modifier::SymmetricDifference => {
+                                                |e: &mut bool| *e = !*e
+                                            }
+                                            Modifier::Union => |e: &mut bool| *e = true,
+                                            Modifier::Difference => |e: &mut bool| *e = false,
+                                            Modifier::Intersection => |_: &mut bool| {},
+                                        },
+                                    );
+                                }
+                            }
+                            if modifier == Modifier::Intersection {
+                                for c in (self.cursor_pos.2)..self.length {
+                                    if let Some(env_hash) = self.get_env_under_cursor(c) {
+                                        self.rows
+                                            .update_selection_with_env(env_hash, |e| *e = false);
+                                    }
+                                }
+                            }
+                        }
+                        PageMovement::End => {
+                            for c in self.cursor_pos.2..self.length {
+                                if let Some(env_hash) = self.get_env_under_cursor(c) {
+                                    self.rows.update_selection_with_env(
+                                        env_hash,
+                                        match modifier {
+                                            Modifier::SymmetricDifference => {
+                                                |e: &mut bool| *e = !*e
+                                            }
+                                            Modifier::Union => |e: &mut bool| *e = true,
+                                            Modifier::Difference => |e: &mut bool| *e = false,
+                                            Modifier::Intersection => |_: &mut bool| {},
+                                        },
+                                    );
+                                }
+                            }
+                            if modifier == Modifier::Intersection {
+                                for c in 0..self.cursor_pos.2 {
+                                    if let Some(env_hash) = self.get_env_under_cursor(c) {
+                                        self.rows
+                                            .update_selection_with_env(env_hash, |e| *e = false);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                self.force_draw = true;
+            }
+
             if !self.rows.row_updates.is_empty() {
-                let (upper_left, bottom_right) = area;
                 while let Some(env_hash) = self.rows.row_updates.pop() {
                     let row: usize = self.rows.env_order[&env_hash];
-                    let rows = get_y(bottom_right) - get_y(upper_left) + 1;
+                    let envelope: EnvelopeRef = context.accounts[&self.cursor_pos.0]
+                        .collection
+                        .get_env(env_hash);
+                    let row_attr = row_attr!(
+                        self.color_cache,
+                        row % 2 == 0,
+                        !envelope.is_seen(),
+                        false,
+                        self.rows.selection[&env_hash]
+                    );
+                    self.rows.row_attr_cache.insert(row, row_attr);
                     let page_no = (self.new_cursor_pos.2).wrapping_div(rows);
 
                     let top_idx = page_no * rows;
-                    if row >= top_idx && row <= top_idx + rows {
-                        let new_area = nth_row_area(area, row % rows);
-                        self.data_columns.draw(
-                            grid,
-                            row,
-                            self.cursor_pos.2,
-                            grid.bounds_iter(new_area),
-                        );
-                        let envelope: EnvelopeRef = context.accounts[&self.cursor_pos.0]
-                            .collection
-                            .get_env(env_hash);
-                        let row_attr = row_attr!(
-                            self.color_cache,
-                            row % 2 == 0,
-                            !envelope.is_seen(),
-                            false,
-                            self.rows.selection[&env_hash]
-                        );
-                        self.rows.row_attr_cache.insert(row, row_attr);
-
-                        change_colors(grid, new_area, row_attr.fg, row_attr.bg);
-                        context.dirty_areas.push_back(new_area);
-                    }
+                    self.force_draw |= row >= top_idx && row < top_idx + rows;
                 }
                 if self.force_draw {
                     /* Draw the entire list */
@@ -1149,6 +1308,7 @@ impl Component for PlainListing {
                         self.modifier_command = Some(Modifier::default());
                     } else if let Some(env_hash) = self.get_env_under_cursor(self.cursor_pos.2) {
                         self.rows.update_selection_with_env(env_hash, |e| *e = !*e);
+                        self.set_dirty(true);
                     }
                     return true;
                 }

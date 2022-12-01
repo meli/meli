@@ -93,9 +93,10 @@ impl<T> RowsState<T> {
         &mut self,
         thread: ThreadHash,
         metadata: T,
-        env_hashes: SmallVec<[EnvelopeHash; 8]>,
+        mut env_hashes: SmallVec<[EnvelopeHash; 8]>,
         entry_strings: EntryStrings,
     ) {
+        env_hashes.dedup();
         let index = self.entries.len();
         self.thread_order.insert(thread, index);
         self.all_threads.insert(thread);
