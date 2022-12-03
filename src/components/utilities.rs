@@ -318,17 +318,19 @@ impl Component for StatusBar {
                         }
                     })
                     .collect();
-                let command_completion_suggestions =
-                    crate::command::command_completion_suggestions(self.ex_buffer.as_str());
-
-                suggestions.extend(command_completion_suggestions.iter().filter_map(|e| {
-                    if !unique_suggestions.contains(e.as_str()) {
-                        unique_suggestions.insert(e.as_str());
-                        Some(e.clone().into())
-                    } else {
-                        None
-                    }
-                }));
+                if let ParseResult::Incomplete {
+                    suggestions: command_completion_suggestions,
+                } = crate::command::parser(self.ex_buffer.as_str(), &context)
+                {
+                    suggestions.extend(command_completion_suggestions.iter().filter_map(|e| {
+                        if !unique_suggestions.contains(e.as_str()) {
+                            unique_suggestions.insert(e.as_str());
+                            Some(e.clone().into())
+                        } else {
+                            None
+                        }
+                    }));
+                }
                 /*
                 suggestions.extend(crate::command::COMMAND_COMPLETION.iter().filter_map(|e| {
                     if e.0.starts_with(self.ex_buffer.as_str()) {

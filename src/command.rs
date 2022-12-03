@@ -1224,15 +1224,23 @@ pub fn command_completion_suggestions(input: &str) -> Vec<String> {
 use std::borrow::Cow;
 
 pub enum LexerToken<'a> {
-    Complete { input: Cow<'a, str>, token: Token },
-    Incomplete { input: &'a str, token: Token },
-    Invalid { input: &'a str },
+    Complete {
+        input: Cow<'a, str>,
+        token: Token,
+    },
+    Incomplete {
+        input: Cow<'a, str>,
+        token: Token,
+    },
+    Invalid {
+        input: Cow<'a, str>,
+        reason: &'static str,
+    },
 }
 
 pub fn lexer(input: &'_ str) -> Result<Vec<Cow<'_, str>>, usize> {
     #[inline(always)]
     fn unescape(input: &str) -> Cow<'_, str> {
-        println!("`{}`", &input);
         if input.is_empty() {
             return input.into();
         }
@@ -1334,6 +1342,65 @@ pub fn lexer(input: &'_ str) -> Result<Vec<Cow<'_, str>>, usize> {
     match state {
         QNone => Ok(tokens),
         _ => Err(prev_token_start),
+    }
+}
+
+#[derive(Debug)]
+pub enum ParseResult {
+    Valid {
+        inner: Action,
+    },
+    Invalid {
+        position: usize,
+        reason: &'static str,
+    },
+    Incomplete {
+        suggestions: Vec<String>,
+    },
+}
+
+pub fn parser(input: &'_ str, context: &crate::Context) -> ParseResult {
+    use crate::melib::ShellExpandTrait;
+    let mut lex_output: Vec<Cow<'_, str>> = match lexer(input) {
+        Ok(v) => v,
+        Err(err) => {
+            return ParseResult::Invalid {
+                position: err,
+                reason: "",
+            }
+        }
+    };
+    let mut sugg = HashSet::default();
+    for Command {
+        tags: _,
+        desc: _,
+        tokens,
+    } in COMMANDS.iter()
+    {
+        let m = tokens.matches_tokens(&lex_output, &mut sugg);
+        let m = match m {
+            Err(i) => {
+                //println!("error at `{}`", lex_output[i]);
+                continue;
+            }
+            Ok(m) => {
+                if !m.is_empty() {
+                    //print!("{:?} ", desc);
+                    //println!(" result = {:#?}\n\n", m);
+                }
+                m
+            }
+        };
+        if let Some((s, ExistingFilepath)) = m.last() {
+            let p = std::path::Path::new(s);
+            sugg.extend(p.complete(true).into_iter());
+        }
+    }
+    ParseResult::Incomplete {
+        suggestions: sugg
+            .into_iter()
+            .map(|s| format!("{}{}", input, s.as_str()))
+            .collect::<Vec<String>>(),
     }
 }
 
