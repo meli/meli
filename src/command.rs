@@ -62,11 +62,16 @@ macro_rules! to_stream {
         }
     };
 }
+pub struct Command {
+    tags: &'static str,
+    desc: &'static str,
+    tokens: TokenStream,
+}
 
 /// Macro to create a const table with every command part that can be auto-completed and its description
 macro_rules! define_commands {
     ( [$({ tags: [$( $tags:literal),*], desc: $desc:literal, tokens: $tokens:expr, parser: ($parser:item)}),*]) => {
-        pub const COMMAND_COMPLETION: &[(&str, &str, TokenStream)] = &[$($( ($tags, $desc, TokenStream { tokens: $tokens } ) ),*),* ];
+        pub const COMMANDS: &[Command] = &[$($( Command {  tags: $tags, desc: $desc, tokens: TokenStream { tokens: $tokens } } ),*),* ];
         $( $parser )*
     };
 }
@@ -136,7 +141,8 @@ impl TokenStream {
                     t @ AttachmentIndexValue
                     | t @ MailboxIndexValue
                     | t @ IndexValue
-                    | t @ Filepath
+                    | t @ ExistingFilepath
+                    | t @ NewFilepath
                     | t @ AccountName
                     | t @ MailboxPath
                     | t @ QuotedStringValue
@@ -191,7 +197,8 @@ impl TokenStream {
                 AttachmentIndexValue
                 | MailboxIndexValue
                 | IndexValue
-                | Filepath
+                | ExistingFilepath
+                | NewFilepath
                 | AccountName
                 | MailboxPath
                 | QuotedStringValue
@@ -206,6 +213,104 @@ impl TokenStream {
             }
         }
         tokens
+    }
+
+    fn matches_tokens<'s>(
+        &self,
+        tokens: &'s [Cow<'s, str>],
+        sugg: &mut HashSet<String>,
+    ) -> Result<Vec<(&'s str, Token)>, usize> {
+        let mut ret = vec![];
+        let mut tok_index = 0;
+        for t in self.tokens.iter() {
+            if tokens[tok_index..].is_empty() {
+                match t.inner() {
+                    Literal(lit) => {
+                        sugg.insert(format!(" {}", lit));
+                    }
+                    Alternatives(v) => {
+                        for t in v.iter() {
+                            //println!("adding empty suggestions for {:?}", t);
+                            if let Ok(mut m) = t.matches_tokens(&tokens[tok_index..], sugg) {
+                                ret.append(&mut m);
+                            }
+                        }
+                    }
+                    Seq(_s) => {}
+                    RestOfStringValue => {
+                        sugg.insert(String::new());
+                    }
+                    t @ AttachmentIndexValue
+                    | t @ MailboxIndexValue
+                    | t @ IndexValue
+                    | t @ ExistingFilepath
+                    | t @ NewFilepath
+                    | t @ AccountName
+                    | t @ MailboxPath
+                    | t @ QuotedStringValue
+                    | t @ AlphanumericStringValue => {
+                        let _t = t;
+                        //sugg.insert(format!("{}{:?}", if s.is_empty() { " " } else { "" }, t));
+                    }
+                }
+                return Ok(ret);
+            }
+            let tok = tokens[tok_index].as_ref();
+            match t.inner() {
+                Literal(lit) => {
+                    if lit.starts_with(tok) && lit.len() != tok.len() {
+                        if tokens[tok_index..].len() != 1 {
+                            return Err(tok_index);
+                        }
+                        sugg.insert(lit[tok.len()..].to_string());
+                        ret.push((tok, *t.inner()));
+                        return Ok(ret);
+                    } else if &tok == lit {
+                        ret.push((tok, *t.inner()));
+                    } else {
+                        return Err(tok_index);
+                    }
+                }
+                Alternatives(v) => {
+                    let mut cont = true;
+                    for t in v.iter() {
+                        if let Ok(mut m) = t.matches_tokens(&tokens[tok_index..], sugg) {
+                            if !m.is_empty() {
+                                ret.append(&mut m);
+                                //println!("_s is empty {}", _s.is_empty());
+                                break;
+                            }
+                        }
+                    }
+                    if ret.is_empty() {
+                        return Ok(ret);
+                    }
+                }
+                Seq(_s) => {
+                    return Ok(ret);
+                }
+                RestOfStringValue => {
+                    if tokens[tok_index..].len() != 1 {
+                        return Err(tok_index);
+                    }
+                    ret.push((tok, *t.inner()));
+                    return Ok(ret);
+                }
+                AttachmentIndexValue
+                | MailboxIndexValue
+                | IndexValue
+                | ExistingFilepath
+                | NewFilepath
+                | AccountName
+                | MailboxPath
+                | QuotedStringValue
+                | AlphanumericStringValue => {
+                    ret.push((tok, *t.inner()));
+                }
+            }
+            tok_index += 1;
+        }
+        Ok(ret)
     }
 }
 
@@ -233,7 +338,8 @@ impl TokenAdicity {
 #[derive(Debug, Copy, Clone)]
 pub enum Token {
     Literal(&'static str),
-    Filepath,
+    ExistingFilepath,
+    NewFilepath,
     Alternatives(&'static [TokenStream]),
     Seq(&'static [TokenAdicity]),
     AccountName,
@@ -326,7 +432,7 @@ define_commands!([
                  },
                 { tags: ["import "],
                   desc: "import FILESYSTEM_PATH MAILBOX_PATH",
-                  tokens: &[One(Literal("import")), One(Filepath), One(MailboxPath)],
+                  tokens: &[One(Literal("import")), One(ExistingFilepath), One(MailboxPath)],
                   parser:(
                       fn import(input: &[u8]) -> IResult<&[u8], Action> {
                           let (input, _) = tag("import")(input.trim())?;
@@ -442,7 +548,7 @@ define_commands!([
                 },
                 { tags: ["export-mbox "],
                   desc: "export-mbox PATH",
-                  tokens: &[One(Literal("export-mbox")), One(Filepath)],
+                  tokens: &[One(Literal("export-mbox")), One(NewFilepath)],
                   parser:(
                       fn export_mbox(input: &[u8]) -> IResult<&[u8], Action> {
                           let (input, _) = tag("export-mbox")(input.trim())?;
@@ -503,7 +609,7 @@ define_commands!([
                 /* Pipe pager contents to binary */
                 { tags: ["pipe "],
                   desc: "pipe EXECUTABLE ARGS",
-                  tokens: &[One(Literal("pipe")), One(Filepath), ZeroOrMore(QuotedStringValue)],
+                  tokens: &[One(Literal("pipe")), One(ExistingFilepath), ZeroOrMore(QuotedStringValue)],
                   parser:(
                       fn pipe<'a>(input: &'a [u8]) -> IResult<&'a [u8], Action> {
                           alt((
@@ -534,7 +640,7 @@ define_commands!([
                 /* Filter pager contents through binary */
                 { tags: ["filter "],
                   desc: "filter EXECUTABLE ARGS",
-                  tokens: &[One(Literal("filter")), One(Filepath), ZeroOrMore(QuotedStringValue)],
+                  tokens: &[One(Literal("filter")), One(ExistingFilepath), ZeroOrMore(QuotedStringValue)],
                   parser:(
                       fn filter(input: &'_ [u8]) -> IResult<&'_ [u8], Action> {
                           let (input, _) = tag("filter")(input.trim())?;
@@ -549,7 +655,7 @@ define_commands!([
                 { tags: ["add-attachment ", "add-attachment-file-picker "],
                   desc: "add-attachment PATH",
                   tokens: &[One(
-Alternatives(&[to_stream!(One(Literal("add-attachment")), One(Filepath)), to_stream!(One(Literal("add-attachment-file-picker")))]))],
+Alternatives(&[to_stream!(One(Literal("add-attachment")), One(ExistingFilepath)), to_stream!(One(Literal("add-attachment-file-picker")))]))],
                   parser:(
                       fn add_attachment<'a>(input: &'a [u8]) -> IResult<&'a [u8], Action> {
                           alt((
@@ -737,7 +843,7 @@ Alternatives(&[to_stream!(One(Literal("add-attachment")), One(Filepath)), to_str
                 },
                 { tags: ["save-attachment "],
                   desc: "save-attachment INDEX PATH",
-                  tokens: &[One(Literal("save-attachment")), One(AttachmentIndexValue), One(Filepath)],
+                  tokens: &[One(Literal("save-attachment")), One(AttachmentIndexValue), One(NewFilepath)],
                   parser:(
                       fn save_attachment(input: &[u8]) -> IResult<&[u8], Action> {
                           let (input, _) = tag("save-attachment")(input.trim())?;
@@ -752,7 +858,7 @@ Alternatives(&[to_stream!(One(Literal("add-attachment")), One(Filepath)), to_str
                 },
                 { tags: ["export-mail "],
                   desc: "export-mail PATH",
-                  tokens: &[One(Literal("export-mail")), One(Filepath)],
+                  tokens: &[One(Literal("export-mail")), One(NewFilepath)],
                   parser:(
                       fn export_mail(input: &[u8]) -> IResult<&[u8], Action> {
                           let (input, _) = tag("export-mail")(input.trim())?;
@@ -988,7 +1094,12 @@ fn test_parser() {
             let mut sugg = Default::default();
             let mut vec = vec![];
             //print!("{}", $input);
-            for (_tags, _desc, tokens) in COMMAND_COMPLETION.iter() {
+            for Command {
+                tags: _,
+                desc: _,
+                tokens,
+            } in COMMANDS.iter()
+            {
                 //println!("{:?}, {:?}, {:?}", _tags, _desc, tokens);
                 let m = tokens.matches(&mut $input.as_str(), &mut sugg);
                 if !m.is_empty() {
@@ -1046,7 +1157,12 @@ fn test_parser_interactive() {
                 let mut sugg = Default::default();
                 let mut vec = vec![];
                 //print!("{}", input);
-                for (_tags, _desc, tokens) in COMMAND_COMPLETION.iter() {
+                for Command {
+                    tags: _,
+                    desc: _,
+                    tokens,
+                } in COMMANDS.iter()
+                {
                     //println!("{:?}, {:?}, {:?}", _tags, _desc, tokens);
                     let m = tokens.matches(&mut input.as_str().trim(), &mut sugg);
                     if !m.is_empty() {
@@ -1085,12 +1201,17 @@ fn test_parser_interactive() {
 pub fn command_completion_suggestions(input: &str) -> Vec<String> {
     use crate::melib::ShellExpandTrait;
     let mut sugg = Default::default();
-    for (_tags, _desc, tokens) in COMMAND_COMPLETION.iter() {
+    for Command {
+        tags: _,
+        desc: _,
+        tokens,
+    } in COMMANDS.iter()
+    {
         let _m = tokens.matches(&mut &(*input), &mut sugg);
         if _m.is_empty() {
             continue;
         }
-        if let Some((s, Filepath)) = _m.last() {
+        if let Some((s, ExistingFilepath)) = _m.last() {
             let p = std::path::Path::new(s);
             sugg.extend(p.complete(true).into_iter());
         }
@@ -1098,4 +1219,218 @@ pub fn command_completion_suggestions(input: &str) -> Vec<String> {
     sugg.into_iter()
         .map(|s| format!("{}{}", input, s.as_str()))
         .collect::<Vec<String>>()
+}
+
+use std::borrow::Cow;
+
+pub enum LexerToken<'a> {
+    Complete { input: Cow<'a, str>, token: Token },
+    Incomplete { input: &'a str, token: Token },
+    Invalid { input: &'a str },
+}
+
+pub fn lexer(input: &'_ str) -> Result<Vec<Cow<'_, str>>, usize> {
+    #[inline(always)]
+    fn unescape(input: &str) -> Cow<'_, str> {
+        println!("`{}`", &input);
+        if input.is_empty() {
+            return input.into();
+        }
+        if let Some(input) = input
+            .strip_prefix('\'')
+            .and_then(|input| input.strip_suffix('\''))
+        {
+            input.into()
+        } else if let Some(input) = input
+            .strip_prefix('"')
+            .and_then(|input| input.strip_suffix('"'))
+        {
+            if input.contains('\\') {
+                input.replace('\\', "").into()
+            } else {
+                input.into()
+            }
+        } else if input.contains('\\') {
+            input.replace('\\', "").into()
+        } else {
+            input.into()
+        }
+    }
+
+    let mut prev_token_start = 0;
+    let mut tokens: Vec<Cow<'_, str>> = vec![];
+    #[repr(u8)]
+    #[derive(Copy, Clone)]
+    enum QuoteState {
+        QNone = 0,
+        QSingle,
+        QDouble,
+        QOne,
+        QDoubleOne,
+    }
+    use QuoteState::*;
+
+    let mut state = QNone;
+
+    for i in 0..input.as_bytes().len() {
+        match (state, input.as_bytes()[i]) {
+            /* handle escaped character \ */
+            (QOne, _) => {
+                state = QNone;
+            }
+            (QDoubleOne, _) => {
+                state = QDouble;
+            }
+            /* handle single quote ' */
+            (QNone, b'\'') => {
+                prev_token_start = i;
+                state = QSingle;
+            }
+            (QSingle, b'\'') => {
+                tokens.push(unescape(&input[prev_token_start..i + 1]));
+                prev_token_start = i + 1;
+                state = QNone;
+            }
+            (QDouble, b'\'') => {}
+            /* handle double quote " */
+            (QNone, b'"') => {
+                prev_token_start = i;
+                state = QDouble;
+            }
+            (QSingle, b'"') => {}
+            (QDouble, b'"') => {
+                tokens.push(unescape(&input[prev_token_start..i + 1]));
+                prev_token_start = i + 1;
+                state = QNone;
+            }
+            /* handle escape character \ */
+            (QNone, b'\\') => {
+                state = QOne;
+            }
+            (QSingle, b'\\') => {
+                // stay
+            }
+            (QDouble, b'\\') => {
+                // quote next character
+                state = QDoubleOne;
+            }
+            (QNone, b'\n') => break,
+            (QSingle | QDouble, b'\n') => {}
+            /* handle white spaces \ */
+            (QNone, b) if b"\t \n".contains(&b) => {
+                tokens.push(unescape(&input[prev_token_start..i]));
+                prev_token_start = i + 1;
+            }
+            (_, _) => {}
+        }
+    }
+
+    if prev_token_start < input.as_bytes().len() {
+        let last_token = input[prev_token_start..].trim();
+        if !last_token.is_empty() {
+            tokens.push(unescape(last_token));
+        }
+    }
+    match state {
+        QNone => Ok(tokens),
+        _ => Err(prev_token_start),
+    }
+}
+
+#[test]
+fn test_lexer() {
+    assert_eq!(
+        &[
+            Cow::Owned::<str>("set".to_string()),
+            Cow::Owned::<str>("plain".to_string())
+        ],
+        lexer("set plain\n").unwrap().as_slice()
+    );
+    assert_eq!(
+        &[
+            Cow::Owned::<str>("export-mail".to_string()),
+            Cow::Owned::<str>("/path/to/file".to_string())
+        ],
+        lexer("export-mail /path/to/file\n").unwrap().as_slice()
+    );
+    assert_eq!(
+        &[
+            Cow::Owned::<str>("export-mail".to_string()),
+            Cow::Owned::<str>("/path/to/ file".to_string())
+        ],
+        lexer("export-mail /path/to/\\ file\n").unwrap().as_slice()
+    );
+    assert_eq!(
+        &[
+            Cow::Owned::<str>("export-mail".to_string()),
+            Cow::Owned::<str>("/path/to/ file".to_string())
+        ],
+        lexer("export-mail \"/path/to/ file\"\n")
+            .unwrap()
+            .as_slice()
+    );
+    assert_eq!(12, lexer("export-mail \"/path/to/ file\n").unwrap_err());
+    use std::io;
+    let mut input = String::new();
+    loop {
+        input.clear();
+        print!("> ");
+        match io::stdin().read_line(&mut input) {
+            Ok(_n) => {
+                if input.trim() == "quit" {
+                    break;
+                }
+                println!("Input is {:?}", input.as_str().trim());
+                //print!("{}", input);
+                let lex_output = lexer(input.as_str());
+                println!("lex output: {:#?}", &lex_output);
+                let lex_output = if let Ok(v) = lex_output {
+                    v
+                } else {
+                    continue;
+                };
+                let mut sugg = Default::default();
+                let mut vec = vec![];
+                //print!("{}", input);
+                for Command {
+                    tags: _,
+                    desc: _,
+                    tokens,
+                } in COMMANDS.iter()
+                {
+                    //println!("{:?}, {:?}, {:?}", _tags, _desc, tokens);
+                    let m = tokens.matches_tokens(&lex_output, &mut sugg);
+                    match m {
+                        Err(i) => {
+                            //println!("error at `{}`", lex_output[i]);
+                        }
+                        Ok(m) => {
+                            if !m.is_empty() {
+                                vec.push(tokens);
+                                //print!("{:?} ", desc);
+                                //println!(" result = {:#?}\n\n", m);
+                            }
+                        }
+                    }
+                }
+                println!(
+                    "suggestions = {:#?}",
+                    sugg.into_iter()
+                        .zip(vec.into_iter())
+                        .map(|(s, v)| format!(
+                            "{}{} {:?}",
+                            input.as_str().trim(),
+                            if input.trim().is_empty() {
+                                s.trim()
+                            } else {
+                                s.as_str()
+                            },
+                            v
+                        ))
+                        .collect::<Vec<String>>()
+                );
+            }
+            Err(error) => println!("error: {}", error),
+        }
+    }
 }
