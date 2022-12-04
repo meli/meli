@@ -179,22 +179,8 @@ impl MailListingTrait for ConversationsListing {
         self.cursor_pos.1 = self.new_cursor_pos.1;
         self.cursor_pos.0 = self.new_cursor_pos.0;
 
-        self.color_cache = ColorCache {
-            theme_default: crate::conf::value(context, "mail.listing.conversations"),
-            subject: crate::conf::value(context, "mail.listing.conversations.subject"),
-            from: crate::conf::value(context, "mail.listing.conversations.from"),
-            date: crate::conf::value(context, "mail.listing.conversations.date"),
-            selected: crate::conf::value(context, "mail.listing.conversations.selected"),
-            unseen: crate::conf::value(context, "mail.listing.conversations.unseen"),
-            highlighted: crate::conf::value(context, "mail.listing.conversations.highlighted"),
-            tag_default: crate::conf::value(context, "mail.listing.tag_default"),
-            ..self.color_cache
-        };
+        self.color_cache = ColorCache::new(context, IndexStyle::Conversations);
 
-        if !context.settings.terminal.use_color() {
-            self.color_cache.highlighted.attrs |= Attr::REVERSE;
-            self.color_cache.tag_default.attrs |= Attr::REVERSE;
-        }
         // Get mailbox as a reference.
         //
         match context.accounts[&self.cursor_pos.0].load(self.cursor_pos.1) {
@@ -1427,25 +1413,7 @@ impl Component for ConversationsListing {
         }
         match *event {
             UIEvent::ConfigReload { old_settings: _ } => {
-                self.color_cache = ColorCache {
-                    theme_default: crate::conf::value(context, "mail.listing.conversations"),
-                    subject: crate::conf::value(context, "mail.listing.conversations.subject"),
-                    from: crate::conf::value(context, "mail.listing.conversations.from"),
-                    date: crate::conf::value(context, "mail.listing.conversations.date"),
-                    selected: crate::conf::value(context, "mail.listing.conversations.selected"),
-                    unseen: crate::conf::value(context, "mail.listing.conversations.unseen"),
-                    highlighted: crate::conf::value(
-                        context,
-                        "mail.listing.conversations.highlighted",
-                    ),
-                    tag_default: crate::conf::value(context, "mail.listing.tag_default"),
-                    ..self.color_cache
-                };
-
-                if !context.settings.terminal.use_color() {
-                    self.color_cache.highlighted.attrs |= Attr::REVERSE;
-                    self.color_cache.tag_default.attrs |= Attr::REVERSE;
-                }
+                self.color_cache = ColorCache::new(context, IndexStyle::Conversations);
                 self.refresh_mailbox(context, true);
                 self.set_dirty(true);
             }

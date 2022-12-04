@@ -241,26 +241,102 @@ impl Default for Modifier {
 
 #[derive(Debug, Default)]
 /// Save theme colors to avoid looking them up again and again from settings
-struct ColorCache {
-    theme_default: ThemeAttribute,
+pub struct ColorCache {
+    pub theme_default: ThemeAttribute,
 
-    unseen: ThemeAttribute,
-    highlighted: ThemeAttribute,
-    selected: ThemeAttribute,
-    even: ThemeAttribute,
-    odd: ThemeAttribute,
-    even_unseen: ThemeAttribute,
-    even_highlighted: ThemeAttribute,
-    even_selected: ThemeAttribute,
-    odd_unseen: ThemeAttribute,
-    odd_highlighted: ThemeAttribute,
-    odd_selected: ThemeAttribute,
-    tag_default: ThemeAttribute,
+    pub unseen: ThemeAttribute,
+    pub highlighted: ThemeAttribute,
+    pub selected: ThemeAttribute,
+    pub even: ThemeAttribute,
+    pub odd: ThemeAttribute,
+    pub even_unseen: ThemeAttribute,
+    pub even_highlighted: ThemeAttribute,
+    pub even_selected: ThemeAttribute,
+    pub odd_unseen: ThemeAttribute,
+    pub odd_highlighted: ThemeAttribute,
+    pub odd_selected: ThemeAttribute,
+    pub tag_default: ThemeAttribute,
 
     /* Conversations */
-    subject: ThemeAttribute,
-    from: ThemeAttribute,
-    date: ThemeAttribute,
+    pub subject: ThemeAttribute,
+    pub from: ThemeAttribute,
+    pub date: ThemeAttribute,
+}
+
+impl ColorCache {
+    pub fn new(context: &Context, style: IndexStyle) -> Self {
+        let mut ret = match style {
+            IndexStyle::Plain => Self {
+                even: crate::conf::value(context, "mail.listing.plain.even"),
+                odd: crate::conf::value(context, "mail.listing.plain.odd"),
+                even_unseen: crate::conf::value(context, "mail.listing.plain.even_unseen"),
+                odd_unseen: crate::conf::value(context, "mail.listing.plain.odd_unseen"),
+                even_highlighted: crate::conf::value(
+                    context,
+                    "mail.listing.plain.even_highlighted",
+                ),
+                odd_highlighted: crate::conf::value(context, "mail.listing.plain.odd_highlighted"),
+                even_selected: crate::conf::value(context, "mail.listing.plain.even_selected"),
+                odd_selected: crate::conf::value(context, "mail.listing.plain.odd_selected"),
+                tag_default: crate::conf::value(context, "mail.listing.tag_default"),
+                theme_default: crate::conf::value(context, "theme_default"),
+                ..Self::default()
+            },
+            IndexStyle::Threaded => Self {
+                even_unseen: crate::conf::value(context, "mail.listing.plain.even_unseen"),
+                even_selected: crate::conf::value(context, "mail.listing.plain.even_selected"),
+                even_highlighted: crate::conf::value(
+                    context,
+                    "mail.listing.plain.even_highlighted",
+                ),
+                odd_unseen: crate::conf::value(context, "mail.listing.plain.odd_unseen"),
+                odd_selected: crate::conf::value(context, "mail.listing.plain.odd_selected"),
+                odd_highlighted: crate::conf::value(context, "mail.listing.plain.odd_highlighted"),
+                even: crate::conf::value(context, "mail.listing.plain.even"),
+                odd: crate::conf::value(context, "mail.listing.plain.odd"),
+                tag_default: crate::conf::value(context, "mail.listing.tag_default"),
+                theme_default: crate::conf::value(context, "theme_default"),
+                ..Self::default()
+            },
+            IndexStyle::Compact => Self {
+                even_unseen: crate::conf::value(context, "mail.listing.compact.even_unseen"),
+                even_selected: crate::conf::value(context, "mail.listing.compact.even_selected"),
+                even_highlighted: crate::conf::value(
+                    context,
+                    "mail.listing.compact.even_highlighted",
+                ),
+                odd_unseen: crate::conf::value(context, "mail.listing.compact.odd_unseen"),
+                odd_selected: crate::conf::value(context, "mail.listing.compact.odd_selected"),
+                odd_highlighted: crate::conf::value(
+                    context,
+                    "mail.listing.compact.odd_highlighted",
+                ),
+                even: crate::conf::value(context, "mail.listing.compact.even"),
+                odd: crate::conf::value(context, "mail.listing.compact.odd"),
+                tag_default: crate::conf::value(context, "mail.listing.tag_default"),
+                theme_default: crate::conf::value(context, "theme_default"),
+                ..Self::default()
+            },
+            IndexStyle::Conversations => Self {
+                theme_default: crate::conf::value(context, "mail.listing.conversations"),
+                subject: crate::conf::value(context, "mail.listing.conversations.subject"),
+                from: crate::conf::value(context, "mail.listing.conversations.from"),
+                date: crate::conf::value(context, "mail.listing.conversations.date"),
+                selected: crate::conf::value(context, "mail.listing.conversations.selected"),
+                unseen: crate::conf::value(context, "mail.listing.conversations.unseen"),
+                highlighted: crate::conf::value(context, "mail.listing.conversations.highlighted"),
+                tag_default: crate::conf::value(context, "mail.listing.tag_default"),
+                ..Self::default()
+            },
+        };
+        if !context.settings.terminal.use_color() {
+            ret.highlighted.attrs |= Attr::REVERSE;
+            ret.tag_default.attrs |= Attr::REVERSE;
+            ret.even_highlighted.attrs |= Attr::REVERSE;
+            ret.odd_highlighted.attrs |= Attr::REVERSE;
+        }
+        ret
+    }
 }
 
 #[derive(Debug)]
