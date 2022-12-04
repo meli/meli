@@ -427,6 +427,19 @@ define_commands!([
                       }
                   )
                 },
+                { tags: ["search-all"],
+                  desc: "search-all <TERM>, searches all mailboxes with given term",
+                  tokens: &[One(Literal("search-all")), One(RestOfStringValue)],
+                  parser:(
+                      fn search_all(input: &[u8]) -> IResult<&[u8], Action> {
+                          let (input, _) = tag("search-all")(input.trim())?;
+                          let (input, _) = is_a(" ")(input)?;
+                          let (input, string) = map_res(not_line_ending, std::str::from_utf8)(input)?;
+                          let (input, _) = eof(input)?;
+                          Ok((input, Listing(SearchAll(String::from(string)))))
+                      }
+                  )
+                },
                 { tags: ["select"],
                   desc: "select <TERM>, selects envelopes matching with given term",
                   tokens: &[One(Literal("select")), One(RestOfStringValue)],
@@ -934,6 +947,7 @@ fn listing_action(input: &[u8]) -> IResult<&[u8], Action> {
         copymove,
         import,
         search,
+        search_all,
         select,
         toggle_thread_snooze,
         open_in_new_tab,

@@ -32,6 +32,8 @@ pub mod view;
 pub use crate::view::*;
 mod compose;
 pub use self::compose::*;
+mod search_all;
+pub use self::search_all::*;
 
 #[cfg(feature = "gpgme")]
 pub mod pgp;

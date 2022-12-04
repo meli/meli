@@ -41,6 +41,7 @@ pub enum ListingAction {
     SetCompact,
     SetConversations,
     Search(String),
+    SearchAll(String),
     Select(String),
     SetSeen,
     SetUnseen,

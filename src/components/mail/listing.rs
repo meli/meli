@@ -1373,6 +1373,20 @@ impl Component for Listing {
                             }
                             return true;
                         }
+                        Action::Listing(ListingAction::SearchAll(ref search_term)) => {
+                            let account_hash = context.accounts[self.cursor_pos.0].hash();
+                            let search_all = SearchAll::with_account(
+                                account_hash,
+                                self.cursor_pos.0,
+                                search_term.clone(),
+                                context,
+                            );
+                            context
+                                .replies
+                                .push_back(UIEvent::Action(Tab(New(Some(Box::new(search_all))))));
+
+                            return true;
+                        }
                         Action::Listing(a @ ListingAction::SetSeen)
                         | Action::Listing(a @ ListingAction::SetUnseen)
                         | Action::Listing(a @ ListingAction::Delete)
