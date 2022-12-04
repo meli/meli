@@ -1683,7 +1683,7 @@ impl Default for Themes {
             "mail.listing.tag_default",
             light = {
                 fg: Color::White,
-                bg: Color::Byte(8),
+                bg: Color::Byte(250),
                 attrs: Attr::BOLD
             },
             dark = {
