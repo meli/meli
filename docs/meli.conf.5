@@ -187,19 +187,36 @@ Its format is described below in
 notmuch is supported by loading the dynamic library libnotmuch.
 If its location is missing from your library paths, you must add it yourself.
 Alternatively, you can specify its path by using a setting.
-.Bl -tag -width 36n
-.It Ic root_mailbox
-points to the directory which contains the
-.Pa .notmuch/
-subdirectory.
+.Pp
 notmuch mailboxes are virtual, since they are defined by user-given notmuch queries.
 You must explicitly state the mailboxes you want in the
 .Ic mailboxes
 field and set the
 .Ar query
 property to each of them.
+To create a tree hierarchy with virtual mailboxes, define the
+.Ar parent
+property to a mailbox as the name of the parent mailbox you have used in your configuration.
+.Pp
+Account properties:
+.Bl -tag -width 36n
+.It Ic root_mailbox
+points to the directory which contains the
+.Pa .notmuch/
+subdirectory.
 .It Ic library_file_path Ar Path
 Use an arbitrary location of libnotmuch by specifying its full filesystem path.
+.Pq Em optional
+.El
+Mailbox properties:
+.Bl -tag -width 36n
+.It Ic query Ar String
+The notmuch query that defines what content this virtual mailbox has.
+Refer to
+.Xr notmuch-search-terms 7
+for notmuch's search syntax.
+.It Ic parent Ar String
+If you wish to build a mailbox hierarchy, define the name of a parent mailbox you have used in your configuration.
 .Pq Em optional
 .El
 Example:
@@ -212,6 +229,8 @@ format = "notmuch"
   "INBOX" = {  query="tag:inbox", subscribe = true }
   "Drafts" = {  query="tag:draft", subscribe = true }
   "Sent" = {  query="from:username@example.com from:username2@example.com", subscribe = true }
+  "Archives" = {  query="tag:archived", subscribe = true }
+  "Archives/2019" = {  query="tag:archived date:01-2019..12-2019", parent="Archives", subscribe = true }
 .Ed
 .Ss IMAP only
 IMAP specific options are:

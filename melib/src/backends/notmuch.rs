@@ -356,10 +356,14 @@ impl NotmuchDb {
         }
         path.pop();
 
-        let mut mailboxes = HashMap::default();
+        let mut mailboxes = HashMap::with_capacity(s.mailboxes.len());
+        let mut parents: Vec<(MailboxHash, &str)> = Vec::with_capacity(s.mailboxes.len());
         for (k, f) in s.mailboxes.iter() {
             if let Some(query_str) = f.extra.get("query") {
                 let hash = MailboxHash::from_bytes(k.as_bytes());
+                if let Some(parent) = f.extra.get("parent") {
+                    parents.push((hash, parent));
+                }
                 mailboxes.insert(
                     hash,
                     NotmuchMailbox {
@@ -379,6 +383,27 @@ impl NotmuchDb {
                     "notmuch mailbox configuration entry `{}` for account {} should have a `query` value set.",
                     k,
                     s.name(),
+                ))
+                .set_kind(ErrorKind::Configuration));
+            }
+        }
+        for (hash, parent) in parents {
+            if let Some(&parent_hash) = mailboxes
+                .iter()
+                .find(|(_, v)| v.name == parent)
+                .map(|(k, _)| k)
+            {
+                mailboxes
+                    .entry(parent_hash)
+                    .or_default()
+                    .children
+                    .push(hash);
+                mailboxes.entry(hash).or_default().parent = Some(parent_hash);
+            } else {
+                return Err(Error::new(format!(
+                    "Mailbox configuration for `{}` defines its parent mailbox as `{}` but no mailbox exists with this exact name.",
+                    mailboxes[&hash].name(),
+                    parent
                 ))
                 .set_kind(ErrorKind::Configuration));
             }
@@ -439,6 +464,7 @@ impl NotmuchDb {
                 )).set_kind(ErrorKind::Configuration));
             }
         }
+        let mut parents: Vec<(String, String)> = Vec::with_capacity(s.mailboxes.len());
         for (k, f) in s.mailboxes.iter_mut() {
             if f.extra.remove("query").is_none() {
                 return Err(Error::new(format!(
@@ -447,6 +473,34 @@ impl NotmuchDb {
                     account_name,
                 ))
                 .set_kind(ErrorKind::Configuration));
+            }
+            if let Some(parent) = f.extra.remove("parent") {
+                parents.push((k.clone(), parent));
+            }
+        }
+        let mut path = Vec::with_capacity(8);
+        for (mbox, parent) in parents.iter() {
+            if !s.mailboxes.contains_key(parent) {
+                return Err(Error::new(format!(
+                    "Mailbox configuration for `{}` defines its parent mailbox as `{}` but no mailbox exists with this exact name.",
+                    mbox,
+                    parent
+                ))
+                .set_kind(ErrorKind::Configuration));
+            }
+            path.clear();
+            path.push(mbox.as_str());
+            let mut iter = parent.as_str();
+            while let Some((k, v)) = parents.iter().find(|(k, _v)| k == iter) {
+                if k == mbox {
+                    return Err(Error::new(format!(
+                        "Found cycle in mailbox hierarchy: {}",
+                        path.join("->")
+                    ))
+                    .set_kind(ErrorKind::Configuration));
+                }
+                path.push(k.as_str());
+                iter = v.as_str();
             }
         }
         Ok(())
