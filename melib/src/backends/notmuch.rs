@@ -309,10 +309,12 @@ impl NotmuchDb {
         _is_subscribed: Box<dyn Fn(&str) -> bool>,
         event_consumer: BackendEventConsumer,
     ) -> Result<Box<dyn MailBackend>> {
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(target_os = "linux")]
         let mut dlpath = "libnotmuch.so.5";
         #[cfg(target_os = "macos")]
         let mut dlpath = "libnotmuch.5.dylib";
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        let mut dlpath = "libnotmuch.so";
         let mut custom_dlpath = false;
         if let Some(lib_path) = s.extra.get("library_file_path") {
             dlpath = lib_path.as_str();
