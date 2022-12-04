@@ -95,7 +95,7 @@ pub struct ComposingSettings {
 impl Default for ComposingSettings {
     fn default() -> Self {
         ComposingSettings {
-            send_mail: SendMail::ShellCommand("/bin/false".into()),
+            send_mail: SendMail::ShellCommand("false".into()),
             editor_command: None,
             embed: false,
             format_flowed: true,

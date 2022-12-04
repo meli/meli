@@ -385,7 +385,7 @@ impl FileSettings {
             let err_msg = r#"You must set a global `composing` option. If you override `composing` in each account, you can use a dummy global like follows:
 
 [composing]
-send_mail = '/bin/false'
+send_mail = 'false'
 
 This is required so that you don't accidentally start meli and find out later that you can't send emails."#;
             if interactive {
@@ -398,7 +398,7 @@ This is required so that you don't accidentally start meli and find out later th
                 };
                 if ask.run() {
                     let mut file = OpenOptions::new().append(true).open(&path)?;
-                    file.write_all("[composing]\nsend_mail = '/bin/false'\n".as_bytes())
+                    file.write_all("[composing]\nsend_mail = 'false'\n".as_bytes())
                         .map_err(|err| {
                             MeliError::new(format!(
                                 "Could not append to {}: {}",
@@ -1214,7 +1214,7 @@ index_style = "Compact"
 identity="username@hostname.local"
 
 [composing]
-send_mail = '/bin/false'
+send_mail = 'false'
 "#;
     const IMAP_CONFIG: &str = r#"
 [accounts.imap]
@@ -1223,10 +1223,10 @@ format = "imap"
 identity="username@example.com"
 server_username = "null"
 server_hostname = "example.com"
-server_password_command = "/bin/false"
+server_password_command = "false"
 
 [composing]
-send_mail = '/bin/false'
+send_mail = 'false'
 "#;
 
     const EXAMPLE_CONFIG: &str = include_str!("../docs/samples/sample-config.toml");
@@ -1262,7 +1262,7 @@ send_mail = '/bin/false'
     assert!(err.summary.as_ref().starts_with("You must set a global `composing` option. If you override `composing` in each account, you can use a dummy global like follows"));
     new_file
         .file
-        .write_all("[composing]\nsend_mail = '/bin/false'\n".as_bytes())
+        .write_all("[composing]\nsend_mail = 'false'\n".as_bytes())
         .unwrap();
     let err = FileSettings::validate(new_file.path.clone(), false, true).unwrap_err();
     assert_eq!(err.summary.as_ref(), "Configuration error (account-name): root_mailbox `/path/to/root/mailbox` is not a valid directory.");
