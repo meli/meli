@@ -150,7 +150,7 @@ impl Composer {
         pager.set_show_scrollbar(true);
         Composer {
             reply_context: None,
-            account_hash: 0,
+            account_hash: AccountHash::default(),
             cursor: Cursor::Headers,
             pager,
             draft: Draft::default(),
@@ -2405,7 +2405,7 @@ hello world.
     let envelope = Envelope::from_bytes(raw_mail.as_bytes(), None).expect("Could not parse mail");
     let mut context = Context::new_mock();
     let account_hash = context.accounts[0].hash();
-    let mailbox_hash = 0;
+    let mailbox_hash = MailboxHash::default();
     let envelope_hash = envelope.hash();
     context.accounts[0]
         .collection

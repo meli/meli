@@ -147,6 +147,7 @@ pub extern crate uuid;
 pub extern crate xdg_utils;
 
 #[derive(Debug, Copy, Clone)]
+#[repr(transparent)]
 pub struct Bytes(pub usize);
 
 impl Bytes {
@@ -394,4 +395,69 @@ pub mod shellexpand {
         assert!(Path::new("~").expand().complete(false).is_empty());
         assert!(!Path::new("~").expand().complete(true).is_empty());
     }
+}
+
+#[macro_export]
+macro_rules! declare_u64_hash {
+    ($type_name:ident) => {
+        #[derive(
+            Hash,
+            Eq,
+            PartialEq,
+            Debug,
+            Ord,
+            PartialOrd,
+            Default,
+            Serialize,
+            Deserialize,
+            Copy,
+            Clone,
+        )]
+        #[repr(transparent)]
+        pub struct $type_name(pub u64);
+
+        impl $type_name {
+            #[inline(always)]
+            pub fn from_bytes(bytes: &[u8]) -> Self {
+                use std::collections::hash_map::DefaultHasher;
+                use std::hash::Hasher;
+                let mut h = DefaultHasher::new();
+                h.write(bytes);
+                Self(h.finish())
+            }
+
+            #[inline(always)]
+            pub const fn to_be_bytes(self) -> [u8; 8] {
+                self.0.to_be_bytes()
+            }
+
+            #[inline(always)]
+            pub const fn is_null(self) -> bool {
+                self.0 == 0
+            }
+        }
+
+        impl core::fmt::Display for $type_name {
+            fn fmt(&self, fmt: &mut core::fmt::Formatter) -> core::fmt::Result {
+                write!(fmt, "{}", self.0)
+            }
+        }
+        #[cfg(feature = "sqlite3")]
+        impl rusqlite::types::ToSql for $type_name {
+            fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput> {
+                Ok(rusqlite::types::ToSqlOutput::from(self.0 as i64))
+            }
+        }
+
+        #[cfg(feature = "sqlite3")]
+        impl rusqlite::types::FromSql for $type_name {
+            fn column_result(
+                value: rusqlite::types::ValueRef,
+            ) -> rusqlite::types::FromSqlResult<Self> {
+                let b: i64 = rusqlite::types::FromSql::column_result(value)?;
+
+                Ok($type_name(b as u64))
+            }
+        }
+    };
 }

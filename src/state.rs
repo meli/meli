@@ -182,13 +182,7 @@ impl Context {
             account_conf.account.format = "maildir".to_string();
             account_conf.account.root_mailbox = "/tmp/".to_string();
             let sender = sender.clone();
-            let account_hash = {
-                use std::collections::hash_map::DefaultHasher;
-                use std::hash::Hasher;
-                let mut hasher = DefaultHasher::new();
-                hasher.write(name.as_bytes());
-                hasher.finish()
-            };
+            let account_hash = AccountHash::from_bytes(name.as_bytes());
             Account::new(
                 account_hash,
                 name,
@@ -328,13 +322,7 @@ impl State {
                 .iter()
                 .map(|(n, a_s)| {
                     let sender = sender.clone();
-                    let account_hash = {
-                        use std::collections::hash_map::DefaultHasher;
-                        use std::hash::Hasher;
-                        let mut hasher = DefaultHasher::new();
-                        hasher.write(n.as_bytes());
-                        hasher.finish()
-                    };
+                    let account_hash = AccountHash::from_bytes(n.as_bytes());
                     Account::new(
                         account_hash,
                         n.to_string(),

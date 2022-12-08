@@ -109,12 +109,11 @@ use crate::datetime::UnixTimestamp;
 use crate::error::{MeliError, Result};
 use crate::parser::BytesExt;
 use crate::thread::ThreadNodeHash;
+use crate::TagHash;
 
 use smallvec::SmallVec;
 use std::borrow::Cow;
-use std::collections::hash_map::DefaultHasher;
 use std::convert::TryInto;
-use std::hash::Hasher;
 use std::ops::Deref;
 
 bitflags! {
@@ -198,31 +197,7 @@ impl Mail {
     }
 }
 
-#[derive(
-    Hash, Eq, PartialEq, Debug, Ord, PartialOrd, Default, Serialize, Deserialize, Copy, Clone,
-)]
-#[repr(transparent)]
-pub struct EnvelopeHash(pub u64);
-
-impl EnvelopeHash {
-    #[inline(always)]
-    pub fn from_bytes(bytes: &[u8]) -> Self {
-        let mut h = DefaultHasher::new();
-        h.write(bytes);
-        Self(h.finish())
-    }
-
-    #[inline(always)]
-    pub const fn to_be_bytes(self) -> [u8; 8] {
-        self.0.to_be_bytes()
-    }
-}
-
-impl core::fmt::Display for EnvelopeHash {
-    fn fmt(&self, fmt: &mut core::fmt::Formatter) -> core::fmt::Result {
-        write!(fmt, "{}", self.0)
-    }
-}
+crate::declare_u64_hash!(EnvelopeHash);
 
 /// `Envelope` represents all the header and structure data of an email we need to know.
 ///
@@ -247,7 +222,7 @@ pub struct Envelope {
     pub thread: ThreadNodeHash,
     pub flags: Flag,
     pub has_attachments: bool,
-    pub labels: SmallVec<[u64; 8]>,
+    pub tags: SmallVec<[TagHash; 8]>,
 }
 
 impl core::fmt::Debug for Envelope {
@@ -290,7 +265,7 @@ impl Envelope {
             thread: ThreadNodeHash::null(),
             has_attachments: false,
             flags: Flag::default(),
-            labels: SmallVec::new(),
+            tags: SmallVec::new(),
         }
     }
 
@@ -809,12 +784,12 @@ impl Envelope {
         self.has_attachments
     }
 
-    pub fn labels(&self) -> &SmallVec<[u64; 8]> {
-        &self.labels
+    pub fn tags(&self) -> &SmallVec<[TagHash; 8]> {
+        &self.tags
     }
 
-    pub fn labels_mut(&mut self) -> &mut SmallVec<[u64; 8]> {
-        &mut self.labels
+    pub fn tags_mut(&mut self) -> &mut SmallVec<[TagHash; 8]> {
+        &mut self.tags
     }
 }
 

@@ -159,7 +159,7 @@ impl MaildirMailbox {
         };
 
         let ret = MaildirMailbox {
-            hash: h.finish(),
+            hash: MailboxHash(h.finish()),
             name: file_name,
             path: fname.unwrap().to_path_buf(),
             fs_path: pathbuf,

@@ -99,7 +99,7 @@ fn main() -> Result<()> {
     }
     let account = &settings.accounts[&account_name].account;
     let mut conn = ManageSieveConnection::new(
-        0,
+        AccountHash::default(),
         account_name.clone(),
         account,
         melib::backends::BackendEventConsumer::new(std::sync::Arc::new(|_, _| {})),

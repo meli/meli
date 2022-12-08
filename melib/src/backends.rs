@@ -20,16 +20,6 @@
  */
 
 use smallvec::SmallVec;
-#[macro_export]
-macro_rules! tag_hash {
-    ($tag:ident) => {{
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::Hasher;
-        let mut hasher = DefaultHasher::new();
-        hasher.write($tag.as_bytes());
-        hasher.finish()
-    }};
-}
 
 #[cfg(feature = "imap_backend")]
 pub mod imap;
@@ -580,8 +570,10 @@ pub trait BackendMailbox: Debug {
     fn count(&self) -> Result<(usize, usize)>;
 }
 
-pub type AccountHash = u64;
-pub type MailboxHash = u64;
+crate::declare_u64_hash!(AccountHash);
+crate::declare_u64_hash!(MailboxHash);
+crate::declare_u64_hash!(TagHash);
+
 pub type Mailbox = Box<dyn BackendMailbox + Send + Sync>;
 
 impl Clone for Mailbox {
@@ -742,10 +734,10 @@ fn test_lazy_count_set() {
     new.set_not_yet_seen(10);
     assert_eq!(new.len(), 10);
     for i in 0..10 {
-        assert!(new.insert_existing(i));
+        assert!(new.insert_existing(EnvelopeHash(i)));
     }
     assert_eq!(new.len(), 10);
-    assert!(!new.insert_existing(10));
+    assert!(!new.insert_existing(EnvelopeHash(10)));
     assert_eq!(new.len(), 10);
 }
 

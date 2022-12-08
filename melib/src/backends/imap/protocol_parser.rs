@@ -26,7 +26,6 @@ use crate::email::parser::{
     BytesExt, IResult,
 };
 use crate::error::ResultIntoMeliError;
-use crate::get_path_hash;
 use nom::{
     branch::{alt, permutation},
     bytes::complete::{is_a, is_not, tag, take, take_until, take_while},
@@ -479,7 +478,7 @@ pub fn list_mailbox_result(input: &[u8]) -> IResult<&[u8], ImapMailbox> {
                 }
             }
             f.imap_path = path.to_string();
-            f.hash = get_path_hash!(&f.imap_path);
+            f.hash = MailboxHash::from_bytes(f.imap_path.as_bytes());
             f.path = if separator == b'/' {
                 f.imap_path.clone()
             } else {
@@ -487,7 +486,7 @@ pub fn list_mailbox_result(input: &[u8]) -> IResult<&[u8], ImapMailbox> {
             };
             f.name = if let Some(pos) = f.imap_path.as_bytes().iter().rposition(|&c| c == separator)
             {
-                f.parent = Some(get_path_hash!(&f.imap_path[..pos]));
+                f.parent = Some(MailboxHash::from_bytes(f.imap_path[..pos].as_bytes()));
                 f.imap_path[pos + 1..].to_string()
             } else {
                 f.imap_path.clone()
@@ -984,7 +983,7 @@ fn test_imap_fetch_response() {
 
     let mut address = SmallVec::new();
     address.push(Address::new(None, "xx@xx.com".to_string()));
-    let mut env = Envelope::new(0);
+    let mut env = Envelope::new(EnvelopeHash::default());
     env.set_subject("xxxx/xxxx".as_bytes().to_vec());
     env.set_date("Fri, 24 Jun 2011 10:09:10 +0000".as_bytes());
     env.set_from(address.clone());
@@ -1599,7 +1598,9 @@ pub struct StatusResponse {
 pub fn status_response(input: &[u8]) -> IResult<&[u8], StatusResponse> {
     let (input, _) = tag("* STATUS ")(input)?;
     let (input, mailbox) = take_until(" (")(input)?;
-    let mailbox = mailbox_token(mailbox).map(|(_, m)| get_path_hash!(m)).ok();
+    let mailbox = mailbox_token(mailbox)
+        .map(|(_, m)| MailboxHash::from_bytes(m.as_bytes()))
+        .ok();
     let (input, _) = tag(" (")(input)?;
     let (input, result) = permutation((
         opt(preceded(

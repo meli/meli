@@ -28,6 +28,7 @@ extern crate xdg;
 
 use crate::conf::deserializers::non_empty_string;
 use crate::terminal::Color;
+use melib::backends::TagHash;
 use melib::search::Query;
 use std::collections::HashSet;
 mod overrides;
@@ -952,6 +953,7 @@ mod dotaddressable {
     impl DotAddressable for char {}
     impl DotAddressable for IndexStyle {}
     impl DotAddressable for u64 {}
+    impl DotAddressable for TagHash {}
     impl DotAddressable for crate::terminal::Color {}
     impl DotAddressable for crate::terminal::Attr {}
     impl DotAddressable for crate::terminal::Key {}

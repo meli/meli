@@ -20,7 +20,7 @@
  */
 
 use super::*;
-use crate::backends::MailboxHash;
+use crate::backends::{MailboxHash, TagHash};
 use smallvec::SmallVec;
 use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
@@ -37,7 +37,7 @@ pub struct Collection {
     pub threads: Arc<RwLock<HashMap<MailboxHash, Threads>>>,
     pub sent_mailbox: Arc<RwLock<Option<MailboxHash>>>,
     pub mailboxes: Arc<RwLock<HashMap<MailboxHash, HashSet<EnvelopeHash>>>>,
-    pub tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
+    pub tag_index: Arc<RwLock<BTreeMap<TagHash, String>>>,
 }
 
 impl Default for Collection {

@@ -25,13 +25,9 @@ use crate::error::{MeliError, Result};
 use crate::shellexpand::ShellExpandTrait;
 use crate::{backends::*, Collection};
 use smallvec::SmallVec;
-use std::collections::{
-    hash_map::{DefaultHasher, HashMap},
-    BTreeMap,
-};
+use std::collections::{hash_map::HashMap, BTreeMap};
 use std::error::Error;
 use std::ffi::{CStr, CString, OsStr};
-use std::hash::{Hash, Hasher};
 use std::io::Read;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
@@ -91,7 +87,7 @@ impl DbConnection {
         mailboxes: Arc<RwLock<HashMap<MailboxHash, NotmuchMailbox>>>,
         index: Arc<RwLock<HashMap<EnvelopeHash, CString>>>,
         mailbox_index: Arc<RwLock<HashMap<EnvelopeHash, SmallVec<[MailboxHash; 16]>>>>,
-        tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
+        tag_index: Arc<RwLock<BTreeMap<TagHash, String>>>,
         account_hash: AccountHash,
         event_consumer: BackendEventConsumer,
         new_revision_uuid: u64,
@@ -112,9 +108,7 @@ impl DbConnection {
                 let tags: (Flag, Vec<String>) = message.tags().collect_flags_and_tags();
                 let mut tag_lock = tag_index.write().unwrap();
                 for tag in tags.1.iter() {
-                    let mut hasher = DefaultHasher::new();
-                    hasher.write(tag.as_bytes());
-                    let num = hasher.finish();
+                    let num = TagHash::from_bytes(tag.as_bytes());
                     if !tag_lock.contains_key(&num) {
                         tag_lock.insert(num, tag.clone());
                     }
@@ -366,11 +360,7 @@ impl NotmuchDb {
         let mut mailboxes = HashMap::default();
         for (k, f) in s.mailboxes.iter() {
             if let Some(query_str) = f.extra.get("query") {
-                let hash = {
-                    let mut h = DefaultHasher::new();
-                    k.hash(&mut h);
-                    h.finish()
-                };
+                let hash = MailboxHash::from_bytes(k.as_bytes());
                 mailboxes.insert(
                     hash,
                     NotmuchMailbox {
@@ -395,11 +385,7 @@ impl NotmuchDb {
             }
         }
 
-        let account_hash = {
-            let mut hasher = DefaultHasher::new();
-            hasher.write(s.name().as_bytes());
-            hasher.finish()
-        };
+        let account_hash = AccountHash::from_bytes(s.name().as_bytes());
         Ok(Box::new(NotmuchDb {
             lib,
             revision_uuid: Arc::new(RwLock::new(0)),
@@ -535,8 +521,8 @@ impl MailBackend for NotmuchDb {
             database: Arc<DbConnection>,
             index: Arc<RwLock<HashMap<EnvelopeHash, CString>>>,
             mailbox_index: Arc<RwLock<HashMap<EnvelopeHash, SmallVec<[MailboxHash; 16]>>>>,
-            mailboxes: Arc<RwLock<HashMap<u64, NotmuchMailbox>>>,
-            tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
+            mailboxes: Arc<RwLock<HashMap<MailboxHash, NotmuchMailbox>>>,
+            tag_index: Arc<RwLock<BTreeMap<TagHash, String>>>,
             iter: std::vec::IntoIter<CString>,
         }
         impl FetchState {
@@ -860,7 +846,7 @@ impl MailBackend for NotmuchDb {
             }
             for (f, v) in flags.iter() {
                 if let (Err(tag), true) = (f, v) {
-                    let hash = tag_hash!(tag);
+                    let hash = TagHash::from_bytes(tag.as_bytes());
                     collection
                         .tag_index
                         .write()

@@ -27,6 +27,7 @@ use crate::backends::BackendMailbox;
 use crate::backends::{
     RefreshEvent,
     RefreshEventKind::{self, *},
+    TagHash,
 };
 use crate::error::*;
 use std::convert::TryInto;
@@ -233,11 +234,11 @@ impl ImapConnection {
                             mailbox.unseen.lock().unwrap().insert_new(env.hash());
                         }
                         for f in keywords {
-                            let hash = tag_hash!(f);
+                            let hash = TagHash::from_bytes(f.as_bytes());
                             if !tag_lck.contains_key(&hash) {
                                 tag_lck.insert(hash, f.to_string());
                             }
-                            env.labels_mut().push(hash);
+                            env.tags_mut().push(hash);
                         }
                     }
                     mailbox.exists.lock().unwrap().insert_new(env.hash());
@@ -364,11 +365,11 @@ impl ImapConnection {
                                     mailbox.unseen.lock().unwrap().insert_new(env.hash());
                                 }
                                 for f in keywords {
-                                    let hash = tag_hash!(f);
+                                    let hash = TagHash::from_bytes(f.as_bytes());
                                     if !tag_lck.contains_key(&hash) {
                                         tag_lck.insert(hash, f.to_string());
                                     }
-                                    env.labels_mut().push(hash);
+                                    env.tags_mut().push(hash);
                                 }
                             }
                             mailbox.exists.lock().unwrap().insert_new(env.hash());

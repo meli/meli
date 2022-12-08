@@ -166,11 +166,11 @@ impl ImapConnection {
                     new_unseen.insert(env.hash());
                 }
                 for f in keywords {
-                    let hash = tag_hash!(f);
+                    let hash = TagHash::from_bytes(f.as_bytes());
                     if !tag_lck.contains_key(&hash) {
                         tag_lck.insert(hash, f.to_string());
                     }
-                    env.labels_mut().push(hash);
+                    env.tags_mut().push(hash);
                 }
             }
         }
@@ -252,19 +252,19 @@ impl ImapConnection {
             }
             let (flags, tags) = flags.unwrap();
             if env_lck[&env_hash].inner.flags() != flags
-                || env_lck[&env_hash].inner.labels()
+                || env_lck[&env_hash].inner.tags()
                     != &tags
                         .iter()
-                        .map(|t| tag_hash!(t))
-                        .collect::<SmallVec<[u64; 8]>>()
+                        .map(|t| TagHash::from_bytes(t.as_bytes()))
+                        .collect::<SmallVec<[TagHash; 8]>>()
             {
                 env_lck.entry(env_hash).and_modify(|entry| {
                     entry.inner.set_flags(flags);
-                    entry.inner.labels_mut().clear();
+                    entry.inner.tags_mut().clear();
                     entry
                         .inner
-                        .labels_mut()
-                        .extend(tags.iter().map(|t| tag_hash!(t)));
+                        .tags_mut()
+                        .extend(tags.iter().map(|t| TagHash::from_bytes(t.as_bytes())));
                 });
                 refresh_events.push((
                     uid,
@@ -452,11 +452,11 @@ impl ImapConnection {
                         new_unseen.insert(env.hash());
                     }
                     for f in keywords {
-                        let hash = tag_hash!(f);
+                        let hash = TagHash::from_bytes(f.as_bytes());
                         if !tag_lck.contains_key(&hash) {
                             tag_lck.insert(hash, f.to_string());
                         }
-                        env.labels_mut().push(hash);
+                        env.tags_mut().push(hash);
                     }
                 }
             }
@@ -540,19 +540,19 @@ impl ImapConnection {
                 }
                 let (flags, tags) = flags.unwrap();
                 if env_lck[&env_hash].inner.flags() != flags
-                    || env_lck[&env_hash].inner.labels()
+                    || env_lck[&env_hash].inner.tags()
                         != &tags
                             .iter()
-                            .map(|t| tag_hash!(t))
-                            .collect::<SmallVec<[u64; 8]>>()
+                            .map(|t| TagHash::from_bytes(t.as_bytes()))
+                            .collect::<SmallVec<[TagHash; 8]>>()
                 {
                     env_lck.entry(env_hash).and_modify(|entry| {
                         entry.inner.set_flags(flags);
-                        entry.inner.labels_mut().clear();
+                        entry.inner.tags_mut().clear();
                         entry
                             .inner
-                            .labels_mut()
-                            .extend(tags.iter().map(|t| tag_hash!(t)));
+                            .tags_mut()
+                            .extend(tags.iter().map(|t| TagHash::from_bytes(t.as_bytes())));
                     });
                     refresh_events.push((
                         uid,

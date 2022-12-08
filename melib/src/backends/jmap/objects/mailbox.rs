@@ -23,9 +23,7 @@ use super::*;
 
 impl Id<MailboxObject> {
     pub fn into_hash(&self) -> MailboxHash {
-        let mut h = DefaultHasher::new();
-        h.write(self.inner.as_bytes());
-        h.finish()
+        MailboxHash::from_bytes(self.inner.as_bytes())
     }
 }
 

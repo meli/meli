@@ -628,7 +628,7 @@ pub trait MailListingTrait: ListingTrait {
                             let tags_lck = collection.tag_index.read().unwrap();
                             if let Some((env, ref bytes)) = iter.next() {
                                 let tags: Vec<&str> = env
-                                    .labels()
+                                    .tags()
                                     .iter()
                                     .filter_map(|h| tags_lck.get(h).map(|s| s.as_str()))
                                     .collect();
@@ -645,7 +645,7 @@ pub trait MailListingTrait: ListingTrait {
                             }
                             for (env, bytes) in iter {
                                 let tags: Vec<&str> = env
-                                    .labels()
+                                    .tags()
                                     .iter()
                                     .filter_map(|h| tags_lck.get(h).map(|s| s.as_str()))
                                     .collect();
@@ -929,7 +929,8 @@ impl Component for Listing {
             if context.is_online(account_hash).is_err()
                 && !matches!(self.component, ListingComponent::Offline(_))
             {
-                self.component = Offline(OfflineListing::new((account_hash, 0)));
+                self.component =
+                    Offline(OfflineListing::new((account_hash, MailboxHash::default())));
             }
 
             if let Some(s) = self.status.as_mut() {
@@ -948,7 +949,8 @@ impl Component for Listing {
             if context.is_online(account_hash).is_err()
                 && !matches!(self.component, ListingComponent::Offline(_))
             {
-                self.component = Offline(OfflineListing::new((account_hash, 0)));
+                self.component =
+                    Offline(OfflineListing::new((account_hash, MailboxHash::default())));
             }
             if let Some(s) = self.status.as_mut() {
                 s.draw(grid, (set_x(upper_left, mid + 1), bottom_right), context);
@@ -2044,7 +2046,10 @@ impl Listing {
             .collect();
         let first_account_hash = account_entries[0].hash;
         let mut ret = Listing {
-            component: Offline(OfflineListing::new((first_account_hash, 0))),
+            component: Offline(OfflineListing::new((
+                first_account_hash,
+                MailboxHash::default(),
+            ))),
             accounts: account_entries,
             status: None,
             dirty: true,
@@ -2567,7 +2572,8 @@ impl Listing {
                         mailbox_settings!(context[account_hash][mailbox_hash].listing.index_style);
                     self.component.set_style(*index_style);
                 } else if !matches!(self.component, ListingComponent::Offline(_)) {
-                    self.component = Offline(OfflineListing::new((account_hash, 0)));
+                    self.component =
+                        Offline(OfflineListing::new((account_hash, MailboxHash::default())));
                 }
                 self.status = None;
                 context

@@ -766,10 +766,10 @@ impl Account {
                         .unwrap()
                         .entry(env_hash)
                         .and_modify(|entry| {
-                            entry.labels_mut().clear();
-                            entry
-                                .labels_mut()
-                                .extend(tags.into_iter().map(|h| tag_hash!(h)));
+                            entry.tags_mut().clear();
+                            entry.tags_mut().extend(
+                                tags.into_iter().map(|h| TagHash::from_bytes(h.as_bytes())),
+                            );
                             entry.set_flags(flags);
                         });
                     #[cfg(feature = "sqlite3")]
@@ -1128,7 +1128,7 @@ impl Account {
     }
 
     pub fn load(&mut self, mailbox_hash: MailboxHash) -> result::Result<(), usize> {
-        if mailbox_hash == 0 {
+        if mailbox_hash.is_null() {
             return Err(0);
         }
         match self.mailbox_entries[&mailbox_hash].status {

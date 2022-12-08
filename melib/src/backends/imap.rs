@@ -19,7 +19,6 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use crate::get_path_hash;
 use smallvec::SmallVec;
 #[macro_use]
 mod protocol_parser;
@@ -516,7 +515,7 @@ impl MailBackend for ImapType {
                 let account_hash = uid_store.account_hash;
                 main_conn_lck.add_refresh_event(RefreshEvent {
                     account_hash,
-                    mailbox_hash: 0,
+                    mailbox_hash: MailboxHash::default(),
                     kind: RefreshEventKind::Failure(err.clone()),
                 });
                 return Err(err);
@@ -754,7 +753,7 @@ impl MailBackend for ImapType {
                                 return Err(MeliError::new(format!("Application error: more than one flag bit set in set_flags: {:?}", flags)).set_kind(crate::ErrorKind::Bug));
                             }
                             Err(tag) => {
-                                let hash = tag_hash!(tag);
+                                let hash = TagHash::from_bytes(tag.as_bytes());
                                 if !tag_lck.contains_key(&hash) {
                                     tag_lck.insert(hash, tag.to_string());
                                 }
@@ -949,7 +948,7 @@ impl MailBackend for ImapType {
             }
             let ret: Result<()> = ImapResponse::try_from(response.as_slice())?.into();
             ret?;
-            let new_hash = get_path_hash!(path.as_str());
+            let new_hash = MailboxHash::from_bytes(path.as_str().as_bytes());
             uid_store.mailboxes.lock().await.clear();
             Ok((new_hash, new_mailbox_fut?.await.map_err(|err| MeliError::new(format!("Mailbox create was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", String::from_utf8_lossy(&response), err)))?))
         }))
@@ -1086,7 +1085,7 @@ impl MailBackend for ImapType {
                     .read_response(&mut response, RequiredResponses::empty())
                     .await?;
             }
-            let new_hash = get_path_hash!(new_path.as_str());
+            let new_hash = MailboxHash::from_bytes(new_path.as_str().as_bytes());
             let ret: Result<()> = ImapResponse::try_from(response.as_slice())?.into();
             ret?;
             uid_store.mailboxes.lock().await.clear();
@@ -1330,11 +1329,7 @@ impl ImapType {
             },
             timeout,
         };
-        let account_hash = {
-            let mut hasher = DefaultHasher::new();
-            hasher.write(s.name.as_bytes());
-            hasher.finish()
-        };
+        let account_hash = AccountHash::from_bytes(s.name.as_bytes());
         let account_name = Arc::new(s.name().to_string());
         let uid_store: Arc<UIDStore> = Arc::new(UIDStore {
             keep_offline_cache,
@@ -1486,7 +1481,7 @@ impl ImapType {
                 debug!("parse error for {:?}", l);
             }
         }
-        mailboxes.retain(|_, v| v.hash != 0);
+        mailboxes.retain(|_, v| !v.hash.is_null());
         conn.send_command(b"LSUB \"\" \"*\"").await?;
         conn.read_response(&mut res, RequiredResponses::LSUB_REQUIRED)
             .await?;
@@ -1824,11 +1819,11 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
                                 our_unseen.insert(env.hash());
                             }
                             for f in keywords {
-                                let hash = tag_hash!(f);
+                                let hash = TagHash::from_bytes(f.as_bytes());
                                 if !tag_lck.contains_key(&hash) {
                                     tag_lck.insert(hash, f.to_string());
                                 }
-                                env.labels_mut().push(hash);
+                                env.tags_mut().push(hash);
                             }
                         }
                     }

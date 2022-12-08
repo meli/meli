@@ -183,7 +183,7 @@ mod sqlite3_m {
                 .prepare("SELECT MAX(uid) FROM envelopes WHERE mailbox_hash = ?1;")?;
 
             let mut ret: Vec<UID> = stmt
-                .query_map(sqlite3::params![mailbox_hash as i64], |row| {
+                .query_map(sqlite3::params![mailbox_hash], |row| {
                     row.get(0).map(|i: Sqlite3UID| i as UID)
                 })?
                 .collect::<std::result::Result<_, _>>()?;
@@ -211,7 +211,7 @@ mod sqlite3_m {
                 "SELECT uidvalidity, flags, highestmodseq FROM mailbox WHERE mailbox_hash = ?1;",
             )?;
 
-            let mut ret = stmt.query_map(sqlite3::params![mailbox_hash as i64], |row| {
+            let mut ret = stmt.query_map(sqlite3::params![mailbox_hash], |row| {
                 Ok((
                     row.get(0).map(|u: Sqlite3UID| u as UID)?,
                     row.get(1)?,
@@ -253,7 +253,7 @@ mod sqlite3_m {
                     .or_insert(uidvalidity);
                 let mut tag_lck = self.uid_store.collection.tag_index.write().unwrap();
                 for f in to_str!(&flags).split('\0') {
-                    let hash = tag_hash!(f);
+                    let hash = TagHash::from_bytes(f.as_bytes());
                     //debug!("hash {} flag {}", hash, &f);
                     if !tag_lck.contains_key(&hash) {
                         tag_lck.insert(hash, f.to_string());
@@ -277,7 +277,7 @@ mod sqlite3_m {
             self.connection
                 .execute(
                     "DELETE FROM mailbox WHERE mailbox_hash = ?1",
-                    sqlite3::params![mailbox_hash as i64],
+                    sqlite3::params![mailbox_hash],
                 )
                 .chain_err_summary(|| {
                     format!(
@@ -289,7 +289,7 @@ mod sqlite3_m {
             if let Some(Ok(highestmodseq)) = select_response.highestmodseq {
                 self.connection.execute(
                 "INSERT OR IGNORE INTO mailbox (uidvalidity, flags, highestmodseq, mailbox_hash) VALUES (?1, ?2, ?3, ?4)",
-                sqlite3::params![select_response.uidvalidity as Sqlite3UID, select_response.flags.1.iter().map(|s| s.as_str()).collect::<Vec<&str>>().join("\0").as_bytes(), highestmodseq, mailbox_hash as i64],
+                sqlite3::params![select_response.uidvalidity as Sqlite3UID, select_response.flags.1.iter().map(|s| s.as_str()).collect::<Vec<&str>>().join("\0").as_bytes(), highestmodseq, mailbox_hash],
             )
             .chain_err_summary(|| {
                 format!(
@@ -304,7 +304,7 @@ mod sqlite3_m {
                         sqlite3::params![
                             select_response.uidvalidity as Sqlite3UID,
                             select_response.flags.1.iter().map(|s| s.as_str()).collect::<Vec<&str>>().join("\0").as_bytes(),
-                            mailbox_hash as i64
+                            mailbox_hash
                         ],
                     )
                     .chain_err_summary(|| {
@@ -340,7 +340,7 @@ mod sqlite3_m {
                                 .join("\0")
                                 .as_bytes(),
                             highestmodseq,
-                            mailbox_hash as i64
+                            mailbox_hash
                         ],
                     )
                     .chain_err_summary(|| {
@@ -362,7 +362,7 @@ mod sqlite3_m {
                                 .collect::<Vec<&str>>()
                                 .join("\0")
                                 .as_bytes(),
-                            mailbox_hash as i64
+                            mailbox_hash
                         ],
                     )
                     .chain_err_summary(|| {
@@ -386,7 +386,7 @@ mod sqlite3_m {
             )?;
 
             let ret: Vec<(UID, Envelope, Option<ModSequence>)> = stmt
-                .query_map(sqlite3::params![mailbox_hash as i64], |row| {
+                .query_map(sqlite3::params![mailbox_hash], |row| {
                     Ok((
                         row.get(0).map(|i: Sqlite3UID| i as UID)?,
                         row.get(1)?,
@@ -464,7 +464,7 @@ mod sqlite3_m {
                     max_uid = std::cmp::max(max_uid, *uid);
                     tx.execute(
                 "INSERT OR REPLACE INTO envelopes (hash, uid, mailbox_hash, modsequence, envelope) VALUES (?1, ?2, ?3, ?4, ?5)",
-                sqlite3::params![envelope.hash(), *uid as Sqlite3UID, mailbox_hash as i64, modseq, &envelope],
+                sqlite3::params![envelope.hash(), *uid as Sqlite3UID, mailbox_hash, modseq, &envelope],
             ).chain_err_summary(|| format!("Could not insert envelope {} {} in header_cache of account {}", envelope.message_id(), envelope.hash(), uid_store.account_name))?;
                 }
             }
@@ -498,7 +498,7 @@ mod sqlite3_m {
                         hash_index_lck.remove(env_hash);
                         tx.execute(
                             "DELETE FROM envelopes WHERE mailbox_hash = ?1 AND uid = ?2;",
-                            sqlite3::params![mailbox_hash as i64, *uid as Sqlite3UID],
+                            sqlite3::params![mailbox_hash, *uid as Sqlite3UID],
                         )
                         .chain_err_summary(|| {
                             format!(
@@ -513,18 +513,18 @@ mod sqlite3_m {
                         )?;
 
                         let mut ret: Vec<Envelope> = stmt
-                            .query_map(
-                                sqlite3::params![mailbox_hash as i64, *uid as Sqlite3UID],
-                                |row| row.get(0),
-                            )?
+                            .query_map(sqlite3::params![mailbox_hash, *uid as Sqlite3UID], |row| {
+                                row.get(0)
+                            })?
                             .collect::<std::result::Result<_, _>>()?;
                         if let Some(mut env) = ret.pop() {
                             env.set_flags(*flags);
-                            env.labels_mut().clear();
-                            env.labels_mut().extend(tags.iter().map(|t| tag_hash!(t)));
+                            env.tags_mut().clear();
+                            env.tags_mut()
+                                .extend(tags.iter().map(|t| TagHash::from_bytes(t.as_bytes())));
                             tx.execute(
                     "UPDATE envelopes SET envelope = ?1 WHERE mailbox_hash = ?2 AND uid = ?3;",
-                    sqlite3::params![&env, mailbox_hash as i64, *uid as Sqlite3UID],
+                    sqlite3::params![&env, mailbox_hash, *uid as Sqlite3UID],
                 )
                                 .chain_err_summary(|| {
                                     format!(
@@ -567,16 +567,13 @@ mod sqlite3_m {
             )?;
 
                     let x = stmt
-                        .query_map(
-                            sqlite3::params![mailbox_hash as i64, uid as Sqlite3UID],
-                            |row| {
-                                Ok((
-                                    row.get(0).map(|u: Sqlite3UID| u as UID)?,
-                                    row.get(1)?,
-                                    row.get(2)?,
-                                ))
-                            },
-                        )?
+                        .query_map(sqlite3::params![mailbox_hash, uid as Sqlite3UID], |row| {
+                            Ok((
+                                row.get(0).map(|u: Sqlite3UID| u as UID)?,
+                                row.get(1)?,
+                                row.get(2)?,
+                            ))
+                        })?
                         .collect::<std::result::Result<_, _>>()?;
                     x
                 }
@@ -586,7 +583,7 @@ mod sqlite3_m {
             )?;
 
                     let x = stmt
-                        .query_map(sqlite3::params![mailbox_hash as i64, env_hash], |row| {
+                        .query_map(sqlite3::params![mailbox_hash, env_hash], |row| {
                             Ok((
                                 row.get(0).map(|u: Sqlite3UID| u as UID)?,
                                 row.get(1)?,
@@ -620,10 +617,9 @@ mod sqlite3_m {
                         "SELECT rfc822 FROM envelopes WHERE mailbox_hash = ?1 AND uid = ?2;",
                     )?;
                     let x = stmt
-                        .query_map(
-                            sqlite3::params![mailbox_hash as i64, uid as Sqlite3UID],
-                            |row| row.get(0),
-                        )?
+                        .query_map(sqlite3::params![mailbox_hash, uid as Sqlite3UID], |row| {
+                            row.get(0)
+                        })?
                         .collect::<std::result::Result<_, _>>()?;
                     x
                 }
@@ -632,9 +628,7 @@ mod sqlite3_m {
                         "SELECT rfc822 FROM envelopes WHERE mailbox_hash = ?1 AND hash = ?2;",
                     )?;
                     let x = stmt
-                        .query_map(sqlite3::params![mailbox_hash as i64, env_hash], |row| {
-                            row.get(0)
-                        })?
+                        .query_map(sqlite3::params![mailbox_hash, env_hash], |row| row.get(0))?
                         .collect::<std::result::Result<_, _>>()?;
                     x
                 }

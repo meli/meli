@@ -222,11 +222,7 @@ impl MailBackend for MaildirType {
 
     fn refresh(&mut self, mailbox_hash: MailboxHash) -> ResultFuture<()> {
         let cache_dir = xdg::BaseDirectories::with_profile("meli", &self.name).unwrap();
-        let account_hash = {
-            let mut hasher = DefaultHasher::default();
-            hasher.write(self.name.as_bytes());
-            hasher.finish()
-        };
+        let account_hash = AccountHash::from_bytes(self.name.as_bytes());
         let sender = self.event_consumer.clone();
 
         let mailbox: &MaildirMailbox = &self.mailboxes[&mailbox_hash];
@@ -329,11 +325,7 @@ impl MailBackend for MaildirType {
         let sender = self.event_consumer.clone();
         let (tx, rx) = channel();
         let mut watcher = watcher(tx, Duration::from_secs(2)).unwrap();
-        let account_hash = {
-            let mut hasher = DefaultHasher::default();
-            hasher.write(self.name.as_bytes());
-            hasher.finish()
-        };
+        let account_hash = AccountHash::from_bytes(self.name.as_bytes());
         let root_mailbox = self.path.to_path_buf();
         watcher
             .watch(&root_mailbox, RecursiveMode::Recursive)
@@ -384,7 +376,7 @@ impl MailBackend for MaildirType {
                                     }
                                 };
                             }
-                            let mailbox_hash = get_path_hash!(pathbuf);
+                            let mailbox_hash = MailboxHash(get_path_hash!(pathbuf));
                             let file_name = pathbuf
                                 .as_path()
                                 .strip_prefix(&root_mailbox)
@@ -425,7 +417,7 @@ impl MailBackend for MaildirType {
                         /* Update */
                         DebouncedEvent::NoticeWrite(pathbuf) | DebouncedEvent::Write(pathbuf) => {
                             debug!("DebouncedEvent::Write(path = {:?}", &pathbuf);
-                            let mailbox_hash = get_path_hash!(pathbuf);
+                            let mailbox_hash = MailboxHash(get_path_hash!(pathbuf));
                             let mut hash_indexes_lock = hash_indexes.lock().unwrap();
                             let index_lock =
                                 &mut hash_indexes_lock.entry(mailbox_hash).or_default();
@@ -502,7 +494,7 @@ impl MailBackend for MaildirType {
                         /* Remove */
                         DebouncedEvent::NoticeRemove(pathbuf) | DebouncedEvent::Remove(pathbuf) => {
                             debug!("DebouncedEvent::Remove(path = {:?}", pathbuf);
-                            let mailbox_hash = get_path_hash!(pathbuf);
+                            let mailbox_hash = MailboxHash(get_path_hash!(pathbuf));
                             let mut hash_indexes_lock = hash_indexes.lock().unwrap();
                             let index_lock = hash_indexes_lock.entry(mailbox_hash).or_default();
                             let hash: EnvelopeHash = if let Some((k, _)) =
@@ -556,9 +548,9 @@ impl MailBackend for MaildirType {
                         /* Envelope hasn't changed */
                         DebouncedEvent::Rename(src, dest) => {
                             debug!("DebouncedEvent::Rename(src = {:?}, dest = {:?})", src, dest);
-                            let mailbox_hash = get_path_hash!(src);
+                            let mailbox_hash = MailboxHash(get_path_hash!(src));
                             let dest_mailbox = {
-                                let dest_mailbox = get_path_hash!(dest);
+                                let dest_mailbox = MailboxHash(get_path_hash!(dest));
                                 if dest_mailbox == mailbox_hash {
                                     None
                                 } else {
@@ -1018,7 +1010,7 @@ impl MailBackend for MaildirType {
                 .map(|item| *item.0)
         });
 
-        let mailbox_hash = get_path_hash!(&path);
+        let mailbox_hash = MailboxHash(get_path_hash!(&path));
         if let Some(parent) = parent {
             self.mailboxes
                 .entry(parent)

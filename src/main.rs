@@ -319,7 +319,12 @@ fn run_app(opt: Opt) -> Result<()> {
             sender,
             receiver.clone(),
         )?;
-        state.register_component(Box::new(EnvelopeView::new(wrapper, None, None, 0)));
+        state.register_component(Box::new(EnvelopeView::new(
+            wrapper,
+            None,
+            None,
+            AccountHash::default(),
+        )));
     } else {
         state = State::new(None, sender, receiver.clone())?;
         #[cfg(feature = "svgscreenshot")]

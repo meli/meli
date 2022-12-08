@@ -378,10 +378,10 @@ impl Default for ComposingSettingsOverride {
 pub struct TagsSettingsOverride {
     #[serde(deserialize_with = "tag_color_de")]
     #[serde(default)]
-    pub colors: Option<HashMap<u64, Color>>,
+    pub colors: Option<HashMap<TagHash, Color>>,
     #[serde(deserialize_with = "tag_set_de", alias = "ignore-tags")]
     #[serde(default)]
-    pub ignore_tags: Option<HashSet<u64>>,
+    pub ignore_tags: Option<HashSet<TagHash>>,
 }
 impl Default for TagsSettingsOverride {
     fn default() -> Self {

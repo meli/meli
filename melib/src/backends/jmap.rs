@@ -29,25 +29,11 @@ use futures::lock::Mutex as FutureMutex;
 use isahc::config::RedirectPolicy;
 use isahc::{AsyncReadResponseExt, HttpClient};
 use serde_json::Value;
-use std::collections::{hash_map::DefaultHasher, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
-use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
-
-macro_rules! tag_hash {
-    ($t:ident) => {{
-        let mut hasher = DefaultHasher::default();
-        $t.hash(&mut hasher);
-        hasher.finish()
-    }};
-    ($t:literal) => {{
-        let mut hasher = DefaultHasher::default();
-        $t.hash(&mut hasher);
-        hasher.finish()
-    }};
-}
 
 #[macro_export]
 macro_rules! _impl {
@@ -178,29 +164,25 @@ impl Store {
             .keywords()
             .keys()
             .map(|tag| {
-                let tag_hash = {
-                    let mut hasher = DefaultHasher::default();
-                    tag.hash(&mut hasher);
-                    hasher.finish()
-                };
+                let tag_hash = TagHash::from_bytes(tag.as_bytes());
                 if !tag_lck.contains_key(&tag_hash) {
                     tag_lck.insert(tag_hash, tag.to_string());
                 }
                 tag_hash
             })
-            .collect::<SmallVec<[u64; 1024]>>();
+            .collect::<SmallVec<[TagHash; 1024]>>();
         let id = obj.id.clone();
         let mailbox_ids = obj.mailbox_ids.clone();
         let blob_id = obj.blob_id.clone();
         drop(tag_lck);
         let mut ret: Envelope = obj.into();
 
-        debug_assert_eq!(tag_hash!("$draft"), 6613915297903591176);
-        debug_assert_eq!(tag_hash!("$seen"), 1683863812294339685);
-        debug_assert_eq!(tag_hash!("$flagged"), 2714010747478170100);
-        debug_assert_eq!(tag_hash!("$answered"), 8940855303929342213);
-        debug_assert_eq!(tag_hash!("$junk"), 2656839745430720464);
-        debug_assert_eq!(tag_hash!("$notjunk"), 4091323799684325059);
+        debug_assert_eq!(TagHash::from_bytes(b"$draft").0, 6613915297903591176);
+        debug_assert_eq!(TagHash::from_bytes(b"$seen").0, 1683863812294339685);
+        debug_assert_eq!(TagHash::from_bytes(b"$flagged").0, 2714010747478170100);
+        debug_assert_eq!(TagHash::from_bytes(b"$answered").0, 8940855303929342213);
+        debug_assert_eq!(TagHash::from_bytes(b"$junk").0, 2656839745430720464);
+        debug_assert_eq!(TagHash::from_bytes(b"$notjunk").0, 4091323799684325059);
         let mut id_store_lck = self.id_store.lock().unwrap();
         let mut reverse_id_store_lck = self.reverse_id_store.lock().unwrap();
         let mut blob_id_store_lck = self.blob_id_store.lock().unwrap();
@@ -219,7 +201,7 @@ impl Store {
         id_store_lck.insert(ret.hash(), id);
         blob_id_store_lck.insert(ret.hash(), blob_id);
         for t in tags {
-            match t {
+            match t.0 {
                 6613915297903591176 => {
                     ret.set_flags(ret.flags() | Flag::DRAFT);
                 }
@@ -233,7 +215,7 @@ impl Store {
                     ret.set_flags(ret.flags() | Flag::REPLIED);
                 }
                 2656839745430720464 | 4091323799684325059 => { /* ignore */ }
-                _ => ret.labels_mut().push(t),
+                _ => ret.tags_mut().push(t),
             }
         }
         ret
@@ -811,7 +793,7 @@ impl MailBackend for JmapType {
                         Ok(_) => {}
                         Err(t) => {
                             if *value {
-                                tag_index_lck.insert(tag_hash!(t), t.clone());
+                                tag_index_lck.insert(TagHash::from_bytes(t.as_bytes()), t.clone());
                             }
                         }
                     }
@@ -883,11 +865,7 @@ impl JmapType {
         )));
         let server_conf = JmapServerConf::new(s)?;
 
-        let account_hash = {
-            let mut hasher = DefaultHasher::new();
-            hasher.write(s.name.as_bytes());
-            hasher.finish()
-        };
+        let account_hash = AccountHash::from_bytes(s.name.as_bytes());
         let store = Arc::new(Store {
             account_name: Arc::new(s.name.clone()),
             account_hash,

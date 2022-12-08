@@ -23,21 +23,20 @@
 
 use super::DotAddressable;
 use crate::terminal::Color;
-use melib::{MeliError, Result};
+use melib::{MeliError, Result, TagHash};
 use serde::{Deserialize, Deserializer};
-use std::collections::{hash_map::DefaultHasher, HashMap, HashSet};
-use std::hash::Hasher;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Default, Debug, Deserialize, Clone, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct TagsSettings {
     #[serde(default, deserialize_with = "tag_color_de")]
-    pub colors: HashMap<u64, Color>,
+    pub colors: HashMap<TagHash, Color>,
     #[serde(default, deserialize_with = "tag_set_de", alias = "ignore-tags")]
-    pub ignore_tags: HashSet<u64>,
+    pub ignore_tags: HashSet<TagHash>,
 }
 
-pub fn tag_set_de<'de, D, T: std::convert::From<HashSet<u64>>>(
+pub fn tag_set_de<'de, D, T: std::convert::From<HashSet<TagHash>>>(
     deserializer: D,
 ) -> std::result::Result<T, D::Error>
 where
@@ -45,16 +44,12 @@ where
 {
     Ok(<Vec<String>>::deserialize(deserializer)?
         .into_iter()
-        .map(|tag| {
-            let mut hasher = DefaultHasher::new();
-            hasher.write(tag.as_bytes());
-            hasher.finish()
-        })
-        .collect::<HashSet<u64>>()
+        .map(|tag| TagHash::from_bytes(tag.as_bytes()))
+        .collect::<HashSet<TagHash>>()
         .into())
 }
 
-pub fn tag_color_de<'de, D, T: std::convert::From<HashMap<u64, Color>>>(
+pub fn tag_color_de<'de, D, T: std::convert::From<HashMap<TagHash, Color>>>(
     deserializer: D,
 ) -> std::result::Result<T, D::Error>
 where
@@ -70,17 +65,15 @@ where
     Ok(<HashMap<String, _Color>>::deserialize(deserializer)?
         .into_iter()
         .map(|(tag, color)| {
-            let mut hasher = DefaultHasher::new();
-            hasher.write(tag.as_bytes());
             (
-                hasher.finish(),
+                TagHash::from_bytes(tag.as_bytes()),
                 match color {
                     _Color::B(b) => Color::Byte(b),
                     _Color::C(c) => c,
                 },
             )
         })
-        .collect::<HashMap<u64, Color>>()
+        .collect::<HashMap<TagHash, Color>>()
         .into())
 }
 

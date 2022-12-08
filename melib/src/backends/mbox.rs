@@ -136,9 +136,8 @@ use nom::{self, error::Error as NomError, error::ErrorKind as NomErrorKind, IRes
 
 extern crate notify;
 use self::notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
-use std::collections::hash_map::{DefaultHasher, HashMap};
+use std::collections::hash_map::HashMap;
 use std::fs::File;
-use std::hash::Hasher;
 use std::io::{BufReader, Read};
 use std::os::unix::io::AsRawFd;
 use std::path::{Path, PathBuf};
@@ -981,11 +980,7 @@ impl MailBackend for MboxType {
                 .map_err(MeliError::new)?;
             debug!("watching {:?}", f.fs_path.as_path());
         }
-        let account_hash = {
-            let mut hasher = DefaultHasher::new();
-            hasher.write(self.account_name.as_bytes());
-            hasher.finish()
-        };
+        let account_hash = AccountHash::from_bytes(self.account_name.as_bytes());
         let mailboxes = self.mailboxes.clone();
         let mailbox_index = self.mailbox_index.clone();
         let prefer_mbox_type = self.prefer_mbox_type;
@@ -1005,7 +1000,7 @@ impl MailBackend for MboxType {
                     Ok(event) => match event {
                         /* Update */
                         DebouncedEvent::NoticeWrite(pathbuf) | DebouncedEvent::Write(pathbuf) => {
-                            let mailbox_hash = get_path_hash!(&pathbuf);
+                            let mailbox_hash = MailboxHash(get_path_hash!(&pathbuf));
                             let file = match std::fs::OpenOptions::new()
                                 .read(true)
                                 .write(true)
@@ -1067,7 +1062,7 @@ impl MailBackend for MboxType {
                                 .values()
                                 .any(|f| f.fs_path == pathbuf)
                             {
-                                let mailbox_hash = get_path_hash!(&pathbuf);
+                                let mailbox_hash = MailboxHash(get_path_hash!(&pathbuf));
                                 (sender)(
                                     account_hash,
                                     BackendEvent::Refresh(RefreshEvent {
@@ -1084,7 +1079,7 @@ impl MailBackend for MboxType {
                         }
                         DebouncedEvent::Rename(src, dest) => {
                             if mailboxes.lock().unwrap().values().any(|f| f.fs_path == src) {
-                                let mailbox_hash = get_path_hash!(&src);
+                                let mailbox_hash = MailboxHash(get_path_hash!(&src));
                                 (sender)(
                                     account_hash,
                                     BackendEvent::Refresh(RefreshEvent {
@@ -1336,7 +1331,7 @@ impl MboxType {
             .file_name()
             .map(|f| f.to_string_lossy().into())
             .unwrap_or_default();
-        let hash = get_path_hash!(&ret.path);
+        let hash = MailboxHash(get_path_hash!(&ret.path));
 
         let read_only = if let Ok(metadata) = std::fs::metadata(&ret.path) {
             metadata.permissions().readonly()
@@ -1374,7 +1369,7 @@ impl MboxType {
         /* Look for other mailboxes */
         for (k, f) in s.mailboxes.iter() {
             if let Some(path_str) = f.extra.get("path") {
-                let hash = get_path_hash!(path_str);
+                let hash = MailboxHash(get_path_hash!(path_str));
                 let pathbuf: PathBuf = path_str.into();
                 if !pathbuf.exists() || pathbuf.is_dir() {
                     return Err(MeliError::new(format!(

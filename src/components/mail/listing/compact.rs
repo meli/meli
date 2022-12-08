@@ -815,7 +815,7 @@ impl CompactListing {
     pub const DESCRIPTION: &'static str = "compact listing";
     pub fn new(coordinates: (AccountHash, MailboxHash)) -> Box<Self> {
         Box::new(CompactListing {
-            cursor_pos: (coordinates.0, 1, 0),
+            cursor_pos: (coordinates.0, MailboxHash::default(), 0),
             new_cursor_pos: (coordinates.0, coordinates.1, 0),
             length: 0,
             sort: (Default::default(), Default::default()),
@@ -854,7 +854,7 @@ impl CompactListing {
         let account = &context.accounts[&self.cursor_pos.0];
         if account.backend_capabilities.supports_tags {
             let tags_lck = account.collection.tag_index.read().unwrap();
-            for t in e.labels().iter() {
+            for t in e.tags().iter() {
                 if mailbox_settings!(
                     context[self.cursor_pos.0][&self.cursor_pos.1]
                         .tags

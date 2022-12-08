@@ -88,7 +88,7 @@ impl<'m> Message<'m> {
     pub fn into_envelope(
         self,
         index: &RwLock<HashMap<EnvelopeHash, CString>>,
-        tag_index: &RwLock<BTreeMap<u64, String>>,
+        tag_index: &RwLock<BTreeMap<TagHash, String>>,
     ) -> Envelope {
         let env_hash = self.env_hash();
         let mut env = Envelope::new(env_hash);
@@ -99,13 +99,11 @@ impl<'m> Message<'m> {
         let mut tag_lock = tag_index.write().unwrap();
         let (flags, tags) = TagIterator::new(&self).collect_flags_and_tags();
         for tag in tags {
-            let mut hasher = DefaultHasher::new();
-            hasher.write(tag.as_bytes());
-            let num = hasher.finish();
+            let num = TagHash::from_bytes(tag.as_bytes());
             if !tag_lock.contains_key(&num) {
                 tag_lock.insert(num, tag);
             }
-            env.labels_mut().push(num);
+            env.tags_mut().push(num);
         }
         unsafe {
             use crate::email::parser::address::rfc2822address_list;
