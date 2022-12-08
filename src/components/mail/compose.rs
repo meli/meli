@@ -1253,7 +1253,7 @@ impl Component for Composer {
                     .chan
                     .try_recv()
                     .map_err(|_: futures::channel::oneshot::Canceled| {
-                        MeliError::new("Job was canceled")
+                        Error::new("Job was canceled")
                     }) {
                     Err(err) | Ok(Some(Err(err))) => {
                         self.mode = ViewMode::Edit;
@@ -1540,7 +1540,7 @@ impl Component for Composer {
                 match melib::email::parser::address::rfc2822address_list(
                     self.form.values()["From"].as_str().as_bytes(),
                 )
-                .map_err(|_err| -> MeliError { "No valid sender address in `From:`".into() })
+                .map_err(|_err| -> Error { "No valid sender address in `From:`".into() })
                 .and_then(|(_, list)| {
                     list.get(0)
                         .cloned()
@@ -1580,7 +1580,7 @@ impl Component for Composer {
                 match melib::email::parser::address::rfc2822address_list(
                     self.form.values()["To"].as_str().as_bytes(),
                 )
-                .map_err(|_err| -> MeliError { "No valid recipient addresses in `To:`".into() })
+                .map_err(|_err| -> Error { "No valid recipient addresses in `To:`".into() })
                 .and_then(|(_, list)| {
                     list.get(0)
                         .cloned()
@@ -2217,7 +2217,7 @@ pub fn save_draft(
     account_hash: AccountHash,
 ) {
     match context.accounts[&account_hash].save_special(bytes, mailbox_type, flags) {
-        Err(MeliError {
+        Err(Error {
             summary,
             details,
             kind,

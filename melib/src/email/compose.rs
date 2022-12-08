@@ -77,10 +77,10 @@ impl Default for Draft {
 }
 
 impl FromStr for Draft {
-    type Err = MeliError;
+    type Err = Error;
     fn from_str(s: &str) -> Result<Self> {
         if s.is_empty() {
-            return Err(MeliError::new("Empty input in Draft::from_str"));
+            return Err(Error::new("Empty input in Draft::from_str"));
         }
 
         let (headers, _) = parser::mail(s.as_bytes())?;
@@ -560,7 +560,7 @@ where
 {
     let path: PathBuf = Path::new(path).expand();
     if !path.is_file() {
-        return Err(MeliError::new(format!("{} is not a file", path.display())));
+        return Err(Error::new(format!("{} is not a file", path.display())));
     }
 
     let mut file = std::fs::File::open(&path)?;

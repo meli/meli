@@ -33,7 +33,7 @@ pub enum KeySelection {
     },
     Error {
         id: ComponentId,
-        err: MeliError,
+        err: Error,
     },
     Loaded {
         widget: Box<UIDialog<melib::gpgme::Key>>,
@@ -140,7 +140,7 @@ impl Component for KeySelection {
                                     }
                                 } else if !*local && allow_remote_lookup.is_ask() {
                                     *self = KeySelection::Error {
-                                        err: MeliError::new(format!(
+                                        err: Error::new(format!(
                                             "No keys found for {}, perform remote lookup?",
                                             pattern
                                         )),
@@ -148,7 +148,7 @@ impl Component for KeySelection {
                                     }
                                 } else {
                                     *self = KeySelection::Error {
-                                        err: MeliError::new(format!(
+                                        err: Error::new(format!(
                                             "No keys found for {}.",
                                             pattern
                                         )),

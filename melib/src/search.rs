@@ -92,7 +92,7 @@ impl QueryTrait for crate::Envelope {
 }
 
 impl TryFrom<&str> for Query {
-    type Error = crate::error::MeliError;
+    type Error = crate::error::Error;
     fn try_from(t: &str) -> crate::error::Result<Query> {
         query()
             .parse_complete(t)

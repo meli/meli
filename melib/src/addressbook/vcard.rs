@@ -28,7 +28,7 @@
 //! - Parameter escaping [RFC 6868 Parameter Value Encoding in iCalendar and vCard](https://datatracker.ietf.org/doc/rfc6868/)
 
 use super::*;
-use crate::error::{MeliError, Result};
+use crate::error::{Error, Result};
 use crate::parsec::{match_literal_anycase, one_or_more, peek, prefix, take_until, Parser};
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -86,7 +86,7 @@ impl CardDeserializer {
         input = if (!input.starts_with(HEADER_CRLF) || !input.ends_with(FOOTER_CRLF))
             && (!input.starts_with(HEADER_LF) || !input.ends_with(FOOTER_LF))
         {
-            return Err(MeliError::new(format!("Error while parsing vcard: input does not start or end with correct header and footer. input is:\n{:?}", input)));
+            return Err(Error::new(format!("Error while parsing vcard: input does not start or end with correct header and footer. input is:\n{:?}", input)));
         } else if input.starts_with(HEADER_CRLF) {
             &input[HEADER_CRLF.len()..input.len() - FOOTER_CRLF.len()]
         } else {
@@ -147,13 +147,13 @@ impl CardDeserializer {
                 }
             }
             if !has_colon {
-                return Err(MeliError::new(format!(
+                return Err(Error::new(format!(
                     "Error while parsing vcard: error at line {}, no colon. {:?}",
                     l, el
                 )));
             }
             if name.is_empty() {
-                return Err(MeliError::new(format!(
+                return Err(Error::new(format!(
                     "Error while parsing vcard: error at line {}, no name for content line. {:?}",
                     l, el
                 )));
@@ -166,7 +166,7 @@ impl CardDeserializer {
 }
 
 impl<V: VCardVersion> TryInto<Card> for VCard<V> {
-    type Error = crate::error::MeliError;
+    type Error = crate::error::Error;
 
     fn try_into(mut self) -> crate::error::Result<Card> {
         let mut card = Card::new();
@@ -187,7 +187,7 @@ impl<V: VCardVersion> TryInto<Card> for VCard<V> {
         if let Some(val) = self.0.remove("FN") {
             card.set_name(val.value);
         } else {
-            return Err(MeliError::new("FN entry missing in VCard."));
+            return Err(Error::new("FN entry missing in VCard."));
         }
         if let Some(val) = self.0.remove("NICKNAME") {
             card.set_additionalname(val.value);

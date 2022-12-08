@@ -21,7 +21,7 @@
 
 use super::default_vals::{internal_value_false, none, true_val};
 use super::DotAddressable;
-use melib::{MeliError, Result, ToggleFlag};
+use melib::{Error, Result, ToggleFlag};
 
 /// Settings for the notifications function.
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -79,7 +79,7 @@ impl DotAddressable for NotificationsSettings {
                     "xbiff_file_path" => self.xbiff_file_path.lookup(field, tail),
                     "play_sound" => self.play_sound.lookup(field, tail),
                     "sound_file" => self.sound_file.lookup(field, tail),
-                    other => Err(MeliError::new(format!(
+                    other => Err(Error::new(format!(
                         "{} has no field named {}",
                         parent_field, other
                     ))),

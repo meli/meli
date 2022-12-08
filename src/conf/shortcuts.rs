@@ -22,7 +22,7 @@
 use super::DotAddressable;
 use crate::terminal::Key;
 use indexmap::IndexMap;
-use melib::{MeliError, Result};
+use melib::{Error, Result};
 
 #[macro_export]
 macro_rules! shortcut {
@@ -76,7 +76,7 @@ impl DotAddressable for Shortcuts {
                     "envelope_view" | "envelope-view" => self.envelope_view.lookup(field, tail),
                     "thread_view" | "thread-view" => self.thread_view.lookup(field, tail),
                     "pager" => self.pager.lookup(field, tail),
-                    other => Err(MeliError::new(format!(
+                    other => Err(Error::new(format!(
                         "{} has no field named {}",
                         parent_field, other
                     ))),
@@ -133,7 +133,7 @@ macro_rules! shortcut_key_values {
                         let tail = &path[1..];
                         match *field {
                             $(stringify!($fname) => self.$fname.lookup(field, tail),)*
-                            other => Err(MeliError::new(format!(
+                            other => Err(Error::new(format!(
                                         "{} has no field named {}",
                                         parent_field, other
                             ))),

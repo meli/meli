@@ -114,7 +114,7 @@ pub enum AttachmentDisplay {
     SignedFailed {
         inner: Box<Attachment>,
         display: Vec<AttachmentDisplay>,
-        error: MeliError,
+        error: Error,
     },
     SignedUnverified {
         inner: Box<Attachment>,
@@ -131,7 +131,7 @@ pub enum AttachmentDisplay {
     },
     EncryptedFailed {
         inner: Box<Attachment>,
-        error: MeliError,
+        error: Error,
     },
     EncryptedSuccess {
         inner: Box<Attachment>,
@@ -184,7 +184,7 @@ enum MailViewState {
         pending_action: Option<PendingReplyAction>,
     },
     Error {
-        err: MeliError,
+        err: Error,
     },
     Loaded {
         bytes: Vec<u8>,
@@ -893,7 +893,7 @@ impl MailView {
                                 {
                                     acc.push(AttachmentDisplay::EncryptedFailed {
                                     inner: Box::new(a.clone()),
-                                                error: MeliError::new("Cannot decrypt: meli must be compiled with libgpgme support."),
+                                                error: Error::new("Cannot decrypt: meli must be compiled with libgpgme support."),
                                             });
                                 }
                                 #[cfg(feature = "gpgme")]
@@ -916,7 +916,7 @@ impl MailView {
                                     } else {
                                         acc.push(AttachmentDisplay::EncryptedFailed {
                                             inner: Box::new(a.clone()),
-                                            error: MeliError::new("Undecrypted."),
+                                            error: Error::new("Undecrypted."),
                                         });
                                     }
                                 }
@@ -1528,7 +1528,7 @@ impl Component for MailView {
                                         .join(&b"\n"[..]))
                                 })
                                 .map(|v| String::from_utf8_lossy(&v).into_owned())
-                                .unwrap_or_else(|err: MeliError| err.to_string());
+                                .unwrap_or_else(|err: Error| err.to_string());
                             if !ret.ends_with("\n\n") {
                                 ret.push_str("\n\n");
                             }

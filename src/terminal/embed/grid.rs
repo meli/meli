@@ -21,7 +21,7 @@
 
 use super::*;
 use crate::terminal::{cells::*, Color};
-use melib::error::{MeliError, Result};
+use melib::error::{Error, Result};
 use melib::text_processing::wcwidth;
 use nix::sys::wait::WaitStatus;
 use nix::sys::wait::{waitpid, WaitPidFlag};
@@ -164,7 +164,7 @@ impl EmbedTerminal {
 
     pub fn is_active(&self) -> Result<WaitStatus> {
         debug!(waitpid(self.child_pid, Some(WaitPidFlag::WNOHANG),))
-            .map_err(|e| MeliError::new(e.to_string()))
+            .map_err(|e| Error::new(e.to_string()))
     }
 
     pub fn process_byte(&mut self, byte: u8) {

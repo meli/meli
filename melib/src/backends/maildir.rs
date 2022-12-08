@@ -28,7 +28,7 @@ pub use stream::*;
 
 use crate::backends::*;
 use crate::email::Flag;
-use crate::error::{MeliError, Result};
+use crate::error::{Error, Result};
 use crate::shellexpand::ShellExpandTrait;
 use futures::stream::Stream;
 use std::collections::hash_map::DefaultHasher;
@@ -76,7 +76,7 @@ impl MaildirOp {
             for e in map.iter() {
                 debug!("{:#?}", e);
             }
-            return Err(MeliError::new("File not found"));
+            return Err(Error::new("File not found"));
         }
 
         Ok(if let Some(modif) = &map[&self.hash].modified {
@@ -196,7 +196,7 @@ impl MaildirMailbox {
         for d in &["cur", "new", "tmp"] {
             p.push(d);
             if !p.is_dir() {
-                return Err(MeliError::new(format!(
+                return Err(Error::new(format!(
                     "{} is not a valid maildir mailbox",
                     path.display()
                 )));

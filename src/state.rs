@@ -421,7 +421,7 @@ impl State {
                 s.context.accounts[i].watch();
             }
             if s.context.is_online_idx(i).is_ok() && s.context.accounts[i].is_empty() {
-                //return Err(MeliError::new(format!(
+                //return Err(Error::new(format!(
                 //    "Account {} has no mailboxes configured.",
                 //    s.context.accounts[i].name()
                 //)));

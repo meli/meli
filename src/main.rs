@@ -78,7 +78,7 @@ fn parse_manpage(src: &str) -> Result<ManPages> {
         "meli.7" | "guide" => Ok(ManPages::Guide),
         "meli.conf" | "meli.conf.5" | "conf" | "config" | "configuration" => Ok(ManPages::Conf),
         "meli-themes" | "meli-themes.5" | "themes" | "theming" | "theme" => Ok(ManPages::Themes),
-        _ => Err(MeliError::new(format!(
+        _ => Err(Error::new(format!(
             "Invalid documentation page: {}",
             src
         ))),
@@ -188,7 +188,7 @@ fn run_app(opt: Opt) -> Result<()> {
                 crate::conf::get_config_file()?
             };
             if config_path.exists() {
-                return Err(MeliError::new(format!(
+                return Err(Error::new(format!(
                     "File `{}` already exists.\nMaybe you meant to specify another path?",
                     config_path.display()
                 )));
@@ -247,7 +247,7 @@ fn run_app(opt: Opt) -> Result<()> {
         }
         #[cfg(not(feature = "cli-docs"))]
         Some(SubCommand::Man(_manopt)) => {
-            return Err(MeliError::new("error: this version of meli was not build with embedded documentation (cargo feature `cli-docs`). You might have it installed as manpages (eg `man meli`), otherwise check https://meli.delivery"));
+            return Err(Error::new("error: this version of meli was not build with embedded documentation (cargo feature `cli-docs`). You might have it installed as manpages (eg `man meli`), otherwise check https://meli.delivery"));
         }
         Some(SubCommand::CompiledWith) => {
             #[cfg(feature = "notmuch")]
@@ -279,12 +279,12 @@ fn run_app(opt: Opt) -> Result<()> {
         }
         Some(SubCommand::View { ref path }) => {
             if !path.exists() {
-                return Err(MeliError::new(format!(
+                return Err(Error::new(format!(
                     "`{}` is not a valid path",
                     path.display()
                 )));
             } else if !path.is_file() {
-                return Err(MeliError::new(format!(
+                return Err(Error::new(format!(
                     "`{}` is a directory",
                     path.display()
                 )));

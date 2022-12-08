@@ -45,7 +45,7 @@ use crate::collection::Collection;
 use crate::conf::AccountSettings;
 use crate::connections::timeout;
 use crate::email::{parser::BytesExt, *};
-use crate::error::{MeliError, Result, ResultIntoMeliError};
+use crate::error::{Error, Result, ResultIntoError};
 use futures::lock::Mutex as FutureMutex;
 use futures::stream::Stream;
 use std::collections::hash_map::DefaultHasher;
@@ -105,7 +105,7 @@ type Capabilities = HashSet<Vec<u8>>;
 macro_rules! get_conf_val {
     ($s:ident[$var:literal]) => {
         $s.extra.get($var).ok_or_else(|| {
-            MeliError::new(format!(
+            Error::new(format!(
                 "Configuration error ({}): IMAP connection requires the field `{}` set",
                 $s.name.as_str(),
                 $var
@@ -117,7 +117,7 @@ macro_rules! get_conf_val {
             .get($var)
             .map(|v| {
                 <_>::from_str(v).map_err(|e| {
-                    MeliError::new(format!(
+                    Error::new(format!(
                         "Configuration error ({}): Invalid value for field `{}`: {}\n{}",
                         $s.name.as_str(),
                         $var,
@@ -180,7 +180,7 @@ impl UIDStore {
             collection: Default::default(),
             is_online: Arc::new(Mutex::new((
                 SystemTime::now(),
-                Err(MeliError::new("Account is uninitialised.")),
+                Err(Error::new("Account is uninitialised.")),
             ))),
             event_consumer,
             timeout,
@@ -424,7 +424,7 @@ impl MailBackend for ImapType {
                             m
                 ).chars());
                 }
-                return Err(MeliError::new(err_string));
+                return Err(Error::new(err_string));
             }
             mailboxes.retain(|_, f| (self.is_subscribed)(f.path()));
             */
@@ -531,7 +531,7 @@ impl MailBackend for ImapType {
         {
             *v
         } else {
-            return Err(MeliError::new(
+            return Err(Error::new(
                     "Message not found in local cache, it might have been deleted before you requested it."
                 ));
         };
@@ -560,10 +560,10 @@ impl MailBackend for ImapType {
                 let mailboxes = uid_store.mailboxes.lock().await;
 
                 let mailbox = mailboxes.get(&mailbox_hash).ok_or_else(|| {
-                    MeliError::new(format!("Mailbox with hash {} not found.", mailbox_hash))
+                    Error::new(format!("Mailbox with hash {} not found.", mailbox_hash))
                 })?;
                 if !mailbox.permissions.lock().unwrap().create_messages {
-                    return Err(MeliError::new(format!(
+                    return Err(Error::new(format!(
                         "You are not allowed to create messages in mailbox {}",
                         mailbox.path()
                     )));
@@ -644,7 +644,7 @@ impl MailBackend for ImapType {
                 let mailboxes = uid_store.mailboxes.lock().await;
                 let mailbox = mailboxes
                     .get(&destination_mailbox_hash)
-                    .ok_or_else(|| MeliError::new("Destination mailbox not found"))?;
+                    .ok_or_else(|| Error::new("Destination mailbox not found"))?;
                 mailbox.imap_path().to_string()
             };
             let mut response = Vec::with_capacity(8 * 1024);
@@ -750,7 +750,7 @@ impl MailBackend for ImapType {
                             }
                             Ok(_) => {
                                 crate::log(format!("Application error: more than one flag bit set in set_flags: {:?}", flags), crate::ERROR);
-                                return Err(MeliError::new(format!("Application error: more than one flag bit set in set_flags: {:?}", flags)).set_kind(crate::ErrorKind::Bug));
+                                return Err(Error::new(format!("Application error: more than one flag bit set in set_flags: {:?}", flags)).set_kind(crate::ErrorKind::Bug));
                             }
                             Err(tag) => {
                                 let hash = TagHash::from_bytes(tag.as_bytes());
@@ -816,7 +816,7 @@ impl MailBackend for ImapType {
                     ),
                                     crate::ERROR,
                                 );
-                                return Err(MeliError::new(format!(
+                                return Err(Error::new(format!(
                         "Application error: more than one flag bit set in set_flags: {:?}", flags
                     )));
                             }
@@ -908,7 +908,7 @@ impl MailBackend for ImapType {
                 let mailboxes = uid_store.mailboxes.lock().await;
 
                 if mailboxes.values().any(|f| f.path == path) {
-                    return Err(MeliError::new(format!(
+                    return Err(Error::new(format!(
                         "Mailbox named `{}` already exists.",
                         path,
                     )));
@@ -950,7 +950,7 @@ impl MailBackend for ImapType {
             ret?;
             let new_hash = MailboxHash::from_bytes(path.as_str().as_bytes());
             uid_store.mailboxes.lock().await.clear();
-            Ok((new_hash, new_mailbox_fut?.await.map_err(|err| MeliError::new(format!("Mailbox create was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", String::from_utf8_lossy(&response), err)))?))
+            Ok((new_hash, new_mailbox_fut?.await.map_err(|err| Error::new(format!("Mailbox create was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", String::from_utf8_lossy(&response), err)))?))
         }))
     }
 
@@ -970,7 +970,7 @@ impl MailBackend for ImapType {
                 imap_path = mailboxes[&mailbox_hash].imap_path().to_string();
                 let permissions = mailboxes[&mailbox_hash].permissions();
                 if !permissions.delete_mailbox {
-                    return Err(MeliError::new(format!("You do not have permission to delete `{}`. Set permissions for this mailbox are {}", mailboxes[&mailbox_hash].name(), permissions)));
+                    return Err(Error::new(format!("You do not have permission to delete `{}`. Set permissions for this mailbox are {}", mailboxes[&mailbox_hash].name(), permissions)));
                 }
             }
             let mut response = Vec::with_capacity(8 * 1024);
@@ -1064,7 +1064,7 @@ impl MailBackend for ImapType {
                 let mailboxes = uid_store.mailboxes.lock().await;
                 let permissions = mailboxes[&mailbox_hash].permissions();
                 if !permissions.delete_mailbox {
-                    return Err(MeliError::new(format!("You do not have permission to rename mailbox `{}` (rename is equivalent to delete + create). Set permissions for this mailbox are {}", mailboxes[&mailbox_hash].name(), permissions)));
+                    return Err(Error::new(format!("You do not have permission to rename mailbox `{}` (rename is equivalent to delete + create). Set permissions for this mailbox are {}", mailboxes[&mailbox_hash].name(), permissions)));
                 }
                 if mailboxes[&mailbox_hash].separator != b'/' {
                     new_path = new_path.replace(
@@ -1107,10 +1107,10 @@ impl MailBackend for ImapType {
             let mailboxes = uid_store.mailboxes.lock().await;
             let permissions = mailboxes[&mailbox_hash].permissions();
             if !permissions.change_permissions {
-                return Err(MeliError::new(format!("You do not have permission to change permissions for mailbox `{}`. Set permissions for this mailbox are {}", mailboxes[&mailbox_hash].name(), permissions)));
+                return Err(Error::new(format!("You do not have permission to change permissions for mailbox `{}`. Set permissions for this mailbox are {}", mailboxes[&mailbox_hash].name(), permissions)));
             }
 
-            Err(MeliError::new("Unimplemented."))
+            Err(Error::new("Unimplemented."))
         }))
     }
 
@@ -1120,7 +1120,7 @@ impl MailBackend for ImapType {
         mailbox_hash: Option<MailboxHash>,
     ) -> ResultFuture<SmallVec<[EnvelopeHash; 512]>> {
         if mailbox_hash.is_none() {
-            return Err(MeliError::new(
+            return Err(Error::new(
                 "Cannot search without specifying mailbox on IMAP",
             ));
         }
@@ -1245,7 +1245,7 @@ impl MailBackend for ImapType {
                     ));
                 }
             }
-            Err(MeliError::new(
+            Err(Error::new(
                 String::from_utf8_lossy(&response).to_string(),
             ))
         }))
@@ -1263,7 +1263,7 @@ impl ImapType {
         let use_oauth2: bool = get_conf_val!(s["use_oauth2"], false)?;
         let server_password = if !s.extra.contains_key("server_password_command") {
             if use_oauth2 {
-                return Err(MeliError::new(format!(
+                return Err(Error::new(format!(
                     "({}) `use_oauth2` use requires `server_password_command` set with a command that returns an OAUTH2 token. Consult documentation for guidance.",
                     s.name,
                 )));
@@ -1278,7 +1278,7 @@ impl ImapType {
                 .stderr(std::process::Stdio::piped())
                 .output()?;
             if !output.status.success() {
-                return Err(MeliError::new(format!(
+                return Err(Error::new(format!(
                     "({}) server_password_command `{}` returned {}: {}",
                     s.name,
                     get_conf_val!(s["server_password_command"])?,
@@ -1299,7 +1299,7 @@ impl ImapType {
         let keep_offline_cache = get_conf_val!(s["offline_cache"], false)?;
         #[cfg(not(feature = "sqlite3"))]
         if keep_offline_cache {
-            return Err(MeliError::new(format!(
+            return Err(Error::new(format!(
                 "({}) keep_offline_cache is true but melib is not compiled with sqlite3",
                 s.name,
             )));
@@ -1512,7 +1512,7 @@ impl ImapType {
             ($s:ident[$var:literal]) => {{
                 keys.insert($var);
                 $s.extra.remove($var).ok_or_else(|| {
-                    MeliError::new(format!(
+                    Error::new(format!(
                         "Configuration error ({}): IMAP connection requires the field `{}` set",
                         $s.name.as_str(),
                         $var
@@ -1525,7 +1525,7 @@ impl ImapType {
                     .remove($var)
                     .map(|v| {
                         <_>::from_str(&v).map_err(|e| {
-                            MeliError::new(format!(
+                            Error::new(format!(
                                 "Configuration error ({}): Invalid value for field `{}`: {}\n{}",
                                 $s.name.as_str(),
                                 $var,
@@ -1543,14 +1543,14 @@ impl ImapType {
         keys.insert("server_password_command");
         if !s.extra.contains_key("server_password_command") {
             if use_oauth2 {
-                return Err(MeliError::new(format!(
+                return Err(Error::new(format!(
                     "({}) `use_oauth2` use requires `server_password_command` set with a command that returns an OAUTH2 token. Consult documentation for guidance.",
                     s.name,
                 )));
             }
             get_conf_val!(s["server_password"])?;
         } else if s.extra.contains_key("server_password") {
-            return Err(MeliError::new(format!(
+            return Err(Error::new(format!(
                 "Configuration error ({}): both server_password and server_password_command are set, cannot choose",
                 s.name.as_str(),
             )));
@@ -1560,7 +1560,7 @@ impl ImapType {
         let use_tls = get_conf_val!(s["use_tls"], true)?;
         let use_starttls = get_conf_val!(s["use_starttls"], false)?;
         if !use_tls && use_starttls {
-            return Err(MeliError::new(format!(
+            return Err(Error::new(format!(
                 "Configuration error ({}): incompatible use_tls and use_starttls values: use_tls = false, use_starttls = true",
                 s.name.as_str(),
             )));
@@ -1572,7 +1572,7 @@ impl ImapType {
         {
             let keep_offline_cache = get_conf_val!(s["offline_cache"], false)?;
             if keep_offline_cache {
-                return Err(MeliError::new(format!(
+                return Err(Error::new(format!(
                     "({}) keep_offline_cache is true but melib is not compiled with sqlite3",
                     s.name,
                 )));
@@ -1584,7 +1584,7 @@ impl ImapType {
         get_conf_val!(s["use_deflate"], true)?;
         #[cfg(not(feature = "deflate_compression"))]
         if s.extra.contains_key("use_deflate") {
-            return Err(MeliError::new(format!(
+            return Err(Error::new(format!(
                 "Configuration error ({}): setting `use_deflate` is set but this version of meli isn't compiled with DEFLATE support.",
                 s.name.as_str(),
             )));
@@ -1597,7 +1597,7 @@ impl ImapType {
             .collect::<HashSet<&str>>();
         let diff = extra_keys.difference(&keys).collect::<Vec<&&str>>();
         if !diff.is_empty() {
-            return Err(MeliError::new(format!(
+            return Err(Error::new(format!(
                 "Configuration error ({}): the following flags are set but are not recognized: {:?}.",
                 s.name.as_str(), diff
             )));

@@ -31,7 +31,7 @@
 use crate::terminal::{Attr, Color};
 use crate::Context;
 use indexmap::IndexMap;
-use melib::{MeliError, Result};
+use melib::{Error, Result};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use smallvec::SmallVec;
 use std::borrow::Cow;
@@ -1212,20 +1212,20 @@ impl Themes {
             Themes::validate_keys(name, t, &hash_set)?;
         }
         if let Err(err) = is_cyclic(&self.light) {
-            return Err(MeliError::new(format!(
+            return Err(Error::new(format!(
                 "light theme contains a cycle: {}",
                 err
             )));
         }
         if let Err(err) = is_cyclic(&self.dark) {
-            return Err(MeliError::new(format!(
+            return Err(Error::new(format!(
                 "dark theme contains a cycle: {}",
                 err
             )));
         }
         for (k, t) in self.other_themes.iter() {
             if let Err(err) = is_cyclic(t) {
-                return Err(MeliError::new(format!(
+                return Err(Error::new(format!(
                     "{} theme contains a cycle: {}",
                     k, err
                 )));

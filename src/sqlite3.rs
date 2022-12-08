@@ -21,7 +21,7 @@
 
 /*! Use an sqlite3 database for fast searching.
  */
-use crate::melib::ResultIntoMeliError;
+use crate::melib::ResultIntoError;
 use melib::search::{
     escape_double_quote,
     Query::{self, *},
@@ -32,7 +32,7 @@ use melib::{
     log,
     sqlite3::{self as melib_sqlite3, rusqlite::params, DatabaseDescription},
     thread::{SortField, SortOrder},
-    MeliError, Result, ERROR,
+    Error, Result, ERROR,
 };
 
 use smallvec::SmallVec;
@@ -142,7 +142,7 @@ pub async fn insert(
 ) -> Result<()> {
     let db_path = db_path()?;
     if !db_path.exists() {
-        return Err(MeliError::new(
+        return Err(Error::new(
             "Database hasn't been initialised. Run `reindex` command",
         ));
     }
@@ -195,7 +195,7 @@ pub async fn insert(
             ),
             ERROR,
         );
-        return Err(MeliError::new(err.to_string()));
+        return Err(Error::new(err.to_string()));
     }
     let account_id: i32 = {
         let mut stmt = conn
@@ -214,7 +214,7 @@ pub async fn insert(
               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
               params![account_id, envelope.hash().to_be_bytes().to_vec(), envelope.date_as_str(), envelope.field_from_to_string(), envelope.field_to_to_string(), envelope.field_cc_to_string(), envelope.field_bcc_to_string(), envelope.subject().into_owned().trim_end_matches('\u{0}'), envelope.message_id_display().to_string(), envelope.in_reply_to_display().map(|f| f.to_string()).unwrap_or_default(), envelope.field_references_to_string(), i64::from(envelope.flags().bits()), if envelope.has_attachments() { 1 } else { 0 }, body, envelope.date().to_be_bytes().to_vec()],
         )
-            .map_err(|e| MeliError::new(e.to_string())) {
+            .map_err(|e| Error::new(e.to_string())) {
                 debug!(
                         "Failed to insert envelope {}: {}",
                         envelope.message_id_display(),
@@ -235,7 +235,7 @@ pub async fn insert(
 pub fn remove(env_hash: EnvelopeHash) -> Result<()> {
     let db_path = db_path()?;
     if !db_path.exists() {
-        return Err(MeliError::new(
+        return Err(Error::new(
             "Database hasn't been initialised. Run `reindex` command",
         ));
     }
@@ -246,7 +246,7 @@ pub fn remove(env_hash: EnvelopeHash) -> Result<()> {
             "DELETE FROM envelopes WHERE hash = ?",
             params![env_hash.to_be_bytes().to_vec(),],
         )
-        .map_err(|e| MeliError::new(e.to_string()))
+        .map_err(|e| Error::new(e.to_string()))
     {
         debug!("Failed to remove envelope {}: {}", env_hash, err);
         log(
@@ -332,7 +332,7 @@ pub fn search(
 ) -> ResultFuture<SmallVec<[EnvelopeHash; 512]>> {
     let db_path = db_path()?;
     if !db_path.exists() {
-        return Err(MeliError::new(
+        return Err(Error::new(
             "Database hasn't been initialised. Run `reindex` command",
         ));
     }
@@ -359,12 +359,12 @@ pub fn search(
             ))
             .as_str(),
         )
-        .map_err(|e| MeliError::new(e.to_string()))?;
+        .map_err(|e| Error::new(e.to_string()))?;
 
     let results = stmt
         .query_map([], |row| row.get::<_, EnvelopeHash>(0))
-        .map_err(MeliError::from)?
-        .map(|item| item.map_err(MeliError::from))
+        .map_err(Error::from)?
+        .map(|item| item.map_err(Error::from))
         .collect::<Result<SmallVec<[EnvelopeHash; 512]>>>();
     Ok(Box::pin(async { results }))
 }

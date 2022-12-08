@@ -199,7 +199,7 @@ impl ImapStream {
                     }
                 }
                 if !broken {
-                    return Err(MeliError::new(format!(
+                    return Err(Error::new(format!(
                         "Could not initiate STARTTLS negotiation to {}.",
                         path
                     )));
@@ -240,7 +240,7 @@ impl ImapStream {
             let addr = if let Ok(a) = lookup_ipv4(path, server_conf.server_port) {
                 a
             } else {
-                return Err(MeliError::new(format!(
+                return Err(Error::new(format!(
                     "Could not lookup address {}",
                     &path
                 )));
@@ -302,15 +302,15 @@ impl ImapStream {
         let capabilities: std::result::Result<Vec<&[u8]>, _> = res
             .split_rn()
             .find(|l| l.starts_with(b"* CAPABILITY"))
-            .ok_or_else(|| MeliError::new(""))
+            .ok_or_else(|| Error::new(""))
             .and_then(|res| {
                 protocol_parser::capabilities(res)
-                    .map_err(|_| MeliError::new(""))
+                    .map_err(|_| Error::new(""))
                     .map(|(_, v)| v)
             });
 
         if capabilities.is_err() {
-            return Err(MeliError::new(format!(
+            return Err(Error::new(format!(
                 "Could not connect to {}: expected CAPABILITY response but got:{}",
                 &server_conf.server_hostname,
                 String::from_utf8_lossy(&res)
@@ -323,7 +323,7 @@ impl ImapStream {
             .iter()
             .any(|cap| cap.eq_ignore_ascii_case(b"IMAP4rev1"))
         {
-            return Err(MeliError::new(format!(
+            return Err(Error::new(format!(
                 "Could not connect to {}: server is not IMAP4rev1 compliant",
                 &server_conf.server_hostname
             )));
@@ -331,7 +331,7 @@ impl ImapStream {
             .iter()
             .any(|cap| cap.eq_ignore_ascii_case(b"LOGINDISABLED"))
         {
-            return Err(MeliError::new(format!(
+            return Err(Error::new(format!(
                 "Could not connect to {}: server does not accept logins [LOGINDISABLED]",
                 &server_conf.server_hostname
             ))
@@ -352,7 +352,7 @@ impl ImapStream {
                     .iter()
                     .any(|cap| cap.eq_ignore_ascii_case(b"AUTH=XOAUTH2"))
                 {
-                    return Err(MeliError::new(format!(
+                    return Err(Error::new(format!(
                                 "Could not connect to {}: OAUTH2 is enabled but server did not return AUTH=XOAUTH2 capability. Returned capabilities were: {}",
                                 &server_conf.server_hostname,
                                 capabilities.iter().map(|capability|
@@ -402,7 +402,7 @@ impl ImapStream {
 
                 if l.starts_with(tag_start.as_bytes()) {
                     if !l[tag_start.len()..].trim().starts_with(b"OK ") {
-                        return Err(MeliError::new(format!(
+                        return Err(Error::new(format!(
                             "Could not connect. Server replied with '{}'",
                             String::from_utf8_lossy(l[tag_start.len()..].trim())
                         ))
@@ -456,7 +456,7 @@ impl ImapStream {
                     ret.extend_from_slice(&buf[0..b]);
                     if let Some(mut pos) = ret[last_line_idx..].rfind("\r\n") {
                         if ret[last_line_idx..].starts_with(b"* BYE") {
-                            return Err(MeliError::new("Disconnected"));
+                            return Err(Error::new("Disconnected"));
                         }
                         if let Some(prev_line) =
                             ret[last_line_idx..pos + last_line_idx].rfind(b"\r\n")
@@ -480,7 +480,7 @@ impl ImapStream {
                     }
                 }
                 Err(err) => {
-                    return Err(MeliError::from(err));
+                    return Err(Error::from(err));
                 }
             }
         }
@@ -555,7 +555,7 @@ impl ImapConnection {
         uid_store: Arc<UIDStore>,
     ) -> ImapConnection {
         ImapConnection {
-            stream: Err(MeliError::new("Offline".to_string())),
+            stream: Err(Error::new("Offline".to_string())),
             server_conf: server_conf.clone(),
             sync_policy: if uid_store.keep_offline_cache {
                 SyncPolicy::Basic
@@ -572,7 +572,7 @@ impl ImapConnection {
                 if SystemTime::now().duration_since(time).unwrap_or_default()
                     >= IMAP_PROTOCOL_TIMEOUT
                 {
-                    let err = MeliError::new(format!(
+                    let err = Error::new(format!(
                         "Connection timed out after {} seconds",
                         IMAP_PROTOCOL_TIMEOUT.as_secs()
                     ))
@@ -660,7 +660,7 @@ impl ImapConnection {
                                     protocol,
                                     current_mailbox,
                                     timeout,
-                                } = std::mem::replace(&mut self.stream, Err(MeliError::new("")))?;
+                                } = std::mem::replace(&mut self.stream, Err(Error::new("")))?;
                                 let stream = stream.into_inner()?;
                                 self.stream = Ok(ImapStream {
                                     cmd_id,
@@ -696,7 +696,7 @@ impl ImapConnection {
                     let r: ImapResponse = ImapResponse::try_from(response.as_slice())?;
                     match r {
                         ImapResponse::Bye(ref response_code) => {
-                            self.stream = Err(MeliError::new(format!(
+                            self.stream = Err(Error::new(format!(
                                 "Offline: received BYE: {:?}",
                                 response_code
                             )));
@@ -847,7 +847,7 @@ impl ImapConnection {
             )
         };
         if no_select {
-            return Err(MeliError::new(format!(
+            return Err(Error::new(format!(
                 "Trying to select a \\NoSelect mailbox: {}",
                 &imap_path
             ))
@@ -933,7 +933,7 @@ impl ImapConnection {
             (m.imap_path().to_string(), m.no_select)
         };
         if no_select {
-            return Err(MeliError::new(format!(
+            return Err(Error::new(format!(
                 "Trying to examine a \\NoSelect mailbox: {}",
                 &imap_path
             ))
@@ -1033,7 +1033,7 @@ pub struct ImapBlockingConnection {
     result: Vec<u8>,
     prev_res_length: usize,
     pub conn: ImapConnection,
-    err: Option<MeliError>,
+    err: Option<Error>,
 }
 
 impl From<ImapConnection> for ImapBlockingConnection {
@@ -1053,7 +1053,7 @@ impl ImapBlockingConnection {
         self.conn
     }
 
-    pub fn err(&mut self) -> Option<MeliError> {
+    pub fn err(&mut self) -> Option<Error> {
         self.err.take()
     }
 
@@ -1104,7 +1104,7 @@ async fn read(
             *prev_failure = None;
         }
         Err(_err) => {
-            *err = Some(Into::<MeliError>::into(_err));
+            *err = Some(Into::<Error>::into(_err));
             *break_flag = true;
             *prev_failure = Some(SystemTime::now());
         }

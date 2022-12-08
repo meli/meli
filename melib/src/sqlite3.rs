@@ -33,17 +33,17 @@ pub struct DatabaseDescription {
 
 pub fn db_path(name: &str) -> Result<PathBuf> {
     let data_dir =
-        xdg::BaseDirectories::with_prefix("meli").map_err(|e| MeliError::new(e.to_string()))?;
+        xdg::BaseDirectories::with_prefix("meli").map_err(|e| Error::new(e.to_string()))?;
     data_dir
         .place_data_file(name)
-        .map_err(|err| MeliError::new(err.to_string()))
+        .map_err(|err| Error::new(err.to_string()))
 }
 
 pub fn open_db(db_path: PathBuf) -> Result<Connection> {
     if !db_path.exists() {
-        return Err(MeliError::new("Database doesn't exist"));
+        return Err(Error::new("Database doesn't exist"));
     }
-    Connection::open(&db_path).map_err(|e| MeliError::new(e.to_string()))
+    Connection::open(&db_path).map_err(|e| Error::new(e.to_string()))
 }
 
 pub fn open_or_create_db(
@@ -69,7 +69,7 @@ pub fn open_or_create_db(
             );
             set_mode = true;
         }
-        let conn = Connection::open(&db_path).map_err(|e| MeliError::new(e.to_string()))?;
+        let conn = Connection::open(&db_path).map_err(|e| Error::new(e.to_string()))?;
         if set_mode {
             use std::os::unix::fs::PermissionsExt;
             let file = std::fs::File::open(&db_path)?;
@@ -89,7 +89,7 @@ pub fn open_or_create_db(
                 crate::INFO,
             );
             if second_try {
-                return Err(MeliError::new(format!(
+                return Err(Error::new(format!(
                             "Database version mismatch, is {} but expected {}. Could not recreate database.",
                             version, description.version
                 )));
@@ -104,7 +104,7 @@ pub fn open_or_create_db(
         }
         if let Some(s) = description.init_script {
             conn.execute_batch(s)
-                .map_err(|e| MeliError::new(e.to_string()))?;
+                .map_err(|e| Error::new(e.to_string()))?;
         }
 
         return Ok(conn);
@@ -137,7 +137,7 @@ impl ToSql for Envelope {
     fn to_sql(&self) -> rusqlite::Result<ToSqlOutput> {
         let v: Vec<u8> = bincode::Options::serialize(bincode::config::DefaultOptions::new(), self)
             .map_err(|e| {
-                rusqlite::Error::ToSqlConversionFailure(Box::new(MeliError::new(e.to_string())))
+                rusqlite::Error::ToSqlConversionFailure(Box::new(Error::new(e.to_string())))
             })?;
         Ok(ToSqlOutput::from(v))
     }

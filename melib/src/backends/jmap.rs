@@ -23,7 +23,7 @@ use crate::backends::*;
 use crate::conf::AccountSettings;
 use crate::connections::timeout;
 use crate::email::*;
-use crate::error::{MeliError, Result};
+use crate::error::{Error, Result};
 use crate::Collection;
 use futures::lock::Mutex as FutureMutex;
 use isahc::config::RedirectPolicy;
@@ -96,7 +96,7 @@ pub struct JmapServerConf {
 macro_rules! get_conf_val {
     ($s:ident[$var:literal]) => {
         $s.extra.get($var).ok_or_else(|| {
-            MeliError::new(format!(
+            Error::new(format!(
                 "Configuration error ({}): JMAP connection requires the field `{}` set",
                 $s.name.as_str(),
                 $var
@@ -108,7 +108,7 @@ macro_rules! get_conf_val {
             .get($var)
             .map(|v| {
                 <_>::from_str(v).map_err(|e| {
-                    MeliError::new(format!(
+                    Error::new(format!(
                         "Configuration error ({}): Invalid value for field `{}`: {}\n{}",
                         $s.name.as_str(),
                         $var,
@@ -399,7 +399,7 @@ impl MailBackend for JmapType {
                 if let Some(mailbox) = mailboxes_lck.get(&mailbox_hash) {
                     mailbox.id.clone()
                 } else {
-                    return Err(MeliError::new(format!(
+                    return Err(Error::new(format!(
                         "Mailbox with hash {} not found",
                         mailbox_hash
                     )));
@@ -409,7 +409,7 @@ impl MailBackend for JmapType {
 
             let upload_response: UploadResponse = match serde_json::from_str(&res_text) {
                 Err(err) => {
-                    let err = MeliError::new(format!("BUG: Could not deserialize {} server JSON response properly, please report this!\nReply from server: {}", &conn.server_conf.server_url, &res_text)).set_source(Some(Arc::new(err))).set_kind(ErrorKind::Bug);
+                    let err = Error::new(format!("BUG: Could not deserialize {} server JSON response properly, please report this!\nReply from server: {}", &conn.server_conf.server_url, &res_text)).set_source(Some(Arc::new(err))).set_kind(ErrorKind::Bug);
                     *conn.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
                     return Err(err);
                 }
@@ -440,7 +440,7 @@ impl MailBackend for JmapType {
 
             let mut v: MethodResponse = match serde_json::from_str(&res_text) {
                 Err(err) => {
-                    let err = MeliError::new(format!("BUG: Could not deserialize {} server JSON response properly, please report this!\nReply from server: {}", &conn.server_conf.server_url, &res_text)).set_source(Some(Arc::new(err))).set_kind(ErrorKind::Bug);
+                    let err = Error::new(format!("BUG: Could not deserialize {} server JSON response properly, please report this!\nReply from server: {}", &conn.server_conf.server_url, &res_text)).set_source(Some(Arc::new(err))).set_kind(ErrorKind::Bug);
                     *conn.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
                     return Err(err);
                 }
@@ -450,14 +450,14 @@ impl MailBackend for JmapType {
                 let ierr: Result<ImportError> =
                     serde_json::from_str(&res_text).map_err(|err| err.into());
                 if let Ok(err) = ierr {
-                    Err(MeliError::new(format!("Could not save message: {:?}", err)))
+                    Err(Error::new(format!("Could not save message: {:?}", err)))
                 } else {
                     Err(err.into())
                 }
             })?;
 
             if let Some(err) = m.not_created.get(&creation_id) {
-                return Err(MeliError::new(format!("Could not save message: {:?}", err)));
+                return Err(Error::new(format!("Could not save message: {:?}", err)));
             }
             Ok(())
         }))
@@ -521,7 +521,7 @@ impl MailBackend for JmapType {
             let res_text = res.text().await?;
             let mut v: MethodResponse = match serde_json::from_str(&res_text) {
                 Err(err) => {
-                    let err = MeliError::new(format!("BUG: Could not deserialize {} server JSON response properly, please report this!\nReply from server: {}", &conn.server_conf.server_url, &res_text)).set_source(Some(Arc::new(err))).set_kind(ErrorKind::Bug);
+                    let err = Error::new(format!("BUG: Could not deserialize {} server JSON response properly, please report this!\nReply from server: {}", &conn.server_conf.server_url, &res_text)).set_source(Some(Arc::new(err))).set_kind(ErrorKind::Bug);
                     *conn.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
                     return Err(err);
                 }
@@ -540,7 +540,7 @@ impl MailBackend for JmapType {
         _mailbox_hash: MailboxHash,
         _new_path: String,
     ) -> ResultFuture<Mailbox> {
-        Err(MeliError::new(
+        Err(Error::new(
             "Renaming mailbox is currently unimplemented for the JMAP backend.",
         ))
     }
@@ -549,7 +549,7 @@ impl MailBackend for JmapType {
         &mut self,
         _path: String,
     ) -> ResultFuture<(MailboxHash, HashMap<MailboxHash, Mailbox>)> {
-        Err(MeliError::new(
+        Err(Error::new(
             "Creating mailbox is currently unimplemented for the JMAP backend.",
         ))
     }
@@ -558,7 +558,7 @@ impl MailBackend for JmapType {
         &mut self,
         _mailbox_hash: MailboxHash,
     ) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
-        Err(MeliError::new(
+        Err(Error::new(
             "Deleting a mailbox is currently unimplemented for the JMAP backend.",
         ))
     }
@@ -568,7 +568,7 @@ impl MailBackend for JmapType {
         _mailbox_hash: MailboxHash,
         _val: bool,
     ) -> ResultFuture<()> {
-        Err(MeliError::new(
+        Err(Error::new(
             "Setting mailbox subscription is currently unimplemented for the JMAP backend.",
         ))
     }
@@ -578,7 +578,7 @@ impl MailBackend for JmapType {
         _mailbox_hash: MailboxHash,
         _val: MailboxPermissions,
     ) -> ResultFuture<()> {
-        Err(MeliError::new(
+        Err(Error::new(
             "Setting mailbox permissions is currently unimplemented for the JMAP backend.",
         ))
     }
@@ -596,13 +596,13 @@ impl MailBackend for JmapType {
             let (source_mailbox_id, destination_mailbox_id) = {
                 let mailboxes_lck = store.mailboxes.read().unwrap();
                 if !mailboxes_lck.contains_key(&source_mailbox_hash) {
-                    return Err(MeliError::new(format!(
+                    return Err(Error::new(format!(
                         "Could not find source mailbox with hash {}",
                         source_mailbox_hash
                     )));
                 }
                 if !mailboxes_lck.contains_key(&destination_mailbox_hash) {
-                    return Err(MeliError::new(format!(
+                    return Err(Error::new(format!(
                         "Could not find destination mailbox with hash {}",
                         destination_mailbox_hash
                     )));
@@ -657,7 +657,7 @@ impl MailBackend for JmapType {
 
             let mut v: MethodResponse = match serde_json::from_str(&res_text) {
                 Err(err) => {
-                    let err = MeliError::new(format!("BUG: Could not deserialize {} server JSON response properly, please report this!\nReply from server: {}", &conn.server_conf.server_url, &res_text)).set_source(Some(Arc::new(err))).set_kind(ErrorKind::Bug);
+                    let err = Error::new(format!("BUG: Could not deserialize {} server JSON response properly, please report this!\nReply from server: {}", &conn.server_conf.server_url, &res_text)).set_source(Some(Arc::new(err))).set_kind(ErrorKind::Bug);
                     *conn.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
                     return Err(err);
                 }
@@ -667,7 +667,7 @@ impl MailBackend for JmapType {
             let m = SetResponse::<EmailObject>::try_from(v.method_responses.remove(0))?;
             if let Some(ids) = m.not_updated {
                 if !ids.is_empty() {
-                    return Err(MeliError::new(format!(
+                    return Err(Error::new(format!(
                         "Could not update ids: {}",
                         ids.into_iter()
                             .map(|err| err.to_string())
@@ -769,7 +769,7 @@ impl MailBackend for JmapType {
             //debug!("res_text = {}", &res_text);
             let mut v: MethodResponse = match serde_json::from_str(&res_text) {
                 Err(err) => {
-                    let err = MeliError::new(format!("BUG: Could not deserialize {} server JSON response properly, please report this!\nReply from server: {}", &conn.server_conf.server_url, &res_text)).set_source(Some(Arc::new(err))).set_kind(ErrorKind::Bug);
+                    let err = Error::new(format!("BUG: Could not deserialize {} server JSON response properly, please report this!\nReply from server: {}", &conn.server_conf.server_url, &res_text)).set_source(Some(Arc::new(err))).set_kind(ErrorKind::Bug);
                     *conn.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
                     return Err(err);
                 }
@@ -778,7 +778,7 @@ impl MailBackend for JmapType {
             *store.online_status.lock().await = (std::time::Instant::now(), Ok(()));
             let m = SetResponse::<EmailObject>::try_from(v.method_responses.remove(0))?;
             if let Some(ids) = m.not_updated {
-                return Err(MeliError::new(
+                return Err(Error::new(
                     ids.into_iter()
                         .map(|err| err.to_string())
                         .collect::<Vec<String>>()
@@ -847,7 +847,7 @@ impl MailBackend for JmapType {
         _env_hashes: EnvelopeHashBatch,
         _mailbox_hash: MailboxHash,
     ) -> ResultFuture<()> {
-        Err(MeliError::new(
+        Err(Error::new(
             "Deleting messages is currently unimplemented for the JMAP backend.",
         ))
     }
@@ -861,7 +861,7 @@ impl JmapType {
     ) -> Result<Box<dyn MailBackend>> {
         let online_status = Arc::new(FutureMutex::new((
             std::time::Instant::now(),
-            Err(MeliError::new("Account is uninitialised.")),
+            Err(Error::new("Account is uninitialised.")),
         )));
         let server_conf = JmapServerConf::new(s)?;
 
@@ -898,7 +898,7 @@ impl JmapType {
         macro_rules! get_conf_val {
             ($s:ident[$var:literal]) => {
                 $s.extra.remove($var).ok_or_else(|| {
-                    MeliError::new(format!(
+                    Error::new(format!(
                         "Configuration error ({}): JMAP connection requires the field `{}` set",
                         $s.name.as_str(),
                         $var
@@ -910,7 +910,7 @@ impl JmapType {
                     .remove($var)
                     .map(|v| {
                         <_>::from_str(&v).map_err(|e| {
-                            MeliError::new(format!(
+                            Error::new(format!(
                                 "Configuration error ({}): Invalid value for field `{}`: {}\n{}",
                                 $s.name.as_str(),
                                 $var,

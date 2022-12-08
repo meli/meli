@@ -42,7 +42,7 @@ pub use connection::*;
 use crate::conf::AccountSettings;
 use crate::connections::timeout;
 use crate::email::*;
-use crate::error::{MeliError, Result, ResultIntoMeliError};
+use crate::error::{Error, Result, ResultIntoError};
 use crate::{backends::*, Collection};
 use futures::lock::Mutex as FutureMutex;
 use futures::stream::Stream;
@@ -57,7 +57,7 @@ pub type UID = usize;
 macro_rules! get_conf_val {
     ($s:ident[$var:literal]) => {
         $s.extra.get($var).ok_or_else(|| {
-            MeliError::new(format!(
+            Error::new(format!(
                 "Configuration error ({}): NNTP connection requires the field `{}` set",
                 $s.name.as_str(),
                 $var
@@ -69,7 +69,7 @@ macro_rules! get_conf_val {
             .get($var)
             .map(|v| {
                 <_>::from_str(v).map_err(|e| {
-                    MeliError::new(format!(
+                    Error::new(format!(
                         "Configuration error ({}) NNTP: Invalid value for field `{}`: {}\n{}",
                         $s.name.as_str(),
                         $var,
@@ -144,7 +144,7 @@ impl UIDStore {
             collection: Collection::new(),
             is_online: Arc::new(Mutex::new((
                 Instant::now(),
-                Err(MeliError::new("Account is uninitialised.")),
+                Err(Error::new("Account is uninitialised.")),
             ))),
         }
     }
@@ -255,7 +255,7 @@ impl MailBackend for NntpType {
         Ok(Box::pin(async move {
             /* To get updates, either issue NEWNEWS if it's supported by the server, and fallback
              * to OVER otherwise */
-            let mbox: NntpMailbox = uid_store.mailboxes.lock().await.get(&mailbox_hash).map(std::clone::Clone::clone).ok_or_else(|| MeliError::new(format!("Mailbox with hash {} not found in NNTP connection, this could possibly be a bug or it was deleted.", mailbox_hash)))?;
+            let mbox: NntpMailbox = uid_store.mailboxes.lock().await.get(&mailbox_hash).map(std::clone::Clone::clone).ok_or_else(|| Error::new(format!("Mailbox with hash {} not found in NNTP connection, this could possibly be a bug or it was deleted.", mailbox_hash)))?;
             let latest_article: Option<crate::UnixTimestamp> = *mbox.latest_article.lock().unwrap();
             let (over_msgid_support, newnews_support): (bool, bool) = {
                 let caps = uid_store.capabilities.lock().unwrap();
@@ -368,7 +368,7 @@ impl MailBackend for NntpType {
 
     fn watch(&self) -> ResultFuture<()> {
         Err(
-            MeliError::new("Watching is currently uniplemented for nntp backend")
+            Error::new("Watching is currently uniplemented for nntp backend")
                 .set_kind(ErrorKind::NotImplemented),
         )
     }
@@ -379,7 +379,7 @@ impl MailBackend for NntpType {
         {
             *v
         } else {
-            return Err(MeliError::new(
+            return Err(Error::new(
                     "Message not found in local cache, it might have been deleted before you requested it."
                 ));
         };
@@ -397,7 +397,7 @@ impl MailBackend for NntpType {
         _mailbox_hash: MailboxHash,
         _flags: Option<Flag>,
     ) -> ResultFuture<()> {
-        Err(MeliError::new("NNTP doesn't support saving."))
+        Err(Error::new("NNTP doesn't support saving."))
     }
 
     fn copy_messages(
@@ -407,7 +407,7 @@ impl MailBackend for NntpType {
         _destination_mailbox_hash: MailboxHash,
         _move_: bool,
     ) -> ResultFuture<()> {
-        Err(MeliError::new("NNTP doesn't support copying/moving."))
+        Err(Error::new("NNTP doesn't support copying/moving."))
     }
 
     fn set_flags(
@@ -416,7 +416,7 @@ impl MailBackend for NntpType {
         _mailbox_hash: MailboxHash,
         _flags: SmallVec<[(std::result::Result<Flag, String>, bool); 8]>,
     ) -> ResultFuture<()> {
-        Err(MeliError::new("NNTP doesn't support flags."))
+        Err(Error::new("NNTP doesn't support flags."))
     }
 
     fn delete_messages(
@@ -424,7 +424,7 @@ impl MailBackend for NntpType {
         _env_hashes: EnvelopeHashBatch,
         _mailbox_hash: MailboxHash,
     ) -> ResultFuture<()> {
-        Err(MeliError::new("NNTP doesn't support deletion."))
+        Err(Error::new("NNTP doesn't support deletion."))
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -443,7 +443,7 @@ impl MailBackend for NntpType {
         &mut self,
         _path: String,
     ) -> ResultFuture<(MailboxHash, HashMap<MailboxHash, Mailbox>)> {
-        Err(MeliError::new(
+        Err(Error::new(
             "Creating mailbox is currently unimplemented for nntp backend.",
         ))
     }
@@ -452,7 +452,7 @@ impl MailBackend for NntpType {
         &mut self,
         _mailbox_hash: MailboxHash,
     ) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
-        Err(MeliError::new(
+        Err(Error::new(
             "Deleting a mailbox is currently unimplemented for nntp backend.",
         ))
     }
@@ -462,7 +462,7 @@ impl MailBackend for NntpType {
         _mailbox_hash: MailboxHash,
         _new_val: bool,
     ) -> ResultFuture<()> {
-        Err(MeliError::new(
+        Err(Error::new(
             "Setting mailbox description is currently unimplemented for nntp backend.",
         ))
     }
@@ -472,7 +472,7 @@ impl MailBackend for NntpType {
         _mailbox_hash: MailboxHash,
         _new_path: String,
     ) -> ResultFuture<Mailbox> {
-        Err(MeliError::new(
+        Err(Error::new(
             "Renaming mailbox is currently unimplemented for nntp backend.",
         ))
     }
@@ -482,7 +482,7 @@ impl MailBackend for NntpType {
         _mailbox_hash: MailboxHash,
         _val: crate::backends::MailboxPermissions,
     ) -> ResultFuture<()> {
-        Err(MeliError::new(
+        Err(Error::new(
             "Setting mailbox permissions is currently unimplemented for nntp backend.",
         ))
     }
@@ -492,7 +492,7 @@ impl MailBackend for NntpType {
         _query: crate::search::Query,
         _mailbox_hash: Option<MailboxHash>,
     ) -> ResultFuture<SmallVec<[EnvelopeHash; 512]>> {
-        Err(MeliError::new(
+        Err(Error::new(
             "Searching is currently unimplemented for nntp backend.",
         ))
     }
@@ -510,7 +510,7 @@ impl MailBackend for NntpType {
                     match &conn.stream {
                         Ok(stream) => {
                             if !stream.supports_submission {
-                                return Err(MeliError::new("Server prohibits posting."));
+                                return Err(Error::new("Server prohibits posting."));
                             }
                         }
                         Err(err) => return Err(err.clone()),
@@ -550,7 +550,7 @@ impl NntpType {
                 .stderr(std::process::Stdio::piped())
                 .output()?;
             if !output.status.success() {
-                return Err(MeliError::new(format!(
+                return Err(Error::new(format!(
                     "({}) server_password_command `{}` returned {}: {}",
                     s.name,
                     get_conf_val!(s["server_password_command"])?,
@@ -608,7 +608,7 @@ impl NntpType {
             );
         }
         if mailboxes.is_empty() {
-            return Err(MeliError::new(format!(
+            return Err(Error::new(format!(
                 "{} has no newsgroups configured.",
                 account_name
             )));
@@ -674,7 +674,7 @@ impl NntpType {
     ($s:ident[$var:literal]) => {{
         keys.insert($var);
         $s.extra.remove($var).ok_or_else(|| {
-            MeliError::new(format!(
+            Error::new(format!(
                 "Configuration error ({}): NNTP connection requires the field `{}` set",
                 $s.name.as_str(),
                 $var
@@ -687,7 +687,7 @@ impl NntpType {
             .remove($var)
             .map(|v| {
                 <_>::from_str(&v).map_err(|e| {
-                    MeliError::new(format!(
+                    Error::new(format!(
                         "Configuration error ({}) NNTP: Invalid value for field `{}`: {}\n{}",
                         $s.name.as_str(),
                         $var,
@@ -705,7 +705,7 @@ impl NntpType {
         if !s.extra.contains_key("server_password_command") {
             get_conf_val!(s["server_password"], String::new())?;
         } else if s.extra.contains_key("server_password") {
-            return Err(MeliError::new(format!(
+            return Err(Error::new(format!(
                 "Configuration error ({}): both server_password and server_password_command are set, cannot choose",
                 s.name.as_str(),
             )));
@@ -715,7 +715,7 @@ impl NntpType {
         let use_tls = get_conf_val!(s["use_tls"], server_port == 563)?;
         let use_starttls = get_conf_val!(s["use_starttls"], server_port != 563)?;
         if !use_tls && use_starttls {
-            return Err(MeliError::new(format!(
+            return Err(Error::new(format!(
                 "Configuration error ({}): incompatible use_tls and use_starttls values: use_tls = false, use_starttls = true",
                 s.name.as_str(),
             )));
@@ -724,7 +724,7 @@ impl NntpType {
         get_conf_val!(s["use_deflate"], false)?;
         #[cfg(not(feature = "deflate_compression"))]
         if s.extra.contains_key("use_deflate") {
-            return Err(MeliError::new(format!(
+            return Err(Error::new(format!(
                 "Configuration error ({}): setting `use_deflate` is set but this version of meli isn't compiled with DEFLATE support.",
                 s.name.as_str(),
             )));
@@ -737,7 +737,7 @@ impl NntpType {
             .collect::<HashSet<&str>>();
         let diff = extra_keys.difference(&keys).collect::<Vec<&&str>>();
         if !diff.is_empty() {
-            return Err(MeliError::new(format!(
+            return Err(Error::new(format!(
                 "Configuration error ({}) NNTP: the following flags are set but are not recognized: {:?}.",
                 s.name.as_str(), diff
             )));
@@ -788,7 +788,7 @@ impl FetchState {
                 .name()
                 .to_string();
             if s.len() != 5 {
-                return Err(MeliError::new(format!(
+                return Err(Error::new(format!(
                     "{} Could not select newsgroup {}: expected GROUP response but got: {}",
                     &uid_store.account_name, path, res
                 )));

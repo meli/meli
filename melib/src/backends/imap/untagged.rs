@@ -309,7 +309,7 @@ impl ImapConnection {
                 );
                 match super::protocol_parser::search_results_raw(&response)
                     .map(|(_, v)| v)
-                    .map_err(MeliError::from)
+                    .map_err(Error::from)
                 {
                     Ok(&[]) => {
                         debug!("UID SEARCH RECENT returned no results");

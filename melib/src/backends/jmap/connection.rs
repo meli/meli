@@ -61,7 +61,7 @@ impl JmapConnection {
         jmap_session_resource_url.push_str("/.well-known/jmap");
 
         let mut req = self.client.get_async(&jmap_session_resource_url).await.map_err(|err| {
-                let err = MeliError::new(format!("Could not connect to JMAP server endpoint for {}. Is your server url setting correct? (i.e. \"jmap.mailserver.org\") (Note: only session resource discovery via /.well-known/jmap is supported. DNS SRV records are not suppported.)\nError connecting to server: {}", &self.server_conf.server_url, &err)).set_source(Some(Arc::new(err)));
+                let err = Error::new(format!("Could not connect to JMAP server endpoint for {}. Is your server url setting correct? (i.e. \"jmap.mailserver.org\") (Note: only session resource discovery via /.well-known/jmap is supported. DNS SRV records are not suppported.)\nError connecting to server: {}", &self.server_conf.server_url, &err)).set_source(Some(Arc::new(err)));
                 //*self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
                 err
         })?;
@@ -69,7 +69,7 @@ impl JmapConnection {
         if !req.status().is_success() {
             let kind: crate::error::NetworkErrorKind = req.status().into();
             let res_text = req.text().await.unwrap_or_default();
-            let err = MeliError::new(format!(
+            let err = Error::new(format!(
                 "Could not connect to JMAP server endpoint for {}. Reply from server: {}",
                 &self.server_conf.server_url, res_text
             ))
@@ -82,7 +82,7 @@ impl JmapConnection {
 
         let session: JmapSession = match serde_json::from_str(&res_text) {
             Err(err) => {
-                let err = MeliError::new(format!("Could not connect to JMAP server endpoint for {}. Is your server url setting correct? (i.e. \"jmap.mailserver.org\") (Note: only session resource discovery via /.well-known/jmap is supported. DNS SRV records are not suppported.)\nReply from server: {}", &self.server_conf.server_url, &res_text)).set_source(Some(Arc::new(err)));
+                let err = Error::new(format!("Could not connect to JMAP server endpoint for {}. Is your server url setting correct? (i.e. \"jmap.mailserver.org\") (Note: only session resource discovery via /.well-known/jmap is supported. DNS SRV records are not suppported.)\nReply from server: {}", &self.server_conf.server_url, &res_text)).set_source(Some(Arc::new(err)));
                 *self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
                 return Err(err);
             }
@@ -92,7 +92,7 @@ impl JmapConnection {
             .capabilities
             .contains_key("urn:ietf:params:jmap:core")
         {
-            let err = MeliError::new(format!("Server {} did not return JMAP Core capability (urn:ietf:params:jmap:core). Returned capabilities were: {}", &self.server_conf.server_url, session.capabilities.keys().map(String::as_str).collect::<Vec<&str>>().join(", ")));
+            let err = Error::new(format!("Server {} did not return JMAP Core capability (urn:ietf:params:jmap:core). Returned capabilities were: {}", &self.server_conf.server_url, session.capabilities.keys().map(String::as_str).collect::<Vec<&str>>().join(", ")));
             *self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
             return Err(err);
         }
@@ -100,7 +100,7 @@ impl JmapConnection {
             .capabilities
             .contains_key("urn:ietf:params:jmap:mail")
         {
-            let err = MeliError::new(format!("Server {} does not support JMAP Mail capability (urn:ietf:params:jmap:mail). Returned capabilities were: {}", &self.server_conf.server_url, session.capabilities.keys().map(String::as_str).collect::<Vec<&str>>().join(", ")));
+            let err = Error::new(format!("Server {} does not support JMAP Mail capability (urn:ietf:params:jmap:mail). Returned capabilities were: {}", &self.server_conf.server_url, session.capabilities.keys().map(String::as_str).collect::<Vec<&str>>().join(", ")));
             *self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
             return Err(err);
         }
@@ -194,7 +194,7 @@ impl JmapConnection {
             debug!(&res_text);
             let mut v: MethodResponse = match serde_json::from_str(&res_text) {
                 Err(err) => {
-                    let err = MeliError::new(format!("BUG: Could not deserialize {} server JSON response properly, please report this!\nReply from server: {}", &self.server_conf.server_url, &res_text)).set_source(Some(Arc::new(err))).set_kind(ErrorKind::Bug);
+                    let err = Error::new(format!("BUG: Could not deserialize {} server JSON response properly, please report this!\nReply from server: {}", &self.server_conf.server_url, &res_text)).set_source(Some(Arc::new(err))).set_kind(ErrorKind::Bug);
                     *self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
                     return Err(err);
                 }

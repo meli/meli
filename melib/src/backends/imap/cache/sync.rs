@@ -687,13 +687,13 @@ impl ImapConnection {
             let (_, status) = protocol_parser::status_response(response.as_slice())?;
             if let Some(uidnext) = status.uidnext {
                 if uidnext == 0 {
-                    return Err(MeliError::new(
+                    return Err(Error::new(
                         "IMAP server error: zero UIDNEXT with nonzero exists.",
                     ));
                 }
                 select_response.uidnext = uidnext;
             } else {
-                return Err(MeliError::new("IMAP server did not reply with UIDNEXT"));
+                return Err(Error::new("IMAP server did not reply with UIDNEXT"));
             }
         }
         Ok(select_response)

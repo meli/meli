@@ -26,7 +26,7 @@
 use crate::state::Context;
 use crate::types::{create_temp_file, ForkType, UIEvent};
 use melib::text_processing::GlobMatch;
-use melib::{email::Attachment, MeliError, Result};
+use melib::{email::Attachment, Error, Result};
 use std::collections::HashMap;
 use std::io::Read;
 use std::io::Write;
@@ -45,13 +45,13 @@ impl MailcapEntry {
          *  $XDG_CONFIG_HOME/meli/mailcap:$XDG_CONFIG_HOME/.mailcap:$HOME/.mailcap:/etc/mailcap:/usr/etc/mailcap:/usr/local/etc/mailcap
          */
         let xdg_dirs =
-            xdg::BaseDirectories::with_prefix("meli").map_err(|e| MeliError::new(e.to_string()))?;
+            xdg::BaseDirectories::with_prefix("meli").map_err(|e| Error::new(e.to_string()))?;
         let mut mailcap_path = xdg_dirs
             .place_config_file("mailcap")
-            .map_err(|e| MeliError::new(e.to_string()))?;
+            .map_err(|e| Error::new(e.to_string()))?;
         if !mailcap_path.exists() {
             mailcap_path = xdg::BaseDirectories::new()
-                .map_err(|e| MeliError::new(e.to_string()))?
+                .map_err(|e| Error::new(e.to_string()))?
                 .place_config_file("mailcap")?;
             if !mailcap_path.exists() {
                 if let Ok(home) = std::env::var("HOME") {
@@ -65,7 +65,7 @@ impl MailcapEntry {
                             mailcap_path = PathBuf::from("/usr/local/etc/mailcap");
                         }
                         if !mailcap_path.exists() {
-                            return Err(MeliError::new("No mailcap file found."));
+                            return Err(Error::new("No mailcap file found."));
                         }
                     }
                 }
@@ -140,7 +140,7 @@ impl MailcapEntry {
         }
 
         match result {
-            None => Err(MeliError::new("Not found")),
+            None => Err(Error::new("Not found")),
             Some(MailcapEntry {
                 command,
                 copiousoutput,

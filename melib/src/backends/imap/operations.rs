@@ -23,7 +23,7 @@ use super::*;
 
 use crate::backends::*;
 use crate::email::*;
-use crate::error::MeliError;
+use crate::error::Error;
 use std::sync::Arc;
 
 /// `BackendOp` implementor for Imap
@@ -82,7 +82,7 @@ impl BackendOp for ImapOp {
                 );
                 let mut results = protocol_parser::fetch_responses(&response)?.1;
                 if results.len() != 1 {
-                    return Err(MeliError::new(format!(
+                    return Err(Error::new(format!(
                         "Invalid/unexpected response: {:?}",
                         response
                     ))
@@ -141,13 +141,13 @@ impl BackendOp for ImapOp {
                 );
                 let v = protocol_parser::uid_fetch_flags_responses(&response)
                     .map(|(_, v)| v)
-                    .map_err(MeliError::from)?;
+                    .map_err(Error::from)?;
                 if v.len() != 1 {
                     debug!("responses len is {}", v.len());
                     debug!(String::from_utf8_lossy(&response));
                     /* TODO: Trigger cache invalidation here. */
                     debug!("message with UID {} was not found", uid);
-                    return Err(MeliError::new(format!(
+                    return Err(Error::new(format!(
                         "Invalid/unexpected response: {:?}",
                         response
                     ))

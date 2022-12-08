@@ -87,11 +87,11 @@ impl BackendMailbox for NntpMailbox {
     }
 
     fn set_is_subscribed(&mut self, _new_val: bool) -> Result<()> {
-        Err(MeliError::new("Cannot set subscription in NNTP."))
+        Err(Error::new("Cannot set subscription in NNTP."))
     }
 
     fn set_special_usage(&mut self, _new_val: SpecialUsageMailbox) -> Result<()> {
-        Err(MeliError::new("Cannot set special usage in NNTP."))
+        Err(Error::new("Cannot set special usage in NNTP."))
     }
 
     fn count(&self) -> Result<(usize, usize)> {

@@ -21,7 +21,7 @@
 
 use super::{default_vals::*, DotAddressable, IndexStyle};
 use melib::search::Query;
-use melib::{MeliError, Result};
+use melib::{Error, Result};
 
 /// Settings for mail listings
 ///
@@ -200,7 +200,7 @@ impl DotAddressable for ListingSettings {
                     "selected_flag" => self.selected_flag.lookup(field, tail),
                     "attachment_flag" => self.attachment_flag.lookup(field, tail),
                     "thread_subject_pack" => self.thread_subject_pack.lookup(field, tail),
-                    other => Err(MeliError::new(format!(
+                    other => Err(Error::new(format!(
                         "{} has no field named {}",
                         parent_field, other
                     ))),

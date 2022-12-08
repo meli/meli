@@ -28,7 +28,7 @@ use super::{MaildirMailbox, MaildirOp, MaildirPathTrait};
 use crate::backends::{RefreshEventKind::*, *};
 use crate::conf::AccountSettings;
 use crate::email::{Envelope, EnvelopeHash, Flag};
-use crate::error::{ErrorKind, MeliError, Result};
+use crate::error::{ErrorKind, Error, Result};
 use crate::shellexpand::ShellExpandTrait;
 use crate::Collection;
 use futures::prelude::Stream;
@@ -838,7 +838,7 @@ impl MailBackend for MaildirType {
     ) -> ResultFuture<()> {
         let hash_index = self.hash_indexes.clone();
         if flags.iter().any(|(f, _)| f.is_err()) {
-            return Err(MeliError::new("Maildir doesn't support tags."));
+            return Err(Error::new("Maildir doesn't support tags."));
         }
 
         Ok(Box::pin(async move {
@@ -863,7 +863,7 @@ impl MailBackend for MaildirType {
                 let path = _path.to_str().unwrap(); // Assume UTF-8 validity
                 let idx: usize = path
                     .rfind(":2,")
-                    .ok_or_else(|| MeliError::new(format!("Invalid email filename: {:?}", path)))?
+                    .ok_or_else(|| Error::new(format!("Invalid email filename: {:?}", path)))?
                     + 3;
                 let mut new_name: String = path[..idx].to_string();
                 for (f, value) in flags.iter() {
@@ -940,9 +940,9 @@ impl MailBackend for MaildirType {
     ) -> ResultFuture<()> {
         let hash_index = self.hash_indexes.clone();
         if !self.mailboxes.contains_key(&source_mailbox_hash) {
-            return Err(MeliError::new("Invalid source mailbox hash").set_kind(ErrorKind::Bug));
+            return Err(Error::new("Invalid source mailbox hash").set_kind(ErrorKind::Bug));
         } else if !self.mailboxes.contains_key(&destination_mailbox_hash) {
-            return Err(MeliError::new("Invalid destination mailbox hash").set_kind(ErrorKind::Bug));
+            return Err(Error::new("Invalid destination mailbox hash").set_kind(ErrorKind::Bug));
         }
         let mut dest_path: PathBuf = self.mailboxes[&destination_mailbox_hash].fs_path().into();
         dest_path.push("cur");
@@ -996,7 +996,7 @@ impl MailBackend for MaildirType {
         let mut path = self.path.clone();
         path.push(&new_path);
         if !path.starts_with(&self.path) {
-            return Err(MeliError::new(format!("Path given (`{}`) is absolute. Please provide a path relative to the account's root mailbox.", &new_path)));
+            return Err(Error::new(format!("Path given (`{}`) is absolute. Please provide a path relative to the account's root mailbox.", &new_path)));
         }
 
         std::fs::create_dir(&path)?;
@@ -1039,7 +1039,7 @@ impl MailBackend for MaildirType {
         &mut self,
         _mailbox_hash: MailboxHash,
     ) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
-        Err(MeliError::new(
+        Err(Error::new(
             "Deleting mailboxes is currently unimplemented for maildir backend.",
         ))
     }
@@ -1049,7 +1049,7 @@ impl MailBackend for MaildirType {
         _mailbox_hash: MailboxHash,
         _val: bool,
     ) -> ResultFuture<()> {
-        Err(MeliError::new(
+        Err(Error::new(
             "Mailbox subscriptions are not possible for the maildir backend.",
         ))
     }
@@ -1059,7 +1059,7 @@ impl MailBackend for MaildirType {
         _mailbox_hash: MailboxHash,
         _new_path: String,
     ) -> ResultFuture<Mailbox> {
-        Err(MeliError::new(
+        Err(Error::new(
             "Renaming mailboxes is currently unimplemented for maildir backend.",
         ))
     }
@@ -1069,7 +1069,7 @@ impl MailBackend for MaildirType {
         _mailbox_hash: MailboxHash,
         _val: crate::backends::MailboxPermissions,
     ) -> ResultFuture<()> {
-        Err(MeliError::new(
+        Err(Error::new(
             "Setting mailbox permissions is not possible for the maildir backend.",
         ))
     }
@@ -1080,7 +1080,7 @@ impl MailBackend for MaildirType {
         _mailbox_hash: Option<MailboxHash>,
     ) -> ResultFuture<SmallVec<[EnvelopeHash; 512]>> {
         Err(
-            MeliError::new("Search is unimplemented for the maildir backend.")
+            Error::new("Search is unimplemented for the maildir backend.")
                 .set_kind(ErrorKind::NotImplemented),
         )
     }
@@ -1107,7 +1107,7 @@ impl MaildirType {
             p: P,
         ) -> Result<Vec<MailboxHash>> {
             if !p.as_ref().exists() || !p.as_ref().is_dir() {
-                return Err(MeliError::new(format!(
+                return Err(Error::new(format!(
                     "Configuration error: Path \"{}\" {}",
                     p.as_ref().display(),
                     if !p.as_ref().exists() {
@@ -1175,13 +1175,13 @@ impl MaildirType {
         }
         let root_mailbox = PathBuf::from(settings.root_mailbox()).expand();
         if !root_mailbox.exists() {
-            return Err(MeliError::new(format!(
+            return Err(Error::new(format!(
                 "Configuration error ({}): root_mailbox `{}` is not a valid directory.",
                 settings.name(),
                 settings.root_mailbox.as_str()
             )));
         } else if !root_mailbox.is_dir() {
-            return Err(MeliError::new(format!(
+            return Err(Error::new(format!(
                 "Configuration error ({}): root_mailbox `{}` is not a directory.",
                 settings.name(),
                 settings.root_mailbox.as_str()
@@ -1255,7 +1255,7 @@ impl MaildirType {
         for d in &["cur", "new", "tmp"] {
             path.push(d);
             if !path.is_dir() {
-                return Err(MeliError::new(format!(
+                return Err(Error::new(format!(
                     "{} is not a valid maildir mailbox",
                     path.display()
                 )));
@@ -1323,13 +1323,13 @@ impl MaildirType {
     pub fn validate_config(s: &mut AccountSettings) -> Result<()> {
         let root_mailbox = PathBuf::from(s.root_mailbox()).expand();
         if !root_mailbox.exists() {
-            return Err(MeliError::new(format!(
+            return Err(Error::new(format!(
                 "Configuration error ({}): root_mailbox `{}` is not a valid directory.",
                 s.name(),
                 s.root_mailbox.as_str()
             )));
         } else if !root_mailbox.is_dir() {
-            return Err(MeliError::new(format!(
+            return Err(Error::new(format!(
                 "Configuration error ({}): root_mailbox `{}` is not a directory.",
                 s.name(),
                 s.root_mailbox.as_str()

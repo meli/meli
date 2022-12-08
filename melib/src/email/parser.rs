@@ -20,7 +20,7 @@
  */
 
 /*! Parsers for email. See submodules */
-use crate::error::{MeliError, Result, ResultIntoMeliError};
+use crate::error::{Error, Result, ResultIntoError};
 use nom::{
     branch::alt,
     bytes::complete::{is_a, is_not, tag, take, take_until, take_while, take_while1},
@@ -132,9 +132,9 @@ impl<I, E> nom::error::FromExternalError<I, E> for ParsingError<I> {
 
 impl<I> nom::error::ContextError<I> for ParsingError<I> {}
 
-impl<'i> From<ParsingError<&'i [u8]>> for MeliError {
-    fn from(val: ParsingError<&'i [u8]>) -> MeliError {
-        MeliError::new("Parsing error").set_summary(format!(
+impl<'i> From<ParsingError<&'i [u8]>> for Error {
+    fn from(val: ParsingError<&'i [u8]>) -> Error {
+        Error::new("Parsing error").set_summary(format!(
             r#"In input: "{}...",
 Error: {}"#,
             String::from_utf8_lossy(val.input)
@@ -146,9 +146,9 @@ Error: {}"#,
     }
 }
 
-impl<'i> From<ParsingError<&'i str>> for MeliError {
-    fn from(val: ParsingError<&'i str>) -> MeliError {
-        MeliError::new("Parsing error").set_summary(format!(
+impl<'i> From<ParsingError<&'i str>> for Error {
+    fn from(val: ParsingError<&'i str>) -> Error {
+        Error::new("Parsing error").set_summary(format!(
             r#"In input: "{}...",
 Error: {}"#,
             val.input.chars().take(30).collect::<String>(),
@@ -157,29 +157,29 @@ Error: {}"#,
     }
 }
 
-impl<'i> From<nom::Err<ParsingError<&'i [u8]>>> for MeliError {
-    fn from(val: nom::Err<ParsingError<&'i [u8]>>) -> MeliError {
+impl<'i> From<nom::Err<ParsingError<&'i [u8]>>> for Error {
+    fn from(val: nom::Err<ParsingError<&'i [u8]>>) -> Error {
         match val {
-            nom::Err::Incomplete(_) => MeliError::new("Parsing Error: Incomplete"),
+            nom::Err::Incomplete(_) => Error::new("Parsing Error: Incomplete"),
             nom::Err::Error(err) | nom::Err::Failure(err) => err.into(),
         }
     }
 }
 
-impl<'i> From<nom::Err<ParsingError<&'i str>>> for MeliError {
-    fn from(val: nom::Err<ParsingError<&'i str>>) -> MeliError {
+impl<'i> From<nom::Err<ParsingError<&'i str>>> for Error {
+    fn from(val: nom::Err<ParsingError<&'i str>>) -> Error {
         match val {
-            nom::Err::Incomplete(_) => MeliError::new("Parsing Error: Incomplete"),
+            nom::Err::Incomplete(_) => Error::new("Parsing Error: Incomplete"),
             nom::Err::Error(err) | nom::Err::Failure(err) => err.into(),
         }
     }
 }
 
-impl From<nom::Err<nom::error::Error<&[u8]>>> for MeliError {
-    fn from(val: nom::Err<nom::error::Error<&[u8]>>) -> MeliError {
+impl From<nom::Err<nom::error::Error<&[u8]>>> for Error {
+    fn from(val: nom::Err<nom::error::Error<&[u8]>>) -> Error {
         match val {
-            nom::Err::Incomplete(_) => MeliError::new("Parsing Error: Incomplete"),
-            nom::Err::Error(_) | nom::Err::Failure(_) => MeliError::new("Parsing Error"),
+            nom::Err::Incomplete(_) => Error::new("Parsing Error: Incomplete"),
+            nom::Err::Error(_) | nom::Err::Failure(_) => Error::new("Parsing Error"),
         }
     }
 }
@@ -304,7 +304,7 @@ pub fn mail(input: &[u8]) -> Result<(Vec<(&[u8], &[u8])>, &[u8])> {
     .chain_err_summary(|| "Could not parse mail")?;
 
     if !rest.is_empty() {
-        return Err(MeliError::new("Got leftover bytes after parsing mail"));
+        return Err(Error::new("Got leftover bytes after parsing mail"));
     }
 
     Ok(result)
@@ -895,7 +895,7 @@ pub mod generic {
         ret_s.extend_from_slice(&rest_wsp);
         let ret_s = String::from_utf8_lossy(&ret_s).into_owned();
         if !input.is_empty() {
-            Err(MeliError::from(format!(
+            Err(Error::from(format!(
                 "unstructured(): unmatched input: {} while result is {}",
                 to_str!(input),
                 ret_s

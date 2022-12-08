@@ -24,7 +24,7 @@ use crate::email::{
     attachment_types::{ContentType, MultipartType},
     attachments::Attachment,
 };
-use crate::{MeliError, Result};
+use crate::{Error, Result};
 
 /// Convert raw attachment to the form needed for signature verification ([rfc3156](https://tools.ietf.org/html/rfc3156))
 ///
@@ -95,7 +95,7 @@ pub fn verify_signature(a: &Attachment) -> Result<(Vec<u8>, &Attachment)> {
             boundary: _,
         } => {
             if parts.len() != 2 {
-                return Err(MeliError::new(format!(
+                return Err(Error::new(format!(
                     "Illegal number of parts in multipart/signed. Expected 2 got {}",
                     parts.len()
                 )));
@@ -114,7 +114,7 @@ pub fn verify_signature(a: &Attachment) -> Result<(Vec<u8>, &Attachment)> {
             {
                 v
             } else {
-                return Err(MeliError::new(
+                return Err(Error::new(
                     "multipart/signed attachment without a signed part".to_string(),
                 ));
             };
@@ -124,13 +124,13 @@ pub fn verify_signature(a: &Attachment) -> Result<(Vec<u8>, &Attachment)> {
             }) {
                 sig
             } else {
-                return Err(MeliError::new(
+                return Err(Error::new(
                     "multipart/signed attachment without a signature part".to_string(),
                 ));
             };
             Ok((signed_part, signature))
         }
-        _ => Err(MeliError::new(
+        _ => Err(Error::new(
             "Should not give non-signed attachments to this function",
         )),
     }

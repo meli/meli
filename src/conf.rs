@@ -285,7 +285,7 @@ impl From<FileAccount> for AccountConf {
 
 pub fn get_config_file() -> Result<PathBuf> {
     let xdg_dirs = xdg::BaseDirectories::with_prefix("meli").map_err(|err| {
-        MeliError::new(format!(
+        Error::new(format!(
             "Could not detect XDG directories for user: {}",
             err
         ))
@@ -344,7 +344,7 @@ impl FileSettings {
         if !config_path.exists() {
             let path_string = config_path.display().to_string();
             if path_string.is_empty() {
-                return Err(MeliError::new("No configuration found."));
+                return Err(Error::new("No configuration found."));
             }
             #[cfg(not(test))]
             let ask = Ask {
@@ -356,13 +356,13 @@ impl FileSettings {
             #[cfg(not(test))]
             if ask.run() {
                 create_config_file(&config_path)?;
-                return Err(MeliError::new(
+                return Err(Error::new(
                     "Edit the sample configuration and relaunch meli.",
                 ));
             }
             #[cfg(test)]
             return Ok(FileSettings::default());
-            return Err(MeliError::new("No configuration file found."));
+            return Err(Error::new("No configuration file found."));
         }
 
         FileSettings::validate(config_path, true, false)
@@ -372,7 +372,7 @@ impl FileSettings {
         let s = pp::pp(&path)?;
         let map: toml::map::Map<String, toml::value::Value> =
             toml::from_str(&s).map_err(|err| {
-                MeliError::new(format!(
+                Error::new(format!(
                     "{}:\nConfig file is invalid TOML: {}",
                     path.display(),
                     err
@@ -401,7 +401,7 @@ This is required so that you don't accidentally start meli and find out later th
                     let mut file = OpenOptions::new().append(true).open(&path)?;
                     file.write_all("[composing]\nsend_mail = 'false'\n".as_bytes())
                         .map_err(|err| {
-                            MeliError::new(format!(
+                            Error::new(format!(
                                 "Could not append to {}: {}",
                                 path.display(),
                                 err
@@ -410,14 +410,14 @@ This is required so that you don't accidentally start meli and find out later th
                     return FileSettings::validate(path, interactive, clear_extras);
                 }
             }
-            return Err(MeliError::new(format!(
+            return Err(Error::new(format!(
                 "{}\n\nEdit the {} and relaunch meli.",
                 if interactive { "" } else { err_msg },
                 path.display()
             )));
         }
         let mut s: FileSettings = toml::from_str(&s).map_err(|err| {
-            MeliError::new(format!(
+            Error::new(format!(
                 "{}:\nConfig file contains errors: {}",
                 path.display(),
                 err
@@ -450,7 +450,7 @@ This is required so that you don't accidentally start meli and find out later th
             "dark" | "light" => {}
             t if s.terminal.themes.other_themes.contains_key(t) => {}
             t => {
-                return Err(MeliError::new(format!("Theme `{}` was not found.", t)));
+                return Err(Error::new(format!("Theme `{}` was not found.", t)));
             }
         }
 
@@ -493,7 +493,7 @@ This is required so that you don't accidentally start meli and find out later th
             };
             backends.validate_config(&lowercase_format, &mut s)?;
             if !s.extra.is_empty() {
-                return Err(MeliError::new(format!(
+                return Err(Error::new(format!(
                     "Unrecognised configuration values: {:?}",
                     s.extra
                 )));
@@ -793,7 +793,7 @@ pub fn create_config_file(p: &Path) -> Result<()> {
 mod pp {
     //! Preprocess configuration files by unfolding `include` macros.
     use melib::{
-        error::{MeliError, Result},
+        error::{Error, Result},
         parsec::*,
         ShellExpandTrait,
     };
@@ -860,7 +860,7 @@ mod pp {
     /// Expands `include` macros in path.
     fn pp_helper(path: &Path, level: u8) -> Result<String> {
         if level > 7 {
-            return Err(MeliError::new(format!("Maximum recursion limit reached while unfolding include directives in {}. Have you included a config file within itself?", path.display())));
+            return Err(Error::new(format!("Maximum recursion limit reached while unfolding include directives in {}. Have you included a config file within itself?", path.display())));
         }
         let mut contents = String::new();
         let mut file = std::fs::File::open(path)?;
@@ -869,7 +869,7 @@ mod pp {
 
         for (i, l) in contents.lines().enumerate() {
             if let (_, Some(sub_path)) = include_directive().parse(l).map_err(|l| {
-                MeliError::new(format!(
+                Error::new(format!(
                     "Malformed include directive in line {} of file {}: {}\nConfiguration uses the standard m4 macro include(`filename`).",
                     i,
                     path.display(),
@@ -936,7 +936,7 @@ mod dotaddressable {
     pub trait DotAddressable: Serialize {
         fn lookup(&self, parent_field: &str, path: &[&str]) -> Result<String> {
             if !path.is_empty() {
-                Err(MeliError::new(format!(
+                Err(Error::new(format!(
                     "{} has no fields, it is of type {}",
                     parent_field,
                     std::any::type_name::<Self>()
@@ -986,7 +986,7 @@ mod dotaddressable {
                         "log_file" => self.log_file.lookup(field, tail),
                         "maximum_level" => self.maximum_level.lookup(field, tail),
 
-                        other => Err(MeliError::new(format!(
+                        other => Err(Error::new(format!(
                             "{} has no field named {}",
                             parent_field, other
                         ))),
@@ -1008,13 +1008,13 @@ mod dotaddressable {
                         "listing" => self.listing.lookup(field, tail),
                         "notifications" => self.notifications.lookup(field, tail),
                         "shortcuts" => self.shortcuts.lookup(field, tail),
-                        "tags" => Err(MeliError::new("unimplemented")),
-                        "composing" => Err(MeliError::new("unimplemented")),
-                        "pgp" => Err(MeliError::new("unimplemented")),
+                        "tags" => Err(Error::new("unimplemented")),
+                        "composing" => Err(Error::new("unimplemented")),
+                        "pgp" => Err(Error::new("unimplemented")),
                         "terminal" => self.terminal.lookup(field, tail),
                         "log" => self.log.lookup(field, tail),
 
-                        other => Err(MeliError::new(format!(
+                        other => Err(Error::new(format!(
                             "{} has no field named {}",
                             parent_field, other
                         ))),
@@ -1035,7 +1035,7 @@ mod dotaddressable {
                         "conf" => self.conf.lookup(field, tail),
                         "conf_override" => self.conf_override.lookup(field, tail),
                         "mailbox_confs" => self.mailbox_confs.lookup(field, tail),
-                        other => Err(MeliError::new(format!(
+                        other => Err(Error::new(format!(
                             "{} has no field named {}",
                             parent_field, other
                         ))),
@@ -1052,17 +1052,17 @@ mod dotaddressable {
                 Some(field) => {
                     let _tail = &path[1..];
                     match *field {
-                        "pager" => Err(MeliError::new("unimplemented")), //self.pager.lookup(field, tail),
-                        "listing" => Err(MeliError::new("unimplemented")), // self.listing.lookup(field, tail),
-                        "notifications" => Err(MeliError::new("unimplemented")), // self.notifications.lookup(field, tail),
-                        "shortcuts" => Err(MeliError::new("unimplemented")), //self.shortcuts.lookup(field, tail),
-                        "composing" => Err(MeliError::new("unimplemented")), //self.composing.lookup(field, tail),
-                        "identity" => Err(MeliError::new("unimplemented")), //self.identity.lookup(field, tail)<String>,
-                        "tags" => Err(MeliError::new("unimplemented")), //self.tags.lookup(field, tail),
-                        "themes" => Err(MeliError::new("unimplemented")), //self.themes.lookup(field, tail)<Themes>,
-                        "pgp" => Err(MeliError::new("unimplemented")), //self.pgp.lookup(field, tail),
+                        "pager" => Err(Error::new("unimplemented")), //self.pager.lookup(field, tail),
+                        "listing" => Err(Error::new("unimplemented")), // self.listing.lookup(field, tail),
+                        "notifications" => Err(Error::new("unimplemented")), // self.notifications.lookup(field, tail),
+                        "shortcuts" => Err(Error::new("unimplemented")), //self.shortcuts.lookup(field, tail),
+                        "composing" => Err(Error::new("unimplemented")), //self.composing.lookup(field, tail),
+                        "identity" => Err(Error::new("unimplemented")), //self.identity.lookup(field, tail)<String>,
+                        "tags" => Err(Error::new("unimplemented")), //self.tags.lookup(field, tail),
+                        "themes" => Err(Error::new("unimplemented")), //self.themes.lookup(field, tail)<Themes>,
+                        "pgp" => Err(Error::new("unimplemented")), //self.pgp.lookup(field, tail),
 
-                        other => Err(MeliError::new(format!(
+                        other => Err(Error::new(format!(
                             "{} has no field named {}",
                             parent_field, other
                         ))),
@@ -1081,7 +1081,7 @@ mod dotaddressable {
                     match *field {
                         "conf_override" => self.conf_override.lookup(field, tail),
                         "mailbox_conf" => self.mailbox_conf.lookup(field, tail),
-                        other => Err(MeliError::new(format!(
+                        other => Err(Error::new(format!(
                             "{} has no field named {}",
                             parent_field, other
                         ))),
@@ -1111,7 +1111,7 @@ mod dotaddressable {
                         "conf_override" => self.conf_override.lookup(field, tail),
                         "extra" => self.extra.lookup(field, tail),
                         "order" => self.order.lookup(field, tail),
-                        other => Err(MeliError::new(format!(
+                        other => Err(Error::new(format!(
                             "{} has no field named {}",
                             parent_field, other
                         ))),
@@ -1138,7 +1138,7 @@ mod dotaddressable {
                         "mailboxes" => self.mailboxes.lookup(field, tail),
                         "manual_refresh" => self.manual_refresh.lookup(field, tail),
                         "extra" => self.extra.lookup(field, tail),
-                        other => Err(MeliError::new(format!(
+                        other => Err(Error::new(format!(
                             "{} has no field named {}",
                             parent_field, other
                         ))),
@@ -1161,7 +1161,7 @@ mod dotaddressable {
                         "ignore" => self.ignore.lookup(field, tail),
                         "usage" => self.usage.lookup(field, tail),
                         "extra" => self.extra.lookup(field, tail),
-                        other => Err(MeliError::new(format!(
+                        other => Err(Error::new(format!(
                             "{} has no field named {}",
                             parent_field, other
                         ))),

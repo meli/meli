@@ -21,12 +21,11 @@
 
 use crate::conf::AccountSettings;
 use crate::email::{Envelope, EnvelopeHash, Flag};
-use crate::error::{MeliError, Result};
+use crate::error::{Error, Result};
 use crate::shellexpand::ShellExpandTrait;
 use crate::{backends::*, Collection};
 use smallvec::SmallVec;
 use std::collections::{hash_map::HashMap, BTreeMap};
-use std::error::Error;
 use std::ffi::{CStr, CString, OsStr};
 use std::io::Read;
 use std::os::unix::ffi::OsStrExt;
@@ -186,8 +185,8 @@ impl std::fmt::Display for NotmuchError {
     }
 }
 
-impl Error for NotmuchError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
+impl std::error::Error for NotmuchError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         None
     }
 }
@@ -319,11 +318,11 @@ impl NotmuchDb {
                 Ok(l) => l,
                 Err(err) => {
                     if custom_dlpath {
-                        return Err(MeliError::new(format!("Notmuch `library_file_path` setting value `{}` for account {} does not exist or is a directory or not a valid library file.",dlpath, s.name()))
+                        return Err(Error::new(format!("Notmuch `library_file_path` setting value `{}` for account {} does not exist or is a directory or not a valid library file.",dlpath, s.name()))
                             .set_kind(ErrorKind::Configuration)
                             .set_source(Some(Arc::new(err))));
                     } else {
-                        return Err(MeliError::new("Could not load libnotmuch!")
+                        return Err(Error::new("Could not load libnotmuch!")
                             .set_details(super::NOTMUCH_ERROR_DETAILS)
                             .set_source(Some(Arc::new(err))));
                     }
@@ -332,7 +331,7 @@ impl NotmuchDb {
         });
         let mut path = Path::new(s.root_mailbox.as_str()).expand();
         if !path.exists() {
-            return Err(MeliError::new(format!(
+            return Err(Error::new(format!(
                 "Notmuch `root_mailbox` {} for account {} does not exist.",
                 s.root_mailbox.as_str(),
                 s.name()
@@ -340,7 +339,7 @@ impl NotmuchDb {
             .set_kind(ErrorKind::Configuration));
         }
         if !path.is_dir() {
-            return Err(MeliError::new(format!(
+            return Err(Error::new(format!(
                 "Notmuch `root_mailbox` {} for account {} is not a directory.",
                 s.root_mailbox.as_str(),
                 s.name()
@@ -349,7 +348,7 @@ impl NotmuchDb {
         }
         path.push(".notmuch");
         if !path.exists() || !path.is_dir() {
-            return Err(MeliError::new(format!(
+            return Err(Error::new(format!(
                 "Notmuch `root_mailbox` {} for account {} does not contain a `.notmuch` subdirectory.",
                 s.root_mailbox.as_str(),
                 s.name()
@@ -376,7 +375,7 @@ impl NotmuchDb {
                     },
                 );
             } else {
-                return Err(MeliError::new(format!(
+                return Err(Error::new(format!(
                     "notmuch mailbox configuration entry `{}` for account {} should have a `query` value set.",
                     k,
                     s.name(),
@@ -405,7 +404,7 @@ impl NotmuchDb {
     pub fn validate_config(s: &mut AccountSettings) -> Result<()> {
         let mut path = Path::new(s.root_mailbox.as_str()).expand();
         if !path.exists() {
-            return Err(MeliError::new(format!(
+            return Err(Error::new(format!(
                 "Notmuch `root_mailbox` {} for account {} does not exist.",
                 s.root_mailbox.as_str(),
                 s.name()
@@ -413,7 +412,7 @@ impl NotmuchDb {
             .set_kind(ErrorKind::Configuration));
         }
         if !path.is_dir() {
-            return Err(MeliError::new(format!(
+            return Err(Error::new(format!(
                 "Notmuch `root_mailbox` {} for account {} is not a directory.",
                 s.root_mailbox.as_str(),
                 s.name()
@@ -422,7 +421,7 @@ impl NotmuchDb {
         }
         path.push(".notmuch");
         if !path.exists() || !path.is_dir() {
-            return Err(MeliError::new(format!(
+            return Err(Error::new(format!(
                 "Notmuch `root_mailbox` {} for account {} does not contain a `.notmuch` subdirectory.",
                 s.root_mailbox.as_str(),
                 s.name()
@@ -433,7 +432,7 @@ impl NotmuchDb {
         let account_name = s.name().to_string();
         if let Some(lib_path) = s.extra.remove("library_file_path") {
             if !Path::new(&lib_path).exists() || Path::new(&lib_path).is_dir() {
-                return Err(MeliError::new(format!(
+                return Err(Error::new(format!(
                             "Notmuch `library_file_path` setting value `{}` for account {} does not exist or is a directory.",
                             &lib_path,
                             s.name()
@@ -442,7 +441,7 @@ impl NotmuchDb {
         }
         for (k, f) in s.mailboxes.iter_mut() {
             if f.extra.remove("query").is_none() {
-                return Err(MeliError::new(format!(
+                return Err(Error::new(format!(
                     "notmuch mailbox configuration entry `{}` for account {} should have a `query` value set.",
                     k,
                     account_name,
@@ -474,7 +473,7 @@ impl NotmuchDb {
             )
         };
         if status != 0 {
-            return Err(MeliError::new(format!(
+            return Err(Error::new(format!(
                 "Could not open notmuch database at path {}. notmuch_database_open returned {}.",
                 path.display(),
                 status
@@ -742,7 +741,7 @@ impl MailBackend for NotmuchDb {
         _destination_mailbox_hash: MailboxHash,
         _move_: bool,
     ) -> ResultFuture<()> {
-        Err(MeliError::new(
+        Err(Error::new(
             "Copying messages is currently unimplemented for notmuch backend",
         ))
     }
@@ -864,7 +863,7 @@ impl MailBackend for NotmuchDb {
         _env_hashes: EnvelopeHashBatch,
         _mailbox_hash: MailboxHash,
     ) -> ResultFuture<()> {
-        Err(MeliError::new(
+        Err(Error::new(
             "Deleting messages is currently unimplemented for notmuch backend",
         ))
     }
@@ -889,7 +888,7 @@ impl MailBackend for NotmuchDb {
                     s.push(' ');
                     s
                 } else {
-                    return Err(MeliError::new(format!(
+                    return Err(Error::new(format!(
                         "Mailbox with hash {} not found!",
                         mailbox_hash
                     ))
@@ -925,7 +924,7 @@ impl MailBackend for NotmuchDb {
         &mut self,
         _mailbox_hash: MailboxHash,
     ) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
-        Err(MeliError::new(
+        Err(Error::new(
             "Deleting mailboxes is currently unimplemented for notmuch backend.",
         ))
     }
@@ -935,7 +934,7 @@ impl MailBackend for NotmuchDb {
         _mailbox_hash: MailboxHash,
         _val: bool,
     ) -> ResultFuture<()> {
-        Err(MeliError::new(
+        Err(Error::new(
             "Mailbox subscriptions are not possible for the notmuch backend.",
         ))
     }
@@ -945,7 +944,7 @@ impl MailBackend for NotmuchDb {
         _mailbox_hash: MailboxHash,
         _new_path: String,
     ) -> ResultFuture<Mailbox> {
-        Err(MeliError::new(
+        Err(Error::new(
             "Renaming mailboxes is currently unimplemented for notmuch backend.",
         ))
     }
@@ -955,7 +954,7 @@ impl MailBackend for NotmuchDb {
         _mailbox_hash: MailboxHash,
         _val: crate::backends::MailboxPermissions,
     ) -> ResultFuture<()> {
-        Err(MeliError::new(
+        Err(Error::new(
             "Setting mailbox permissions is not possible for the notmuch backend.",
         ))
     }
@@ -965,7 +964,7 @@ impl MailBackend for NotmuchDb {
         _new_path: String,
     ) -> ResultFuture<(MailboxHash, HashMap<MailboxHash, Mailbox>)> {
         Err(
-            MeliError::new("Creating mailboxes is unimplemented for the notmuch backend.")
+            Error::new("Creating mailboxes is unimplemented for the notmuch backend.")
                 .set_kind(ErrorKind::NotImplemented),
         )
     }
@@ -1016,7 +1015,7 @@ impl<'s> Query<'s> {
             call!(lib, notmuch_query_create)(*database.inner.read().unwrap(), query_cstr.as_ptr())
         };
         if query.is_null() {
-            return Err(MeliError::new("Could not create query. Out of memory?"));
+            return Err(Error::new("Could not create query. Out of memory?"));
         }
         Ok(Query {
             lib,
@@ -1043,7 +1042,7 @@ impl<'s> Query<'s> {
             call!(self.lib, notmuch_query_search_messages)(self.ptr, &mut messages as *mut _)
         };
         if status != 0 {
-            return Err(MeliError::new(format!(
+            return Err(Error::new(format!(
                 "Search for {} returned {}",
                 self.query_str, status,
             )));

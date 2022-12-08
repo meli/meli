@@ -97,7 +97,7 @@ pub async fn get_mailboxes(conn: &JmapConnection) -> Result<HashMap<MailboxHash,
     let res_text = res.text().await?;
     let mut v: MethodResponse = match serde_json::from_str(&res_text) {
         Err(err) => {
-            let err = MeliError::new(format!("BUG: Could not deserialize {} server JSON response properly, please report this!\nReply from server: {}", &conn.server_conf.server_url, &res_text)).set_source(Some(Arc::new(err))).set_kind(ErrorKind::Bug);
+            let err = Error::new(format!("BUG: Could not deserialize {} server JSON response properly, please report this!\nReply from server: {}", &conn.server_conf.server_url, &res_text)).set_source(Some(Arc::new(err))).set_kind(ErrorKind::Bug);
             *conn.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
             return Err(err);
         }
@@ -204,7 +204,7 @@ pub async fn get_message_list(
     let res_text = res.text().await?;
     let mut v: MethodResponse = match serde_json::from_str(&res_text) {
         Err(err) => {
-            let err = MeliError::new(format!("BUG: Could not deserialize {} server JSON response properly, please report this!\nReply from server: {}", &conn.server_conf.server_url, &res_text)).set_source(Some(Arc::new(err))).set_kind(ErrorKind::Bug);
+            let err = Error::new(format!("BUG: Could not deserialize {} server JSON response properly, please report this!\nReply from server: {}", &conn.server_conf.server_url, &res_text)).set_source(Some(Arc::new(err))).set_kind(ErrorKind::Bug);
             *conn.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
             return Err(err);
         }
@@ -284,7 +284,7 @@ pub async fn fetch(
 
     let mut v: MethodResponse = match serde_json::from_str(&res_text) {
         Err(err) => {
-            let err = MeliError::new(format!("BUG: Could not deserialize {} server JSON response properly, please report this!\nReply from server: {}", &conn.server_conf.server_url, &res_text)).set_source(Some(Arc::new(err))).set_kind(ErrorKind::Bug);
+            let err = Error::new(format!("BUG: Could not deserialize {} server JSON response properly, please report this!\nReply from server: {}", &conn.server_conf.server_url, &res_text)).set_source(Some(Arc::new(err))).set_kind(ErrorKind::Bug);
             *conn.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
             return Err(err);
         }

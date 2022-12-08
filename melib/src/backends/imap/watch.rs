@@ -70,7 +70,7 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
     {
         Some(mailbox) => mailbox,
         None => {
-            return Err(MeliError::new("INBOX mailbox not found in local mailbox index. meli may have not parsed the IMAP mailboxes correctly"));
+            return Err(Error::new("INBOX mailbox not found in local mailbox index. meli may have not parsed the IMAP mailboxes correctly"));
         }
     };
     let mailbox_hash = mailbox.hash();

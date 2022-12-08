@@ -24,7 +24,7 @@
 use super::default_vals::*;
 use super::deserializers::*;
 use super::DotAddressable;
-use melib::{MeliError, Result, ToggleFlag};
+use melib::{Error, Result, ToggleFlag};
 
 /// Settings for the pager function.
 #[derive(Debug, Deserialize, Clone, Serialize)]
@@ -149,7 +149,7 @@ impl DotAddressable for PagerSettings {
                     }
                     "show_date_in_my_timezone" => self.show_date_in_my_timezone.lookup(field, tail),
                     "url_launcher" => self.html_filter.lookup(field, tail),
-                    other => Err(MeliError::new(format!(
+                    other => Err(Error::new(format!(
                         "{} has no field named {}",
                         parent_field, other
                     ))),

@@ -34,7 +34,7 @@ impl MboxFormat {
         crlf: bool,
     ) -> Result<()> {
         if tags.iter().any(|t| t.contains(' ')) {
-            return Err(MeliError::new("mbox tags/keywords can't contain spaces"));
+            return Err(Error::new("mbox tags/keywords can't contain spaces"));
         }
         let line_ending: &'static [u8] = if crlf { &b"\r\n"[..] } else { &b"\n"[..] };
         if !is_empty {
@@ -91,7 +91,7 @@ impl MboxFormat {
                     }
                 }
             }
-            Ok::<(), MeliError>(())
+            Ok::<(), Error>(())
         };
         let write_metadata_fn = |writer: &mut dyn std::io::Write| match metadata_format {
             MboxMetadata::CClient => {
@@ -133,7 +133,7 @@ impl MboxFormat {
                     writer.write_all(v.as_bytes())?;
                     writer.write_all(line_ending)?;
                 }
-                Ok::<(), MeliError>(())
+                Ok::<(), Error>(())
             }
             MboxMetadata::None => Ok(()),
         };
@@ -152,7 +152,7 @@ impl MboxFormat {
         };
 
         match self {
-            MboxFormat::MboxO | MboxFormat::MboxRd => Err(MeliError::new("Unimplemented.")),
+            MboxFormat::MboxO | MboxFormat::MboxRd => Err(Error::new("Unimplemented.")),
             MboxFormat::MboxCl => {
                 let len = (body_len
                     + body

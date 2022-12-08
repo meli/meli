@@ -24,7 +24,7 @@ use melib::async_workers::{Async, AsyncBuilder, AsyncStatus, WorkContext};
 use melib::backends::*;
 use melib::conf::AccountSettings;
 use melib::email::{Envelope, EnvelopeHash, Flag};
-use melib::error::{MeliError, Result};
+use melib::error::{Error, Result};
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
@@ -90,7 +90,7 @@ impl MailBackend for PluginBackend {
             }
             is_online.1.clone()
         } else {
-            Err(MeliError::new("busy"))
+            Err(Error::new("busy"))
         }
     }
 
@@ -201,13 +201,13 @@ impl MailBackend for PluginBackend {
         _mailbox_hash: MailboxHash,
         _flags: Option<Flag>,
     ) -> ResultFuture<()> {
-        Err(MeliError::new("Saving is currently unimplemented for plugins"))
+        Err(Error::new("Saving is currently unimplemented for plugins"))
     }
     fn create_mailbox(
         &mut self,
         _name: String,
     ) -> ResultFuture<(MailboxHash, HashMap<MailboxHash, Mailbox>)> {
-        Err(MeliError::new("Creating a mailbox is currently unimplemented for plugins"))
+        Err(Error::new("Creating a mailbox is currently unimplemented for plugins"))
     }
     fn collection(&self) -> melib::Collection {
         self.collection.clone()
@@ -226,7 +226,7 @@ impl PluginBackend {
         _ev: melib::backends::BackendEventConsumer,
     ) -> Result<Box<dyn MailBackend>> {
         if plugin.kind != PluginKind::Backend {
-            return Err(MeliError::new(format!(
+            return Err(Error::new(format!(
                 "Error: Plugin `{}` is not a mail backend plugin, it's `{:?}`",
                 &plugin.name, &plugin.kind
             )));
@@ -248,7 +248,7 @@ impl PluginBackend {
             plugin,
             channel: Arc::new(Mutex::new(channel)),
             collection: Default::default(),
-            is_online: Arc::new(Mutex::new((now, Err(MeliError::new("Unitialized"))))),
+            is_online: Arc::new(Mutex::new((now, Err(Error::new("Unitialized"))))),
         }))
     }
 
@@ -294,12 +294,12 @@ impl BackendOp for PluginOp {
                     .and_then(std::convert::identity)?
                     .into_bytes())
             } else {
-                Err(MeliError::new("busy"))
+                Err(Error::new("busy"))
             }
         }))
     }
 
     fn fetch_flags(&self) -> ResultFuture<Flag> {
-        Err(MeliError::new("Unimplemented."))
+        Err(Error::new("Unimplemented."))
     }
 }

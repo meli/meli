@@ -21,7 +21,7 @@
 
 /*! Plugins are executed by meli and communication is done by `messagepack` IPC.
  */
-use melib::error::{MeliError, Result};
+use melib::error::{Error, Result};
 use std::collections::HashMap;
 use std::io::Write;
 use std::os::unix::net::{UnixListener, UnixStream};
@@ -276,7 +276,7 @@ impl PluginManager {
                 }
             }
         }
-        Err(MeliError::new("no listeners for this hook"))
+        Err(Error::new("no listeners for this hook"))
     }
 
     pub fn listener(&self) -> UnixListener {

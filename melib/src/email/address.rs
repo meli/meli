@@ -262,7 +262,7 @@ impl Address {
                 let email = self.get_email();
                 let (local_part, domain) =
                     match super::parser::address::addr_spec_raw(email.as_bytes())
-                        .map_err(Into::<MeliError>::into)
+                        .map_err(Into::<Error>::into)
                         .and_then(|(_, (l, d))| {
                             Ok((String::from_utf8(l.into())?, String::from_utf8(d.into())?))
                         }) {
@@ -368,7 +368,7 @@ impl core::fmt::Debug for Address {
 }
 
 impl TryFrom<&str> for Address {
-    type Error = MeliError;
+    type Error = Error;
     fn try_from(val: &str) -> Result<Address> {
         Ok(parser::address::address(val.as_bytes())?.1)
     }

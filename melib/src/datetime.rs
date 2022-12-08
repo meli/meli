@@ -37,7 +37,7 @@
 //! let s = timestamp_to_string(timestamp, Some("%Y-%m-%d"), true);
 //! assert_eq!(s, "2020-01-08");
 //! ```
-use crate::error::{Result, ResultIntoMeliError};
+use crate::error::{Result, ResultIntoError};
 use std::borrow::Cow;
 use std::convert::TryInto;
 use std::ffi::{CStr, CString};

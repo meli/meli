@@ -76,7 +76,7 @@
 
 use crate::connections::{lookup_ipv4, Connection};
 use crate::email::{parser::BytesExt, Address, Envelope};
-use crate::error::{MeliError, Result, ResultIntoMeliError};
+use crate::error::{Error, Result, ResultIntoError};
 use futures::io::{AsyncReadExt, AsyncWriteExt};
 use native_tls::TlsConnector;
 use smallvec::SmallVec;
@@ -294,7 +294,7 @@ impl SmtpConnection {
                             danger_accept_invalid_certs,
                         };
                     } else {
-                        return Err(MeliError::new("Please specify what SMTP security transport to use explicitly instead of `auto`."));
+                        return Err(Error::new("Please specify what SMTP security transport to use explicitly instead of `auto`."));
                     }
                 }
                 socket.write_all(b"EHLO meli.delivery\r\n").await?;
@@ -369,7 +369,7 @@ impl SmtpConnection {
                 let result: Result<ReplyCode> = reply.into();
                 result?;
                 if code != ReplyCode::_220 {
-                    return Err(MeliError::new(format!(
+                    return Err(Error::new(format!(
                         "SMTP Server didn't reply with a 220 greeting: {:?}",
                         Reply::new(&res, code)
                     )));
@@ -395,7 +395,7 @@ impl SmtpConnection {
                     .iter()
                     .any(|l| l.starts_with("AUTH"))
             {
-                return Err(MeliError::new(format!(
+                return Err(Error::new(format!(
                         "SMTP Server doesn't advertise Authentication support. Server response was: {:?}",
                         pre_auth_extensions_reply
                     )).set_kind(crate::error::ErrorKind::Authentication));
@@ -448,7 +448,7 @@ impl SmtpConnection {
                             })
                             .await?;
                             if !output.status.success() {
-                                return Err(MeliError::new(format!(
+                                return Err(Error::new(format!(
                                     "SMTP password evaluation command `{}` returned {}: {}",
                                     command,
                                     output.status,
@@ -511,7 +511,7 @@ impl SmtpConnection {
                         })
                         .await?;
                         if !output.status.success() {
-                            return Err(MeliError::new(format!(
+                            return Err(Error::new(format!(
                                 "SMTP XOAUTH2 token evaluation command `{}` returned {}: {}",
                                 &token_command,
                                 output.status,
@@ -600,7 +600,7 @@ impl SmtpConnection {
             .chain_err_summary(|| "SMTP submission was aborted")?;
         let tos = tos.unwrap_or_else(|| envelope.to());
         if tos.is_empty() && envelope.cc().is_empty() && envelope.bcc().is_empty() {
-            return Err(MeliError::new("SMTP submission was aborted because there was no e-mail address found in the To: header field. Consider adding recipients."));
+            return Err(Error::new("SMTP submission was aborted because there was no e-mail address found in the To: header field. Consider adding recipients."));
         }
         let mut current_command: SmallVec<[&[u8]; 16]> = SmallVec::new();
         //first step in the procedure is the MAIL command.
@@ -610,9 +610,9 @@ impl SmtpConnection {
             current_command.push(envelope_from.trim().as_bytes());
         } else {
             if envelope.from().is_empty() {
-                return Err(MeliError::new("SMTP submission was aborted because there was no e-mail address found in the From: header field. Consider adding a valid value or setting `envelope_from` in SMTP client settings"));
+                return Err(Error::new("SMTP submission was aborted because there was no e-mail address found in the From: header field. Consider adding a valid value or setting `envelope_from` in SMTP client settings"));
             } else if envelope.from().len() != 1 {
-                return Err(MeliError::new("SMTP submission was aborted because there was more than one e-mail address found in the From: header field. Consider setting `envelope_from` in SMTP client settings"));
+                return Err(Error::new("SMTP submission was aborted because there was more than one e-mail address found in the From: header field. Consider setting `envelope_from` in SMTP client settings"));
             }
             current_command.push(envelope.from()[0].address_spec_raw().trim());
         }
@@ -885,7 +885,7 @@ impl ReplyCode {
 }
 
 impl TryFrom<&'_ str> for ReplyCode {
-    type Error = MeliError;
+    type Error = Error;
     fn try_from(val: &'_ str) -> Result<ReplyCode> {
         if val.len() != 3 {
             debug!("{}", val);
@@ -920,7 +920,7 @@ impl TryFrom<&'_ str> for ReplyCode {
             "553" => Ok(_553),
             "554" => Ok(_554),
             "555" => Ok(_555),
-            _ => Err(MeliError::new(format!("Unknown SMTP reply code: {}", val))),
+            _ => Err(Error::new(format!("Unknown SMTP reply code: {}", val))),
         }
     }
 }
@@ -935,7 +935,7 @@ pub struct Reply<'s> {
 impl<'s> Into<Result<ReplyCode>> for Reply<'s> {
     fn into(self: Reply<'s>) -> Result<ReplyCode> {
         if self.code.is_err() {
-            Err(MeliError::new(self.lines.join("\n")).set_summary(self.code.as_str()))
+            Err(Error::new(self.lines.join("\n")).set_summary(self.code.as_str()))
         } else {
             Ok(self.code)
         }
@@ -971,13 +971,13 @@ async fn read_lines<'r>(
                     .take(3)
                     .all(|c| c.is_ascii_digit())
             {
-                return Err(MeliError::new(format!("Invalid SMTP reply: {}", ret)));
+                return Err(Error::new(format!("Invalid SMTP reply: {}", ret)));
             }
             if let Some(ref returned_code) = returned_code {
                 if ReplyCode::try_from(ret[last_line_idx..].get(..3).unwrap())? != *returned_code {
                     buffer.extend(ret.drain(last_line_idx..));
                     if ret.lines().last().unwrap().chars().nth(4).unwrap() != ' ' {
-                        return Err(MeliError::new(format!("Invalid SMTP reply: {}", ret)));
+                        return Err(Error::new(format!("Invalid SMTP reply: {}", ret)));
                     }
                     break 'read_loop;
                 }
@@ -1000,12 +1000,12 @@ async fn read_lines<'r>(
                 ret.push_str(unsafe { std::str::from_utf8_unchecked(&buf[0..b]) });
             }
             Err(err) => {
-                return Err(MeliError::from(err));
+                return Err(Error::from(err));
             }
         }
     }
     if ret.len() < 3 {
-        return Err(MeliError::new(format!("Invalid SMTP reply: {}", ret)));
+        return Err(Error::new(format!("Invalid SMTP reply: {}", ret)));
     }
     let code = ReplyCode::try_from(&ret[..3])?;
     let reply = Reply::new(ret, code);
@@ -1016,7 +1016,7 @@ async fn read_lines<'r>(
     {
         let result: Result<ReplyCode> = reply.clone().into();
         result?;
-        return Err(MeliError::new(format!(
+        return Err(Error::new(format!(
             "SMTP Server didn't reply with expected greeting code {:?}: {:?}",
             expected_reply_code.unwrap(),
             reply

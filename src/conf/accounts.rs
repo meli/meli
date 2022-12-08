@@ -28,7 +28,7 @@ use crate::jobs::{JobExecutor, JobId, JoinHandle};
 use indexmap::IndexMap;
 use melib::backends::*;
 use melib::email::*;
-use melib::error::{ErrorKind, MeliError, Result};
+use melib::error::{ErrorKind, Error, Result};
 use melib::text_processing::GlobMatch;
 use melib::thread::{SortField, SortOrder, Threads};
 use melib::AddressBook;
@@ -63,7 +63,7 @@ macro_rules! try_recv_timeout {
         let now = std::time::Instant::now();
         let mut res = Ok(None);
         while now + _3_MS >= std::time::Instant::now() {
-            res = $oneshot.try_recv().map_err(|_| MeliError::new("canceled"));
+            res = $oneshot.try_recv().map_err(|_| Error::new("canceled"));
             if res.as_ref().map(|r| r.is_some()).unwrap_or(false) || res.is_err() {
                 break;
             }
@@ -75,7 +75,7 @@ macro_rules! try_recv_timeout {
 #[derive(Debug, Clone)]
 pub enum MailboxStatus {
     Available,
-    Failed(MeliError),
+    Failed(Error),
     /// first argument is done work, and second is total work
     Parsing(usize, usize),
     None,
@@ -502,7 +502,7 @@ impl Account {
             is_online: if !backend.capabilities().is_remote {
                 Ok(())
             } else {
-                Err(MeliError::new("Attempting connection."))
+                Err(Error::new("Attempting connection."))
             },
             mailbox_entries: Default::default(),
             mailboxes_order: Default::default(),
@@ -1220,7 +1220,7 @@ impl Account {
                 ),
                 melib::INFO,
             );
-            Err(MeliError::new(format!(
+            Err(Error::new(format!(
                 "Message was stored in {} so that you can restore it manually.",
                 file.path.display()
             ))
@@ -1235,7 +1235,7 @@ impl Account {
         flags: Option<Flag>,
     ) -> Result<()> {
         if self.settings.account.read_only() {
-            return Err(MeliError::new(format!(
+            return Err(Error::new(format!(
                 "Account {} is read-only.",
                 self.name.as_str()
             )));
@@ -1275,7 +1275,7 @@ impl Account {
         match send_mail {
             SendMail::ShellCommand(ref command) => {
                 if command.is_empty() {
-                    return Err(MeliError::new(
+                    return Err(Error::new(
                         "send_mail shell command configuration value is empty",
                     ));
                 }
@@ -1307,7 +1307,7 @@ impl Account {
                         )
                     };
                     melib::log(&error_message, melib::LoggingLevel::ERROR);
-                    return Err(MeliError::new(error_message).set_summary("Message not sent."));
+                    return Err(Error::new(error_message).set_summary("Message not sent."));
                 }
                 Ok(None)
             }
@@ -1342,7 +1342,7 @@ impl Account {
                     self.insert_job(handle.job_id, JobRequest::SendMessageBackground { handle });
                     return Ok(None);
                 }
-                Err(MeliError::new("Server does not support submission.")
+                Err(Error::new("Server does not support submission.")
                     .set_summary("Message not sent."))
             }
         }
@@ -1362,7 +1362,7 @@ impl Account {
                 match send_mail {
                     SendMail::ShellCommand(ref command) => {
                         if command.is_empty() {
-                            return Err(MeliError::new(
+                            return Err(Error::new(
                                 "send_mail shell command configuration value is empty",
                             ));
                         }
@@ -1395,7 +1395,7 @@ impl Account {
                             };
                             melib::log(&error_message, melib::LoggingLevel::ERROR);
                             return Err(
-                                MeliError::new(error_message).set_summary("Message not sent.")
+                                Error::new(error_message).set_summary("Message not sent.")
                             );
                         }
                         Ok(())
@@ -1418,7 +1418,7 @@ impl Account {
                             fut.await?;
                             return Ok(());
                         }
-                        Err(MeliError::new("Server does not support submission.")
+                        Err(Error::new("Server does not support submission.")
                             .set_summary("Message not sent."))
                     }
                 }
@@ -1444,7 +1444,7 @@ impl Account {
     ) -> Result<()> {
         use crate::command::actions::MailboxOperation;
         if self.settings.account.read_only() {
-            return Err(MeliError::new("Account is read-only."));
+            return Err(Error::new("Account is read-only."));
         }
         match op {
             MailboxOperation::Create(path) => {
@@ -1463,7 +1463,7 @@ impl Account {
             }
             MailboxOperation::Delete(path) => {
                 if self.mailbox_entries.len() == 1 {
-                    return Err(MeliError::new("Cannot delete only mailbox."));
+                    return Err(Error::new("Cannot delete only mailbox."));
                 }
 
                 let mailbox_hash = self.mailbox_by_path(&path)?;
@@ -1526,8 +1526,8 @@ impl Account {
                 );
                 Ok(())
             }
-            MailboxOperation::Rename(_, _) => Err(MeliError::new("Not implemented.")),
-            MailboxOperation::SetPermissions(_) => Err(MeliError::new("Not implemented.")),
+            MailboxOperation::Rename(_, _) => Err(Error::new("Not implemented.")),
+            MailboxOperation::SetPermissions(_) => Err(Error::new("Not implemented.")),
         }
     }
 
@@ -1614,7 +1614,7 @@ impl Account {
         {
             Ok(*mailbox_hash)
         } else {
-            Err(MeliError::new("Mailbox with that path not found."))
+            Err(Error::new("Mailbox with that path not found."))
         }
     }
 

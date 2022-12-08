@@ -835,10 +835,10 @@ pub struct EmailQueryChangesResponse {
 }
 
 impl std::convert::TryFrom<&RawValue> for EmailQueryChangesResponse {
-    type Error = crate::error::MeliError;
+    type Error = crate::error::Error;
     fn try_from(t: &RawValue) -> Result<EmailQueryChangesResponse> {
         let res: (String, EmailQueryChangesResponse, String) =
-            serde_json::from_str(t.get()).map_err(|err| crate::error::MeliError::new(format!("BUG: Could not deserialize server JSON response properly, please report this!\nReply from server: {}", &t)).set_source(Some(Arc::new(err))).set_kind(ErrorKind::Bug))?;
+            serde_json::from_str(t.get()).map_err(|err| crate::error::Error::new(format!("BUG: Could not deserialize server JSON response properly, please report this!\nReply from server: {}", &t)).set_source(Some(Arc::new(err))).set_kind(ErrorKind::Bug))?;
         assert_eq!(&res.0, "Email/queryChanges");
         Ok(res.1)
     }

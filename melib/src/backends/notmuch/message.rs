@@ -42,7 +42,7 @@ impl<'m> Message<'m> {
             )
         };
         if message.is_null() {
-            return Err(MeliError::new(format!(
+            return Err(Error::new(format!(
                 "Message with message id {:?} not found in notmuch database.",
                 msg_id
             )));
@@ -205,7 +205,7 @@ impl<'m> Message<'m> {
                 call!(self.lib, notmuch_message_add_tag)(self.message, tag.as_ptr())
             )
         } {
-            return Err(MeliError::new("Could not set tag.").set_source(Some(Arc::new(err))));
+            return Err(Error::new("Could not set tag.").set_source(Some(Arc::new(err))));
         }
         Ok(())
     }
@@ -217,7 +217,7 @@ impl<'m> Message<'m> {
                 call!(self.lib, notmuch_message_remove_tag)(self.message, tag.as_ptr())
             )
         } {
-            return Err(MeliError::new("Could not set tag.").set_source(Some(Arc::new(err))));
+            return Err(Error::new("Could not set tag.").set_source(Some(Arc::new(err))));
         }
         Ok(())
     }
@@ -233,7 +233,7 @@ impl<'m> Message<'m> {
                 call!(self.lib, notmuch_message_tags_to_maildir_flags)(self.message)
             )
         } {
-            return Err(MeliError::new("Could not set flags.").set_source(Some(Arc::new(err))));
+            return Err(Error::new("Could not set flags.").set_source(Some(Arc::new(err))));
         }
         Ok(())
     }

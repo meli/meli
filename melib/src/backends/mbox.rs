@@ -118,7 +118,7 @@
 //!     false,
 //! )?;
 //! file.flush()?;
-//! # Ok::<(), melib::MeliError>(())
+//! # Ok::<(), melib::Error>(())
 //! ```
 
 use crate::backends::*;
@@ -126,7 +126,7 @@ use crate::collection::Collection;
 use crate::conf::AccountSettings;
 use crate::email::parser::BytesExt;
 use crate::email::*;
-use crate::error::{ErrorKind, MeliError, Result};
+use crate::error::{ErrorKind, Error, Result};
 use crate::get_path_hash;
 use crate::shellexpand::ShellExpandTrait;
 use nom::bytes::complete::tag;
@@ -174,7 +174,7 @@ fn get_rw_lock_blocking(f: &File, path: &Path) -> Result<()> {
     let ret_val = unsafe { libc::fcntl(fd, F_OFD_SETLKW, ptr as *mut libc::c_void) };
     if ret_val == -1 {
         let err = nix::errno::Errno::from_i32(nix::errno::errno());
-        return Err(MeliError::new(format!(
+        return Err(Error::new(format!(
             "Could not lock {}: fcntl() returned {}",
             path.display(),
             err.desc()
@@ -962,7 +962,7 @@ impl MailBackend for MboxType {
     }
 
     fn refresh(&mut self, _mailbox_hash: MailboxHash) -> ResultFuture<()> {
-        Err(MeliError::new(
+        Err(Error::new(
             "Refreshing is currently unimplemented for mbox backend.",
         ))
     }
@@ -972,12 +972,12 @@ impl MailBackend for MboxType {
         let (tx, rx) = channel();
         let mut watcher = watcher(tx, std::time::Duration::from_secs(10))
             .map_err(|e| e.to_string())
-            .map_err(MeliError::new)?;
+            .map_err(Error::new)?;
         for f in self.mailboxes.lock().unwrap().values() {
             watcher
                 .watch(&f.fs_path, RecursiveMode::Recursive)
                 .map_err(|e| e.to_string())
-                .map_err(MeliError::new)?;
+                .map_err(Error::new)?;
             debug!("watching {:?}", f.fs_path.as_path());
         }
         let account_hash = AccountHash::from_bytes(self.account_name.as_bytes());
@@ -1068,7 +1068,7 @@ impl MailBackend for MboxType {
                                     BackendEvent::Refresh(RefreshEvent {
                                         account_hash,
                                         mailbox_hash,
-                                        kind: RefreshEventKind::Failure(MeliError::new(format!(
+                                        kind: RefreshEventKind::Failure(Error::new(format!(
                                             "mbox mailbox {} was removed.",
                                             pathbuf.display()
                                         ))),
@@ -1085,7 +1085,7 @@ impl MailBackend for MboxType {
                                     BackendEvent::Refresh(RefreshEvent {
                                         account_hash,
                                         mailbox_hash,
-                                        kind: RefreshEventKind::Failure(MeliError::new(format!(
+                                        kind: RefreshEventKind::Failure(Error::new(format!(
                                             "mbox mailbox {} was renamed to {}.",
                                             src.display(),
                                             dest.display()
@@ -1151,7 +1151,7 @@ impl MailBackend for MboxType {
         _destination_mailbox_hash: MailboxHash,
         _move_: bool,
     ) -> ResultFuture<()> {
-        Err(MeliError::new(
+        Err(Error::new(
             "Copying messages is currently unimplemented for mbox backend",
         ))
     }
@@ -1162,7 +1162,7 @@ impl MailBackend for MboxType {
         _mailbox_hash: MailboxHash,
         _flags: SmallVec<[(std::result::Result<Flag, String>, bool); 8]>,
     ) -> ResultFuture<()> {
-        Err(MeliError::new(
+        Err(Error::new(
             "Settings flags is currently unimplemented for mbox backend",
         ))
     }
@@ -1172,7 +1172,7 @@ impl MailBackend for MboxType {
         _env_hashes: EnvelopeHashBatch,
         _mailbox_hash: MailboxHash,
     ) -> ResultFuture<()> {
-        Err(MeliError::new(
+        Err(Error::new(
             "Deleting messages is currently unimplemented for mbox backend",
         ))
     }
@@ -1183,7 +1183,7 @@ impl MailBackend for MboxType {
         _mailbox_hash: MailboxHash,
         _flags: Option<Flag>,
     ) -> ResultFuture<()> {
-        Err(MeliError::new(
+        Err(Error::new(
             "Saving messages is currently unimplemented for mbox backend",
         ))
     }
@@ -1204,7 +1204,7 @@ impl MailBackend for MboxType {
         &mut self,
         _mailbox_hash: MailboxHash,
     ) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
-        Err(MeliError::new(
+        Err(Error::new(
             "Deleting mailboxes is currently unimplemented for mbox backend.",
         ))
     }
@@ -1214,7 +1214,7 @@ impl MailBackend for MboxType {
         _mailbox_hash: MailboxHash,
         _val: bool,
     ) -> ResultFuture<()> {
-        Err(MeliError::new(
+        Err(Error::new(
             "Mailbox subscriptions are not possible for the mbox backend.",
         ))
     }
@@ -1224,7 +1224,7 @@ impl MailBackend for MboxType {
         _mailbox_hash: MailboxHash,
         _new_path: String,
     ) -> ResultFuture<Mailbox> {
-        Err(MeliError::new(
+        Err(Error::new(
             "Renaming mailboxes is currently unimplemented for mbox backend.",
         ))
     }
@@ -1234,7 +1234,7 @@ impl MailBackend for MboxType {
         _mailbox_hash: MailboxHash,
         _val: crate::backends::MailboxPermissions,
     ) -> ResultFuture<()> {
-        Err(MeliError::new(
+        Err(Error::new(
             "Setting mailbox permissions is not possible for the mbox backend.",
         ))
     }
@@ -1245,7 +1245,7 @@ impl MailBackend for MboxType {
         _mailbox_hash: Option<MailboxHash>,
     ) -> ResultFuture<SmallVec<[EnvelopeHash; 512]>> {
         Err(
-            MeliError::new("Search is unimplemented for the mbox backend.")
+            Error::new("Search is unimplemented for the mbox backend.")
                 .set_kind(ErrorKind::NotImplemented),
         )
     }
@@ -1255,7 +1255,7 @@ impl MailBackend for MboxType {
         _new_path: String,
     ) -> ResultFuture<(MailboxHash, HashMap<MailboxHash, Mailbox>)> {
         Err(
-            MeliError::new("Creating mailboxes is unimplemented for the mbox backend.")
+            Error::new("Creating mailboxes is unimplemented for the mbox backend.")
                 .set_kind(ErrorKind::NotImplemented),
         )
     }
@@ -1264,7 +1264,7 @@ impl MailBackend for MboxType {
 macro_rules! get_conf_val {
     ($s:ident[$var:literal]) => {
         $s.extra.get($var).ok_or_else(|| {
-            MeliError::new(format!(
+            Error::new(format!(
                 "Configuration error ({}): mbox backend requires the field `{}` set",
                 $s.name.as_str(),
                 $var
@@ -1276,7 +1276,7 @@ macro_rules! get_conf_val {
             .get($var)
             .map(|v| {
                 <_>::from_str(v).map_err(|e| {
-                    MeliError::new(format!(
+                    Error::new(format!(
                         "Configuration error ({}): Invalid value for field `{}`: {}\n{}",
                         $s.name.as_str(),
                         $var,
@@ -1297,7 +1297,7 @@ impl MboxType {
     ) -> Result<Box<dyn MailBackend>> {
         let path = Path::new(s.root_mailbox.as_str()).expand();
         if !path.exists() {
-            return Err(MeliError::new(format!(
+            return Err(Error::new(format!(
                 "\"root_mailbox\" {} for account {} is not a valid path.",
                 s.root_mailbox.as_str(),
                 s.name()
@@ -1315,7 +1315,7 @@ impl MboxType {
                 "mboxcl" => Some(MboxFormat::MboxCl),
                 "mboxcl2" => Some(MboxFormat::MboxCl2),
                 _ => {
-                    return Err(MeliError::new(format!(
+                    return Err(Error::new(format!(
                         "{} invalid `prefer_mbox_type` value: `{}`",
                         s.name(),
                         prefer_mbox_type,
@@ -1372,7 +1372,7 @@ impl MboxType {
                 let hash = MailboxHash(get_path_hash!(path_str));
                 let pathbuf: PathBuf = path_str.into();
                 if !pathbuf.exists() || pathbuf.is_dir() {
-                    return Err(MeliError::new(format!(
+                    return Err(Error::new(format!(
                         "mbox mailbox configuration entry \"{}\" path value {} is not a file.",
                         k, path_str
                     )));
@@ -1411,7 +1411,7 @@ impl MboxType {
                     },
                 );
             } else {
-                return Err(MeliError::new(format!(
+                return Err(Error::new(format!(
                     "mbox mailbox configuration entry \"{}\" should have a \"path\" value set pointing to an mbox file.",
                     k
                 )));
@@ -1424,7 +1424,7 @@ impl MboxType {
         macro_rules! get_conf_val {
             ($s:ident[$var:literal]) => {
                 $s.extra.remove($var).ok_or_else(|| {
-                    MeliError::new(format!(
+                    Error::new(format!(
                         "Configuration error ({}): mbox backend requires the field `{}` set",
                         $s.name.as_str(),
                         $var
@@ -1436,7 +1436,7 @@ impl MboxType {
                     .remove($var)
                     .map(|v| {
                         <_>::from_str(&v).map_err(|e| {
-                            MeliError::new(format!(
+                            Error::new(format!(
                                 "Configuration error ({}): Invalid value for field `{}`: {}\n{}",
                                 $s.name.as_str(),
                                 $var,
@@ -1450,7 +1450,7 @@ impl MboxType {
         }
         let path = Path::new(s.root_mailbox.as_str()).expand();
         if !path.exists() {
-            return Err(MeliError::new(format!(
+            return Err(Error::new(format!(
                 "\"root_mailbox\" {} for account {} is not a valid path.",
                 s.root_mailbox.as_str(),
                 s.name()

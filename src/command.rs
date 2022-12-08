@@ -34,7 +34,7 @@ use melib::nom::{
     IResult,
 };
 pub use melib::thread::{SortField, SortOrder};
-use melib::MeliError;
+use melib::Error;
 pub mod actions;
 use actions::MailboxOperation;
 use std::collections::HashSet;
@@ -952,7 +952,7 @@ fn view(input: &[u8]) -> IResult<&[u8], Action> {
     ))(input)
 }
 
-pub fn parse_command(input: &[u8]) -> Result<Action, MeliError> {
+pub fn parse_command(input: &[u8]) -> Result<Action, Error> {
     alt((
         goto,
         listing_action,

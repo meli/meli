@@ -40,7 +40,7 @@ pub use self::imap::ImapType;
 #[cfg(feature = "imap_backend")]
 pub use self::nntp::NntpType;
 use crate::conf::AccountSettings;
-use crate::error::{ErrorKind, MeliError, Result};
+use crate::error::{ErrorKind, Error, Result};
 
 #[cfg(feature = "maildir_backend")]
 use self::maildir::MaildirType;
@@ -227,7 +227,7 @@ impl Backends {
             .map
             .get(key)
             .ok_or_else(|| {
-                MeliError::new(format!(
+                Error::new(format!(
                     "{}{} is not a valid mail backend. {}",
                     if key == "notmuch" {
                         NOTMUCH_ERROR_MSG
@@ -260,8 +260,8 @@ pub enum BackendEvent {
     //Job(Box<Future<Output = Result<()>> + Send + 'static>)
 }
 
-impl From<MeliError> for BackendEvent {
-    fn from(val: MeliError) -> BackendEvent {
+impl From<Error> for BackendEvent {
+    fn from(val: Error) -> BackendEvent {
         BackendEvent::Notice {
             description: val.summary.to_string(),
             content: Some(val.to_string()),
@@ -279,7 +279,7 @@ pub enum RefreshEventKind {
     Remove(EnvelopeHash),
     NewFlags(EnvelopeHash, (Flag, Vec<String>)),
     Rescan,
-    Failure(MeliError),
+    Failure(Error),
     MailboxCreate(Mailbox),
     MailboxDelete(MailboxHash),
     MailboxRename {
@@ -426,7 +426,7 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
         _mailbox_hash: Option<MailboxHash>,
         _flags: Option<Flag>,
     ) -> ResultFuture<()> {
-        Err(MeliError::new("Submission not supported in this backend.")
+        Err(Error::new("Submission not supported in this backend.")
             .set_kind(ErrorKind::NotSupported))
     }
 }

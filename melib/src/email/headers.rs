@@ -20,7 +20,7 @@
  */
 
 /*! Wrapper type `HeaderName` for case-insensitive comparisons */
-use crate::error::MeliError;
+use crate::error::Error;
 use indexmap::IndexMap;
 use smallvec::SmallVec;
 use std::borrow::Borrow;
@@ -83,13 +83,13 @@ impl<S: AsRef<[u8]>> Hash for HeaderNameType<S> {
 }
 
 impl TryFrom<&[u8]> for HeaderName {
-    type Error = MeliError;
+    type Error = Error;
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         if value.is_ascii() {
             Ok(HeaderNameType(value.into()))
         } else {
-            Err(MeliError::new(format!(
+            Err(Error::new(format!(
                 "Header value is not ascii: {:?}",
                 value
             )))
@@ -98,13 +98,13 @@ impl TryFrom<&[u8]> for HeaderName {
 }
 
 impl TryFrom<&str> for HeaderName {
-    type Error = MeliError;
+    type Error = Error;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         if value.is_ascii() {
             Ok(HeaderNameType(value.as_bytes().into()))
         } else {
-            Err(MeliError::new(format!(
+            Err(Error::new(format!(
                 "Header value is not ascii: {:?}",
                 value
             )))

@@ -23,7 +23,7 @@ use super::*;
 
 use crate::backends::*;
 use crate::email::*;
-use crate::error::MeliError;
+use crate::error::Error;
 use std::sync::Arc;
 
 /// `BackendOp` implementor for Nntp
@@ -67,7 +67,7 @@ impl BackendOp for NntpOp {
                 .await?;
             conn.read_response(&mut res, false, &["211 "]).await?;
             if !res.starts_with("211 ") {
-                return Err(MeliError::new(format!(
+                return Err(Error::new(format!(
                     "{} Could not select newsgroup {}: expected GROUP response but got: {}",
                     &uid_store.account_name, path, res
                 )));
@@ -76,7 +76,7 @@ impl BackendOp for NntpOp {
                 .await?;
             conn.read_response(&mut res, true, &["220 "]).await?;
             if !res.starts_with("220 ") {
-                return Err(MeliError::new(format!(
+                return Err(Error::new(format!(
                     "{} Could not select article {}: expected ARTICLE response but got: {}",
                     &uid_store.account_name, path, res
                 )));

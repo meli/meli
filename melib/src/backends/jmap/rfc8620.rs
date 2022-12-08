@@ -411,10 +411,10 @@ pub struct GetResponse<OBJ: Object> {
 }
 
 impl<OBJ: Object + DeserializeOwned> std::convert::TryFrom<&RawValue> for GetResponse<OBJ> {
-    type Error = crate::error::MeliError;
-    fn try_from(t: &RawValue) -> Result<GetResponse<OBJ>, crate::error::MeliError> {
+    type Error = crate::error::Error;
+    fn try_from(t: &RawValue) -> Result<GetResponse<OBJ>, crate::error::Error> {
         let res: (String, GetResponse<OBJ>, String) =
-            serde_json::from_str(t.get()).map_err(|err| crate::error::MeliError::new(format!("BUG: Could not deserialize server JSON response properly, please report this!\nReply from server: {}", &t)).set_source(Some(Arc::new(err))).set_kind(crate::error::ErrorKind::Bug))?;
+            serde_json::from_str(t.get()).map_err(|err| crate::error::Error::new(format!("BUG: Could not deserialize server JSON response properly, please report this!\nReply from server: {}", &t)).set_source(Some(Arc::new(err))).set_kind(crate::error::ErrorKind::Bug))?;
         assert_eq!(&res.0, &format!("{}/get", OBJ::NAME));
         Ok(res.1)
     }
@@ -516,10 +516,10 @@ pub struct QueryResponse<OBJ: Object> {
 }
 
 impl<OBJ: Object + DeserializeOwned> std::convert::TryFrom<&RawValue> for QueryResponse<OBJ> {
-    type Error = crate::error::MeliError;
-    fn try_from(t: &RawValue) -> Result<QueryResponse<OBJ>, crate::error::MeliError> {
+    type Error = crate::error::Error;
+    fn try_from(t: &RawValue) -> Result<QueryResponse<OBJ>, crate::error::Error> {
         let res: (String, QueryResponse<OBJ>, String) =
-            serde_json::from_str(t.get()).map_err(|err| crate::error::MeliError::new(format!("BUG: Could not deserialize server JSON response properly, please report this!\nReply from server: {}", &t)).set_source(Some(Arc::new(err))).set_kind(crate::error::ErrorKind::Bug))?;
+            serde_json::from_str(t.get()).map_err(|err| crate::error::Error::new(format!("BUG: Could not deserialize server JSON response properly, please report this!\nReply from server: {}", &t)).set_source(Some(Arc::new(err))).set_kind(crate::error::ErrorKind::Bug))?;
         assert_eq!(&res.0, &format!("{}/query", OBJ::NAME));
         Ok(res.1)
     }
@@ -651,10 +651,10 @@ pub struct ChangesResponse<OBJ: Object> {
 }
 
 impl<OBJ: Object + DeserializeOwned> std::convert::TryFrom<&RawValue> for ChangesResponse<OBJ> {
-    type Error = crate::error::MeliError;
-    fn try_from(t: &RawValue) -> Result<ChangesResponse<OBJ>, crate::error::MeliError> {
+    type Error = crate::error::Error;
+    fn try_from(t: &RawValue) -> Result<ChangesResponse<OBJ>, crate::error::Error> {
         let res: (String, ChangesResponse<OBJ>, String) =
-            serde_json::from_str(t.get()).map_err(|err| crate::error::MeliError::new(format!("BUG: Could not deserialize server JSON response properly, please report this!\nReply from server: {}", &t)).set_source(Some(Arc::new(err))).set_kind(crate::error::ErrorKind::Bug))?;
+            serde_json::from_str(t.get()).map_err(|err| crate::error::Error::new(format!("BUG: Could not deserialize server JSON response properly, please report this!\nReply from server: {}", &t)).set_source(Some(Arc::new(err))).set_kind(crate::error::ErrorKind::Bug))?;
         assert_eq!(&res.0, &format!("{}/changes", OBJ::NAME));
         Ok(res.1)
     }
@@ -850,10 +850,10 @@ pub struct SetResponse<OBJ: Object> {
 }
 
 impl<OBJ: Object + DeserializeOwned> std::convert::TryFrom<&RawValue> for SetResponse<OBJ> {
-    type Error = crate::error::MeliError;
-    fn try_from(t: &RawValue) -> Result<SetResponse<OBJ>, crate::error::MeliError> {
+    type Error = crate::error::Error;
+    fn try_from(t: &RawValue) -> Result<SetResponse<OBJ>, crate::error::Error> {
         let res: (String, SetResponse<OBJ>, String) =
-            serde_json::from_str(t.get()).map_err(|err| crate::error::MeliError::new(format!("BUG: Could not deserialize server JSON response properly, please report this!\nReply from server: {}", &t)).set_source(Some(Arc::new(err))).set_kind(crate::error::ErrorKind::Bug))?;
+            serde_json::from_str(t.get()).map_err(|err| crate::error::Error::new(format!("BUG: Could not deserialize server JSON response properly, please report this!\nReply from server: {}", &t)).set_source(Some(Arc::new(err))).set_kind(crate::error::ErrorKind::Bug))?;
         assert_eq!(&res.0, &format!("{}/set", OBJ::NAME));
         Ok(res.1)
     }

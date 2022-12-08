@@ -23,7 +23,7 @@ use crate::email::{
     pgp::{DecryptionMetadata, Recipient},
     Address,
 };
-use crate::error::{ErrorKind, IntoMeliError, MeliError, Result, ResultIntoMeliError};
+use crate::error::{ErrorKind, IntoError, Error, Result, ResultIntoError};
 use futures::FutureExt;
 use serde::{
     de::{self, Deserialize},
@@ -218,7 +218,7 @@ impl Context {
         if unsafe { call!(&lib, gpgme_check_version)(GPGME_VERSION.as_bytes().as_ptr() as *mut _) }
             .is_null()
         {
-            return Err(MeliError::new(format!(
+            return Err(Error::new(format!(
                 "Could not use libgpgme: requested version compatible with {} but got {}",
                 GPGME_VERSION,
                 unsafe {
@@ -260,7 +260,7 @@ impl Context {
         let ret = Context {
             inner: Arc::new(ContextInner {
                 inner: core::ptr::NonNull::new(ptr).ok_or_else(|| {
-                    MeliError::new("Could not use libgpgme").set_kind(ErrorKind::Bug)
+                    Error::new("Could not use libgpgme").set_kind(ErrorKind::Bug)
                 })?,
                 lib,
             }),
@@ -420,7 +420,7 @@ impl Context {
             lib: self.inner.lib.clone(),
             kind: DataKind::Memory,
             inner: core::ptr::NonNull::new(ptr).ok_or_else(|| {
-                MeliError::new("Could not create libgpgme data").set_kind(ErrorKind::Bug)
+                Error::new("Could not create libgpgme data").set_kind(ErrorKind::Bug)
             })?,
         })
     }
@@ -428,7 +428,7 @@ impl Context {
     pub fn new_data_file<P: AsRef<Path>>(&self, r: P) -> Result<Data> {
         let path: &Path = r.as_ref();
         if !path.exists() {
-            return Err(MeliError::new(format!(
+            return Err(Error::new(format!(
                 "File `{}` doesn't exist.",
                 path.display()
             )));
@@ -449,7 +449,7 @@ impl Context {
             lib: self.inner.lib.clone(),
             kind: DataKind::Memory,
             inner: core::ptr::NonNull::new(ptr).ok_or_else(|| {
-                MeliError::new("Could not create libgpgme data").set_kind(ErrorKind::Bug)
+                Error::new("Could not create libgpgme data").set_kind(ErrorKind::Bug)
             })?,
         })
     }
@@ -541,7 +541,7 @@ impl Context {
                 let verify_result: gpgme_verify_result_t =
                     unsafe { call!(&ctx.lib, gpgme_op_verify_result)(ctx.inner.as_ptr()) };
                 if verify_result.is_null() {
-                    return Err(MeliError::new(
+                    return Err(Error::new(
                         "Unspecified libgpgme error: gpgme_op_verify_result returned NULL.",
                     )
                     .set_err_kind(ErrorKind::External));
@@ -554,7 +554,7 @@ impl Context {
                 .lock()
                 .unwrap()
                 .take()
-                .unwrap_or_else(|| Err(MeliError::new("Unspecified libgpgme error")));
+                .unwrap_or_else(|| Err(Error::new("Unspecified libgpgme error")));
             ret
         })
     }
@@ -662,7 +662,7 @@ impl Context {
                 .lock()
                 .unwrap()
                 .take()
-                .unwrap_or_else(|| Err(MeliError::new("Unspecified libgpgme error")))?;
+                .unwrap_or_else(|| Err(Error::new("Unspecified libgpgme error")))?;
             let mut keys = vec![];
             while let Ok(inner) = key_receiver.try_recv() {
                 let key = Key::new(inner, ctx.lib.clone());
@@ -679,7 +679,7 @@ impl Context {
     ) -> Result<impl Future<Output = Result<Vec<u8>>>> {
         if sign_keys.is_empty() {
             return Err(
-                MeliError::new("gpgme: Call to sign() with zero keys.").set_kind(ErrorKind::Bug)
+                Error::new("gpgme: Call to sign() with zero keys.").set_kind(ErrorKind::Bug)
             );
         }
         let mut sig: gpgme_data_t = std::ptr::null_mut();
@@ -715,7 +715,7 @@ impl Context {
             lib: self.inner.lib.clone(),
             kind: DataKind::Memory,
             inner: core::ptr::NonNull::new(sig).ok_or_else(|| {
-                MeliError::new("internal libgpgme error").set_kind(ErrorKind::Bug)
+                Error::new("internal libgpgme error").set_kind(ErrorKind::Bug)
             })?,
         };
 
@@ -787,7 +787,7 @@ impl Context {
                 .lock()
                 .unwrap()
                 .take()
-                .unwrap_or_else(|| Err(MeliError::new("Unspecified libgpgme error")))?;
+                .unwrap_or_else(|| Err(Error::new("Unspecified libgpgme error")))?;
             sig.seek(std::io::SeekFrom::Start(0))
                 .chain_err_summary(|| {
                     "libgpgme error: could not perform seek on signature data object"
@@ -819,7 +819,7 @@ impl Context {
             lib: self.inner.lib.clone(),
             kind: DataKind::Memory,
             inner: core::ptr::NonNull::new(plain).ok_or_else(|| {
-                MeliError::new("internal libgpgme error").set_kind(ErrorKind::Bug)
+                Error::new("internal libgpgme error").set_kind(ErrorKind::Bug)
             })?,
         };
 
@@ -893,12 +893,12 @@ impl Context {
                 .lock()
                 .unwrap()
                 .take()
-                .unwrap_or_else(|| Err(MeliError::new("Unspecified libgpgme error")))?;
+                .unwrap_or_else(|| Err(Error::new("Unspecified libgpgme error")))?;
 
             let decrypt_result =
                 unsafe { call!(&ctx.lib, gpgme_op_decrypt_result)(ctx.inner.as_ptr()) };
             if decrypt_result.is_null() {
-                return Err(MeliError::new(
+                return Err(Error::new(
                     "Unspecified libgpgme error: gpgme_op_decrypt_result returned NULL.",
                 )
                 .set_err_kind(ErrorKind::External));
@@ -968,7 +968,7 @@ impl Context {
     ) -> Result<impl Future<Output = Result<Vec<u8>>> + Send> {
         if encrypt_keys.is_empty() {
             return Err(
-                MeliError::new("gpgme: Call to encrypt() with zero keys.").set_kind(ErrorKind::Bug)
+                Error::new("gpgme: Call to encrypt() with zero keys.").set_kind(ErrorKind::Bug)
             );
         }
         unsafe {
@@ -1031,7 +1031,7 @@ impl Context {
             lib: self.inner.lib.clone(),
             kind: DataKind::Memory,
             inner: core::ptr::NonNull::new(cipher).ok_or_else(|| {
-                MeliError::new("internal libgpgme error").set_kind(ErrorKind::Bug)
+                Error::new("internal libgpgme error").set_kind(ErrorKind::Bug)
             })?,
         };
 
@@ -1104,12 +1104,12 @@ impl Context {
                 .lock()
                 .unwrap()
                 .take()
-                .unwrap_or_else(|| Err(MeliError::new("Unspecified libgpgme error")))?;
+                .unwrap_or_else(|| Err(Error::new("Unspecified libgpgme error")))?;
 
             let encrypt_result =
                 unsafe { call!(&ctx.lib, gpgme_op_encrypt_result)(ctx.inner.as_ptr()) };
             if encrypt_result.is_null() {
-                return Err(MeliError::new(
+                return Err(Error::new(
                     "Unspecified libgpgme error: gpgme_op_encrypt_result returned NULL.",
                 )
                 .set_err_kind(ErrorKind::External));
@@ -1139,7 +1139,7 @@ fn gpgme_error_try(lib: &libloading::Library, error_code: GpgmeError) -> Result<
     while buf.ends_with(&b"\0"[..]) {
         buf.pop();
     }
-    Err(MeliError::from(
+    Err(Error::from(
         String::from_utf8(buf)
             .unwrap_or_else(|err| String::from_utf8_lossy(&err.into_bytes()).to_string()),
     )

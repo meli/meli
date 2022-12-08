@@ -25,7 +25,7 @@ use crate::email::parser::{
     generic::{byte_in_range, byte_in_slice},
     BytesExt, IResult,
 };
-use crate::error::ResultIntoMeliError;
+use crate::error::ResultIntoError;
 use nom::{
     branch::{alt, permutation},
     bytes::complete::{is_a, is_not, tag, take, take_until, take_while},
@@ -255,11 +255,11 @@ pub enum ImapResponse {
 }
 
 impl TryFrom<&'_ [u8]> for ImapResponse {
-    type Error = MeliError;
+    type Error = Error;
     fn try_from(val: &'_ [u8]) -> Result<ImapResponse> {
         let val: &[u8] = val.split_rn().last().unwrap_or(val);
         let mut val = val[val.find(b" ").ok_or_else(|| {
-            MeliError::new(format!(
+            Error::new(format!(
                 "Expected tagged IMAP response (OK,NO,BAD, etc) but found {:?}",
                 val
             ))
@@ -268,7 +268,7 @@ impl TryFrom<&'_ [u8]> for ImapResponse {
         // M12 NO [CANNOT] Invalid mailbox name: Name must not have \'/\' characters (0.000 + 0.098 + 0.097 secs).\r\n
         if val.ends_with(b" secs).") {
             val = &val[..val.rfind(b"(").ok_or_else(|| {
-                MeliError::new(format!(
+                Error::new(format!(
                     "Expected tagged IMAP response (OK,NO,BAD, etc) but found {:?}",
                     val
                 ))
@@ -286,7 +286,7 @@ impl TryFrom<&'_ [u8]> for ImapResponse {
         } else if val.starts_with(b"BYE") {
             Self::Bye(ResponseCode::from(&val[b"BYE ".len()..]))
         } else {
-            return Err(MeliError::new(format!(
+            return Err(Error::new(format!(
                 "Expected tagged IMAP response (OK,NO,BAD, etc) but found {:?}",
                 val
             )));
@@ -299,11 +299,11 @@ impl Into<Result<()>> for ImapResponse {
         match self {
             Self::Ok(_) | Self::Preauth(_) | Self::Bye(_) => Ok(()),
             Self::No(ResponseCode::Alert(msg)) | Self::Bad(ResponseCode::Alert(msg)) => {
-                Err(MeliError::new(msg))
+                Err(Error::new(msg))
             }
-            Self::No(err) => Err(MeliError::new(format!("{:?}", err)))
+            Self::No(err) => Err(Error::new(format!("{:?}", err)))
                 .chain_err_summary(|| "IMAP NO Response.".to_string()),
-            Self::Bad(err) => Err(MeliError::new(format!("{:?}", err)))
+            Self::Bad(err) => Err(Error::new(format!("{:?}", err)))
                 .chain_err_summary(|| "IMAP BAD Response.".to_string()),
         }
     }
@@ -514,7 +514,7 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
     macro_rules! should_start_with {
         ($input:expr, $tag:literal) => {
             if !$input.starts_with($tag) {
-                return Err(MeliError::new(format!(
+                return Err(Error::new(format!(
                     "Expected `{}` but got `{:.50}`",
                     String::from_utf8_lossy($tag),
                     String::from_utf8_lossy(&$input)
@@ -528,7 +528,7 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
     macro_rules! bounds {
         () => {
             if i == input.len() {
-                return Err(MeliError::new(format!(
+                return Err(Error::new(format!(
                     "Expected more input. Got: `{:.50}`",
                     String::from_utf8_lossy(&input)
                 )));
@@ -592,7 +592,7 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
                 ret.uid =
                     Some(UID::from_str(unsafe { std::str::from_utf8_unchecked(uid) }).unwrap());
             } else {
-                return debug!(Err(MeliError::new(format!(
+                return debug!(Err(Error::new(format!(
                     "Unexpected input while parsing UID FETCH response. Got: `{:.40}`",
                     String::from_utf8_lossy(input)
                 ))));
@@ -603,7 +603,7 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
                 ret.flags = Some(flags);
                 i += (input.len() - i - rest.len()) + 1;
             } else {
-                return debug!(Err(MeliError::new(format!(
+                return debug!(Err(Error::new(format!(
                     "Unexpected input while parsing UID FETCH response. Could not parse FLAGS: {:.40}.",
                     String::from_utf8_lossy(&input[i..])
                 ))));
@@ -619,7 +619,7 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
                     .and_then(std::num::NonZeroU64::new)
                     .map(ModSequence);
             } else {
-                return debug!(Err(MeliError::new(format!(
+                return debug!(Err(Error::new(format!(
                     "Unexpected input while parsing MODSEQ in UID FETCH response. Got: `{:.40}`",
                     String::from_utf8_lossy(input)
                 ))));
@@ -638,7 +638,7 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
                 ret.body = Some(body);
                 i += input.len() - i - rest.len();
             } else {
-                return debug!(Err(MeliError::new(format!(
+                return debug!(Err(Error::new(format!(
                     "Unexpected input while parsing UID FETCH response. Could not parse RFC822: {:.40}",
                     String::from_utf8_lossy(&input[i..])
                 ))));
@@ -649,7 +649,7 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
                 ret.envelope = Some(envelope);
                 i += input.len() - i - rest.len();
             } else {
-                return debug!(Err(MeliError::new(format!(
+                return debug!(Err(Error::new(format!(
                     "Unexpected input while parsing UID FETCH response. Could not parse ENVELOPE: {:.40}",
                     String::from_utf8_lossy(&input[i..])
                 ))));
@@ -671,7 +671,7 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
                 }
                 i += input.len() - i - rest.len();
             } else {
-                return debug!(Err(MeliError::new(format!(
+                return debug!(Err(Error::new(format!(
                     "Unexpected input while parsing UID FETCH response. Could not parse BODY[HEADER.FIELDS (REFERENCES)]: {:.40}",
                     String::from_utf8_lossy(&input[i..])
                 ))));
@@ -687,7 +687,7 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
                 }
                 i += input.len() - i - rest.len();
             } else {
-                return debug!(Err(MeliError::new(format!(
+                return debug!(Err(Error::new(format!(
                     "Unexpected input while parsing UID FETCH response. Could not parse BODY[HEADER.FIELDS (\"REFERENCES\"): {:.40}",
                     String::from_utf8_lossy(&input[i..])
                 ))));
@@ -700,7 +700,7 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
                 "Got unexpected token while parsing UID FETCH response:\n`{}`\n",
                 String::from_utf8_lossy(input)
             );
-            return debug!(Err(MeliError::new(format!(
+            return debug!(Err(Error::new(format!(
                 "Got unexpected token while parsing UID FETCH response: `{:.40}`",
                 String::from_utf8_lossy(&input[i..])
             ))));
@@ -735,7 +735,7 @@ pub fn fetch_responses(mut input: &[u8]) -> ImapParseResult<Vec<FetchResponse<'_
                 ret.push(el);
             }
             Err(err) => {
-                return Err(MeliError::new(format!(
+                return Err(Error::new(format!(
                     "Unexpected input while parsing UID FETCH responses: {} `{:.40}`",
                     err,
                     String::from_utf8_lossy(input),
@@ -747,7 +747,7 @@ pub fn fetch_responses(mut input: &[u8]) -> ImapParseResult<Vec<FetchResponse<'_
     if !input.is_empty() && ret.is_empty() {
         if let Ok(ImapResponse::Ok(_)) = ImapResponse::try_from(input) {
         } else {
-            return Err(MeliError::new(format!(
+            return Err(Error::new(format!(
                 "310Unexpected input while parsing UID FETCH responses: `{:.40}`",
                 String::from_utf8_lossy(input)
             )));
@@ -1153,7 +1153,7 @@ pub fn select_response(input: &[u8]) -> Result<SelectResponse> {
     } else {
         let ret = String::from_utf8_lossy(input).to_string();
         debug!("BAD/NO response in select: {}", &ret);
-        Err(MeliError::new(ret))
+        Err(Error::new(ret))
     }
 }
 

@@ -40,7 +40,7 @@ impl RpcChannel {
             session: *session,
         };
         let greeting: PluginGreeting = ret.from_read().map_err(|err| {
-            MeliError::new(format!("Could not get correct plugin greeting: {}", err))
+            Error::new(format!("Could not get correct plugin greeting: {}", err))
         })?;
         debug!(&greeting);
         //if greeting.version != "dev" {
@@ -54,11 +54,11 @@ impl RpcChannel {
     pub fn expect_ack(&mut self) -> Result<()> {
         debug!("expect_ack()");
         let ack: u32 = debug!(rmp_serde::decode::from_read(&mut self.stream))
-            .map_err(|_| MeliError::new("Plugin did not return ACK."))?;
+            .map_err(|_| Error::new("Plugin did not return ACK."))?;
         if 0x6 == ack {
             Ok(())
         } else {
-            Err(MeliError::new("Plugin did not return ACK."))
+            Err(Error::new("Plugin did not return ACK."))
         }
     }
 
@@ -68,7 +68,7 @@ impl RpcChannel {
             &mut self.stream,
             &rmpv::ValueRef::Integer(0x6.into())
         ))
-        .map_err(|err| MeliError::new(err.to_string()))?;
+        .map_err(|err| Error::new(err.to_string()))?;
         let _ = self.stream.flush();
         Ok(())
     }
@@ -76,7 +76,7 @@ impl RpcChannel {
     pub fn write_ref(&mut self, value_ref: &rmpv::ValueRef) -> Result<()> {
         debug!("write_ref() {:?}", value_ref);
         debug!(rmpv::encode::write_value_ref(&mut self.stream, value_ref))
-            .map_err(|err| MeliError::new(err.to_string()))?;
+            .map_err(|err| Error::new(err.to_string()))?;
         let _ = self.stream.flush();
         Ok(())
     }
@@ -84,7 +84,7 @@ impl RpcChannel {
     pub fn read(&mut self) -> Result<rmpv::Value> {
         debug!("read()");
         let ret: RpcResult = debug!(rmp_serde::decode::from_read(&mut self.stream))
-            .map_err(|err| MeliError::new(err.to_string()))?;
+            .map_err(|err| Error::new(err.to_string()))?;
         let _ = self.stream.flush();
         self.ack()?;
         debug!("read() ret={:?}", &ret);
@@ -97,7 +97,7 @@ impl RpcChannel {
     {
         debug!("from_read()");
         let ret: Result<T> = debug!(rmp_serde::decode::from_read(&mut self.stream))
-            .map_err(|err| MeliError::new(err.to_string()));
+            .map_err(|err| Error::new(err.to_string()));
         let _ = self.stream.flush();
         self.ack()?;
         debug!("read() ret={:?}", &ret);
@@ -117,7 +117,7 @@ impl RpcResult {
     fn into(self) -> Result<rmpv::Value> {
         match self {
             RpcResult::Ok(v) => Ok(v),
-            RpcResult::Err(err) => Err(MeliError::new(err)),
+            RpcResult::Err(err) => Err(Error::new(err)),
         }
     }
 }
@@ -136,7 +136,7 @@ impl<T: core::fmt::Debug + Clone + serde::Serialize + serde::de::DeserializeOwne
     fn into(self) -> Result<T> {
         match self {
             PluginResult::Ok(v) => Ok(v),
-            PluginResult::Err(err) => Err(MeliError::new(err)),
+            PluginResult::Err(err) => Err(Error::new(err)),
         }
     }
 }

@@ -119,7 +119,7 @@ impl NntpStream {
                 ret.read_response(&mut res, true, command_to_replycodes("CAPABILITIES"))
                     .await?;
                 if !res.starts_with("101 ") {
-                    return Err(MeliError::new(format!(
+                    return Err(Error::new(format!(
                         "Could not connect to {}: expected CAPABILITIES response but got:{}",
                         &server_conf.server_hostname, res
                     )));
@@ -130,7 +130,7 @@ impl NntpStream {
                     .iter()
                     .any(|cap| cap.eq_ignore_ascii_case("VERSION 2"))
                 {
-                    return Err(MeliError::new(format!(
+                    return Err(Error::new(format!(
                         "Could not connect to {}: server is not NNTP VERSION 2 compliant",
                         &server_conf.server_hostname
                     )));
@@ -139,7 +139,7 @@ impl NntpStream {
                     .iter()
                     .any(|cap| cap.eq_ignore_ascii_case("STARTTLS"))
                 {
-                    return Err(MeliError::new(format!(
+                    return Err(Error::new(format!(
                         "Could not connect to {}: server does not support STARTTLS",
                         &server_conf.server_hostname
                     )));
@@ -149,7 +149,7 @@ impl NntpStream {
                 ret.read_response(&mut res, false, command_to_replycodes("STARTTLS"))
                     .await?;
                 if !res.starts_with("382 ") {
-                    return Err(MeliError::new(format!(
+                    return Err(Error::new(format!(
                         "Could not connect to {}: could not begin TLS negotiation, got: {}",
                         &server_conf.server_hostname, res
                     )));
@@ -213,7 +213,7 @@ impl NntpStream {
         ret.read_response(&mut res, true, command_to_replycodes("CAPABILITIES"))
             .await?;
         if !res.starts_with("101 ") {
-            return Err(MeliError::new(format!(
+            return Err(Error::new(format!(
                 "Could not connect to {}: expected CAPABILITIES response but got:{}",
                 &server_conf.server_hostname, res
             )));
@@ -224,7 +224,7 @@ impl NntpStream {
             .iter()
             .any(|cap| cap.eq_ignore_ascii_case("VERSION 2"))
         {
-            return Err(MeliError::new(format!(
+            return Err(Error::new(format!(
                 "Could not connect to {}: server is not NNTP compliant",
                 &server_conf.server_hostname
             )));
@@ -257,7 +257,7 @@ impl NntpStream {
                         .chain_err_kind(ErrorKind::Authentication)?;
                 }
             } else {
-                return Err(MeliError::new(format!(
+                return Err(Error::new(format!(
                     "Could not connect: no supported auth mechanisms in server capabilities: {:?}",
                     capabilities
                 ))
@@ -324,20 +324,20 @@ impl NntpStream {
                     ret.push_str(unsafe { std::str::from_utf8_unchecked(&buf[0..b]) });
                     if ret.len() > 4 {
                         if ret.starts_with("205 ") {
-                            return Err(MeliError::new(format!("Disconnected: {}", ret)));
+                            return Err(Error::new(format!("Disconnected: {}", ret)));
                         } else if ret.starts_with("501 ") || ret.starts_with("500 ") {
-                            return Err(MeliError::new(format!("Syntax error: {}", ret)));
+                            return Err(Error::new(format!("Syntax error: {}", ret)));
                         } else if ret.starts_with("403 ") {
-                            return Err(MeliError::new(format!("Internal error: {}", ret)));
+                            return Err(Error::new(format!("Internal error: {}", ret)));
                         } else if ret.starts_with("502 ")
                             || ret.starts_with("480 ")
                             || ret.starts_with("483 ")
                             || ret.starts_with("401 ")
                         {
-                            return Err(MeliError::new(format!("Connection state error: {}", ret))
+                            return Err(Error::new(format!("Connection state error: {}", ret))
                                 .set_err_kind(ErrorKind::Authentication));
                         } else if !expected_reply_code.iter().any(|r| ret.starts_with(r)) {
-                            return Err(MeliError::new(format!("Unexpected reply code: {}", ret)));
+                            return Err(Error::new(format!("Unexpected reply code: {}", ret)));
                         }
                     }
                     if let Some(mut pos) = ret[last_line_idx..].rfind("\r\n") {
@@ -357,7 +357,7 @@ impl NntpStream {
                     }
                 }
                 Err(err) => {
-                    return Err(MeliError::from(err));
+                    return Err(Error::from(err));
                 }
             }
         }
@@ -429,7 +429,7 @@ impl NntpConnection {
         uid_store: Arc<UIDStore>,
     ) -> NntpConnection {
         NntpConnection {
-            stream: Err(MeliError::new("Offline".to_string())),
+            stream: Err(Error::new("Offline".to_string())),
             server_conf: server_conf.clone(),
             uid_store,
         }
@@ -439,8 +439,8 @@ impl NntpConnection {
         Box::pin(async move {
             if let (instant, ref mut status @ Ok(())) = *self.uid_store.is_online.lock().unwrap() {
                 if Instant::now().duration_since(instant) >= std::time::Duration::new(60 * 30, 0) {
-                    *status = Err(MeliError::new("Connection timed out"));
-                    self.stream = Err(MeliError::new("Connection timed out"));
+                    *status = Err(Error::new("Connection timed out"));
+                    self.stream = Err(Error::new("Connection timed out"));
                 }
             }
             if self.stream.is_ok() {

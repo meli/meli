@@ -106,7 +106,7 @@ pub use headers::*;
 pub use mailto::*;
 
 use crate::datetime::UnixTimestamp;
-use crate::error::{MeliError, Result};
+use crate::error::{Error, Result};
 use crate::parser::BytesExt;
 use crate::thread::ThreadNodeHash;
 use crate::TagHash;
@@ -283,7 +283,7 @@ impl Envelope {
             }
             return Ok(e);
         }
-        Err(MeliError::new("Couldn't parse mail."))
+        Err(Error::new("Couldn't parse mail."))
     }
 
     pub fn hash(&self) -> EnvelopeHash {
@@ -302,7 +302,7 @@ impl Envelope {
             Err(e) => {
                 debug!("error in parsing mail\n{:?}\n", e);
                 let error_msg = String::from("Mail cannot be shown because of errors.");
-                return Err(MeliError::new(error_msg));
+                return Err(Error::new(error_msg));
             }
         };
         for (name, value) in headers {

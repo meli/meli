@@ -22,7 +22,7 @@
 use super::{ImapConnection, ImapProtocol, ImapServerConf, UIDStore};
 use crate::conf::AccountSettings;
 use crate::email::parser::IResult;
-use crate::error::{MeliError, Result};
+use crate::error::{Error, Result};
 use crate::get_conf_val;
 use crate::imap::RequiredResponses;
 use nom::{
@@ -313,7 +313,7 @@ impl ManageSieveConnection {
         let uid_store = Arc::new(UIDStore {
             is_online: Arc::new(Mutex::new((
                 SystemTime::now(),
-                Err(MeliError::new("Account is uninitialised.")),
+                Err(Error::new("Account is uninitialised.")),
             ))),
             ..UIDStore::new(
                 account_hash,

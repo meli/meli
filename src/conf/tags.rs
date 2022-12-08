@@ -23,7 +23,7 @@
 
 use super::DotAddressable;
 use crate::terminal::Color;
-use melib::{MeliError, Result, TagHash};
+use melib::{Error, Result, TagHash};
 use serde::{Deserialize, Deserializer};
 use std::collections::{HashMap, HashSet};
 
@@ -85,7 +85,7 @@ impl DotAddressable for TagsSettings {
                 match *field {
                     "colors" => self.colors.lookup(field, tail),
                     "ignore_tags" => self.ignore_tags.lookup(field, tail),
-                    other => Err(MeliError::new(format!(
+                    other => Err(Error::new(format!(
                         "{} has no field named {}",
                         parent_field, other
                     ))),

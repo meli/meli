@@ -24,7 +24,7 @@
 use super::deserializers::non_empty_string;
 use super::DotAddressable;
 use super::Themes;
-use melib::{MeliError, Result, ToggleFlag};
+use melib::{Error, Result, ToggleFlag};
 
 /// Settings for terminal display
 #[derive(Debug, Deserialize, Clone, Serialize)]
@@ -89,7 +89,7 @@ impl DotAddressable for TerminalSettings {
                 let tail = &path[1..];
                 match *field {
                     "theme" => self.theme.lookup(field, tail),
-                    "themes" => Err(MeliError::new("unimplemented")),
+                    "themes" => Err(Error::new("unimplemented")),
                     "ascii_drawing" => self.ascii_drawing.lookup(field, tail),
                     "use_color" => self.use_color.lookup(field, tail),
                     "use_mouse" => self.use_mouse.lookup(field, tail),
@@ -99,7 +99,7 @@ impl DotAddressable for TerminalSettings {
                     "progress_spinner_sequence" => {
                         self.progress_spinner_sequence.lookup(field, tail)
                     }
-                    other => Err(MeliError::new(format!(
+                    other => Err(Error::new(format!(
                         "{} has no field named {}",
                         parent_field, other
                     ))),

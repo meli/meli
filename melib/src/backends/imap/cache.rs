@@ -441,7 +441,7 @@ mod sqlite3_m {
                 .cloned()
                 .unwrap_or_default();
             if self.mailbox_state(mailbox_hash)?.is_none() {
-                return Err(MeliError::new("Mailbox is not in cache").set_kind(ErrorKind::Bug));
+                return Err(Error::new("Mailbox is not in cache").set_kind(ErrorKind::Bug));
             }
             let Self {
                 ref mut connection,
@@ -483,7 +483,7 @@ mod sqlite3_m {
             refresh_events: &[(UID, RefreshEvent)],
         ) -> Result<()> {
             if self.mailbox_state(mailbox_hash)?.is_none() {
-                return Err(MeliError::new("Mailbox is not in cache").set_kind(ErrorKind::Bug));
+                return Err(Error::new("Mailbox is not in cache").set_kind(ErrorKind::Bug));
             }
             let Self {
                 ref mut connection,
@@ -691,7 +691,7 @@ mod default_m {
 
     impl ImapCacheReset for DefaultCache {
         fn reset_db(uid_store: &UIDStore) -> Result<()> {
-            Err(MeliError::new("melib is not built with any imap cache").set_kind(ErrorKind::Bug))
+            Err(Error::new("melib is not built with any imap cache").set_kind(ErrorKind::Bug))
         }
     }
 
@@ -701,7 +701,7 @@ mod default_m {
         }
 
         fn mailbox_state(&mut self, _mailbox_hash: MailboxHash) -> Result<Option<()>> {
-            Err(MeliError::new("melib is not built with any imap cache").set_kind(ErrorKind::Bug))
+            Err(Error::new("melib is not built with any imap cache").set_kind(ErrorKind::Bug))
         }
 
         fn clear(
@@ -709,11 +709,11 @@ mod default_m {
             _mailbox_hash: MailboxHash,
             _select_response: &SelectResponse,
         ) -> Result<()> {
-            Err(MeliError::new("melib is not built with any imap cache").set_kind(ErrorKind::Bug))
+            Err(Error::new("melib is not built with any imap cache").set_kind(ErrorKind::Bug))
         }
 
         fn envelopes(&mut self, _mailbox_hash: MailboxHash) -> Result<Option<Vec<EnvelopeHash>>> {
-            Err(MeliError::new("melib is not built with any imap cache").set_kind(ErrorKind::Bug))
+            Err(Error::new("melib is not built with any imap cache").set_kind(ErrorKind::Bug))
         }
 
         fn insert_envelopes(
@@ -721,7 +721,7 @@ mod default_m {
             _mailbox_hash: MailboxHash,
             _fetches: &[FetchResponse<'_>],
         ) -> Result<()> {
-            Err(MeliError::new("melib is not built with any imap cache").set_kind(ErrorKind::Bug))
+            Err(Error::new("melib is not built with any imap cache").set_kind(ErrorKind::Bug))
         }
 
         fn update_mailbox(
@@ -729,7 +729,7 @@ mod default_m {
             _mailbox_hash: MailboxHash,
             _select_response: &SelectResponse,
         ) -> Result<()> {
-            Err(MeliError::new("melib is not built with any imap cache").set_kind(ErrorKind::Bug))
+            Err(Error::new("melib is not built with any imap cache").set_kind(ErrorKind::Bug))
         }
 
         fn update(
@@ -737,7 +737,7 @@ mod default_m {
             _mailbox_hash: MailboxHash,
             _refresh_events: &[(UID, RefreshEvent)],
         ) -> Result<()> {
-            Err(MeliError::new("melib is not built with any imap cache").set_kind(ErrorKind::Bug))
+            Err(Error::new("melib is not built with any imap cache").set_kind(ErrorKind::Bug))
         }
 
         fn find_envelope(
@@ -745,7 +745,7 @@ mod default_m {
             _identifier: std::result::Result<UID, EnvelopeHash>,
             _mailbox_hash: MailboxHash,
         ) -> Result<Option<CachedEnvelope>> {
-            Err(MeliError::new("melib is not built with any imap cache").set_kind(ErrorKind::Bug))
+            Err(Error::new("melib is not built with any imap cache").set_kind(ErrorKind::Bug))
         }
 
         fn rfc822(
@@ -753,7 +753,7 @@ mod default_m {
             _identifier: std::result::Result<UID, EnvelopeHash>,
             _mailbox_hash: MailboxHash,
         ) -> Result<Option<Vec<u8>>> {
-            Err(MeliError::new("melib is not built with any imap cache").set_kind(ErrorKind::Bug))
+            Err(Error::new("melib is not built with any imap cache").set_kind(ErrorKind::Bug))
         }
     }
 }
