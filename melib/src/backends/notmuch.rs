@@ -903,8 +903,11 @@ impl MailBackend for NotmuchDb {
                     s.push(' ');
                     s
                 } else {
-                    return Err(MeliError::new("Mailbox with hash {} not found!")
-                        .set_kind(crate::error::ErrorKind::Bug));
+                    return Err(MeliError::new(format!(
+                        "Mailbox with hash {} not found!",
+                        mailbox_hash
+                    ))
+                    .set_kind(crate::error::ErrorKind::Bug));
                 }
             } else {
                 String::new()

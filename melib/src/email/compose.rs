@@ -90,7 +90,7 @@ impl FromStr for Draft {
             ret.headers
                 .insert(k.try_into()?, String::from_utf8(v.to_vec())?);
         }
-        let body = Envelope::new(0).body_bytes(s.as_bytes());
+        let body = Envelope::new(EnvelopeHash::default()).body_bytes(s.as_bytes());
 
         ret.body = String::from_utf8(body.decode(Default::default()))?;
 

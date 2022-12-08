@@ -30,17 +30,12 @@ use melib::{
     backends::{MailBackend, ResultFuture},
     email::{Envelope, EnvelopeHash},
     log,
-    sqlite3::{
-        self as melib_sqlite3,
-        rusqlite::{self, params},
-        DatabaseDescription,
-    },
+    sqlite3::{self as melib_sqlite3, rusqlite::params, DatabaseDescription},
     thread::{SortField, SortOrder},
     MeliError, Result, ERROR,
 };
 
 use smallvec::SmallVec;
-use std::convert::TryInto;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
@@ -367,16 +362,9 @@ pub fn search(
         .map_err(|e| MeliError::new(e.to_string()))?;
 
     let results = stmt
-        .query_map([], |row| row.get(0))
-        .map_err(|e| MeliError::new(e.to_string()))?
-        .map(|r: std::result::Result<Vec<u8>, rusqlite::Error>| {
-            Ok(u64::from_be_bytes(
-                r.map_err(|e| MeliError::new(e.to_string()))?
-                    .as_slice()
-                    .try_into()
-                    .map_err(|e: std::array::TryFromSliceError| MeliError::new(e.to_string()))?,
-            ))
-        })
+        .query_map([], |row| row.get::<_, EnvelopeHash>(0))
+        .map_err(MeliError::from)?
+        .map(|item| item.map_err(MeliError::from))
         .collect::<Result<SmallVec<[EnvelopeHash; 512]>>>();
     Ok(Box::pin(async { results }))
 }

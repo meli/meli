@@ -119,7 +119,7 @@ pub fn over_article(input: &str) -> IResult<&str, (UID, Envelope)> {
                 let mut hasher = DefaultHasher::new();
                 hasher.write(num.as_bytes());
                 hasher.write(message_id.unwrap_or_default().as_bytes());
-                hasher.finish()
+                EnvelopeHash(hasher.finish())
             };
             let mut env = Envelope::new(env_hash);
             if let Some(date) = date {

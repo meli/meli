@@ -58,11 +58,7 @@ impl<'m> Message<'m> {
     pub fn env_hash(&self) -> EnvelopeHash {
         let msg_id = unsafe { call!(self.lib, notmuch_message_get_message_id)(self.message) };
         let c_str = unsafe { CStr::from_ptr(msg_id) };
-        {
-            let mut hasher = DefaultHasher::default();
-            c_str.hash(&mut hasher);
-            hasher.finish()
-        }
+        EnvelopeHash::from_bytes(c_str.to_bytes_with_nul())
     }
 
     pub fn header(&self, header: &CStr) -> Option<&[u8]> {

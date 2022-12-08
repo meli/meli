@@ -464,7 +464,7 @@ mod sqlite3_m {
                     max_uid = std::cmp::max(max_uid, *uid);
                     tx.execute(
                 "INSERT OR REPLACE INTO envelopes (hash, uid, mailbox_hash, modsequence, envelope) VALUES (?1, ?2, ?3, ?4, ?5)",
-                sqlite3::params![envelope.hash() as i64, *uid as Sqlite3UID, mailbox_hash as i64, modseq, &envelope],
+                sqlite3::params![envelope.hash(), *uid as Sqlite3UID, mailbox_hash as i64, modseq, &envelope],
             ).chain_err_summary(|| format!("Could not insert envelope {} {} in header_cache of account {}", envelope.message_id(), envelope.hash(), uid_store.account_name))?;
                 }
             }
@@ -586,16 +586,13 @@ mod sqlite3_m {
             )?;
 
                     let x = stmt
-                        .query_map(
-                            sqlite3::params![mailbox_hash as i64, env_hash as i64],
-                            |row| {
-                                Ok((
-                                    row.get(0).map(|u: Sqlite3UID| u as UID)?,
-                                    row.get(1)?,
-                                    row.get(2)?,
-                                ))
-                            },
-                        )?
+                        .query_map(sqlite3::params![mailbox_hash as i64, env_hash], |row| {
+                            Ok((
+                                row.get(0).map(|u: Sqlite3UID| u as UID)?,
+                                row.get(1)?,
+                                row.get(2)?,
+                            ))
+                        })?
                         .collect::<std::result::Result<_, _>>()?;
                     x
                 }
@@ -635,10 +632,9 @@ mod sqlite3_m {
                         "SELECT rfc822 FROM envelopes WHERE mailbox_hash = ?1 AND hash = ?2;",
                     )?;
                     let x = stmt
-                        .query_map(
-                            sqlite3::params![mailbox_hash as i64, env_hash as i64],
-                            |row| row.get(0),
-                        )?
+                        .query_map(sqlite3::params![mailbox_hash as i64, env_hash], |row| {
+                            row.get(0)
+                        })?
                         .collect::<std::result::Result<_, _>>()?;
                     x
                 }

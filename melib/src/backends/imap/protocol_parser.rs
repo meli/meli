@@ -1336,7 +1336,7 @@ pub fn envelope(input: &[u8]) -> IResult<&[u8], Envelope> {
     Ok((
         input,
         ({
-            let mut env = Envelope::new(0);
+            let mut env = Envelope::new(EnvelopeHash::default());
             if let Some(date) = date {
                 env.set_date(&date);
                 if let Ok(d) =
@@ -1760,5 +1760,5 @@ pub fn generate_envelope_hash(mailbox_path: &str, uid: &UID) -> EnvelopeHash {
     let mut h = DefaultHasher::new();
     h.write_usize(*uid);
     h.write(mailbox_path.as_bytes());
-    h.finish()
+    EnvelopeHash(h.finish())
 }

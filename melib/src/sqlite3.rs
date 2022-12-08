@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use crate::{error::*, logging::log, Envelope};
+use crate::{error::*, logging::log, Envelope, EnvelopeHash};
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput};
 pub use rusqlite::{self, params, Connection};
 use std::path::PathBuf;
@@ -157,5 +157,19 @@ impl FromSql for Envelope {
             &b,
         )
         .map_err(|e| FromSqlError::Other(Box::new(e)))
+    }
+}
+
+impl ToSql for EnvelopeHash {
+    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput> {
+        Ok(ToSqlOutput::from(self.0 as i64))
+    }
+}
+
+impl FromSql for EnvelopeHash {
+    fn column_result(value: rusqlite::types::ValueRef) -> FromSqlResult<Self> {
+        let b: i64 = FromSql::column_result(value)?;
+
+        Ok(EnvelopeHash(b as u64))
     }
 }

@@ -26,9 +26,7 @@ use core::marker::PhantomData;
 use serde::de::{Deserialize, Deserializer};
 use serde_json::value::RawValue;
 use serde_json::Value;
-use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
-use std::hash::Hasher;
 
 mod import;
 pub use import::*;
@@ -42,9 +40,7 @@ impl Object for ThreadObject {
 
 impl Id<EmailObject> {
     pub fn into_hash(&self) -> EnvelopeHash {
-        let mut h = DefaultHasher::new();
-        h.write(self.inner.as_bytes());
-        h.finish()
+        EnvelopeHash::from_bytes(self.inner.as_bytes())
     }
 }
 
@@ -250,7 +246,7 @@ impl std::fmt::Display for EmailAddress {
 
 impl std::convert::From<EmailObject> for crate::Envelope {
     fn from(mut t: EmailObject) -> crate::Envelope {
-        let mut env = crate::Envelope::new(0);
+        let mut env = crate::Envelope::new(t.id.into_hash());
         if let Ok(d) = crate::email::parser::dates::rfc5322_date(env.date_as_str().as_bytes()) {
             env.set_datetime(d);
         }
@@ -327,7 +323,6 @@ impl std::convert::From<EmailObject> for crate::Envelope {
             }
         }
 
-        env.set_hash(t.id.into_hash());
         env
     }
 }

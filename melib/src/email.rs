@@ -198,7 +198,31 @@ impl Mail {
     }
 }
 
-pub type EnvelopeHash = u64;
+#[derive(
+    Hash, Eq, PartialEq, Debug, Ord, PartialOrd, Default, Serialize, Deserialize, Copy, Clone,
+)]
+#[repr(transparent)]
+pub struct EnvelopeHash(pub u64);
+
+impl EnvelopeHash {
+    #[inline(always)]
+    pub fn from_bytes(bytes: &[u8]) -> Self {
+        let mut h = DefaultHasher::new();
+        h.write(bytes);
+        Self(h.finish())
+    }
+
+    #[inline(always)]
+    pub const fn to_be_bytes(self) -> [u8; 8] {
+        self.0.to_be_bytes()
+    }
+}
+
+impl core::fmt::Display for EnvelopeHash {
+    fn fmt(&self, fmt: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(fmt, "{}", self.0)
+    }
+}
 
 /// `Envelope` represents all the header and structure data of an email we need to know.
 ///
@@ -244,7 +268,7 @@ impl core::fmt::Debug for Envelope {
 
 impl Default for Envelope {
     fn default() -> Self {
-        Envelope::new(0)
+        Envelope::new(EnvelopeHash::default())
     }
 }
 
@@ -276,9 +300,7 @@ impl Envelope {
     }
 
     pub fn from_bytes(bytes: &[u8], flags: Option<Flag>) -> Result<Envelope> {
-        let mut h = DefaultHasher::new();
-        h.write(bytes);
-        let mut e = Envelope::new(h.finish());
+        let mut e = Envelope::new(EnvelopeHash::from_bytes(bytes));
         let res = e.populate_headers(bytes).ok();
         if res.is_some() {
             if let Some(f) = flags {
@@ -396,7 +418,7 @@ impl Envelope {
         }
         if self.message_id.raw().is_empty() {
             let hash = self.hash;
-            self.set_message_id(format!("<{:x}>", hash).as_bytes());
+            self.set_message_id(format!("<{:x}>", hash.0).as_bytes());
         }
         if self.references.is_some() {
             if let Some(pos) = self

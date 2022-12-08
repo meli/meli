@@ -150,7 +150,7 @@ macro_rules! get_path_hash {
 pub fn get_file_hash(file: &Path) -> EnvelopeHash {
     let mut hasher = DefaultHasher::default();
     file.hash(&mut hasher);
-    hasher.finish()
+    EnvelopeHash(hasher.finish())
 }
 
 pub fn move_to_cur(p: PathBuf) -> Result<PathBuf> {
