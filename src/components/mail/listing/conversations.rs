@@ -1216,11 +1216,17 @@ impl Component for ConversationsListing {
                 return;
             }
 
-            let area = (
+            let entry_area = (
                 set_x(upper_left, get_x(upper_left) + width!(area) / 3 + 2),
                 bottom_right,
             );
-            self.view.draw(grid, area, context);
+            let gap_area = (
+                pos_dec(upper_left!(entry_area), (1, 0)),
+                bottom_right!(entry_area),
+            );
+            clear_area(grid, gap_area, self.color_cache.theme_default);
+            context.dirty_areas.push_back(gap_area);
+            self.view.draw(grid, entry_area, context);
         }
         self.dirty = false;
     }
