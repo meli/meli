@@ -142,7 +142,7 @@ impl AttachmentBuilder {
             Ok((_, (ct, cst, params))) => {
                 if ct.eq_ignore_ascii_case(b"multipart") {
                     let mut boundary = None;
-                    for (n, v) in params {
+                    for (n, v) in &params {
                         if n.eq_ignore_ascii_case(b"boundary") {
                             boundary = Some(v);
                             break;
@@ -155,6 +155,10 @@ impl AttachmentBuilder {
                         self.content_type = ContentType::Multipart {
                             boundary,
                             kind: MultipartType::from(cst),
+                            parameters: params
+                                .into_iter()
+                                .map(|(kb, vb)| (kb.to_vec(), vb.to_vec()))
+                                .collect::<Vec<(Vec<u8>, Vec<u8>)>>(),
                             parts,
                         };
                     } else {
@@ -208,7 +212,7 @@ impl AttachmentBuilder {
                     self.content_type = ContentType::CMSSignature;
                 } else {
                     let mut name: Option<String> = None;
-                    for (n, v) in params {
+                    for (n, v) in &params {
                         if n.eq_ignore_ascii_case(b"name") {
                             if let Ok(v) = crate::email::parser::encodings::phrase(v.trim(), false)
                                 .as_ref()
@@ -225,7 +229,14 @@ impl AttachmentBuilder {
                     tag.extend(ct);
                     tag.push(b'/');
                     tag.extend(cst);
-                    self.content_type = ContentType::Other { tag, name };
+                    self.content_type = ContentType::Other {
+                        tag,
+                        name,
+                        parameters: params
+                            .into_iter()
+                            .map(|(kb, vb)| (kb.to_vec(), vb.to_vec()))
+                            .collect::<Vec<(Vec<u8>, Vec<u8>)>>(),
+                    };
                 }
             }
             Err(e) => {
@@ -556,11 +567,18 @@ impl Attachment {
                 text.extend(self.decode(Default::default()));
             }
             ContentType::Multipart {
-                ref kind,
+                kind: MultipartType::Related,
                 ref parts,
+                ref parameters,
                 ..
-            } => match kind {
-                MultipartType::Alternative => {
+            } => {
+                if let Some(main_attachment) = parameters
+                    .iter()
+                    .find_map(|(k, v)| if k == b"type" { Some(v) } else { None })
+                    .and_then(|t| parts.iter().find(|a| a.content_type == t.as_slice()))
+                {
+                    main_attachment.get_text_recursive(text);
+                } else {
                     for a in parts {
                         if a.content_disposition.kind.is_inline() {
                             if let ContentType::Text {
@@ -573,14 +591,33 @@ impl Attachment {
                         }
                     }
                 }
-                _ => {
-                    for a in parts {
-                        if a.content_disposition.kind.is_inline() {
+            }
+            ContentType::Multipart {
+                kind: MultipartType::Alternative,
+                ref parts,
+                ..
+            } => {
+                for a in parts {
+                    if a.content_disposition.kind.is_inline() {
+                        if let ContentType::Text {
+                            kind: Text::Plain, ..
+                        } = a.content_type
+                        {
                             a.get_text_recursive(text);
+                            break;
                         }
                     }
                 }
-            },
+            }
+            ContentType::Multipart {
+                kind: _, ref parts, ..
+            } => {
+                for a in parts {
+                    if a.content_disposition.kind.is_inline() {
+                        a.get_text_recursive(text);
+                    }
+                }
+            }
             _ => {}
         }
     }
@@ -646,7 +683,10 @@ impl Attachment {
                 ref parts,
                 ..
             } => parts.iter().all(Attachment::is_html),
-
+            ContentType::Multipart {
+                kind: MultipartType::Related,
+                ..
+            } => false,
             ContentType::Multipart { ref parts, .. } => parts.iter().any(Attachment::is_html),
             _ => false,
         }
@@ -709,11 +749,24 @@ impl Attachment {
                     boundary,
                     kind,
                     parts,
+                    parameters,
                 } => {
                     let boundary = String::from_utf8_lossy(boundary);
                     ret.push_str(&format!("Content-Type: {}; boundary={}", kind, boundary));
                     if *kind == MultipartType::Signed {
                         ret.push_str("; micalg=pgp-sha512; protocol=\"application/pgp-signature\"");
+                    }
+                    for (n, v) in parameters {
+                        ret.push_str("; ");
+                        ret.push_str(&String::from_utf8_lossy(n));
+                        ret.push('=');
+                        if v.contains(&b' ') {
+                            ret.push('"');
+                        }
+                        ret.push_str(&String::from_utf8_lossy(v));
+                        if v.contains(&b' ') {
+                            ret.push('"');
+                        }
                     }
                     ret.push_str("\r\n");
 
@@ -732,15 +785,25 @@ impl Attachment {
                     ret.push_str(&format!("Content-Type: {}\r\n\r\n", a.content_type));
                     ret.push_str(&String::from_utf8_lossy(a.body()));
                 }
-                ContentType::OctetStream { ref name } => {
+                ContentType::OctetStream { name, parameters } => {
                     if let Some(name) = name {
-                        ret.push_str(&format!(
-                            "Content-Type: {}; name={}\r\n\r\n",
-                            a.content_type, name
-                        ));
+                        ret.push_str(&format!("Content-Type: {}; name={}", a.content_type, name));
                     } else {
-                        ret.push_str(&format!("Content-Type: {}\r\n\r\n", a.content_type));
+                        ret.push_str(&format!("Content-Type: {}", a.content_type));
                     }
+                    for (n, v) in parameters {
+                        ret.push_str("; ");
+                        ret.push_str(&String::from_utf8_lossy(n));
+                        ret.push('=');
+                        if v.contains(&b' ') {
+                            ret.push('"');
+                        }
+                        ret.push_str(&String::from_utf8_lossy(v));
+                        if v.contains(&b' ') {
+                            ret.push('"');
+                        }
+                    }
+                    ret.push_str("\r\n\r\n");
                     ret.push_str(BASE64_MIME.encode(a.body()).trim());
                 }
                 _ => {
@@ -803,7 +866,10 @@ impl Attachment {
         match self.content_type {
             ContentType::Other { .. } => Vec::new(),
             ContentType::Text { .. } => self.decode_helper(options),
-            ContentType::OctetStream { ref name } => name
+            ContentType::OctetStream {
+                ref name,
+                parameters: _,
+            } => name
                 .clone()
                 .unwrap_or_else(|| self.mime_type())
                 .into_bytes(),
@@ -820,6 +886,7 @@ impl Attachment {
             ContentType::Multipart {
                 ref kind,
                 ref parts,
+                parameters: _,
                 ..
             } => match kind {
                 MultipartType::Alternative => {

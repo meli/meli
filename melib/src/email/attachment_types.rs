@@ -262,6 +262,7 @@ pub enum ContentType {
     },
     Multipart {
         boundary: Vec<u8>,
+        parameters: Vec<(Vec<u8>, Vec<u8>)>,
         kind: MultipartType,
         parts: Vec<Attachment>,
     },
@@ -271,9 +272,11 @@ pub enum ContentType {
     Other {
         tag: Vec<u8>,
         name: Option<String>,
+        parameters: Vec<(Vec<u8>, Vec<u8>)>,
     },
     OctetStream {
         name: Option<String>,
+        parameters: Vec<(Vec<u8>, Vec<u8>)>,
     },
 }
 
@@ -287,72 +290,76 @@ impl Default for ContentType {
     }
 }
 
-impl PartialEq<&str> for ContentType {
-    fn eq(&self, other: &&str) -> bool {
+impl PartialEq<&[u8]> for ContentType {
+    fn eq(&self, other: &&[u8]) -> bool {
         match (self, *other) {
             (
                 ContentType::Text {
                     kind: Text::Plain, ..
                 },
-                "text/plain",
+                b"text/plain",
             ) => true,
             (
                 ContentType::Text {
                     kind: Text::Html, ..
                 },
-                "text/html",
+                b"text/html",
             ) => true,
             (
                 ContentType::Multipart {
                     kind: MultipartType::Alternative,
                     ..
                 },
-                "multipart/alternative",
+                b"multipart/alternative",
             ) => true,
             (
                 ContentType::Multipart {
                     kind: MultipartType::Digest,
                     ..
                 },
-                "multipart/digest",
+                b"multipart/digest",
             ) => true,
             (
                 ContentType::Multipart {
                     kind: MultipartType::Encrypted,
                     ..
                 },
-                "multipart/encrypted",
+                b"multipart/encrypted",
             ) => true,
             (
                 ContentType::Multipart {
                     kind: MultipartType::Mixed,
                     ..
                 },
-                "multipart/mixed",
+                b"multipart/mixed",
             ) => true,
             (
                 ContentType::Multipart {
                     kind: MultipartType::Related,
                     ..
                 },
-                "multipart/related",
+                b"multipart/related",
             ) => true,
             (
                 ContentType::Multipart {
                     kind: MultipartType::Signed,
                     ..
                 },
-                "multipart/signed",
+                b"multipart/signed",
             ) => true,
-            (ContentType::PGPSignature, "application/pgp-signature") => true,
-            (ContentType::CMSSignature, "application/pkcs7-signature") => true,
-            (ContentType::MessageRfc822, "message/rfc822") => true,
-            (ContentType::Other { tag, .. }, _) => {
-                other.eq_ignore_ascii_case(&String::from_utf8_lossy(tag))
-            }
-            (ContentType::OctetStream { .. }, "application/octet-stream") => true,
+            (ContentType::PGPSignature, b"application/pgp-signature") => true,
+            (ContentType::CMSSignature, b"application/pkcs7-signature") => true,
+            (ContentType::MessageRfc822, b"message/rfc822") => true,
+            (ContentType::Other { tag, .. }, _) => other.eq_ignore_ascii_case(tag),
+            (ContentType::OctetStream { .. }, b"application/octet-stream") => true,
             _ => false,
         }
+    }
+}
+
+impl PartialEq<&str> for ContentType {
+    fn eq(&self, other: &&str) -> bool {
+        self.eq(&other.as_bytes())
     }
 }
 
@@ -424,7 +431,10 @@ impl ContentType {
     pub fn name(&self) -> Option<&str> {
         match self {
             ContentType::Other { ref name, .. } => name.as_ref().map(|n| n.as_ref()),
-            ContentType::OctetStream { ref name } => name.as_ref().map(|n| n.as_ref()),
+            ContentType::OctetStream {
+                ref name,
+                parameters: _,
+            } => name.as_ref().map(|n| n.as_ref()),
             _ => None,
         }
     }

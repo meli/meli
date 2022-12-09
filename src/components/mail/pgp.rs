@@ -71,9 +71,10 @@ pub fn sign_filter(
                         boundary: boundary.into_bytes(),
                         kind: MultipartType::Signed,
                         parts: parts.into_iter().map(|a| a.into()).collect::<Vec<_>>(),
+                        parameters: vec![],
                     },
                     Default::default(),
-                    Vec::new(),
+                    vec![],
                 )
                 .into())
             })
@@ -100,7 +101,7 @@ pub fn encrypt_filter(
 
                 let sig_attachment = {
                     let mut a = Attachment::new(
-                            ContentType::OctetStream { name: None },
+                            ContentType::OctetStream { name: None, parameters: vec![] },
                             Default::default(),
                             ctx.encrypt(sign_keys, encrypt_keys, data)?.await?,
                         );
@@ -117,9 +118,10 @@ pub fn encrypt_filter(
                         boundary: boundary.into_bytes(),
                         kind: MultipartType::Encrypted,
                         parts: parts.into_iter().map(|a| a.into()).collect::<Vec<_>>(),
+                        parameters: vec![],
                     },
                     Default::default(),
-                    Vec::new(),
+                    vec![],
                 )
                 .into())
             })

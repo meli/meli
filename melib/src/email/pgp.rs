@@ -93,6 +93,7 @@ pub fn verify_signature(a: &Attachment) -> Result<(Vec<u8>, &Attachment)> {
             kind: MultipartType::Signed,
             ref parts,
             boundary: _,
+            parameters: _,
         } => {
             if parts.len() != 2 {
                 return Err(Error::new(format!(

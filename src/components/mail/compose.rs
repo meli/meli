@@ -2305,9 +2305,10 @@ pub fn send_draft_async(
                 boundary: boundary.into_bytes(),
                 kind: MultipartType::Mixed,
                 parts: parts.into_iter().map(|a| a.into()).collect::<Vec<_>>(),
+                parameters: vec![],
             },
             Default::default(),
-            Vec::new(),
+            vec![],
         )
         .into();
     }

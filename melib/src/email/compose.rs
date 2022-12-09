@@ -335,14 +335,19 @@ impl Draft {
                 parts.push(body_attachment);
             }
             parts.extend(attachments.into_iter());
-            build_multipart(&mut ret, MultipartType::Mixed, parts);
+            build_multipart(&mut ret, MultipartType::Mixed, &[], parts);
         }
 
         Ok(ret)
     }
 }
 
-fn build_multipart(ret: &mut String, kind: MultipartType, parts: Vec<AttachmentBuilder>) {
+fn build_multipart(
+    ret: &mut String,
+    kind: MultipartType,
+    parameters: &[(Vec<u8>, Vec<u8>)],
+    parts: Vec<AttachmentBuilder>,
+) {
     let boundary = ContentType::make_boundary(&parts);
     ret.push_str(&format!(
         r#"Content-Type: {}; charset="utf-8"; boundary="{}""#,
@@ -350,6 +355,18 @@ fn build_multipart(ret: &mut String, kind: MultipartType, parts: Vec<AttachmentB
     ));
     if kind == MultipartType::Encrypted {
         ret.push_str(r#"; protocol="application/pgp-encrypted""#);
+    }
+    for (n, v) in parameters {
+        ret.push_str("; ");
+        ret.push_str(&String::from_utf8_lossy(n));
+        ret.push('=');
+        if v.contains(&b' ') {
+            ret.push('"');
+        }
+        ret.push_str(&String::from_utf8_lossy(v));
+        if v.contains(&b' ') {
+            ret.push('"');
+        }
     }
     ret.push_str("\r\n\r\n");
     /* rfc1341 */
@@ -389,10 +406,12 @@ fn print_attachment(ret: &mut String, a: AttachmentBuilder) {
             boundary: _,
             kind,
             parts,
+            parameters,
         } => {
             build_multipart(
                 ret,
                 kind,
+                &parameters,
                 parts
                     .into_iter()
                     .map(|s| s.into())
@@ -578,6 +597,7 @@ where
             } else {
                 b"application/octet-stream".to_vec()
             },
+            parameters: vec![],
         });
 
     Ok(attachment)

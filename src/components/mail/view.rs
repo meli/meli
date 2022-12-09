@@ -2263,7 +2263,10 @@ impl Component for MailView {
                                 ));
                                     }
                                 }
-                                ContentType::OctetStream { ref name } => {
+                                ContentType::OctetStream {
+                                    ref name,
+                                    parameters: _,
+                                } => {
                                     context.replies.push_back(UIEvent::StatusEvent(
                                         StatusEvent::DisplayMessage(format!(
                                 "Failed to open {}. application/octet-stream isn't supported yet",
