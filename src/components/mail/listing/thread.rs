@@ -122,10 +122,10 @@ pub struct ThreadListing {
     )>,
 
     data_columns: DataColumns<5>,
-    rows_drawn: SegmentTree,
     rows: RowsState<(ThreadHash, EnvelopeHash)>,
     /// If we must redraw on next redraw event
     dirty: bool,
+    force_draw: bool,
     /// If `self.view` is focused or not.
     focus: Focus,
     initialised: bool,
@@ -408,12 +408,6 @@ impl MailListingTrait for ThreadListing {
             CellBuffer::new_with_context(min_width.4, self.rows.len(), None, context);
         self.data_columns.segment_tree[4] = row_widths.4.into();
 
-        self.rows_drawn = SegmentTree::from(
-            std::iter::repeat(1)
-                .take(self.rows.len())
-                .collect::<SmallVec<_>>(),
-        );
-        debug_assert!(self.rows_drawn.array.len() == self.rows.len());
         self.draw_rows(
             context,
             0,
@@ -490,11 +484,6 @@ impl ListingTrait for ThreadListing {
         let page_no = (self.new_cursor_pos.2).wrapping_div(rows);
 
         let top_idx = page_no * rows;
-        self.draw_rows(
-            context,
-            top_idx,
-            cmp::min(self.length.saturating_sub(1), top_idx + rows - 1),
-        );
 
         /* If cursor position has changed, remove the highlight from the previous position and
          * apply it in the new one. */
@@ -516,7 +505,9 @@ impl ListingTrait for ThreadListing {
                 }
                 context.dirty_areas.push_back(new_area);
             }
-            return;
+            if !self.force_draw {
+                return;
+            }
         } else if self.cursor_pos != self.new_cursor_pos {
             self.cursor_pos = self.new_cursor_pos;
         }
@@ -526,16 +517,12 @@ impl ListingTrait for ThreadListing {
             self.new_cursor_pos.2 = self.length - 1;
             self.cursor_pos.2 = self.new_cursor_pos.2;
         }
+        self.draw_rows(
+            context,
+            top_idx,
+            cmp::min(self.length.saturating_sub(1), top_idx + rows - 1),
+        );
 
-        _ = self
-            .data_columns
-            .recalc_widths((width!(area), height!(area)), top_idx);
-        clear_area(grid, area, self.color_cache.theme_default);
-        /* Page_no has changed, so draw new page */
-        self.data_columns
-            .draw(grid, top_idx, self.cursor_pos.2, grid.bounds_iter(area));
-
-        /* Page_no has changed, so draw new page */
         _ = self
             .data_columns
             .recalc_widths((width!(area), height!(area)), top_idx);
@@ -650,11 +637,11 @@ impl ListingTrait for ThreadListing {
                 /* If self.rows.row_updates is not empty and we exit a thread, the row_update events
                  * will be performed but the list will not be drawn. So force a draw in any case.
                  * */
-                // self.force_draw = true;
+                self.force_draw = true;
             }
             Focus::Entry => {
                 if let Some(env_hash) = self.get_env_under_cursor(self.cursor_pos.2) {
-                    // self.force_draw = true;
+                    self.force_draw = true;
                     self.dirty = true;
                     let coordinates = (self.cursor_pos.0, self.cursor_pos.1, env_hash);
 
@@ -699,9 +686,9 @@ impl ThreadListing {
             subsort: (Default::default(), Default::default()),
             color_cache: ColorCache::default(),
             data_columns: DataColumns::default(),
-            rows_drawn: SegmentTree::default(),
             rows: RowsState::default(),
             dirty: true,
+            force_draw: true,
             focus: Focus::None,
             view: None,
             initialised: false,
@@ -840,14 +827,7 @@ impl ThreadListing {
             return;
         }
         debug_assert!(end >= start);
-        if self.rows_drawn.get_max(start, end) == 0 {
-            //debug!("not drawing {}-{}", start, end);
-            return;
-        }
         //debug!("drawing {}-{}", start, end);
-        for i in start..=end {
-            self.rows_drawn.update(i, 0);
-        }
         let min_width = (
             self.data_columns.columns[0].size().0,
             self.data_columns.columns[1].size().0,
@@ -996,6 +976,50 @@ impl ThreadListing {
                     .set_attrs(row_attr.attrs);
             }
         }
+    }
+
+    fn update_line(&mut self, context: &Context, env_hash: EnvelopeHash) {
+        let account = &context.accounts[&self.cursor_pos.0];
+
+        if !account.contains_key(env_hash) {
+            /* The envelope has been renamed or removed, so wait for the appropriate event to
+             * arrive */
+            return;
+        }
+        let envelope: EnvelopeRef = account.collection.get_env(env_hash);
+        let thread_hash = self.rows.env_to_thread[&env_hash];
+        let idx = self.rows.env_order[&env_hash];
+        let row_attr = row_attr!(
+            self.color_cache,
+            idx % 2 == 0,
+            !envelope.is_seen(),
+            false,
+            self.rows.selection[&env_hash]
+        );
+        self.rows.row_attr_cache.insert(idx, row_attr);
+
+        let mut strings = self.make_entry_string(&envelope, context);
+        drop(envelope);
+        std::mem::swap(
+            &mut self.rows.entries.get_mut(idx).unwrap().1.subject,
+            &mut strings.subject,
+        );
+        let columns = &mut self.data_columns.columns;
+        let min_width = (
+            columns[0].size().0,
+            columns[1].size().0,
+            columns[2].size().0,
+            columns[3].size().0,
+            columns[4].size().0,
+        );
+
+        clear_area(&mut columns[0], ((0, idx), (min_width.0, idx)), row_attr);
+        clear_area(&mut columns[1], ((0, idx), (min_width.1, idx)), row_attr);
+        clear_area(&mut columns[2], ((0, idx), (min_width.2, idx)), row_attr);
+        clear_area(&mut columns[3], ((0, idx), (min_width.3, idx)), row_attr);
+        clear_area(&mut columns[4], ((0, idx), (min_width.4, idx)), row_attr);
+
+        *self.rows.entries.get_mut(idx).unwrap() = ((thread_hash, env_hash), strings);
     }
 }
 
@@ -1161,7 +1185,7 @@ impl Component for ThreadListing {
                     }
                 }
             }
-            //self.force_draw = true;
+            self.force_draw = true;
         }
 
         if !self.rows.row_updates.is_empty() {
@@ -1169,30 +1193,15 @@ impl Component for ThreadListing {
             let top_idx = page_no * rows;
 
             while let Some(env_hash) = self.rows.row_updates.pop() {
+                self.update_line(context, env_hash);
                 let row: usize = self.rows.env_order[&env_hash];
 
-                if row >= top_idx && row <= top_idx + rows {
-                    let new_area = nth_row_area(area, row % rows);
-                    self.data_columns.draw(
-                        grid,
-                        row,
-                        self.cursor_pos.2,
-                        grid.bounds_iter(new_area),
-                    );
-                    let envelope: EnvelopeRef = context.accounts[&self.cursor_pos.0]
-                        .collection
-                        .get_env(env_hash);
-                    let row_attr = row_attr!(
-                        self.color_cache,
-                        row % 2 == 0,
-                        !envelope.is_seen(),
-                        false,
-                        self.rows.selection[&env_hash]
-                    );
-                    self.rows.row_attr_cache.insert(row, row_attr);
-                    change_colors(grid, new_area, row_attr.fg, row_attr.bg);
-                    context.dirty_areas.push_back(new_area);
-                }
+                self.force_draw |= row >= top_idx && row < top_idx + rows;
+            }
+            if self.force_draw {
+                /* Draw the entire list */
+                self.draw_list(grid, area, context);
+                self.force_draw = false;
             }
         }
 

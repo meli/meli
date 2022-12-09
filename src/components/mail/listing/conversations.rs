@@ -23,6 +23,7 @@ use super::*;
 use crate::components::PageMovement;
 use crate::jobs::JoinHandle;
 use indexmap::IndexSet;
+use std::collections::BTreeMap;
 use std::iter::FromIterator;
 
 macro_rules! row_attr {
@@ -226,6 +227,8 @@ impl MailListingTrait for ConversationsListing {
         let account = &context.accounts[&self.cursor_pos.0];
 
         let threads = account.collection.get_threads(self.cursor_pos.1);
+        let tags_lck = account.collection.tag_index.read().unwrap();
+
         self.rows.clear();
         self.length = 0;
         if self.error.is_err() {
@@ -234,6 +237,7 @@ impl MailListingTrait for ConversationsListing {
         let mut max_entry_columns = 0;
 
         let mut other_subjects = IndexSet::new();
+        let mut tags = IndexSet::new();
         let mut from_address_list = Vec::new();
         let mut from_address_set: std::collections::HashSet<Vec<u8>> =
             std::collections::HashSet::new();
@@ -267,7 +271,23 @@ impl MailListingTrait for ConversationsListing {
 
                 panic!();
             }
+            let root_envelope: &EnvelopeRef = &context.accounts[&self.cursor_pos.0]
+                .collection
+                .get_env(root_env_hash);
+            use melib::search::QueryTrait;
+            if let Some(filter_query) = mailbox_settings!(
+                context[self.cursor_pos.0][&self.cursor_pos.1]
+                    .listing
+                    .filter
+            )
+            .as_ref()
+            {
+                if !root_envelope.is_match(filter_query) {
+                    continue;
+                }
+            }
             other_subjects.clear();
+            tags.clear();
             from_address_list.clear();
             from_address_set.clear();
             for (envelope, show_subject) in threads
@@ -290,6 +310,11 @@ impl MailListingTrait for ConversationsListing {
                 if show_subject {
                     other_subjects.insert(envelope.subject().to_string());
                 }
+                if account.backend_capabilities.supports_tags {
+                    for &t in envelope.tags().iter() {
+                        tags.insert(t);
+                    }
+                }
 
                 for addr in envelope.from().iter() {
                     if from_address_set.contains(addr.address_spec_raw()) {
@@ -299,28 +324,15 @@ impl MailListingTrait for ConversationsListing {
                     from_address_list.push(addr.clone());
                 }
             }
-            let root_envelope: &EnvelopeRef = &context.accounts[&self.cursor_pos.0]
-                .collection
-                .get_env(root_env_hash);
-            use melib::search::QueryTrait;
-            if let Some(filter_query) = mailbox_settings!(
-                context[self.cursor_pos.0][&self.cursor_pos.1]
-                    .listing
-                    .filter
-            )
-            .as_ref()
-            {
-                if !root_envelope.is_match(filter_query) {
-                    continue;
-                }
-            }
 
             let strings = self.make_entry_string(
                 root_envelope,
                 context,
+                &tags_lck,
                 &from_address_list,
                 &threads,
                 &other_subjects,
+                &tags,
                 thread,
             );
             max_entry_columns = std::cmp::max(
@@ -628,20 +640,21 @@ impl ConversationsListing {
 
     pub(super) fn make_entry_string(
         &self,
-        e: &Envelope,
+        root_envelope: &Envelope,
         context: &Context,
+        tags_lck: &BTreeMap<TagHash, String>,
         from: &[Address],
         threads: &Threads,
         other_subjects: &IndexSet<String>,
+        tags: &IndexSet<TagHash>,
         hash: ThreadHash,
     ) -> EntryStrings {
         let thread = threads.thread_ref(hash);
-        let mut tags = String::new();
+        let mut tags_string = String::new();
         let mut colors = SmallVec::new();
         let account = &context.accounts[&self.cursor_pos.0];
         if account.backend_capabilities.supports_tags {
-            let tags_lck = account.collection.tag_index.read().unwrap();
-            for t in e.tags().iter() {
+            for t in tags {
                 if mailbox_settings!(
                     context[self.cursor_pos.0][&self.cursor_pos.1]
                         .tags
@@ -654,9 +667,9 @@ impl ConversationsListing {
                 {
                     continue;
                 }
-                tags.push(' ');
-                tags.push_str(tags_lck.get(t).as_ref().unwrap());
-                tags.push(' ');
+                tags_string.push(' ');
+                tags_string.push_str(tags_lck.get(t).as_ref().unwrap());
+                tags_string.push(' ');
                 colors.push(
                     mailbox_settings!(context[self.cursor_pos.0][&self.cursor_pos.1].tags.colors)
                         .get(t)
@@ -669,8 +682,8 @@ impl ConversationsListing {
                         }),
                 );
             }
-            if !tags.is_empty() {
-                tags.pop();
+            if !tags_string.is_empty() {
+                tags_string.pop();
             }
         }
         let mut subject = if *mailbox_settings!(
@@ -688,33 +701,23 @@ impl ConversationsListing {
                     acc
                 })
         } else {
-            e.subject().to_string()
+            root_envelope.subject().to_string()
         };
         subject.truncate_at_boundary(100);
-        if thread.len() > 1 {
-            EntryStrings {
-                date: DateString(ConversationsListing::format_date(context, thread.date())),
-                subject: SubjectString(format!("{} ({})", subject, thread.len())),
-                flag: FlagString(format!(
-                    "{}{}",
-                    if thread.has_attachments() { "📎" } else { "" },
-                    if thread.snoozed() { "💤" } else { "" }
-                )),
-                from: FromString(address_list!((from) as comma_sep_list)),
-                tags: TagString(tags, colors),
-            }
-        } else {
-            EntryStrings {
-                date: DateString(ConversationsListing::format_date(context, thread.date())),
-                subject: SubjectString(subject),
-                flag: FlagString(format!(
-                    "{}{}",
-                    if thread.has_attachments() { "📎" } else { "" },
-                    if thread.snoozed() { "💤" } else { "" }
-                )),
-                from: FromString(address_list!((from) as comma_sep_list)),
-                tags: TagString(tags, colors),
-            }
+        EntryStrings {
+            date: DateString(ConversationsListing::format_date(context, thread.date())),
+            subject: SubjectString(if thread.len() > 1 {
+                format!("{} ({})", subject, thread.len())
+            } else {
+                subject
+            }),
+            flag: FlagString(format!(
+                "{}{}",
+                if thread.has_attachments() { "📎" } else { "" },
+                if thread.snoozed() { "💤" } else { "" }
+            )),
+            from: FromString(address_list!((from) as comma_sep_list)),
+            tags: TagString(tags_string, colors),
         }
     }
 
@@ -768,9 +771,11 @@ impl ConversationsListing {
         let account = &context.accounts[&self.cursor_pos.0];
         let thread_hash = self.rows.env_to_thread[&env_hash];
         let threads = account.collection.get_threads(self.cursor_pos.1);
+        let tags_lck = account.collection.tag_index.read().unwrap();
         let idx: usize = self.rows.thread_order[&thread_hash];
 
         let mut other_subjects = IndexSet::new();
+        let mut tags = IndexSet::new();
         let mut from_address_list = Vec::new();
         let mut from_address_set: std::collections::HashSet<Vec<u8>> =
             std::collections::HashSet::new();
@@ -793,6 +798,11 @@ impl ConversationsListing {
             if show_subject {
                 other_subjects.insert(envelope.subject().to_string());
             }
+            if account.backend_capabilities.supports_tags {
+                for &t in envelope.tags().iter() {
+                    tags.insert(t);
+                }
+            }
             for addr in envelope.from().iter() {
                 if from_address_set.contains(addr.address_spec_raw()) {
                     continue;
@@ -805,9 +815,11 @@ impl ConversationsListing {
         let strings = self.make_entry_string(
             &envelope,
             context,
+            &tags_lck,
             &from_address_list,
             &threads,
             &other_subjects,
+            &tags,
             thread_hash,
         );
         drop(envelope);
@@ -819,6 +831,7 @@ impl ConversationsListing {
     fn draw_rows(&self, grid: &mut CellBuffer, area: Area, context: &Context, top_idx: usize) {
         let account = &context.accounts[&self.cursor_pos.0];
         let threads = account.collection.get_threads(self.cursor_pos.1);
+        clear_area(grid, area, self.color_cache.theme_default);
         let (mut upper_left, bottom_right) = area;
         for (idx, ((thread_hash, root_env_hash), strings)) in
             self.rows.entries.iter().enumerate().skip(top_idx)

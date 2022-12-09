@@ -968,6 +968,130 @@ impl PlainListing {
             _ => melib::datetime::timestamp_to_string(envelope.datetime(), None, false),
         }
     }
+
+    fn update_line(&mut self, context: &Context, env_hash: EnvelopeHash) {
+        let account = &context.accounts[&self.cursor_pos.0];
+
+        if !account.contains_key(env_hash) {
+            /* The envelope has been renamed or removed, so wait for the appropriate event to
+             * arrive */
+            return;
+        }
+        let envelope: EnvelopeRef = account.collection.get_env(env_hash);
+        let thread_hash = self.rows.env_to_thread[&env_hash];
+        let idx = self.rows.env_order[&env_hash];
+        let row_attr = row_attr!(
+            self.color_cache,
+            idx % 2 == 0,
+            !envelope.is_seen(),
+            false,
+            self.rows.selection[&env_hash]
+        );
+        self.rows.row_attr_cache.insert(idx, row_attr);
+
+        let strings = self.make_entry_string(&envelope, context);
+        drop(envelope);
+        let columns = &mut self.data_columns.columns;
+        let min_width = (
+            columns[0].size().0,
+            columns[1].size().0,
+            columns[2].size().0,
+            columns[3].size().0,
+        );
+
+        clear_area(&mut columns[0], ((0, idx), (min_width.0, idx)), row_attr);
+        clear_area(&mut columns[1], ((0, idx), (min_width.1, idx)), row_attr);
+        clear_area(&mut columns[2], ((0, idx), (min_width.2, idx)), row_attr);
+        clear_area(&mut columns[3], ((0, idx), (min_width.3, idx)), row_attr);
+
+        let (x, _) = write_string_to_grid(
+            &idx.to_string(),
+            &mut columns[0],
+            row_attr.fg,
+            row_attr.bg,
+            row_attr.attrs,
+            ((0, idx), (min_width.0, idx)),
+            None,
+        );
+        for c in columns[0].row_iter(x..min_width.0, idx) {
+            columns[0][c].set_bg(row_attr.bg).set_attrs(row_attr.attrs);
+        }
+        let (x, _) = write_string_to_grid(
+            &strings.date,
+            &mut columns[1],
+            row_attr.fg,
+            row_attr.bg,
+            row_attr.attrs,
+            ((0, idx), (min_width.1, idx)),
+            None,
+        );
+        for c in columns[1].row_iter(x..min_width.1, idx) {
+            columns[1][c].set_bg(row_attr.bg).set_attrs(row_attr.attrs);
+        }
+        let (x, _) = write_string_to_grid(
+            &strings.from,
+            &mut columns[2],
+            row_attr.fg,
+            row_attr.bg,
+            row_attr.attrs,
+            ((0, idx), (min_width.2, idx)),
+            None,
+        );
+        for c in columns[2].row_iter(x..min_width.2, idx) {
+            columns[2][c].set_bg(row_attr.bg).set_attrs(row_attr.attrs);
+        }
+        let (x, _) = write_string_to_grid(
+            &strings.flag,
+            &mut columns[3],
+            row_attr.fg,
+            row_attr.bg,
+            row_attr.attrs,
+            ((0, idx), (min_width.3, idx)),
+            None,
+        );
+        let (x, _) = write_string_to_grid(
+            &strings.subject,
+            &mut columns[3],
+            row_attr.fg,
+            row_attr.bg,
+            row_attr.attrs,
+            ((x, idx), (min_width.3, idx)),
+            None,
+        );
+        let x = {
+            let mut x = x + 1;
+            for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
+                let color = color.unwrap_or(self.color_cache.tag_default.bg);
+                let (_x, _) = write_string_to_grid(
+                    t,
+                    &mut columns[3],
+                    self.color_cache.tag_default.fg,
+                    color,
+                    self.color_cache.tag_default.attrs,
+                    ((x + 1, idx), (min_width.3, idx)),
+                    None,
+                );
+                for c in columns[3].row_iter(x..(x + 1), idx) {
+                    columns[3][c].set_bg(color);
+                }
+                for c in columns[3].row_iter(_x..(_x + 1), idx) {
+                    columns[3][c].set_bg(color).set_keep_bg(true);
+                }
+                for c in columns[3].row_iter((x + 1)..(_x + 1), idx) {
+                    columns[3][c].set_keep_fg(true).set_keep_bg(true);
+                }
+                for c in columns[3].row_iter(x..(x + 1), idx) {
+                    columns[3][c].set_keep_bg(true);
+                }
+                x = _x + 1;
+            }
+            x
+        };
+        for c in columns[3].row_iter(x..min_width.3, idx) {
+            columns[3][c].set_bg(row_attr.bg).set_attrs(row_attr.attrs);
+        }
+        *self.rows.entries.get_mut(idx).unwrap() = ((thread_hash, env_hash), strings);
+    }
 }
 
 impl Component for PlainListing {
@@ -1181,6 +1305,7 @@ impl Component for PlainListing {
 
             if !self.rows.row_updates.is_empty() {
                 while let Some(env_hash) = self.rows.row_updates.pop() {
+                    self.update_line(context, env_hash);
                     let row: usize = self.rows.env_order[&env_hash];
                     let envelope: EnvelopeRef = context.accounts[&self.cursor_pos.0]
                         .collection
