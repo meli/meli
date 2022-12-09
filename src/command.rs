@@ -847,7 +847,7 @@ Alternatives(&[to_stream!(One(Literal("add-attachment")), One(Filepath)), to_str
                       fn manage_mailboxes(input: &[u8]) -> IResult<&[u8], Action> {
                           let (input, _) = tag("manage-mailboxes")(input.trim())?;
                           let (input, _) = eof(input)?;
-                          Ok((input, ManageMailboxes))
+                          Ok((input, Tab(ManageMailboxes)))
                       }
                   )
                 },
