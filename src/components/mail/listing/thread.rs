@@ -170,7 +170,7 @@ impl MailListingTrait for ThreadListing {
     /// Fill the `self.content` `CellBuffer` with the contents of the account mailbox the user has
     /// chosen.
     fn refresh_mailbox(&mut self, context: &mut Context, _force: bool) {
-        self.dirty = true;
+        self.set_dirty(true);
         if !(self.cursor_pos.0 == self.new_cursor_pos.0
             && self.cursor_pos.1 == self.new_cursor_pos.1)
         {
@@ -1409,7 +1409,7 @@ impl Component for ThreadListing {
                     (self.rows.entries[row].0).1 = *new_hash;
                 }
 
-                self.dirty = true;
+                self.set_dirty(true);
 
                 if self.unfocused() {
                     if let Some(v) = self.view.as_mut() {
@@ -1435,7 +1435,7 @@ impl Component for ThreadListing {
                     self.rows.row_updates.push(*env_hash);
                 }
 
-                self.dirty = true;
+                self.set_dirty(true);
 
                 if self.unfocused() {
                     if let Some(v) = self.view.as_mut() {
@@ -1444,10 +1444,10 @@ impl Component for ThreadListing {
                 }
             }
             UIEvent::ChangeMode(UIMode::Normal) => {
-                self.dirty = true;
+                self.set_dirty(true);
             }
             UIEvent::Resize => {
-                self.dirty = true;
+                self.set_dirty(true);
             }
             UIEvent::Input(Key::Esc)
                 if !self.unfocused()
@@ -1461,7 +1461,7 @@ impl Component for ThreadListing {
                 for v in self.rows.selection.values_mut() {
                     *v = false;
                 }
-                self.dirty = true;
+                self.set_dirty(true);
                 return true;
             }
             UIEvent::Input(ref key)
@@ -1480,14 +1480,14 @@ impl Component for ThreadListing {
                 Action::SubSort(field, order) => {
                     debug!("SubSort {:?} , {:?}", field, order);
                     self.subsort = (*field, *order);
-                    self.dirty = true;
+                    self.set_dirty(true);
                     self.refresh_mailbox(context, false);
                     return true;
                 }
                 Action::Sort(field, order) => {
                     debug!("Sort {:?} , {:?}", field, order);
                     self.sort = (*field, *order);
-                    self.dirty = true;
+                    self.set_dirty(true);
                     self.refresh_mailbox(context, false);
                     return true;
                 }

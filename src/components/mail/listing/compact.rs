@@ -242,7 +242,7 @@ impl MailListingTrait for CompactListing {
     /// Fill the `self.data_columns` `CellBuffers` with the contents of the account mailbox the user has
     /// chosen.
     fn refresh_mailbox(&mut self, context: &mut Context, force: bool) {
-        self.dirty = true;
+        self.set_dirty(true);
         self.rows.clear();
         let old_cursor_pos = self.cursor_pos;
         if !(self.cursor_pos.0 == self.new_cursor_pos.0
@@ -1783,7 +1783,7 @@ impl Component for CompactListing {
                             self.sortcmd = true;
                             if !self.filtered_selection.is_empty() {
                                 // FIXME: perform sort
-                                self.dirty = true;
+                                self.set_dirty(true);
                             } else {
                                 self.refresh_mailbox(context, false);
                             }
@@ -1854,7 +1854,7 @@ impl Component for CompactListing {
                     self.rows.row_update_add_thread(thread);
                 }
 
-                self.dirty = true;
+                self.set_dirty(true);
 
                 if self.unfocused() {
                     self.view
@@ -1884,7 +1884,7 @@ impl Component for CompactListing {
                     self.rows.row_update_add_thread(thread);
                 }
 
-                self.dirty = true;
+                self.set_dirty(true);
 
                 if self.unfocused() {
                     self.view
@@ -1892,10 +1892,10 @@ impl Component for CompactListing {
                 }
             }
             UIEvent::ChangeMode(UIMode::Normal) => {
-                self.dirty = true;
+                self.set_dirty(true);
             }
             UIEvent::Resize => {
-                self.dirty = true;
+                self.set_dirty(true);
             }
             UIEvent::Input(Key::Esc)
                 if !self.unfocused()
@@ -1909,7 +1909,7 @@ impl Component for CompactListing {
                 for v in self.rows.selection.values_mut() {
                     *v = false;
                 }
-                self.dirty = true;
+                self.set_dirty(true);
                 return true;
             }
             UIEvent::Input(Key::Esc) if !self.unfocused() && !self.filter_term.is_empty() => {

@@ -185,7 +185,7 @@ impl MailListingTrait for PlainListing {
     /// Fill the `self.data_columns` `CellBuffers` with the contents of the account mailbox the user has
     /// chosen.
     fn refresh_mailbox(&mut self, context: &mut Context, force: bool) {
-        self.dirty = true;
+        self.set_dirty(true);
         let old_cursor_pos = self.cursor_pos;
         if !(self.cursor_pos.0 == self.new_cursor_pos.0
             && self.cursor_pos.1 == self.new_cursor_pos.1)
@@ -1478,7 +1478,7 @@ impl Component for PlainListing {
                     }
                 }
 
-                self.dirty = true;
+                self.set_dirty(true);
 
                 if self.unfocused() {
                     self.view
@@ -1497,7 +1497,7 @@ impl Component for PlainListing {
                 }
 
                 self.rows.row_updates.push(*env_hash);
-                self.dirty = true;
+                self.set_dirty(true);
 
                 if self.unfocused() {
                     self.view
@@ -1505,10 +1505,10 @@ impl Component for PlainListing {
                 }
             }
             UIEvent::ChangeMode(UIMode::Normal) => {
-                self.dirty = true;
+                self.set_dirty(true);
             }
             UIEvent::Resize => {
-                self.dirty = true;
+                self.set_dirty(true);
             }
             UIEvent::Input(Key::Esc)
                 if !self.unfocused()
@@ -1520,7 +1520,7 @@ impl Component for PlainListing {
                         .any(std::convert::identity) =>
             {
                 self.rows.clear_selection();
-                self.dirty = true;
+                self.set_dirty(true);
                 return true;
             }
             UIEvent::Input(Key::Esc) if !self.unfocused() && !self.filter_term.is_empty() => {

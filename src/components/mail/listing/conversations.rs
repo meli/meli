@@ -168,7 +168,7 @@ impl MailListingTrait for ConversationsListing {
     }
 
     fn refresh_mailbox(&mut self, context: &mut Context, force: bool) {
-        self.dirty = true;
+        self.set_dirty(true);
         let old_mailbox_hash = self.cursor_pos.1;
         let old_cursor_pos = self.cursor_pos;
         if !(self.cursor_pos.0 == self.new_cursor_pos.0
@@ -1327,7 +1327,7 @@ impl Component for ConversationsListing {
                         self.rows.rename_env(*old_hash, *new_hash);
                     }
 
-                    self.dirty = true;
+                    self.set_dirty(true);
 
                     if self.unfocused() {
                         self.view.process_event(
@@ -1359,7 +1359,7 @@ impl Component for ConversationsListing {
                         self.rows.row_updates.push(*env_hash);
                     }
 
-                    self.dirty = true;
+                    self.set_dirty(true);
 
                     if self.unfocused() {
                         self.view
@@ -1392,7 +1392,7 @@ impl Component for ConversationsListing {
                                 self.sort,
                                 &context.accounts[&self.cursor_pos.0].collection.envelopes,
                             );
-                            self.dirty = true;
+                            self.set_dirty(true);
                         } else {
                             self.refresh_mailbox(context, false);
                         }
@@ -1441,10 +1441,10 @@ impl Component for ConversationsListing {
                 self.set_dirty(true);
             }
             UIEvent::ChangeMode(UIMode::Normal) => {
-                self.dirty = true;
+                self.set_dirty(true);
             }
             UIEvent::Resize => {
-                self.dirty = true;
+                self.set_dirty(true);
             }
             UIEvent::Action(ref action) => match action {
                 Action::Listing(Search(ref filter_term)) if !self.unfocused() => {
@@ -1482,7 +1482,7 @@ impl Component for ConversationsListing {
                         .any(std::convert::identity) =>
             {
                 self.rows.clear_selection();
-                self.dirty = true;
+                self.set_dirty(true);
                 return true;
             }
             UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Char(''))
