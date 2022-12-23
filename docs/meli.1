@@ -351,7 +351,7 @@ To open a draft for further editing, select your draft in the mail listing and p
 \&.
 .Sh CONTACTS
 .Nm
-supports two kinds of contact backends:
+supports three kinds of contact backends:
 .sp
 .Bl -enum -compact -offset indent
 .It
@@ -366,6 +366,11 @@ The path defined as
 .Ic vcard_folder
 can hold multiple vCards per file.
 They are loaded read only.
+.It
+a
+.Xr mutt 1
+compatible alias file in the option
+.Ic mutt_alias_file
 .El
 .sp
 See

@@ -343,6 +343,23 @@ pub fn is_a<'a>(slice: &'static [u8]) -> impl Parser<'a, &'a str> {
     }
 }
 
+pub fn is_not<'a>(slice: &'static [u8]) -> impl Parser<'a, &'a str> {
+    move |input: &'a str| {
+        let mut i = 0;
+        for byte in input.as_bytes().iter() {
+            if slice.contains(byte) {
+                break;
+            }
+            i += 1;
+        }
+        if i == 0 {
+            return Err("");
+        }
+        let (b, a) = input.split_at(i);
+        Ok((a, b))
+    }
+}
+
 /// Try alternative parsers in order until one succeeds.
 ///
 /// ```rust

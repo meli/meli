@@ -22,7 +22,10 @@
 #[cfg(feature = "vcard")]
 pub mod vcard;
 
+pub mod mutt;
+
 use crate::datetime::{self, UnixTimestamp};
+use crate::parsec::Parser;
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -97,30 +100,50 @@ impl AddressBook {
     }
 
     pub fn with_account(s: &crate::conf::AccountSettings) -> AddressBook {
-        #[cfg(not(feature = "vcard"))]
-        {
-            AddressBook::new(s.name.clone())
-        }
-        #[cfg(feature = "vcard")]
-        {
-            let mut ret = AddressBook::new(s.name.clone());
-            if let Some(vcard_path) = s.vcard_folder() {
-                match vcard::load_cards(std::path::Path::new(vcard_path)) {
-                    Ok(cards) => {
-                        for c in cards {
-                            ret.add_card(c);
-                        }
-                    }
-                    Err(err) => {
-                        crate::log(
-                            format!("Could not load vcards from {:?}: {}", vcard_path, err),
-                            crate::WARN,
-                        );
+        let mut ret = AddressBook::new(s.name.clone());
+        if let Some(mutt_alias_file) = s.extra.get("mutt_alias_file").map(String::as_str) {
+            match std::fs::read_to_string(std::path::Path::new(mutt_alias_file))
+                .map_err(|err| err.to_string())
+                .and_then(|contents| {
+                    contents
+                        .lines()
+                        .map(|line| mutt::parse_mutt_contact().parse(line).map(|(_, c)| c))
+                        .collect::<Result<Vec<Card>, &str>>()
+                        .map_err(|err| err.to_string())
+                }) {
+                Ok(cards) => {
+                    for c in cards {
+                        ret.add_card(c);
                     }
                 }
+                Err(err) => {
+                    crate::log(
+                        format!(
+                            "Could not load mutt alias file {:?}: {}",
+                            mutt_alias_file, err
+                        ),
+                        crate::WARN,
+                    );
+                }
             }
-            ret
         }
+        #[cfg(feature = "vcard")]
+        if let Some(vcard_path) = s.vcard_folder() {
+            match vcard::load_cards(std::path::Path::new(vcard_path)) {
+                Ok(cards) => {
+                    for c in cards {
+                        ret.add_card(c);
+                    }
+                }
+                Err(err) => {
+                    crate::log(
+                        format!("Could not load vcards from {:?}: {}", vcard_path, err),
+                        crate::WARN,
+                    );
+                }
+            }
+        }
+        ret
     }
 
     pub fn add_card(&mut self, card: Card) {
@@ -203,36 +226,54 @@ impl Card {
         datetime::timestamp_to_string(self.last_edited, None, false)
     }
 
-    pub fn set_id(&mut self, new_val: CardId) {
+    pub fn set_id(&mut self, new_val: CardId) -> &mut Self {
         self.id = new_val;
-    }
-    pub fn set_title(&mut self, new: String) {
-        self.title = new;
-    }
-    pub fn set_name(&mut self, new: String) {
-        self.name = new;
-    }
-    pub fn set_additionalname(&mut self, new: String) {
-        self.additionalname = new;
-    }
-    pub fn set_name_prefix(&mut self, new: String) {
-        self.name_prefix = new;
-    }
-    pub fn set_name_suffix(&mut self, new: String) {
-        self.name_suffix = new;
-    }
-    pub fn set_email(&mut self, new: String) {
-        self.email = new;
-    }
-    pub fn set_url(&mut self, new: String) {
-        self.url = new;
-    }
-    pub fn set_key(&mut self, new: String) {
-        self.key = new;
+        self
     }
 
-    pub fn set_extra_property(&mut self, key: &str, value: String) {
+    pub fn set_title(&mut self, new: String) -> &mut Self {
+        self.title = new;
+        self
+    }
+
+    pub fn set_name(&mut self, new: String) -> &mut Self {
+        self.name = new;
+        self
+    }
+
+    pub fn set_additionalname(&mut self, new: String) -> &mut Self {
+        self.additionalname = new;
+        self
+    }
+
+    pub fn set_name_prefix(&mut self, new: String) -> &mut Self {
+        self.name_prefix = new;
+        self
+    }
+
+    pub fn set_name_suffix(&mut self, new: String) -> &mut Self {
+        self.name_suffix = new;
+        self
+    }
+
+    pub fn set_email(&mut self, new: String) -> &mut Self {
+        self.email = new;
+        self
+    }
+
+    pub fn set_url(&mut self, new: String) -> &mut Self {
+        self.url = new;
+        self
+    }
+
+    pub fn set_key(&mut self, new: String) -> &mut Self {
+        self.key = new;
+        self
+    }
+
+    pub fn set_extra_property(&mut self, key: &str, value: String) -> &mut Self {
         self.extra_properties.insert(key.to_string(), value);
+        self
     }
 
     pub fn extra_property(&self, key: &str) -> Option<&str> {
@@ -243,8 +284,9 @@ impl Card {
         &self.extra_properties
     }
 
-    pub fn set_external_resource(&mut self, new_val: bool) {
+    pub fn set_external_resource(&mut self, new_val: bool) -> &mut Self {
         self.external_resource = new_val;
+        self
     }
 
     pub fn external_resource(&self) -> bool {
