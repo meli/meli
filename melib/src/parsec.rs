@@ -267,6 +267,76 @@ where
     }
 }
 
+pub fn pairmutation<'a, P1, P2, R1, R2>(parser1: P1, parser2: P2) -> impl Parser<'a, (R1, R2)>
+where
+    P1: Parser<'a, R1>,
+    P2: Parser<'a, R2>,
+{
+    move |input| {
+        if let ok @ Ok(_) = parser1.parse(input).and_then(|(next_input, result1)| {
+            parser2
+                .parse(next_input)
+                .map(|(last_input, result2)| (last_input, (result1, result2)))
+        }) {
+            return ok;
+        }
+        parser2.parse(input).and_then(|(next_input, result1)| {
+            parser1
+                .parse(next_input)
+                .map(|(last_input, result2)| (last_input, (result2, result1)))
+        })
+    }
+}
+
+#[macro_export]
+macro_rules! permutation {
+    ($input:expr, $($field:tt, $t:ty, $parser:expr),*) => {{
+        'perm: {
+            struct PermStruct {
+                $($field: Option<$t>),*
+            }
+            let mut results = PermStruct {
+                $($field: None),*
+            };
+            let mut input = $input;
+            let mut left = 0;
+            $(_ = &$parser; left += 1;)*
+            let mut count = 1;
+            let mut finished = 0;
+            loop {
+                let mut any_success = false;
+                $(if results.$field.is_none() {
+                    if let Ok((rest, res)) = $parser.parse(input) {
+                        if !matches!(res, None) || count > left {
+                            results.$field = Some(res);
+                            finished += 1;
+                            count = 1;
+                            input = rest;
+                        }
+                        any_success = true;
+                    }
+                })*
+                count += 1;
+
+                if !any_success {
+                    break 'perm Err(input);
+                }
+                if finished == left || count >= 2*left {
+                    break;
+                }
+
+            }
+            if finished != left {
+                break 'perm Err(input);
+            }
+            let PermStruct {
+                $($field),*
+            } = results;
+            Ok((input, ($($field.unwrap()),*)))
+        }
+    }}
+}
+
 pub fn prefix<'a, PN, P, R, RN>(pre: PN, parser: P) -> impl Parser<'a, R>
 where
     PN: Parser<'a, RN>,
@@ -293,9 +363,14 @@ where
     }
 }
 
-pub fn delimited<'a, PN, RN, P, R>(lparser: PN, mid: P, rparser: PN) -> impl Parser<'a, R>
+pub fn delimited<'a, PNL, PNR, LN, RN, P, R>(
+    lparser: PNL,
+    mid: P,
+    rparser: PNR,
+) -> impl Parser<'a, R>
 where
-    PN: Parser<'a, RN>,
+    PNL: Parser<'a, LN>,
+    PNR: Parser<'a, RN>,
     P: Parser<'a, R>,
 {
     move |input| {
