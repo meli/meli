@@ -358,11 +358,6 @@ pub mod parser {
         quoted_string()
     }
 
-    #[inline(always)]
-    pub fn literal_map<'a, T: Clone>(literal: &'static str, value: T) -> impl Parser<'a, T> {
-        move |input| map(parse_token(literal), |_| value.clone()).parse(input)
-    }
-
     // number             = 1*DIGIT [ QUANTIFIER ]
     // QUANTIFIER         = "K" / "M" / "G"
     pub fn number<'a>() -> impl Parser<'a, u64> {
@@ -388,8 +383,8 @@ pub mod parser {
         move |input| {
             ws(pair(
                 either(
-                    literal_map(":over", IntegerOperator::Over),
-                    literal_map(":under", IntegerOperator::Under),
+                    map(parse_token(":over"), |_| IntegerOperator::Over),
+                    map(parse_token(":under"), |_| IntegerOperator::Under),
                 ),
                 ws(number()),
             ))
@@ -521,8 +516,8 @@ pub mod parser {
         move |input| {
             either(
                 either(
-                    literal_map("true", ConditionRule::Literal(true)),
-                    literal_map("false", ConditionRule::Literal(false)),
+                    map(parse_token("true"), |_| ConditionRule::Literal(true)),
+                    map(parse_token("false"), |_| ConditionRule::Literal(false)),
                 ),
                 either(
                     either(
