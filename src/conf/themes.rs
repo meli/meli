@@ -1212,23 +1212,14 @@ impl Themes {
             Themes::validate_keys(name, t, &hash_set)?;
         }
         if let Err(err) = is_cyclic(&self.light) {
-            return Err(Error::new(format!(
-                "light theme contains a cycle: {}",
-                err
-            )));
+            return Err(Error::new(format!("light theme contains a cycle: {}", err)));
         }
         if let Err(err) = is_cyclic(&self.dark) {
-            return Err(Error::new(format!(
-                "dark theme contains a cycle: {}",
-                err
-            )));
+            return Err(Error::new(format!("dark theme contains a cycle: {}", err)));
         }
         for (k, t) in self.other_themes.iter() {
             if let Err(err) = is_cyclic(t) {
-                return Err(Error::new(format!(
-                    "{} theme contains a cycle: {}",
-                    k, err
-                )));
+                return Err(Error::new(format!("{} theme contains a cycle: {}", k, err)));
             }
         }
         Ok(())

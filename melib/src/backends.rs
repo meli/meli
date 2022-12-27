@@ -40,7 +40,7 @@ pub use self::imap::ImapType;
 #[cfg(feature = "imap_backend")]
 pub use self::nntp::NntpType;
 use crate::conf::AccountSettings;
-use crate::error::{ErrorKind, Error, Result};
+use crate::error::{Error, ErrorKind, Result};
 
 #[cfg(feature = "maildir_backend")]
 use self::maildir::MaildirType;

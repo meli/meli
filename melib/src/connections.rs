@@ -270,10 +270,9 @@ pub fn lookup_ipv4(host: &str, port: u16) -> crate::Result<std::net::SocketAddr>
     }
 
     Err(
-        crate::error::Error::new(format!("Could not lookup address {}:{}", host, port))
-            .set_kind(crate::error::ErrorKind::Network(
-                crate::error::NetworkErrorKind::HostLookupFailed,
-            )),
+        crate::error::Error::new(format!("Could not lookup address {}:{}", host, port)).set_kind(
+            crate::error::ErrorKind::Network(crate::error::NetworkErrorKind::HostLookupFailed),
+        ),
     )
 }
 
@@ -284,8 +283,10 @@ pub async fn timeout<O>(dur: Option<Duration>, f: impl Future<Output = O>) -> cr
     if let Some(dur) = dur {
         match future::select(f, smol::Timer::after(dur)).await {
             Either::Left((out, _)) => Ok(out),
-            Either::Right(_) => Err(crate::error::Error::new("Timed out.")
-                .set_kind(crate::error::ErrorKind::Timeout)),
+            Either::Right(_) => {
+                Err(crate::error::Error::new("Timed out.")
+                    .set_kind(crate::error::ErrorKind::Timeout))
+            }
         }
     } else {
         Ok(f.await)

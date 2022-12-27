@@ -401,11 +401,7 @@ This is required so that you don't accidentally start meli and find out later th
                     let mut file = OpenOptions::new().append(true).open(&path)?;
                     file.write_all("[composing]\nsend_mail = 'false'\n".as_bytes())
                         .map_err(|err| {
-                            Error::new(format!(
-                                "Could not append to {}: {}",
-                                path.display(),
-                                err
-                            ))
+                            Error::new(format!("Could not append to {}: {}", path.display(), err))
                         })?;
                     return FileSettings::validate(path, interactive, clear_extras);
                 }

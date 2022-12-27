@@ -126,7 +126,7 @@ use crate::collection::Collection;
 use crate::conf::AccountSettings;
 use crate::email::parser::BytesExt;
 use crate::email::*;
-use crate::error::{ErrorKind, Error, Result};
+use crate::error::{Error, ErrorKind, Result};
 use crate::get_path_hash;
 use crate::shellexpand::ShellExpandTrait;
 use nom::bytes::complete::tag;
@@ -1244,10 +1244,8 @@ impl MailBackend for MboxType {
         _query: crate::search::Query,
         _mailbox_hash: Option<MailboxHash>,
     ) -> ResultFuture<SmallVec<[EnvelopeHash; 512]>> {
-        Err(
-            Error::new("Search is unimplemented for the mbox backend.")
-                .set_kind(ErrorKind::NotImplemented),
-        )
+        Err(Error::new("Search is unimplemented for the mbox backend.")
+            .set_kind(ErrorKind::NotImplemented))
     }
 
     fn create_mailbox(

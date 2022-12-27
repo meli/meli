@@ -82,11 +82,10 @@ impl BackendOp for ImapOp {
                 );
                 let mut results = protocol_parser::fetch_responses(&response)?.1;
                 if results.len() != 1 {
-                    return Err(Error::new(format!(
-                        "Invalid/unexpected response: {:?}",
-                        response
-                    ))
-                    .set_summary(format!("message with UID {} was not found?", uid)));
+                    return Err(
+                        Error::new(format!("Invalid/unexpected response: {:?}", response))
+                            .set_summary(format!("message with UID {} was not found?", uid)),
+                    );
                 }
                 let FetchResponse {
                     uid: _uid,
@@ -147,11 +146,10 @@ impl BackendOp for ImapOp {
                     debug!(String::from_utf8_lossy(&response));
                     /* TODO: Trigger cache invalidation here. */
                     debug!("message with UID {} was not found", uid);
-                    return Err(Error::new(format!(
-                        "Invalid/unexpected response: {:?}",
-                        response
-                    ))
-                    .set_summary(format!("message with UID {} was not found?", uid)));
+                    return Err(
+                        Error::new(format!("Invalid/unexpected response: {:?}", response))
+                            .set_summary(format!("message with UID {} was not found?", uid)),
+                    );
                 }
                 let (_uid, (_flags, _)) = v[0];
                 assert_eq!(_uid, uid);

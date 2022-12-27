@@ -240,10 +240,7 @@ impl ImapStream {
             let addr = if let Ok(a) = lookup_ipv4(path, server_conf.server_port) {
                 a
             } else {
-                return Err(Error::new(format!(
-                    "Could not lookup address {}",
-                    &path
-                )));
+                return Err(Error::new(format!("Could not lookup address {}", &path)));
             };
             AsyncWrapper::new(Connection::Tcp(
                 if let Some(timeout) = server_conf.timeout {

@@ -78,10 +78,7 @@ fn parse_manpage(src: &str) -> Result<ManPages> {
         "meli.7" | "guide" => Ok(ManPages::Guide),
         "meli.conf" | "meli.conf.5" | "conf" | "config" | "configuration" => Ok(ManPages::Conf),
         "meli-themes" | "meli-themes.5" | "themes" | "theming" | "theme" => Ok(ManPages::Themes),
-        _ => Err(Error::new(format!(
-            "Invalid documentation page: {}",
-            src
-        ))),
+        _ => Err(Error::new(format!("Invalid documentation page: {}", src))),
     }
 }
 
@@ -284,10 +281,7 @@ fn run_app(opt: Opt) -> Result<()> {
                     path.display()
                 )));
             } else if !path.is_file() {
-                return Err(Error::new(format!(
-                    "`{}` is a directory",
-                    path.display()
-                )));
+                return Err(Error::new(format!("`{}` is a directory", path.display())));
             }
         }
         None => {}

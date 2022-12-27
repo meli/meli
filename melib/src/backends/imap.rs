@@ -1245,9 +1245,7 @@ impl MailBackend for ImapType {
                     ));
                 }
             }
-            Err(Error::new(
-                String::from_utf8_lossy(&response).to_string(),
-            ))
+            Err(Error::new(String::from_utf8_lossy(&response).to_string()))
         }))
     }
 }

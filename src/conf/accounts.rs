@@ -28,7 +28,7 @@ use crate::jobs::{JobExecutor, JobId, JoinHandle};
 use indexmap::IndexMap;
 use melib::backends::*;
 use melib::email::*;
-use melib::error::{ErrorKind, Error, Result};
+use melib::error::{Error, ErrorKind, Result};
 use melib::text_processing::GlobMatch;
 use melib::thread::{SortField, SortOrder, Threads};
 use melib::AddressBook;
@@ -1394,9 +1394,7 @@ impl Account {
                         )
                             };
                             melib::log(&error_message, melib::LoggingLevel::ERROR);
-                            return Err(
-                                Error::new(error_message).set_summary("Message not sent.")
-                            );
+                            return Err(Error::new(error_message).set_summary("Message not sent."));
                         }
                         Ok(())
                     }

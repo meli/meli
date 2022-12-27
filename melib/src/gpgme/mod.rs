@@ -23,7 +23,7 @@ use crate::email::{
     pgp::{DecryptionMetadata, Recipient},
     Address,
 };
-use crate::error::{ErrorKind, IntoError, Error, Result, ResultIntoError};
+use crate::error::{Error, ErrorKind, IntoError, Result, ResultIntoError};
 use futures::FutureExt;
 use serde::{
     de::{self, Deserialize},
@@ -259,9 +259,8 @@ impl Context {
         }
         let ret = Context {
             inner: Arc::new(ContextInner {
-                inner: core::ptr::NonNull::new(ptr).ok_or_else(|| {
-                    Error::new("Could not use libgpgme").set_kind(ErrorKind::Bug)
-                })?,
+                inner: core::ptr::NonNull::new(ptr)
+                    .ok_or_else(|| Error::new("Could not use libgpgme").set_kind(ErrorKind::Bug))?,
                 lib,
             }),
             io_state,
@@ -714,9 +713,8 @@ impl Context {
         let mut sig = Data {
             lib: self.inner.lib.clone(),
             kind: DataKind::Memory,
-            inner: core::ptr::NonNull::new(sig).ok_or_else(|| {
-                Error::new("internal libgpgme error").set_kind(ErrorKind::Bug)
-            })?,
+            inner: core::ptr::NonNull::new(sig)
+                .ok_or_else(|| Error::new("internal libgpgme error").set_kind(ErrorKind::Bug))?,
         };
 
         let io_state = self.io_state.clone();
@@ -818,9 +816,8 @@ impl Context {
         let mut plain = Data {
             lib: self.inner.lib.clone(),
             kind: DataKind::Memory,
-            inner: core::ptr::NonNull::new(plain).ok_or_else(|| {
-                Error::new("internal libgpgme error").set_kind(ErrorKind::Bug)
-            })?,
+            inner: core::ptr::NonNull::new(plain)
+                .ok_or_else(|| Error::new("internal libgpgme error").set_kind(ErrorKind::Bug))?,
         };
 
         let ctx = self.inner.clone();
@@ -1030,9 +1027,8 @@ impl Context {
         let mut cipher = Data {
             lib: self.inner.lib.clone(),
             kind: DataKind::Memory,
-            inner: core::ptr::NonNull::new(cipher).ok_or_else(|| {
-                Error::new("internal libgpgme error").set_kind(ErrorKind::Bug)
-            })?,
+            inner: core::ptr::NonNull::new(cipher)
+                .ok_or_else(|| Error::new("internal libgpgme error").set_kind(ErrorKind::Bug))?,
         };
 
         let ctx = self.inner.clone();

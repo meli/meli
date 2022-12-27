@@ -28,7 +28,7 @@ use super::{MaildirMailbox, MaildirOp, MaildirPathTrait};
 use crate::backends::{RefreshEventKind::*, *};
 use crate::conf::AccountSettings;
 use crate::email::{Envelope, EnvelopeHash, Flag};
-use crate::error::{ErrorKind, Error, Result};
+use crate::error::{Error, ErrorKind, Result};
 use crate::shellexpand::ShellExpandTrait;
 use crate::Collection;
 use futures::prelude::Stream;

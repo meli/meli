@@ -148,10 +148,7 @@ impl Component for KeySelection {
                                     }
                                 } else {
                                     *self = KeySelection::Error {
-                                        err: Error::new(format!(
-                                            "No keys found for {}.",
-                                            pattern
-                                        )),
+                                        err: Error::new(format!("No keys found for {}.", pattern)),
                                         id,
                                     }
                                 }
