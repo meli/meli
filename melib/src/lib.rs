@@ -110,6 +110,7 @@ pub use addressbook::*;
 pub mod backends;
 pub use backends::*;
 mod collection;
+#[cfg(feature = "sieve")]
 pub mod sieve;
 pub use collection::*;
 pub mod conf;

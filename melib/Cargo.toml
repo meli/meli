@@ -54,7 +54,7 @@ mailin-embedded = { version = "0.7", features = ["rtls"] }
 stderrlog = "^0.5"
 
 [features]
-default = ["unicode_algorithms", "imap_backend", "maildir_backend", "mbox_backend", "vcard", "sqlite3", "smtp", "deflate_compression"]
+default = ["unicode_algorithms", "imap_backend", "maildir_backend", "mbox_backend", "vcard", "sqlite3", "smtp", "deflate_compression", "sieve"]
 
 debug-tracing = []
 deflate_compression = ["flate2", ]
@@ -71,3 +71,4 @@ sqlite3 = ["rusqlite", ]
 tls = ["native-tls"]
 unicode_algorithms = ["unicode-segmentation"]
 vcard = []
+sieve = []
