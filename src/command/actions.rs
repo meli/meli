@@ -89,6 +89,7 @@ pub enum ComposeAction {
     SaveDraft,
     ToggleSign,
     ToggleEncrypt,
+    Mailto(melib::Mailto),
 }
 
 #[derive(Debug)]

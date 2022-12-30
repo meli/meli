@@ -1889,6 +1889,15 @@ impl Component for Listing {
                     .push_back(UIEvent::Action(Tab(New(Some(Box::new(mgr))))));
                 return true;
             }
+            UIEvent::Action(Action::Compose(ComposeAction::Mailto(ref mailto))) => {
+                let account_hash = context.accounts[self.cursor_pos.0].hash();
+                let mut composer = Composer::with_account(account_hash, context);
+                composer.set_draft(mailto.into());
+                context
+                    .replies
+                    .push_back(UIEvent::Action(Tab(New(Some(Box::new(composer))))));
+                return true;
+            }
             UIEvent::StartupCheck(_)
             | UIEvent::MailboxUpdate(_)
             | UIEvent::EnvelopeUpdate(_)

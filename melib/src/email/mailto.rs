@@ -23,7 +23,7 @@
 use super::*;
 use std::convert::TryFrom;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Mailto {
     pub address: Address,
     pub subject: Option<String>,
@@ -47,7 +47,13 @@ impl From<Mailto> for Draft {
         ret.set_header("Bcc", bcc.unwrap_or_default());
         ret.set_body(body.unwrap_or_default());
         ret.set_header("To", address.to_string());
-        debug!(ret)
+        ret
+    }
+}
+
+impl From<&Mailto> for Draft {
+    fn from(val: &Mailto) -> Self {
+        Draft::from(val.clone())
     }
 }
 

@@ -184,6 +184,12 @@ impl From<nom::Err<nom::error::Error<&[u8]>>> for Error {
     }
 }
 
+impl<'i> From<ParsingError<&'i [u8]>> for nom::error::Error<&'i [u8]> {
+    fn from(val: ParsingError<&'i [u8]>) -> nom::error::Error<&'i [u8]> {
+        nom::error::Error::new(val.input, ErrorKind::Satisfy)
+    }
+}
+
 macro_rules! is_ctl_or_space {
     ($var:ident) => {
         /* <any ASCII control character and DEL> */
@@ -952,7 +958,7 @@ pub mod generic {
             let value = String::from_utf8_lossy(&input[..value_end]).to_string();
             match tag {
                 b"subject" if subject.is_none() => {
-                    subject = Some(value);
+                    subject = Some(value.replace("%20", " "));
                 }
                 b"cc" if cc.is_none() => {
                     cc = Some(value);

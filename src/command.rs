@@ -500,6 +500,20 @@ define_commands!([
                       }
                   )
                 },
+                { tags: ["mailto "],
+                  desc: "mailto MAILTO_ADDRESS",
+                  tokens: &[One(Literal("mailto")), One(QuotedStringValue)],
+                  parser:(
+                      fn mailto(input: &[u8]) -> IResult<&[u8], Action> {
+                          let (input, _) = tag("mailto")(input.ltrim())?;
+                          let (input, _) = is_a(" ")(input)?;
+                          let (input, val) = map_res(not_line_ending, std::str::from_utf8)(input.trim())?;
+                          let (_empty, _) = eof(input)?;
+                          let (input, val) = melib::email::parser::generic::mailto(val.as_bytes()).map_err(|err| err.map(Into::into))?;
+                          Ok((input, Compose(Mailto(val))))
+                      }
+                  )
+                },
                 /* Pipe pager contents to binary */
                 { tags: ["pipe "],
                   desc: "pipe EXECUTABLE ARGS",
@@ -931,6 +945,7 @@ fn listing_action(input: &[u8]) -> IResult<&[u8], Action> {
 fn compose_action(input: &[u8]) -> IResult<&[u8], Action> {
     alt((
         add_attachment,
+        mailto,
         remove_attachment,
         toggle_sign,
         toggle_encrypt,
