@@ -3,6 +3,7 @@ name = "meli"
 version = "0.7.2"
 authors = ["Manos Pitsidianakis <el13635@mail.ntua.gr>"]
 edition = "2018"
+rust-version = "1.65.0"
 
 license = "GPL-3.0-or-later"
 readme = "README.md"
