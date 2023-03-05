@@ -154,7 +154,7 @@ pub struct EmailObject {
     pub size: u64,
     #[serde(default)]
     pub received_at: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_none_default")]
     pub message_id: Vec<String>,
     #[serde(default)]
     pub to: Option<SmallVec<[EmailAddress; 1]>>,
@@ -197,6 +197,20 @@ pub struct EmailObject {
     pub thread_id: Id<ThreadObject>,
     #[serde(flatten)]
     pub extra: HashMap<String, Value>,
+}
+
+/// Deserializer that uses `Default::default()` in place of a present but `null`
+/// value. Note that `serde(default)` doesn't apply if the key is present but
+/// has a value of `null`.
+fn deserialize_none_default<'de, D, T>(
+    deserializer: D,
+) -> std::result::Result<T, D::Error>
+where
+  D: Deserializer<'de>,
+  T: Deserialize<'de> + Default,
+{
+    let v = Option::<T>::deserialize(deserializer)?;
+    Ok(v.unwrap_or(T::default()))
 }
 
 impl EmailObject {
