@@ -159,30 +159,42 @@ pub struct Store {
 
 impl Store {
     pub fn add_envelope(&self, obj: EmailObject) -> Envelope {
+        let mut flags = Flag::default();
+        let mut labels: SmallVec<[TagHash; 8]> = SmallVec::new();
         let mut tag_lck = self.collection.tag_index.write().unwrap();
-        let tags = obj
-            .keywords()
-            .keys()
-            .map(|tag| {
-                let tag_hash = TagHash::from_bytes(tag.as_bytes());
-                if !tag_lck.contains_key(&tag_hash) {
-                    tag_lck.insert(tag_hash, tag.to_string());
+        for t in obj.keywords().keys() {
+            match t.as_str() {
+                "$draft" => {
+                    flags |= Flag::DRAFT;
                 }
-                tag_hash
-            })
-            .collect::<SmallVec<[TagHash; 1024]>>();
+                "$seen" => {
+                    flags |= Flag::SEEN;
+                }
+                "$flagged" => {
+                    flags |= Flag::FLAGGED;
+                }
+                "$answered" => {
+                    flags |= Flag::REPLIED;
+                }
+                "$junk" | "$notjunk" => { /* ignore */ }
+                _ => {
+                    let tag_hash = TagHash::from_bytes(t.as_bytes());
+                    if !tag_lck.contains_key(&tag_hash) {
+                        tag_lck.insert(tag_hash, t.to_string());
+                    }
+                    labels.push(tag_hash);
+                }
+            }
+        }
+
         let id = obj.id.clone();
         let mailbox_ids = obj.mailbox_ids.clone();
         let blob_id = obj.blob_id.clone();
         drop(tag_lck);
         let mut ret: Envelope = obj.into();
+        ret.set_flags(flags);
+        ret.tags_mut().append(&mut labels);
 
-        debug_assert_eq!(TagHash::from_bytes(b"$draft").0, 6613915297903591176);
-        debug_assert_eq!(TagHash::from_bytes(b"$seen").0, 1683863812294339685);
-        debug_assert_eq!(TagHash::from_bytes(b"$flagged").0, 2714010747478170100);
-        debug_assert_eq!(TagHash::from_bytes(b"$answered").0, 8940855303929342213);
-        debug_assert_eq!(TagHash::from_bytes(b"$junk").0, 2656839745430720464);
-        debug_assert_eq!(TagHash::from_bytes(b"$notjunk").0, 4091323799684325059);
         let mut id_store_lck = self.id_store.lock().unwrap();
         let mut reverse_id_store_lck = self.reverse_id_store.lock().unwrap();
         let mut blob_id_store_lck = self.blob_id_store.lock().unwrap();
@@ -200,24 +212,6 @@ impl Store {
         reverse_id_store_lck.insert(id.clone(), ret.hash());
         id_store_lck.insert(ret.hash(), id);
         blob_id_store_lck.insert(ret.hash(), blob_id);
-        for t in tags {
-            match t.0 {
-                6613915297903591176 => {
-                    ret.set_flags(ret.flags() | Flag::DRAFT);
-                }
-                1683863812294339685 => {
-                    ret.set_flags(ret.flags() | Flag::SEEN);
-                }
-                2714010747478170100 => {
-                    ret.set_flags(ret.flags() | Flag::FLAGGED);
-                }
-                8940855303929342213 => {
-                    ret.set_flags(ret.flags() | Flag::REPLIED);
-                }
-                2656839745430720464 | 4091323799684325059 => { /* ignore */ }
-                _ => ret.tags_mut().push(t),
-            }
-        }
         ret
     }
 
