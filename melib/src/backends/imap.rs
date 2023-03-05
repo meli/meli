@@ -1259,33 +1259,15 @@ impl ImapType {
         let server_hostname = get_conf_val!(s["server_hostname"])?;
         let server_username = get_conf_val!(s["server_username"])?;
         let use_oauth2: bool = get_conf_val!(s["use_oauth2"], false)?;
-        let server_password = if !s.extra.contains_key("server_password_command") {
-            if use_oauth2 {
-                return Err(Error::new(format!(
-                    "({}) `use_oauth2` use requires `server_password_command` set with a command that returns an OAUTH2 token. Consult documentation for guidance.",
-                    s.name,
-                )));
-            }
-            get_conf_val!(s["server_password"])?.to_string()
-        } else {
-            let invocation = get_conf_val!(s["server_password_command"])?;
-            let output = std::process::Command::new("sh")
-                .args(&["-c", invocation])
-                .stdin(std::process::Stdio::piped())
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::piped())
-                .output()?;
-            if !output.status.success() {
-                return Err(Error::new(format!(
-                    "({}) server_password_command `{}` returned {}: {}",
-                    s.name,
-                    get_conf_val!(s["server_password_command"])?,
-                    output.status,
-                    String::from_utf8_lossy(&output.stderr)
-                )));
-            }
-            std::str::from_utf8(&output.stdout)?.trim_end().to_string()
-        };
+
+        if use_oauth2 && !s.extra.contains_key("server_password_command") {
+            return Err(Error::new(format!(
+                "({}) `use_oauth2` use requires `server_password_command` set with a command that returns an OAUTH2 token. Consult documentation for guidance.",
+                s.name,
+            )));
+        }
+
+        let server_password = s.server_password()?;
         let server_port = get_conf_val!(s["server_port"], 143)?;
         let use_tls = get_conf_val!(s["use_tls"], true)?;
         let use_starttls = use_tls && get_conf_val!(s["use_starttls"], server_port != 993)?;

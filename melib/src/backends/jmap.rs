@@ -126,7 +126,7 @@ impl JmapServerConf {
         Ok(JmapServerConf {
             server_url: get_conf_val!(s["server_url"])?.to_string(),
             server_username: get_conf_val!(s["server_username"])?.to_string(),
-            server_password: get_conf_val!(s["server_password"])?.to_string(),
+            server_password: s.server_password()?,
             danger_accept_invalid_certs: get_conf_val!(s["danger_accept_invalid_certs"], false)?,
             timeout: get_conf_val!(s["timeout"], 16_u64).map(|t| {
                 if t == 0 {
@@ -924,7 +924,10 @@ impl JmapType {
         }
         get_conf_val!(s["server_url"])?;
         get_conf_val!(s["server_username"])?;
-        get_conf_val!(s["server_password"])?;
+
+        // either of these two needed
+        get_conf_val!(s["server_password"]).or(get_conf_val!(s["server_password_command"]))?;
+
         get_conf_val!(s["danger_accept_invalid_certs"], false)?;
         Ok(())
     }

@@ -21,6 +21,7 @@
 
 //! Basic mail account configuration to use with [`backends`](./backends/index.html)
 use crate::backends::SpecialUsageMailbox;
+use crate::error::{Error, Result};
 pub use crate::{SortField, SortOrder};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
@@ -78,6 +79,36 @@ impl AccountSettings {
     #[cfg(feature = "vcard")]
     pub fn vcard_folder(&self) -> Option<&str> {
         self.extra.get("vcard_folder").map(String::as_str)
+    }
+
+    /// Get the server password, either directly from the `server_password`
+    /// settings value, or by running the `server_password_command` and reading
+    /// the output.
+    pub fn server_password(&self) -> Result<String> {
+        if let Some(cmd) = self.extra.get("server_password_command") {
+            let output = std::process::Command::new("sh")
+                .args(&["-c", cmd])
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .output()?;
+
+            if output.status.success() {
+                Ok(std::str::from_utf8(&output.stdout)?.trim_end().to_string())
+            } else {
+                Err(Error::new(format!(
+                    "({}) server_password_command `{}` returned {}: {}",
+                    self.name,
+                    cmd,
+                    output.status,
+                    String::from_utf8_lossy(&output.stderr)
+                )))
+            }
+        } else if let Some(pass) = self.extra.get("server_password") {
+            Ok(pass.to_owned())
+        } else {
+            Err(Error::new(format!("Configuration error: connection requires either server_password or server_password_command")))
+        }
     }
 }
 
