@@ -1,10 +1,12 @@
 Description: Fix PREFIX env var in Makefile for use in Debian
 Author: Manos Pitsidianakis <epilys@nessuent.xyz>
-Last-Update: 2020-01-30
---- a/Makefile
-+++ b/Makefile
-@@ -18,7 +18,7 @@
- # along with meli. If not, see <http://www.gnu.org/licenses/>.
+Last-Update: 2023-03-06
+Index: meli/Makefile
+===================================================================
+--- meli.orig/Makefile
++++ meli/Makefile
+@@ -20,7 +20,7 @@
+ .SUFFIXES:
  
  # Options
 -PREFIX ?= /usr/local
