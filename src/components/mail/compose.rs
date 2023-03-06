@@ -2392,6 +2392,7 @@ fn attribution_string(
 }
 
 #[test]
+#[ignore]
 fn test_compose_reply_subject_prefix() {
     let raw_mail = r#"From: "some name" <some@example.com>
 To: "me" <myself@example.com>

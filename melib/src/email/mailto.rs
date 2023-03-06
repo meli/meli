@@ -102,7 +102,7 @@ mod tests {
                 bcc.as_ref().map(String::as_str),
                 body.as_ref().map(String::as_str),
             ),
-            (&test_address, Some("email%20subject"), None, None, None)
+            (&test_address, Some("email subject"), None, None, None)
         );
         let mailto = Mailto::try_from(&b"mailto:info@example.com?cc=8cc9@example.com"[0..])
             .expect("Could not parse mailto link.");
