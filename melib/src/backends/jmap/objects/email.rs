@@ -202,12 +202,10 @@ pub struct EmailObject {
 /// Deserializer that uses `Default::default()` in place of a present but `null`
 /// value. Note that `serde(default)` doesn't apply if the key is present but
 /// has a value of `null`.
-fn deserialize_none_default<'de, D, T>(
-    deserializer: D,
-) -> std::result::Result<T, D::Error>
+fn deserialize_none_default<'de, D, T>(deserializer: D) -> std::result::Result<T, D::Error>
 where
-  D: Deserializer<'de>,
-  T: Deserialize<'de> + Default,
+    D: Deserializer<'de>,
+    T: Deserialize<'de> + Default,
 {
     let v = Option::<T>::deserialize(deserializer)?;
     Ok(v.unwrap_or(T::default()))
