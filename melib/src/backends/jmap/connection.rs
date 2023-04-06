@@ -36,13 +36,26 @@ impl JmapConnection {
     pub fn new(server_conf: &JmapServerConf, store: Arc<Store>) -> Result<Self> {
         let client = HttpClient::builder()
             .timeout(std::time::Duration::from_secs(10))
-            .redirect_policy(RedirectPolicy::Limit(10))
-            .authentication(isahc::auth::Authentication::basic())
-            .credentials(isahc::auth::Credentials::new(
-                &server_conf.server_username,
-                &server_conf.server_password,
-            ))
-            .build()?;
+            .connection_cache_size(8)
+            .connection_cache_ttl(std::time::Duration::from_secs(30 * 60))
+            .default_header("Content-Type", "application/json")
+            .redirect_policy(RedirectPolicy::Limit(10));
+        let client = if server_conf.use_token {
+            client
+                .authentication(isahc::auth::Authentication::none())
+                .default_header(
+                    "Authorization",
+                    format!("Bearer {}", &server_conf.server_password),
+                )
+        } else {
+            client
+                .authentication(isahc::auth::Authentication::basic())
+                .credentials(isahc::auth::Credentials::new(
+                    &server_conf.server_username,
+                    &server_conf.server_password,
+                ))
+        };
+        let client = client.build()?;
         let server_conf = server_conf.clone();
         Ok(JmapConnection {
             session: Arc::new(Mutex::new(Default::default())),

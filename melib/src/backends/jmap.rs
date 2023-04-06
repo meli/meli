@@ -89,6 +89,7 @@ pub struct JmapServerConf {
     pub server_url: String,
     pub server_username: String,
     pub server_password: String,
+    pub use_token: bool,
     pub danger_accept_invalid_certs: bool,
     pub timeout: Option<Duration>,
 }
@@ -123,10 +124,22 @@ macro_rules! get_conf_val {
 
 impl JmapServerConf {
     pub fn new(s: &AccountSettings) -> Result<Self> {
+        let use_token: bool = get_conf_val!(s["use_token"], false)?;
+
+        if use_token
+            && !(s.extra.contains_key("server_password_command")
+                ^ s.extra.contains_key("server_password"))
+        {
+            return Err(Error::new(format!(
+                "({}) `use_token` use requires either the `server_password_command` set with a command that returns an Bearer token of your account, or `server_password` with the API Bearer token as a string. Consult documentation for guidance.",
+                s.name,
+            )));
+        }
         Ok(JmapServerConf {
             server_url: get_conf_val!(s["server_url"])?.to_string(),
             server_username: get_conf_val!(s["server_username"])?.to_string(),
             server_password: s.server_password()?,
+            use_token,
             danger_accept_invalid_certs: get_conf_val!(s["danger_accept_invalid_certs"], false)?,
             timeout: get_conf_val!(s["timeout"], 16_u64).map(|t| {
                 if t == 0 {
@@ -919,6 +932,7 @@ impl JmapType {
         get_conf_val!(s["server_url"])?;
         get_conf_val!(s["server_username"])?;
 
+        get_conf_val!(s["use_token"], false)?;
         // either of these two needed
         get_conf_val!(s["server_password"]).or(get_conf_val!(s["server_password_command"]))?;
 
