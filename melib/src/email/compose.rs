@@ -33,7 +33,7 @@ use data_encoding::BASE64_MIME;
 use super::*;
 use crate::{
     email::{
-        attachment_types::{Charset, ContentTransferEncoding, ContentType, MultipartType},
+        attachment_types::{Charset, ContentTransferEncoding, ContentType, MultipartType, Text},
         attachments::AttachmentBuilder,
     },
     error::{ErrorKind, ResultIntoError},
@@ -128,14 +128,14 @@ impl FromStr for Draft {
 }
 
 impl Draft {
-    pub fn edit(envelope: &Envelope, bytes: &[u8]) -> Result<Self> {
+    pub fn edit(envelope: &Envelope, bytes: &[u8], kind: Text) -> Result<Self> {
         let mut ret = Self::default();
         for (k, v) in envelope.headers(bytes).unwrap_or_else(|_| Vec::new()) {
             ret.headers.insert(k, v.into());
         }
 
         let body = envelope.body_bytes(bytes);
-        ret.body = body.text();
+        ret.body = body.text(kind);
         ret.attachments = body.attachments().into_iter().map(Into::into).collect();
 
         Ok(ret)
@@ -437,10 +437,9 @@ fn build_multipart(
 }
 
 fn print_attachment(ret: &mut String, a: AttachmentBuilder) {
-    use ContentType::*;
     match a.content_type {
         ContentType::Text {
-            kind: crate::email::attachment_types::Text::Plain,
+            kind: Text::Plain,
             charset: Charset::UTF8,
             parameters: ref v,
         } if v.is_empty() => {
@@ -450,7 +449,7 @@ fn print_attachment(ret: &mut String, a: AttachmentBuilder) {
                 ret.push_str("\r\n");
             }
         }
-        Text { .. } => {
+        ContentType::Text { .. } => {
             let mut pop_crlf = false;
             let raw = a.build().into_raw();
             for line in raw.lines() {
@@ -463,7 +462,7 @@ fn print_attachment(ret: &mut String, a: AttachmentBuilder) {
                 ret.pop();
             }
         }
-        Multipart {
+        ContentType::Multipart {
             boundary: _,
             kind,
             parts,
@@ -479,7 +478,7 @@ fn print_attachment(ret: &mut String, a: AttachmentBuilder) {
                     .collect::<Vec<AttachmentBuilder>>(),
             );
         }
-        MessageRfc822 => {
+        ContentType::MessageRfc822 => {
             ret.push_str(&format!(
                 "Content-Type: {}; charset=\"utf-8\"\r\n",
                 a.content_type
@@ -498,7 +497,7 @@ fn print_attachment(ret: &mut String, a: AttachmentBuilder) {
                 ret.pop();
             }
         }
-        PGPSignature => {
+        ContentType::PGPSignature => {
             ret.push_str(&format!(
                 "Content-Type: {}; charset=\"utf-8\"; name=\"signature.asc\"\r\n",
                 a.content_type

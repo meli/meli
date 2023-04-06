@@ -27,7 +27,7 @@ use std::{
 
 use melib::{
     backends::MailBackend,
-    email::{Envelope, EnvelopeHash},
+    email::{attachment_types::Text, Envelope, EnvelopeHash},
     log,
     search::{
         escape_double_quote,
@@ -164,7 +164,7 @@ impl AccountCache {
             .as_bytes()?;
 
         let body = match op.await.map(|bytes| envelope.body_bytes(&bytes)) {
-            Ok(body) => body.text(),
+            Ok(body) => body.text(Text::Plain),
             Err(err) => {
                 log::error!(
                     "Failed to open envelope {}: {err}",
@@ -355,7 +355,7 @@ impl AccountCache {
                     let envelopes_lck = acc_mutex.read().unwrap();
                     for (env_hash, bytes) in chunk_bytes {
                         if let Some(e) = envelopes_lck.get(&env_hash) {
-                            let body = e.body_bytes(&bytes).text().replace('\0', "");
+                            let body = e.body_bytes(&bytes).text(Text::Plain).replace('\0', "");
                             tx.execute(
                                 "INSERT OR REPLACE INTO envelopes (account_id, hash, date, _from, \
                                  _to, cc, bcc, subject, message_id, in_reply_to, _references, \

@@ -299,7 +299,7 @@ impl ViewFilter {
             filter_invocation: String::new(),
             content_type: att.content_type.clone(),
             notice,
-            body_text: att.text(),
+            body_text: att.text(Text::Plain),
             unfiltered: att.decode(Default::default()),
             event_handler: None,
             id: ComponentId::default(),

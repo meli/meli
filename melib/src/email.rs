@@ -28,7 +28,7 @@
 //! into [`Address`] types.
 //!
 //! ```
-//! use melib::{Attachment, Envelope};
+//! use melib::{email::attachment_types::Text, Attachment, Envelope};
 //!
 //! let raw_mail = r#"From: "some name" <some@example.com>
 //! To: "me" <myself@example.com>
@@ -83,7 +83,7 @@
 //! let body = envelope.body_bytes(raw_mail.as_bytes());
 //! assert_eq!(body.content_type().to_string().as_str(), "multipart/mixed");
 //!
-//! let body_text = body.text();
+//! let body_text = body.text(Text::Plain);
 //! assert_eq!(body_text.as_str(), "hello world.");
 //!
 //! let subattachments: Vec<Attachment> = body.attachments();

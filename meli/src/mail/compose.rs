@@ -264,7 +264,7 @@ impl Composer {
         });
         let envelope: EnvelopeRef = context.accounts[&account_hash].collection.get_env(env_hash);
 
-        ret.draft = Draft::edit(&envelope, bytes)?;
+        ret.draft = Draft::edit(&envelope, bytes, Text::Plain)?;
 
         ret.account_hash = account_hash;
         Ok(ret)

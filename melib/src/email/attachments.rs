@@ -407,7 +407,7 @@ pub struct Attachment {
 impl std::fmt::Debug for Attachment {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let mut text = Vec::with_capacity(4096);
-        self.get_text_recursive(&mut text);
+        self.get_text_recursive(&Text::Plain, &mut text);
         f.debug_struct("Attachment")
             .field("Content-Type", &self.content_type)
             .field("Content-Transfer-Encoding", &self.content_transfer_encoding)
@@ -601,7 +601,7 @@ impl Attachment {
         false
     }
 
-    fn get_text_recursive(&self, text: &mut Vec<u8>) {
+    fn get_text_recursive(&self, kind: &Text, text: &mut Vec<u8>) {
         match self.content_type {
             ContentType::Text { .. } | ContentType::PGPSignature | ContentType::CMSSignature => {
                 text.extend(self.decode(Default::default()));
@@ -617,17 +617,14 @@ impl Attachment {
                     .find_map(|(k, v)| if k == b"type" { Some(v) } else { None })
                     .and_then(|t| parts.iter().find(|a| a.content_type == t.as_slice()))
                 {
-                    main_attachment.get_text_recursive(text);
+                    main_attachment.get_text_recursive(kind, text);
                 } else {
                     for a in parts {
-                        if a.content_disposition.kind.is_inline() {
-                            if let ContentType::Text {
-                                kind: Text::Plain, ..
-                            } = a.content_type
-                            {
-                                a.get_text_recursive(text);
-                                break;
-                            }
+                        if a.content_disposition.kind.is_inline()
+                            && matches!(&a.content_type, ContentType::Text { kind: a_kind, .. } if a_kind == kind)
+                        {
+                            a.get_text_recursive(kind, text);
+                            break;
                         }
                     }
                 }
@@ -638,14 +635,11 @@ impl Attachment {
                 ..
             } => {
                 for a in parts {
-                    if a.content_disposition.kind.is_inline() {
-                        if let ContentType::Text {
-                            kind: Text::Plain, ..
-                        } = a.content_type
-                        {
-                            a.get_text_recursive(text);
-                            break;
-                        }
+                    if a.content_disposition.kind.is_inline()
+                        && matches!(&a.content_type, ContentType::Text { kind: a_kind, .. } if a_kind == kind)
+                    {
+                        a.get_text_recursive(kind, text);
+                        break;
                     }
                 }
             }
@@ -654,7 +648,7 @@ impl Attachment {
             } => {
                 for a in parts {
                     if a.content_disposition.kind.is_inline() {
-                        a.get_text_recursive(text);
+                        a.get_text_recursive(kind, text);
                     }
                 }
             }
@@ -662,9 +656,9 @@ impl Attachment {
         }
     }
 
-    pub fn text(&self) -> String {
+    pub fn text(&self, kind: Text) -> String {
         let mut text = Vec::with_capacity(self.body.length);
-        self.get_text_recursive(&mut text);
+        self.get_text_recursive(&kind, &mut text);
         String::from_utf8_lossy(text.as_slice()).into()
     }
 
