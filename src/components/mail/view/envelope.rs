@@ -143,7 +143,7 @@ impl EnvelopeView {
             ViewMode::Raw => String::from_utf8_lossy(body.body()).into_owned(),
             ViewMode::Url => {
                 let mut t = body_text;
-                for (lidx, l) in finder.links(&body.text()).enumerate() {
+                for (lidx, l) in finder.links(&body.text(Text::Plain)).enumerate() {
                     let offset = if lidx < 10 {
                         lidx * 3
                     } else if lidx < 100 {
@@ -170,7 +170,7 @@ impl EnvelopeView {
             ViewMode::Attachment(aidx) => {
                 let attachments = body.attachments();
                 let mut ret = "Viewing attachment. Press `r` to return \n".to_string();
-                ret.push_str(&attachments[aidx].text());
+                ret.push_str(&attachments[aidx].text(Text::Plain));
                 ret
             }
         }
@@ -475,7 +475,7 @@ impl Component for EnvelopeView {
                     .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
                 let url = {
                     let finder = LinkFinder::new();
-                    let t = self.mail.body().text();
+                    let t = self.mail.body().text(Text::Plain);
                     let links: Vec<Link> = finder.links(&t).collect();
                     if let Some(u) = links.get(lidx) {
                         u.as_str().to_string()

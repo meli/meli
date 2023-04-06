@@ -1435,7 +1435,7 @@ impl Component for MailView {
                             self.subview = Some(subview);
                             self.mode = ViewMode::Subview;
                         } else {
-                            text.push_str(&attachment.text());
+                            text.push_str(&attachment.text(Text::Plain));
                             let colors = crate::conf::value(context, "mail.view.body");
                             self.pager =
                                 Pager::from_string(text, Some(context), Some(0), None, colors);

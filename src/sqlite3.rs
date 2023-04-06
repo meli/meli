@@ -28,7 +28,7 @@ use melib::search::{
 };
 use melib::{
     backends::{MailBackend, ResultFuture},
-    email::{Envelope, EnvelopeHash},
+    email::{attachment_types::Text, Envelope, EnvelopeHash},
     log,
     sqlite3::{self as melib_sqlite3, rusqlite::params, DatabaseDescription},
     thread::{SortField, SortOrder},
@@ -156,7 +156,7 @@ pub async fn insert(
         .as_bytes()?;
 
     let body = match op.await.map(|bytes| envelope.body_bytes(&bytes)) {
-        Ok(body) => body.text(),
+        Ok(body) => body.text(Text::Plain),
         Err(err) => {
             debug!(
                 "{}",
@@ -312,7 +312,7 @@ pub fn index(context: &mut crate::state::Context, account_index: usize) -> Resul
                     .chain_err_summary(|| format!("Failed to open envelope {}", env_hash))?;
                 let envelopes_lck = acc_mutex.read().unwrap();
                 if let Some(e) = envelopes_lck.get(env_hash) {
-                    let body = e.body_bytes(&bytes).text().replace('\0', "");
+                    let body = e.body_bytes(&bytes).text(Text::Plain).replace('\0', "");
                     conn.execute("INSERT OR REPLACE INTO envelopes (account_id, hash, date, _from, _to, cc, bcc, subject, message_id, in_reply_to, _references, flags, has_attachments, body_text, timestamp)
               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
               params![account_id, e.hash().to_be_bytes().to_vec(), e.date_as_str(), e.field_from_to_string(), e.field_to_to_string(), e.field_cc_to_string(), e.field_bcc_to_string(), e.subject().into_owned().trim_end_matches('\u{0}'), e.message_id_display().to_string(), e.in_reply_to_display().map(|f| f.to_string()).unwrap_or_default(), e.field_references_to_string(), i64::from(e.flags().bits()), if e.has_attachments() { 1 } else { 0 }, body, e.date().to_be_bytes().to_vec()],
