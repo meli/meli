@@ -244,7 +244,7 @@ impl Component for EmbedContainer {
                         match embed_guard.is_active() {
                             Ok(WaitStatus::Exited(_, exit_code)) => {
                                 drop(embed_guard);
-                                let embed = self.embed.take();
+                                _ = self.embed.take();
                                 if exit_code != 0 {
                                     context.replies.push_back(UIEvent::Notification(
                                         None,

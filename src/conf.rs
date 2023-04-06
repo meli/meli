@@ -362,6 +362,7 @@ impl FileSettings {
             }
             #[cfg(test)]
             return Ok(FileSettings::default());
+            #[cfg(not(test))]
             return Err(Error::new("No configuration file found."));
         }
 
