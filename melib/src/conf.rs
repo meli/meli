@@ -127,6 +127,8 @@ pub struct MailboxConf {
     pub usage: Option<SpecialUsageMailbox>,
     #[serde(default = "none")]
     pub sort_order: Option<usize>,
+    #[serde(default = "none")]
+    pub encoding: Option<String>,
     #[serde(flatten)]
     pub extra: HashMap<String, String>,
 }
@@ -140,6 +142,7 @@ impl Default for MailboxConf {
             ignore: ToggleFlag::Unset,
             usage: None,
             sort_order: None,
+            encoding: None,
             extra: HashMap::default(),
         }
     }
@@ -166,15 +169,6 @@ pub fn none<T>() -> Option<T> {
 macro_rules! named_unit_variant {
     ($variant:ident) => {
         pub mod $variant {
-            /*
-            pub fn serialize<S>(serializer: S) -> Result<S::Ok, S::Error>
-            where
-                S: serde::Serializer,
-            {
-                serializer.serialize_str(stringify!($variant))
-            }
-            */
-
             pub fn deserialize<'de, D>(deserializer: D) -> Result<(), D::Error>
             where
                 D: serde::Deserializer<'de>,

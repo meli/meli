@@ -505,6 +505,12 @@ Example:
   "INBOX/Drafts" = { sort_order = 1 }
   "INBOX/Lists" = { sort_order = 2 }
 .Ed
+.It Ic encoding Ar String
+.Pq Em optional
+Override the default utf-8 charset for the mailbox name.
+Useful only for mUTF-7 mailboxes.
+.\" default value
+.Pq Em "utf7", "utf-7", "utf8", "utf-8"
 .El
 .Sh COMPOSING
 Composing specific options

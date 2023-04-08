@@ -220,10 +220,6 @@ impl BackendMailbox for MaildirMailbox {
         self.path.to_str().unwrap_or_else(|| self.name())
     }
 
-    fn change_name(&mut self, s: &str) {
-        self.name = s.to_string();
-    }
-
     fn children(&self) -> &[MailboxHash] {
         &self.children
     }

@@ -253,8 +253,6 @@ impl BackendMailbox for NotmuchMailbox {
         self.path.as_str()
     }
 
-    fn change_name(&mut self, _s: &str) {}
-
     fn clone(&self) -> Mailbox {
         Box::new(std::clone::Clone::clone(self))
     }

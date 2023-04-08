@@ -19,6 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+pub mod utf7;
 use smallvec::SmallVec;
 
 #[cfg(feature = "imap_backend")]
@@ -555,10 +556,10 @@ impl SpecialUsageMailbox {
 
 pub trait BackendMailbox: Debug {
     fn hash(&self) -> MailboxHash;
+    /// Final component of `path`.
     fn name(&self) -> &str;
     /// Path of mailbox within the mailbox hierarchy, with `/` as separator.
     fn path(&self) -> &str;
-    fn change_name(&mut self, new_name: &str);
     fn clone(&self) -> Mailbox;
     fn children(&self) -> &[MailboxHash];
     fn parent(&self) -> Option<MailboxHash>;

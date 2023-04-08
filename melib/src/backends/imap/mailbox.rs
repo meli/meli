@@ -83,10 +83,6 @@ impl BackendMailbox for ImapMailbox {
         &self.path
     }
 
-    fn change_name(&mut self, s: &str) {
-        self.name = s.to_string();
-    }
-
     fn children(&self) -> &[MailboxHash] {
         &self.children
     }

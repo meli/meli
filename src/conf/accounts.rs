@@ -101,11 +101,45 @@ impl MailboxStatus {
 pub struct MailboxEntry {
     pub status: MailboxStatus,
     pub name: String,
+    pub path: String,
     pub ref_mailbox: Mailbox,
     pub conf: FileMailboxConf,
 }
 
 impl MailboxEntry {
+    pub fn new(
+        status: MailboxStatus,
+        name: String,
+        ref_mailbox: Mailbox,
+        conf: FileMailboxConf,
+    ) -> Self {
+        let mut ret = Self {
+            status,
+            name,
+            path: ref_mailbox.path().into(),
+            ref_mailbox,
+            conf,
+        };
+        match ret.conf.mailbox_conf.extra.get("encoding") {
+            None => {}
+            Some(v) if ["utf-8", "utf8"].iter().any(|e| v.eq_ignore_ascii_case(e)) => {}
+            Some(v) if ["utf-7", "utf7"].iter().any(|e| v.eq_ignore_ascii_case(e)) => {
+                ret.name = melib::backends::utf7::decode_utf7_imap(&ret.name);
+                ret.path = melib::backends::utf7::decode_utf7_imap(&ret.path);
+            }
+            Some(other) => {
+                melib::log(
+                    format!(
+                        "mailbox `{}`: unrecognized mailbox name charset: {}",
+                        &ret.name, other
+                    ),
+                    melib::WARN,
+                );
+            }
+        }
+        ret
+    }
+
     pub fn status(&self) -> String {
         match self.status {
             MailboxStatus::Available => format!(
@@ -564,12 +598,12 @@ impl Account {
                 }
                 mailbox_entries.insert(
                     f.hash(),
-                    MailboxEntry {
-                        ref_mailbox: f.clone(),
-                        name: f.path().to_string(),
-                        status: MailboxStatus::None,
-                        conf: conf.clone(),
-                    },
+                    MailboxEntry::new(
+                        MailboxStatus::None,
+                        f.path().to_string(),
+                        f.clone(),
+                        conf.clone(),
+                    ),
                 );
             } else {
                 let mut new = FileMailboxConf::default();
@@ -588,12 +622,7 @@ impl Account {
 
                 mailbox_entries.insert(
                     f.hash(),
-                    MailboxEntry {
-                        ref_mailbox: f.clone(),
-                        name: f.path().to_string(),
-                        status: MailboxStatus::None,
-                        conf: new,
-                    },
+                    MailboxEntry::new(MailboxStatus::None, f.path().to_string(), f.clone(), new),
                 );
             }
         }
@@ -1951,12 +1980,12 @@ impl Account {
 
                                 self.mailbox_entries.insert(
                                     mailbox_hash,
-                                    MailboxEntry {
-                                        name: mailboxes[&mailbox_hash].path().to_string(),
+                                    MailboxEntry::new(
                                         status,
-                                        conf: new,
-                                        ref_mailbox: mailboxes.remove(&mailbox_hash).unwrap(),
-                                    },
+                                        mailboxes[&mailbox_hash].path().to_string(),
+                                        mailboxes.remove(&mailbox_hash).unwrap(),
+                                        new,
+                                    ),
                                 );
                                 self.collection
                                     .threads
@@ -2368,5 +2397,80 @@ fn build_mailboxes_order(
         }
 
         rec(node, mailbox_entries, 0, false);
+    }
+}
+
+#[test]
+fn test_mailbox_utf7() {
+    #[derive(Debug)]
+    struct TestMailbox(String);
+
+    impl melib::BackendMailbox for TestMailbox {
+        fn hash(&self) -> MailboxHash {
+            unimplemented!()
+        }
+
+        fn name(&self) -> &str {
+            &self.0
+        }
+
+        fn path(&self) -> &str {
+            &self.0
+        }
+
+        fn children(&self) -> &[MailboxHash] {
+            unimplemented!()
+        }
+
+        fn clone(&self) -> Mailbox {
+            unimplemented!()
+        }
+
+        fn special_usage(&self) -> SpecialUsageMailbox {
+            unimplemented!()
+        }
+
+        fn parent(&self) -> Option<MailboxHash> {
+            unimplemented!()
+        }
+
+        fn permissions(&self) -> MailboxPermissions {
+            unimplemented!()
+        }
+
+        fn is_subscribed(&self) -> bool {
+            unimplemented!()
+        }
+
+        fn set_is_subscribed(&mut self, _: bool) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn set_special_usage(&mut self, _: SpecialUsageMailbox) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn count(&self) -> Result<(usize, usize)> {
+            unimplemented!()
+        }
+    }
+    for (n, d) in [
+        ("~peter/mail/&U,BTFw-/&ZeVnLIqe-", "~peter/mail/台北/日本語"),
+        ("&BB4EQgQ,BEAEMAQyBDsENQQ9BD0ESwQ1-", "Отправленные"),
+    ] {
+        let ref_mbox = TestMailbox(n.to_string());
+        let mut conf: melib::MailboxConf = Default::default();
+        conf.extra.insert("encoding".to_string(), "utf7".into());
+
+        let entry = MailboxEntry::new(
+            MailboxStatus::None,
+            n.to_string(),
+            Box::new(ref_mbox),
+            FileMailboxConf {
+                mailbox_conf: conf,
+                ..Default::default()
+            },
+        );
+        assert_eq!(&entry.path, d);
     }
 }

@@ -18,6 +18,7 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
+
 use crate::backends::{
     BackendMailbox, LazyCountSet, Mailbox, MailboxHash, MailboxPermissions, SpecialUsageMailbox,
 };
@@ -56,10 +57,6 @@ impl BackendMailbox for NntpMailbox {
 
     fn path(&self) -> &str {
         &self.nntp_path
-    }
-
-    fn change_name(&mut self, s: &str) {
-        self.nntp_path = s.to_string();
     }
 
     fn children(&self) -> &[MailboxHash] {

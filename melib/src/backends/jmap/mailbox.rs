@@ -58,8 +58,6 @@ impl BackendMailbox for JmapMailbox {
         &self.path
     }
 
-    fn change_name(&mut self, _s: &str) {}
-
     fn clone(&self) -> Mailbox {
         Box::new(std::clone::Clone::clone(self))
     }

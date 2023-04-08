@@ -214,10 +214,6 @@ impl BackendMailbox for MboxMailbox {
         self.path.to_str().unwrap()
     }
 
-    fn change_name(&mut self, s: &str) {
-        self.name = s.to_string();
-    }
-
     fn clone(&self) -> Mailbox {
         Box::new(MboxMailbox {
             hash: self.hash,

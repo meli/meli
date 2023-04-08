@@ -26,10 +26,6 @@ path = "src/lib.rs"
 name = "managesieve-client"
 path = "src/managesieve.rs"
 
-#[[bin]]
-#name = "async"
-#path = "src/async.rs"
-
 [dependencies]
 async-task = "^4.2.0"
 bincode = { version = "^1.3.0", default-features = false }
