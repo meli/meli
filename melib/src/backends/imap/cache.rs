@@ -684,20 +684,20 @@ mod default_m {
     pub struct DefaultCache;
 
     impl DefaultCache {
-        pub fn get(_uid_store: Arc<UIDStore>) -> Result<Box<dyn ImapCache>> {
+        pub fn get(_: Arc<UIDStore>) -> Result<Box<dyn ImapCache>> {
             Ok(Box::new(Self))
         }
     }
 
     impl ImapCacheReset for DefaultCache {
-        fn reset_db(uid_store: &UIDStore) -> Result<()> {
+        fn reset_db(_: &UIDStore) -> Result<()> {
             Err(Error::new("melib is not built with any imap cache").set_kind(ErrorKind::Bug))
         }
     }
 
     impl ImapCache for DefaultCache {
         fn reset(&mut self) -> Result<()> {
-            DefaultCache::reset_db(&self.uid_store)
+            Err(Error::new("melib is not built with any imap cache").set_kind(ErrorKind::Bug))
         }
 
         fn mailbox_state(&mut self, _mailbox_hash: MailboxHash) -> Result<Option<()>> {
