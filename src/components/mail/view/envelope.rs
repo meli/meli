@@ -51,6 +51,7 @@ pub struct EnvelopeView {
     mail: Mail,
 
     _account_hash: AccountHash,
+    force_charset: ForceCharset,
     cmd_buf: String,
     id: ComponentId,
 }
@@ -73,6 +74,7 @@ impl EnvelopeView {
             subview,
             dirty: true,
             mode: ViewMode::Normal,
+            force_charset: ForceCharset::None,
             mail,
             _account_hash,
             cmd_buf: String::with_capacity(4),
@@ -122,7 +124,11 @@ impl EnvelopeView {
                     }
                 }
             })),
-            ..Default::default()
+            force_charset: if let ForceCharset::Forced(val) = self.force_charset {
+                Some(val)
+            } else {
+                None
+            },
         }))
         .into_owned();
         match self.mode {
@@ -312,9 +318,42 @@ impl Component for EnvelopeView {
         } else if let Some(p) = self.pager.as_mut() {
             p.draw(grid, (set_y(upper_left, y + 1), bottom_right), context);
         }
+
+        if let ForceCharset::Dialog(ref mut s) = self.force_charset {
+            s.draw(grid, area, context);
+        }
     }
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+        match (&mut self.force_charset, &event) {
+            (ForceCharset::Dialog(selector), UIEvent::FinishedUIDialog(id, results))
+                if *id == selector.id() =>
+            {
+                if let Some(results) = results.downcast_ref::<Vec<Option<Charset>>>() {
+                    if results.len() != 1 {
+                        self.force_charset = ForceCharset::None;
+                        self.set_dirty(true);
+                        return true;
+                    }
+                    if let Some(charset) = results[0] {
+                        self.force_charset = ForceCharset::Forced(charset);
+                    } else {
+                        self.force_charset = ForceCharset::None;
+                    }
+                } else {
+                    self.force_charset = ForceCharset::None;
+                }
+                self.set_dirty(true);
+                return true;
+            }
+            (ForceCharset::Dialog(selector), _) => {
+                if selector.process_event(event, context) {
+                    return true;
+                }
+            }
+            _ => {}
+        }
+
         if let Some(ref mut sub) = self.subview {
             if sub.process_event(event, context) {
                 return true;
@@ -324,6 +363,7 @@ impl Component for EnvelopeView {
                 return true;
             }
         }
+
         match *event {
             UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Alt('')) if !self.cmd_buf.is_empty() => {
                 self.cmd_buf.clear();
@@ -521,15 +561,64 @@ impl Component for EnvelopeView {
                 self.dirty = true;
                 return true;
             }
+            UIEvent::Input(Key::Char('d')) => {
+                let entries = vec![
+                    (None, "default".to_string()),
+                    (Some(Charset::Ascii), Charset::Ascii.to_string()),
+                    (Some(Charset::UTF8), Charset::UTF8.to_string()),
+                    (Some(Charset::UTF16), Charset::UTF16.to_string()),
+                    (Some(Charset::ISO8859_1), Charset::ISO8859_1.to_string()),
+                    (Some(Charset::ISO8859_2), Charset::ISO8859_2.to_string()),
+                    (Some(Charset::ISO8859_3), Charset::ISO8859_3.to_string()),
+                    (Some(Charset::ISO8859_4), Charset::ISO8859_4.to_string()),
+                    (Some(Charset::ISO8859_5), Charset::ISO8859_5.to_string()),
+                    (Some(Charset::ISO8859_6), Charset::ISO8859_6.to_string()),
+                    (Some(Charset::ISO8859_7), Charset::ISO8859_7.to_string()),
+                    (Some(Charset::ISO8859_8), Charset::ISO8859_8.to_string()),
+                    (Some(Charset::ISO8859_10), Charset::ISO8859_10.to_string()),
+                    (Some(Charset::ISO8859_13), Charset::ISO8859_13.to_string()),
+                    (Some(Charset::ISO8859_14), Charset::ISO8859_14.to_string()),
+                    (Some(Charset::ISO8859_15), Charset::ISO8859_15.to_string()),
+                    (Some(Charset::ISO8859_16), Charset::ISO8859_16.to_string()),
+                    (Some(Charset::Windows1250), Charset::Windows1250.to_string()),
+                    (Some(Charset::Windows1251), Charset::Windows1251.to_string()),
+                    (Some(Charset::Windows1252), Charset::Windows1252.to_string()),
+                    (Some(Charset::Windows1253), Charset::Windows1253.to_string()),
+                    (Some(Charset::GBK), Charset::GBK.to_string()),
+                    (Some(Charset::GB2312), Charset::GB2312.to_string()),
+                    (Some(Charset::GB18030), Charset::GB18030.to_string()),
+                    (Some(Charset::BIG5), Charset::BIG5.to_string()),
+                    (Some(Charset::ISO2022JP), Charset::ISO2022JP.to_string()),
+                    (Some(Charset::EUCJP), Charset::EUCJP.to_string()),
+                    (Some(Charset::KOI8R), Charset::KOI8R.to_string()),
+                    (Some(Charset::KOI8U), Charset::KOI8U.to_string()),
+                ];
+                self.force_charset = ForceCharset::Dialog(Box::new(Selector::new(
+                    "select charset to force",
+                    entries,
+                    true,
+                    Some(Box::new(
+                        move |id: ComponentId, results: &[Option<Charset>]| {
+                            Some(UIEvent::FinishedUIDialog(id, Box::new(results.to_vec())))
+                        },
+                    )),
+                    context,
+                )));
+                self.dirty = true;
+                return true;
+            }
             _ => {}
         }
         false
     }
+
     fn is_dirty(&self) -> bool {
         self.dirty
             || self.pager.as_ref().map(|p| p.is_dirty()).unwrap_or(false)
             || self.subview.as_ref().map(|p| p.is_dirty()).unwrap_or(false)
+            || matches!(self.force_charset, ForceCharset::Dialog(ref s) if s.is_dirty())
     }
+
     fn set_dirty(&mut self, value: bool) {
         self.dirty = value;
     }

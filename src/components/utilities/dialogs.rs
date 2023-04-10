@@ -891,8 +891,8 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selec
             self.vertical_alignment,
             self.horizontal_alignment,
         );
-        clear_area(grid, dialog_area, self.theme_default);
         let inner_area = create_box(grid, dialog_area);
+        clear_area(grid, inner_area, self.theme_default);
         write_string_to_grid(
             &self.title,
             grid,

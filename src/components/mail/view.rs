@@ -45,6 +45,23 @@ pub use self::envelope::*;
 use linkify::LinkFinder;
 use xdg_utils::query_default_app;
 
+#[derive(Debug, Default)]
+enum ForceCharset {
+    #[default]
+    None,
+    Dialog(Box<UIDialog<Option<Charset>>>),
+    Forced(Charset),
+}
+
+impl Into<Option<Charset>> for &ForceCharset {
+    fn into(self) -> Option<Charset> {
+        match self {
+            ForceCharset::Forced(val) => Some(*val),
+            ForceCharset::None | ForceCharset::Dialog(_) => None,
+        }
+    }
+}
+
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 enum Source {
     Decoded,
@@ -160,6 +177,7 @@ pub struct MailView {
     theme_default: ThemeAttribute,
     active_jobs: HashSet<JobId>,
     state: MailViewState,
+    force_charset: ForceCharset,
 
     cmd_buf: String,
     id: ComponentId,
@@ -196,6 +214,74 @@ enum MailViewState {
     },
 }
 
+impl MailViewState {
+    fn load_bytes(self_: &mut MailView, bytes: Vec<u8>, context: &mut Context) {
+        let account = &mut context.accounts[&self_.coordinates.0];
+        if account
+            .collection
+            .get_env(self_.coordinates.2)
+            .other_headers()
+            .is_empty()
+        {
+            let _ = account
+                .collection
+                .get_env_mut(self_.coordinates.2)
+                .populate_headers(&bytes);
+        }
+        let env = Box::new(account.collection.get_env(self_.coordinates.2).clone());
+        let body = Box::new(AttachmentBuilder::new(&bytes).build());
+        let display = MailView::attachment_to(
+            &body,
+            context,
+            self_.coordinates,
+            &mut self_.active_jobs,
+            (&self_.force_charset).into(),
+        );
+        let (paths, attachment_tree_s) = self_.attachment_displays_to_tree(&display);
+        self_.attachment_tree = attachment_tree_s;
+        self_.attachment_paths = paths;
+        let body_text = self_.attachment_displays_to_text(&display, context, true);
+        self_.state = MailViewState::Loaded {
+            display,
+            env,
+            body,
+            bytes,
+            body_text,
+            links: vec![],
+        };
+    }
+
+    fn redecode(self_: &mut MailView, context: &mut Context) {
+        let (new_display, new_body_text) =
+            if let MailViewState::Loaded { ref body, .. } = self_.state {
+                let new_display = MailView::attachment_to(
+                    body,
+                    context,
+                    self_.coordinates,
+                    &mut self_.active_jobs,
+                    (&self_.force_charset).into(),
+                );
+                let (paths, attachment_tree_s) = self_.attachment_displays_to_tree(&new_display);
+                self_.attachment_tree = attachment_tree_s;
+                self_.attachment_paths = paths;
+                let body_text = self_.attachment_displays_to_text(&new_display, context, true);
+                (new_display, body_text)
+            } else {
+                return;
+            };
+
+        if let MailViewState::Loaded {
+            ref mut display,
+            ref mut body_text,
+            ..
+        } = self_.state
+        {
+            *display = new_display;
+            *body_text = new_body_text;
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug)]
 enum LinkKind {
     Url,
@@ -228,6 +314,7 @@ impl Clone for MailView {
             attachment_paths: self.attachment_paths.clone(),
             state: MailViewState::default(),
             active_jobs: self.active_jobs.clone(),
+            force_charset: ForceCharset::None,
             ..*self
         }
     }
@@ -264,7 +351,7 @@ impl MailView {
             theme_default: crate::conf::value(context, "mail.view.body"),
             active_jobs: Default::default(),
             state: MailViewState::default(),
-
+            force_charset: ForceCharset::None,
             cmd_buf: String::with_capacity(4),
             id: ComponentId::new_v4(),
         };
@@ -298,41 +385,7 @@ impl MailView {
                         if let Ok(Some(bytes_result)) = try_recv_timeout!(&mut handle.chan) {
                             match bytes_result {
                                 Ok(bytes) => {
-                                    if account
-                                        .collection
-                                        .get_env(self.coordinates.2)
-                                        .other_headers()
-                                        .is_empty()
-                                    {
-                                        let _ = account
-                                            .collection
-                                            .get_env_mut(self.coordinates.2)
-                                            .populate_headers(&bytes);
-                                    }
-                                    let env = Box::new(
-                                        account.collection.get_env(self.coordinates.2).clone(),
-                                    );
-                                    let body = Box::new(AttachmentBuilder::new(&bytes).build());
-                                    let display = Self::attachment_to(
-                                        &body,
-                                        context,
-                                        self.coordinates,
-                                        &mut self.active_jobs,
-                                    );
-                                    let (paths, attachment_tree_s) =
-                                        self.attachment_displays_to_tree(&display);
-                                    self.attachment_tree = attachment_tree_s;
-                                    self.attachment_paths = paths;
-                                    let body_text =
-                                        self.attachment_displays_to_text(&display, context, true);
-                                    self.state = MailViewState::Loaded {
-                                        display,
-                                        env,
-                                        body,
-                                        bytes,
-                                        body_text,
-                                        links: vec![],
-                                    };
+                                    MailViewState::load_bytes(self, bytes, context);
                                 }
                                 Err(err) => {
                                     self.state = MailViewState::Error { err };
@@ -719,6 +772,7 @@ impl MailView {
         context: &mut Context,
         coordinates: (AccountHash, MailboxHash, EnvelopeHash),
         active_jobs: &mut HashSet<JobId>,
+        force_charset: Option<Charset>,
     ) -> Vec<AttachmentDisplay> {
         let mut ret = vec![];
         fn rec(
@@ -727,13 +781,14 @@ impl MailView {
             coordinates: (AccountHash, MailboxHash, EnvelopeHash),
             acc: &mut Vec<AttachmentDisplay>,
             active_jobs: &mut HashSet<JobId>,
+            force_charset: Option<Charset>,
         ) {
             if a.content_disposition.kind.is_attachment() || a.content_type == "message/rfc822" {
                 acc.push(AttachmentDisplay::Attachment {
                     inner: Box::new(a.clone()),
                 });
             } else if a.content_type().is_text_html() {
-                let bytes = a.decode(Default::default());
+                let bytes = a.decode(force_charset.into());
                 let filter_invocation =
                     mailbox_settings!(context[coordinates.0][&coordinates.1].pager.html_filter)
                         .as_ref()
@@ -788,7 +843,7 @@ impl MailView {
                     }
                 }
             } else if a.is_text() {
-                let bytes = a.decode(Default::default());
+                let bytes = a.decode(force_charset.into());
                 acc.push(AttachmentDisplay::InlineText {
                     inner: Box::new(a.clone()),
                     comment: None,
@@ -810,7 +865,7 @@ impl MailView {
                         if let Some(text_attachment_pos) =
                             parts.iter().position(|a| a.content_type == "text/plain")
                         {
-                            let bytes = &parts[text_attachment_pos].decode(Default::default());
+                            let bytes = &parts[text_attachment_pos].decode(force_charset.into());
                             if bytes.trim().is_empty()
                                 && mailbox_settings!(
                                     context[coordinates.0][&coordinates.1]
@@ -831,7 +886,14 @@ impl MailView {
                             }
                         }
                         for a in parts {
-                            rec(a, context, coordinates, &mut display, active_jobs);
+                            rec(
+                                a,
+                                context,
+                                coordinates,
+                                &mut display,
+                                active_jobs,
+                                force_charset,
+                            );
                         }
                         acc.push(AttachmentDisplay::Alternative {
                             inner: Box::new(a.clone()),
@@ -846,7 +908,14 @@ impl MailView {
                                 inner: Box::new(a.clone()),
                                 display: {
                                     let mut v = vec![];
-                                    rec(&parts[0], context, coordinates, &mut v, active_jobs);
+                                    rec(
+                                        &parts[0],
+                                        context,
+                                        coordinates,
+                                        &mut v,
+                                        active_jobs,
+                                        force_charset,
+                                    );
                                     v
                                 },
                             });
@@ -869,7 +938,14 @@ impl MailView {
                                     job_id: handle.job_id,
                                     display: {
                                         let mut v = vec![];
-                                        rec(&parts[0], context, coordinates, &mut v, active_jobs);
+                                        rec(
+                                            &parts[0],
+                                            context,
+                                            coordinates,
+                                            &mut v,
+                                            active_jobs,
+                                            force_charset,
+                                        );
                                         v
                                     },
                                     handle,
@@ -879,7 +955,14 @@ impl MailView {
                                     inner: Box::new(a.clone()),
                                     display: {
                                         let mut v = vec![];
-                                        rec(&parts[0], context, coordinates, &mut v, active_jobs);
+                                        rec(
+                                            &parts[0],
+                                            context,
+                                            coordinates,
+                                            &mut v,
+                                            active_jobs,
+                                            force_charset,
+                                        );
                                         v
                                     },
                                 });
@@ -925,13 +1008,20 @@ impl MailView {
                     }
                     _ => {
                         for a in parts {
-                            rec(a, context, coordinates, acc, active_jobs);
+                            rec(a, context, coordinates, acc, active_jobs, force_charset);
                         }
                     }
                 }
             }
         }
-        rec(body, context, coordinates, &mut ret, active_jobs);
+        rec(
+            body,
+            context,
+            coordinates,
+            &mut ret,
+            active_jobs,
+            force_charset,
+        );
         ret
     }
 
@@ -1655,12 +1745,46 @@ impl Component for MailView {
         if let ViewMode::ContactSelector(ref mut s) = self.mode {
             s.draw(grid, area, context);
         }
+
+        if let ForceCharset::Dialog(ref mut s) = self.force_charset {
+            s.draw(grid, area, context);
+        }
     }
 
     fn process_event(&mut self, mut event: &mut UIEvent, context: &mut Context) -> bool {
         if self.coordinates.0.is_null() || self.coordinates.1.is_null() {
             return false;
         }
+
+        match (&mut self.force_charset, &event) {
+            (ForceCharset::Dialog(selector), UIEvent::FinishedUIDialog(id, results))
+                if *id == selector.id() =>
+            {
+                self.force_charset =
+                    if let Some(results) = results.downcast_ref::<Vec<Option<Charset>>>() {
+                        if results.len() != 1 {
+                            ForceCharset::None
+                        } else if let Some(charset) = results[0] {
+                            ForceCharset::Forced(charset)
+                        } else {
+                            ForceCharset::None
+                        }
+                    } else {
+                        ForceCharset::None
+                    };
+                MailViewState::redecode(self, context);
+                self.initialised = false;
+                self.set_dirty(true);
+                return true;
+            }
+            (ForceCharset::Dialog(selector), _) => {
+                if selector.process_event(event, context) {
+                    return true;
+                }
+            }
+            _ => {}
+        }
+
         let shortcuts = self.get_shortcuts(context);
         match (&mut self.mode, &mut event) {
             /*(ViewMode::Ansi(ref mut buf), _) => {
@@ -1745,44 +1869,7 @@ impl Component for MailView {
                                 Ok(None) => { /* something happened, perhaps a worker thread panicked */
                                 }
                                 Ok(Some(Ok(bytes))) => {
-                                    if context.accounts[&self.coordinates.0]
-                                        .collection
-                                        .get_env(self.coordinates.2)
-                                        .other_headers()
-                                        .is_empty()
-                                    {
-                                        let _ = context.accounts[&self.coordinates.0]
-                                            .collection
-                                            .get_env_mut(self.coordinates.2)
-                                            .populate_headers(&bytes);
-                                    }
-                                    let env = Box::new(
-                                        context.accounts[&self.coordinates.0]
-                                            .collection
-                                            .get_env(self.coordinates.2)
-                                            .clone(),
-                                    );
-                                    let body = Box::new(AttachmentBuilder::new(&bytes).build());
-                                    let display = Self::attachment_to(
-                                        &body,
-                                        context,
-                                        self.coordinates,
-                                        &mut self.active_jobs,
-                                    );
-                                    let (paths, attachment_tree_s) =
-                                        self.attachment_displays_to_tree(&display);
-                                    self.attachment_tree = attachment_tree_s;
-                                    self.attachment_paths = paths;
-                                    let body_text =
-                                        self.attachment_displays_to_text(&display, context, true);
-                                    self.state = MailViewState::Loaded {
-                                        bytes,
-                                        env,
-                                        body,
-                                        display,
-                                        links: vec![],
-                                        body_text,
-                                    };
+                                    MailViewState::load_bytes(self, bytes, context);
                                 }
                                 Ok(Some(Err(err))) => {
                                     self.state = MailViewState::Error { err };
@@ -1855,6 +1942,7 @@ impl Component for MailView {
                                                     context,
                                                     self.coordinates,
                                                     &mut self.active_jobs,
+                                                    (&self.force_charset).into(),
                                                 );
                                                 *d = AttachmentDisplay::EncryptedSuccess {
                                                     inner: std::mem::replace(
@@ -2700,6 +2788,55 @@ impl Component for MailView {
                     .push_back(UIEvent::Action(Tab(New(Some(Box::new(self.clone()))))));
                 return true;
             }
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::ENVELOPE_VIEW]["change_charset"]) =>
+            {
+                let entries = vec![
+                    (None, "default".to_string()),
+                    (Some(Charset::Ascii), Charset::Ascii.to_string()),
+                    (Some(Charset::UTF8), Charset::UTF8.to_string()),
+                    (Some(Charset::UTF16), Charset::UTF16.to_string()),
+                    (Some(Charset::ISO8859_1), Charset::ISO8859_1.to_string()),
+                    (Some(Charset::ISO8859_2), Charset::ISO8859_2.to_string()),
+                    (Some(Charset::ISO8859_3), Charset::ISO8859_3.to_string()),
+                    (Some(Charset::ISO8859_4), Charset::ISO8859_4.to_string()),
+                    (Some(Charset::ISO8859_5), Charset::ISO8859_5.to_string()),
+                    (Some(Charset::ISO8859_6), Charset::ISO8859_6.to_string()),
+                    (Some(Charset::ISO8859_7), Charset::ISO8859_7.to_string()),
+                    (Some(Charset::ISO8859_8), Charset::ISO8859_8.to_string()),
+                    (Some(Charset::ISO8859_10), Charset::ISO8859_10.to_string()),
+                    (Some(Charset::ISO8859_13), Charset::ISO8859_13.to_string()),
+                    (Some(Charset::ISO8859_14), Charset::ISO8859_14.to_string()),
+                    (Some(Charset::ISO8859_15), Charset::ISO8859_15.to_string()),
+                    (Some(Charset::ISO8859_16), Charset::ISO8859_16.to_string()),
+                    (Some(Charset::Windows1250), Charset::Windows1250.to_string()),
+                    (Some(Charset::Windows1251), Charset::Windows1251.to_string()),
+                    (Some(Charset::Windows1252), Charset::Windows1252.to_string()),
+                    (Some(Charset::Windows1253), Charset::Windows1253.to_string()),
+                    (Some(Charset::GBK), Charset::GBK.to_string()),
+                    (Some(Charset::GB2312), Charset::GB2312.to_string()),
+                    (Some(Charset::GB18030), Charset::GB18030.to_string()),
+                    (Some(Charset::BIG5), Charset::BIG5.to_string()),
+                    (Some(Charset::ISO2022JP), Charset::ISO2022JP.to_string()),
+                    (Some(Charset::EUCJP), Charset::EUCJP.to_string()),
+                    (Some(Charset::KOI8R), Charset::KOI8R.to_string()),
+                    (Some(Charset::KOI8U), Charset::KOI8U.to_string()),
+                ];
+                self.force_charset = ForceCharset::Dialog(Box::new(Selector::new(
+                    "select charset to force",
+                    entries,
+                    true,
+                    Some(Box::new(
+                        move |id: ComponentId, results: &[Option<Charset>]| {
+                            Some(UIEvent::FinishedUIDialog(id, Box::new(results.to_vec())))
+                        },
+                    )),
+                    context,
+                )));
+                self.initialised = false;
+                self.dirty = true;
+                return true;
+            }
             _ => {}
         }
         false
@@ -2709,13 +2846,8 @@ impl Component for MailView {
         self.dirty
             || self.pager.is_dirty()
             || self.subview.as_ref().map(|p| p.is_dirty()).unwrap_or(false)
-            || if let ViewMode::ContactSelector(ref s) = self.mode {
-                s.is_dirty()
-            /*} else if let ViewMode::Ansi(ref r) = self.mode {
-            r.is_dirty()*/
-            } else {
-                false
-            }
+            || matches!(self.force_charset, ForceCharset::Dialog(ref s) if s.is_dirty())
+            || matches!(self.mode, ViewMode::ContactSelector(ref s) if s.is_dirty())
     }
 
     fn set_dirty(&mut self, value: bool) {

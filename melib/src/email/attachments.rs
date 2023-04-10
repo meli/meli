@@ -32,6 +32,23 @@ use smallvec::SmallVec;
 
 use crate::email::attachment_types::*;
 
+pub type Filter<'a> = Box<dyn FnMut(&Attachment, &mut Vec<u8>) + 'a>;
+
+#[derive(Default)]
+pub struct DecodeOptions<'att> {
+    pub filter: Option<Filter<'att>>,
+    pub force_charset: Option<Charset>,
+}
+
+impl<'att> From<Option<Charset>> for DecodeOptions<'att> {
+    fn from(force_charset: Option<Charset>) -> DecodeOptions<'att> {
+        Self {
+            filter: None,
+            force_charset,
+        }
+    }
+}
+
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AttachmentBuilder {
     pub content_type: ContentType,
@@ -982,12 +999,4 @@ impl Attachment {
 
 pub fn interpret_format_flowed(_t: &str) -> String {
     unimplemented!()
-}
-
-pub type Filter<'a> = Box<dyn FnMut(&Attachment, &mut Vec<u8>) + 'a>;
-
-#[derive(Default)]
-pub struct DecodeOptions<'att> {
-    pub filter: Option<Filter<'att>>,
-    pub force_charset: Option<Charset>,
 }
