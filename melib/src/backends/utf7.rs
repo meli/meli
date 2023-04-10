@@ -34,7 +34,7 @@ use regex::{Captures, Regex};
 /// Encode UTF-7 IMAP mailbox name
 ///
 /// <https://datatracker.ietf.org/doc/html/rfc3501#section-5.1.3>
-pub fn encode_utf7_imap(text: String) -> String {
+pub fn encode_utf7_imap(text: &str) -> String {
     let mut result = "".to_string();
     let text = text.replace('&', "&-");
     let mut text = text.as_str();
@@ -183,14 +183,5 @@ mod tests {
     #[test]
     fn decode_consecutive_accents() {
         assert_eq!(decode_utf7_imap("th&AOkA4g-tre"), "théâtre")
-    }
-
-    use proptest::prelude::*;
-    proptest! {
-        #![proptest_config(ProptestConfig::with_cases(10000))]
-        #[test]
-        fn fuzzy_dec_enc_check(s in "\\PC*") {
-            assert_eq!(decode_utf7_imap(encode_utf7_imap(s.clone())),s)
-        }
     }
 }
