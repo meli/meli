@@ -22,57 +22,55 @@
 #![allow(clippy::just_underscores_and_digits)]
 #![allow(clippy::needless_lifetimes)]
 
-/*!
- * SMTP client support
- *
- * This module implements a client for the SMTP protocol as specified by [RFC 5321 Simple Mail
- * Transfer Protocol](https://www.rfc-editor.org/rfc/rfc5321).
- *
- * The connection and methods are `async` and uses the `smol` runtime.
- *# Example
- *
- *```not_run
- *extern crate melib;
- *
- *use melib::futures;
- *use melib::smol;
- *use melib::smtp::*;
- *use melib::Result;
- *let conf = SmtpServerConf {
- *    hostname: "smtp.mail.gr".into(),
- *    port: 587,
- *    security: SmtpSecurity::StartTLS {
- *        danger_accept_invalid_certs: false,
- *    },
- *    extensions: SmtpExtensionSupport::default(),
- *    auth: SmtpAuth::Auto {
- *        username: "l15".into(),
- *        password: Password::CommandEval(
- *            "gpg2 --no-tty -q -d ~/.passwords/mail.gpg".into(),
- *        ),
- *        require_auth: true,
- *    },
- *};
- *
- *std::thread::Builder::new().spawn(move || {
- *    let ex = smol::Executor::new();
- *    futures::executor::block_on(ex.run(futures::future::pending::<()>()));
- *}).unwrap();
- *
- *let mut conn = futures::executor::block_on(SmtpConnection::new_connection(conf)).unwrap();
- *futures::executor::block_on(conn.mail_transaction(r#"To: l10@mail.gr
- *Subject: Fwd: SMTP TEST
- *From: Me <l15@mail.gr>
- *Message-Id: <E1hSjnr-0003fN-RL@pppppp>
- *Date: Mon, 13 Jul 2020 09:02:15 +0300
- *
- *Prescriptions-R-X"#,
- *    b"l15@mail.gr",
- *    b"l10@mail.gr",
- *)).unwrap();
- *Ok(())
- *```
- */
+//! SMTP client support
+//!
+//! This module implements a client for the SMTP protocol as specified by [RFC 5321 Simple Mail
+//! Transfer Protocol](https://www.rfc-editor.org/rfc/rfc5321).
+//!
+//! The connection and methods are `async` and uses the `smol` runtime.
+//!# Example
+//!
+//! ```not_run
+//! extern crate melib;
+//!
+//! use melib::futures;
+//! use melib::smol;
+//! use melib::smtp::*;
+//! use melib::Result;
+//! let conf = SmtpServerConf {
+//!     hostname: "smtp.example.com".into(),
+//!     port: 587,
+//!     security: SmtpSecurity::StartTLS {
+//!         danger_accept_invalid_certs: false,
+//!     },
+//!     extensions: SmtpExtensionSupport::default(),
+//!     auth: SmtpAuth::Auto {
+//!         username: "l15".into(),
+//!         password: Password::CommandEval(
+//!             "gpg2 --no-tty -q -d ~/.passwords/mail.gpg".into(),
+//!         ),
+//!         require_auth: true,
+//!     },
+//! };
+//!
+//! std::thread::Builder::new().spawn(move || {
+//!     let ex = smol::Executor::new();
+//!     futures::executor::block_on(ex.run(futures::future::pending::<()>()));
+//! }).unwrap();
+//!
+//! let mut conn = futures::executor::block_on(SmtpConnection::new_connection(conf)).unwrap();
+//! futures::executor::block_on(conn.mail_transaction(r#"To: l10@example.com
+//! Subject: Fwd: SMTP TEST
+//! From: Me <l15@example.com>
+//! Message-Id: <E1hSjnr-0003fN-RL@example.com>
+//! Date: Mon, 13 Jul 2020 09:02:15 +0300
+//!
+//! Prescriptions-R-X"#,
+//!     b"l15@example.com",
+//!     b"l10@example.com",
+//! )).unwrap();
+//! Ok(())
+//! ```
 
 use crate::connections::{lookup_ipv4, Connection};
 use crate::email::{parser::BytesExt, Address, Envelope};
@@ -93,17 +91,17 @@ use std::process::Command;
 pub enum SmtpSecurity {
     #[serde(alias = "starttls", alias = "STARTTLS")]
     StartTLS {
-        #[serde(default = "false_val")]
+        #[serde(default = "crate::conf::false_val")]
         danger_accept_invalid_certs: bool,
     },
     #[serde(alias = "auto")]
     Auto {
-        #[serde(default = "false_val")]
+        #[serde(default = "crate::conf::false_val")]
         danger_accept_invalid_certs: bool,
     },
     #[serde(alias = "tls", alias = "TLS")]
     Tls {
-        #[serde(default = "false_val")]
+        #[serde(default = "crate::conf::false_val")]
         danger_accept_invalid_certs: bool,
     },
     #[serde(alias = "none")]
@@ -138,7 +136,7 @@ pub enum SmtpAuth {
     Auto {
         username: String,
         password: Password,
-        #[serde(default = "true_val")]
+        #[serde(default = "crate::conf::true_val")]
         require_auth: bool,
         #[serde(skip_serializing, skip_deserializing, default)]
         auth_type: SmtpAuthType,
@@ -146,7 +144,7 @@ pub enum SmtpAuth {
     #[serde(alias = "xoauth2")]
     XOAuth2 {
         token_command: String,
-        #[serde(default = "true_val")]
+        #[serde(default = "crate::conf::true_val")]
         require_auth: bool,
     },
     // md5, sasl, etc
@@ -156,14 +154,6 @@ pub enum SmtpAuth {
 pub struct SmtpAuthType {
     plain: bool,
     login: bool,
-}
-
-const fn true_val() -> bool {
-    true
-}
-
-const fn false_val() -> bool {
-    false
 }
 
 impl SmtpAuth {
@@ -201,17 +191,17 @@ pub struct SmtpExtensionSupport {
     /// [RFC 6152: SMTP Service Extension for 8-bit MIME Transport](https://www.rfc-editor.org/rfc/rfc6152)
     #[serde(default = "crate::conf::true_val")]
     _8bitmime: bool,
-    //Essentially, the PRDR extension to SMTP allows (but does not require) an SMTP server to
-    //issue multiple responses after a message has been transferred, by mutual consent of the
-    //client and server. SMTP clients that support the PRDR extension then use the expanded
-    //responses as supplemental data to the responses that were received during the earlier
-    //envelope exchange.
+    /// Essentially, the PRDR extension to SMTP allows (but does not require) an SMTP server to
+    /// issue multiple responses after a message has been transferred, by mutual consent of the
+    /// client and server. SMTP clients that support the PRDR extension then use the expanded
+    /// responses as supplemental data to the responses that were received during the earlier
+    /// envelope exchange.
     #[serde(default = "crate::conf::true_val")]
     prdr: bool,
     #[serde(default = "crate::conf::true_val")]
     binarymime: bool,
-    //Resources:
-    //- http://www.postfix.org/SMTPUTF8_README.html
+    /// Resources:
+    /// - http://www.postfix.org/SMTPUTF8_README.html
     #[serde(default = "crate::conf::true_val")]
     smtputf8: bool,
     #[serde(default = "crate::conf::true_val")]
@@ -239,10 +229,10 @@ impl Default for SmtpExtensionSupport {
     }
 }
 
-#[derive(Debug)]
 /// SMTP client session object.
 ///
 /// See module-wide documentation.
+#[derive(Debug)]
 pub struct SmtpConnection {
     stream: AsyncWrapper<Connection>,
     read_buffer: String,
@@ -543,6 +533,11 @@ impl SmtpConnection {
         Ok(ret)
     }
 
+    /// Set a new value for `envelope_from`.
+    pub fn set_envelope_from(&mut self, envelope_from: String) {
+        self.server_conf.envelope_from = envelope_from;
+    }
+
     fn set_extension_support(&mut self, reply: Reply<'_>) {
         debug_assert_eq!(reply.code, ReplyCode::_250);
         self.server_conf.extensions.pipelining &= reply.lines.contains(&"PIPELINING");
@@ -763,63 +758,63 @@ pub type ExpectedReplyCode = Option<(ReplyCode, &'static [ReplyCode])>;
 /// Recognized kinds of SMTP reply codes
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ReplyCode {
-    ///System status, or system help reply
+    /// System status, or system help reply
     _211,
-    ///Help message (Information on how to use the receiver or the meaning of a particular non-standard command; this reply is useful only to the human user)
+    /// Help message (Information on how to use the receiver or the meaning of a particular non-standard command; this reply is useful only to the human user)
     _214,
-    ///<domain> Service ready
+    /// <domain> Service ready
     _220,
-    ///<domain> Service closing transmission channel
+    /// <domain> Service closing transmission channel
     _221,
-    ///Authentication successful,
+    /// Authentication successful,
     _235,
-    ///Requested mail action okay, completed
+    /// Requested mail action okay, completed
     _250,
-    ///User not local; will forward to <forward-path> (See Section 3.4)
+    /// User not local; will forward to <forward-path> (See Section 3.4)
     _251,
-    ///Cannot VRFY user, but will accept message and attempt delivery (See Section 3.5.3)
+    /// Cannot VRFY user, but will accept message and attempt delivery (See Section 3.5.3)
     _252,
-    ///rfc4954 AUTH continuation request
+    /// rfc4954 AUTH continuation request
     _334,
-    ///PRDR specific, eg "content analysis has started|
+    /// PRDR specific, eg "content analysis has started|
     _353,
-    ///Start mail input; end with <CRLF>.<CRLF>
+    /// Start mail input; end with <CRLF>.<CRLF>
     _354,
-    ///<domain> Service not available, closing transmission channel (This may be a reply to any command if the service knows it must shut down)
+    /// <domain> Service not available, closing transmission channel (This may be a reply to any command if the service knows it must shut down)
     _421,
-    ///Requested mail action not taken: mailbox unavailable (e.g., mailbox busy or temporarily blocked for policy reasons)
+    /// Requested mail action not taken: mailbox unavailable (e.g., mailbox busy or temporarily blocked for policy reasons)
     _450,
-    ///Requested action aborted: local error in processing
+    /// Requested action aborted: local error in processing
     _451,
-    ///Requested action not taken: insufficient system storage
+    /// Requested action not taken: insufficient system storage
     _452,
-    ///Server unable to accommodate parameters
+    /// Server unable to accommodate parameters
     _455,
-    ///Syntax error, command unrecognized (This may include errors such as command line too long)
+    /// Syntax error, command unrecognized (This may include errors such as command line too long)
     _500,
-    ///Syntax error in parameters or arguments
+    /// Syntax error in parameters or arguments
     _501,
-    ///Command not implemented (see Section 4.2.4)
+    /// Command not implemented (see Section 4.2.4)
     _502,
-    ///Bad sequence of commands
+    /// Bad sequence of commands
     _503,
-    ///Command parameter not implemented
+    /// Command parameter not implemented
     _504,
-    ///Authentication failed
+    /// Authentication failed
     _535,
-    ///Requested action not taken: mailbox unavailable (e.g., mailbox not found, no access, or command rejected for policy reasons)
+    /// Requested action not taken: mailbox unavailable (e.g., mailbox not found, no access, or command rejected for policy reasons)
     _550,
-    ///User not local; please try <forward-path> (See Section 3.4)
+    /// User not local; please try <forward-path> (See Section 3.4)
     _551,
-    ///Requested mail action aborted: exceeded storage allocation
+    /// Requested mail action aborted: exceeded storage allocation
     _552,
-    ///Requested action not taken: mailbox name not allowed (e.g., mailbox syntax incorrect)
+    /// Requested action not taken: mailbox name not allowed (e.g., mailbox syntax incorrect)
     _553,
-    ///Transaction failed (Or, in the case of a connection-opening response, "No SMTP service here")
+    /// Transaction failed (Or, in the case of a connection-opening response, "No SMTP service here")
     _554,
-    ///MAIL FROM/RCPT TO parameters not recognized or not implemented
+    /// MAIL FROM/RCPT TO parameters not recognized or not implemented
     _555,
-    ///Must issue a STARTTLS command first
+    /// Must issue a STARTTLS command first
     _530,
 }
 
@@ -1081,6 +1076,7 @@ mod test {
                 .lock()
                 .unwrap()
                 .iter_mut()
+                .rev()
                 .find(|((i, d), _)| (i, d.as_str()) == (&ip, domain))
             {
                 std::dbg!(&message);
@@ -1157,24 +1153,27 @@ mod test {
         }
 
         fn data_end(&mut self) -> Response {
-            eprintln!("datae_nd() ");
-            if let Some(((_, _), message)) = self.mails.lock().unwrap().pop() {
-                if let Message::Data { from: _, to, buf } = message {
-                    for to in to {
-                        match crate::Envelope::from_bytes(&buf, None) {
-                            Ok(env) => {
-                                std::dbg!(&env);
-                                std::dbg!(env.other_headers());
-                                self.stored.lock().unwrap().push((to.clone(), env));
-                            }
-                            Err(err) => {
-                                eprintln!("envelope parse error {}", err);
-                            }
+            let last = self.mails.lock().unwrap().pop();
+            if let Some(((ip, domain), Message::Data { from: _, to, buf })) = last {
+                for to in to {
+                    match crate::Envelope::from_bytes(&buf, None) {
+                        Ok(env) => {
+                            std::dbg!(&env);
+                            std::dbg!(env.other_headers());
+                            self.stored.lock().unwrap().push((to.clone(), env));
+                        }
+                        Err(err) => {
+                            eprintln!("envelope parse error {}", err);
                         }
                     }
-                    return OK;
                 }
+                self.mails
+                    .lock()
+                    .unwrap()
+                    .push(((ip, domain), Message::Helo));
+                return OK;
             }
+            eprintln!("last self.mails item was not Message::Data: {last:?}");
             INTERNAL_ERROR
         }
     }
