@@ -19,15 +19,17 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+//! Command line client binary.
 //!
-//!  This crate contains the frontend stuff of the application. The application entry way on
-//!  `src/bin.rs` creates an event loop and passes input to a thread.
+//! This crate contains the frontend stuff of the application. The application entry way on
+//! `src/bin.rs` creates an event loop and passes input to a thread.
 //!
 //! The mail handling stuff is done in the `melib` crate which includes all backend needs. The
 //! split is done to theoretically be able to create different frontends with the same innards.
-//!
 
 use meli::*;
+mod args;
+use args::*;
 use std::os::raw::c_int;
 
 fn notify(
@@ -71,87 +73,6 @@ fn notify(
     Ok(r)
 }
 
-#[cfg(feature = "cli-docs")]
-fn parse_manpage(src: &str) -> Result<ManPages> {
-    match src {
-        "" | "meli" | "meli.1" | "main" => Ok(ManPages::Main),
-        "meli.7" | "guide" => Ok(ManPages::Guide),
-        "meli.conf" | "meli.conf.5" | "conf" | "config" | "configuration" => Ok(ManPages::Conf),
-        "meli-themes" | "meli-themes.5" | "themes" | "theming" | "theme" => Ok(ManPages::Themes),
-        _ => Err(Error::new(format!("Invalid documentation page: {}", src))),
-    }
-}
-
-#[cfg(feature = "cli-docs")]
-#[derive(Copy, Clone, Debug)]
-/// Choose manpage
-enum ManPages {
-    /// meli(1)
-    Main = 0,
-    /// meli.conf(5)
-    Conf = 1,
-    /// meli-themes(5)
-    Themes = 2,
-    /// meli(7)
-    Guide = 3,
-}
-
-#[derive(Debug, StructOpt)]
-#[structopt(name = "meli", about = "terminal mail client", version_short = "v")]
-struct Opt {
-    /// use specified configuration file
-    #[structopt(short, long, parse(from_os_str))]
-    config: Option<PathBuf>,
-
-    #[structopt(subcommand)]
-    subcommand: Option<SubCommand>,
-}
-
-#[derive(Debug, StructOpt)]
-enum SubCommand {
-    /// print default theme in full to stdout and exit.
-    PrintDefaultTheme,
-    /// print loaded themes in full to stdout and exit.
-    PrintLoadedThemes,
-    /// create a sample configuration file with available configuration options. If PATH is not specified, meli will try to create it in $XDG_CONFIG_HOME/meli/config.toml
-    #[structopt(display_order = 1)]
-    CreateConfig {
-        #[structopt(value_name = "NEW_CONFIG_PATH", parse(from_os_str))]
-        path: Option<PathBuf>,
-    },
-    /// test a configuration file for syntax issues or missing options.
-    #[structopt(display_order = 2)]
-    TestConfig {
-        #[structopt(value_name = "CONFIG_PATH", parse(from_os_str))]
-        path: Option<PathBuf>,
-    },
-    #[structopt(visible_alias="docs", aliases=&["docs", "manpage", "manpages"])]
-    #[structopt(display_order = 3)]
-    /// print documentation page and exit (Piping to a pager is recommended.).
-    Man(ManOpt),
-
-    #[structopt(display_order = 4)]
-    /// print compile time feature flags of this binary
-    CompiledWith,
-
-    /// View mail from input file.
-    View {
-        #[structopt(value_name = "INPUT", parse(from_os_str))]
-        path: PathBuf,
-    },
-}
-
-#[derive(Debug, StructOpt)]
-struct ManOpt {
-    #[structopt(default_value = "meli", possible_values=&["meli", "conf", "themes", "meli.7", "guide"], value_name="PAGE", parse(try_from_str = parse_manpage))]
-    #[cfg(feature = "cli-docs")]
-    page: ManPages,
-    /// If true, output text in stdout instead of spawning $PAGER.
-    #[structopt(long = "no-raw", alias = "no-raw", value_name = "bool")]
-    #[cfg(feature = "cli-docs")]
-    no_raw: Option<Option<bool>>,
-}
-
 fn main() {
     let opt = Opt::from_args();
     ::std::process::exit(match run_app(opt) {
@@ -191,6 +112,29 @@ fn run_app(opt: Opt) -> Result<()> {
                 )));
             }
             conf::create_config_file(&config_path)?;
+            return Ok(());
+        }
+        Some(SubCommand::EditConfig) => {
+            use std::process::{Command, Stdio};
+            let editor = std::env::var("EDITOR")
+                .or_else(|_| std::env::var("VISUAL"))
+                .map_err(|err| {
+                    format!("Could not find any value in environment variables EDITOR and VISUAL. {err}")
+                })?;
+            let config_path = crate::conf::get_config_file()?;
+
+            let mut cmd = Command::new(&editor);
+
+            let mut handle = &mut cmd;
+            for c in crate::conf::get_included_configs(config_path)? {
+                handle = handle.arg(&c);
+            }
+            let mut handle = handle
+                .stdin(Stdio::inherit())
+                .stdout(Stdio::inherit())
+                .stderr(Stdio::inherit())
+                .spawn()?;
+            handle.wait()?;
             return Ok(());
         }
         #[cfg(feature = "cli-docs")]

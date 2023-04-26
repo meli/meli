@@ -31,6 +31,9 @@ use crate::terminal::Color;
 use melib::backends::TagHash;
 use melib::search::Query;
 use std::collections::HashSet;
+use std::io::Read;
+use std::process::{Command, Stdio};
+
 mod overrides;
 pub use overrides::*;
 pub mod composing;
@@ -302,6 +305,93 @@ pub fn get_config_file() -> Result<PathBuf> {
                 )
             })?),
     }
+}
+
+pub fn get_included_configs(conf_path: PathBuf) -> Result<Vec<PathBuf>> {
+    const M4_PREAMBLE: &str = r#"divert(-1)dnl
+define(`include', `divert(0)$1
+divert(-1)
+')dnl
+changequote(`"', `"')dnl
+"#;
+    let mut ret = vec![];
+    let prefix = conf_path.parent().unwrap().to_path_buf();
+    let mut stack = vec![(None::<PathBuf>, conf_path)];
+    let mut contents = String::new();
+    while let Some((parent, p)) = stack.pop() {
+        if !p.exists() || p.is_dir() {
+            return Err(format!(
+                "Path {}{included}{in_parent} {msg}.",
+                p.display(),
+                included = if parent.is_some() {
+                    " which is included in "
+                } else {
+                    ""
+                },
+                in_parent = if let Some(parent) = parent {
+                    std::borrow::Cow::Owned(parent.display().to_string())
+                } else {
+                    std::borrow::Cow::Borrowed("")
+                },
+                msg = if !p.exists() {
+                    "does not exist"
+                } else {
+                    "is a directory, not a text file"
+                }
+            )
+            .into());
+        }
+        contents.clear();
+        let mut file = std::fs::File::open(&p)?;
+        file.read_to_string(&mut contents)?;
+
+        let mut handle = Command::new("m4")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()?;
+        let mut stdin = handle.stdin.take().unwrap();
+        stdin.write_all(M4_PREAMBLE.as_bytes())?;
+        stdin.write_all(contents.as_bytes())?;
+        drop(stdin);
+        let stdout = handle.wait_with_output()?.stdout.clone();
+        for subpath in stdout.lines() {
+            let subpath = subpath?;
+            let path = &Path::new(&subpath);
+            if path.is_absolute() {
+                stack.push((Some(p.clone()), path.to_path_buf()));
+            } else {
+                stack.push((Some(p.clone()), prefix.join(path)));
+            }
+        }
+        ret.push(p);
+    }
+
+    Ok(ret)
+}
+
+pub fn expand_config(conf_path: PathBuf) -> Result<String> {
+    let _paths = get_included_configs(conf_path.clone())?;
+    const M4_PREAMBLE: &str = r#"define(`builtin_include', defn(`include'))dnl
+define(`include', `builtin_include(substr($1,1,decr(decr(len($1)))))dnl')dnl
+"#;
+    let mut contents = String::new();
+    contents.clear();
+    let mut file = std::fs::File::open(&conf_path)?;
+    file.read_to_string(&mut contents)?;
+
+    let mut handle = Command::new("m4")
+        .current_dir(conf_path.parent().unwrap_or(&Path::new("/")))
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    let mut stdin = handle.stdin.take().unwrap();
+    stdin.write_all(M4_PREAMBLE.as_bytes())?;
+    stdin.write_all(contents.as_bytes())?;
+    drop(stdin);
+    let stdout = handle.wait_with_output()?.stdout.clone();
+    Ok(String::from_utf8_lossy(&stdout).to_string())
 }
 
 struct Ask {
@@ -866,7 +956,7 @@ mod pp {
         for (i, l) in contents.lines().enumerate() {
             if let (_, Some(sub_path)) = include_directive().parse(l).map_err(|l| {
                 Error::new(format!(
-                    "Malformed include directive in line {} of file {}: {}\nConfiguration uses the standard m4 macro include(`filename`).",
+                    "Malformed include directive in line {} of file {}: {}\nConfiguration uses the standard m4 macro include(\"filename\").",
                     i,
                     path.display(),
                     l
@@ -898,8 +988,7 @@ mod pp {
             path.as_ref().expand()
         };
 
-        let mut ret = pp_helper(&p_buf, 0)?;
-        drop(p_buf);
+        let mut ret = super::expand_config(p_buf)?;
         if let Ok(xdg_dirs) = xdg::BaseDirectories::with_prefix("meli") {
             for theme_mailbox in xdg_dirs.find_config_files("themes") {
                 let read_dir = std::fs::read_dir(theme_mailbox)?;
