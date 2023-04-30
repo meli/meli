@@ -93,6 +93,10 @@ MELI_FEATURES="jmap" make
 
 or if building directly with cargo, use the flag `--features="jmap"'.
 
+### HTML Rendering
+
+HTML rendering is achieved using [w3m](https://github.com/tats/w3m) by default.
+
 # Development
 
 Development builds can be built and/or run with
