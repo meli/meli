@@ -19,11 +19,14 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use std::{
+    fs::OpenOptions,
+    io::{BufWriter, Write},
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
+
 use crate::shellexpand::ShellExpandTrait;
-use std::fs::OpenOptions;
-use std::io::{BufWriter, Write};
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
 
 #[derive(Copy, Clone, PartialEq, PartialOrd, Hash, Debug, Serialize, Deserialize)]
 pub enum LoggingLevel {

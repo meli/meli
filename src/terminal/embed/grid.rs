@@ -19,12 +19,14 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use melib::{
+    error::{Error, Result},
+    text_processing::wcwidth,
+};
+use nix::sys::wait::{waitpid, WaitPidFlag, WaitStatus};
+
 use super::*;
 use crate::terminal::{cells::*, Color};
-use melib::error::{Error, Result};
-use melib::text_processing::wcwidth;
-use nix::sys::wait::WaitStatus;
-use nix::sys::wait::{waitpid, WaitPidFlag};
 
 #[derive(Debug)]
 enum ScreenBuffer {
@@ -34,9 +36,9 @@ enum ScreenBuffer {
 
 /// `EmbedGrid` manages the terminal grid state of the embed process.
 ///
-/// The embed process sends bytes to the master end (see super mod) and interprets them in a state
-/// machine stored in `State`. Escape codes are translated as changes to the grid, eg changes in a
-/// cell's colors.
+/// The embed process sends bytes to the master end (see super mod) and
+/// interprets them in a state machine stored in `State`. Escape codes are
+/// translated as changes to the grid, eg changes in a cell's colors.
 ///
 /// The main process copies the grid whenever the actual terminal is redrawn.
 #[derive(Debug)]
@@ -52,8 +54,8 @@ pub struct EmbedGrid {
     fg_color: Color,
     bg_color: Color,
     attrs: Attr,
-    /// Store the fg/bg color when highlighting the cell where the cursor is so that it can be
-    /// restored afterwards
+    /// Store the fg/bg color when highlighting the cell where the cursor is so
+    /// that it can be restored afterwards
     prev_fg_color: Option<Color>,
     prev_bg_color: Option<Color>,
     prev_attrs: Option<Attr>,
@@ -405,7 +407,7 @@ impl EmbedGrid {
                 *state = State::CsiQ(buf1);
             }
             /* OSC stuff */
-            (c, State::Osc1(ref mut buf)) if (b'0'..=b'9').contains(&c) || c == b'?' => {
+            (c, State::Osc1(ref mut buf)) if c.is_ascii_digit() || c == b'?' => {
                 buf.push(c);
             }
             (b';', State::Osc1(ref mut buf1_p)) => {
@@ -413,7 +415,7 @@ impl EmbedGrid {
                 let buf2 = SmallVec::new();
                 *state = State::Osc2(buf1, buf2);
             }
-            (c, State::Osc2(_, ref mut buf)) if (b'0'..=b'9').contains(&c) || c == b'?' => {
+            (c, State::Osc2(_, ref mut buf)) if c.is_ascii_digit() || c == b'?' => {
                 buf.push(c);
             }
             /* Normal */
@@ -575,7 +577,7 @@ impl EmbedGrid {
                 *state = State::Normal;
             }
             /* CSI ? stuff */
-            (c, State::CsiQ(ref mut buf)) if (b'0'..=b'9').contains(&c) => {
+            (c, State::CsiQ(ref mut buf)) if c.is_ascii_digit() => {
                 buf.push(c);
             }
             (b'h', State::CsiQ(ref buf)) => {
@@ -652,13 +654,13 @@ impl EmbedGrid {
                 *state = State::Normal;
             }
             /* END OF CSI ? stuff */
-            (c, State::Csi) if (b'0'..=b'9').contains(&c) => {
+            (c, State::Csi) if c.is_ascii_digit() => {
                 let mut buf1 = SmallVec::new();
                 buf1.push(c);
                 *state = State::Csi1(buf1);
             }
             (b'J', State::Csi) => {
-                /* Erase in Display (ED), VT100.*/
+                /* Erase in Display (ED), VT100. */
                 /* Erase Below (default). */
                 clear_area(
                     grid,
@@ -681,7 +683,7 @@ impl EmbedGrid {
                 *state = State::Normal;
             }
             (b'K', State::Csi) => {
-                /* Erase in Line (ED), VT100.*/
+                /* Erase in Line (ED), VT100. */
                 /* Erase to right (Default) */
                 //debug!("{}", EscCode::from((&(*state), byte)));
                 for x in cursor.0..terminal_size.0 {
@@ -732,7 +734,7 @@ impl EmbedGrid {
                 *state = State::Normal;
             }
             (b'K', State::Csi1(buf)) if buf.as_ref() == b"0" => {
-                /* Erase in Line (ED), VT100.*/
+                /* Erase in Line (ED), VT100. */
                 /* Erase to right (Default) */
                 //debug!("{}", EscCode::from((&(*state), byte)));
                 for x in cursor.0..terminal_size.0 {
@@ -741,7 +743,7 @@ impl EmbedGrid {
                 *state = State::Normal;
             }
             (b'K', State::Csi1(buf)) if buf.as_ref() == b"1" => {
-                /* Erase in Line (ED), VT100.*/
+                /* Erase in Line (ED), VT100. */
                 /* Erase to left (Default) */
                 for x in 0..=cursor.0 {
                     grid[(x, cursor.1)] = Cell::default();
@@ -750,7 +752,7 @@ impl EmbedGrid {
                 *state = State::Normal;
             }
             (b'K', State::Csi1(buf)) if buf.as_ref() == b"2" => {
-                /* Erase in Line (ED), VT100.*/
+                /* Erase in Line (ED), VT100. */
                 /* Erase all */
                 for y in 0..terminal_size.1 {
                     for x in 0..terminal_size.0 {
@@ -766,7 +768,7 @@ impl EmbedGrid {
                 *state = State::Normal;
             }
             (b'J', State::Csi1(ref buf)) if buf.as_ref() == b"0" => {
-                /* Erase in Display (ED), VT100.*/
+                /* Erase in Display (ED), VT100. */
                 /* Erase Below (default). */
                 clear_area(
                     grid,
@@ -789,7 +791,7 @@ impl EmbedGrid {
                 *state = State::Normal;
             }
             (b'J', State::Csi1(ref buf)) if buf.as_ref() == b"1" => {
-                /* Erase in Display (ED), VT100.*/
+                /* Erase in Display (ED), VT100. */
                 /* Erase Above */
                 clear_area(
                     grid,
@@ -806,7 +808,7 @@ impl EmbedGrid {
                 *state = State::Normal;
             }
             (b'J', State::Csi1(ref buf)) if buf.as_ref() == b"2" => {
-                /* Erase in Display (ED), VT100.*/
+                /* Erase in Display (ED), VT100. */
                 /* Erase All */
                 clear_area(
                     grid,
@@ -817,7 +819,7 @@ impl EmbedGrid {
                 *state = State::Normal;
             }
             (b'X', State::Csi1(ref buf)) => {
-                /* Erase Ps Character(s) (default = 1) (ECH)..*/
+                /* Erase Ps Character(s) (default = 1) (ECH).. */
                 let ps = unsafe { std::str::from_utf8_unchecked(buf) }
                     .parse::<usize>()
                     .unwrap();
@@ -842,8 +844,8 @@ impl EmbedGrid {
             (b't', State::Csi1(buf)) => {
                 /* Window manipulation */
                 if buf.as_ref() == b"18" || buf.as_ref() == b"19" {
-                    // Ps = 18 → Report the size of the text area in characters as CSI 8 ; height ; width t
-                    //debug!("report size of the text area");
+                    // Ps = 18 → Report the size of the text area in characters as CSI 8 ; height ;
+                    // width t debug!("report size of the text area");
                     //debug!("got {}", EscCode::from((&(*state), byte)));
                     stdin.write_all(b"\x1b[8;").unwrap();
                     stdin
@@ -856,7 +858,8 @@ impl EmbedGrid {
                     stdin.write_all(&[b't']).unwrap();
                     stdin.flush().unwrap();
                 } else {
-                    //debug!("ignoring unknown code {}", EscCode::from((&(*state), byte)));
+                    //debug!("ignoring unknown code {}",
+                    // EscCode::from((&(*state), byte)));
                 }
                 *state = State::Normal;
             }
@@ -980,7 +983,8 @@ impl EmbedGrid {
                     cursor.0 = new_col.saturating_sub(1);
                 } else {
                     //debug!(
-                    //    "error: new_cal = {} > terminal.size.0 = {}\nterminal_size = {:?}",
+                    //    "error: new_cal = {} > terminal.size.0 =
+                    // {}\nterminal_size = {:?}",
                     //    new_col, terminal_size.0, terminal_size
                     //);
                 }
@@ -1269,7 +1273,7 @@ impl EmbedGrid {
                 grid[cursor_val!()].set_attrs(*attrs);
                 *state = State::Normal;
             }
-            (c, State::Csi1(ref mut buf)) if (b'0'..=b'9').contains(&c) || c == b' ' => {
+            (c, State::Csi1(ref mut buf)) if c.is_ascii_digit() || c == b' ' => {
                 buf.push(c);
             }
             (b';', State::Csi2(ref mut buf1_p, ref mut buf2_p)) => {
@@ -1319,11 +1323,12 @@ impl EmbedGrid {
                 //debug!("cursor became: {:?}", cursor);
                 *state = State::Normal;
             }
-            (c, State::Csi2(_, ref mut buf)) if (b'0'..=b'9').contains(&c) => {
+            (c, State::Csi2(_, ref mut buf)) if c.is_ascii_digit() => {
                 buf.push(c);
             }
             (b'r', State::Csi2(_, _)) | (b'r', State::Csi) => {
-                /* CSI Ps ; Ps r Set Scrolling Region [top;bottom] (default = full size of window) (DECSTBM). */
+                /* CSI Ps ; Ps r Set Scrolling Region [top;bottom] (default = full size of
+                 * window) (DECSTBM). */
                 let (top, bottom) = if let State::Csi2(ref top, ref bottom) = state {
                     (
                         unsafe { std::str::from_utf8_unchecked(top) }
@@ -1352,7 +1357,7 @@ impl EmbedGrid {
                 *state = State::Normal;
             }
 
-            (c, State::Csi3(_, _, ref mut buf)) if (b'0'..=b'9').contains(&c) => {
+            (c, State::Csi3(_, _, ref mut buf)) if c.is_ascii_digit() => {
                 buf.push(c);
             }
             (b'm', State::Csi3(ref buf1, ref buf2, ref buf3))
@@ -1385,7 +1390,7 @@ impl EmbedGrid {
                 grid[cursor_val!()].set_bg(*bg_color);
                 *state = State::Normal;
             }
-            (c, State::Csi3(_, _, ref mut buf)) if (b'0'..=b'9').contains(&c) => {
+            (c, State::Csi3(_, _, ref mut buf)) if c.is_ascii_digit() => {
                 buf.push(c);
             }
             (b';', State::Csi3(ref mut buf1_p, ref mut buf2_p, ref mut buf3_p)) => {
@@ -1395,7 +1400,7 @@ impl EmbedGrid {
                 let buf4 = SmallVec::new();
                 *state = State::Csi4(buf1, buf2, buf3, buf4);
             }
-            (c, State::Csi4(_, _, _, ref mut buf)) if (b'0'..=b'9').contains(&c) => {
+            (c, State::Csi4(_, _, _, ref mut buf)) if c.is_ascii_digit() => {
                 buf.push(c);
             }
             (b';', State::Csi4(ref mut buf1_p, ref mut buf2_p, ref mut buf3_p, ref mut buf4_p)) => {
@@ -1406,7 +1411,7 @@ impl EmbedGrid {
                 let buf5 = SmallVec::new();
                 *state = State::Csi5(buf1, buf2, buf3, buf4, buf5);
             }
-            (c, State::Csi5(_, _, _, _, ref mut buf)) if (b'0'..=b'9').contains(&c) => {
+            (c, State::Csi5(_, _, _, _, ref mut buf)) if c.is_ascii_digit() => {
                 buf.push(c);
             }
             (
@@ -1427,7 +1432,7 @@ impl EmbedGrid {
                 let buf6 = SmallVec::new();
                 *state = State::Csi6(buf1, buf2, buf3, buf4, buf5, buf6);
             }
-            (c, State::Csi6(_, _, _, _, _, ref mut buf)) if (b'0'..=b'9').contains(&c) => {
+            (c, State::Csi6(_, _, _, _, _, ref mut buf)) if c.is_ascii_digit() => {
                 buf.push(c);
             }
             (

@@ -40,9 +40,10 @@ enum SelectorCursor {
 
 /// Shows a little window with options for user to select.
 ///
-/// Instantiate with Selector::new(). Set single_only to true if user should only choose one of the
-/// options. After passing input events to this component, check Selector::is_done to see if the
-/// user has finalised their choices. Collect the choices by consuming the Selector with
+/// Instantiate with Selector::new(). Set single_only to true if user should
+/// only choose one of the options. After passing input events to this
+/// component, check Selector::is_done to see if the user has finalised their
+/// choices. Collect the choices by consuming the Selector with
 /// Selector::collect()
 pub struct Selector<T: 'static + PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send>
 {

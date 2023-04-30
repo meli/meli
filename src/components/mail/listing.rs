@@ -19,27 +19,32 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::*;
-use crate::conf::accounts::JobRequest;
-use crate::types::segment_tree::SegmentTree;
+use std::{
+    collections::{BTreeSet, HashMap, HashSet},
+    convert::TryFrom,
+    ops::{Deref, DerefMut},
+};
+
 use melib::backends::EnvelopeHashBatch;
 use smallvec::SmallVec;
-use std::collections::{BTreeSet, HashMap, HashSet};
-use std::convert::TryFrom;
-use std::ops::{Deref, DerefMut};
 
-// TODO: emoji_text_presentation_selector should be printed along with the chars before it but not
-// as a separate Cell
+use super::*;
+use crate::{conf::accounts::JobRequest, types::segment_tree::SegmentTree};
+
+// TODO: emoji_text_presentation_selector should be printed along with the chars
+// before it but not as a separate Cell
 //macro_rules! emoji_text_presentation_selector {
 //    () => {
 //        "\u{FE0E}"
 //    };
 //}
 //
-//pub const DEFAULT_ATTACHMENT_FLAG: &str = concat!("📎", emoji_text_presentation_selector!());
-//pub const DEFAULT_SELECTED_FLAG: &str = concat!("☑️", emoji_text_presentation_selector!());
-//pub const DEFAULT_UNSEEN_FLAG: &str = concat!("●", emoji_text_presentation_selector!());
-//pub const DEFAULT_SNOOZED_FLAG: &str = concat!("💤", emoji_text_presentation_selector!());
+//pub const DEFAULT_ATTACHMENT_FLAG: &str = concat!("📎",
+// emoji_text_presentation_selector!()); pub const DEFAULT_SELECTED_FLAG: &str =
+// concat!("☑️", emoji_text_presentation_selector!());
+// pub const DEFAULT_UNSEEN_FLAG: &str = concat!("●",
+// emoji_text_presentation_selector!()); pub const DEFAULT_SNOOZED_FLAG: &str =
+// concat!("💤", emoji_text_presentation_selector!());
 
 pub const DEFAULT_ATTACHMENT_FLAG: &str = "📎";
 pub const DEFAULT_SELECTED_FLAG: &str = "☑️";
@@ -225,18 +230,13 @@ pub enum Focus {
     EntryFullscreen,
 }
 
-#[derive(Debug, Copy, PartialEq, Eq, Clone)]
+#[derive(Debug, Copy, PartialEq, Eq, Clone, Default)]
 pub enum Modifier {
+    #[default]
     SymmetricDifference,
     Union,
     Difference,
     Intersection,
-}
-
-impl Default for Modifier {
-    fn default() -> Self {
-        Modifier::SymmetricDifference
-    }
 }
 
 #[derive(Debug, Default)]
@@ -601,10 +601,9 @@ pub trait MailListingTrait: ListingTrait {
                 }
             }
             ListingAction::ExportMbox(format, ref path) => {
+                use std::{future::Future, io::Write, pin::Pin};
+
                 use futures::future::try_join_all;
-                use std::future::Future;
-                use std::io::Write;
-                use std::pin::Pin;
 
                 let futures: Result<Vec<_>> = envs_to_set
                     .iter()
@@ -725,7 +724,8 @@ pub trait MailListingTrait: ListingTrait {
     ) {
     }
 
-    /// Use `force` when there have been changes in the mailbox or account lists in `context`
+    /// Use `force` when there have been changes in the mailbox or account lists
+    /// in `context`
     fn refresh_mailbox(&mut self, context: &mut Context, force: bool);
 }
 
@@ -1357,7 +1357,7 @@ impl Component for Listing {
                                 .mailbox_by_path(mailbox_path)
                                 .and_then(|mailbox_hash| {
                                     Ok((
-                                        std::fs::read(&file_path).chain_err_summary(|| {
+                                        std::fs::read(file_path).chain_err_summary(|| {
                                             format!("Could not read {}", file_path.display())
                                         })?,
                                         mailbox_hash,
@@ -1716,7 +1716,8 @@ impl Component for Listing {
                                     *account_cursor += 1;
                                     *entry_cursor = MenuEntryCursor::Status;
                                 }
-                                /* If current account has no mailboxes and there is no next account, return true */
+                                /* If current account has no mailboxes and there is no next
+                                 * account, return true */
                                 (_, MenuEntryCursor::Status) => {
                                     return true;
                                 }
@@ -1929,7 +1930,7 @@ impl Component for Listing {
                     .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
                 return true;
             }
-            UIEvent::Input(Key::Char(c)) if ('0'..='9').contains(&c) => {
+            UIEvent::Input(Key::Char(c)) if c.is_ascii_digit() => {
                 self.cmd_buf.push(c);
                 self.component.set_modifier_active(true);
                 context
@@ -2309,8 +2310,8 @@ impl Listing {
         let mut branches = String::with_capacity(16);
 
         // What depth to skip if a mailbox is toggled to collapse
-        // The value should be the collapsed mailbox's indentation, so that its children are not
-        // visible.
+        // The value should be the collapsed mailbox's indentation, so that its children
+        // are not visible.
         let mut skip: Option<usize> = None;
         let mut skipped_counter: usize = 0;
         'grid_loop: for y in get_y(upper_left) + 1..get_y(bottom_right) {
@@ -2381,8 +2382,8 @@ impl Listing {
                 )
             };
 
-            /* Calculate how many columns the mailbox index tags should occupy with right alignment,
-             * eg.
+            /* Calculate how many columns the mailbox index tags should occupy with right
+             * alignment, eg.
              *  1
              *  2
              * ...

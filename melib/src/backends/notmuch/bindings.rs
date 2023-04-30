@@ -244,7 +244,6 @@ pub type notmuch_database_open_verbose = unsafe extern "C" fn(
 ) -> notmuch_status_t;
 
 /// Retrieve last status string for given database.
-///
 pub type notmuch_database_status_string =
     unsafe extern "C" fn(notmuch: *const notmuch_database_t) -> *const ::std::os::raw::c_char;
 
@@ -509,7 +508,6 @@ extern "C" {
     /// @deprecated Deprecated as of libnotmuch 5.1 (notmuch 0.26). Please
     /// use notmuch_database_index_file instead.
     /// ```
-    ///
     pub fn notmuch_database_add_message(
         database: *mut notmuch_database_t,
         filename: *const ::std::os::raw::c_char,
@@ -751,7 +749,7 @@ pub type notmuch_query_add_tag_exclude = unsafe extern "C" fn(
 ///     }
 ///
 ///     notmuch_query_destroy (query);
-///```
+/// ```
 ///
 /// Note: If you are finished with a thread before its containing
 /// query, you can call notmuch_thread_destroy to clean up some memory
@@ -779,7 +777,6 @@ pub type notmuch_query_search_threads = unsafe extern "C" fn(
 /// @deprecated Deprecated as of libnotmuch 5 (notmuch 0.25). Please
 /// ```
 /// use notmuch_query_search_threads instead.
-///
 pub type notmuch_query_search_threads_st = unsafe extern "C" fn(
     query: *mut notmuch_query_t,
     out: *mut *mut notmuch_threads_t,
@@ -809,7 +806,7 @@ pub type notmuch_query_search_threads_st = unsafe extern "C" fn(
 ///     }
 ///
 ///     notmuch_query_destroy (query);
-///```
+/// ```
 ///
 /// Note: If you are finished with a message before its containing
 /// query, you can call notmuch_message_destroy to clean up some memory
@@ -839,7 +836,6 @@ pub type notmuch_query_search_messages = unsafe extern "C" fn(
 /// @deprecated Deprecated as of libnotmuch 5 (notmuch 0.25). Please use
 /// ```
 /// notmuch_query_search_messages instead.
-///
 pub type notmuch_query_search_messages_st = unsafe extern "C" fn(
     query: *mut notmuch_query_t,
     out: *mut *mut notmuch_messages_t,
@@ -1091,7 +1087,7 @@ pub type notmuch_thread_get_newest_date =
 ///     }
 ///
 ///     notmuch_thread_destroy (thread);
-///```
+/// ```
 ///
 /// Note that there's no explicit destructor needed for the
 /// notmuch_tags_t object. (For consistency, we do provide a
@@ -1250,7 +1246,8 @@ pub type notmuch_message_get_filename =
 pub type notmuch_message_get_filenames =
     unsafe extern "C" fn(message: *mut notmuch_message_t) -> *mut notmuch_filenames_t;
 
-/// Re-index the e-mail corresponding to 'message' using the supplied index options
+/// Re-index the e-mail corresponding to 'message' using the supplied index
+/// options
 ///
 /// Returns the status of the re-index operation.  (see the return
 /// codes documented in notmuch_database_index_file)
@@ -1333,7 +1330,7 @@ pub type notmuch_message_get_header = unsafe extern "C" fn(
 ///     }
 ///
 ///     notmuch_message_destroy (message);
-///```
+/// ```
 ///
 /// Note that there's no explicit destructor needed for the
 /// notmuch_tags_t object. (For consistency, we do provide a
@@ -1423,7 +1420,6 @@ pub type notmuch_message_maildir_flags_to_tags =
 
 /// return TRUE if any filename of 'message' has maildir flag 'flag',
 /// FALSE otherwise.
-///
 pub type notmuch_message_has_maildir_flag = unsafe extern "C" fn(
     message: *mut notmuch_message_t,
     flag: ::std::os::raw::c_char,
@@ -1673,7 +1669,7 @@ extern "C" {
     ///     }
     ///
     ///     notmuch_message_properties_destroy (list);
-    ///```
+    /// ```
     ///
     /// Note that there's no explicit destructor needed for the
     /// notmuch_message_properties_t object. (For consistency, we do
@@ -1689,7 +1685,8 @@ extern "C" {
         exact: notmuch_bool_t,
     ) -> *mut notmuch_message_properties_t;
 }
-/// Return the number of properties named "key" belonging to the specific message.
+/// Return the number of properties named "key" belonging to the specific
+/// message.
 ///
 /// ```text
 /// @param[in] message  The message to examine
@@ -1970,7 +1967,8 @@ pub type notmuch_database_get_config_list = unsafe extern "C" fn(
     out: *mut *mut notmuch_config_list_t,
 ) -> notmuch_status_t;
 
-/// Is 'config_list' iterator valid (i.e. _key, _value, _move_to_next can be called).
+/// Is 'config_list' iterator valid (i.e. _key, _value, _move_to_next can be
+/// called).
 ///
 /// ```text
 /// @since libnotmuch 4.4 (notmuch 0.23)

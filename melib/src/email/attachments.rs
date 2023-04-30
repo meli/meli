@@ -20,17 +20,17 @@
  */
 
 /*! Encoding/decoding of attachments */
-use crate::email::{
-    address::StrBuilder,
-    parser::{self, BytesExt},
-    Mail,
-};
-use core::fmt;
-use core::str;
+use core::{fmt, str};
+
 use data_encoding::BASE64_MIME;
 use smallvec::SmallVec;
 
-use crate::email::attachment_types::*;
+use crate::email::{
+    address::StrBuilder,
+    attachment_types::*,
+    parser::{self, BytesExt},
+    Mail,
+};
 
 pub type Filter<'a> = Box<dyn FnMut(&Attachment, &mut Vec<u8>) + 'a>;
 
@@ -117,8 +117,9 @@ impl AttachmentBuilder {
         self
     }
 
-    /// Set body to the entire raw contents, use this if raw contains only data and no headers
-    /// If raw contains data and headers pass it through AttachmentBuilder::new().
+    /// Set body to the entire raw contents, use this if raw contains only data
+    /// and no headers If raw contains data and headers pass it through
+    /// AttachmentBuilder::new().
     pub fn set_body_to_raw(&mut self) -> &mut Self {
         self.body = StrBuilder {
             offset: 0,
@@ -515,8 +516,8 @@ impl Attachment {
         }
     }
 
-    /* Call on the body of a multipart/mixed Envelope to check if there are attachments without
-     * completely parsing them */
+    /* Call on the body of a multipart/mixed Envelope to check if there are
+     * attachments without completely parsing them */
     pub fn check_if_has_attachments_quick(bytes: &[u8], boundary: &[u8]) -> bool {
         if bytes.is_empty() {
             return false;

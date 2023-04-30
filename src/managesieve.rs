@@ -21,9 +21,9 @@
 
 #[macro_use]
 extern crate melib;
-use melib::*;
-
 use std::collections::VecDeque;
+
+use melib::*;
 #[macro_use]
 extern crate serde_derive;
 extern crate linkify;
@@ -32,8 +32,7 @@ extern crate serde_json;
 extern crate smallvec;
 extern crate termion;
 
-use melib::backends::imap::managesieve::ManageSieveConnection;
-use melib::Result;
+use melib::{backends::imap::managesieve::ManageSieveConnection, Result};
 
 #[macro_use]
 pub mod types;
@@ -66,14 +65,16 @@ pub mod mailcap;
 
 use futures::executor::block_on;
 
-/// Opens an interactive shell on a managesieve server. Suggested use is with rlwrap(1)
+/// Opens an interactive shell on a managesieve server. Suggested use is with
+/// rlwrap(1)
 ///
 /// # Example invocation:
 /// ```sh
 /// ./manage_sieve server_hostname server_username server_password server_port");
 /// ```
 ///
-/// `danger_accept_invalid_certs` is turned on by default, so no certificate validation is performed.
+/// `danger_accept_invalid_certs` is turned on by default, so no certificate
+/// validation is performed.
 
 fn main() -> Result<()> {
     let mut args = std::env::args().skip(1).collect::<Vec<String>>();
@@ -139,8 +140,7 @@ fn main() -> Result<()> {
     use PrevCmd::*;
     let mut prev_cmd: PrevCmd = None;
     loop {
-        use std::io;
-        use std::io::Write;
+        use std::{io, io::Write};
         input.clear();
         print!("> ");
         io::stdout().flush().unwrap();
@@ -193,7 +193,7 @@ fn main() -> Result<()> {
                     match prev_cmd {
                         None => println!("invalid command `{}`", input),
                         Checkscript => {
-                            let content = std::fs::read_to_string(&input).unwrap();
+                            let content = std::fs::read_to_string(input).unwrap();
                             let result = block_on(conn.checkscript(content.as_bytes()));
                             println!("Got {:?}", result);
                             prev_cmd = None;
@@ -204,7 +204,7 @@ fn main() -> Result<()> {
                         }
                         PutscriptString(name) => {
                             prev_cmd = None;
-                            let content = std::fs::read_to_string(&input).unwrap();
+                            let content = std::fs::read_to_string(input).unwrap();
                             let result =
                                 block_on(conn.putscript(name.as_bytes(), content.as_bytes()));
                             println!("Got {:?}", result);

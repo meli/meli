@@ -20,11 +20,11 @@
  */
 
 //! # Mutt contact formats
-//!
+
+use std::collections::VecDeque;
 
 use super::*;
 use crate::parsec::{is_not, map_res, match_literal_anycase, prefix, Parser};
-use std::collections::VecDeque;
 
 //alias <nickname> [ <long name> ] <address>
 // From mutt doc:

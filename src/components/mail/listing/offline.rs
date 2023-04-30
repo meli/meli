@@ -19,9 +19,10 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use std::borrow::Cow;
+
 use super::*;
 use crate::components::PageMovement;
-use std::borrow::Cow;
 
 #[derive(Debug)]
 pub struct OfflineListing {

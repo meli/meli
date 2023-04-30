@@ -19,18 +19,25 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use crate::conf::AccountSettings;
-use crate::email::{Envelope, EnvelopeHash, Flag};
-use crate::error::{Error, Result};
-use crate::shellexpand::ShellExpandTrait;
-use crate::{backends::*, Collection};
+use std::{
+    collections::{hash_map::HashMap, BTreeMap},
+    ffi::{CStr, CString, OsStr},
+    io::Read,
+    os::unix::ffi::OsStrExt,
+    path::{Path, PathBuf},
+    sync::{Arc, Mutex, RwLock},
+};
+
 use smallvec::SmallVec;
-use std::collections::{hash_map::HashMap, BTreeMap};
-use std::ffi::{CStr, CString, OsStr};
-use std::io::Read;
-use std::os::unix::ffi::OsStrExt;
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, RwLock};
+
+use crate::{
+    backends::*,
+    conf::AccountSettings,
+    email::{Envelope, EnvelopeHash, Flag},
+    error::{Error, Result},
+    shellexpand::ShellExpandTrait,
+    Collection,
+};
 
 macro_rules! call {
     ($lib:expr, $func:ty) => {{
@@ -316,9 +323,14 @@ impl NotmuchDb {
                 Ok(l) => l,
                 Err(err) => {
                     if custom_dlpath {
-                        return Err(Error::new(format!("Notmuch `library_file_path` setting value `{}` for account {} does not exist or is a directory or not a valid library file.",dlpath, s.name()))
-                            .set_kind(ErrorKind::Configuration)
-                            .set_source(Some(Arc::new(err))));
+                        return Err(Error::new(format!(
+                            "Notmuch `library_file_path` setting value `{}` for account {} does \
+                             not exist or is a directory or not a valid library file.",
+                            dlpath,
+                            s.name()
+                        ))
+                        .set_kind(ErrorKind::Configuration)
+                        .set_source(Some(Arc::new(err))));
                     } else {
                         return Err(Error::new("Could not load libnotmuch!")
                             .set_details(super::NOTMUCH_ERROR_DETAILS)
@@ -347,10 +359,12 @@ impl NotmuchDb {
         path.push(".notmuch");
         if !path.exists() || !path.is_dir() {
             return Err(Error::new(format!(
-                "Notmuch `root_mailbox` {} for account {} does not contain a `.notmuch` subdirectory.",
+                "Notmuch `root_mailbox` {} for account {} does not contain a `.notmuch` \
+                 subdirectory.",
                 s.root_mailbox.as_str(),
                 s.name()
-            )).set_kind(ErrorKind::Configuration));
+            ))
+            .set_kind(ErrorKind::Configuration));
         }
         path.pop();
 
@@ -378,7 +392,8 @@ impl NotmuchDb {
                 );
             } else {
                 return Err(Error::new(format!(
-                    "notmuch mailbox configuration entry `{}` for account {} should have a `query` value set.",
+                    "notmuch mailbox configuration entry `{}` for account {} should have a \
+                     `query` value set.",
                     k,
                     s.name(),
                 ))
@@ -399,7 +414,8 @@ impl NotmuchDb {
                 mailboxes.entry(hash).or_default().parent = Some(parent_hash);
             } else {
                 return Err(Error::new(format!(
-                    "Mailbox configuration for `{}` defines its parent mailbox as `{}` but no mailbox exists with this exact name.",
+                    "Mailbox configuration for `{}` defines its parent mailbox as `{}` but no \
+                     mailbox exists with this exact name.",
                     mailboxes[&hash].name(),
                     parent
                 ))
@@ -445,10 +461,12 @@ impl NotmuchDb {
         path.push(".notmuch");
         if !path.exists() || !path.is_dir() {
             return Err(Error::new(format!(
-                "Notmuch `root_mailbox` {} for account {} does not contain a `.notmuch` subdirectory.",
+                "Notmuch `root_mailbox` {} for account {} does not contain a `.notmuch` \
+                 subdirectory.",
                 s.root_mailbox.as_str(),
                 s.name()
-            )).set_kind(ErrorKind::Configuration));
+            ))
+            .set_kind(ErrorKind::Configuration));
         }
         path.pop();
 
@@ -456,19 +474,21 @@ impl NotmuchDb {
         if let Some(lib_path) = s.extra.remove("library_file_path") {
             if !Path::new(&lib_path).exists() || Path::new(&lib_path).is_dir() {
                 return Err(Error::new(format!(
-                            "Notmuch `library_file_path` setting value `{}` for account {} does not exist or is a directory.",
-                            &lib_path,
-                            s.name()
-                )).set_kind(ErrorKind::Configuration));
+                    "Notmuch `library_file_path` setting value `{}` for account {} does not exist \
+                     or is a directory.",
+                    &lib_path,
+                    s.name()
+                ))
+                .set_kind(ErrorKind::Configuration));
             }
         }
         let mut parents: Vec<(String, String)> = Vec::with_capacity(s.mailboxes.len());
         for (k, f) in s.mailboxes.iter_mut() {
             if f.extra.remove("query").is_none() {
                 return Err(Error::new(format!(
-                    "notmuch mailbox configuration entry `{}` for account {} should have a `query` value set.",
-                    k,
-                    account_name,
+                    "notmuch mailbox configuration entry `{}` for account {} should have a \
+                     `query` value set.",
+                    k, account_name,
                 ))
                 .set_kind(ErrorKind::Configuration));
             }
@@ -480,9 +500,9 @@ impl NotmuchDb {
         for (mbox, parent) in parents.iter() {
             if !s.mailboxes.contains_key(parent) {
                 return Err(Error::new(format!(
-                    "Mailbox configuration for `{}` defines its parent mailbox as `{}` but no mailbox exists with this exact name.",
-                    mbox,
-                    parent
+                    "Mailbox configuration for `{}` defines its parent mailbox as `{}` but no \
+                     mailbox exists with this exact name.",
+                    mbox, parent
                 ))
                 .set_kind(ErrorKind::Configuration));
             }

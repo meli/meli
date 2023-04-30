@@ -23,38 +23,42 @@
  * Account management from user configuration.
  */
 
-use super::{AccountConf, FileMailboxConf};
-use crate::jobs::{JobExecutor, JobId, JoinHandle};
-use indexmap::IndexMap;
-use melib::backends::*;
-use melib::email::*;
-use melib::error::{Error, ErrorKind, Result};
-use melib::text_processing::GlobMatch;
-use melib::thread::{SortField, SortOrder, Threads};
-use melib::AddressBook;
-use melib::Collection;
-use smallvec::SmallVec;
-use std::collections::BTreeMap;
-use std::collections::{HashMap, HashSet};
+use std::{
+    borrow::Cow,
+    collections::{BTreeMap, HashMap, HashSet, VecDeque},
+    convert::TryFrom,
+    fs,
+    future::Future,
+    io,
+    ops::{Index, IndexMut},
+    os::unix::fs::PermissionsExt,
+    pin::Pin,
+    result,
+    sync::{Arc, RwLock},
+};
 
-use crate::types::UIEvent::{self, EnvelopeRemove, EnvelopeRename, EnvelopeUpdate, Notification};
-use crate::{StatusEvent, ThreadEvent};
 use crossbeam::channel::Sender;
 use futures::{
     future::FutureExt,
     stream::{Stream, StreamExt},
 };
-use std::borrow::Cow;
-use std::collections::VecDeque;
-use std::convert::TryFrom;
-use std::fs;
-use std::future::Future;
-use std::io;
-use std::ops::{Index, IndexMut};
-use std::os::unix::fs::PermissionsExt;
-use std::pin::Pin;
-use std::result;
-use std::sync::{Arc, RwLock};
+use indexmap::IndexMap;
+use melib::{
+    backends::*,
+    email::*,
+    error::{Error, ErrorKind, Result},
+    text_processing::GlobMatch,
+    thread::{SortField, SortOrder, Threads},
+    AddressBook, Collection,
+};
+use smallvec::SmallVec;
+
+use super::{AccountConf, FileMailboxConf};
+use crate::{
+    jobs::{JobExecutor, JobId, JoinHandle},
+    types::UIEvent::{self, EnvelopeRemove, EnvelopeRename, EnvelopeUpdate, Notification},
+    StatusEvent, ThreadEvent,
+};
 
 #[macro_export]
 macro_rules! try_recv_timeout {
@@ -72,19 +76,14 @@ macro_rules! try_recv_timeout {
     }};
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum MailboxStatus {
     Available,
     Failed(Error),
     /// first argument is done work, and second is total work
     Parsing(usize, usize),
+    #[default]
     None,
-}
-
-impl Default for MailboxStatus {
-    fn default() -> Self {
-        MailboxStatus::None
-    }
 }
 
 impl MailboxStatus {
@@ -512,7 +511,11 @@ impl Account {
                 Err(err) => {
                     sender
                         .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(format!("Error with setting up an sqlite3 search database for account `{}`: {}", name, err))
+                            StatusEvent::DisplayMessage(format!(
+                                "Error with setting up an sqlite3 search database for account \
+                                 `{}`: {}",
+                                name, err
+                            )),
                         )))
                         .unwrap();
                     None
@@ -523,7 +526,11 @@ impl Account {
                 if !db_path.exists() {
                     sender
                         .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(format!("An sqlite3 search database for account `{}` seems to be missing, a new one must be created with the `reindex` command.", name))
+                            StatusEvent::DisplayMessage(format!(
+                                "An sqlite3 search database for account `{}` seems to be missing, \
+                                 a new one must be created with the `reindex` command.",
+                                name
+                            )),
                         )))
                         .unwrap();
                 }
@@ -563,9 +570,10 @@ impl Account {
 
         let mut sent_mailbox = None;
 
-        /* Keep track of which mailbox config values we encounter in the actual mailboxes returned
-         * by the backend. For each of the actual mailboxes, delete the key from the hash set. If
-         * any are left, they are misconfigurations (eg misspelling) and a warning is shown to the
+        /* Keep track of which mailbox config values we encounter in the actual
+         * mailboxes returned by the backend. For each of the actual
+         * mailboxes, delete the key from the hash set. If any are left, they
+         * are misconfigurations (eg misspelling) and a warning is shown to the
          * user */
         let mut mailbox_conf_hash_set = self
             .settings
@@ -630,17 +638,19 @@ impl Account {
         for missing_mailbox in &mailbox_conf_hash_set {
             melib::log(
                 format!(
-                    "Account `{}` mailbox `{}` configured but not present in account's mailboxes. Is it misspelled?",
+                    "Account `{}` mailbox `{}` configured but not present in account's mailboxes. \
+                     Is it misspelled?",
                     &self.name, missing_mailbox,
                 ),
                 melib::WARN,
             );
             self.sender
                 .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(format!(
-                                    "Account `{}` mailbox `{}` configured but not present in account's mailboxes. Is it misspelled?",
-                                    &self.name, missing_mailbox,
-                            )),
+                    StatusEvent::DisplayMessage(format!(
+                        "Account `{}` mailbox `{}` configured but not present in account's \
+                         mailboxes. Is it misspelled?",
+                        &self.name, missing_mailbox,
+                    )),
                 )))
                 .unwrap();
         }
@@ -732,7 +742,8 @@ impl Account {
         }
 
         {
-            //let mailbox: &mut Mailbox = self.mailboxes[idx].as_mut().unwrap().as_mut().unwrap();
+            //let mailbox: &mut Mailbox =
+            // self.mailboxes[idx].as_mut().unwrap().as_mut().unwrap();
             match event.kind {
                 RefreshEventKind::Update(old_hash, envelope) => {
                     if !self.collection.contains_key(&old_hash) {
@@ -1056,7 +1067,7 @@ impl Account {
     pub fn refresh(&mut self, mailbox_hash: MailboxHash) -> Result<()> {
         if let Some(ref refresh_command) = self.settings.conf().refresh_command {
             let child = std::process::Command::new("sh")
-                .args(&["-c", refresh_command])
+                .args(["-c", refresh_command])
                 .stdin(std::process::Stdio::null())
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::piped())
@@ -1297,9 +1308,12 @@ impl Account {
         send_mail: crate::conf::composing::SendMail,
         complete_in_background: bool,
     ) -> Result<Option<JoinHandle<Result<()>>>> {
+        use std::{
+            io::Write,
+            process::{Command, Stdio},
+        };
+
         use crate::conf::composing::SendMail;
-        use std::io::Write;
-        use std::process::{Command, Stdio};
         debug!(&send_mail);
         match send_mail {
             SendMail::ShellCommand(ref command) => {
@@ -1309,7 +1323,7 @@ impl Account {
                     ));
                 }
                 let mut msmtp = Command::new("sh")
-                    .args(&["-c", command])
+                    .args(["-c", command])
                     .stdin(Stdio::piped())
                     .stdout(Stdio::piped())
                     .spawn()
@@ -1385,9 +1399,12 @@ impl Account {
         let backend = self.backend.clone();
         |message: Arc<String>| -> Pin<Box<dyn Future<Output = Result<()>> + Send>> {
             Box::pin(async move {
+                use std::{
+                    io::Write,
+                    process::{Command, Stdio},
+                };
+
                 use crate::conf::composing::SendMail;
-                use std::io::Write;
-                use std::process::{Command, Stdio};
                 match send_mail {
                     SendMail::ShellCommand(ref command) => {
                         if command.is_empty() {
@@ -1396,7 +1413,7 @@ impl Account {
                             ));
                         }
                         let mut msmtp = Command::new("sh")
-                            .args(&["-c", command])
+                            .args(["-c", command])
                             .stdin(Stdio::piped())
                             .stdout(Stdio::piped())
                             .spawn()
@@ -1418,9 +1435,10 @@ impl Account {
                                 )
                             } else {
                                 format!(
-                            "Could not send e-mail using `{}`: Process was killed by signal",
-                            command
-                        )
+                                    "Could not send e-mail using `{}`: Process was killed by \
+                                     signal",
+                                    command
+                                )
                             };
                             melib::log(&error_message, melib::LoggingLevel::ERROR);
                             return Err(Error::new(error_message).set_summary("Message not sent."));
@@ -1566,8 +1584,8 @@ impl Account {
         ret.as_ref().map(|ret| ret.1.ref_mailbox.hash())
     }
 
-    /* Call only in Context::is_online, since only Context can launch the watcher threads if an
-     * account goes from offline to online. */
+    /* Call only in Context::is_online, since only Context can launch the watcher
+     * threads if an account goes from offline to online. */
     pub fn is_online(&mut self) -> Result<()> {
         if !self.backend_capabilities.is_remote && !self.backend_capabilities.is_async {
             return Ok(());
@@ -1967,7 +1985,8 @@ impl Account {
                                     }
                                     tmp
                                 };
-                                /* if new mailbox has parent, we need to update its children field */
+                                /* if new mailbox has parent, we need to update its children
+                                 * field */
                                 if let Some(parent_hash) = mailboxes[&mailbox_hash].parent() {
                                     self.mailbox_entries
                                         .entry(parent_hash)
@@ -2002,7 +2021,8 @@ impl Account {
                                     &self.mailbox_entries,
                                     &mut self.mailboxes_order,
                                 );
-                                //Ok(format!("`{}` successfully created.", &path))
+                                //Ok(format!("`{}` successfully created.",
+                                // &path))
                             }
                         }
                     }
@@ -2050,7 +2070,8 @@ impl Account {
                                 .remove(&mailbox_hash);
                             let deleted_mailbox =
                                 self.mailbox_entries.remove(&mailbox_hash).unwrap();
-                            /* if deleted mailbox had parent, we need to update its children field */
+                            /* if deleted mailbox had parent, we need to update its children
+                             * field */
                             if let Some(parent_hash) = deleted_mailbox.ref_mailbox.parent() {
                                 self.mailbox_entries
                                     .entry(parent_hash)
@@ -2392,7 +2413,7 @@ fn build_mailboxes_order(
             }
             while let Some(i) = iter.next() {
                 let c = &mut node.children[i];
-                rec(c, mailbox_entries, indentation, iter.peek() != None);
+                rec(c, mailbox_entries, indentation, iter.peek().is_some());
             }
         }
 

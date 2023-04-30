@@ -19,27 +19,21 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use std::{borrow::Cow, collections::HashMap, time::Duration};
+
 use super::*;
-use std::borrow::Cow;
-use std::collections::HashMap;
-use std::time::Duration;
 
 type AutoCompleteFn = Box<dyn Fn(&Context, &str) -> Vec<AutoCompleteEntry> + Send + Sync>;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Default)]
 enum FormFocus {
+    #[default]
     Fields,
     Buttons,
     TextInput,
 }
 
 type Cursor = usize;
-
-impl Default for FormFocus {
-    fn default() -> FormFocus {
-        FormFocus::Fields
-    }
-}
 
 pub enum Field {
     Text(UText, Option<(AutoCompleteFn, Box<AutoComplete>)>),
@@ -149,8 +143,8 @@ impl Component for Field {
                  * ##########################################
                  *
                  * Example:
-                 * For the string "The quick brown fox jumps over the lazy dog" with visible width
-                 * of field of 10 columns
+                 * For the string "The quick brown fox jumps over the lazy dog" with visible
+                 * width of field of 10 columns
                  *
                  *
                  * Cursor <= width
@@ -390,18 +384,13 @@ impl fmt::Display for Field {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub enum FormButtonActions {
     Accept,
     Reset,
+    #[default]
     Cancel,
     Other(&'static str),
-}
-
-impl Default for FormButtonActions {
-    fn default() -> Self {
-        FormButtonActions::Cancel
-    }
 }
 
 #[derive(Debug, Default)]

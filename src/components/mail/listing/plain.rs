@@ -19,12 +19,10 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::EntryStrings;
-use super::*;
-use crate::components::PageMovement;
-use crate::jobs::JoinHandle;
-use std::cmp;
-use std::iter::FromIterator;
+use std::{cmp, iter::FromIterator};
+
+use super::{EntryStrings, *};
+use crate::{components::PageMovement, jobs::JoinHandle};
 
 macro_rules! address_list {
     (($name:expr) as comma_sep_list) => {{
@@ -118,8 +116,8 @@ macro_rules! row_attr {
     }};
 }
 
-/// A list of all mail (`Envelope`s) in a `Mailbox`. On `\n` it opens the `Envelope` content in a
-/// `MailView`.
+/// A list of all mail (`Envelope`s) in a `Mailbox`. On `\n` it opens the
+/// `Envelope` content in a `MailView`.
 #[derive(Debug)]
 pub struct PlainListing {
     /// (x, y, z): x is accounts, y is mailboxes, z is index inside a mailbox.
@@ -182,8 +180,8 @@ impl MailListingTrait for PlainListing {
         )
     }
 
-    /// Fill the `self.data_columns` `CellBuffers` with the contents of the account mailbox the user has
-    /// chosen.
+    /// Fill the `self.data_columns` `CellBuffers` with the contents of the
+    /// account mailbox the user has chosen.
     fn refresh_mailbox(&mut self, context: &mut Context, force: bool) {
         self.set_dirty(true);
         let old_cursor_pos = self.cursor_pos;
@@ -423,8 +421,8 @@ impl ListingTrait for PlainListing {
 
         let top_idx = page_no * rows;
 
-        /* If cursor position has changed, remove the highlight from the previous position and
-         * apply it in the new one. */
+        /* If cursor position has changed, remove the highlight from the previous
+         * position and apply it in the new one. */
         if self.cursor_pos.2 != self.new_cursor_pos.2 && prev_page_no == page_no {
             let old_cursor_pos = self.cursor_pos;
             self.cursor_pos = self.new_cursor_pos;
@@ -571,9 +569,10 @@ impl ListingTrait for PlainListing {
                 self.view
                     .process_event(&mut UIEvent::VisibilityChange(false), context);
                 self.dirty = true;
-                /* If self.rows.row_updates is not empty and we exit a thread, the row_update events
-                 * will be performed but the list will not be drawn. So force a draw in any case.
-                 * */
+                /* If self.rows.row_updates is not empty and we exit a thread, the row_update
+                 * events will be performed but the list will not be drawn.
+                 * So force a draw in any case.
+                 */
                 self.force_draw = true;
             }
             Focus::Entry => {
@@ -973,8 +972,8 @@ impl PlainListing {
         let account = &context.accounts[&self.cursor_pos.0];
 
         if !account.contains_key(env_hash) {
-            /* The envelope has been renamed or removed, so wait for the appropriate event to
-             * arrive */
+            /* The envelope has been renamed or removed, so wait for the appropriate
+             * event to arrive */
             return;
         }
         let envelope: EnvelopeRef = account.collection.get_env(env_hash);
@@ -1425,7 +1424,8 @@ impl Component for PlainListing {
                         self.subsort = (*field, *order);
                         //if !self.filtered_selection.is_empty() {
                         //    let threads = &account.collection.threads[&self.cursor_pos.1];
-                        //    threads.vec_inner_sort_by(&mut self.filtered_selection, self.sort, &account.collection);
+                        //    threads.vec_inner_sort_by(&mut self.filtered_selection, self.sort,
+                        // &account.collection);
                         //} else {
                         //    self.refresh_mailbox(contex, falset);
                         //}

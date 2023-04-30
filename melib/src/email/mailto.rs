@@ -20,8 +20,9 @@
  */
 
 /*! Parsing of `mailto` addresses */
-use super::*;
 use std::convert::TryFrom;
+
+use super::*;
 
 #[derive(Debug, Clone)]
 pub struct Mailto {

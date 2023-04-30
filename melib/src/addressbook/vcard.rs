@@ -27,11 +27,13 @@
 //! - Version 4 [RFC 6350: vCard Format Specification](https://datatracker.ietf.org/doc/rfc6350/)
 //! - Parameter escaping [RFC 6868 Parameter Value Encoding in iCalendar and vCard](https://datatracker.ietf.org/doc/rfc6868/)
 
+use std::{collections::HashMap, convert::TryInto};
+
 use super::*;
-use crate::error::{Error, Result};
-use crate::parsec::{match_literal_anycase, one_or_more, peek, prefix, take_until, Parser};
-use std::collections::HashMap;
-use std::convert::TryInto;
+use crate::{
+    error::{Error, Result},
+    parsec::{match_literal_anycase, one_or_more, peek, prefix, take_until, Parser},
+};
 
 /* Supported vcard versions */
 pub trait VCardVersion: core::fmt::Debug {}
@@ -86,7 +88,11 @@ impl CardDeserializer {
         input = if (!input.starts_with(HEADER_CRLF) || !input.ends_with(FOOTER_CRLF))
             && (!input.starts_with(HEADER_LF) || !input.ends_with(FOOTER_LF))
         {
-            return Err(Error::new(format!("Error while parsing vcard: input does not start or end with correct header and footer. input is:\n{:?}", input)));
+            return Err(Error::new(format!(
+                "Error while parsing vcard: input does not start or end with correct header and \
+                 footer. input is:\n{:?}",
+                input
+            )));
         } else if input.starts_with(HEADER_CRLF) {
             &input[HEADER_CRLF.len()..input.len() - FOOTER_CRLF.len()]
         } else {

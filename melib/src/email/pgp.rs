@@ -20,11 +20,13 @@
  */
 
 /*! Verification of OpenPGP signatures */
-use crate::email::{
-    attachment_types::{ContentType, MultipartType},
-    attachments::Attachment,
+use crate::{
+    email::{
+        attachment_types::{ContentType, MultipartType},
+        attachments::Attachment,
+    },
+    Error, Result,
 };
-use crate::{Error, Result};
 
 /// Convert raw attachment to the form needed for signature verification ([rfc3156](https://tools.ietf.org/html/rfc3156))
 ///

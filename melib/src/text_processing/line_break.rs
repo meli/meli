@@ -20,16 +20,17 @@
  */
 
 extern crate unicode_segmentation;
-use self::unicode_segmentation::UnicodeSegmentation;
-use super::grapheme_clusters::TextProcessing;
-use super::tables::LINE_BREAK_RULES;
-use super::types::LineBreakClass;
-use super::types::Reflow;
-use core::cmp::Ordering;
-use core::iter::Peekable;
-use core::str::FromStr;
+use core::{cmp::Ordering, iter::Peekable, str::FromStr};
 use std::collections::VecDeque;
+
 use LineBreakClass::*;
+
+use self::unicode_segmentation::UnicodeSegmentation;
+use super::{
+    grapheme_clusters::TextProcessing,
+    tables::LINE_BREAK_RULES,
+    types::{LineBreakClass, Reflow},
+};
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum LineBreakCandidate {
@@ -138,14 +139,32 @@ impl EvenAfterSpaces for str {
 /// Returns positions where breaks can happen
 /// Examples:
 /// ```
-/// use melib::text_processing::{self, LineBreakCandidate::{self, *}};
-/// use melib::text_processing::line_break::LineBreakCandidateIter;
+/// use melib::text_processing::{
+///     self,
+///     line_break::LineBreakCandidateIter,
+///     LineBreakCandidate::{self, *},
+/// };
 ///
-/// assert!(LineBreakCandidateIter::new("").collect::<Vec<(usize, LineBreakCandidate)>>().is_empty());
-/// assert_eq!(&[(7, BreakAllowed), (12, MandatoryBreak)],
-///            LineBreakCandidateIter::new("Sample Text.").collect::<Vec<(usize, LineBreakCandidate)>>().as_slice());
-/// assert_eq!(&[(3, MandatoryBreak), (7, MandatoryBreak), (10, BreakAllowed), (17, MandatoryBreak)],
-///            LineBreakCandidateIter::new("Sa\nmp\r\nle T(e)xt.").collect::<Vec<(usize, LineBreakCandidate)>>().as_slice());
+/// assert!(LineBreakCandidateIter::new("")
+///     .collect::<Vec<(usize, LineBreakCandidate)>>()
+///     .is_empty());
+/// assert_eq!(
+///     &[(7, BreakAllowed), (12, MandatoryBreak)],
+///     LineBreakCandidateIter::new("Sample Text.")
+///         .collect::<Vec<(usize, LineBreakCandidate)>>()
+///         .as_slice()
+/// );
+/// assert_eq!(
+///     &[
+///         (3, MandatoryBreak),
+///         (7, MandatoryBreak),
+///         (10, BreakAllowed),
+///         (17, MandatoryBreak)
+///     ],
+///     LineBreakCandidateIter::new("Sa\nmp\r\nle T(e)xt.")
+///         .collect::<Vec<(usize, LineBreakCandidate)>>()
+///         .as_slice()
+/// );
 /// ```
 impl<'a> Iterator for LineBreakCandidateIter<'a> {
     type Item = (usize, LineBreakCandidate);
@@ -190,13 +209,13 @@ impl<'a> Iterator for LineBreakCandidateIter<'a> {
                 *reg_ind_streak = 0;
             }
 
-            /* LB1 Assign a line breaking class to each code point of the input. Resolve AI, CB, CJ,
-             * SA, SG, and XX into other line breaking classes depending on criteria outside the scope
-             * of this algorithm.
+            /* LB1 Assign a line breaking class to each code point of the input. Resolve
+             * AI, CB, CJ, SA, SG, and XX into other line breaking classes
+             * depending on criteria outside the scope of this algorithm.
              *
-             * In the absence of such criteria all characters with a specific combination of original
-             * class and General_Category property value are resolved as follows:
-             * Resolved Original     General_Category
+             * In the absence of such criteria all characters with a specific combination
+             * of original class and General_Category property value are
+             * resolved as follows: Resolved Original     General_Category
              * AL       AI, SG, XX   Any
              * CM       SA           Only Mn or Mc
              * AL       SA           Any except Mn and Mc
@@ -245,7 +264,8 @@ impl<'a> Iterator for LineBreakCandidateIter<'a> {
                         continue;
                     }
                     WJ => {
-                        /*: LB11 Do not break before or after Word joiner and related characters.*/
+                        /* : LB11 Do not break before or after Word joiner and related
+                         * characters. */
                         *pos += grapheme.len();
                         continue;
                     }
@@ -266,8 +286,8 @@ impl<'a> Iterator for LineBreakCandidateIter<'a> {
             }
             match class {
                 ZW => {
-                    // LB8 Break before any character following a zero-width space, even if one or more
-                    // spaces intervene
+                    // LB8 Break before any character following a zero-width space, even if one or
+                    // more spaces intervene
                     // ZW SP* ÷
                     *pos += grapheme.len();
                     while next_grapheme_class!((next_char is SP)) {
@@ -286,9 +306,9 @@ impl<'a> Iterator for LineBreakCandidateIter<'a> {
                 }
 
                 CM => {
-                    // LB9 Do not break a combining character sequence; treat it as if it has the line
-                    // breaking class of the base character in all of the following rules. Treat ZWJ as
-                    // if it were CM.
+                    // LB9 Do not break a combining character sequence; treat it as if it has the
+                    // line breaking class of the base character in all of the
+                    // following rules. Treat ZWJ as if it were CM.
                     // Treat X (CM | ZWJ)* as if it were X.
                     // where X is any line break class except BK, CR, LF, NL, SP, or ZW.
 
@@ -296,7 +316,7 @@ impl<'a> Iterator for LineBreakCandidateIter<'a> {
                     continue;
                 }
                 WJ => {
-                    /*: LB11 Do not break before or after Word joiner and related characters.*/
+                    /* : LB11 Do not break before or after Word joiner and related characters. */
                     *pos += grapheme.len();
                     /* Get next grapheme */
                     if next_grapheme_class!(iter, grapheme).is_some() {
@@ -305,7 +325,8 @@ impl<'a> Iterator for LineBreakCandidateIter<'a> {
                     continue;
                 }
                 GL => {
-                    /*LB12 Non-breaking characters: LB12 Do not break after NBSP and related characters.*/
+                    /* LB12 Non-breaking characters: LB12 Do not break after NBSP and related
+                     * characters. */
                     *pos += grapheme.len();
                     continue;
                 }
@@ -315,8 +336,8 @@ impl<'a> Iterator for LineBreakCandidateIter<'a> {
                 let next_class = get_class!(next_grapheme);
                 match next_class {
                     GL if ![SP, BA, HY].contains(&class) => {
-                        /* LB12a Do not break before NBSP and related characters, except after spaces and
-                         * hyphens.  [^SP BA HY] × GL
+                        /* LB12a Do not break before NBSP and related characters, except after
+                         * spaces and hyphens.  [^SP BA HY] × GL
                          * Also LB12 Do not break after NBSP and related characters */
                         *pos += grapheme.len();
                         continue;
@@ -384,8 +405,8 @@ impl<'a> Iterator for LineBreakCandidateIter<'a> {
                     if !text[idx + grapheme.len()..].even_after_spaces().is_empty()
                         && get_class!(text[idx + grapheme.len()..].even_after_spaces()) == NS =>
                 {
-                    /* LB16 Do not break between closing punctuation and a nonstarter (lb=NS), even with
-                     * intervening spaces.
+                    /* LB16 Do not break between closing punctuation and a nonstarter (lb=NS),
+                     * even with intervening spaces.
                      * (CL | CP) SP* × NS */
                     *pos += grapheme.len();
                     while Some(SP) == next_grapheme_class!(iter, grapheme) {
@@ -397,7 +418,7 @@ impl<'a> Iterator for LineBreakCandidateIter<'a> {
                     && get_class!(text[idx + grapheme.len()..].even_after_spaces()) == B2 =>
                 {
                     /* LB17 Do not break within ‘——’, even with intervening spaces.
-                     * B2 SP* × B2*/
+                     * B2 SP* × B2 */
                     *pos += grapheme.len();
                     continue;
                 }
@@ -434,8 +455,9 @@ impl<'a> Iterator for LineBreakCandidateIter<'a> {
                     set_last_break!(*last_break, ret);
                     return Some((ret, BreakAllowed));
                 }
-                /* LB21 Do not break before hyphen-minus, other hyphens, fixed-width spaces, small
-                 * kana, and other non-starters, or after acute accents.  × BA,  × HY, × NS,  BB × */
+                /* LB21 Do not break before hyphen-minus, other hyphens, fixed-width spaces,
+                 * small kana, and other non-starters, or after acute accents.  ×
+                 * BA,  × HY, × NS,  BB × */
                 BB if !*break_now => {
                     *pos += grapheme.len();
                     continue;
@@ -447,8 +469,9 @@ impl<'a> Iterator for LineBreakCandidateIter<'a> {
                 let next_class = get_class!(next_grapheme);
                 match next_class {
                     BA | HY | NS => {
-                        /* LB21 Do not break before hyphen-minus, other hyphens, fixed-width spaces, small
-                         * kana, and other non-starters, or after acute accents.  × BA,  × HY, × NS,  BB × */
+                        /* LB21 Do not break before hyphen-minus, other hyphens, fixed-width
+                         * spaces, small kana, and other non-starters, or
+                         * after acute accents.  × BA,  × HY, × NS,  BB × */
                         *pos += grapheme.len();
                         //*pos += next_grapheme.len();
                         continue;
@@ -485,7 +508,7 @@ impl<'a> Iterator for LineBreakCandidateIter<'a> {
                     self.iter.next();
                     continue;
                 }
-                /*  EX × IN */
+                /* EX × IN */
                 EX if next_grapheme_class!((next_char is IN)) => {
                     let (idx, next_grapheme) = next_char.unwrap();
                     *pos = idx + next_grapheme.len();
@@ -497,21 +520,21 @@ impl<'a> Iterator for LineBreakCandidateIter<'a> {
                     *pos += grapheme.len();
                     continue;
                 }
-                /*  (ID | EB | EM) × IN */
+                /* (ID | EB | EM) × IN */
                 ID | EB | EM if next_grapheme_class!((next_char is IN)) => {
                     let (idx, next_grapheme) = next_char.unwrap();
                     *pos = idx + next_grapheme.len();
                     self.iter.next();
                     continue;
                 }
-                /*  IN × IN */
+                /* IN × IN */
                 IN if next_grapheme_class!((next_char is IN)) => {
                     let (idx, next_grapheme) = next_char.unwrap();
                     *pos = idx + next_grapheme.len();
                     self.iter.next();
                     continue;
                 }
-                /*  NU × IN */
+                /* NU × IN */
                 NU if next_grapheme_class!((next_char is IN)) => {
                     let (idx, next_grapheme) = next_char.unwrap();
                     *pos = idx + next_grapheme.len();
@@ -533,8 +556,8 @@ impl<'a> Iterator for LineBreakCandidateIter<'a> {
                     self.iter.next();
                     continue;
                 }
-                /* LB23a Do not break between numeric prefixes and ideographs, or between ideographs
-                 * and numeric postfixes.
+                /* LB23a Do not break between numeric prefixes and ideographs, or between
+                 * ideographs and numeric postfixes.
                  * PR × (ID | EB | EM) */
                 PR if next_grapheme_class!((next_char is ID, EB, EM)) => {
                     let (idx, next_grapheme) = next_char.unwrap();
@@ -558,7 +581,7 @@ impl<'a> Iterator for LineBreakCandidateIter<'a> {
                     self.iter.next();
                     continue;
                 }
-                /*(AL | HL) × (PR | PO) */
+                /* (AL | HL) × (PR | PO) */
                 AL | HL if next_grapheme_class!((next_char is PR, PO)) => {
                     let (idx, next_grapheme) = next_char.unwrap();
                     *pos = idx + next_grapheme.len();
@@ -749,9 +772,9 @@ impl<'a> Iterator for LineBreakCandidateIter<'a> {
                     continue;
                 }
                 RI => {
-                    /* LB30a Break between two regional indicator symbols if and only if there are an
-                     * even number of regional indicators preceding the position of the break.
-                     * sot (RI RI)* RI × RI
+                    /* LB30a Break between two regional indicator symbols if and only if there
+                     * are an even number of regional indicators preceding
+                     * the position of the break. sot (RI RI)* RI × RI
                      * [^RI] (RI RI)* RI × RI */
                     *reg_ind_streak += 1;
                     *pos += grapheme.len();
@@ -852,8 +875,7 @@ mod tests {
 pub use alg::linear;
 
 mod alg {
-    use super::super::grapheme_clusters::TextProcessing;
-    use super::super::*;
+    use super::super::{grapheme_clusters::TextProcessing, *};
     fn cost(i: usize, j: usize, width: usize, minima: &[usize], offsets: &[usize]) -> usize {
         let w = offsets[j] + j - offsets[i] - i - 1;
         if w > width {
@@ -1060,7 +1082,7 @@ pub fn split_lines_reflow(text: &str, reflow: Reflow, width: Option<usize>) -> V
                     } else if prev_quote_depth == quote_depth {
                         /* This becomes part of the paragraph we're in */
                     } else {
-                        /*Malformed line, different quote depths can't be in the same paragraph. */
+                        /* Malformed line, different quote depths can't be in the same paragraph. */
                         let paragraph = &text[paragraph_start..prev_index];
                         reflow_helper(&mut ret, paragraph, prev_quote_depth, in_paragraph, width);
 
@@ -1071,7 +1093,7 @@ pub fn split_lines_reflow(text: &str, reflow: Reflow, width: Option<usize>) -> V
                         let paragraph = &text[paragraph_start..*i];
                         reflow_helper(&mut ret, paragraph, quote_depth, in_paragraph, width);
                     } else {
-                        /*Malformed line, different quote depths can't be in the same paragraph. */
+                        /* Malformed line, different quote depths can't be in the same paragraph. */
                         let paragraph = &text[paragraph_start..prev_index];
                         reflow_helper(&mut ret, paragraph, prev_quote_depth, in_paragraph, width);
                         let paragraph = &text[prev_index..*i];
@@ -1248,12 +1270,13 @@ easy to take MORE than nothing.'"#;
 }
 
 mod segment_tree {
-    /*! Simple segment tree implementation for maximum in range queries. This is useful if given an
-     *  array of numbers you want to get the maximum value inside an interval quickly.
+    /*! Simple segment tree implementation for maximum in range queries. This
+     * is useful if given an  array of numbers you want to get the
+     * maximum value inside an interval quickly.
      */
+    use std::{convert::TryFrom, iter::FromIterator};
+
     use smallvec::SmallVec;
-    use std::convert::TryFrom;
-    use std::iter::FromIterator;
 
     #[derive(Default, Debug, Clone)]
     pub(super) struct SegmentTree {
@@ -1329,8 +1352,9 @@ mod segment_tree {
     }
 }
 
-/// A lazy stateful iterator for line breaking text. Useful for very long text where you don't want
-/// to linebreak it completely before user requests specific lines.
+/// A lazy stateful iterator for line breaking text. Useful for very long text
+/// where you don't want to linebreak it completely before user requests
+/// specific lines.
 #[derive(Debug, Clone)]
 pub struct LineBreakText {
     text: String,
@@ -1511,7 +1535,8 @@ impl Iterator for LineBreakText {
                         } else if prev_quote_depth == quote_depth {
                             /* This becomes part of the paragraph we're in */
                         } else {
-                            /*Malformed line, different quote depths can't be in the same paragraph. */
+                            /* Malformed line, different quote depths can't be in the same
+                             * paragraph. */
                             let paragraph_s = &self.text[paragraph_start..prev_index];
                             reflow_helper2(
                                 &mut paragraph,
@@ -1534,7 +1559,8 @@ impl Iterator for LineBreakText {
                                 self.width,
                             );
                         } else {
-                            /*Malformed line, different quote depths can't be in the same paragraph. */
+                            /* Malformed line, different quote depths can't be in the same
+                             * paragraph. */
                             let paragraph_s = &self.text[paragraph_start..prev_index];
                             reflow_helper2(
                                 &mut paragraph,

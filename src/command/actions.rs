@@ -23,10 +23,12 @@
  * User actions that need to be handled by the UI
  */
 
-use crate::components::Component;
+use std::path::PathBuf;
+
 pub use melib::thread::{SortField, SortOrder};
 use melib::uuid::Uuid;
-use std::path::PathBuf;
+
+use crate::components::Component;
 
 #[derive(Debug)]
 pub enum TagAction {

@@ -21,13 +21,16 @@
 
 /*! Components visual and logical separations of application interfaces.
  *
- * They can draw on the terminal and receive events, but also do other stuff as well. (For example, see the `notifications` module.)
+ * They can draw on the terminal and receive events, but also do other stuff
+ * as well. (For example, see the `notifications` module.)
  * See the `Component` Trait for more details.
  */
 
 use super::*;
-use crate::melib::text_processing::{TextProcessing, Truncate};
-use crate::terminal::boundaries::*;
+use crate::{
+    melib::text_processing::{TextProcessing, Truncate},
+    terminal::boundaries::*,
+};
 
 pub mod mail;
 pub use crate::mail::*;
@@ -46,8 +49,10 @@ pub use self::mailbox_management::*;
 #[cfg(feature = "svgscreenshot")]
 pub mod svg;
 
-use std::fmt;
-use std::fmt::{Debug, Display};
+use std::{
+    fmt,
+    fmt::{Debug, Display},
+};
 
 use indexmap::IndexMap;
 use uuid::Uuid;
@@ -86,8 +91,9 @@ pub enum ScrollUpdate {
 }
 
 /// Types implementing this Trait can draw on the terminal and receive events.
-/// If a type wants to skip drawing if it has not changed anything, it can hold some flag in its
-/// fields (eg self.dirty = false) and act upon that in their `draw` implementation.
+/// If a type wants to skip drawing if it has not changed anything, it can hold
+/// some flag in its fields (eg self.dirty = false) and act upon that in their
+/// `draw` implementation.
 pub trait Component: Display + Debug + Send + Sync {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context);
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool;

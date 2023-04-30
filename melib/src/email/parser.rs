@@ -20,20 +20,21 @@
  */
 
 /*! Parsers for email. See submodules */
-use crate::error::{Error, Result, ResultIntoError};
+use std::borrow::Cow;
+
 use nom::{
     branch::alt,
     bytes::complete::{is_a, is_not, tag, take, take_until, take_while, take_while1},
     character::{is_alphabetic, is_digit, is_hex_digit},
-    combinator::peek,
-    combinator::{map, opt},
+    combinator::{map, opt, peek},
     error::{context, ErrorKind},
     multi::{many0, many1, separated_list1},
     number::complete::le_u8,
     sequence::{delimited, pair, preceded, separated_pair, terminated},
 };
 use smallvec::SmallVec;
-use std::borrow::Cow;
+
+use crate::error::{Error, Result, ResultIntoError};
 
 macro_rules! to_str {
     ($l:expr) => {{
@@ -318,8 +319,7 @@ pub fn mail(input: &[u8]) -> Result<(Vec<(&[u8], &[u8])>, &[u8])> {
 
 pub mod dates {
     /*! Date values in headers */
-    use super::generic::*;
-    use super::*;
+    use super::{generic::*, *};
     use crate::datetime::UnixTimestamp;
 
     fn take_n_digits(n: usize) -> impl Fn(&[u8]) -> IResult<&[u8], &[u8]> {
@@ -451,15 +451,15 @@ pub mod dates {
 
     ///e.g Wed Sep  9 00:27:54 2020
     ///```text
-    ///day-of-week month day time year
-    ///date-time       =   [ day-of-week "," ] date time [CFWS]
-    ///date            =   day month year
-    ///time            =   time-of-day zone
-    ///time-of-day     =   hour ":" minute [ ":" second ]
-    ///hour            =   2DIGIT / obs-hour
-    ///minute          =   2DIGIT / obs-minute
-    ///second          =   2DIGIT / obs-second
-    ///```
+    /// day-of-week month day time year
+    /// date-time       =   [ day-of-week "," ] date time [CFWS]
+    /// date            =   day month year
+    /// time            =   time-of-day zone
+    /// time-of-day     =   hour ":" minute [ ":" second ]
+    /// hour            =   2DIGIT / obs-hour
+    /// minute          =   2DIGIT / obs-minute
+    /// second          =   2DIGIT / obs-second
+    /// ```
     pub fn mbox_date_time(input: &[u8]) -> IResult<&[u8], UnixTimestamp> {
         let orig_input = input;
         let mut accum: SmallVec<[u8; 32]> = SmallVec::new();
@@ -656,7 +656,8 @@ pub mod generic {
             let (rest, _) = utf8_tail(rest)?;
             Ok((rest, &input[0..2]))
         }
-        /// UTF8-3      = %xE0 %xA0-BF UTF8-tail / %xE1-EC 2( UTF8-tail ) / %xED %x80-9F UTF8-tail / %xEE-EF 2( UTF8-tail )
+        /// UTF8-3      = %xE0 %xA0-BF UTF8-tail / %xE1-EC 2( UTF8-tail ) / %xED
+        /// %x80-9F UTF8-tail / %xEE-EF 2( UTF8-tail )
         fn utf8_3<'a>(input: &'a [u8]) -> IResult<&'a [u8], &'a [u8]> {
             alt((
                 |input: &'a [u8]| -> IResult<&'a [u8], &'a [u8]> {
@@ -685,7 +686,8 @@ pub mod generic {
                 },
             ))(input)
         }
-        /// UTF8-4      = %xF0 %x90-BF 2( UTF8-tail ) / %xF1-F3 3( UTF8-tail ) / %xF4 %x80-8F 2( UTF8-tail )
+        /// UTF8-4      = %xF0 %x90-BF 2( UTF8-tail ) / %xF1-F3 3( UTF8-tail ) /
+        /// %xF4 %x80-8F 2( UTF8-tail )
         fn utf8_4<'a>(input: &'a [u8]) -> IResult<&'a [u8], &'a [u8]> {
             alt((
                 |input: &'a [u8]| -> IResult<&'a [u8], &'a [u8]> {
@@ -741,11 +743,11 @@ pub mod generic {
     }
 
     ///```text
-    ///ctext           =   %d33-39 /          ; Printable US-ASCII
+    /// ctext           =   %d33-39 /          ; Printable US-ASCII
     ///                     %d42-91 /          ;  characters not including
     ///                     %d93-126 /         ;  "(", ")", or "\"
     ///                     obs-ctext
-    ///```
+    /// ```
     fn ctext(input: &[u8]) -> IResult<&[u8], ()> {
         alt((
             map(
@@ -761,13 +763,13 @@ pub mod generic {
     }
 
     ///```text
-    ///ctext           =   %d33-39 /          ; Printable US-ASCII
+    /// ctext           =   %d33-39 /          ; Printable US-ASCII
     ///                    %d42-91 /          ;  characters not including
     ///                    %d93-126 /         ;  "(", ")", or "\"
     ///                    obs-ctext
-    ///ccontent        =   ctext / quoted-pair / comment
-    ///comment         =   "(" *([FWS] ccontent) [FWS] ")"
-    ///```
+    /// ccontent        =   ctext / quoted-pair / comment
+    /// comment         =   "(" *([FWS] ccontent) [FWS] ")"
+    /// ```
     pub fn comment(input: &[u8]) -> IResult<&[u8], ()> {
         if !input.starts_with(b"(") {
             return Err(nom::Err::Error(
@@ -911,8 +913,7 @@ pub mod generic {
         }
     }
 
-    use crate::email::address::Address;
-    use crate::email::mailto::Mailto;
+    use crate::email::{address::Address, mailto::Mailto};
     pub fn mailto(mut input: &[u8]) -> IResult<&[u8], Mailto> {
         if !input.starts_with(b"mailto:") {
             return Err(nom::Err::Error(
@@ -1081,7 +1082,8 @@ pub mod generic {
         Ok((rest, ret))
     }
 
-    ///`quoted-string   =   [CFWS] DQUOTE *([FWS] qcontent) [FWS] DQUOTE [CFWS]`
+    ///`quoted-string   =   [CFWS] DQUOTE *([FWS] qcontent) [FWS] DQUOTE
+    /// [CFWS]`
     pub fn quoted_string(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
         let (input, opt_space) = opt(cfws)(input)?;
         if !input.starts_with(b"\"") {
@@ -1213,7 +1215,10 @@ pub mod generic {
         Ok((input, ret.into()))
     }
 
-    ///`atext           =   ALPHA / DIGIT /    ; Printable US-ASCII "!" / "#" /        ;  characters not including "$" / "%" /        ;  specials.  Used for atoms.  "&" / "'" / "*" / "+" / "-" / "/" / "=" / "?" / "^" / "_" / "`" / "{" / "|" / "}" / "~"`
+    ///`atext           =   ALPHA / DIGIT /    ; Printable US-ASCII "!" / "#" /
+    /// ;  characters not including "$" / "%" /        ;  specials.  Used for
+    /// atoms.  "&" / "'" / "*" / "+" / "-" / "/" / "=" / "?" / "^" / "_" / "`"
+    /// / "{" / "|" / "}" / "~"`
     pub fn atext_ascii(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
         if input.is_empty() {
             return Err(nom::Err::Error((input, "atext(): empty input").into()));
@@ -1244,10 +1249,10 @@ pub mod generic {
     }
 
     ///```text
-    ///dtext           =   %d33-90 /          ; Printable US-ASCII
+    /// dtext           =   %d33-90 /          ; Printable US-ASCII
     ///                    %d94-126 /         ;  characters not including
     ///                    obs-dtext          ;  "[", "]", or "\"
-    ///```
+    /// ```
     pub fn dtext(input: &[u8]) -> IResult<&[u8], u8> {
         alt((byte_in_range(33, 90), byte_in_range(94, 125)))(input)
     }
@@ -1259,11 +1264,13 @@ pub mod mailing_lists {
     //! Implemented RFCs:
     //!
     //! - [RFC2369 "The Use of URLs as Meta-Syntax for Core Mail List Commands and their Transport through Message Header Fields"](https://tools.ietf.org/html/rfc2369)
-    use super::*;
     use generic::cfws;
 
-    ///Parse the value of headers defined in RFC2369 "The Use of URLs as Meta-Syntax for Core
-    ///Mail List Commands and their Transport through Message Header Fields"
+    use super::*;
+
+    ///Parse the value of headers defined in RFC2369 "The Use of URLs as
+    /// Meta-Syntax for Core Mail List Commands and their Transport through
+    /// Message Header Fields"
     pub fn rfc_2369_list_headers_action_list(input: &[u8]) -> IResult<&[u8], Vec<&[u8]>> {
         let (input, _) = opt(cfws)(input)?;
         let (input, ret) = alt((
@@ -1458,9 +1465,9 @@ pub mod headers {
     /* A header can span multiple lines, eg:
      *
      * Received: from -------------------- (-------------------------)
-     * 	by --------------------- (--------------------- [------------------]) (-----------------------)
-     * 	with ESMTP id ------------ for <------------------->;
-     * 	Tue,  5 Jan 2016 21:30:44 +0100 (CET)
+     * 	by --------------------- (--------------------- [------------------])
+     * (-----------------------) 	with ESMTP id ------------ for
+     * <------------------->; 	Tue,  5 Jan 2016 21:30:44 +0100 (CET)
      */
 
     pub fn header_value(input: &[u8]) -> IResult<&[u8], &[u8]> {
@@ -1580,8 +1587,10 @@ pub mod headers {
 pub mod attachments {
     /*! Email attachments */
     use super::*;
-    use crate::email::address::*;
-    use crate::email::attachment_types::{ContentDisposition, ContentDispositionKind};
+    use crate::email::{
+        address::*,
+        attachment_types::{ContentDisposition, ContentDispositionKind},
+    };
     pub fn attachment(input: &[u8]) -> IResult<&[u8], (std::vec::Vec<(&[u8], &[u8])>, &[u8])> {
         alt((
             separated_pair(
@@ -1807,7 +1816,8 @@ pub mod attachments {
     pub fn content_disposition(input: &[u8]) -> IResult<&[u8], ContentDisposition> {
         let (input, kind) = alt((take_until(";"), take_while(|_| true)))(input.trim())?;
         let mut ret = ContentDisposition {
-            /* RFC2183 Content-Disposition: "Unrecognized disposition types should be treated as `attachment'." */
+            /* RFC2183 Content-Disposition: "Unrecognized disposition types should be treated as
+             * `attachment'." */
             kind: if kind.trim().eq_ignore_ascii_case(b"inline") {
                 ContentDispositionKind::Inline
             } else {
@@ -1846,11 +1856,11 @@ pub mod attachments {
 
 pub mod encodings {
     /*! Email encodings (quoted printable, MIME) */
+    use data_encoding::BASE64_MIME;
+    use encoding::{all::*, DecoderTrap, Encoding};
+
     use super::*;
     use crate::email::attachment_types::Charset;
-    use data_encoding::BASE64_MIME;
-    use encoding::all::*;
-    use encoding::{DecoderTrap, Encoding};
     pub fn quoted_printable_byte(input: &[u8]) -> IResult<&[u8], u8> {
         if input.len() < 3 {
             Err(nom::Err::Error(
@@ -2023,7 +2033,8 @@ pub mod encodings {
         if input.starts_with(b"=\n") {
             Ok((&input[2..], input[1])) // `=\n` is an escaped space character.
         } else if input.starts_with(b"=\r\n") {
-            Ok((&input[3..], input[2])) // `=\r\n` is an escaped space character.
+            Ok((&input[3..], input[2])) // `=\r\n` is an escaped space
+                                        // character.
         } else {
             Err(nom::Err::Error(
                 (input, "quoted_printable_soft_break(): invalid input").into(),
@@ -2036,8 +2047,9 @@ pub mod encodings {
         Ok((rest, 0x20))
     }
 
-    // With MIME, headers in quoted printable format can contain underscores that represent spaces.
-    // In non-header context, an underscore is just a plain underscore.
+    // With MIME, headers in quoted printable format can contain underscores that
+    // represent spaces. In non-header context, an underscore is just a plain
+    // underscore.
     pub fn quoted_printable_bytes_header(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
         many0(alt((quoted_printable_byte, qp_underscore_header, le_u8)))(input)
     }
@@ -2173,9 +2185,9 @@ pub mod address {
     //! - [RFC6532 "Internationalized Email Headers"](https://tools.ietf.org/html/rfc6532)
     //! - [RFC2047 "MIME Part Three: Message Header Extensions for Non-ASCII Text"](https://tools.ietf.org/html/rfc2047)
     use super::*;
-    use crate::email::address::*;
-    use crate::email::parser::generic::{
-        atom, cfws, dot_atom, dot_atom_text, dtext, phrase2, quoted_string,
+    use crate::email::{
+        address::*,
+        parser::generic::{atom, cfws, dot_atom, dot_atom_text, dtext, phrase2, quoted_string},
     };
     pub fn display_addr(input: &[u8]) -> IResult<&[u8], Address> {
         if input.is_empty() || input.len() < 3 {
@@ -2447,8 +2459,8 @@ pub mod address {
     }
 
     ///```text
-    ///address         =   mailbox / group
-    ///```
+    /// address         =   mailbox / group
+    /// ```
     pub fn address(input: &[u8]) -> IResult<&[u8], Address> {
         alt((mailbox, group))(input)
     }
@@ -2599,15 +2611,18 @@ pub mod address {
 #[cfg(test)]
 mod tests {
     use super::{address::*, encodings::*, *};
-    use crate::email::address::*;
-    use crate::make_address;
+    use crate::{email::address::*, make_address};
 
     #[test]
     fn test_phrase() {
         let words = b"=?iso-8859-7?B?W215Y291cnNlcy5udHVhLmdyIC0gyvXs4fTp6t4g6uHpIMri4e306ere?=
      =?iso-8859-7?B?INb18+nq3l0gzd3hIMHt4erv3+358+c6IMzF0c/TIMHQz9TFy8XTzMHU?=
       =?iso-8859-7?B?2c0gwiDUzC4gysHNLiDFzsXUwdPH0yAyMDE3LTE4OiDTx8zFydnTxw==?=";
-        assert_eq!("[mycourses.ntua.gr - Κυματική και Κβαντική Φυσική] Νέα Ανακοίνωση: ΜΕΡΟΣ ΑΠΟΤΕΛΕΣΜΑΤΩΝ Β ΤΜ. ΚΑΝ. ΕΞΕΤΑΣΗΣ 2017-18: ΣΗΜΕΙΩΣΗ" , std::str::from_utf8(&phrase(words.trim(), false).unwrap().1).unwrap());
+        assert_eq!(
+            "[mycourses.ntua.gr - Κυματική και Κβαντική Φυσική] Νέα Ανακοίνωση: ΜΕΡΟΣ \
+             ΑΠΟΤΕΛΕΣΜΑΤΩΝ Β ΤΜ. ΚΑΝ. ΕΞΕΤΑΣΗΣ 2017-18: ΣΗΜΕΙΩΣΗ",
+            std::str::from_utf8(&phrase(words.trim(), false).unwrap().1).unwrap()
+        );
         let words = b"=?UTF-8?Q?=CE=A0=CF=81=CF=8C=CF=83=CE=B8=CE=B5?= =?UTF-8?Q?=CF=84=CE=B7_=CE=B5=CE=BE=CE=B5=CF=84?= =?UTF-8?Q?=CE=B1=CF=83=CF=84=CE=B9=CE=BA=CE=AE?=";
         assert_eq!(
             "Πρόσθετη εξεταστική",
@@ -2929,12 +2944,16 @@ mod tests {
             "=?iso-8859-1?q?Fran=E7ois?= Pons <fpons@mandrakesoft.com>"
         );
         assert_parse!(
-            "هل تتكلم اللغة الإنجليزية /العربية؟", "do.you.speak@arabic.com",
-            "=?utf-8?b?2YfZhCDYqtiq2YPZhNmFINin2YTZhNi62Kkg2KfZhNil2YbYrNmE2YrYstmK2Kk=?=\n =?utf-8?b?IC/Yp9mE2LnYsdio2YrYqdif?= <do.you.speak@arabic.com>"
+            "هل تتكلم اللغة الإنجليزية /العربية؟",
+            "do.you.speak@arabic.com",
+            "=?utf-8?b?2YfZhCDYqtiq2YPZhNmFINin2YTZhNi62Kkg2KfZhNil2YbYrNmE2YrYstmK2Kk=?=\n \
+             =?utf-8?b?IC/Yp9mE2LnYsdio2YrYqdif?= <do.you.speak@arabic.com>"
         );
         assert_parse!(
-            "狂ったこの世で狂うなら気は確かだ。", "famous@quotes.ja",
-            "=?utf-8?b?54uC44Gj44Gf44GT44Gu5LiW44Gn54uC44GG44Gq44KJ5rCX44Gv56K644GL44Gg?=\n =?utf-8?b?44CC?= <famous@quotes.ja>"
+            "狂ったこの世で狂うなら気は確かだ。",
+            "famous@quotes.ja",
+            "=?utf-8?b?54uC44Gj44Gf44GT44Gu5LiW44Gn54uC44GG44Gq44KJ5rCX44Gv56K644GL44Gg?=\n \
+             =?utf-8?b?44CC?= <famous@quotes.ja>"
         );
         assert_eq!(
             Address::new_group(

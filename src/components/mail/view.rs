@@ -19,20 +19,23 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::*;
-use crate::conf::accounts::JobRequest;
-use crate::jobs::{JobId, JoinHandle};
-use melib::email::attachment_types::ContentType;
-use melib::list_management;
-use melib::parser::BytesExt;
-use smallvec::SmallVec;
-use std::collections::HashSet;
-use std::fmt::Write as _;
-use std::io::Write;
+use std::{
+    collections::HashSet,
+    convert::TryFrom,
+    fmt::Write as _,
+    io::Write,
+    os::unix::fs::PermissionsExt,
+    process::{Command, Stdio},
+};
 
-use std::convert::TryFrom;
-use std::os::unix::fs::PermissionsExt;
-use std::process::{Command, Stdio};
+use melib::{email::attachment_types::ContentType, list_management, parser::BytesExt};
+use smallvec::SmallVec;
+
+use super::*;
+use crate::{
+    conf::accounts::JobRequest,
+    jobs::{JobId, JoinHandle},
+};
 
 mod html;
 pub use self::html::*;
@@ -40,10 +43,10 @@ mod thread;
 pub use self::thread::*;
 
 mod envelope;
-pub use self::envelope::*;
-
 use linkify::LinkFinder;
 use xdg_utils::query_default_app;
+
+pub use self::envelope::*;
 
 #[derive(Debug, Default)]
 enum ForceCharset {
@@ -68,8 +71,9 @@ enum Source {
     Raw,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Default)]
 enum ViewMode {
+    #[default]
     Normal,
     Url,
     Attachment(usize),
@@ -77,12 +81,6 @@ enum ViewMode {
     //Ansi(RawBuffer),
     Subview,
     ContactSelector(Box<UIDialog<Card>>),
-}
-
-impl Default for ViewMode {
-    fn default() -> Self {
-        ViewMode::Normal
-    }
 }
 
 impl ViewMode {
@@ -158,8 +156,8 @@ pub enum AttachmentDisplay {
     },
 }
 
-/// Contains an Envelope view, with sticky headers, a pager for the body, and subviews for more
-/// menus
+/// Contains an Envelope view, with sticky headers, a pager for the body, and
+/// subviews for more menus
 #[derive(Debug, Default)]
 pub struct MailView {
     coordinates: (AccountHash, MailboxHash, EnvelopeHash),
@@ -322,7 +320,7 @@ impl Clone for MailView {
 
 impl fmt::Display for MailView {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", "view mail")
+        write!(f, "view mail")
     }
 }
 
@@ -739,7 +737,7 @@ impl MailView {
                         branches,
                         paths,
                         cur_path,
-                        iter.peek() != None,
+                        iter.peek().is_some(),
                         s,
                     );
                     if Some(i) == default_alternative {
@@ -795,7 +793,7 @@ impl MailView {
                         .map(|s| s.as_str())
                         .unwrap_or("w3m -I utf-8 -T text/html");
                 let command_obj = Command::new("sh")
-                    .args(&["-c", filter_invocation])
+                    .args(["-c", filter_invocation])
                     .stdin(Stdio::piped())
                     .stdout(Stdio::piped())
                     .spawn();
@@ -810,9 +808,10 @@ impl MailView {
                             Some(NotificationType::Error(melib::ErrorKind::External)),
                         ));
                         let comment = Some(format!(
-                                "Failed to start html filter process: `{}`. Press `v` to open in web browser. \n\n",
-                                filter_invocation
-                            ));
+                            "Failed to start html filter process: `{}`. Press `v` to open in web \
+                             browser. \n\n",
+                            filter_invocation
+                        ));
                         let text = String::from_utf8_lossy(&bytes).to_string();
                         acc.push(AttachmentDisplay::InlineText {
                             inner: Box::new(a.clone()),
@@ -975,9 +974,12 @@ impl MailView {
                                 #[cfg(not(feature = "gpgme"))]
                                 {
                                     acc.push(AttachmentDisplay::EncryptedFailed {
-                                    inner: Box::new(a.clone()),
-                                                error: Error::new("Cannot decrypt: meli must be compiled with libgpgme support."),
-                                            });
+                                        inner: Box::new(a.clone()),
+                                        error: Error::new(
+                                            "Cannot decrypt: meli must be compiled with libgpgme \
+                                             support.",
+                                        ),
+                                    });
                                 }
                                 #[cfg(feature = "gpgme")]
                                 {
@@ -1185,8 +1187,8 @@ impl Component for MailView {
         let y: usize = {
             let account = &context.accounts[&self.coordinates.0];
             if !account.contains_key(self.coordinates.2) {
-                /* The envelope has been renamed or removed, so wait for the appropriate event to
-                 * arrive */
+                /* The envelope has been renamed or removed, so wait for the appropriate
+                 * event to arrive */
                 return;
             }
             let envelope: EnvelopeRef = account.collection.get_env(self.coordinates.2);
@@ -1866,7 +1868,8 @@ impl Component for MailView {
                         } if handle.job_id == *job_id => {
                             match handle.chan.try_recv() {
                                 Err(_) => { /* Job was canceled */ }
-                                Ok(None) => { /* something happened, perhaps a worker thread panicked */
+                                Ok(None) => { /* something happened, perhaps a worker
+                                      * thread panicked */
                                 }
                                 Ok(Some(Ok(bytes))) => {
                                     MailViewState::load_bytes(self, bytes, context);
@@ -1895,7 +1898,9 @@ impl Component for MailView {
                                         self.initialised = false;
                                         match handle.chan.try_recv() {
                                             Err(_) => { /* Job was canceled */ }
-                                            Ok(None) => { /* something happened, perhaps a worker thread panicked */
+                                            Ok(None) => { /* something happened,
+                                                  * perhaps a worker thread
+                                                  * panicked */
                                             }
                                             Ok(Some(Ok(()))) => {
                                                 *d = AttachmentDisplay::SignedVerified {
@@ -1930,7 +1935,9 @@ impl Component for MailView {
                                         self.initialised = false;
                                         match handle.chan.try_recv() {
                                             Err(_) => { /* Job was canceled */ }
-                                            Ok(None) => { /* something happened, perhaps a worker thread panicked */
+                                            Ok(None) => { /* something happened,
+                                                  * perhaps a worker thread
+                                                  * panicked */
                                             }
                                             Ok(Some(Ok((metadata, decrypted_bytes)))) => {
                                                 let plaintext = Box::new(
@@ -2108,35 +2115,36 @@ impl Component for MailView {
                         on_finish: Some(CallbackFn(Box::new(move |context: &mut Context| {
                             match receiver.try_recv() {
                                 Err(_) => { /* Job was canceled */ }
-                                Ok(None) => { /* something happened, perhaps a worker thread panicked */
+                                Ok(None) => { /* something happened, perhaps a worker
+                                      * thread panicked */
                                 }
                                 Ok(Some(result)) => {
                                     match result.and_then(|bytes| {
                                         Composer::edit(account_hash, env_hash, &bytes, context)
                                     }) {
                                         Ok(composer) => {
-                                            context.replies.push_back(UIEvent::Action(Tab(New(Some(
-                                                                Box::new(composer),
-                                            )))));
+                                            context.replies.push_back(UIEvent::Action(Tab(New(
+                                                Some(Box::new(composer)),
+                                            ))));
                                         }
                                         Err(err) => {
                                             let err_string = format!(
                                                 "Failed to open envelope {}: {}",
                                                 context.accounts[&account_hash]
-                                                .collection
-                                                .envelopes
-                                                .read()
-                                                .unwrap()
-                                                .get(&env_hash)
-                                                .map(|env| env.message_id_display())
-                                                .unwrap_or_else(|| "Not found".into()),
+                                                    .collection
+                                                    .envelopes
+                                                    .read()
+                                                    .unwrap()
+                                                    .get(&env_hash)
+                                                    .map(|env| env.message_id_display())
+                                                    .unwrap_or_else(|| "Not found".into()),
                                                 err
                                             );
                                             log(&err_string, ERROR);
                                             context.replies.push_back(UIEvent::Notification(
-                                                    Some("Failed to open e-mail".to_string()),
-                                                    err_string,
-                                                    Some(NotificationType::Error(err.kind)),
+                                                Some("Failed to open e-mail".to_string()),
+                                                err_string,
+                                                Some(NotificationType::Error(err.kind)),
                                             ));
                                         }
                                     }
@@ -2176,7 +2184,7 @@ impl Component for MailView {
                     .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
                 return true;
             }
-            UIEvent::Input(Key::Char(c)) if ('0'..='9').contains(&c) => {
+            UIEvent::Input(Key::Char(c)) if c.is_ascii_digit() => {
                 self.cmd_buf.push(c);
                 context
                     .replies
@@ -2316,7 +2324,7 @@ impl Component for MailView {
                                             false,
                                         );
                                         match Command::new("sh")
-                                            .args(&["-c", &exec_cmd])
+                                            .args(["-c", &exec_cmd])
                                             .stdin(Stdio::piped())
                                             .stdout(Stdio::piped())
                                             .spawn()
@@ -2336,19 +2344,22 @@ impl Component for MailView {
                                         }
                                     } else {
                                         context.replies.push_back(UIEvent::StatusEvent(
-                                        StatusEvent::DisplayMessage(if let Some(filename) = filename.as_ref() {
-                                            format!(
-                                                "Couldn't find a default application for file {} (type {})",
-                                                filename,
-                                                attachment_type
-                                            )
-                                        } else {
-                                            format!(
-                                                "Couldn't find a default application for type {}",
-                                                attachment_type
-                                            )
-                                        }),
-                                ));
+                                            StatusEvent::DisplayMessage(
+                                                if let Some(filename) = filename.as_ref() {
+                                                    format!(
+                                                        "Couldn't find a default application for \
+                                                         file {} (type {})",
+                                                        filename, attachment_type
+                                                    )
+                                                } else {
+                                                    format!(
+                                                        "Couldn't find a default application for \
+                                                         type {}",
+                                                        attachment_type
+                                                    )
+                                                },
+                                            ),
+                                        ));
                                     }
                                 }
                                 ContentType::OctetStream {
@@ -2357,9 +2368,10 @@ impl Component for MailView {
                                 } => {
                                     context.replies.push_back(UIEvent::StatusEvent(
                                         StatusEvent::DisplayMessage(format!(
-                                "Failed to open {}. application/octet-stream isn't supported yet",
-                                name.as_ref().map(|n| n.as_str()).unwrap_or("file")
-                            )),
+                                            "Failed to open {}. application/octet-stream isn't \
+                                             supported yet",
+                                            name.as_ref().map(|n| n.as_str()).unwrap_or("file")
+                                        )),
                                     ));
                                 }
                             }
@@ -2479,8 +2491,8 @@ impl Component for MailView {
                 // Save entire message as eml
                 let account = &context.accounts[&self.coordinates.0];
                 if !account.contains_key(self.coordinates.2) {
-                    /* The envelope has been renamed or removed, so wait for the appropriate event to
-                     * arrive */
+                    /* The envelope has been renamed or removed, so wait for the appropriate
+                     * event to arrive */
                     return true;
                 }
                 let bytes = if let MailViewState::Loaded { ref bytes, .. } = self.state {
@@ -2532,8 +2544,8 @@ impl Component for MailView {
                 {
                     let account = &context.accounts[&self.coordinates.0];
                     if !account.contains_key(self.coordinates.2) {
-                        /* The envelope has been renamed or removed, so wait for the appropriate event to
-                         * arrive */
+                        /* The envelope has been renamed or removed, so wait for the appropriate
+                         * event to arrive */
                         return true;
                     }
                 }
@@ -2626,8 +2638,8 @@ impl Component for MailView {
             UIEvent::Action(MailingListAction(ref e)) => {
                 let account = &context.accounts[&self.coordinates.0];
                 if !account.contains_key(self.coordinates.2) {
-                    /* The envelope has been renamed or removed, so wait for the appropriate event to
-                     * arrive */
+                    /* The envelope has been renamed or removed, so wait for the appropriate
+                     * event to arrive */
                     return true;
                 }
                 let envelope: EnvelopeRef = account.collection.get_env(self.coordinates.2);
@@ -2661,7 +2673,7 @@ impl Component for MailView {
                             return true;
                         }
                         MailingListAction::ListUnsubscribe if actions.unsubscribe.is_some() => {
-                            /* autosend or open unsubscribe option*/
+                            /* autosend or open unsubscribe option */
                             let unsubscribe = actions.unsubscribe.as_ref().unwrap();
                             for option in unsubscribe.iter() {
                                 /* TODO: Ask for confirmation before proceding with an action */

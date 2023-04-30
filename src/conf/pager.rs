@@ -21,10 +21,9 @@
 
 //! Settings for the pager function.
 
-use super::default_vals::*;
-use super::deserializers::*;
-use super::DotAddressable;
 use melib::{Error, Result, ToggleFlag};
+
+use super::{default_vals::*, deserializers::*, DotAddressable};
 
 /// Settings for the pager function.
 #[derive(Debug, Deserialize, Clone, Serialize)]
@@ -79,8 +78,8 @@ pub struct PagerSettings {
     #[serde(default = "eighty_val", alias = "minimum-width")]
     pub minimum_width: usize,
 
-    /// Choose `text/html` alternative if `text/plain` is empty in `multipart/alternative`
-    /// attachments.
+    /// Choose `text/html` alternative if `text/plain` is empty in
+    /// `multipart/alternative` attachments.
     /// Default: true
     #[serde(
         default = "internal_value_true",
@@ -93,8 +92,8 @@ pub struct PagerSettings {
     #[serde(default = "internal_value_true", alias = "show-date-in-my-timezone")]
     pub show_date_in_my_timezone: ToggleFlag,
 
-    /// A command to launch URLs with. The URL will be given as the first argument of the command.
-    /// Default: None
+    /// A command to launch URLs with. The URL will be given as the first
+    /// argument of the command. Default: None
     #[serde(default = "none", deserialize_with = "non_empty_string")]
     pub url_launcher: Option<String>,
 

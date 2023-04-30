@@ -25,36 +25,38 @@
  * This module implements Jamie Zawinski's [threading algorithm](https://www.jwz.org/doc/threading.html). Quoted comments (/* " .. " */) are
  * taken almost verbatim from the algorithm.
  *
- * The entry point of this module is the `Threads` struct and its `new` method. It contains
- * `ThreadNodes` which are the nodes in the thread trees that might have messages associated with
- * them. The root nodes (first messages in each thread) are stored in `root_set` and `tree`
- * vectors. `Threads` has inner mutability since we need to sort without the user having mutable
- * ownership.
+ * The entry point of this module is the `Threads` struct and its `new`
+ * method. It contains `ThreadNodes` which are the nodes in the thread trees
+ * that might have messages associated with them. The root nodes (first
+ * messages in each thread) are stored in `root_set` and `tree`
+ * vectors. `Threads` has inner mutability since we need to sort without the
+ * user having mutable ownership.
  */
 
-use crate::datetime::UnixTimestamp;
-use crate::email::address::StrBuild;
-use crate::email::parser::BytesExt;
-use crate::email::*;
+use crate::{
+    datetime::UnixTimestamp,
+    email::{address::StrBuild, parser::BytesExt, *},
+};
 
 mod iterators;
+use std::{
+    cmp::Ordering,
+    collections::{HashMap, HashSet},
+    fmt,
+    iter::FromIterator,
+    ops::Index,
+    result::Result as StdResult,
+    str::FromStr,
+    string::ToString,
+    sync::{Arc, RwLock},
+};
+
 pub use iterators::*;
+use smallvec::SmallVec;
+use uuid::Uuid;
 
 #[cfg(feature = "unicode_algorithms")]
 use crate::text_processing::grapheme_clusters::*;
-use uuid::Uuid;
-
-use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet};
-use std::fmt;
-use std::iter::FromIterator;
-use std::ops::Index;
-use std::result::Result as StdResult;
-use std::str::FromStr;
-use std::string::ToString;
-use std::sync::{Arc, RwLock};
-
-use smallvec::SmallVec;
 
 type Envelopes = Arc<RwLock<HashMap<EnvelopeHash, Envelope>>>;
 
@@ -120,24 +122,35 @@ macro_rules! make {
         let old_group_hash = $threads.find_group($threads.thread_nodes[&$c].group);
         let parent_group_hash = $threads.find_group($threads.thread_nodes[&$p].group);
         if old_group_hash != parent_group_hash {
-            if let Some(old_env_hashes) = $threads.thread_to_envelope.get(&old_group_hash).cloned() {
+            if let Some(old_env_hashes) = $threads.thread_to_envelope.get(&old_group_hash).cloned()
+            {
                 for &env_hash in &old_env_hashes {
                     *$threads.envelope_to_thread.entry(env_hash).or_default() = parent_group_hash;
                 }
-                $threads.thread_to_envelope.entry(parent_group_hash).or_default().extend(old_env_hashes.into_iter());
+                $threads
+                    .thread_to_envelope
+                    .entry(parent_group_hash)
+                    .or_default()
+                    .extend(old_env_hashes.into_iter());
             }
             let prev_parent = remove_from_parent!(&mut $threads.thread_nodes, $c);
             if !($threads.thread_nodes[&$p]).children.contains(&$c) {
-                /* Pruned nodes keep their children in case they show up in a later merge, so do not panic
-                 * if children exists */
-                $threads.thread_nodes.entry($p).and_modify(|e| e.children.push($c));
+                /* Pruned nodes keep their children in case they show up in a later merge, so
+                 * do not panic if children exists */
+                $threads
+                    .thread_nodes
+                    .entry($p)
+                    .and_modify(|e| e.children.push($c));
             }
             $threads.thread_nodes.entry($c).and_modify(|e| {
                 e.parent = Some($p);
             });
-            let old_group = std::mem::replace($threads.groups.entry(old_group_hash).or_default(), ThreadGroup::Node {
-                parent: Arc::new(RwLock::new(parent_group_hash)),
-            });
+            let old_group = std::mem::replace(
+                $threads.groups.entry(old_group_hash).or_default(),
+                ThreadGroup::Node {
+                    parent: Arc::new(RwLock::new(parent_group_hash)),
+                },
+            );
             $threads.thread_nodes.entry($c).and_modify(|e| {
                 e.group = parent_group_hash;
             });
@@ -147,21 +160,24 @@ macro_rules! make {
             {
                 let parent_group = $threads.thread_ref_mut(parent_group_hash);
                 match (parent_group, old_group) {
-                    (Thread {
-                        ref mut date,
-                        ref mut len,
-                        ref mut unseen,
-                        ref mut snoozed,
-                        ref mut attachments,
-                        ..
-                    }, ThreadGroup::Root(Thread {
-                        date: old_date,
-                        len: old_len,
-                        unseen: old_unseen,
-                        snoozed: old_snoozed,
-                        attachments: old_attachments,
-                        ..
-                    })) => {
+                    (
+                        Thread {
+                            ref mut date,
+                            ref mut len,
+                            ref mut unseen,
+                            ref mut snoozed,
+                            ref mut attachments,
+                            ..
+                        },
+                        ThreadGroup::Root(Thread {
+                            date: old_date,
+                            len: old_len,
+                            unseen: old_unseen,
+                            snoozed: old_snoozed,
+                            attachments: old_attachments,
+                            ..
+                        }),
+                    ) => {
                         *date = std::cmp::max(old_date, *date);
                         *len += old_len;
                         *unseen += old_unseen;
@@ -169,13 +185,13 @@ macro_rules! make {
                         *snoozed |= old_snoozed;
                     }
                     _ => unreachable!(),
-                 }
+                }
             }
             prev_parent
         } else {
             None
         }
-        }};
+    }};
 }
 
 /// Strip common prefixes from subjects
@@ -185,9 +201,15 @@ macro_rules! make {
 /// use melib::thread::SubjectPrefix;
 ///
 /// let mut subject = "Re: RE: Res: Re: Res: Subject";
-/// assert_eq!(subject.strip_prefixes_from_list(<&str>::USUAL_PREFIXES, None), &"Subject");
+/// assert_eq!(
+///     subject.strip_prefixes_from_list(<&str>::USUAL_PREFIXES, None),
+///     &"Subject"
+/// );
 /// let mut subject = "Re: RE: Res: Re: Res: Subject";
-/// assert_eq!(subject.strip_prefixes_from_list(<&str>::USUAL_PREFIXES, Some(1)), &"RE: Res: Re: Res: Subject");
+/// assert_eq!(
+///     subject.strip_prefixes_from_list(<&str>::USUAL_PREFIXES, Some(1)),
+///     &"RE: Res: Re: Res: Subject"
+/// );
 /// ```
 pub trait SubjectPrefix {
     const USUAL_PREFIXES: &'static [&'static str] = &[
@@ -199,7 +221,7 @@ pub trait SubjectPrefix {
         "Fw:",
         /* taken from
          * https://en.wikipedia.org/wiki/List_of_email_subject_abbreviations#Abbreviations_in_other_languages
-         * */
+         */
         "回复:",
         "回覆:",
         // Dutch (Antwoord)
@@ -919,8 +941,9 @@ impl Threads {
                     .unwrap()
                     .set_thread(thread_hash);
 
-                /* If thread node currently has a message from a foreign mailbox and env_hash is
-                 * from current mailbox we want to update it, otherwise return */
+                /* If thread node currently has a message from a foreign mailbox and env_hash
+                 * is from current mailbox we want to update it, otherwise
+                 * return */
                 if node.other_mailbox || other_mailbox {
                     return false;
                 }

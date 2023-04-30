@@ -19,26 +19,34 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use crate::email::{
-    pgp::{DecryptionMetadata, Recipient},
-    Address,
+use std::{
+    borrow::Cow,
+    collections::HashMap,
+    ffi::{CStr, CString, OsStr},
+    future::Future,
+    io::Seek,
+    os::unix::{
+        ffi::OsStrExt,
+        io::{AsRawFd, RawFd},
+    },
+    path::Path,
+    sync::{Arc, Mutex},
 };
-use crate::error::{Error, ErrorKind, IntoError, Result, ResultIntoError};
+
 use futures::FutureExt;
 use serde::{
     de::{self, Deserialize},
     Deserializer, Serialize, Serializer,
 };
 use smol::Async;
-use std::borrow::Cow;
-use std::collections::HashMap;
-use std::ffi::{CStr, CString, OsStr};
-use std::future::Future;
-use std::io::Seek;
-use std::os::unix::ffi::OsStrExt;
-use std::os::unix::io::{AsRawFd, RawFd};
-use std::path::Path;
-use std::sync::{Arc, Mutex};
+
+use crate::{
+    email::{
+        pgp::{DecryptionMetadata, Recipient},
+        Address,
+    },
+    error::{Error, ErrorKind, IntoError, Result, ResultIntoError},
+};
 
 macro_rules! call {
     ($lib:expr, $func:ty) => {{
@@ -247,10 +255,10 @@ impl Context {
 
         let mut io_cbs = gpgme_io_cbs {
             add: Some(io::gpgme_register_io_cb),
-            add_priv: Arc::into_raw(add_priv_data) as *mut ::std::os::raw::c_void, //add_priv: *mut ::std::os::raw::c_void,
+            add_priv: Arc::into_raw(add_priv_data) as *mut ::std::os::raw::c_void, /* add_priv: *mut ::std::os::raw::c_void, */
             remove: Some(io::gpgme_remove_io_cb),
             event: Some(io::gpgme_event_io_cb),
-            event_priv: Arc::into_raw(event_priv_data) as *mut ::std::os::raw::c_void, //pub event_priv: *mut ::std::os::raw::c_void,
+            event_priv: Arc::into_raw(event_priv_data) as *mut ::std::os::raw::c_void, /* pub event_priv: *mut ::std::os::raw::c_void, */
         };
 
         unsafe {
@@ -1345,7 +1353,8 @@ impl Drop for Key {
 //        futures::executor::block_on(ctx.keylist().unwrap()).unwrap()
 //    );
 //    let cipher = ctx.new_data_file("/tmp/msg.asc").unwrap();
-//    let plain = futures::executor::block_on(ctx.decrypt(cipher).unwrap()).unwrap();
+//    let plain =
+// futures::executor::block_on(ctx.decrypt(cipher).unwrap()).unwrap();
 //    println!(
 //       "buf: {}",
 //       String::from_utf8_lossy(&plain.into_bytes().unwrap())

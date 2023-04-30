@@ -19,12 +19,17 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-//! Basic mail account configuration to use with [`backends`](./backends/index.html)
-use crate::backends::SpecialUsageMailbox;
-use crate::error::{Error, Result};
-pub use crate::{SortField, SortOrder};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+//! Basic mail account configuration to use with
+//! [`backends`](./backends/index.html)
 use std::collections::HashMap;
+
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+use crate::{
+    backends::SpecialUsageMailbox,
+    error::{Error, Result},
+};
+pub use crate::{SortField, SortOrder};
 
 #[derive(Debug, Serialize, Default, Clone)]
 pub struct AccountSettings {
@@ -87,7 +92,7 @@ impl AccountSettings {
     pub fn server_password(&self) -> Result<String> {
         if let Some(cmd) = self.extra.get("server_password_command") {
             let output = std::process::Command::new("sh")
-                .args(&["-c", cmd])
+                .args(["-c", cmd])
                 .stdin(std::process::Stdio::piped())
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::piped())
@@ -107,7 +112,10 @@ impl AccountSettings {
         } else if let Some(pass) = self.extra.get("server_password") {
             Ok(pass.to_owned())
         } else {
-            Err(Error::new(format!("Configuration error: connection requires either server_password or server_password_command")))
+            Err(Error::new(format!(
+                "Configuration error: connection requires either server_password or \
+                 server_password_command"
+            )))
         }
     }
 }

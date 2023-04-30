@@ -19,9 +19,11 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::fs::OpenOptions;
-use std::io::{Read, Write};
-use std::sync::{Arc, Mutex};
+use std::{
+    fs::OpenOptions,
+    io::{Read, Write},
+    sync::{Arc, Mutex},
+};
 
 thread_local!(static CMD_HISTORY_FILE: Arc<Mutex<std::fs::File>> = Arc::new(Mutex::new({
     let data_dir = xdg::BaseDirectories::with_prefix("meli").unwrap();

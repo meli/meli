@@ -19,9 +19,11 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::fs::File;
-use std::io::prelude::*;
-use std::process::{Command, Stdio};
+use std::{
+    fs::File,
+    io::prelude::*,
+    process::{Command, Stdio},
+};
 
 use quote::{format_ident, quote};
 
@@ -29,7 +31,8 @@ use quote::{format_ident, quote};
 pub fn override_derive(filenames: &[(&str, &str)]) {
     let mut output_file =
         File::create("src/conf/overrides.rs").expect("Unable to open output file");
-    let mut output_string = r##"/*
+    let mut output_string = r##"// @generated
+/*
  * meli - conf/overrides.rs
  *
  * Copyright 2020 Manos Pitsidianakis
@@ -60,7 +63,7 @@ use super::*;
 
     'file_loop: for (filename, ident) in filenames {
         println!("cargo:rerun-if-changed={}", filename);
-        let mut file = File::open(&filename)
+        let mut file = File::open(filename)
             .unwrap_or_else(|err| panic!("Unable to open file `{}` {}", filename, err));
 
         let mut src = String::new();

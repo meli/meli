@@ -67,7 +67,9 @@ pub enum SubCommand {
     PrintLoadedThemes,
     /// edit configuration files in `$EDITOR`/`$VISUAL`.
     EditConfig,
-    /// create a sample configuration file with available configuration options. If PATH is not specified, meli will try to create it in $XDG_CONFIG_HOME/meli/config.toml
+    /// create a sample configuration file with available configuration options.
+    /// If PATH is not specified, meli will try to create it in
+    /// $XDG_CONFIG_HOME/meli/config.toml
     #[structopt(display_order = 1)]
     CreateConfig {
         #[structopt(value_name = "NEW_CONFIG_PATH", parse(from_os_str))]

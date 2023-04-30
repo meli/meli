@@ -19,9 +19,9 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::TextProcessing;
-
 use smallvec::SmallVec;
+
+use super::TextProcessing;
 
 pub trait KMP {
     fn kmp_search(&self, pattern: &str) -> SmallVec<[usize; 256]>;

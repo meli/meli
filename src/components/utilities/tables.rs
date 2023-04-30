@@ -20,9 +20,10 @@
  */
 
 /*! UI components to display tabular lists. */
+use std::mem::MaybeUninit;
+
 use super::*;
 use crate::segment_tree::SegmentTree;
-use std::mem::MaybeUninit;
 
 #[derive(Debug, Default, Copy, Clone)]
 pub enum ColumnElasticity {
@@ -130,7 +131,8 @@ pub struct DataColumns<const N: usize> {
     pub segment_tree: Box<[SegmentTree; N]>,
 }
 
-// Workaround because Default derive doesn't work for const generic array lengths yet.
+// Workaround because Default derive doesn't work for const generic array
+// lengths yet.
 impl<const N: usize> Default for DataColumns<N> {
     fn default() -> Self {
         fn init_array<T, const N: usize>(cl: impl Fn() -> T) -> [T; N] {

@@ -19,24 +19,28 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::*;
-use crate::email::address::{Address, MailboxAddress};
-use crate::email::parser::{
-    generic::{byte_in_range, byte_in_slice},
-    BytesExt, IResult,
-};
-use crate::error::ResultIntoError;
+use std::{convert::TryFrom, str::FromStr};
+
 use nom::{
     branch::{alt, permutation},
     bytes::complete::{is_a, is_not, tag, take, take_until, take_while},
-    character::complete::digit1,
-    character::is_digit,
+    character::{complete::digit1, is_digit},
     combinator::{map, map_res, opt},
     multi::{fold_many1, length_data, many0, many1, separated_list1},
     sequence::{delimited, preceded},
 };
-use std::convert::TryFrom;
-use std::str::FromStr;
+
+use super::*;
+use crate::{
+    email::{
+        address::{Address, MailboxAddress},
+        parser::{
+            generic::{byte_in_range, byte_in_slice},
+            BytesExt, IResult,
+        },
+    },
+    error::ResultIntoError,
+};
 
 bitflags! {
     #[derive(Default, Serialize, Deserialize)]
@@ -137,7 +141,7 @@ fn test_imap_required_responses() {
     let response =
         &b"* 1040 FETCH (UID 1064 FLAGS ())\r\nM15 OK Fetch completed (0.001 + 0.299 secs).\r\n"[..];
     for l in response.split_rn() {
-        /*debug!("check line: {}", &l);*/
+        /* debug!("check line: {}", &l); */
         if required_responses.check(l) {
             ret.extend_from_slice(l);
         }
@@ -159,35 +163,59 @@ pub struct ImapLineIterator<'a> {
 
 #[derive(Debug, PartialEq)]
 pub enum ResponseCode {
-    ///The human-readable text contains a special alert that MUST be presented to the user in a fashion that calls the user's attention to the message.
+    ///The human-readable text contains a special alert that MUST be presented
+    /// to the user in a fashion that calls the user's attention to the message.
     Alert(String),
 
-    ///Optionally followed by a parenthesized list of charsets.  A SEARCH failed because the given charset is not supported by this implementation.  If the optional list of charsets is given, this lists the charsets that are supported by this implementation.
+    ///Optionally followed by a parenthesized list of charsets.  A SEARCH
+    /// failed because the given charset is not supported by this
+    /// implementation.  If the optional list of charsets is given, this lists
+    /// the charsets that are supported by this implementation.
     Badcharset(Option<String>),
 
-    /// Followed by a list of capabilities.  This can appear in the initial OK or PREAUTH response to transmit an initial capabilities list.  This makes it unnecessary for a client to send a separate CAPABILITY command if it recognizes this response.
+    /// Followed by a list of capabilities.  This can appear in the initial OK
+    /// or PREAUTH response to transmit an initial capabilities list.  This
+    /// makes it unnecessary for a client to send a separate CAPABILITY command
+    /// if it recognizes this response.
     Capability,
 
-    /// The human-readable text represents an error in parsing the [RFC-2822] header or [MIME-IMB] headers of a message in the mailbox.
+    /// The human-readable text represents an error in parsing the [RFC-2822]
+    /// header or [MIME-IMB] headers of a message in the mailbox.
     Parse(String),
 
-    /// Followed by a parenthesized list of flags, indicates which of the known flags the client can change permanently.  Any flags that are in the FLAGS untagged response, but not the PERMANENTFLAGS list, can not be set permanently.  If the client attempts to STORE a flag that is not in the PERMANENTFLAGS list, the server will either ignore the change or store the state change for the remainder of the current session only.  The PERMANENTFLAGS list can also include the special flag \*, which indicates that it is possible to create new keywords by attempting to store those flags in the mailbox.
+    /// Followed by a parenthesized list of flags, indicates which of the known
+    /// flags the client can change permanently.  Any flags that are in the
+    /// FLAGS untagged response, but not the PERMANENTFLAGS list, can not be set
+    /// permanently.  If the client attempts to STORE a flag that is not in the
+    /// PERMANENTFLAGS list, the server will either ignore the change or store
+    /// the state change for the remainder of the current session only.  The
+    /// PERMANENTFLAGS list can also include the special flag \*, which
+    /// indicates that it is possible to create new keywords by attempting to
+    /// store those flags in the mailbox.
     Permanentflags(String),
 
-    /// The mailbox is selected read-only, or its access while selected has changed from read-write to read-only.
+    /// The mailbox is selected read-only, or its access while selected has
+    /// changed from read-write to read-only.
     ReadOnly,
 
-    /// The mailbox is selected read-write, or its access while selected has changed from read-only to read-write.
+    /// The mailbox is selected read-write, or its access while selected has
+    /// changed from read-only to read-write.
     ReadWrite,
 
-    /// An APPEND or COPY attempt is failing because the target mailbox does not exist (as opposed to some other reason).  This is a hint to the client that the operation can succeed if the mailbox is first created by the CREATE command.
+    /// An APPEND or COPY attempt is failing because the target mailbox does not
+    /// exist (as opposed to some other reason).  This is a hint to the client
+    /// that the operation can succeed if the mailbox is first created by the
+    /// CREATE command.
     Trycreate,
 
-    /// Followed by a decimal number, indicates the next unique identifier value.  Refer to section 2.3.1.1 for more information.
+    /// Followed by a decimal number, indicates the next unique identifier
+    /// value.  Refer to section 2.3.1.1 for more information.
     Uidnext(UID),
-    /// Followed by a decimal number, indicates the unique identifier validity value.  Refer to section 2.3.1.1 for more information.
+    /// Followed by a decimal number, indicates the unique identifier validity
+    /// value.  Refer to section 2.3.1.1 for more information.
     Uidvalidity(UID),
-    /// Followed by a decimal number, indicates the number of the first message without the \Seen flag set.
+    /// Followed by a decimal number, indicates the number of the first message
+    /// without the \Seen flag set.
     Unseen(ImapNum),
 }
 
@@ -195,15 +223,23 @@ impl std::fmt::Display for ResponseCode {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         use ResponseCode::*;
         match self {
-            Alert(s)=> write!(fmt, "ALERT: {}", s),
-            Badcharset(None)=> write!(fmt, "Given charset is not supported by this server."),
-            Badcharset(Some(s))=> write!(fmt, "Given charset is not supported by this server. Supported ones are: {}", s),
+            Alert(s) => write!(fmt, "ALERT: {}", s),
+            Badcharset(None) => write!(fmt, "Given charset is not supported by this server."),
+            Badcharset(Some(s)) => write!(
+                fmt,
+                "Given charset is not supported by this server. Supported ones are: {}",
+                s
+            ),
             Capability => write!(fmt, "Capability response"),
             Parse(s) => write!(fmt, "Server error in parsing message headers: {}", s),
             Permanentflags(s) => write!(fmt, "Mailbox supports these flags: {}", s),
-            ReadOnly=> write!(fmt, "This mailbox is selected read-only."),
+            ReadOnly => write!(fmt, "This mailbox is selected read-only."),
             ReadWrite => write!(fmt, "This mailbox is selected with read-write permissions."),
-            Trycreate => write!(fmt, "Failed to operate on the target mailbox because it doesn't exist. Try creating it first."),
+            Trycreate => write!(
+                fmt,
+                "Failed to operate on the target mailbox because it doesn't exist. Try creating \
+                 it first."
+            ),
             Uidnext(uid) => write!(fmt, "Next UID value is {}", uid),
             Uidvalidity(uid) => write!(fmt, "Next UIDVALIDITY value is {}", uid),
             Unseen(uid) => write!(fmt, "First message without the \\Seen flag is {}", uid),
@@ -265,7 +301,8 @@ impl TryFrom<&'_ [u8]> for ImapResponse {
             ))
         })? + 1..]
             .trim();
-        // M12 NO [CANNOT] Invalid mailbox name: Name must not have \'/\' characters (0.000 + 0.098 + 0.097 secs).\r\n
+        // M12 NO [CANNOT] Invalid mailbox name: Name must not have \'/\' characters
+        // (0.000 + 0.098 + 0.097 secs).\r\n
         if val.ends_with(b" secs).") {
             val = &val[..val.rfind(b"(").ok_or_else(|| {
                 Error::new(format!(
@@ -432,8 +469,8 @@ fn test_imap_line_iterator() {
 */
 
 /*
-* LIST (\HasNoChildren) "." INBOX.Sent
-* LIST (\HasChildren) "." INBOX
+ * LIST (\HasNoChildren) "." INBOX.Sent
+ * LIST (\HasChildren) "." INBOX
  */
 
 pub fn list_mailbox_result(input: &[u8]) -> IResult<&[u8], ImapMailbox> {
@@ -604,7 +641,8 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
                 i += (input.len() - i - rest.len()) + 1;
             } else {
                 return debug!(Err(Error::new(format!(
-                    "Unexpected input while parsing UID FETCH response. Could not parse FLAGS: {:.40}.",
+                    "Unexpected input while parsing UID FETCH response. Could not parse FLAGS: \
+                     {:.40}.",
                     String::from_utf8_lossy(&input[i..])
                 ))));
             }
@@ -639,7 +677,8 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
                 i += input.len() - i - rest.len();
             } else {
                 return debug!(Err(Error::new(format!(
-                    "Unexpected input while parsing UID FETCH response. Could not parse RFC822: {:.40}",
+                    "Unexpected input while parsing UID FETCH response. Could not parse RFC822: \
+                     {:.40}",
                     String::from_utf8_lossy(&input[i..])
                 ))));
             }
@@ -650,7 +689,8 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
                 i += input.len() - i - rest.len();
             } else {
                 return debug!(Err(Error::new(format!(
-                    "Unexpected input while parsing UID FETCH response. Could not parse ENVELOPE: {:.40}",
+                    "Unexpected input while parsing UID FETCH response. Could not parse ENVELOPE: \
+                     {:.40}",
                     String::from_utf8_lossy(&input[i..])
                 ))));
             }
@@ -672,7 +712,8 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
                 i += input.len() - i - rest.len();
             } else {
                 return debug!(Err(Error::new(format!(
-                    "Unexpected input while parsing UID FETCH response. Could not parse BODY[HEADER.FIELDS (REFERENCES)]: {:.40}",
+                    "Unexpected input while parsing UID FETCH response. Could not parse \
+                     BODY[HEADER.FIELDS (REFERENCES)]: {:.40}",
                     String::from_utf8_lossy(&input[i..])
                 ))));
             }
@@ -688,7 +729,8 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
                 i += input.len() - i - rest.len();
             } else {
                 return debug!(Err(Error::new(format!(
-                    "Unexpected input while parsing UID FETCH response. Could not parse BODY[HEADER.FIELDS (\"REFERENCES\"): {:.40}",
+                    "Unexpected input while parsing UID FETCH response. Could not parse \
+                     BODY[HEADER.FIELDS (\"REFERENCES\"): {:.40}",
                     String::from_utf8_lossy(&input[i..])
                 ))));
             }
@@ -815,9 +857,15 @@ macro_rules! flags_to_imap_list {
 /* Input Example:
  * ==============
  *
- *  "M0 OK [CAPABILITY IMAP4rev1 LITERAL+ SASL-IR LOGIN-REFERRALS ID ENABLE IDLE SORT SORT=DISPLAY THREAD=REFERENCES THREAD=REFS THREAD=ORDEREDSUBJECT MULTIAPPEND URL-PARTIAL CATENATE UNSELECT CHILDREN NAMESPACE UIDPLUS LIST-EXTENDED I18NLEVEL=1 CONDSTORE QRESYNC ESEARCH ESORT SEARCHRES WITHIN CONTEXT=SEARCH LIST-STATUS BINARY MOVE SPECIAL-USE] Logged in\r\n"
-*   "* CAPABILITY IMAP4rev1 UNSELECT IDLE NAMESPACE QUOTA ID XLIST CHILDREN X-GM-EXT-1 XYZZY SASL-IR AUTH=XOAUTH2 AUTH=PLAIN AUTH=PLAIN-CLIENT TOKEN AUTH=OAUTHBEARER AUTH=XOAUTH\r\n"
-*   "* CAPABILITY IMAP4rev1 LITERAL+ SASL-IR LOGIN-REFERRALS ID ENABLE IDLE AUTH=PLAIN\r\n"
+ *  "M0 OK [CAPABILITY IMAP4rev1 LITERAL+ SASL-IR LOGIN-REFERRALS ID ENABLE
+ * IDLE SORT SORT=DISPLAY THREAD=REFERENCES THREAD=REFS THREAD=ORDEREDSUBJECT
+ * MULTIAPPEND URL-PARTIAL CATENATE UNSELECT CHILDREN NAMESPACE UIDPLUS
+ * LIST-EXTENDED I18NLEVEL=1 CONDSTORE QRESYNC ESEARCH ESORT SEARCHRES WITHIN
+ * CONTEXT=SEARCH LIST-STATUS BINARY MOVE SPECIAL-USE] Logged in\r\n"
+ *   "* CAPABILITY IMAP4rev1 UNSELECT IDLE NAMESPACE QUOTA ID XLIST CHILDREN
+ * X-GM-EXT-1 XYZZY SASL-IR AUTH=XOAUTH2 AUTH=PLAIN AUTH=PLAIN-CLIENT TOKEN
+ * AUTH=OAUTHBEARER AUTH=XOAUTH\r\n"   "* CAPABILITY IMAP4rev1 LITERAL+
+ * SASL-IR LOGIN-REFERRALS ID ENABLE IDLE AUTH=PLAIN\r\n"
  */
 
 pub fn capabilities(input: &[u8]) -> IResult<&[u8], Vec<&[u8]>> {
@@ -829,7 +877,8 @@ pub fn capabilities(input: &[u8]) -> IResult<&[u8], Vec<&[u8]>> {
     Ok((input, ret))
 }
 
-/// This enum represents the server's untagged responses detailed in `7. Server Responses` of RFC 3501   INTERNET MESSAGE ACCESS PROTOCOL - VERSION 4rev1
+/// This enum represents the server's untagged responses detailed in `7. Server
+/// Responses` of RFC 3501   INTERNET MESSAGE ACCESS PROTOCOL - VERSION 4rev1
 #[derive(Debug, PartialEq)]
 pub enum UntaggedResponse<'s> {
     /// ```text
@@ -1090,7 +1139,8 @@ pub struct SelectResponse {
 /*
  *
  *  * FLAGS (\Answered \Flagged \Deleted \Seen \Draft)
- *  * OK [PERMANENTFLAGS (\Answered \Flagged \Deleted \Seen \Draft \*)] Flags permitted.
+ *  * OK [PERMANENTFLAGS (\Answered \Flagged \Deleted \Seen \Draft \*)] Flags
+ *    permitted.
  *  * 45 EXISTS
  *  * 0 RECENT
  *  * OK [UNSEEN 16] First unseen.
@@ -1283,30 +1333,30 @@ pub fn byte_flags(input: &[u8]) -> IResult<&[u8], (Flag, Vec<String>)> {
 }
 
 /*
-* The fields of the envelope structure are in the following
-* order: date, subject, from, sender, reply-to, to, cc, bcc,
-* in-reply-to, and message-id. The date, subject, in-reply-to,
-* and message-id fields are strings. The from, sender, reply-to,
-* to, cc, and bcc fields are parenthesized lists of address
-* structures.
-* An address structure is a parenthesized list that describes an
-* electronic mail address. The fields of an address structure
-* are in the following order: personal name, [SMTP]
-* at-domain-list (source route), mailbox name, and host name.
-*/
+ * The fields of the envelope structure are in the following
+ * order: date, subject, from, sender, reply-to, to, cc, bcc,
+ * in-reply-to, and message-id. The date, subject, in-reply-to,
+ * and message-id fields are strings. The from, sender, reply-to,
+ * to, cc, and bcc fields are parenthesized lists of address
+ * structures.
+ * An address structure is a parenthesized list that describes an
+ * electronic mail address. The fields of an address structure
+ * are in the following order: personal name, [SMTP]
+ * at-domain-list (source route), mailbox name, and host name.
+ */
 
 /*
-*  * 12 FETCH (FLAGS (\Seen) INTERNALDATE "17-Jul-1996 02:44:25 -0700"
-*  RFC822.SIZE 4286 ENVELOPE ("Wed, 17 Jul 1996 02:23:25 -0700 (PDT)"
-*  "IMAP4rev1 WG mtg summary and minutes"
-*  (("Terry Gray" NIL "gray" "cac.washington.edu"))
-*  (("Terry Gray" NIL "gray" "cac.washington.edu"))
-*  (("Terry Gray" NIL "gray" "cac.washington.edu"))
-*  ((NIL NIL "imap" "cac.washington.edu"))
-*  ((NIL NIL "minutes" "CNRI.Reston.VA.US")
-*  ("John Klensin" NIL "KLENSIN" "MIT.EDU")) NIL NIL
-*  "<B27397-0100000@cac.washington.edu>")
-*/
+ *  * 12 FETCH (FLAGS (\Seen) INTERNALDATE "17-Jul-1996 02:44:25 -0700"
+ *  RFC822.SIZE 4286 ENVELOPE ("Wed, 17 Jul 1996 02:23:25 -0700 (PDT)"
+ *  "IMAP4rev1 WG mtg summary and minutes"
+ *  (("Terry Gray" NIL "gray" "cac.washington.edu"))
+ *  (("Terry Gray" NIL "gray" "cac.washington.edu"))
+ *  (("Terry Gray" NIL "gray" "cac.washington.edu"))
+ *  ((NIL NIL "imap" "cac.washington.edu"))
+ *  ((NIL NIL "minutes" "CNRI.Reston.VA.US")
+ *  ("John Klensin" NIL "KLENSIN" "MIT.EDU")) NIL NIL
+ *  "<B27397-0100000@cac.washington.edu>")
+ */
 
 pub fn envelope(input: &[u8]) -> IResult<&[u8], Envelope> {
     let (input, _) = tag("(")(input)?;
@@ -1466,7 +1516,8 @@ pub fn envelope_address(input: &[u8]) -> IResult<&[u8], Address> {
     ))
 }
 
-// Read a literal ie a byte sequence prefixed with a tag containing its length delimited in {}s
+// Read a literal ie a byte sequence prefixed with a tag containing its length
+// delimited in {}s
 pub fn literal(input: &[u8]) -> IResult<&[u8], &[u8]> {
     length_data(delimited(
         tag("{"),
@@ -1694,7 +1745,8 @@ pub fn string_token(input: &[u8]) -> IResult<&[u8], &[u8]> {
 // ASTRING-CHAR = ATOM-CHAR / resp-specials
 // atom = 1*ATOM-CHAR
 // ATOM-CHAR = <any CHAR except atom-specials>
-// atom-specials = "(" / ")" / "{" / SP / CTL / list-wildcards / quoted-specials / resp-specials
+// atom-specials = "(" / ")" / "{" / SP / CTL / list-wildcards / quoted-specials
+// / resp-specials
 fn astring_char(input: &[u8]) -> IResult<&[u8], &[u8]> {
     let (rest, chars) = many1(atom_char)(input)?;
     Ok((rest, &input[0..chars.len()]))

@@ -37,11 +37,14 @@
 //! let s = timestamp_to_string(timestamp, Some("%Y-%m-%d"), true);
 //! assert_eq!(s, "2020-01-08");
 //! ```
+use std::{
+    borrow::Cow,
+    convert::TryInto,
+    ffi::{CStr, CString},
+    os::raw::c_int,
+};
+
 use crate::error::{Result, ResultIntoError};
-use std::borrow::Cow;
-use std::convert::TryInto;
-use std::ffi::{CStr, CString};
-use std::os::raw::c_int;
 
 pub type UnixTimestamp = u64;
 pub const RFC3339_FMT_WITH_TIME: &str = "%Y-%m-%dT%H:%M:%S\0";
@@ -122,7 +125,8 @@ impl Drop for Locale {
     }
 }
 
-// How to unit test this? Test machine is not guaranteed to have non-english locales.
+// How to unit test this? Test machine is not guaranteed to have non-english
+// locales.
 impl Locale {
     #[cfg(not(target_os = "netbsd"))]
     fn new(

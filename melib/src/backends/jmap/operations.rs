@@ -19,8 +19,9 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::*;
 use std::sync::Arc;
+
+use super::*;
 
 /// `BackendOp` implementor for Imap
 #[derive(Debug, Clone)]

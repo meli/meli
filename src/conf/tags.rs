@@ -21,11 +21,13 @@
 
 //! E-mail tag configuration and {de,}serializing.
 
-use super::DotAddressable;
-use crate::terminal::Color;
+use std::collections::{HashMap, HashSet};
+
 use melib::{Error, Result, TagHash};
 use serde::{Deserialize, Deserializer};
-use std::collections::{HashMap, HashSet};
+
+use super::DotAddressable;
+use crate::terminal::Color;
 
 #[derive(Default, Debug, Deserialize, Clone, Serialize)]
 #[serde(deny_unknown_fields)]

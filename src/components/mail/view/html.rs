@@ -19,9 +19,12 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use std::{
+    io::Write,
+    process::{Command, Stdio},
+};
+
 use super::*;
-use std::io::Write;
-use std::process::{Command, Stdio};
 
 #[derive(Debug)]
 pub struct HtmlView {
@@ -40,7 +43,7 @@ impl HtmlView {
         let mut display_text = if let Some(filter_invocation) = settings.pager.html_filter.as_ref()
         {
             let command_obj = Command::new("sh")
-                .args(&["-c", filter_invocation])
+                .args(["-c", filter_invocation])
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
                 .spawn();
@@ -74,7 +77,7 @@ impl HtmlView {
                 }
             }
         } else if let Ok(mut html_filter) = Command::new("w3m")
-            .args(&["-I", "utf-8", "-T", "text/html"])
+            .args(["-I", "utf-8", "-T", "text/html"])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .spawn()
@@ -154,7 +157,7 @@ impl Component for HtmlView {
                 let exec_cmd =
                     super::desktop_exec_to_command(&command, p.path.display().to_string(), false);
                 match Command::new("sh")
-                    .args(&["-c", &exec_cmd])
+                    .args(["-c", &exec_cmd])
                     .stdin(Stdio::piped())
                     .stdout(Stdio::piped())
                     .spawn()

@@ -19,9 +19,9 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use melib::{search::Query, Error, Result};
+
 use super::{default_vals::*, DotAddressable, IndexStyle};
-use melib::search::Query;
-use melib::{Error, Result};
 
 /// Settings for mail listings
 ///
@@ -29,32 +29,32 @@ use melib::{Error, Result};
 /// Tree decoration examples:
 ///
 ///```no_run
-///const HAS_SIBLING: &str = " ┃";
-///const NO_SIBLING: &str = "  ";
-///const HAS_SIBLING_LEAF: &str = " ┣━";
-///const NO_SIBLING_LEAF: &str = " ┗━";
-///```
+/// const HAS_SIBLING: &str = " ┃";
+/// const NO_SIBLING: &str = "  ";
+/// const HAS_SIBLING_LEAF: &str = " ┣━";
+/// const NO_SIBLING_LEAF: &str = " ┗━";
+/// ```
 ///
 ///```no_run
-///const HAS_SIBLING: &str = " |";
-///const NO_SIBLING: &str = "  ";
-///const HAS_SIBLING_LEAF: &str = " |\\_";
-///const NO_SIBLING_LEAF: &str = " \\_";
-///```
+/// const HAS_SIBLING: &str = " |";
+/// const NO_SIBLING: &str = "  ";
+/// const HAS_SIBLING_LEAF: &str = " |\\_";
+/// const NO_SIBLING_LEAF: &str = " \\_";
+/// ```
 ///
 ///```no_run
-///const HAS_SIBLING: &str = " ";
-///const NO_SIBLING: &str = " ";
-///const HAS_SIBLING_LEAF: &str = " ";
-///const NO_SIBLING_LEAF: &str = " ";
-///```
+/// const HAS_SIBLING: &str = " ";
+/// const NO_SIBLING: &str = " ";
+/// const HAS_SIBLING_LEAF: &str = " ";
+/// const NO_SIBLING_LEAF: &str = " ";
+/// ```
 ///
 ///```no_run
-///const HAS_SIBLING: &str = " │";
-///const NO_SIBLING: &str = "  ";
-///const HAS_SIBLING_LEAF: &str = " ├─";
-///const NO_SIBLING_LEAF: &str = " ╰─";
-///```
+/// const HAS_SIBLING: &str = " │";
+/// const NO_SIBLING: &str = "  ";
+/// const HAS_SIBLING_LEAF: &str = " ├─";
+/// const NO_SIBLING_LEAF: &str = " ╰─";
+/// ```
 #[derive(Debug, Deserialize, Clone, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ListingSettings {
@@ -130,8 +130,8 @@ pub struct ListingSettings {
     #[serde(default)]
     pub attachment_flag: Option<String>,
 
-    /// Should threads with differentiating Subjects show a list of those subjects on the entry
-    /// title?
+    /// Should threads with differentiating Subjects show a list of those
+    /// subjects on the entry title?
     /// Default: "true"
     #[serde(default = "true_val")]
     pub thread_subject_pack: bool,

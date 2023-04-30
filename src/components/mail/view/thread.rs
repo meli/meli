@@ -19,9 +19,10 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use std::cmp;
+
 use super::*;
 use crate::components::PageMovement;
-use std::cmp;
 
 #[derive(Debug, Clone)]
 struct ThreadEntry {
@@ -62,8 +63,8 @@ pub struct ThreadView {
 impl ThreadView {
     /*
      * coordinates: (account index, mailbox_hash, root set thread_node index)
-     * expanded_hash: optional position of expanded entry when we render the threadview. Default
-     *  expanded message is the last one.
+     * expanded_hash: optional position of expanded entry when we render the
+     * threadview. Default  expanded message is the last one.
      * context: current context
      */
     pub fn new(
@@ -491,8 +492,8 @@ impl ThreadView {
         let page_no = (self.new_cursor_pos).wrapping_div(rows);
 
         let top_idx = page_no * rows;
-        /* This closure (written for code clarity, should be inlined by the compiler) returns the
-         * **line** of an entry in the ThreadView grid. */
+        /* This closure (written for code clarity, should be inlined by the compiler)
+         * returns the **line** of an entry in the ThreadView grid. */
         let get_entry_area = |idx: usize, entries: &[ThreadEntry]| {
             let entries = &entries;
             let visual_indentation = entries[idx].index.0 * 4;
@@ -530,8 +531,8 @@ impl ThreadView {
                     ),
                 );
             }
-            /* If cursor position has changed, remove the highlight from the previous position and
-             * apply it in the new one. */
+            /* If cursor position has changed, remove the highlight from the previous
+             * position and apply it in the new one. */
             self.cursor_pos = self.new_cursor_pos;
             if self.cursor_pos + 1 > visibles.len() {
                 self.cursor_pos = visibles.len().saturating_sub(1);
@@ -588,8 +589,8 @@ impl ThreadView {
         } else {
             let old_cursor_pos = self.cursor_pos;
             self.cursor_pos = self.new_cursor_pos;
-            /* If cursor position has changed, remove the highlight from the previous position and
-             * apply it in the new one. */
+            /* If cursor position has changed, remove the highlight from the previous
+             * position and apply it in the new one. */
             let visibles: Vec<&usize> =
                 self.visible_entries.iter().flat_map(|v| v.iter()).collect();
             for &idx in &[old_cursor_pos, self.cursor_pos] {
@@ -941,7 +942,8 @@ impl ThreadView {
         }
     }
 
-    /// Current position in self.entries (not in drawn entries which might exclude nonvisible ones)
+    /// Current position in self.entries (not in drawn entries which might
+    /// exclude nonvisible ones)
     fn current_pos(&self) -> usize {
         let visibles: Vec<&usize> = self.visible_entries.iter().flat_map(|v| v.iter()).collect();
         *visibles[self.new_cursor_pos]

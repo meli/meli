@@ -19,19 +19,18 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use crate::backends::{BackendMailbox, MailboxHash};
-use crate::connections::{lookup_ipv4, Connection};
-use crate::email::parser::BytesExt;
-use crate::error::*;
+use crate::{
+    backends::{BackendMailbox, MailboxHash},
+    connections::{lookup_ipv4, Connection},
+    email::parser::BytesExt,
+    error::*,
+};
 extern crate native_tls;
+use std::{collections::HashSet, future::Future, pin::Pin, sync::Arc, time::Instant};
+
 use futures::io::{AsyncReadExt, AsyncWriteExt};
 use native_tls::TlsConnector;
 pub use smol::Async as AsyncWrapper;
-use std::collections::HashSet;
-use std::future::Future;
-use std::pin::Pin;
-use std::sync::Arc;
-use std::time::Instant;
 
 use super::{Capabilities, NntpServerConf, UIDStore};
 

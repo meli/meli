@@ -20,9 +20,11 @@
  */
 
 //! Configuration for composing email.
-use super::default_vals::{ask, false_val, none, true_val};
-use melib::ToggleFlag;
 use std::collections::HashMap;
+
+use melib::ToggleFlag;
+
+use super::default_vals::{ask, false_val, none, true_val};
 
 /// Settings for writing and sending new e-mail
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -31,7 +33,9 @@ pub struct ComposingSettings {
     /// A command to pipe new emails to
     /// Required
     pub send_mail: SendMail,
-    /// Command to launch editor. Can have arguments. Draft filename is given as the last argument. If it's missing, the environment variable $EDITOR is looked up.
+    /// Command to launch editor. Can have arguments. Draft filename is given as
+    /// the last argument. If it's missing, the environment variable $EDITOR is
+    /// looked up.
     #[serde(
         default = "none",
         alias = "editor-command",
@@ -54,15 +58,16 @@ pub struct ComposingSettings {
     /// Default: empty
     #[serde(default, alias = "default-header-values")]
     pub default_header_values: HashMap<String, String>,
-    /// Wrap header preample when editing a draft in an editor. This allows you to write non-plain
-    /// text email without the preamble creating syntax errors. They are stripped when you return
-    /// from the editor. The values should be a two element array of strings, a prefix and suffix.
+    /// Wrap header preample when editing a draft in an editor. This allows you
+    /// to write non-plain text email without the preamble creating syntax
+    /// errors. They are stripped when you return from the editor. The
+    /// values should be a two element array of strings, a prefix and suffix.
     /// Default: None
     #[serde(default, alias = "wrap-header-preample")]
     pub wrap_header_preamble: Option<(String, String)>,
-    /// Store sent mail after successful submission. This setting is meant to be disabled for
-    /// non-standard behaviour in gmail, which auto-saves sent mail on its own.
-    /// Default: true
+    /// Store sent mail after successful submission. This setting is meant to be
+    /// disabled for non-standard behaviour in gmail, which auto-saves sent
+    /// mail on its own. Default: true
     #[serde(default = "true_val")]
     pub store_sent_mail: bool,
     /// The attribution line appears above the quoted reply text.
@@ -70,12 +75,12 @@ pub struct ComposingSettings {
     /// - `%+f` — the sender's name and email address.
     /// - `%+n` — the sender's name (or email address, if no name is included).
     /// - `%+a` — the sender's email address.
-    /// The format string is passed to strftime(3) with the replied envelope's date.
-    /// Default: "On %a, %0e %b %Y %H:%M, %+f wrote:%n"
+    /// The format string is passed to strftime(3) with the replied envelope's
+    /// date. Default: "On %a, %0e %b %Y %H:%M, %+f wrote:%n"
     #[serde(default = "none")]
     pub attribution_format_string: Option<String>,
-    /// Whether the strftime call for the attribution string uses the POSIX locale instead of
-    /// the user's active locale
+    /// Whether the strftime call for the attribution string uses the POSIX
+    /// locale instead of the user's active locale
     /// Default: true
     #[serde(default = "true_val")]
     pub attribution_use_posix_locale: bool,
@@ -84,7 +89,12 @@ pub struct ComposingSettings {
     #[serde(default = "ask", alias = "forward-as-attachment")]
     pub forward_as_attachment: ToggleFlag,
     /// Alternative lists of reply prefixes (etc. ["Re:", "RE:", ...]) to strip
-    /// Default: `["Re:", "RE:", "Fwd:", "Fw:", "回复:", "回覆:", "SV:", "Sv:", "VS:", "Antw:", "Doorst:", "VS:", "VL:", "REF:", "TR:", "TR:", "AW:", "WG:", "ΑΠ:", "Απ:", "απ:", "ΠΡΘ:", "Πρθ:", "πρθ:", "ΣΧΕΤ:", "Σχετ:", "σχετ:", "ΠΡΘ:", "Πρθ:", "πρθ:", "Vá:", "Továbbítás:", "R:", "I:", "RIF:", "FS:", "BLS:", "TRS:", "VS:", "VB:", "RV:", "RES:", "Res", "ENC:", "Odp:", "PD:", "YNT:", "İLT:", "ATB:", "YML:"]`
+    /// Default: `["Re:", "RE:", "Fwd:", "Fw:", "回复:", "回覆:", "SV:", "Sv:",
+    /// "VS:", "Antw:", "Doorst:", "VS:", "VL:", "REF:", "TR:", "TR:", "AW:",
+    /// "WG:", "ΑΠ:", "Απ:", "απ:", "ΠΡΘ:", "Πρθ:", "πρθ:", "ΣΧΕΤ:", "Σχετ:",
+    /// "σχετ:", "ΠΡΘ:", "Πρθ:", "πρθ:", "Vá:", "Továbbítás:", "R:", "I:",
+    /// "RIF:", "FS:", "BLS:", "TRS:", "VS:", "VB:", "RV:", "RES:", "Res",
+    /// "ENC:", "Odp:", "PD:", "YNT:", "İLT:", "ATB:", "YML:"]`
     #[serde(default, alias = "reply-prefix-list-to-strip")]
     pub reply_prefix_list_to_strip: Option<Vec<String>>,
     /// The prefix to use in reply subjects. The de facto prefix is "Re:".

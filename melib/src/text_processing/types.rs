@@ -123,15 +123,10 @@ impl From<&str> for LineBreakClass {
     }
 }
 
-#[derive(PartialEq, Eq, Debug, Copy, Clone)]
+#[derive(PartialEq, Eq, Debug, Copy, Clone, Default)]
 pub enum Reflow {
     No,
     All,
+    #[default]
     FormatFlowed,
-}
-
-impl Default for Reflow {
-    fn default() -> Self {
-        Reflow::FormatFlowed
-    }
 }

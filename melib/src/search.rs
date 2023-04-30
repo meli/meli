@@ -19,13 +19,12 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use crate::parsec::*;
-use crate::UnixTimestamp;
-use std::borrow::Cow;
-use std::convert::TryFrom;
+use std::{borrow::Cow, convert::TryFrom};
 
 pub use query_parser::query;
 use Query::*;
+
+use crate::{parsec::*, UnixTimestamp};
 
 #[derive(Debug, PartialEq, Clone, Serialize)]
 pub enum Query {
@@ -233,9 +232,10 @@ pub mod query_parser {
     ///
     /// # Invocation
     /// ```
-    /// use melib::search::query;
-    /// use melib::search::Query;
-    /// use melib::parsec::Parser;
+    /// use melib::{
+    ///     parsec::Parser,
+    ///     search::{query, Query},
+    /// };
     ///
     /// let input = "test";
     /// let query = query().parse(input);

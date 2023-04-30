@@ -18,9 +18,10 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
+use std::sync::Arc;
+
 use super::*;
 use crate::backends::SpecialUsageMailbox;
-use std::sync::Arc;
 
 /// Arguments for IMAP watching functions
 pub struct ImapWatchKit {
@@ -52,8 +53,8 @@ pub async fn poll_with_examine(kit: ImapWatchKit) -> Result<()> {
 
 pub async fn idle(kit: ImapWatchKit) -> Result<()> {
     debug!("IDLE");
-    /* IDLE only watches the connection's selected mailbox. We will IDLE on INBOX and every ~5
-     * minutes wake up and poll the others */
+    /* IDLE only watches the connection's selected mailbox. We will IDLE on INBOX
+     * and every ~5 minutes wake up and poll the others */
     let ImapWatchKit {
         mut conn,
         main_conn,
@@ -70,7 +71,10 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
     {
         Some(mailbox) => mailbox,
         None => {
-            return Err(Error::new("INBOX mailbox not found in local mailbox index. meli may have not parsed the IMAP mailboxes correctly"));
+            return Err(Error::new(
+                "INBOX mailbox not found in local mailbox index. meli may have not parsed the \
+                 IMAP mailboxes correctly",
+            ));
         }
     };
     let mailbox_hash = mailbox.hash();
@@ -342,7 +346,8 @@ pub async fn examine_updates(
         } else if select_response.exists > mailbox.exists.lock().unwrap().len() {
             conn.send_command(
                 format!(
-                    "FETCH {}:* (UID FLAGS ENVELOPE BODY.PEEK[HEADER.FIELDS (REFERENCES)] BODYSTRUCTURE)",
+                    "FETCH {}:* (UID FLAGS ENVELOPE BODY.PEEK[HEADER.FIELDS (REFERENCES)] \
+                     BODYSTRUCTURE)",
                     std::cmp::max(mailbox.exists.lock().unwrap().len(), 1)
                 )
                 .as_bytes(),

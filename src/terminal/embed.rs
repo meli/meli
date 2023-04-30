@@ -19,43 +19,47 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use crate::terminal::position::*;
-use melib::{error::*, log, ERROR};
-use smallvec::SmallVec;
+use std::{
+    ffi::{CString, OsStr},
+    os::unix::{
+        ffi::OsStrExt,
+        io::{AsRawFd, FromRawFd, IntoRawFd},
+    },
+};
 
+use melib::{error::*, log, ERROR};
 #[cfg(not(target_os = "macos"))]
 use nix::{
     fcntl::{open, OFlag},
     pty::{grantpt, posix_openpt, ptsname, unlockpt},
     sys::stat,
 };
-
-use nix::libc::{STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
-use nix::pty::Winsize;
-use nix::unistd::{dup2, fork, ForkResult};
-use nix::{ioctl_none_bad, ioctl_write_ptr_bad};
-use std::ffi::{CString, OsStr};
-use std::os::unix::{
-    ffi::OsStrExt,
-    io::{AsRawFd, FromRawFd, IntoRawFd},
+use nix::{
+    ioctl_none_bad, ioctl_write_ptr_bad,
+    libc::{STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO},
+    pty::Winsize,
+    unistd::{dup2, fork, ForkResult},
 };
+use smallvec::SmallVec;
+
+use crate::terminal::position::*;
 
 mod grid;
 
-pub use grid::{EmbedGrid, EmbedTerminal};
+#[cfg(not(target_os = "macos"))]
+use std::path::Path;
+use std::{
+    convert::TryFrom,
+    io::{Read, Write},
+    sync::{Arc, Mutex},
+};
 
-// ioctl request code to "Make the given terminal the controlling terminal of the calling process"
+pub use grid::{EmbedGrid, EmbedTerminal};
+// ioctl request code to "Make the given terminal the controlling terminal of the calling
+// process"
 use libc::TIOCSCTTY;
 // ioctl request code to set window size of pty:
 use libc::TIOCSWINSZ;
-
-#[cfg(not(target_os = "macos"))]
-use std::path::Path;
-
-use std::convert::TryFrom;
-use std::io::Read;
-use std::io::Write;
-use std::sync::{Arc, Mutex};
 
 // Macro generated function that calls ioctl to set window size of slave pty end
 ioctl_write_ptr_bad!(set_window_size, TIOCSWINSZ, Winsize);
@@ -142,7 +146,7 @@ pub fn create_pty(
             }
             /* Find posix sh location, because POSIX shell is not always at /bin/sh */
             let path_var = std::process::Command::new("getconf")
-                .args(&["PATH"])
+                .args(["PATH"])
                 .output()?
                 .stdout;
             for mut p in std::env::split_paths(&OsStr::from_bytes(&path_var[..])) {
@@ -273,9 +277,7 @@ impl std::fmt::Display for EscCode<'_> {
                 unsafestr!(buf2),
                 *c as char
             ),
-            EscCode(ExpectingControlChar, b'D') => write!(
-                f, "ESC D Linefeed"
-            ),
+            EscCode(ExpectingControlChar, b'D') => write!(f, "ESC D Linefeed"),
             EscCode(Csi, b'm') => write!(
                 f,
                 "ESC[m\t\tCSI Character Attributes | Set Attr and Color to Normal (default)"
@@ -284,14 +286,8 @@ impl std::fmt::Display for EscCode<'_> {
                 f,
                 "ESC[K\t\tCSI Erase from the cursor to the end of the line"
             ),
-            EscCode(Csi, b'L') => write!(
-                f,
-                "ESC[L\t\tCSI Insert one blank line"
-            ),
-            EscCode(Csi, b'M') => write!(
-                f,
-                "ESC[M\t\tCSI delete line"
-            ),
+            EscCode(Csi, b'L') => write!(f, "ESC[L\t\tCSI Insert one blank line"),
+            EscCode(Csi, b'M') => write!(f, "ESC[M\t\tCSI delete line"),
             EscCode(Csi, b'J') => write!(
                 f,
                 "ESC[J\t\tCSI Erase from the cursor to the end of the screen"
@@ -368,17 +364,16 @@ impl std::fmt::Display for EscCode<'_> {
                 "ESC[{buf}S\t\tCSI P s S Scroll up P s lines (default = 1) (SU), VT420, EC",
                 buf = unsafestr!(buf)
             ),
-            EscCode(Csi1(ref buf), b'J') => write!(
-                f,
-                "Erase in display {buf}",
-                buf = unsafestr!(buf)
-            ),
+            EscCode(Csi1(ref buf), b'J') => {
+                write!(f, "Erase in display {buf}", buf = unsafestr!(buf))
+            }
             EscCode(Csi1(ref buf), c) => {
                 write!(f, "ESC[{}{}\t\tCSI [UNKNOWN]", unsafestr!(buf), *c as char)
             }
             EscCode(Csi2(ref buf1, ref buf2), b'r') => write!(
                 f,
-                "ESC[{};{}r\t\tCSI Set Scrolling Region [top;bottom] (default = full size of window) (DECSTBM), VT100.",
+                "ESC[{};{}r\t\tCSI Set Scrolling Region [top;bottom] (default = full size of \
+                 window) (DECSTBM), VT100.",
                 unsafestr!(buf1),
                 unsafestr!(buf2),
             ),

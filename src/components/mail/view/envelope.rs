@@ -19,11 +19,12 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::*;
-use linkify::{Link, LinkFinder};
 use std::process::{Command, Stdio};
 
+use linkify::{Link, LinkFinder};
 use xdg_utils::query_default_app;
+
+use super::*;
 
 #[derive(PartialEq, Eq, Debug)]
 enum ViewMode {
@@ -40,8 +41,8 @@ impl ViewMode {
     }
 }
 
-/// Contains an Envelope view, with sticky headers, a pager for the body, and subviews for more
-/// menus
+/// Contains an Envelope view, with sticky headers, a pager for the body, and
+/// subviews for more menus
 #[derive(Debug)]
 pub struct EnvelopeView {
     pager: Option<Pager>,
@@ -91,7 +92,7 @@ impl EnvelopeView {
                     let settings = &context.settings;
                     if let Some(filter_invocation) = settings.pager.html_filter.as_ref() {
                         let command_obj = Command::new("sh")
-                            .args(&["-c", filter_invocation])
+                            .args(["-c", filter_invocation])
                             .stdin(Stdio::piped())
                             .stdout(Stdio::piped())
                             .spawn();
@@ -114,9 +115,10 @@ impl EnvelopeView {
                                     .write_all(v)
                                     .expect("Failed to write to stdin");
                                 *v = format!(
-                            "Text piped through `{}`. Press `v` to open in web browser. \n\n",
-                            filter_invocation
-                        )
+                                    "Text piped through `{}`. Press `v` to open in web browser. \
+                                     \n\n",
+                                    filter_invocation
+                                )
                                 .into_bytes();
                                 v.extend(html_filter.wait_with_output().unwrap().stdout);
                             }
@@ -372,7 +374,7 @@ impl Component for EnvelopeView {
                     .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
                 return true;
             }
-            UIEvent::Input(Key::Char(c)) if ('0'..='9').contains(&c) => {
+            UIEvent::Input(Key::Char(c)) if c.is_ascii_digit() => {
                 self.cmd_buf.push(c);
                 return true;
             }
@@ -449,7 +451,7 @@ impl Component for EnvelopeView {
                                     false,
                                 );
                                 match Command::new("sh")
-                                    .args(&["-c", &exec_cmd])
+                                    .args(["-c", &exec_cmd])
                                     .stdin(Stdio::piped())
                                     .stdout(Stdio::piped())
                                     .spawn()
@@ -469,18 +471,20 @@ impl Component for EnvelopeView {
                                 }
                             } else {
                                 context.replies.push_back(UIEvent::StatusEvent(
-                                        StatusEvent::DisplayMessage(if let Some(filename) = filename.as_ref() {
+                                    StatusEvent::DisplayMessage(
+                                        if let Some(filename) = filename.as_ref() {
                                             format!(
-                                                "Couldn't find a default application for file {} (type {})",
-                                                filename,
-                                                attachment_type
+                                                "Couldn't find a default application for file {} \
+                                                 (type {})",
+                                                filename, attachment_type
                                             )
                                         } else {
                                             format!(
                                                 "Couldn't find a default application for type {}",
                                                 attachment_type
                                             )
-                                        }),
+                                        },
+                                    ),
                                 ));
                                 return true;
                             }

@@ -19,18 +19,21 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::{ImapConnection, MailboxSelection, UID};
-use crate::backends::imap::protocol_parser::{
-    generate_envelope_hash, FetchResponse, ImapLineSplit, RequiredResponses, UntaggedResponse,
-};
-use crate::backends::BackendMailbox;
-use crate::backends::{
-    RefreshEvent,
-    RefreshEventKind::{self, *},
-    TagHash,
-};
-use crate::error::*;
 use std::convert::TryInto;
+
+use super::{ImapConnection, MailboxSelection, UID};
+use crate::{
+    backends::{
+        imap::protocol_parser::{
+            generate_envelope_hash, FetchResponse, ImapLineSplit, RequiredResponses,
+            UntaggedResponse,
+        },
+        BackendMailbox, RefreshEvent,
+        RefreshEventKind::{self, *},
+        TagHash,
+    },
+    error::*,
+};
 
 impl ImapConnection {
     pub async fn process_untagged(&mut self, line: &[u8]) -> Result<bool> {
@@ -323,7 +326,11 @@ impl ImapConnection {
                                 accum.push(',');
                                 accum.push_str(to_str!(ms).trim());
                             }
-                            format!("UID FETCH {} (UID FLAGS ENVELOPE BODY.PEEK[HEADER.FIELDS (REFERENCES)] BODYSTRUCTURE)", accum)
+                            format!(
+                                "UID FETCH {} (UID FLAGS ENVELOPE BODY.PEEK[HEADER.FIELDS \
+                                 (REFERENCES)] BODYSTRUCTURE)",
+                                accum
+                            )
                         };
                         try_fail!(
                             mailbox_hash,

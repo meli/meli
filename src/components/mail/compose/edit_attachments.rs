@@ -21,16 +21,11 @@
 
 use super::*;
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub enum EditAttachmentCursor {
     AttachmentNo(usize),
+    #[default]
     Buttons,
-}
-
-impl Default for EditAttachmentCursor {
-    fn default() -> Self {
-        EditAttachmentCursor::Buttons
-    }
 }
 
 #[derive(Debug)]

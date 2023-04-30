@@ -1,9 +1,6 @@
 extern crate melib;
 
-use melib::futures;
-use melib::smol;
-use melib::smtp::*;
-use melib::Result;
+use melib::{futures, smol, smtp::*, Result};
 
 fn main() -> Result<()> {
     let conf = SmtpServerConf {

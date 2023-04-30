@@ -19,10 +19,11 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::DotAddressable;
-use crate::terminal::Key;
 use indexmap::IndexMap;
 use melib::{Error, Result};
+
+use super::DotAddressable;
+use crate::terminal::Key;
 
 #[macro_export]
 macro_rules! shortcut {

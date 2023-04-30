@@ -18,11 +18,15 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
-use crate::email::attachments::{Attachment, AttachmentBuilder};
-use crate::email::parser::BytesExt;
+use std::{
+    fmt::{Display, Formatter, Result as FmtResult},
+    str,
+};
 
-use std::fmt::{Display, Formatter, Result as FmtResult};
-use std::str;
+use crate::email::{
+    attachments::{Attachment, AttachmentBuilder},
+    parser::BytesExt,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Charset {
@@ -421,9 +425,10 @@ impl ContentType {
 
         boundary.push_str(&random_boundary);
         /* rfc134
-         * "The only mandatory parameter for the multipart Content-Type is the boundary parameter,
-         * which consists of 1 to 70 characters from a set of characters known to be very robust
-         * through email gateways, and NOT ending with white space"*/
+         * "The only mandatory parameter for the multipart Content-Type is the
+         * boundary parameter, which consists of 1 to 70 characters from a
+         * set of characters known to be very robust through email gateways,
+         * and NOT ending with white space" */
         boundary.truncate(70);
         boundary
     }

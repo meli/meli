@@ -33,7 +33,7 @@ pub struct AccountStatus {
 
 impl fmt::Display for AccountStatus {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", "status")
+        write!(f, "status")
     }
 }
 
@@ -368,8 +368,8 @@ impl Component for AccountStatus {
             }
         }
 
-        /* self.content may have been resized with write_string_to_grid() calls above since it has
-         * growable set */
+        /* self.content may have been resized with write_string_to_grid() calls above
+         * since it has growable set */
         let (width, height) = self.content.size();
         let (cols, rows) = (width!(area), height!(area));
         self.cursor = (

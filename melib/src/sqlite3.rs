@@ -19,10 +19,12 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use crate::{error::*, logging::log, Envelope};
+use std::path::PathBuf;
+
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput};
 pub use rusqlite::{self, params, Connection};
-use std::path::PathBuf;
+
+use crate::{error::*, logging::log, Envelope};
 
 #[derive(Copy, Clone, Debug)]
 pub struct DatabaseDescription {
@@ -90,8 +92,9 @@ pub fn open_or_create_db(
             );
             if second_try {
                 return Err(Error::new(format!(
-                            "Database version mismatch, is {} but expected {}. Could not recreate database.",
-                            version, description.version
+                    "Database version mismatch, is {} but expected {}. Could not recreate \
+                     database.",
+                    version, description.version
                 )));
             }
             reset_db(description, identifier)?;
@@ -100,7 +103,7 @@ pub fn open_or_create_db(
         }
 
         if version == 0 {
-            conn.pragma_update(None, "user_version", &description.version)?;
+            conn.pragma_update(None, "user_version", description.version)?;
         }
         if let Some(s) = description.init_script {
             conn.execute_batch(s)

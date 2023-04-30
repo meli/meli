@@ -20,33 +20,38 @@
  */
 
 use super::protocol_parser::{ImapLineSplit, ImapResponse, RequiredResponses, SelectResponse};
-use crate::backends::{MailboxHash, RefreshEvent};
-use crate::connections::{lookup_ipv4, timeout, Connection};
-use crate::email::parser::BytesExt;
-use crate::error::*;
+use crate::{
+    backends::{MailboxHash, RefreshEvent},
+    connections::{lookup_ipv4, timeout, Connection},
+    email::parser::BytesExt,
+    error::*,
+};
 extern crate native_tls;
+use std::{
+    collections::HashSet,
+    convert::TryFrom,
+    future::Future,
+    iter::FromIterator,
+    pin::Pin,
+    sync::Arc,
+    time::{Duration, Instant, SystemTime},
+};
+
 use futures::io::{AsyncReadExt, AsyncWriteExt};
 use native_tls::TlsConnector;
 pub use smol::Async as AsyncWrapper;
-use std::collections::HashSet;
-use std::convert::TryFrom;
-use std::future::Future;
-use std::iter::FromIterator;
-use std::pin::Pin;
-use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime};
 
 const IMAP_PROTOCOL_TIMEOUT: Duration = Duration::from_secs(60 * 28);
 
-use super::protocol_parser;
-use super::{Capabilities, ImapServerConf, UIDStore};
+use super::{protocol_parser, Capabilities, ImapServerConf, UIDStore};
 
 #[derive(Debug, Clone, Copy)]
 pub enum SyncPolicy {
     None,
     ///rfc4549 `Synch Ops for Disconnected IMAP4 Clients` <https://tools.ietf.org/html/rfc4549>
     Basic,
-    ///rfc7162 `IMAP Extensions: Quick Flag Changes Resynchronization (CONDSTORE) and Quick Mailbox Resynchronization (QRESYNC)`
+    ///rfc7162 `IMAP Extensions: Quick Flag Changes Resynchronization
+    /// (CONDSTORE) and Quick Mailbox Resynchronization (QRESYNC)`
     Condstore,
     CondstoreQresync,
 }
@@ -144,13 +149,14 @@ impl ImapStream {
                 if let Some(timeout) = server_conf.timeout {
                     TcpStream::connect_timeout(&addr, timeout)?
                 } else {
-                    TcpStream::connect(&addr)?
+                    TcpStream::connect(addr)?
                 },
             ))?;
             if server_conf.use_starttls {
                 let err_fn = || {
                     if server_conf.server_port == 993 {
-                        "STARTTLS failed. Server port is set to 993, which normally uses TLS. Maybe try disabling use_starttls."
+                        "STARTTLS failed. Server port is set to 993, which normally uses TLS. \
+                         Maybe try disabling use_starttls."
                     } else {
                         "STARTTLS failed. Is the connection already encrypted?"
                     }
@@ -246,7 +252,7 @@ impl ImapStream {
                 if let Some(timeout) = server_conf.timeout {
                     TcpStream::connect_timeout(&addr, timeout)?
                 } else {
-                    TcpStream::connect(&addr)?
+                    TcpStream::connect(addr)?
                 },
             ))?
         };
@@ -350,10 +356,14 @@ impl ImapStream {
                     .any(|cap| cap.eq_ignore_ascii_case(b"AUTH=XOAUTH2"))
                 {
                     return Err(Error::new(format!(
-                                "Could not connect to {}: OAUTH2 is enabled but server did not return AUTH=XOAUTH2 capability. Returned capabilities were: {}",
-                                &server_conf.server_hostname,
-                                capabilities.iter().map(|capability|
-                                    String::from_utf8_lossy(capability).to_string()).collect::<Vec<String>>().join(" ")
+                        "Could not connect to {}: OAUTH2 is enabled but server did not return \
+                         AUTH=XOAUTH2 capability. Returned capabilities were: {}",
+                        &server_conf.server_hostname,
+                        capabilities
+                            .iter()
+                            .map(|capability| String::from_utf8_lossy(capability).to_string())
+                            .collect::<Vec<String>>()
+                            .join(" ")
                     )));
                 }
                 ret.send_command(
@@ -414,8 +424,8 @@ impl ImapStream {
         }
 
         if capabilities.is_none() {
-            /* sending CAPABILITY after LOGIN automatically is an RFC recommendation, so check
-             * for lazy servers */
+            /* sending CAPABILITY after LOGIN automatically is an RFC recommendation, so
+             * check for lazy servers */
             drop(capabilities);
             ret.send_command(b"CAPABILITY").await?;
             ret.read_response(&mut res).await.unwrap();
@@ -648,7 +658,14 @@ impl ImapConnection {
                             | ImapResponse::Bad(code)
                             | ImapResponse::Preauth(code)
                             | ImapResponse::Bye(code) => {
-                                crate::log(format!("Could not use COMPRESS=DEFLATE in account `{}`: server replied with `{}`", self.uid_store.account_name, code), crate::LoggingLevel::WARN);
+                                crate::log(
+                                    format!(
+                                        "Could not use COMPRESS=DEFLATE in account `{}`: server \
+                                         replied with `{}`",
+                                        self.uid_store.account_name, code
+                                    ),
+                                    crate::LoggingLevel::WARN,
+                                );
                             }
                             ImapResponse::Ok(_) => {
                                 let ImapStream {
@@ -750,7 +767,7 @@ impl ImapConnection {
                         &required_responses
                     );*/
                     for l in response.split_rn() {
-                        /*debug!("check line: {}", &l);*/
+                        /* debug!("check line: {}", &l); */
                         if required_responses.check(l) || !self.process_untagged(l).await? {
                             ret.extend_from_slice(l);
                         }

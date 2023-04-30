@@ -20,19 +20,29 @@
  */
 
 //! A crate that performs mail client operations such as
-//! - Hold an [`Envelope`](./email/struct.Envelope.html) with methods convenient for mail client use. (see module [`email`](./email/index.html))
-//! - Abstract through mail storages through the [`MailBackend`](./backends/trait.MailBackend.html) trait, and handle read/writes/updates through it. (see module [`backends`](./backends/index.html))
-//! - Decode attachments (see module [`email::attachments`](./email/attachments/index.html))
+//! - Hold an [`Envelope`](./email/struct.Envelope.html) with methods convenient
+//!   for mail client use. (see module [`email`](./email/index.html))
+//! - Abstract through mail storages through the
+//!   [`MailBackend`](./backends/trait.MailBackend.html) trait, and handle
+//!   read/writes/updates through it. (see module
+//!   [`backends`](./backends/index.html))
+//! - Decode attachments (see module
+//!   [`email::attachments`](./email/attachments/index.html))
 //! - Create new mail (see [`email::Draft`](./email/compose/struct.Draft.html))
 //! - Send mail with an SMTP client (see module [`smtp`](./smtp/index.html))
-//! - Manage an `addressbook` i.e. have contacts (see module [`addressbook`](./addressbook/index.html))
-//! - Build thread structures out of a list of mail via their `In-Reply-To` and `References` header values (see module [`thread`](./thread/index.html))
+//! - Manage an `addressbook` i.e. have contacts (see module
+//!   [`addressbook`](./addressbook/index.html))
+//! - Build thread structures out of a list of mail via their `In-Reply-To` and
+//!   `References` header values (see module [`thread`](./thread/index.html))
 //!
 //! Other exports are
-//! - Basic mail account configuration to use with [`backends`](./backends/index.html) (see module [`conf`](./conf/index.html))
+//! - Basic mail account configuration to use with
+//!   [`backends`](./backends/index.html) (see module
+//!   [`conf`](./conf/index.html))
 //! - Parser combinators (see module [`parsec`](./parsec/index.html))
 //! - A `ShellExpandTrait` to expand paths like a shell.
-//! - A `debug` macro that works like `std::dbg` but for multiple threads. (see [`debug` macro](./macro.debug.html))
+//! - A `debug` macro that works like `std::dbg` but for multiple threads. (see
+//!   [`debug` macro](./macro.debug.html))
 #[macro_use]
 pub mod dbg {
 
@@ -102,8 +112,7 @@ pub use datetime::UnixTimestamp;
 
 #[macro_use]
 mod logging;
-pub use self::logging::LoggingLevel::*;
-pub use self::logging::*;
+pub use self::logging::{LoggingLevel::*, *};
 
 pub mod addressbook;
 pub use addressbook::*;
@@ -180,12 +189,15 @@ impl core::fmt::Display for Bytes {
 pub use shellexpand::ShellExpandTrait;
 pub mod shellexpand {
 
-    use smallvec::SmallVec;
-    use std::ffi::OsStr;
-    use std::os::unix::ffi::OsStrExt;
     #[cfg(not(any(target_os = "netbsd", target_os = "macos")))]
     use std::os::unix::io::AsRawFd;
-    use std::path::{Path, PathBuf};
+    use std::{
+        ffi::OsStr,
+        os::unix::ffi::OsStrExt,
+        path::{Path, PathBuf},
+    };
+
+    use smallvec::SmallVec;
 
     pub trait ShellExpandTrait {
         fn expand(&self) -> PathBuf;
@@ -233,23 +245,20 @@ pub mod shellexpand {
 
             let (prefix, _match) = if self.as_os_str().as_bytes().ends_with(b"/.") {
                 (self.components().as_path(), OsStr::from_bytes(b"."))
+            } else if self.exists() && (!force || self.as_os_str().as_bytes().ends_with(b"/")) {
+                return SmallVec::new();
             } else {
-                if self.exists() && (!force || self.as_os_str().as_bytes().ends_with(b"/")) {
-                    // println!("{} {:?}", self.display(), self.components().last());
-                    return SmallVec::new();
+                let last_component = self
+                    .components()
+                    .last()
+                    .map(|c| c.as_os_str())
+                    .unwrap_or_else(|| OsStr::from_bytes(b""));
+                let prefix = if let Some(p) = self.parent() {
+                    p
                 } else {
-                    let last_component = self
-                        .components()
-                        .last()
-                        .map(|c| c.as_os_str())
-                        .unwrap_or_else(|| OsStr::from_bytes(b""));
-                    let prefix = if let Some(p) = self.parent() {
-                        p
-                    } else {
-                        return SmallVec::new();
-                    };
-                    (prefix, last_component)
-                }
+                    return SmallVec::new();
+                };
+                (prefix, last_component)
             };
 
             let dir = match ::nix::dir::Dir::openat(
@@ -322,10 +331,13 @@ pub mod shellexpand {
                     pos += dir[0].d_reclen as usize;
                 }
                 // https://github.com/romkatv/gitstatus/blob/caf44f7aaf33d0f46e6749e50595323c277e0908/src/dir.cc
-                // "It's tempting to bail here if n + sizeof(linux_dirent64) + 512 <= n. After all, there
-                // was enough space for another entry but SYS_getdents64 didn't write it, so this must be
-                // the end of the directory listing, right? Unfortunately, no. SYS_getdents64 is finicky.
-                // It sometimes writes a partial list of entries even if the full list would fit."
+                // "It's tempting to bail here if n + sizeof(linux_dirent64) +
+                // 512 <= n. After all, there was enough space
+                // for another entry but SYS_getdents64 didn't write it, so this
+                // must be the end of the directory listing,
+                // right? Unfortunately, no. SYS_getdents64 is finicky.
+                // It sometimes writes a partial list of entries even if the
+                // full list would fit."
             }
             entries
         }
@@ -420,8 +432,7 @@ macro_rules! declare_u64_hash {
         impl $type_name {
             #[inline(always)]
             pub fn from_bytes(bytes: &[u8]) -> Self {
-                use std::collections::hash_map::DefaultHasher;
-                use std::hash::Hasher;
+                use std::{collections::hash_map::DefaultHasher, hash::Hasher};
                 let mut h = DefaultHasher::new();
                 h.write(bytes);
                 Self(h.finish())

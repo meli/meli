@@ -21,8 +21,9 @@
 
 /*! Various useful components that can be used in a generic fashion.
  */
-use super::*;
 use text_processing::Reflow;
+
+use super::*;
 
 mod pager;
 pub use self::pager::*;
@@ -37,10 +38,10 @@ mod dialogs;
 pub use self::dialogs::*;
 
 mod tables;
-pub use self::tables::*;
-
-use crate::jobs::JobId;
 use std::collections::HashSet;
+
+pub use self::tables::*;
+use crate::jobs::JobId;
 
 #[derive(Default, Debug, Clone)]
 pub struct SearchPattern {
@@ -943,12 +944,13 @@ impl Component for Tabbed {
             ));
         }
 
-        /* If children are dirty but self isn't and the shortcuts panel is visible, it will get
-         * overwritten. */
+        /* If children are dirty but self isn't and the shortcuts panel is visible,
+         * it will get overwritten. */
         let must_redraw_shortcuts: bool = self.show_shortcuts && !self.dirty && self.is_dirty();
 
-        /* children should be drawn after the shortcuts/help panel lest they overwrite the panel on
-         * the grid. the drawing order is determined by the dirty_areas queue which is LIFO */
+        /* children should be drawn after the shortcuts/help panel lest they
+         * overwrite the panel on the grid. the drawing order is determined
+         * by the dirty_areas queue which is LIFO */
         if self.children.len() > 1 {
             self.draw_tabs(
                 grid,

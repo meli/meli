@@ -24,12 +24,14 @@ pub mod vcard;
 
 pub mod mutt;
 
-use crate::datetime::{self, UnixTimestamp};
-use crate::parsec::Parser;
-use std::collections::HashMap;
+use std::{collections::HashMap, ops::Deref};
+
 use uuid::Uuid;
 
-use std::ops::Deref;
+use crate::{
+    datetime::{self, UnixTimestamp},
+    parsec::Parser,
+};
 
 #[derive(Hash, Debug, PartialEq, Eq, Clone, Copy, Deserialize, Serialize)]
 #[serde(from = "String")]
@@ -85,7 +87,8 @@ pub struct Card {
     last_edited: UnixTimestamp,
     extra_properties: HashMap<String, String>,
 
-    /// If true, we can't make any changes because we do not manage this resource.
+    /// If true, we can't make any changes because we do not manage this
+    /// resource.
     external_resource: bool,
 }
 

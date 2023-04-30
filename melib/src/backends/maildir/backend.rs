@@ -21,32 +21,36 @@
 
 //! # Maildir Backend
 //!
-//! This module implements a maildir backend according to the maildir specification.
-//! <https://cr.yp.to/proto/maildir.html>
+//! This module implements a maildir backend according to the maildir
+//! specification. <https://cr.yp.to/proto/maildir.html>
 
-use super::{MaildirMailbox, MaildirOp, MaildirPathTrait};
-use crate::backends::{RefreshEventKind::*, *};
-use crate::conf::AccountSettings;
-use crate::email::{Envelope, EnvelopeHash, Flag};
-use crate::error::{Error, ErrorKind, Result};
-use crate::shellexpand::ShellExpandTrait;
-use crate::Collection;
 use futures::prelude::Stream;
 
-extern crate notify;
-use self::notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
-use std::time::Duration;
+use super::{MaildirMailbox, MaildirOp, MaildirPathTrait};
+use crate::{
+    backends::{RefreshEventKind::*, *},
+    conf::AccountSettings,
+    email::{Envelope, EnvelopeHash, Flag},
+    error::{Error, ErrorKind, Result},
+    shellexpand::ShellExpandTrait,
+    Collection,
+};
 
-use std::collections::{hash_map::DefaultHasher, HashMap, HashSet};
-use std::ffi::OsStr;
-use std::fs;
-use std::hash::{Hash, Hasher};
-use std::io::{self, Read, Write};
-use std::ops::{Deref, DerefMut};
-use std::os::unix::fs::PermissionsExt;
-use std::path::{Component, Path, PathBuf};
-use std::sync::mpsc::channel;
-use std::sync::{Arc, Mutex};
+extern crate notify;
+use std::{
+    collections::{hash_map::DefaultHasher, HashMap, HashSet},
+    ffi::OsStr,
+    fs,
+    hash::{Hash, Hasher},
+    io::{self, Read, Write},
+    ops::{Deref, DerefMut},
+    os::unix::fs::PermissionsExt,
+    path::{Component, Path, PathBuf},
+    sync::{mpsc::channel, Arc, Mutex},
+    time::Duration,
+};
+
+use self::notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) enum PathMod {
@@ -669,7 +673,10 @@ impl MailBackend for MaildirType {
                                         e.modified = Some(PathMod::Hash(new_hash));
                                         e.removed = false;
                                     });
-                                    debug!("contains_old_key, key was marked as removed (by external source)");
+                                    debug!(
+                                        "contains_old_key, key was marked as removed (by external \
+                                         source)"
+                                    );
                                 } else {
                                     debug!("not contains_new_key");
                                 }
@@ -893,7 +900,7 @@ impl MailBackend for MaildirType {
                     Some(PathMod::Path(new_name.clone()));
 
                 debug!("renaming {:?} to {:?}", path, new_name);
-                fs::rename(&path, &new_name)?;
+                fs::rename(path, &new_name)?;
                 debug!("success in rename");
             }
             Ok(())
@@ -996,12 +1003,16 @@ impl MailBackend for MaildirType {
         let mut path = self.path.clone();
         path.push(&new_path);
         if !path.starts_with(&self.path) {
-            return Err(Error::new(format!("Path given (`{}`) is absolute. Please provide a path relative to the account's root mailbox.", &new_path)));
+            return Err(Error::new(format!(
+                "Path given (`{}`) is absolute. Please provide a path relative to the account's \
+                 root mailbox.",
+                &new_path
+            )));
         }
 
         std::fs::create_dir(&path)?;
-        /* create_dir does not create intermediate directories (like `mkdir -p`), so the parent must be a valid
-         * mailbox at this point. */
+        /* create_dir does not create intermediate directories (like `mkdir -p`), so
+         * the parent must be a valid mailbox at this point. */
 
         let parent = path.parent().and_then(|p| {
             self.mailboxes
@@ -1143,8 +1154,9 @@ impl MaildirType {
                                 children.push(f.hash);
                                 mailboxes.insert(f.hash, f);
                             } else {
-                                /* If directory is invalid (i.e. has no {cur,new,tmp} subfolders),
-                                 * accept it ONLY if it contains subdirs of any depth that are
+                                /* If directory is invalid (i.e. has no {cur,new,tmp}
+                                 * subfolders), accept it ONLY if
+                                 * it contains subdirs of any depth that are
                                  * valid maildir paths
                                  */
                                 let subdirs = recurse_mailboxes(mailboxes, settings, &path)?;
@@ -1379,7 +1391,7 @@ fn add_path_to_index(
             map.len()
         );
     }
-    let mut reader = io::BufReader::new(fs::File::open(&path)?);
+    let mut reader = io::BufReader::new(fs::File::open(path)?);
     buf.clear();
     reader.read_to_end(buf)?;
     let mut env = Envelope::from_bytes(buf.as_slice(), Some(path.flags()))?;

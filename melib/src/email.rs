@@ -24,8 +24,9 @@
  *
  * # Parsing bytes into an `Envelope`
  *
- * An [`Envelope`](Envelope) represents the information you can get from an email's headers and body
- * structure. Addresses in `To`, `From` fields etc are parsed into [`Address`](crate::email::Address) types.
+ * An [`Envelope`](Envelope) represents the information you can get from an
+ * email's headers and body structure. Addresses in `To`, `From` fields etc
+ * are parsed into [`Address`](crate::email::Address) types.
  *
  * ```
  * use melib::{Attachment, Envelope};
@@ -75,7 +76,10 @@
  *
  * let envelope = Envelope::from_bytes(raw_mail.as_bytes(), None).expect("Could not parse mail");
  * assert_eq!(envelope.subject().as_ref(), "gratuitously encoded subject");
- * assert_eq!(envelope.message_id_display().as_ref(), "<h2g7f.z0gy2pgaen5m@example.com>");
+ * assert_eq!(
+ *     envelope.message_id_display().as_ref(),
+ *     "<h2g7f.z0gy2pgaen5m@example.com>"
+ * );
  *
  * let body = envelope.body_bytes(raw_mail.as_bytes());
  * assert_eq!(body.content_type().to_string().as_str(), "multipart/mixed");
@@ -85,7 +89,10 @@
  *
  * let subattachments: Vec<Attachment> = body.attachments();
  * assert_eq!(subattachments.len(), 3);
- * assert_eq!(subattachments[2].content_type().name().unwrap(), "test_image.gif");
+ * assert_eq!(
+ *     subattachments[2].content_type().name().unwrap(),
+ *     "test_image.gif"
+ * );
  * ```
  */
 
@@ -99,22 +106,22 @@ pub mod mailto;
 pub mod parser;
 pub mod pgp;
 
+use std::{borrow::Cow, convert::TryInto, ops::Deref};
+
 pub use address::{Address, MessageID, References, StrBuild, StrBuilder};
 pub use attachments::{Attachment, AttachmentBuilder};
 pub use compose::{attachment_from_file, Draft};
 pub use headers::*;
 pub use mailto::*;
-
-use crate::datetime::UnixTimestamp;
-use crate::error::{Error, Result};
-use crate::parser::BytesExt;
-use crate::thread::ThreadNodeHash;
-use crate::TagHash;
-
 use smallvec::SmallVec;
-use std::borrow::Cow;
-use std::convert::TryInto;
-use std::ops::Deref;
+
+use crate::{
+    datetime::UnixTimestamp,
+    error::{Error, Result},
+    parser::BytesExt,
+    thread::ThreadNodeHash,
+    TagHash,
+};
 
 bitflags! {
     #[derive(Default, Serialize, Deserialize)]
@@ -159,9 +166,10 @@ impl Flag {
     flag_impl!(fn is_flagged, Flag::FLAGGED);
 }
 
-///`Mail` holds both the envelope info of an email in its `envelope` field and the raw bytes that
-///describe the email in `bytes`. Its body as an `melib::email::Attachment` can be parsed on demand
-///with the `melib::email::Mail::body` method.
+///`Mail` holds both the envelope info of an email in its `envelope` field and
+/// the raw bytes that describe the email in `bytes`. Its body as an
+/// `melib::email::Attachment` can be parsed on demand
+/// with the `melib::email::Mail::body` method.
 #[derive(Debug, Clone, Default)]
 pub struct Mail {
     pub envelope: Envelope,
@@ -199,12 +207,13 @@ impl Mail {
 
 crate::declare_u64_hash!(EnvelopeHash);
 
-/// `Envelope` represents all the header and structure data of an email we need to know.
+/// `Envelope` represents all the header and structure data of an email we need
+/// to know.
 ///
 ///  Attachments (the email's body) is parsed on demand with `body` method.
 ///
-///To access the email attachments, you need to parse them from the raw email bytes into an
-///`Attachment` object.
+///To access the email attachments, you need to parse them from the raw email
+/// bytes into an `Attachment` object.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Envelope {
     pub hash: EnvelopeHash,
@@ -364,7 +373,11 @@ impl Envelope {
                             self.has_attachments =
                                 Attachment::check_if_has_attachments_quick(body, boundary);
                         } else {
-                            debug!("{:?} has no boundary field set in multipart/mixed content-type field.", &self);
+                            debug!(
+                                "{:?} has no boundary field set in multipart/mixed content-type \
+                                 field.",
+                                &self
+                            );
                         }
                     }
                     _ => {}

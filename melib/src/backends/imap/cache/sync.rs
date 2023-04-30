@@ -130,7 +130,8 @@ impl ImapConnection {
         // 2.  tag1 UID FETCH <lastseenuid+1>:* <descriptors>
         self.send_command(
             format!(
-                "UID FETCH {}:* (UID FLAGS ENVELOPE BODY.PEEK[HEADER.FIELDS (REFERENCES)] BODYSTRUCTURE)",
+                "UID FETCH {}:* (UID FLAGS ENVELOPE BODY.PEEK[HEADER.FIELDS (REFERENCES)] \
+                 BODYSTRUCTURE)",
                 max_uid + 1
             )
             .as_bytes(),
@@ -375,9 +376,9 @@ impl ImapConnection {
             //   client MUST
             //   * empty the local cache of that mailbox;
             //   * "forget" the cached HIGHESTMODSEQ value for the mailbox;
-            //   * remove any pending "actions" that refer to UIDs in that
-            //     mailbox (note that this doesn't affect actions performed on
-            //     client-generated fake UIDs; see Section 5); and
+            //   * remove any pending "actions" that refer to UIDs in that mailbox (note
+            //     that this doesn't affect actions performed on client-generated fake UIDs;
+            //     see Section 5); and
             //   * skip steps 1b and 2-II;
             cache_handle.clear(mailbox_hash, &select_response)?;
             return Ok(None);
@@ -398,9 +399,9 @@ impl ImapConnection {
         let new_highestmodseq = select_response.highestmodseq.unwrap().unwrap();
         let mut refresh_events = vec![];
         // 1b) Check the mailbox HIGHESTMODSEQ.
-        //  If the cached value is the same as the one returned by the server, skip fetching
-        //  message flags on step 2-II, i.e., the client only has to find out which messages got
-        //  expunged.
+        //  If the cached value is the same as the one returned by the server, skip
+        // fetching  message flags on step 2-II, i.e., the client only has to
+        // find out which messages got  expunged.
         if cached_highestmodseq != new_highestmodseq {
             /* Cache is synced, only figure out which messages got expunged */
 
@@ -415,7 +416,8 @@ impl ImapConnection {
             // 2.  tag1 UID FETCH <lastseenuid+1>:* <descriptors>
             self.send_command(
                 format!(
-                    "UID FETCH {}:* (UID FLAGS ENVELOPE BODY.PEEK[HEADER.FIELDS (REFERENCES)] BODYSTRUCTURE) (CHANGEDSINCE {})",
+                    "UID FETCH {}:* (UID FLAGS ENVELOPE BODY.PEEK[HEADER.FIELDS (REFERENCES)] \
+                     BODYSTRUCTURE) (CHANGEDSINCE {})",
                     cached_max_uid + 1,
                     cached_highestmodseq,
                 )
@@ -571,8 +573,8 @@ impl ImapConnection {
                 .insert(mailbox_hash, Ok(new_highestmodseq));
         }
         let mut valid_envs = BTreeSet::default();
-        // This should be UID SEARCH 1:<maxuid> but it's difficult to compare to cached UIDs at the
-        // point of calling this function
+        // This should be UID SEARCH 1:<maxuid> but it's difficult to compare to cached
+        // UIDs at the point of calling this function
         self.send_command(b"UID SEARCH ALL").await?;
         self.read_response(&mut response, RequiredResponses::SEARCH)
             .await?;
@@ -614,7 +616,8 @@ impl ImapConnection {
         Ok(Some(payload.into_iter().map(|(_, env)| env).collect()))
     }
 
-    //rfc7162_Quick Flag Changes Resynchronization (CONDSTORE)_and Quick Mailbox Resynchronization (QRESYNC)
+    //rfc7162_Quick Flag Changes Resynchronization (CONDSTORE)_and Quick Mailbox
+    // Resynchronization (QRESYNC)
     pub async fn resync_condstoreqresync(
         &mut self,
         _cache_handle: Box<dyn ImapCache>,
@@ -634,8 +637,8 @@ impl ImapConnection {
             )
         };
 
-        /* first SELECT the mailbox to get READ/WRITE permissions (because EXAMINE only
-         * returns READ-ONLY for both cases) */
+        /* first SELECT the mailbox to get READ/WRITE permissions (because EXAMINE
+         * only returns READ-ONLY for both cases) */
         let mut select_response = self
             .select_mailbox(mailbox_hash, &mut response, true)
             .await?

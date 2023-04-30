@@ -19,14 +19,17 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::*;
-use crate::backends::jmap::rfc8620::bool_false;
-use crate::email::address::{Address, MailboxAddress};
 use core::marker::PhantomData;
-use serde::de::{Deserialize, Deserializer};
-use serde_json::value::RawValue;
-use serde_json::Value;
 use std::collections::HashMap;
+
+use serde::de::{Deserialize, Deserializer};
+use serde_json::{value::RawValue, Value};
+
+use super::*;
+use crate::{
+    backends::jmap::rfc8620::bool_false,
+    email::address::{Address, MailboxAddress},
+};
 
 mod import;
 pub use import::*;
@@ -83,14 +86,13 @@ impl Id<EmailObject> {
 //      first character changed from "\" in IMAP to "$" in JMAP and have
 //      particular semantic meaning:
 //
-//      *  "$draft": The Email is a draft the user is composing.
+//      * "$draft": The Email is a draft the user is composing.
 //
-//      *  "$seen": The Email has been read.
+//      * "$seen": The Email has been read.
 //
-//      *  "$flagged": The Email has been flagged for urgent/special
-//         attention.
+//      * "$flagged": The Email has been flagged for urgent/special attention.
 //
-//      *  "$answered": The Email has been replied to.
+//      * "$answered": The Email has been replied to.
 //
 //      The IMAP "\Recent" keyword is not exposed via JMAP.  The IMAP
 //      "\Deleted" keyword is also not present: IMAP uses a delete+expunge
@@ -115,19 +117,19 @@ impl Id<EmailObject> {
 //      keywords in common use.  New keywords may be established here in
 //      the future.  In particular, note:
 //
-//      *  "$forwarded": The Email has been forwarded.
+//      * "$forwarded": The Email has been forwarded.
 //
-//      *  "$phishing": The Email is highly likely to be phishing.
-//         Clients SHOULD warn users to take care when viewing this Email
-//         and disable links and attachments.
+//      * "$phishing": The Email is highly likely to be phishing. Clients SHOULD
+//        warn users to take care when viewing this Email and disable links and
+//        attachments.
 //
-//      *  "$junk": The Email is definitely spam.  Clients SHOULD set this
-//         flag when users report spam to help train automated spam-
-//         detection systems.
+//      * "$junk": The Email is definitely spam.  Clients SHOULD set this flag
+//        when users report spam to help train automated spam- detection
+//        systems.
 //
-//      *  "$notjunk": The Email is definitely not spam.  Clients SHOULD
-//         set this flag when users indicate an Email is legitimate, to
-//         help train automated spam-detection systems.
+//      * "$notjunk": The Email is definitely not spam.  Clients SHOULD set this
+//        flag when users indicate an Email is legitimate, to help train
+//        automated spam-detection systems.
 //
 //   o  size: "UnsignedInt" (immutable; server-set)
 //
@@ -586,8 +588,10 @@ impl From<crate::search::Query> for Filter<EmailFilterCondition, EmailObject> {
     fn from(val: crate::search::Query) -> Self {
         let mut ret = Filter::Condition(EmailFilterCondition::new().into());
         fn rec(q: &crate::search::Query, f: &mut Filter<EmailFilterCondition, EmailObject>) {
-            use crate::datetime::{timestamp_to_string, RFC3339_FMT};
-            use crate::search::Query::*;
+            use crate::{
+                datetime::{timestamp_to_string, RFC3339_FMT},
+                search::Query::*,
+            };
             match q {
                 Subject(t) => {
                     *f = Filter::Condition(EmailFilterCondition::new().subject(t.clone()).into());
@@ -849,8 +853,16 @@ pub struct EmailQueryChangesResponse {
 impl std::convert::TryFrom<&RawValue> for EmailQueryChangesResponse {
     type Error = crate::error::Error;
     fn try_from(t: &RawValue) -> Result<EmailQueryChangesResponse> {
-        let res: (String, EmailQueryChangesResponse, String) =
-            serde_json::from_str(t.get()).map_err(|err| crate::error::Error::new(format!("BUG: Could not deserialize server JSON response properly, please report this!\nReply from server: {}", &t)).set_source(Some(Arc::new(err))).set_kind(ErrorKind::Bug))?;
+        let res: (String, EmailQueryChangesResponse, String) = serde_json::from_str(t.get())
+            .map_err(|err| {
+                crate::error::Error::new(format!(
+                    "BUG: Could not deserialize server JSON response properly, please report \
+                     this!\nReply from server: {}",
+                    &t
+                ))
+                .set_source(Some(Arc::new(err)))
+                .set_kind(ErrorKind::Bug)
+            })?;
         assert_eq!(&res.0, "Email/queryChanges");
         Ok(res.1)
     }

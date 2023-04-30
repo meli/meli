@@ -195,8 +195,7 @@ pub struct gpgme_data {
 }
 pub type gpgme_data_t = *mut gpgme_data;
 pub type gpgme_error_t = gpg_error_t;
-pub use self::gpg_err_code_t as gpgme_err_code_t;
-pub use self::gpg_err_source_t as gpgme_err_source_t;
+pub use self::{gpg_err_code_t as gpgme_err_code_t, gpg_err_source_t as gpgme_err_source_t};
 pub type gpgme_strerror = extern "C" fn(err: gpgme_error_t) -> *const ::std::os::raw::c_char;
 pub type gpgme_strerror_r = unsafe extern "C" fn(
     err: gpg_error_t,
@@ -5326,14 +5325,12 @@ pub type gpgme_op_assuan_transact = extern "C" fn(
 pub type GpgmeCtx = gpgme_ctx_t;
 pub type GpgmeData = gpgme_data_t;
 pub type GpgmeError = gpgme_error_t;
-pub use self::gpgme_attr_t as GpgmeAttr;
-pub use self::gpgme_data_encoding_t as GpgmeDataEncoding;
-pub use self::gpgme_hash_algo_t as GpgmeHashAlgo;
-pub use self::gpgme_protocol_t as GpgmeProtocol;
-pub use self::gpgme_pubkey_algo_t as GpgmePubKeyAlgo;
-pub use self::gpgme_sig_mode_t as GpgmeSigMode;
-pub use self::gpgme_sig_stat_t as GpgmeSigStat;
-pub use self::gpgme_validity_t as GpgmeValidity;
+pub use self::{
+    gpgme_attr_t as GpgmeAttr, gpgme_data_encoding_t as GpgmeDataEncoding,
+    gpgme_hash_algo_t as GpgmeHashAlgo, gpgme_protocol_t as GpgmeProtocol,
+    gpgme_pubkey_algo_t as GpgmePubKeyAlgo, gpgme_sig_mode_t as GpgmeSigMode,
+    gpgme_sig_stat_t as GpgmeSigStat, gpgme_validity_t as GpgmeValidity,
+};
 pub type GpgmeEngineInfo = gpgme_engine_info_t;
 pub type GpgmeSubkey = gpgme_subkey_t;
 pub type GpgmeKeySig = gpgme_key_sig_t;

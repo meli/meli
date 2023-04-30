@@ -24,10 +24,10 @@ Notification handling components.
 */
 use std::process::{Command, Stdio};
 
-use super::*;
-
 #[cfg(all(target_os = "linux", feature = "dbus-notifications"))]
 pub use dbus::*;
+
+use super::*;
 
 #[cfg(all(target_os = "linux", feature = "dbus-notifications"))]
 mod dbus {
@@ -230,7 +230,20 @@ impl Component for NotificationCommand {
                 } else {
                     #[cfg(target_os = "macos")]
                     {
-                        let applescript = format!("display notification \"{message}\" with title \"{title}\" subtitle \"{subtitle}\"", message = body.replace('"', "'"), title = title.as_ref().map(String::as_str).unwrap_or("meli").replace('"', "'"), subtitle = kind.map(|k| k.to_string()).unwrap_or_default().replace('"', "'"));
+                        let applescript = format!(
+                            "display notification \"{message}\" with title \"{title}\" subtitle \
+                             \"{subtitle}\"",
+                            message = body.replace('"', "'"),
+                            title = title
+                                .as_ref()
+                                .map(String::as_str)
+                                .unwrap_or("meli")
+                                .replace('"', "'"),
+                            subtitle = kind
+                                .map(|k| k.to_string())
+                                .unwrap_or_default()
+                                .replace('"', "'")
+                        );
                         match Command::new("osascript")
                             .arg("-e")
                             .arg(applescript)
@@ -279,7 +292,7 @@ impl Component for NotificationCommand {
 fn update_xbiff(path: &str) -> Result<()> {
     let mut file = std::fs::OpenOptions::new()
         .append(true) /* writes will append to a file instead of overwriting previous contents */
-        .create(true) /* a new file will be created if the file does not yet already exist.*/
+        .create(true) /* a new file will be created if the file does not yet already exist. */
         .open(path)?;
     if file.metadata()?.len() > 128 {
         file.set_len(0)?;

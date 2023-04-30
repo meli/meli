@@ -36,26 +36,29 @@ use cache::{ImapCacheReset, ModSequence};
 pub mod managesieve;
 mod untagged;
 
-use crate::backends::{
-    RefreshEventKind::{self, *},
-    *,
+use std::{
+    collections::{hash_map::DefaultHasher, BTreeSet, HashMap, HashSet},
+    convert::TryFrom,
+    hash::Hasher,
+    pin::Pin,
+    str::FromStr,
+    sync::{Arc, Mutex},
+    time::{Duration, SystemTime},
 };
 
-use crate::collection::Collection;
-use crate::conf::AccountSettings;
-use crate::connections::timeout;
-use crate::email::{parser::BytesExt, *};
-use crate::error::{Error, Result, ResultIntoError};
-use futures::lock::Mutex as FutureMutex;
-use futures::stream::Stream;
-use std::collections::hash_map::DefaultHasher;
-use std::collections::{BTreeSet, HashMap, HashSet};
-use std::convert::TryFrom;
-use std::hash::Hasher;
-use std::pin::Pin;
-use std::str::FromStr;
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, SystemTime};
+use futures::{lock::Mutex as FutureMutex, stream::Stream};
+
+use crate::{
+    backends::{
+        RefreshEventKind::{self, *},
+        *,
+    },
+    collection::Collection,
+    conf::AccountSettings,
+    connections::timeout,
+    email::{parser::BytesExt, *},
+    error::{Error, Result, ResultIntoError},
+};
 
 pub type ImapNum = usize;
 pub type UID = ImapNum;
@@ -340,7 +343,8 @@ impl MailBackend for ImapType {
             cache_handle,
         };
 
-        /* do this in a closure to prevent recursion limit error in async_stream macro */
+        /* do this in a closure to prevent recursion limit error in async_stream
+         * macro */
         let prepare_cl = |f: &ImapMailbox| {
             f.set_warm(true);
             if let Ok(mut exists) = f.exists.lock() {
@@ -526,15 +530,15 @@ impl MailBackend for ImapType {
     }
 
     fn operation(&self, hash: EnvelopeHash) -> Result<Box<dyn BackendOp>> {
-        let (uid, mailbox_hash) = if let Some(v) =
-            self.uid_store.hash_index.lock().unwrap().get(&hash)
-        {
-            *v
-        } else {
-            return Err(Error::new(
-                    "Message not found in local cache, it might have been deleted before you requested it."
+        let (uid, mailbox_hash) =
+            if let Some(v) = self.uid_store.hash_index.lock().unwrap().get(&hash) {
+                *v
+            } else {
+                return Err(Error::new(
+                    "Message not found in local cache, it might have been deleted before you \
+                     requested it.",
                 ));
-        };
+            };
         Ok(Box::new(ImapOp::new(
             uid,
             mailbox_hash,
@@ -749,8 +753,20 @@ impl MailBackend for ImapType {
                                 cmd.push_str("\\Draft ");
                             }
                             Ok(_) => {
-                                crate::log(format!("Application error: more than one flag bit set in set_flags: {:?}", flags), crate::ERROR);
-                                return Err(Error::new(format!("Application error: more than one flag bit set in set_flags: {:?}", flags)).set_kind(crate::ErrorKind::Bug));
+                                crate::log(
+                                    format!(
+                                        "Application error: more than one flag bit set in \
+                                         set_flags: {:?}",
+                                        flags
+                                    ),
+                                    crate::ERROR,
+                                );
+                                return Err(Error::new(format!(
+                                    "Application error: more than one flag bit set in set_flags: \
+                                     {:?}",
+                                    flags
+                                ))
+                                .set_kind(crate::ErrorKind::Bug));
                             }
                             Err(tag) => {
                                 let hash = TagHash::from_bytes(tag.as_bytes());
@@ -812,13 +828,17 @@ impl MailBackend for ImapType {
                             Ok(_) => {
                                 crate::log(
                                     format!(
-                        "Application error: more than one flag bit set in set_flags: {:?}", flags
-                    ),
+                                        "Application error: more than one flag bit set in \
+                                         set_flags: {:?}",
+                                        flags
+                                    ),
                                     crate::ERROR,
                                 );
                                 return Err(Error::new(format!(
-                        "Application error: more than one flag bit set in set_flags: {:?}", flags
-                    )));
+                                    "Application error: more than one flag bit set in set_flags: \
+                                     {:?}",
+                                    flags
+                                )));
                             }
                             Err(tag) => {
                                 cmd.push_str(tag);
@@ -892,16 +912,17 @@ impl MailBackend for ImapType {
         Ok(Box::pin(async move {
             /* Must transform path to something the IMAP server will accept
              *
-             * Each root mailbox has a hierarchy delimeter reported by the LIST entry. All paths
-             * must use this delimeter to indicate children of this mailbox.
+             * Each root mailbox has a hierarchy delimeter reported by the LIST entry.
+             * All paths must use this delimeter to indicate children of this
+             * mailbox.
              *
-             * A new root mailbox should have the default delimeter, which can be found out by issuing
-             * an empty LIST command as described in RFC3501:
+             * A new root mailbox should have the default delimeter, which can be found
+             * out by issuing an empty LIST command as described in RFC3501:
              * C: A101 LIST "" ""
              * S: * LIST (\Noselect) "/" ""
              *
-             * The default delimiter for us is '/' just like UNIX paths. I apologise if this
-             * decision is unpleasant for you.
+             * The default delimiter for us is '/' just like UNIX paths. I apologise if
+             * this decision is unpleasant for you.
              */
 
             {
@@ -924,8 +945,8 @@ impl MailBackend for ImapType {
                     }
                 }
 
-                /* FIXME  Do not try to CREATE a sub-mailbox in a mailbox that has the \Noinferiors
-                 * flag set. */
+                /* FIXME  Do not try to CREATE a sub-mailbox in a mailbox
+                 * that has the \Noinferiors flag set. */
             }
 
             let mut response = Vec::with_capacity(8 * 1024);
@@ -950,7 +971,17 @@ impl MailBackend for ImapType {
             ret?;
             let new_hash = MailboxHash::from_bytes(path.as_str().as_bytes());
             uid_store.mailboxes.lock().await.clear();
-            Ok((new_hash, new_mailbox_fut?.await.map_err(|err| Error::new(format!("Mailbox create was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", String::from_utf8_lossy(&response), err)))?))
+            Ok((
+                new_hash,
+                new_mailbox_fut?.await.map_err(|err| {
+                    Error::new(format!(
+                        "Mailbox create was succesful (returned `{}`) but listing mailboxes \
+                         afterwards returned `{}`",
+                        String::from_utf8_lossy(&response),
+                        err
+                    ))
+                })?,
+            ))
         }))
     }
 
@@ -970,7 +1001,12 @@ impl MailBackend for ImapType {
                 imap_path = mailboxes[&mailbox_hash].imap_path().to_string();
                 let permissions = mailboxes[&mailbox_hash].permissions();
                 if !permissions.delete_mailbox {
-                    return Err(Error::new(format!("You do not have permission to delete `{}`. Set permissions for this mailbox are {}", mailboxes[&mailbox_hash].name(), permissions)));
+                    return Err(Error::new(format!(
+                        "You do not have permission to delete `{}`. Set permissions for this \
+                         mailbox are {}",
+                        mailboxes[&mailbox_hash].name(),
+                        permissions
+                    )));
                 }
             }
             let mut response = Vec::with_capacity(8 * 1024);
@@ -998,7 +1034,15 @@ impl MailBackend for ImapType {
             let ret: Result<()> = ImapResponse::try_from(response.as_slice())?.into();
             ret?;
             uid_store.mailboxes.lock().await.clear();
-            new_mailbox_fut?.await.map_err(|err| format!("Mailbox delete was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", String::from_utf8_lossy(&response), err).into())
+            new_mailbox_fut?.await.map_err(|err| {
+                format!(
+                    "Mailbox delete was succesful (returned `{}`) but listing mailboxes \
+                     afterwards returned `{}`",
+                    String::from_utf8_lossy(&response),
+                    err
+                )
+                .into()
+            })
         }))
     }
 
@@ -1064,7 +1108,12 @@ impl MailBackend for ImapType {
                 let mailboxes = uid_store.mailboxes.lock().await;
                 let permissions = mailboxes[&mailbox_hash].permissions();
                 if !permissions.delete_mailbox {
-                    return Err(Error::new(format!("You do not have permission to rename mailbox `{}` (rename is equivalent to delete + create). Set permissions for this mailbox are {}", mailboxes[&mailbox_hash].name(), permissions)));
+                    return Err(Error::new(format!(
+                        "You do not have permission to rename mailbox `{}` (rename is equivalent \
+                         to delete + create). Set permissions for this mailbox are {}",
+                        mailboxes[&mailbox_hash].name(),
+                        permissions
+                    )));
                 }
                 if mailboxes[&mailbox_hash].separator != b'/' {
                     new_path = new_path.replace(
@@ -1089,7 +1138,14 @@ impl MailBackend for ImapType {
             let ret: Result<()> = ImapResponse::try_from(response.as_slice())?.into();
             ret?;
             uid_store.mailboxes.lock().await.clear();
-            new_mailbox_fut?.await.map_err(|err| format!("Mailbox rename was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", String::from_utf8_lossy(&response), err))?;
+            new_mailbox_fut?.await.map_err(|err| {
+                format!(
+                    "Mailbox rename was succesful (returned `{}`) but listing mailboxes \
+                     afterwards returned `{}`",
+                    String::from_utf8_lossy(&response),
+                    err
+                )
+            })?;
             Ok(BackendMailbox::clone(
                 &uid_store.mailboxes.lock().await[&new_hash],
             ))
@@ -1107,7 +1163,12 @@ impl MailBackend for ImapType {
             let mailboxes = uid_store.mailboxes.lock().await;
             let permissions = mailboxes[&mailbox_hash].permissions();
             if !permissions.change_permissions {
-                return Err(Error::new(format!("You do not have permission to change permissions for mailbox `{}`. Set permissions for this mailbox are {}", mailboxes[&mailbox_hash].name(), permissions)));
+                return Err(Error::new(format!(
+                    "You do not have permission to change permissions for mailbox `{}`. Set \
+                     permissions for this mailbox are {}",
+                    mailboxes[&mailbox_hash].name(),
+                    permissions
+                )));
             }
 
             Err(Error::new("Unimplemented."))
@@ -1262,7 +1323,8 @@ impl ImapType {
 
         if use_oauth2 && !s.extra.contains_key("server_password_command") {
             return Err(Error::new(format!(
-                "({}) `use_oauth2` use requires `server_password_command` set with a command that returns an OAUTH2 token. Consult documentation for guidance.",
+                "({}) `use_oauth2` use requires `server_password_command` set with a command that \
+                 returns an OAUTH2 token. Consult documentation for guidance.",
                 s.name,
             )));
         }
@@ -1524,14 +1586,16 @@ impl ImapType {
         if !s.extra.contains_key("server_password_command") {
             if use_oauth2 {
                 return Err(Error::new(format!(
-                    "({}) `use_oauth2` use requires `server_password_command` set with a command that returns an OAUTH2 token. Consult documentation for guidance.",
+                    "({}) `use_oauth2` use requires `server_password_command` set with a command \
+                     that returns an OAUTH2 token. Consult documentation for guidance.",
                     s.name,
                 )));
             }
             get_conf_val!(s["server_password"])?;
         } else if s.extra.contains_key("server_password") {
             return Err(Error::new(format!(
-                "Configuration error ({}): both server_password and server_password_command are set, cannot choose",
+                "Configuration error ({}): both server_password and server_password_command are \
+                 set, cannot choose",
                 s.name.as_str(),
             )));
         }
@@ -1541,7 +1605,8 @@ impl ImapType {
         let use_starttls = get_conf_val!(s["use_starttls"], false)?;
         if !use_tls && use_starttls {
             return Err(Error::new(format!(
-                "Configuration error ({}): incompatible use_tls and use_starttls values: use_tls = false, use_starttls = true",
+                "Configuration error ({}): incompatible use_tls and use_starttls values: use_tls \
+                 = false, use_starttls = true",
                 s.name.as_str(),
             )));
         }
@@ -1565,7 +1630,8 @@ impl ImapType {
         #[cfg(not(feature = "deflate_compression"))]
         if s.extra.contains_key("use_deflate") {
             return Err(Error::new(format!(
-                "Configuration error ({}): setting `use_deflate` is set but this version of meli isn't compiled with DEFLATE support.",
+                "Configuration error ({}): setting `use_deflate` is set but this version of meli \
+                 isn't compiled with DEFLATE support.",
                 s.name.as_str(),
             )));
         }
@@ -1578,8 +1644,10 @@ impl ImapType {
         let diff = extra_keys.difference(&keys).collect::<Vec<&&str>>();
         if !diff.is_empty() {
             return Err(Error::new(format!(
-                "Configuration error ({}): the following flags are set but are not recognized: {:?}.",
-                s.name.as_str(), diff
+                "Configuration error ({}): the following flags are set but are not recognized: \
+                 {:?}.",
+                s.name.as_str(),
+                diff
             )));
         }
         Ok(())
@@ -1658,7 +1726,14 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
                         /* Try resetting the database */
                         if let Some(ref mut cache_handle) = state.cache_handle {
                             if let Err(err) = cache_handle.reset() {
-                                crate::log(format!("IMAP cache error: could not reset cache for {}. Reason: {}", state.uid_store.account_name, err), crate::ERROR);
+                                crate::log(
+                                    format!(
+                                        "IMAP cache error: could not reset cache for {}. Reason: \
+                                         {}",
+                                        state.uid_store.account_name, err
+                                    ),
+                                    crate::ERROR,
+                                );
                             }
                         }
                         state.stage = FetchStage::InitialFresh;
@@ -1743,11 +1818,14 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
                 if max_uid_left > 0 {
                     debug!("{} max_uid_left= {}", mailbox_hash, max_uid_left);
                     let command = if max_uid_left == 1 {
-                        "UID FETCH 1 (UID FLAGS ENVELOPE BODY.PEEK[HEADER.FIELDS (REFERENCES)] BODYSTRUCTURE)".to_string()
+                        "UID FETCH 1 (UID FLAGS ENVELOPE BODY.PEEK[HEADER.FIELDS (REFERENCES)] \
+                         BODYSTRUCTURE)"
+                            .to_string()
                     } else {
                         format!(
-                            "UID FETCH {}:{} (UID FLAGS ENVELOPE BODY.PEEK[HEADER.FIELDS (REFERENCES)] BODYSTRUCTURE)",
-                                std::cmp::max(max_uid_left.saturating_sub(chunk_size), 1),
+                            "UID FETCH {}:{} (UID FLAGS ENVELOPE BODY.PEEK[HEADER.FIELDS \
+                             (REFERENCES)] BODYSTRUCTURE)",
+                            std::cmp::max(max_uid_left.saturating_sub(chunk_size), 1),
                             max_uid_left
                         )
                     };

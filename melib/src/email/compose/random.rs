@@ -19,10 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::char;
-use std::fs::File;
-use std::io::prelude::*;
-use std::time::SystemTime;
+use std::{char, fs::File, io::prelude::*, time::SystemTime};
 
 fn random_u64() -> u64 {
     let mut f = File::open("/dev/urandom").unwrap();

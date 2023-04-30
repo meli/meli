@@ -19,8 +19,9 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::*;
 use serde_json::value::RawValue;
+
+use super::*;
 
 /// #`import`
 ///
@@ -31,7 +32,6 @@ use serde_json::value::RawValue;
 ///    - `account_id`: "Id"
 ///
 ///       The id of the account to use.
-///
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ImportCall {
@@ -81,10 +81,9 @@ impl ImportCall {
     }
 
     _impl!(
-        ///   -  accountId: "Id"
+        ///   - accountId: "Id"
         ///
         ///      The id of the account to use.
-        ///
         account_id: Id<Account>
     );
     _impl!(if_in_state: Option<State<EmailObject>>);
@@ -123,9 +122,10 @@ pub enum ImportError {
     AlreadyExists {
         description: Option<String>,
         /// An "existingId" property of type "Id" MUST be included on
-        ///the SetError object with the id of the existing Email.  If duplicates
-        ///are allowed, the newly created Email object MUST have a separate id
-        ///and independent mutable properties to the existing object.
+        ///the SetError object with the id of the existing Email.  If
+        /// duplicates are allowed, the newly created Email object MUST
+        /// have a separate id and independent mutable properties to the
+        /// existing object.
         existing_id: Id<EmailObject>,
     },
     ///If the "blobId", "mailboxIds", or "keywords" properties are invalid
@@ -146,7 +146,8 @@ pub enum ImportError {
     ///different to the "blobId" on the EmailImport object.  Alternatively,
     ///the server MAY reject the import with an "invalidEmail" SetError.
     InvalidEmail { description: Option<String> },
-    ///An "ifInState" argument was supplied, and it does not match the current state.
+    ///An "ifInState" argument was supplied, and it does not match the current
+    /// state.
     StateMismatch,
 }
 
@@ -185,7 +186,15 @@ impl std::convert::TryFrom<&RawValue> for ImportResponse {
     type Error = crate::error::Error;
     fn try_from(t: &RawValue) -> Result<ImportResponse> {
         let res: (String, ImportResponse, String) =
-            serde_json::from_str(t.get()).map_err(|err| crate::error::Error::new(format!("BUG: Could not deserialize server JSON response properly, please report this!\nReply from server: {}", &t)).set_source(Some(Arc::new(err))).set_kind(ErrorKind::Bug))?;
+            serde_json::from_str(t.get()).map_err(|err| {
+                crate::error::Error::new(format!(
+                    "BUG: Could not deserialize server JSON response properly, please report \
+                     this!\nReply from server: {}",
+                    &t
+                ))
+                .set_source(Some(Arc::new(err)))
+                .set_kind(ErrorKind::Bug)
+            })?;
         assert_eq!(&res.0, &ImportCall::NAME);
         Ok(res.1)
     }

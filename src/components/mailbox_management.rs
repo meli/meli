@@ -18,12 +18,12 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
-use super::*;
-use crate::conf::accounts::MailboxEntry;
-use crate::melib::text_processing::TextProcessing;
+use std::cmp;
+
 use melib::backends::AccountHash;
 
-use std::cmp;
+use super::*;
+use crate::{conf::accounts::MailboxEntry, melib::text_processing::TextProcessing};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum MailboxAction {
@@ -63,7 +63,7 @@ pub struct MailboxManager {
 
 impl fmt::Display for MailboxManager {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", "mailboxes")
+        write!(f, "mailboxes")
     }
 }
 
@@ -96,7 +96,7 @@ impl MailboxManager {
         self.length = account.mailbox_entries.len();
         self.entries = account.mailbox_entries.clone();
         self.entries
-            .sort_by(|_, a, _, b| a.ref_mailbox.path().cmp(&b.ref_mailbox.path()));
+            .sort_by(|_, a, _, b| a.ref_mailbox.path().cmp(b.ref_mailbox.path()));
 
         self.set_dirty(true);
         let mut min_width = (
@@ -268,8 +268,8 @@ impl MailboxManager {
                 )));
         }
 
-        /* If cursor position has changed, remove the highlight from the previous position and
-         * apply it in the new one. */
+        /* If cursor position has changed, remove the highlight from the previous
+         * position and apply it in the new one. */
         if self.cursor_pos != self.new_cursor_pos && prev_page_no == page_no {
             let old_cursor_pos = self.cursor_pos;
             self.cursor_pos = self.new_cursor_pos;
@@ -362,11 +362,13 @@ impl Component for MailboxManager {
                                 MailboxAction::Move | MailboxAction::Rename => {
                                     context.replies.push_back(UIEvent::CmdInput(Key::Paste(
                                         format!(
-                                        "rename-mailbox \"{account_name}\" \"{mailbox_path_src}\" ",
-                                        account_name = context.accounts[&self.account_hash].name(),
-                                        mailbox_path_src =
-                                            self.entries[self.cursor_pos].ref_mailbox.path()
-                                    ),
+                                            "rename-mailbox \"{account_name}\" \
+                                             \"{mailbox_path_src}\" ",
+                                            account_name =
+                                                context.accounts[&self.account_hash].name(),
+                                            mailbox_path_src =
+                                                self.entries[self.cursor_pos].ref_mailbox.path()
+                                        ),
                                     )));
                                     context
                                         .replies

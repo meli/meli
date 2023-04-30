@@ -21,12 +21,13 @@
 
 use super::*;
 mod sync;
+use std::convert::TryFrom;
+
 use crate::{
     backends::MailboxHash,
     email::{Envelope, EnvelopeHash},
     error::*,
 };
-use std::convert::TryFrom;
 
 #[derive(Debug, PartialEq, Hash, Eq, Ord, PartialOrd, Copy, Clone)]
 pub struct ModSequence(pub std::num::NonZeroU64);
@@ -105,10 +106,11 @@ pub use sqlite3_m::*;
 #[cfg(feature = "sqlite3")]
 mod sqlite3_m {
     use super::*;
-    use crate::sqlite3::rusqlite::types::{
-        FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput,
+    use crate::sqlite3::{
+        self,
+        rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput},
+        DatabaseDescription,
     };
-    use crate::sqlite3::{self, DatabaseDescription};
 
     type Sqlite3UID = i32;
 
@@ -287,23 +289,45 @@ mod sqlite3_m {
                 })?;
 
             if let Some(Ok(highestmodseq)) = select_response.highestmodseq {
-                self.connection.execute(
-                "INSERT OR IGNORE INTO mailbox (uidvalidity, flags, highestmodseq, mailbox_hash) VALUES (?1, ?2, ?3, ?4)",
-                sqlite3::params![select_response.uidvalidity as Sqlite3UID, select_response.flags.1.iter().map(|s| s.as_str()).collect::<Vec<&str>>().join("\0").as_bytes(), highestmodseq, mailbox_hash],
-            )
-            .chain_err_summary(|| {
-                format!(
-                    "Could not insert uidvalidity {} in header_cache of account {}",
-                    select_response.uidvalidity, self.uid_store.account_name
-                )
-            })?;
+                self.connection
+                    .execute(
+                        "INSERT OR IGNORE INTO mailbox (uidvalidity, flags, highestmodseq, \
+                         mailbox_hash) VALUES (?1, ?2, ?3, ?4)",
+                        sqlite3::params![
+                            select_response.uidvalidity as Sqlite3UID,
+                            select_response
+                                .flags
+                                .1
+                                .iter()
+                                .map(|s| s.as_str())
+                                .collect::<Vec<&str>>()
+                                .join("\0")
+                                .as_bytes(),
+                            highestmodseq,
+                            mailbox_hash
+                        ],
+                    )
+                    .chain_err_summary(|| {
+                        format!(
+                            "Could not insert uidvalidity {} in header_cache of account {}",
+                            select_response.uidvalidity, self.uid_store.account_name
+                        )
+                    })?;
             } else {
                 self.connection
                     .execute(
-                        "INSERT OR IGNORE INTO mailbox (uidvalidity, flags, mailbox_hash) VALUES (?1, ?2, ?3)",
+                        "INSERT OR IGNORE INTO mailbox (uidvalidity, flags, mailbox_hash) VALUES \
+                         (?1, ?2, ?3)",
                         sqlite3::params![
                             select_response.uidvalidity as Sqlite3UID,
-                            select_response.flags.1.iter().map(|s| s.as_str()).collect::<Vec<&str>>().join("\0").as_bytes(),
+                            select_response
+                                .flags
+                                .1
+                                .iter()
+                                .map(|s| s.as_str())
+                                .collect::<Vec<&str>>()
+                                .join("\0")
+                                .as_bytes(),
                             mailbox_hash
                         ],
                     )
@@ -463,9 +487,24 @@ mod sqlite3_m {
                 {
                     max_uid = std::cmp::max(max_uid, *uid);
                     tx.execute(
-                "INSERT OR REPLACE INTO envelopes (hash, uid, mailbox_hash, modsequence, envelope) VALUES (?1, ?2, ?3, ?4, ?5)",
-                sqlite3::params![envelope.hash(), *uid as Sqlite3UID, mailbox_hash, modseq, &envelope],
-            ).chain_err_summary(|| format!("Could not insert envelope {} {} in header_cache of account {}", envelope.message_id(), envelope.hash(), uid_store.account_name))?;
+                        "INSERT OR REPLACE INTO envelopes (hash, uid, mailbox_hash, modsequence, \
+                         envelope) VALUES (?1, ?2, ?3, ?4, ?5)",
+                        sqlite3::params![
+                            envelope.hash(),
+                            *uid as Sqlite3UID,
+                            mailbox_hash,
+                            modseq,
+                            &envelope
+                        ],
+                    )
+                    .chain_err_summary(|| {
+                        format!(
+                            "Could not insert envelope {} {} in header_cache of account {}",
+                            envelope.message_id(),
+                            envelope.hash(),
+                            uid_store.account_name
+                        )
+                    })?;
                 }
             }
             tx.commit()?;
@@ -523,15 +562,17 @@ mod sqlite3_m {
                             env.tags_mut()
                                 .extend(tags.iter().map(|t| TagHash::from_bytes(t.as_bytes())));
                             tx.execute(
-                    "UPDATE envelopes SET envelope = ?1 WHERE mailbox_hash = ?2 AND uid = ?3;",
-                    sqlite3::params![&env, mailbox_hash, *uid as Sqlite3UID],
-                )
-                                .chain_err_summary(|| {
-                                    format!(
-                                        "Could not update envelope {} uid {} from  mailbox {} account {}",
-                                        env_hash, *uid, mailbox_hash, uid_store.account_name
-                                    )
-                                })?;
+                                "UPDATE envelopes SET envelope = ?1 WHERE mailbox_hash = ?2 AND \
+                                 uid = ?3;",
+                                sqlite3::params![&env, mailbox_hash, *uid as Sqlite3UID],
+                            )
+                            .chain_err_summary(|| {
+                                format!(
+                                    "Could not update envelope {} uid {} from  mailbox {} account \
+                                     {}",
+                                    env_hash, *uid, mailbox_hash, uid_store.account_name
+                                )
+                            })?;
                             uid_store
                                 .envelopes
                                 .lock()
@@ -563,8 +604,9 @@ mod sqlite3_m {
             let mut ret: Vec<(UID, Envelope, Option<ModSequence>)> = match identifier {
                 Ok(uid) => {
                     let mut stmt = self.connection.prepare(
-                "SELECT uid, envelope, modsequence FROM envelopes WHERE mailbox_hash = ?1 AND uid = ?2;",
-            )?;
+                        "SELECT uid, envelope, modsequence FROM envelopes WHERE mailbox_hash = ?1 \
+                         AND uid = ?2;",
+                    )?;
 
                     let x = stmt
                         .query_map(sqlite3::params![mailbox_hash, uid as Sqlite3UID], |row| {
@@ -579,8 +621,9 @@ mod sqlite3_m {
                 }
                 Err(env_hash) => {
                     let mut stmt = self.connection.prepare(
-                "SELECT uid, envelope, modsequence FROM envelopes WHERE mailbox_hash = ?1 AND hash = ?2;",
-            )?;
+                        "SELECT uid, envelope, modsequence FROM envelopes WHERE mailbox_hash = ?1 \
+                         AND hash = ?2;",
+                    )?;
 
                     let x = stmt
                         .query_map(sqlite3::params![mailbox_hash, env_hash], |row| {

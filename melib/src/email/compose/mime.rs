@@ -20,7 +20,6 @@
  */
 
 use super::*;
-
 #[cfg(feature = "unicode_algorithms")]
 use crate::text_processing::grapheme_clusters::TextProcessing;
 
@@ -61,9 +60,9 @@ pub fn encode_header(value: &str) -> String {
                     is_current_window_ascii = false;
                 }
                 /* RFC2047 recommends:
-                 * 'While there is no limit to the length of a multiple-line header field, each line of
-                 * a header field that contains one or more 'encoded-word's is limited to 76
-                 * characters.'
+                 * 'While there is no limit to the length of a multiple-line header field, each
+                 * line of a header field that contains one or more
+                 * 'encoded-word's is limited to 76 characters.'
                  * This is a rough compliance.
                  */
                 (false, false) if (((4 * (idx - current_window_start) / 3) + 3) & !3) > 33 => {
@@ -84,8 +83,8 @@ pub fn encode_header(value: &str) -> String {
     }
     #[cfg(not(feature = "unicode_algorithms"))]
     {
-        /* TODO: test this. If it works as fine as the one above, there's no need to keep the above
-         * implementation.*/
+        /* TODO: test this. If it works as fine as the one above, there's no need to
+         * keep the above implementation. */
         for (i, g) in value.char_indices() {
             match (g.is_ascii(), is_current_window_ascii) {
                 (true, true) => {
@@ -116,9 +115,9 @@ pub fn encode_header(value: &str) -> String {
                     is_current_window_ascii = false;
                 }
                 /* RFC2047 recommends:
-                 * 'While there is no limit to the length of a multiple-line header field, each line of
-                 * a header field that contains one or more 'encoded-word's is limited to 76
-                 * characters.'
+                 * 'While there is no limit to the length of a multiple-line header field, each
+                 * line of a header field that contains one or more
+                 * 'encoded-word's is limited to 76 characters.'
                  * This is a rough compliance.
                  */
                 (false, false)
@@ -139,8 +138,8 @@ pub fn encode_header(value: &str) -> String {
             }
         }
     }
-    /* If the last part of the header value is encoded, it won't be pushed inside the previous for
-     * block */
+    /* If the last part of the header value is encoded, it won't be pushed inside
+     * the previous for block */
     if !is_current_window_ascii {
         ret.push_str(&format!(
             "=?UTF-8?B?{}?=",
@@ -156,35 +155,39 @@ fn test_encode_header() {
     let words = "compilers/2020a σε Rust";
     assert_eq!(
         "compilers/2020a =?UTF-8?B?z4POtSA=?=Rust",
-        &encode_header(&words),
+        &encode_header(words),
     );
     assert_eq!(
         &std::str::from_utf8(
-            &crate::email::parser::encodings::phrase(encode_header(&words).as_bytes(), false)
+            &crate::email::parser::encodings::phrase(encode_header(words).as_bytes(), false)
                 .unwrap()
                 .1
         )
         .unwrap(),
         &words,
     );
-    let words = "[internal] =?UTF-8?B?zp3Orc6/z4Igzp/OtM63zrPPjM+CIM6jz4U=?= =?UTF-8?B?zrPOs8+BzrHPhs6uz4I=?=";
+    let words = "[internal] =?UTF-8?B?zp3Orc6/z4Igzp/OtM63zrPPjM+CIM6jz4U=?= \
+                 =?UTF-8?B?zrPOs8+BzrHPhs6uz4I=?=";
     let words_enc = r#"[internal] Νέος Οδηγός Συγγραφής"#;
-    assert_eq!(words, &encode_header(&words_enc),);
+    assert_eq!(words, &encode_header(words_enc),);
     assert_eq!(
         r#"[internal] Νέος Οδηγός Συγγραφής"#,
         std::str::from_utf8(
-            &crate::email::parser::encodings::phrase(encode_header(&words_enc).as_bytes(), false)
+            &crate::email::parser::encodings::phrase(encode_header(words_enc).as_bytes(), false)
                 .unwrap()
                 .1
         )
         .unwrap(),
     );
-    //let words = "[Advcomparch] =?utf-8?b?zqPPhc68z4DOtc+BzrnPhs6/z4HOrCDPg861IGZs?=\n\t=?utf-8?b?dXNoIM67z4zOs8+JIG1pc3ByZWRpY3Rpb24gzrrOsc+Ezqwgz4TOt869?=\n\t=?utf-8?b?IM61zrrPhM6tzrvOtc+Dzrcgc3RvcmU=?=";
+    //let words = "[Advcomparch]
+    // =?utf-8?b?zqPPhc68z4DOtc+BzrnPhs6/z4HOrCDPg861IGZs?=\n\t=?utf-8?b?
+    // dXNoIM67z4zOs8+JIG1pc3ByZWRpY3Rpb24gzrrOsc+Ezqwgz4TOt869?=\n\t=?utf-8?b?
+    // IM61zrrPhM6tzrvOtc+Dzrcgc3RvcmU=?=";
     let words_enc = "[Advcomparch] Συμπεριφορά σε flush λόγω misprediction κατά την εκτέλεση store";
     assert_eq!(
         "[Advcomparch] Συμπεριφορά σε flush λόγω misprediction κατά την εκτέλεση store",
         std::str::from_utf8(
-            &crate::email::parser::encodings::phrase(encode_header(&words_enc).as_bytes(), false)
+            &crate::email::parser::encodings::phrase(encode_header(words_enc).as_bytes(), false)
                 .unwrap()
                 .1
         )

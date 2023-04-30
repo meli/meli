@@ -29,11 +29,12 @@ fn main() -> Result<(), std::io::Error> {
         println!("cargo:rerun-if-changed=build.rs");
         println!("cargo:rerun-if-changed={}", MOD_PATH);
         /* Line break tables */
-        use std::fs::File;
-        use std::io::prelude::*;
-        use std::io::BufReader;
-        use std::path::Path;
-        use std::process::{Command, Stdio};
+        use std::{
+            fs::File,
+            io::{prelude::*, BufReader},
+            path::Path,
+            process::{Command, Stdio},
+        };
         const LINE_BREAK_TABLE_URL: &str =
             "http://www.unicode.org/Public/UCD/latest/ucd/LineBreak.txt";
         /* Grapheme width tables */
@@ -52,7 +53,7 @@ fn main() -> Result<(), std::io::Error> {
             std::process::exit(0);
         }
         let mut child = Command::new("curl")
-            .args(&["-o", "-", LINE_BREAK_TABLE_URL])
+            .args(["-o", "-", LINE_BREAK_TABLE_URL])
             .stdout(Stdio::piped())
             .stdin(Stdio::null())
             .stderr(Stdio::inherit())
@@ -69,7 +70,8 @@ fn main() -> Result<(), std::io::Error> {
             let tokens: &str = line.split_whitespace().next().unwrap();
 
             let semicolon_idx: usize = tokens.chars().position(|c| c == ';').unwrap();
-            /* LineBreak.txt list is ascii encoded so we can assume each char takes one byte: */
+            /* LineBreak.txt list is ascii encoded so we can assume each char takes one
+             * byte: */
             let chars_str: &str = &tokens[..semicolon_idx];
 
             let mut codepoint_iter = chars_str.split("..");
@@ -87,21 +89,21 @@ fn main() -> Result<(), std::io::Error> {
         child.wait()?;
 
         let child = Command::new("curl")
-            .args(&["-o", "-", UNICODE_DATA_URL])
+            .args(["-o", "-", UNICODE_DATA_URL])
             .stdout(Stdio::piped())
             .output()?;
 
         let unicode_data = String::from_utf8_lossy(&child.stdout);
 
         let child = Command::new("curl")
-            .args(&["-o", "-", EAW_URL])
+            .args(["-o", "-", EAW_URL])
             .stdout(Stdio::piped())
             .output()?;
 
         let eaw_data = String::from_utf8_lossy(&child.stdout);
 
         let child = Command::new("curl")
-            .args(&["-o", "-", EMOJI_DATA_URL])
+            .args(["-o", "-", EMOJI_DATA_URL])
             .stdout(Stdio::piped())
             .output()?;
 
@@ -198,13 +200,13 @@ fn main() -> Result<(), std::io::Error> {
             }
             // Apply the following special cases:
             //  - The unassigned code points in the following blocks default to "W":
-            //         CJK Unified Ideographs Extension A: U+3400..U+4DBF
-            //         CJK Unified Ideographs:             U+4E00..U+9FFF
-            //         CJK Compatibility Ideographs:       U+F900..U+FAFF
-            //  - All undesignated code points in Planes 2 and 3, whether inside or
-            //      outside of allocated blocks, default to "W":
-            //         Plane 2:                            U+20000..U+2FFFD
-            //         Plane 3:                            U+30000..U+3FFFD
+            //         - CJK Unified Ideographs Extension A: U+3400..U+4DBF
+            //         - CJK Unified Ideographs:             U+4E00..U+9FFF
+            //         - CJK Compatibility Ideographs:       U+F900..U+FAFF
+            //  - All undesignated code points in Planes 2 and 3, whether inside or outside
+            //    of allocated blocks, default to "W":
+            //         - Plane 2:                            U+20000..U+2FFFD
+            //         - Plane 3:                            U+30000..U+3FFFD
             const WIDE_RANGES: [(usize, usize); 5] = [
                 (0x3400, 0x4DBF),
                 (0x4E00, 0x9FFF),
@@ -245,12 +247,12 @@ fn main() -> Result<(), std::io::Error> {
                 }
 
                 use std::str::FromStr;
-                let mut v = comment.trim().split_whitespace().next().unwrap();
+                let mut v = comment.split_whitespace().next().unwrap();
                 if v.starts_with('E') {
                     v = &v[1..];
                 }
                 if v.as_bytes()
-                    .get(0)
+                    .first()
                     .map(|c| !c.is_ascii_digit())
                     .unwrap_or(true)
                 {
@@ -325,7 +327,7 @@ fn main() -> Result<(), std::io::Error> {
             }
         }
 
-        let mut file = File::create(&mod_path)?;
+        let mut file = File::create(mod_path)?;
         file.write_all(
             br#"/*
  * meli - text_processing crate.

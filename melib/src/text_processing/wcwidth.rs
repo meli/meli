@@ -48,7 +48,10 @@ pub struct CodePointsIterator<'a> {
 }
 
 /*
- * UTF-8 uses a system of binary prefixes, in which the high bits of each byte mark whether it’s a single byte, the beginning of a multi-byte sequence, or a continuation byte; the remaining bits, concatenated, give the code point index. This table shows how it works:
+ * UTF-8 uses a system of binary prefixes, in which the high bits of each
+ * byte mark whether it’s a single byte, the beginning of a multi-byte
+ * sequence, or a continuation byte; the remaining bits, concatenated, give
+ * the code point index. This table shows how it works:
  *
  * UTF-8 (binary) 	                Code point (binary) 	Range
  * 0xxxxxxx                     	xxxxxxx 	        U+0000–U+007F

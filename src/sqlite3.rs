@@ -21,27 +21,31 @@
 
 /*! Use an sqlite3 database for fast searching.
  */
-use crate::melib::ResultIntoError;
-use melib::search::{
-    escape_double_quote,
-    Query::{self, *},
+use std::{
+    path::PathBuf,
+    sync::{Arc, RwLock},
 };
+
 use melib::{
     backends::{MailBackend, ResultFuture},
     email::{Envelope, EnvelopeHash},
     log,
+    search::{
+        escape_double_quote,
+        Query::{self, *},
+    },
     sqlite3::{self as melib_sqlite3, rusqlite::params, DatabaseDescription},
     thread::{SortField, SortOrder},
     Error, Result, ERROR,
 };
-
 use smallvec::SmallVec;
-use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
+
+use crate::melib::ResultIntoError;
 
 const DB: DatabaseDescription = DatabaseDescription {
-name: "index.db",
-init_script:Some( "CREATE TABLE IF NOT EXISTS envelopes (
+    name: "index.db",
+    init_script: Some(
+        "CREATE TABLE IF NOT EXISTS envelopes (
                     id               INTEGER PRIMARY KEY,
                     account_id       INTEGER REFERENCES accounts ON UPDATE CASCADE,
                     hash             BLOB NOT NULL UNIQUE,
@@ -89,7 +93,8 @@ CREATE INDEX IF NOT EXISTS envelope_cc_index ON envelopes (cc);
 CREATE INDEX IF NOT EXISTS envelope_bcc_index ON envelopes (bcc);
 CREATE INDEX IF NOT EXISTS envelope_message_id_index ON envelopes (message_id);
 
-        CREATE VIRTUAL TABLE IF NOT EXISTS fts USING fts5(subject, body_text, content=envelopes, content_rowid=id);
+        CREATE VIRTUAL TABLE IF NOT EXISTS fts USING fts5(subject, body_text, content=envelopes, \
+         content_rowid=id);
 
 -- Triggers to keep the FTS index up to date.
 CREATE TRIGGER IF NOT EXISTS envelopes_ai AFTER INSERT ON envelopes BEGIN
@@ -97,14 +102,17 @@ CREATE TRIGGER IF NOT EXISTS envelopes_ai AFTER INSERT ON envelopes BEGIN
 END;
 
 CREATE TRIGGER IF NOT EXISTS envelopes_ad AFTER DELETE ON envelopes BEGIN
-  INSERT INTO fts(fts, rowid, subject, body_text) VALUES('delete', old.id, old.subject, old.body_text);
+  INSERT INTO fts(fts, rowid, subject, body_text) VALUES('delete', old.id, old.subject, \
+         old.body_text);
 END;
 
 CREATE TRIGGER IF NOT EXISTS envelopes_au AFTER UPDATE ON envelopes BEGIN
-  INSERT INTO fts(fts, rowid, subject, body_text) VALUES('delete', old.id, old.subject, old.body_text);
+  INSERT INTO fts(fts, rowid, subject, body_text) VALUES('delete', old.id, old.subject, \
+         old.body_text);
   INSERT INTO fts(rowid, subject, body_text) VALUES (new.id, new.subject, new.body_text);
-END; "),
-version: 1,
+END; ",
+    ),
+    version: 1,
 };
 
 pub fn db_path() -> Result<PathBuf> {
@@ -126,8 +134,8 @@ pub fn db_path() -> Result<PathBuf> {
 //                    || b != 0x60
 //                    || b != 26
 //                {
-//                    return Cow::from(format!("\"{}\"", escape_double_quote(w)));
-//                }
+//                    return Cow::from(format!("\"{}\"",
+// escape_double_quote(w)));                }
 //            }
 //            Cow::from(w)
 //        }
@@ -209,26 +217,49 @@ pub async fn insert(
             .unwrap();
         x
     };
-    if let Err(err) = conn.execute(
-            "INSERT OR REPLACE INTO envelopes (account_id, hash, date, _from, _to, cc, bcc, subject, message_id, in_reply_to, _references, flags, has_attachments, body_text, timestamp)
+    if let Err(err) = conn
+        .execute(
+            "INSERT OR REPLACE INTO envelopes (account_id, hash, date, _from, _to, cc, bcc, \
+             subject, message_id, in_reply_to, _references, flags, has_attachments, body_text, \
+             timestamp)
               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
-              params![account_id, envelope.hash().to_be_bytes().to_vec(), envelope.date_as_str(), envelope.field_from_to_string(), envelope.field_to_to_string(), envelope.field_cc_to_string(), envelope.field_bcc_to_string(), envelope.subject().into_owned().trim_end_matches('\u{0}'), envelope.message_id_display().to_string(), envelope.in_reply_to_display().map(|f| f.to_string()).unwrap_or_default(), envelope.field_references_to_string(), i64::from(envelope.flags().bits()), if envelope.has_attachments() { 1 } else { 0 }, body, envelope.date().to_be_bytes().to_vec()],
+            params![
+                account_id,
+                envelope.hash().to_be_bytes().to_vec(),
+                envelope.date_as_str(),
+                envelope.field_from_to_string(),
+                envelope.field_to_to_string(),
+                envelope.field_cc_to_string(),
+                envelope.field_bcc_to_string(),
+                envelope.subject().into_owned().trim_end_matches('\u{0}'),
+                envelope.message_id_display().to_string(),
+                envelope
+                    .in_reply_to_display()
+                    .map(|f| f.to_string())
+                    .unwrap_or_default(),
+                envelope.field_references_to_string(),
+                i64::from(envelope.flags().bits()),
+                if envelope.has_attachments() { 1 } else { 0 },
+                body,
+                envelope.date().to_be_bytes().to_vec()
+            ],
         )
-            .map_err(|e| Error::new(e.to_string())) {
-                debug!(
-                        "Failed to insert envelope {}: {}",
-                        envelope.message_id_display(),
-                        err
-                    );
-                log(
-                    format!(
-                        "Failed to insert envelope {}: {}",
-                        envelope.message_id_display(),
-                        err
-                    ),
-                    ERROR,
-                );
-              }
+        .map_err(|e| Error::new(e.to_string()))
+    {
+        debug!(
+            "Failed to insert envelope {}: {}",
+            envelope.message_id_display(),
+            err
+        );
+        log(
+            format!(
+                "Failed to insert envelope {}: {}",
+                envelope.message_id_display(),
+                err
+            ),
+            ERROR,
+        );
+    }
     Ok(())
 }
 
@@ -313,10 +344,34 @@ pub fn index(context: &mut crate::state::Context, account_index: usize) -> Resul
                 let envelopes_lck = acc_mutex.read().unwrap();
                 if let Some(e) = envelopes_lck.get(env_hash) {
                     let body = e.body_bytes(&bytes).text().replace('\0', "");
-                    conn.execute("INSERT OR REPLACE INTO envelopes (account_id, hash, date, _from, _to, cc, bcc, subject, message_id, in_reply_to, _references, flags, has_attachments, body_text, timestamp)
+                    conn.execute(
+                        "INSERT OR REPLACE INTO envelopes (account_id, hash, date, _from, _to, \
+                         cc, bcc, subject, message_id, in_reply_to, _references, flags, \
+                         has_attachments, body_text, timestamp)
               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
-              params![account_id, e.hash().to_be_bytes().to_vec(), e.date_as_str(), e.field_from_to_string(), e.field_to_to_string(), e.field_cc_to_string(), e.field_bcc_to_string(), e.subject().into_owned().trim_end_matches('\u{0}'), e.message_id_display().to_string(), e.in_reply_to_display().map(|f| f.to_string()).unwrap_or_default(), e.field_references_to_string(), i64::from(e.flags().bits()), if e.has_attachments() { 1 } else { 0 }, body, e.date().to_be_bytes().to_vec()],
-                        ).chain_err_summary(|| format!( "Failed to insert envelope {}", e.message_id_display()))?;
+                        params![
+                            account_id,
+                            e.hash().to_be_bytes().to_vec(),
+                            e.date_as_str(),
+                            e.field_from_to_string(),
+                            e.field_to_to_string(),
+                            e.field_cc_to_string(),
+                            e.field_bcc_to_string(),
+                            e.subject().into_owned().trim_end_matches('\u{0}'),
+                            e.message_id_display().to_string(),
+                            e.in_reply_to_display()
+                                .map(|f| f.to_string())
+                                .unwrap_or_default(),
+                            e.field_references_to_string(),
+                            i64::from(e.flags().bits()),
+                            if e.has_attachments() { 1 } else { 0 },
+                            body,
+                            e.date().to_be_bytes().to_vec()
+                        ],
+                    )
+                    .chain_err_summary(|| {
+                        format!("Failed to insert envelope {}", e.message_id_display())
+                    })?;
                 }
             }
             let sleep_dur = std::time::Duration::from_millis(20);
@@ -478,14 +533,14 @@ pub fn query_to_sql(q: &Query) -> String {
 
 #[test]
 fn test_query_to_sql() {
-    use melib::parsec::Parser;
-    use melib::search::query;
+    use melib::{parsec::Parser, search::query};
     assert_eq!(
         "(subject LIKE \"%test%\" ) AND (body_text LIKE \"%i%\" ) ",
         &query_to_sql(&query().parse_complete("subject: test and i").unwrap().1)
     );
     assert_eq!(
-        "(subject LIKE \"%github%\" ) OR ((_from LIKE \"%epilys%\" ) AND ((subject LIKE \"%lib%\" ) OR (subject LIKE \"%meli%\" ) ) ) ",
+        "(subject LIKE \"%github%\" ) OR ((_from LIKE \"%epilys%\" ) AND ((subject LIKE \"%lib%\" \
+         ) OR (subject LIKE \"%meli%\" ) ) ) ",
         &query_to_sql(
             &query()
                 .parse_complete(

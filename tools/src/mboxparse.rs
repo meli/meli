@@ -22,7 +22,8 @@
 extern crate melib;
 use melib::Result;
 
-/// Parses e-mail from files and prints the debug information of the parsed `Envelope`
+/// Parses e-mail from files and prints the debug information of the parsed
+/// `Envelope`
 ///
 /// # Example invocation
 /// ```sh
@@ -41,7 +42,7 @@ fn main() -> Result<()> {
 
         if filename.exists() && filename.is_file() {
             let buffer = std::fs::read_to_string(&filename)
-                .expect(&format!("Something went wrong reading the file {}", i,));
+                .unwrap_or_else(|_| panic!("Something went wrong reading the file {}", i));
             let res =
                 melib::backends::mbox::mbox_parse(Default::default(), buffer.as_bytes(), 0, None);
             match res {

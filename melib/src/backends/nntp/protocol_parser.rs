@@ -19,13 +19,15 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::*;
-use crate::email::parser::IResult;
+use std::str::FromStr;
+
 use nom::{
     bytes::complete::{is_not, tag},
     combinator::opt,
 };
-use std::str::FromStr;
+
+use super::*;
+use crate::email::parser::IResult;
 
 pub struct NntpLineIterator<'a> {
     slice: &'a str,

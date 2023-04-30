@@ -153,7 +153,8 @@ pub enum ZoneRule {
     ///time zone in offset format "+hhmm" or "-hhmm".  An
     ///offset of 0 (Zulu) always has a positive sign.
     Zone,
-    /// "weekday"   => the day of the week expressed as an integer between "0" and "6". "0" is Sunday, "1" is Monday, etc.
+    /// "weekday"   => the day of the week expressed as an integer between "0"
+    /// and "6". "0" is Sunday, "1" is Monday, etc.
     Weekday,
 }
 
@@ -370,9 +371,9 @@ pub mod parser {
             ),
             |(num_s, quant)| {
                 Ok(match (num_s.parse::<u64>(), quant.to_ascii_lowercase()) {
-                    (Ok(num), 'k') => num * 1000,
-                    (Ok(num), 'm') => num * 1000_000,
-                    (Ok(num), 'g') => num * 1000_000_000,
+                    (Ok(num), 'k') => num * 1_000,
+                    (Ok(num), 'm') => num * 1_000_000,
+                    (Ok(num), 'g') => num * 1_000_000_000,
                     _ => return Err(num_s),
                 })
             },
@@ -483,7 +484,8 @@ pub mod parser {
         }
     }
 
-    // address [COMPARATOR] [ADDRESS-PART] [MATCH-TYPE] <header-list: string-list> <key-list: string-list>
+    // address [COMPARATOR] [ADDRESS-PART] [MATCH-TYPE] <header-list: string-list>
+    // <key-list: string-list>
     pub fn parse_sieve_address<'a>() -> impl Parser<'a, ConditionRule> {
         move |input| {
             map(
@@ -677,18 +679,11 @@ pub mod parser {
 
 #[cfg(test)]
 mod test {
-    use super::parser::*;
+    use super::{
+        parser::*, ActionCommand::*, AddressOperator::*, CharacterOperator::*, ConditionRule::*,
+        ControlCommand::*, IntegerOperator::*, MatchOperator::*, Rule::*, RuleBlock,
+    };
     use crate::parsec::Parser;
-
-    use super::ActionCommand::*;
-    use super::AddressOperator::*;
-    use super::CharacterOperator::*;
-    use super::ConditionRule::*;
-    use super::ControlCommand::*;
-    use super::IntegerOperator::*;
-    use super::MatchOperator::*;
-    use super::Rule::*;
-    use super::RuleBlock;
 
     #[test]
     fn test_sieve_parse_strings() {
@@ -705,9 +700,10 @@ mod test {
 
     #[test]
     fn test_sieve_parse_conditionals() {
-        /* Operators that start with : like :matches are unordered and optional, since they have
-         * defaults. But that means we must handle any order correctly, which is tricky if we use
-         * an optional parser; for an optional parser both None and Some(_) are valid values.
+        /* Operators that start with : like :matches are unordered and optional,
+         * since they have defaults. But that means we must handle any order
+         * correctly, which is tricky if we use an optional parser; for an
+         * optional parser both None and Some(_) are valid values.
          */
 
         /* Permutations of two */

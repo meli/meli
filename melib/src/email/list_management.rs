@@ -20,10 +20,11 @@
  */
 
 /*! Parsing of rfc2369/rfc2919 `List-*` headers */
-use super::parser;
-use super::Envelope;
-use smallvec::SmallVec;
 use std::convert::From;
+
+use smallvec::SmallVec;
+
+use super::{parser, Envelope};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum ListAction<'a> {
@@ -43,8 +44,8 @@ impl<'a> From<&'a [u8]> for ListAction<'a> {
         } else if value.starts_with(b"NO") {
             ListAction::No
         } else {
-            /* Otherwise treat it as url. There's no foolproof way to check if this is valid, so
-             * postpone it until we try an HTTP request.
+            /* Otherwise treat it as url. There's no foolproof way to check if this is
+             * valid, so postpone it until we try an HTTP request.
              */
             ListAction::Url(value)
         }
@@ -55,8 +56,8 @@ impl<'a> ListAction<'a> {
     pub fn parse_options_list(input: &'a [u8]) -> Option<SmallVec<[ListAction<'a>; 4]>> {
         parser::mailing_lists::rfc_2369_list_headers_action_list(input)
             .map(|(_, mut vec)| {
-                /* Prefer email options first, since this _is_ a mail client after all and it's
-                 * more automated */
+                /* Prefer email options first, since this _is_ a mail client after all and
+                 * it's more automated */
                 vec.sort_unstable_by(|a, b| {
                     match (a.starts_with(b"mailto:"), b.starts_with(b"mailto:")) {
                         (true, false) => std::cmp::Ordering::Less,

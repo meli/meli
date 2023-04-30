@@ -1,17 +1,17 @@
 extern crate melib;
 
-use melib::backends::ImapType;
-use melib::{futures, smol, Result};
-use melib::{AccountSettings, BackendEventConsumer};
+use melib::{backends::ImapType, futures, smol, AccountSettings, BackendEventConsumer, Result};
 
-/// Opens an interactive shell on an IMAP server. Suggested use is with rlwrap(1)
+/// Opens an interactive shell on an IMAP server. Suggested use is with
+/// rlwrap(1)
 ///
 /// # Example invocation:
 /// ```sh
 /// ./imapshell server_hostname server_username server_password server_port");
 /// ```
 ///
-/// `danger_accept_invalid_certs` is turned on by default, so no certificate validation is performed.
+/// `danger_accept_invalid_certs` is turned on by default, so no certificate
+/// validation is performed.
 
 fn main() -> Result<()> {
     let mut args = std::env::args().skip(1).collect::<Vec<String>>();
@@ -21,10 +21,10 @@ fn main() -> Result<()> {
     }
 
     let (a, b, c, d) = (
-        std::mem::replace(&mut args[0], String::new()),
-        std::mem::replace(&mut args[1], String::new()),
-        std::mem::replace(&mut args[2], String::new()),
-        std::mem::replace(&mut args[3], String::new()),
+        std::mem::take(&mut args[0]),
+        std::mem::take(&mut args[1]),
+        std::mem::take(&mut args[2]),
+        std::mem::take(&mut args[3]),
     );
     let set = AccountSettings {
         extra: [

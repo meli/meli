@@ -22,15 +22,17 @@
 //FIXME
 #![allow(unused_imports, unused_variables)]
 
-use melib::email::{
-    attachment_types::{ContentDisposition, ContentType, MultipartType},
-    pgp as melib_pgp, Attachment, AttachmentBuilder,
+use std::{future::Future, pin::Pin};
+
+use melib::{
+    email::{
+        attachment_types::{ContentDisposition, ContentType, MultipartType},
+        pgp as melib_pgp, Attachment, AttachmentBuilder,
+    },
+    error::*,
+    gpgme::*,
+    parser::BytesExt,
 };
-use melib::error::*;
-use melib::gpgme::*;
-use melib::parser::BytesExt;
-use std::future::Future;
-use std::pin::Pin;
 
 pub async fn decrypt(raw: Vec<u8>) -> Result<(melib_pgp::DecryptionMetadata, Vec<u8>)> {
     Err("libgpgme functions are temporarily disabled due to an unsolved bug <https://git.meli.delivery/meli/meli/issues/176>.".into())

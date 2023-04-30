@@ -20,20 +20,25 @@
  */
 
 /*! Wrapper type `HeaderName` for case-insensitive comparisons */
-use crate::error::Error;
+use std::{
+    borrow::Borrow,
+    cmp::{Eq, PartialEq},
+    convert::TryFrom,
+    fmt,
+    hash::{Hash, Hasher},
+    ops::{Deref, DerefMut},
+};
+
 use indexmap::IndexMap;
 use smallvec::SmallVec;
-use std::borrow::Borrow;
-use std::cmp::{Eq, PartialEq};
-use std::convert::TryFrom;
-use std::fmt;
-use std::hash::{Hash, Hasher};
-use std::ops::{Deref, DerefMut};
+
+use crate::error::Error;
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
 pub struct HeaderNameType<S>(S);
 
-///Case insensitive wrapper for a header name. As of `RFC5322` it's guaranteened to be ASCII.
+/// Case insensitive wrapper for a header name. As of `RFC5322` it's
+/// guaranteed to be ASCII.
 pub type HeaderName = HeaderNameType<SmallVec<[u8; 32]>>;
 
 impl HeaderName {
@@ -148,7 +153,7 @@ impl<'a> Borrow<dyn HeaderKey + 'a> for HeaderName {
 
 impl<S: AsRef<[u8]>> HeaderNameType<S> {
     pub fn as_str(&self) -> &str {
-        //HeadersType are ascii so valid utf8
+        // HeadersType are ascii so valid utf8
         unsafe { std::str::from_utf8_unchecked(self.0.as_ref()) }
     }
 

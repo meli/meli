@@ -19,9 +19,12 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::default_vals::{internal_value_false, none, true_val};
-use super::DotAddressable;
 use melib::{Error, Result, ToggleFlag};
+
+use super::{
+    default_vals::{internal_value_false, none, true_val},
+    DotAddressable,
+};
 
 /// Settings for the notifications function.
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -37,14 +40,14 @@ pub struct NotificationsSettings {
     #[serde(default = "none")]
     pub script: Option<String>,
 
-    /// A command to pipe new mail notifications through (preferred over `script`).
-    /// Default: None
+    /// A command to pipe new mail notifications through (preferred over
+    /// `script`). Default: None
     #[serde(default = "none")]
     pub new_mail_script: Option<String>,
 
-    /// A file location which has its size changed when new mail arrives (max 128 bytes). Can be
-    /// used to trigger new mail notifications eg with `xbiff(1)`.
-    /// Default: None
+    /// A file location which has its size changed when new mail arrives (max
+    /// 128 bytes). Can be used to trigger new mail notifications eg with
+    /// `xbiff(1)`. Default: None
     #[serde(default = "none", alias = "xbiff-file-path")]
     pub xbiff_file_path: Option<String>,
 

@@ -19,12 +19,14 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::{ThreadNode, ThreadNodeHash};
-use smallvec::SmallVec;
 use std::collections::HashMap;
 
-/* `ThreadsIterator` returns messages according to the sorted order. For example, for the following
- * threads:
+use smallvec::SmallVec;
+
+use super::{ThreadNode, ThreadNodeHash};
+
+/* `ThreadsIterator` returns messages according to the sorted order. For
+ * example, for the following threads:
  *
  *  ```
  *  A_
@@ -82,8 +84,8 @@ impl<'a> Iterator for ThreadsGroupIterator<'a> {
         }
     }
 }
-/* `ThreadIterator` returns messages of a specific thread according to the sorted order. For example, for the following
- * thread:
+/* `ThreadIterator` returns messages of a specific thread according to the
+ * sorted order. For example, for the following thread:
  *
  *  ```
  *  A_

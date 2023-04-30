@@ -19,13 +19,16 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use std::{
+    collections::{BTreeMap, HashMap, HashSet},
+    ops::{Deref, DerefMut},
+    sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
+};
+
+use smallvec::SmallVec;
+
 use super::*;
 use crate::backends::{MailboxHash, TagHash};
-use smallvec::SmallVec;
-use std::ops::{Deref, DerefMut};
-use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
-
-use std::collections::{BTreeMap, HashMap, HashSet};
 
 pub type EnvelopeRef<'g> = RwRef<'g, EnvelopeHash, Envelope>;
 pub type EnvelopeRefMut<'g> = RwRefMut<'g, EnvelopeHash, Envelope>;

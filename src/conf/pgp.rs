@@ -20,9 +20,10 @@
  */
 
 #[cfg(feature = "gpgme")]
-use super::default_vals::*;
-#[cfg(feature = "gpgme")]
 use melib::conf::ToggleFlag;
+
+#[cfg(feature = "gpgme")]
+use super::default_vals::*;
 
 #[cfg(feature = "gpgme")]
 /// Settings for digital signing and encryption

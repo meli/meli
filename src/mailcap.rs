@@ -21,17 +21,21 @@
 
 //! # mailcap file - Find mailcap entries to execute attachments.
 //!
-//! Implements [RFC 1524 A User Agent Configuration Mechanism For Multimedia Mail Format
-//! Information](https://www.rfc-editor.org/rfc/inline-errata/rfc1524.html)
-use crate::state::Context;
-use crate::types::{create_temp_file, ForkType, UIEvent};
-use melib::text_processing::GlobMatch;
-use melib::{email::Attachment, Error, Result};
-use std::collections::HashMap;
-use std::io::Read;
-use std::io::Write;
-use std::path::PathBuf;
-use std::process::{Command, Stdio};
+//! Implements [RFC 1524 A User Agent Configuration Mechanism For Multimedia
+//! Mail Format Information](https://www.rfc-editor.org/rfc/inline-errata/rfc1524.html)
+use std::{
+    collections::HashMap,
+    io::{Read, Write},
+    path::PathBuf,
+    process::{Command, Stdio},
+};
+
+use melib::{email::Attachment, text_processing::GlobMatch, Error, Result};
+
+use crate::{
+    state::Context,
+    types::{create_temp_file, ForkType, UIEvent},
+};
 
 pub struct MailcapEntry {
     command: String,
@@ -42,7 +46,8 @@ pub struct MailcapEntry {
 impl MailcapEntry {
     pub fn execute(a: &Attachment, context: &mut Context) -> Result<()> {
         /* lookup order:
-         *  $XDG_CONFIG_HOME/meli/mailcap:$XDG_CONFIG_HOME/.mailcap:$HOME/.mailcap:/etc/mailcap:/usr/etc/mailcap:/usr/local/etc/mailcap
+         *  $XDG_CONFIG_HOME/meli/mailcap:$XDG_CONFIG_HOME/.mailcap:$HOME/.mailcap:/
+         * etc/mailcap:/usr/etc/mailcap:/usr/local/etc/mailcap
          */
         let xdg_dirs =
             xdg::BaseDirectories::with_prefix("meli").map_err(|e| Error::new(e.to_string()))?;
@@ -188,7 +193,7 @@ impl MailcapEntry {
                 if copiousoutput {
                     let out = if needs_stdin {
                         let mut child = Command::new("sh")
-                            .args(&["-c", &cmd_string])
+                            .args(["-c", &cmd_string])
                             .stdin(Stdio::piped())
                             .stdout(Stdio::piped())
                             .spawn()?;
@@ -201,7 +206,7 @@ impl MailcapEntry {
                         child.wait_with_output()?.stdout
                     } else {
                         let child = Command::new("sh")
-                            .args(&["-c", &cmd_string])
+                            .args(["-c", &cmd_string])
                             .stdin(Stdio::piped())
                             .stdout(Stdio::piped())
                             .spawn()?;
@@ -223,7 +228,7 @@ impl MailcapEntry {
                     debug!(pager.wait_with_output()?.stdout);
                 } else if needs_stdin {
                     let mut child = Command::new("sh")
-                        .args(&["-c", &cmd_string])
+                        .args(["-c", &cmd_string])
                         .stdin(Stdio::piped())
                         .stdout(Stdio::inherit())
                         .spawn()?;
@@ -236,7 +241,7 @@ impl MailcapEntry {
                     debug!(child.wait_with_output()?.stdout);
                 } else {
                     let child = Command::new("sh")
-                        .args(&["-c", &cmd_string])
+                        .args(["-c", &cmd_string])
                         .stdin(Stdio::inherit())
                         .stdout(Stdio::inherit())
                         .spawn()?;

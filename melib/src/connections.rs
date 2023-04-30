@@ -20,6 +20,8 @@
  */
 
 //! Connections layers (TCP/fd/TLS/Deflate) to use with remote backends.
+use std::{os::unix::io::AsRawFd, time::Duration};
+
 #[cfg(feature = "deflate_compression")]
 use flate2::{read::DeflateDecoder, write::DeflateEncoder, Compression};
 #[cfg(any(target_os = "openbsd", target_os = "netbsd", target_os = "haiku"))]
@@ -35,8 +37,6 @@ use libc::TCP_KEEPALIVE as KEEPALIVE_OPTION;
 )))]
 use libc::TCP_KEEPIDLE as KEEPALIVE_OPTION;
 use libc::{self, c_int, c_void};
-use std::os::unix::io::AsRawFd;
-use std::time::Duration;
 
 #[derive(Debug)]
 pub enum Connection {

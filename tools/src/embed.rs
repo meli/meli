@@ -1,11 +1,15 @@
-use meli::terminal::embed::*;
-use meli::terminal::*;
-use meli::*;
+use std::{
+    fs::File,
+    io::prelude::*,
+    os::raw::c_int,
+    sync::{Arc, Mutex},
+};
+
+use meli::{
+    terminal::{embed::*, *},
+    *,
+};
 use nix::sys::wait::WaitStatus;
-use std::fs::File;
-use std::io::prelude::*;
-use std::os::raw::c_int;
-use std::sync::{Arc, Mutex};
 
 fn notify(
     signals: &[c_int],
@@ -140,7 +144,7 @@ impl Component for EmbedContainer {
                     change_colors(grid, embed_area, Color::Byte(8), theme_default.bg);
                     let stopped_message: String =
                         format!("Process with PID {} has stopped.", guard.child_pid);
-                    let stopped_message_2: String = format!("-press 'e' to re-activate.",);
+                    let stopped_message_2: String = "-press 'e' to re-activate.".to_string();
                     const STOPPED_MESSAGE_3: &str =
                         "-press Ctrl-C to forcefully kill it and return to editor.";
                     let max_len = std::cmp::max(
@@ -215,7 +219,6 @@ impl Component for EmbedContainer {
         }
         context.dirty_areas.push_back(area);
         self.dirty = false;
-        return;
     }
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
@@ -244,7 +247,7 @@ impl Component for EmbedContainer {
                         match embed_guard.is_active() {
                             Ok(WaitStatus::Exited(_, exit_code)) => {
                                 drop(embed_guard);
-                                let embed = self.embed.take();
+                                _ = self.embed.take();
                                 if exit_code != 0 {
                                     context.replies.push_back(UIEvent::Notification(
                                         None,
@@ -393,11 +396,11 @@ impl Component for EmbedContainer {
 
 fn main() -> std::io::Result<()> {
     let command = std::env::args()
-        .skip(1)
-        .next()
+        .nth(1)
         .expect("expected command as first argument");
-    /* Create a channel to communicate with other threads. The main process is the sole receiver.
-     * */
+    /* Create a channel to communicate with other threads. The main process is
+     * the sole receiver.
+     */
     let (sender, receiver) = crossbeam::channel::bounded(32 * ::std::mem::size_of::<ThreadEvent>());
     /* Catch SIGWINCH to handle terminal resizing */
     let signals = &[
@@ -425,7 +428,8 @@ fn main() -> std::io::Result<()> {
             }
             state.redraw();
 
-            /* Poll on all channels. Currently we have the input channel for stdin, watching events and the signal watcher. */
+            /* Poll on all channels. Currently we have the input channel for stdin,
+             * watching events and the signal watcher. */
             crossbeam::select! {
                 recv(receiver) -> r => {
                     match r {

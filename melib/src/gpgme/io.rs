@@ -19,8 +19,9 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::*;
 use std::io::{self, Read, Seek, Write};
+
+use super::*;
 
 #[repr(C)]
 struct TagData {

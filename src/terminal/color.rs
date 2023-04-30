@@ -26,9 +26,9 @@ use termion::color::{AnsiValue, Rgb as TermionRgb};
 ///
 /// `Color::Default` represents the default color of the underlying terminal.
 ///
-/// The eight basic colors may be used directly and correspond to 0x00..0x07 in the 8-bit (256)
-/// color range; in addition, the eight basic colors coupled with `Attr::BOLD` correspond to
-/// 0x08..0x0f in the 8-bit color range.
+/// The eight basic colors may be used directly and correspond to 0x00..0x07 in
+/// the 8-bit (256) color range; in addition, the eight basic colors coupled
+/// with `Attr::BOLD` correspond to 0x08..0x0f in the 8-bit color range.
 ///
 /// `Color::Byte(..)` may be used to specify a color in the 8-bit range.
 ///
@@ -49,7 +49,7 @@ use termion::color::{AnsiValue, Rgb as TermionRgb};
 /// // Basic colors are also 8-bit colors (but not vice-versa).
 /// assert_eq!(red.as_byte(), fancy.as_byte())
 /// ```
-#[derive(Hash, Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Hash, Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub enum Color {
     Black,
     Red,
@@ -62,6 +62,7 @@ pub enum Color {
     Byte(u8),
     Rgb(u8, u8, u8),
     /// Terminal default.
+    #[default]
     Default,
 }
 
@@ -396,9 +397,7 @@ impl Color {
             s if s.starts_with('#')
                 && s.len() == 7
                 && s[1..].as_bytes().iter().all(|&b| {
-                    (b'0'..=b'9').contains(&b)
-                        || (b'a'..=b'f').contains(&b)
-                        || (b'A'..=b'F').contains(&b)
+                    b.is_ascii_digit() || (b'a'..=b'f').contains(&b) || (b'A'..=b'F').contains(&b)
                 }) =>
             {
                 return Ok(Color::Rgb(
@@ -413,9 +412,7 @@ impl Color {
             s if s.starts_with('#')
                 && s.len() == 4
                 && s[1..].as_bytes().iter().all(|&b| {
-                    (b'0'..=b'9').contains(&b)
-                        || (b'a'..=b'f').contains(&b)
-                        || (b'A'..=b'F').contains(&b)
+                    b.is_ascii_digit() || (b'a'..=b'f').contains(&b) || (b'A'..=b'F').contains(&b)
                 }) =>
             {
                 return Ok(Color::Rgb(
@@ -432,12 +429,6 @@ impl Color {
                 .map_err(|_| de::Error::custom("invalid `color` value"))?,
         };
         Ok(Color::Byte(byte))
-    }
-}
-
-impl Default for Color {
-    fn default() -> Self {
-        Color::Default
     }
 }
 

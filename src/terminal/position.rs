@@ -142,7 +142,6 @@ macro_rules! bottom_right {
 /// let invalid_area = ((2, 2), (1, 1));
 /// assert!(!is_valid_area!(invalid_area));
 /// ```
-///
 #[macro_export]
 macro_rules! is_valid_area {
     ($a:expr) => {{
@@ -172,25 +171,22 @@ pub fn center_area(area: Area, (width, height): (usize, usize)) -> Area {
     )
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub enum Alignment {
-    /// Stretch to fill all space if possible, center if no meaningful way to stretch.
+    /// Stretch to fill all space if possible, center if no meaningful way to
+    /// stretch.
     Fill,
     /// Snap to left or top side, leaving space on right or bottom.
     Start,
     /// Snap to right or bottom side, leaving space on left or top.
     End,
     /// Center natural width of widget inside the allocation.
+    #[default]
     Center,
 }
 
-impl Default for Alignment {
-    fn default() -> Self {
-        Alignment::Center
-    }
-}
-
-/// Place given area of dimensions `(width, height)` inside `area` according to given alignment
+/// Place given area of dimensions `(width, height)` inside `area` according to
+/// given alignment
 pub fn align_area(
     area: Area,
     (width, height): (usize, usize),

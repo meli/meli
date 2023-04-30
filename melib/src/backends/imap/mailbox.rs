@@ -19,12 +19,15 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::protocol_parser::SelectResponse;
-use crate::backends::{
-    BackendMailbox, LazyCountSet, Mailbox, MailboxHash, MailboxPermissions, SpecialUsageMailbox,
-};
-use crate::error::*;
 use std::sync::{Arc, Mutex, RwLock};
+
+use super::protocol_parser::SelectResponse;
+use crate::{
+    backends::{
+        BackendMailbox, LazyCountSet, Mailbox, MailboxHash, MailboxPermissions, SpecialUsageMailbox,
+    },
+    error::*,
+};
 
 #[derive(Debug, Default, Clone)]
 pub struct ImapMailbox {
@@ -51,7 +54,8 @@ impl ImapMailbox {
         &self.imap_path
     }
 
-    /// Establish that mailbox contents have been fetched at least once during this execution
+    /// Establish that mailbox contents have been fetched at least once during
+    /// this execution
     #[inline(always)]
     pub fn set_warm(&self, new_value: bool) {
         *self.warm.lock().unwrap() = new_value;

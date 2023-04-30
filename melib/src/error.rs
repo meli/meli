@@ -23,13 +23,7 @@
  * An error object for `melib`
  */
 
-use std::borrow::Cow;
-use std::fmt;
-use std::io;
-use std::result;
-use std::str;
-use std::string;
-use std::sync::Arc;
+use std::{borrow::Cow, fmt, io, result, str, string, sync::Arc};
 
 pub type Result<T> = result::Result<T, Error>;
 

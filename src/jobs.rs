@@ -21,21 +21,25 @@
 
 //! Async job executor thread pool
 
-use melib::smol;
-use melib::uuid::Uuid;
-use std::collections::HashMap;
-use std::future::Future;
-use std::panic::catch_unwind;
-use std::sync::{Arc, Mutex};
-use std::thread;
-use std::time::Duration;
+use std::{
+    collections::HashMap,
+    future::Future,
+    iter,
+    panic::catch_unwind,
+    sync::{Arc, Mutex},
+    thread,
+    time::Duration,
+};
+
+use crossbeam::{
+    channel::Sender,
+    deque::{Injector, Stealer, Worker},
+    sync::{Parker, Unparker},
+};
+pub use futures::channel::oneshot;
+use melib::{smol, uuid::Uuid};
 
 use crate::types::{ThreadEvent, UIEvent};
-use crossbeam::channel::Sender;
-use crossbeam::deque::{Injector, Stealer, Worker};
-use crossbeam::sync::{Parker, Unparker};
-pub use futures::channel::oneshot;
-use std::iter;
 
 type AsyncTask = async_task::Runnable;
 
@@ -245,7 +249,8 @@ impl JobExecutor {
         }
     }
 
-    /// Spawns a future with a generic return value `R` that might block on a new thread
+    /// Spawns a future with a generic return value `R` that might block on a
+    /// new thread
     pub fn spawn_blocking<F, R>(&self, future: F) -> JoinHandle<R>
     where
         F: Future<Output = R> + Send + 'static,

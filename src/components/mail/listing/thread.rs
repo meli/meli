@@ -19,12 +19,10 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use std::{cmp, convert::TryInto, fmt::Write, iter::FromIterator};
+
 use super::*;
 use crate::components::PageMovement;
-use std::cmp;
-use std::convert::TryInto;
-use std::fmt::Write;
-use std::iter::FromIterator;
 
 macro_rules! row_attr {
     ($color_cache:expr, $even: expr, $unseen:expr, $highlighted:expr, $selected:expr  $(,)*) => {{
@@ -102,8 +100,8 @@ macro_rules! row_attr {
     }};
 }
 
-/// A list of all mail (`Envelope`s) in a `Mailbox`. On `\n` it opens the `Envelope` content in a
-/// `MailView`.
+/// A list of all mail (`Envelope`s) in a `Mailbox`. On `\n` it opens the
+/// `Envelope` content in a `MailView`.
 #[derive(Debug)]
 pub struct ThreadListing {
     /// (x, y, z): x is accounts, y is mailboxes, z is index inside a mailbox.
@@ -167,8 +165,8 @@ impl MailListingTrait for ThreadListing {
         )
     }
 
-    /// Fill the `self.content` `CellBuffer` with the contents of the account mailbox the user has
-    /// chosen.
+    /// Fill the `self.content` `CellBuffer` with the contents of the account
+    /// mailbox the user has chosen.
     fn refresh_mailbox(&mut self, context: &mut Context, _force: bool) {
         self.set_dirty(true);
         if !(self.cursor_pos.0 == self.new_cursor_pos.0
@@ -485,8 +483,8 @@ impl ListingTrait for ThreadListing {
 
         let top_idx = page_no * rows;
 
-        /* If cursor position has changed, remove the highlight from the previous position and
-         * apply it in the new one. */
+        /* If cursor position has changed, remove the highlight from the previous
+         * position and apply it in the new one. */
         if self.cursor_pos.2 != self.new_cursor_pos.2 && prev_page_no == page_no {
             let old_cursor_pos = self.cursor_pos;
             self.cursor_pos = self.new_cursor_pos;
@@ -634,9 +632,10 @@ impl ListingTrait for ThreadListing {
             Focus::None => {
                 self.view = None;
                 self.dirty = true;
-                /* If self.rows.row_updates is not empty and we exit a thread, the row_update events
-                 * will be performed but the list will not be drawn. So force a draw in any case.
-                 * */
+                /* If self.rows.row_updates is not empty and we exit a thread, the row_update
+                 * events will be performed but the list will not be drawn.
+                 * So force a draw in any case.
+                 */
                 self.force_draw = true;
             }
             Focus::Entry => {
@@ -982,8 +981,8 @@ impl ThreadListing {
         let account = &context.accounts[&self.cursor_pos.0];
 
         if !account.contains_key(env_hash) {
-            /* The envelope has been renamed or removed, so wait for the appropriate event to
-             * arrive */
+            /* The envelope has been renamed or removed, so wait for the appropriate
+             * event to arrive */
             return;
         }
         let envelope: EnvelopeRef = account.collection.get_env(env_hash);

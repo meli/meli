@@ -19,17 +19,22 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use core::{future::Future, pin::Pin};
+use std::{
+    io::{self, Read},
+    os::unix::fs::PermissionsExt,
+    path::PathBuf,
+    result,
+    sync::{Arc, Mutex},
+};
+
+use futures::{
+    stream::{FuturesUnordered, StreamExt},
+    task::{Context, Poll},
+};
+
 use super::*;
 use crate::backends::maildir::backend::move_to_cur;
-use core::future::Future;
-use core::pin::Pin;
-use futures::stream::{FuturesUnordered, StreamExt};
-use futures::task::{Context, Poll};
-use std::io::{self, Read};
-use std::os::unix::fs::PermissionsExt;
-use std::path::PathBuf;
-use std::result;
-use std::sync::{Arc, Mutex};
 
 pub struct MaildirStream {
     payloads: Pin<
@@ -66,7 +71,7 @@ impl MaildirStream {
             files
                 .chunks(chunk_size)
                 .map(|chunk| {
-                    let cache_dir = xdg::BaseDirectories::with_profile("meli", &name).unwrap();
+                    let cache_dir = xdg::BaseDirectories::with_profile("meli", name).unwrap();
                     Box::pin(Self::chunk(
                         SmallVec::from(chunk),
                         cache_dir,

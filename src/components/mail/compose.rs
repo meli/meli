@@ -19,21 +19,23 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::*;
-use melib::email::attachment_types::{ContentType, MultipartType};
-use melib::list_management;
-use melib::Draft;
+use std::{
+    convert::TryInto,
+    future::Future,
+    pin::Pin,
+    process::{Command, Stdio},
+    sync::{Arc, Mutex},
+};
 
-use crate::conf::accounts::JobRequest;
-use crate::jobs::JoinHandle;
-use crate::terminal::embed::EmbedTerminal;
 use indexmap::IndexSet;
+use melib::{
+    email::attachment_types::{ContentType, MultipartType},
+    list_management, Draft,
+};
 use nix::sys::wait::WaitStatus;
-use std::convert::TryInto;
-use std::future::Future;
-use std::pin::Pin;
-use std::process::{Command, Stdio};
-use std::sync::{Arc, Mutex};
+
+use super::*;
+use crate::{conf::accounts::JobRequest, jobs::JoinHandle, terminal::embed::EmbedTerminal};
 
 #[cfg(feature = "gpgme")]
 mod gpg;
@@ -373,8 +375,9 @@ impl Composer {
         let mut ret = Composer::reply_to(coordinates, reply_body, context, false);
         let account = &context.accounts[&coordinates.0];
         let parent_message = account.collection.get_env(coordinates.2);
-        /* If message is from a mailing list and we detect a List-Post header, ask user if they
-         * want to reply to the mailing list or the submitter of the message */
+        /* If message is from a mailing list and we detect a List-Post header, ask
+         * user if they want to reply to the mailing list or the submitter of
+         * the message */
         if let Some(actions) = list_management::ListActions::detect(&parent_message) {
             if let Some(post) = actions.post {
                 if let list_management::ListAction::Email(list_post_addr) = post[0] {
@@ -1104,20 +1107,27 @@ impl Component for Composer {
                                 )));
                             self.mode = ViewMode::WaitingForSendResult(
                                 UIDialog::new(
-                                    "Waiting for confirmation.. The tab will close automatically on successful submission.",
+                                    "Waiting for confirmation.. The tab will close automatically \
+                                     on successful submission.",
                                     vec![
-                                    ('c', "force close tab".to_string()),
-                                    ('n', "close this message and return to edit mode".to_string()),
+                                        ('c', "force close tab".to_string()),
+                                        (
+                                            'n',
+                                            "close this message and return to edit mode"
+                                                .to_string(),
+                                        ),
                                     ],
                                     true,
                                     Some(Box::new(move |id: ComponentId, results: &[char]| {
                                         Some(UIEvent::FinishedUIDialog(
-                                                id,
-                                                Box::new(results.first().cloned().unwrap_or('c')),
+                                            id,
+                                            Box::new(results.first().cloned().unwrap_or('c')),
                                         ))
                                     })),
                                     context,
-                                ), handle);
+                                ),
+                                handle,
+                            );
                         }
                         Err(err) => {
                             context.replies.push_back(UIEvent::Notification(
@@ -1680,10 +1690,12 @@ impl Component for Composer {
                     match std::env::var("EDITOR") {
                         Err(err) => {
                             context.replies.push_back(UIEvent::Notification(
-                            Some(err.to_string()),
-                            "$EDITOR is not set. You can change an envvar's value with setenv or set composing.editor_command setting in your configuration.".to_string(),
-                            Some(NotificationType::Error(melib::error::ErrorKind::None)),
-                        ));
+                                Some(err.to_string()),
+                                "$EDITOR is not set. You can change an envvar's value with setenv \
+                                 or set composing.editor_command setting in your configuration."
+                                    .to_string(),
+                                Some(NotificationType::Error(melib::error::ErrorKind::None)),
+                            ));
                             return true;
                         }
                         Ok(v) => v,
@@ -1744,7 +1756,7 @@ impl Component for Composer {
                     DEBUG,
                 );
                 match Command::new("sh")
-                    .args(&["-c", &editor_command])
+                    .args(["-c", &editor_command])
                     .stdin(Stdio::inherit())
                     .stdout(Stdio::inherit())
                     .spawn()
@@ -1798,7 +1810,7 @@ impl Component for Composer {
                     }
                     let f = create_temp_file(&[], None, None, true);
                     match Command::new("sh")
-                        .args(&["-c", command])
+                        .args(["-c", command])
                         .stdin(Stdio::null())
                         .stdout(Stdio::from(f.file()))
                         .spawn()
@@ -1886,7 +1898,7 @@ impl Component for Composer {
                         DEBUG,
                     );
                     match Command::new("sh")
-                        .args(&["-c", command])
+                        .args(["-c", command])
                         .stdin(Stdio::inherit())
                         .stdout(Stdio::inherit())
                         .stderr(Stdio::piped())

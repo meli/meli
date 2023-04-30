@@ -19,14 +19,12 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::*;
-use crate::components::PageMovement;
-use crate::jobs::JoinHandle;
+use std::{cmp, collections::BTreeMap, convert::TryInto, iter::FromIterator};
+
 use indexmap::IndexSet;
-use std::cmp;
-use std::collections::BTreeMap;
-use std::convert::TryInto;
-use std::iter::FromIterator;
+
+use super::*;
+use crate::{components::PageMovement, jobs::JoinHandle};
 
 macro_rules! digits_of_num {
     ($num:expr) => {{
@@ -158,8 +156,8 @@ macro_rules! row_attr {
     }};
 }
 
-/// A list of all mail (`Envelope`s) in a `Mailbox`. On `\n` it opens the `Envelope` content in a
-/// `ThreadView`.
+/// A list of all mail (`Envelope`s) in a `Mailbox`. On `\n` it opens the
+/// `Envelope` content in a `ThreadView`.
 #[derive(Debug)]
 pub struct CompactListing {
     /// (x, y, z): x is accounts, y is mailboxes, z is index inside a mailbox.
@@ -239,8 +237,8 @@ impl MailListingTrait for CompactListing {
         SmallVec::from_iter(iter)
     }
 
-    /// Fill the `self.data_columns` `CellBuffers` with the contents of the account mailbox the user has
-    /// chosen.
+    /// Fill the `self.data_columns` `CellBuffers` with the contents of the
+    /// account mailbox the user has chosen.
     fn refresh_mailbox(&mut self, context: &mut Context, force: bool) {
         self.set_dirty(true);
         self.rows.clear();
@@ -565,7 +563,7 @@ impl ListingTrait for CompactListing {
     fn set_coordinates(&mut self, coordinates: (AccountHash, MailboxHash)) {
         self.new_cursor_pos = (coordinates.0, coordinates.1, 0);
         self.focus = Focus::None;
-        self.view = Box::new(ThreadView::default());
+        self.view = Box::<ThreadView>::default();
         self.filtered_selection.clear();
         self.filtered_order.clear();
         self.filter_term.clear();
@@ -692,8 +690,8 @@ impl ListingTrait for CompactListing {
         let end_idx = cmp::min(self.length.saturating_sub(1), top_idx + rows - 1);
         self.draw_rows(context, top_idx, end_idx);
 
-        /* If cursor position has changed, remove the highlight from the previous position and
-         * apply it in the new one. */
+        /* If cursor position has changed, remove the highlight from the previous
+         * position and apply it in the new one. */
         if self.cursor_pos.2 != self.new_cursor_pos.2 && prev_page_no == page_no {
             let old_cursor_pos = self.cursor_pos;
             self.cursor_pos = self.new_cursor_pos;
@@ -840,9 +838,10 @@ impl ListingTrait for CompactListing {
                 self.view
                     .process_event(&mut UIEvent::VisibilityChange(false), context);
                 self.dirty = true;
-                /* If self.rows.row_updates is not empty and we exit a thread, the row_update events
-                 * will be performed but the list will not be drawn. So force a draw in any case.
-                 * */
+                /* If self.rows.row_updates is not empty and we exit a thread, the row_update
+                 * events will be performed but the list will not be drawn.
+                 * So force a draw in any case.
+                 */
                 self.force_draw = true;
             }
             Focus::Entry => {
@@ -889,7 +888,7 @@ impl CompactListing {
             rows: RowsState::default(),
             dirty: true,
             force_draw: true,
-            view: Box::new(ThreadView::default()),
+            view: Box::<ThreadView>::default(),
             color_cache: ColorCache::default(),
             movement: None,
             modifier_active: false,
@@ -1064,8 +1063,8 @@ impl CompactListing {
         let account = &context.accounts[&self.cursor_pos.0];
 
         if !account.contains_key(env_hash) {
-            /* The envelope has been renamed or removed, so wait for the appropriate event to
-             * arrive */
+            /* The envelope has been renamed or removed, so wait for the appropriate
+             * event to arrive */
             return;
         }
         let tags_lck = account.collection.tag_index.read().unwrap();

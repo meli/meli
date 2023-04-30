@@ -26,14 +26,17 @@ extern crate serde;
 extern crate toml;
 extern crate xdg;
 
-use crate::conf::deserializers::non_empty_string;
-use crate::terminal::Color;
-use melib::backends::TagHash;
-use melib::search::Query;
-use std::collections::HashSet;
-use std::io::Read;
-use std::process::{Command, Stdio};
+use std::{
+    collections::HashSet,
+    io::Read,
+    process::{Command, Stdio},
+};
 
+use melib::{backends::TagHash, search::Query};
+
+use crate::{conf::deserializers::non_empty_string, terminal::Color};
+
+#[rustfmt::skip]
 mod overrides;
 pub use overrides::*;
 pub mod composing;
@@ -49,30 +52,29 @@ mod themes;
 pub use themes::*;
 
 pub mod accounts;
-pub use self::accounts::Account;
-pub use self::composing::*;
-pub use self::pgp::*;
-pub use self::shortcuts::*;
-pub use self::tags::*;
-pub use melib::thread::{SortField, SortOrder};
-
-use self::default_vals::*;
-use self::listing::ListingSettings;
-use self::notifications::NotificationsSettings;
-use self::terminal::TerminalSettings;
-use crate::pager::PagerSettings;
-use melib::conf::{AccountSettings, MailboxConf, ToggleFlag};
-use melib::error::*;
-
-use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use std::{
+    collections::HashMap,
+    env,
+    fs::OpenOptions,
+    io::{self, BufRead, Write},
+    os::unix::fs::PermissionsExt,
+    path::{Path, PathBuf},
+};
 
 use indexmap::IndexMap;
-use std::collections::HashMap;
-use std::env;
-use std::fs::OpenOptions;
-use std::io::{self, BufRead, Write};
-use std::os::unix::fs::PermissionsExt;
-use std::path::{Path, PathBuf};
+pub use melib::thread::{SortField, SortOrder};
+use melib::{
+    conf::{AccountSettings, MailboxConf, ToggleFlag},
+    error::*,
+};
+use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+
+pub use self::{accounts::Account, composing::*, pgp::*, shortcuts::*, tags::*};
+use self::{
+    default_vals::*, listing::ListingSettings, notifications::NotificationsSettings,
+    terminal::TerminalSettings,
+};
+use crate::pager::PagerSettings;
 
 #[macro_export]
 macro_rules! split_command {
@@ -185,7 +187,8 @@ pub struct FileAccount {
     pub conf_override: MailUIConf,
     #[serde(flatten)]
     #[serde(deserialize_with = "extra_settings")]
-    pub extra: IndexMap<String, String>, /* use custom deserializer to convert any given value (eg bool, number, etc) to string */
+    pub extra: IndexMap<String, String>, /* use custom deserializer to convert any given value
+                                          * (eg bool, number, etc) to string */
 }
 
 impl FileAccount {
@@ -381,7 +384,7 @@ define(`include', `builtin_include(substr($1,1,decr(decr(len($1)))))dnl')dnl
     file.read_to_string(&mut contents)?;
 
     let mut handle = Command::new("m4")
-        .current_dir(conf_path.parent().unwrap_or(&Path::new("/")))
+        .current_dir(conf_path.parent().unwrap_or(Path::new("/")))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -390,7 +393,7 @@ define(`include', `builtin_include(substr($1,1,decr(decr(len($1)))))dnl')dnl
     stdin.write_all(M4_PREAMBLE.as_bytes())?;
     stdin.write_all(contents.as_bytes())?;
     drop(stdin);
-    let stdout = handle.wait_with_output()?.stdout.clone();
+    let stdout = handle.wait_with_output()?.stdout;
     Ok(String::from_utf8_lossy(&stdout).to_string())
 }
 
@@ -452,6 +455,7 @@ impl FileSettings {
             }
             #[cfg(test)]
             return Ok(FileSettings::default());
+            #[cfg(not(test))]
             return Err(Error::new("No configuration file found."));
         }
 
@@ -469,8 +473,8 @@ impl FileSettings {
                 ))
             })?;
         /*
-         * Check that a global composing option is set and return a user-friendly error message because the
-         * default serde one is confusing.
+         * Check that a global composing option is set and return a user-friendly
+         * error message because the default serde one is confusing.
          */
         if !map.contains_key("composing") {
             let err_msg = r#"You must set a global `composing` option. If you override `composing` in each account, you can use a dummy global like follows:
@@ -483,9 +487,10 @@ This is required so that you don't accidentally start meli and find out later th
                 println!("{}", err_msg);
                 let ask = Ask {
                     message: format!(
-                                 "Would you like to append this dummy value in your configuration file {} and continue?",
-                                 path.display()
-                             )
+                        "Would you like to append this dummy value in your configuration file {} \
+                         and continue?",
+                        path.display()
+                    ),
                 };
                 if ask.run() {
                     let mut file = OpenOptions::new().append(true).open(&path)?;
@@ -664,18 +669,13 @@ impl Settings {
     }
 }
 
-#[derive(Copy, Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Copy, Debug, Clone, Hash, PartialEq, Eq, Default)]
 pub enum IndexStyle {
     Plain,
     Threaded,
+    #[default]
     Compact,
     Conversations,
-}
-
-impl Default for IndexStyle {
-    fn default() -> Self {
-        IndexStyle::Compact
-    }
 }
 
 /*
@@ -753,9 +753,9 @@ mod deserializers {
     where
         D: Deserializer<'de>,
     {
-        /* Why is this needed? If the user gives a configuration value such as key = true, the
-         * parsing will fail since it expects string values. We want to accept key = true as well
-         * as key = "true". */
+        /* Why is this needed? If the user gives a configuration value such as key =
+         * true, the parsing will fail since it expects string values. We
+         * want to accept key = true as well as key = "true". */
         #[derive(Deserialize)]
         struct Wrapper(#[serde(deserialize_with = "any_of")] String);
 
@@ -794,18 +794,13 @@ impl Serialize for IndexStyle {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub enum SearchBackend {
     None,
+    #[default]
     Auto,
     #[cfg(feature = "sqlite3")]
     Sqlite3,
-}
-
-impl Default for SearchBackend {
-    fn default() -> Self {
-        SearchBackend::Auto
-    }
 }
 
 impl<'de> Deserialize<'de> for SearchBackend {
@@ -878,13 +873,16 @@ pub fn create_config_file(p: &Path) -> Result<()> {
 
 mod pp {
     //! Preprocess configuration files by unfolding `include` macros.
+    use std::{
+        io::Read,
+        path::{Path, PathBuf},
+    };
+
     use melib::{
         error::{Error, Result},
         parsec::*,
         ShellExpandTrait,
     };
-    use std::io::Read;
-    use std::path::{Path, PathBuf};
 
     /// Try to parse line into a path to be included.
     fn include_directive<'a>() -> impl Parser<'a, Option<&'a str>> {
@@ -946,7 +944,11 @@ mod pp {
     /// Expands `include` macros in path.
     fn pp_helper(path: &Path, level: u8) -> Result<String> {
         if level > 7 {
-            return Err(Error::new(format!("Maximum recursion limit reached while unfolding include directives in {}. Have you included a config file within itself?", path.display())));
+            return Err(Error::new(format!(
+                "Maximum recursion limit reached while unfolding include directives in {}. Have \
+                 you included a config file within itself?",
+                path.display()
+            )));
         }
         let mut contents = String::new();
         let mut file = std::fs::File::open(path)?;
@@ -956,14 +958,15 @@ mod pp {
         for (i, l) in contents.lines().enumerate() {
             if let (_, Some(sub_path)) = include_directive().parse(l).map_err(|l| {
                 Error::new(format!(
-                    "Malformed include directive in line {} of file {}: {}\nConfiguration uses the standard m4 macro include(\"filename\").",
+                    "Malformed include directive in line {} of file {}: {}\nConfiguration uses \
+                     the standard m4 macro include(\"filename\").",
                     i,
                     path.display(),
                     l
                 ))
             })? {
                 let mut p = Path::new(sub_path).expand();
-                 if p.is_relative() {
+                if p.is_relative() {
                     /* We checked that path is ok above so we can do unwrap here */
                     let prefix = path.parent().unwrap();
                     p = prefix.join(p)
@@ -979,8 +982,8 @@ mod pp {
         Ok(ret)
     }
 
-    /// Expands `include` macros in configuration file and other configuration files (eg. themes)
-    /// in the filesystem.
+    /// Expands `include` macros in configuration file and other configuration
+    /// files (eg. themes) in the filesystem.
     pub fn pp<P: AsRef<Path>>(path: P) -> Result<String> {
         let p_buf: PathBuf = if path.as_ref().is_relative() {
             path.as_ref().expand().canonicalize()?
@@ -1137,14 +1140,22 @@ mod dotaddressable {
                 Some(field) => {
                     let _tail = &path[1..];
                     match *field {
-                        "pager" => Err(Error::new("unimplemented")), //self.pager.lookup(field, tail),
-                        "listing" => Err(Error::new("unimplemented")), // self.listing.lookup(field, tail),
-                        "notifications" => Err(Error::new("unimplemented")), // self.notifications.lookup(field, tail),
-                        "shortcuts" => Err(Error::new("unimplemented")), //self.shortcuts.lookup(field, tail),
-                        "composing" => Err(Error::new("unimplemented")), //self.composing.lookup(field, tail),
-                        "identity" => Err(Error::new("unimplemented")), //self.identity.lookup(field, tail)<String>,
-                        "tags" => Err(Error::new("unimplemented")), //self.tags.lookup(field, tail),
-                        "themes" => Err(Error::new("unimplemented")), //self.themes.lookup(field, tail)<Themes>,
+                        "pager" => Err(Error::new("unimplemented")), /* self.pager.lookup(field, */
+                        // tail),
+                        "listing" => Err(Error::new("unimplemented")), /* self.listing.lookup(field, tail), */
+                        "notifications" => Err(Error::new("unimplemented")), /* self.notifications.lookup(field, tail), */
+                        "shortcuts" => Err(Error::new("unimplemented")),     /* self.shortcuts. */
+                        // lookup(field,
+                        // tail),
+                        "composing" => Err(Error::new("unimplemented")), /* self.composing.lookup(field, tail), */
+                        "identity" => Err(Error::new("unimplemented")),  /* self.identity. */
+                        // lookup(field,
+                        // tail)<String>,
+                        "tags" => Err(Error::new("unimplemented")), /* self.tags.lookup(field, */
+                        // tail),
+                        "themes" => Err(Error::new("unimplemented")), /* self.themes. */
+                        // lookup(field,
+                        // tail)<Themes>,
                         "pgp" => Err(Error::new("unimplemented")), //self.pgp.lookup(field, tail),
 
                         other => Err(Error::new(format!(
@@ -1260,10 +1271,7 @@ mod dotaddressable {
 
 #[test]
 fn test_config_parse() {
-    use std::fmt::Write;
-    use std::fs;
-    use std::io::prelude::*;
-    use std::path::PathBuf;
+    use std::{fmt::Write, fs, io::prelude::*, path::PathBuf};
 
     struct ConfigFile {
         path: PathBuf,
@@ -1346,13 +1354,20 @@ send_mail = 'false'
 
     let mut new_file = ConfigFile::new(TEST_CONFIG).unwrap();
     let err = FileSettings::validate(new_file.path.clone(), false, true).unwrap_err();
-    assert!(err.summary.as_ref().starts_with("You must set a global `composing` option. If you override `composing` in each account, you can use a dummy global like follows"));
+    assert!(err.summary.as_ref().starts_with(
+        "You must set a global `composing` option. If you override `composing` in each account, \
+         you can use a dummy global like follows"
+    ));
     new_file
         .file
         .write_all("[composing]\nsend_mail = 'false'\n".as_bytes())
         .unwrap();
     let err = FileSettings::validate(new_file.path.clone(), false, true).unwrap_err();
-    assert_eq!(err.summary.as_ref(), "Configuration error (account-name): root_mailbox `/path/to/root/mailbox` is not a valid directory.");
+    assert_eq!(
+        err.summary.as_ref(),
+        "Configuration error (account-name): root_mailbox `/path/to/root/mailbox` is not a valid \
+         directory."
+    );
 
     /* Test unrecognised configuration entries error */
 

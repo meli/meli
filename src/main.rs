@@ -21,16 +21,19 @@
 
 //! Command line client binary.
 //!
-//! This crate contains the frontend stuff of the application. The application entry way on
-//! `src/bin.rs` creates an event loop and passes input to a thread.
+//! This crate contains the frontend stuff of the application. The application
+//! entry way on `src/bin.rs` creates an event loop and passes input to a
+//! thread.
 //!
-//! The mail handling stuff is done in the `melib` crate which includes all backend needs. The
-//! split is done to theoretically be able to create different frontends with the same innards.
+//! The mail handling stuff is done in the `melib` crate which includes all
+//! backend needs. The split is done to theoretically be able to create
+//! different frontends with the same innards.
 
 use meli::*;
 mod args;
-use args::*;
 use std::os::raw::c_int;
+
+use args::*;
 
 fn notify(
     signals: &[c_int],
@@ -119,7 +122,10 @@ fn run_app(opt: Opt) -> Result<()> {
             let editor = std::env::var("EDITOR")
                 .or_else(|_| std::env::var("VISUAL"))
                 .map_err(|err| {
-                    format!("Could not find any value in environment variables EDITOR and VISUAL. {err}")
+                    format!(
+                        "Could not find any value in environment variables EDITOR and VISUAL. \
+                         {err}"
+                    )
                 })?;
             let config_path = crate::conf::get_config_file()?;
 
@@ -146,8 +152,9 @@ fn run_app(opt: Opt) -> Result<()> {
                 include_bytes!(concat!(env!("OUT_DIR"), "/meli-themes.txt.gz")),
                 include_bytes!(concat!(env!("OUT_DIR"), "/meli.7.txt.gz")),
             ];
-            use flate2::bufread::GzDecoder;
             use std::io::prelude::*;
+
+            use flate2::bufread::GzDecoder;
             let mut gz = GzDecoder::new(MANPAGES[page as usize]);
             let mut v = String::with_capacity(
                 str::parse::<usize>(unsafe {
@@ -231,8 +238,9 @@ fn run_app(opt: Opt) -> Result<()> {
         None => {}
     }
 
-    /* Create a channel to communicate with other threads. The main process is the sole receiver.
-     * */
+    /* Create a channel to communicate with other threads. The main process is
+     * the sole receiver.
+     */
     let (sender, receiver) = crossbeam::channel::bounded(32 * ::std::mem::size_of::<ThreadEvent>());
     /* Catch SIGWINCH to handle terminal resizing */
     let signals = &[
@@ -310,7 +318,8 @@ fn run_app(opt: Opt) -> Result<()> {
             }
             state.redraw();
 
-            /* Poll on all channels. Currently we have the input channel for stdin, watching events and the signal watcher. */
+            /* Poll on all channels. Currently we have the input channel for stdin,
+             * watching events and the signal watcher. */
             crossbeam::select! {
                 recv(receiver) -> r => {
                     match r {

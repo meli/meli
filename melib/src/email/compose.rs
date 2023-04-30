@@ -20,18 +20,24 @@
  */
 
 /*! Compose a `Draft`, with MIME and attachment support */
-use super::*;
-use crate::email::attachment_types::{
-    Charset, ContentTransferEncoding, ContentType, MultipartType,
+use std::{
+    ffi::OsStr,
+    io::Read,
+    path::{Path, PathBuf},
+    str::FromStr,
 };
-use crate::email::attachments::AttachmentBuilder;
-use crate::shellexpand::ShellExpandTrait;
+
 use data_encoding::BASE64_MIME;
-use std::ffi::OsStr;
-use std::io::Read;
-use std::path::{Path, PathBuf};
-use std::str::FromStr;
 use xdg_utils::query_mime_info;
+
+use super::*;
+use crate::{
+    email::{
+        attachment_types::{Charset, ContentTransferEncoding, ContentType, MultipartType},
+        attachments::AttachmentBuilder,
+    },
+    shellexpand::ShellExpandTrait,
+};
 
 pub mod mime;
 pub mod random;
@@ -370,7 +376,10 @@ fn build_multipart(
     }
     ret.push_str("\r\n\r\n");
     /* rfc1341 */
-    ret.push_str("This is a MIME formatted message with attachments. Use a MIME-compliant client to view it properly.\r\n");
+    ret.push_str(
+        "This is a MIME formatted message with attachments. Use a MIME-compliant client to view \
+         it properly.\r\n",
+    );
     for sub in parts {
         ret.push_str("--");
         ret.push_str(&boundary);
@@ -484,8 +493,9 @@ fn print_attachment(ret: &mut String, a: AttachmentBuilder) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::str::FromStr;
+
+    use super::*;
 
     #[test]
     fn test_new_draft() {
@@ -508,21 +518,33 @@ mod tests {
 
         let original = default.clone();
         let s = default.to_edit_string();
-        assert_eq!(s, "<!--\nDate: Sun, 16 Jun 2013 17:56:45 +0200\nFrom: \nTo: \nCc: \nBcc: \nSubject: test_update()\n-->\n\nαδφαφσαφασ");
+        assert_eq!(
+            s,
+            "<!--\nDate: Sun, 16 Jun 2013 17:56:45 +0200\nFrom: \nTo: \nCc: \nBcc: \nSubject: \
+             test_update()\n-->\n\nαδφαφσαφασ"
+        );
         assert!(!default.update(&s).unwrap());
         assert_eq!(&original, &default);
 
         default.set_wrap_header_preamble(Some(("".to_string(), "".to_string())));
         let original = default.clone();
         let s = default.to_edit_string();
-        assert_eq!(s, "Date: Sun, 16 Jun 2013 17:56:45 +0200\nFrom: \nTo: \nCc: \nBcc: \nSubject: test_update()\n\nαδφαφσαφασ");
+        assert_eq!(
+            s,
+            "Date: Sun, 16 Jun 2013 17:56:45 +0200\nFrom: \nTo: \nCc: \nBcc: \nSubject: \
+             test_update()\n\nαδφαφσαφασ"
+        );
         assert!(!default.update(&s).unwrap());
         assert_eq!(&original, &default);
 
         default.set_wrap_header_preamble(None);
         let original = default.clone();
         let s = default.to_edit_string();
-        assert_eq!(s, "Date: Sun, 16 Jun 2013 17:56:45 +0200\nFrom: \nTo: \nCc: \nBcc: \nSubject: test_update()\n\nαδφαφσαφασ");
+        assert_eq!(
+            s,
+            "Date: Sun, 16 Jun 2013 17:56:45 +0200\nFrom: \nTo: \nCc: \nBcc: \nSubject: \
+             test_update()\n\nαδφαφσαφασ"
+        );
         assert!(!default.update(&s).unwrap());
         assert_eq!(&original, &default);
 
@@ -532,7 +554,11 @@ mod tests {
         )));
         let original = default.clone();
         let s = default.to_edit_string();
-        assert_eq!(s, "{-\n\n\n===========\nDate: Sun, 16 Jun 2013 17:56:45 +0200\nFrom: \nTo: \nCc: \nBcc: \nSubject: test_update()\n</mixed>\n\nαδφαφσαφασ");
+        assert_eq!(
+            s,
+            "{-\n\n\n===========\nDate: Sun, 16 Jun 2013 17:56:45 +0200\nFrom: \nTo: \nCc: \nBcc: \
+             \nSubject: test_update()\n</mixed>\n\nαδφαφσαφασ"
+        );
         assert!(!default.update(&s).unwrap());
         assert_eq!(&original, &default);
 
@@ -543,7 +569,11 @@ mod tests {
             .set_wrap_header_preamble(Some(("<!--".to_string(), "-->".to_string())));
         let original = default.clone();
         let s = default.to_edit_string();
-        assert_eq!(s, "<!--\nDate: Sun, 16 Jun 2013 17:56:45 +0200\nFrom: \nTo: \nCc: \nBcc: \nSubject: test_update()\n-->\n\nhellohello<!--\n<!--\n<--hellohello\nhellohello-->\n-->\n-->hello\n");
+        assert_eq!(
+            s,
+            "<!--\nDate: Sun, 16 Jun 2013 17:56:45 +0200\nFrom: \nTo: \nCc: \nBcc: \nSubject: \
+             test_update()\n-->\n\nhellohello<!--\n<!--\n<--hellohello\nhellohello-->\n-->\n-->hello\n"
+        );
         assert!(!default.update(&s).unwrap());
         assert_eq!(&original, &default);
     }
@@ -572,7 +602,8 @@ mod tests {
         */
 }
 
-/// Reads file from given path, and returns an 'application/octet-stream' AttachmentBuilder object
+/// Reads file from given path, and returns an 'application/octet-stream'
+/// AttachmentBuilder object
 pub fn attachment_from_file<I>(path: &I) -> Result<AttachmentBuilder>
 where
     I: AsRef<OsStr>,

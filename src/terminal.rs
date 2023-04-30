@@ -22,8 +22,7 @@
 /*! Terminal grid cells, keys, colors, etc.
  */
 extern crate serde;
-use self::serde::de::Visitor;
-use self::serde::{de, Deserialize, Deserializer};
+use self::serde::{de, de::Visitor, Deserialize, Deserializer};
 extern crate unicode_segmentation;
 
 mod color;
@@ -36,12 +35,9 @@ mod cells;
 mod keys;
 pub mod embed;
 mod text_editing;
-pub use self::cells::*;
-pub use self::keys::*;
-pub use self::position::*;
-pub use self::text_editing::*;
-
 use std::fmt;
+
+pub use self::{cells::*, keys::*, position::*, text_editing::*};
 /*
  * CSI events we use
  */
@@ -101,12 +97,14 @@ derive_csi_sequence!(
 );
 
 derive_csi_sequence!(
-    #[doc = "`CSI Ps ; Ps ; Ps t`, where `Ps = 2 2 ; 0`  -> Save xterm icon and window title on stack."]
+    #[doc = "`CSI Ps ; Ps ; Ps t`, where `Ps = 2 2 ; 0`  -> Save xterm icon and window title on \
+             stack."]
     (SaveWindowTitleIconToStack, "22;0t")
 );
 
 derive_csi_sequence!(
-    #[doc = "Restore window title and icon from terminal's title stack. `CSI Ps ; Ps ; Ps t`, where `Ps = 2 3 ; 0`  -> Restore xterm icon and window title from stack."]
+    #[doc = "Restore window title and icon from terminal's title stack. `CSI Ps ; Ps ; Ps t`, \
+             where `Ps = 2 3 ; 0`  -> Restore xterm icon and window title from stack."]
     (RestoreWindowTitleIconFromStack, "23;0t")
 );
 
@@ -284,9 +282,10 @@ mod braille {
     }
     */
 
-    /// Iterate on 2x4 pixel blocks from a bitmap and return a unicode braille character for each
-    /// block. The iterator holds four lines of bitmaps encoded as `u16` numbers in swapped bit
-    /// order, like the `xbm` graphics format. The bitmap is split to `u16` columns.
+    /// Iterate on 2x4 pixel blocks from a bitmap and return a unicode braille
+    /// character for each block. The iterator holds four lines of bitmaps
+    /// encoded as `u16` numbers in swapped bit order, like the `xbm`
+    /// graphics format. The bitmap is split to `u16` columns.
     ///
     /// ## Usage
     /// ```no_run
@@ -339,6 +338,7 @@ mod braille {
     ///
     /// ## Explanation:
     /// For the following bitmap:
+    ///
     /// ```text
     ///   ◻◼◻◻◼◻◻◼◻◻◻◼◼◼◼◼
     ///   ◼◼◼◼◼◼◻◻◼◻◼◻◻◼◼◼
@@ -347,6 +347,7 @@ mod braille {
     /// ```
     ///
     /// Iteration on each step examines two columns:
+    ///
     /// ```text
     ///   ⇩⇩
     ///   ◻◼┆◻◻┆◼◻┆◻◼┆◻◻┆◻◼┆◼◼┆◼◼
@@ -355,7 +356,7 @@ mod braille {
     ///   ◼◻┆◼◼┆◻◼┆◼◻┆◼◼┆◼◻┆◻◻┆◻◻
     /// ```
     ///
-    ///  The first two columns are encoded as:
+    /// The first two columns are encoded as:
     ///
     /// ```text
     /// ┏━━━━━━┳━━━━┓
@@ -371,12 +372,16 @@ mod braille {
     /// ◻◼◻◼◼◻◼◻ = 0b01011010 = 0x5A
     /// 12345678
     /// ```
-    /// and braille character is bitmap + 0x2800 (Braille block's position in Unicode)
+    ///
+    /// and braille character is bitmap + 0x2800 (Braille block's position in
+    /// Unicode)
+    ///
     /// ```text
     /// 0x5A + 0x2800 = 0x285A = '⡚'
     /// ```
     ///
-    /// Why three columns? I originally wrote this for X-Face bitmaps, which are 48x48 pixels.
+    /// Why three columns? I originally wrote this for X-Face bitmaps, which are
+    /// 48x48 pixels.
     pub struct BraillePixelIter {
         columns: [Braille16bitColumn; 3],
         column_ptr: usize,
@@ -445,8 +450,9 @@ mod braille {
             bits += (0x1 & (bitmaps.3.rotate_left(*bitcolumn))) * 0x80;
             *bitcolumn += 1;
 
-            /* The Braille Patterns block spans the entire [U+2800, U+28FF] range and bits is a
-             * 16bit integer ∈ [0x00, 0xFF] so this is guaranteed to be a Unicode char */
+            /* The Braille Patterns block spans the entire [U+2800, U+28FF] range and
+             * bits is a 16bit integer ∈ [0x00, 0xFF] so this is guaranteed
+             * to be a Unicode char */
             Some(unsafe { std::char::from_u32_unchecked(bits as u32 + 0x2800) })
         }
     }
@@ -454,13 +460,12 @@ mod braille {
 
 pub use screen::StateStdout;
 pub mod screen {
-    use super::*;
+    use std::io::{BufWriter, Write};
+
     use cells::CellBuffer;
-    use std::io::BufWriter;
-    use std::io::Write;
-    use termion::raw::IntoRawMode;
-    use termion::screen::AlternateScreen;
-    use termion::{clear, cursor};
+    use termion::{clear, cursor, raw::IntoRawMode, screen::AlternateScreen};
+
+    use super::*;
     pub type StateStdout =
         termion::screen::AlternateScreen<termion::raw::RawTerminal<BufWriter<std::io::Stdout>>>;
 
@@ -476,8 +481,8 @@ pub mod screen {
     }
 
     impl Screen {
-        /// Switch back to the terminal's main screen (The command line the user sees before opening
-        /// the application)
+        /// Switch back to the terminal's main screen (The command line the user
+        /// sees before opening the application)
         pub fn switch_to_main_screen(&mut self) {
             let mouse = self.mouse;
             write!(
@@ -554,7 +559,8 @@ pub mod screen {
             }
             self.flush();
         }
-        /// On `SIGWNICH` the `State` redraws itself according to the new terminal size.
+        /// On `SIGWNICH` the `State` redraws itself according to the new
+        /// terminal size.
         pub fn update_size(&mut self) {
             let termsize = termion::terminal_size().ok();
             let termcols = termsize.map(|(w, _)| w);

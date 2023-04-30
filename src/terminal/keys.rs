@@ -19,11 +19,11 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::*;
 use crossbeam::{channel::Receiver, select};
 use serde::{Serialize, Serializer};
-use termion::event::Event as TermionEvent;
-use termion::event::Key as TermionKey;
+use termion::event::{Event as TermionEvent, Key as TermionKey};
+
+use super::*;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Key {
@@ -59,7 +59,8 @@ pub enum Key {
     Alt(char),
     /// Ctrl modified character.
     ///
-    /// Note that certain keys may not be modifiable with `ctrl`, due to limitations of terminals.
+    /// Note that certain keys may not be modifiable with `ctrl`, due to
+    /// limitations of terminals.
     Ctrl(char),
     /// Null byte.
     Null,
@@ -69,8 +70,7 @@ pub enum Key {
     Paste(String),
 }
 
-pub use termion::event::MouseButton;
-pub use termion::event::MouseEvent;
+pub use termion::event::{MouseButton, MouseEvent};
 
 impl fmt::Display for Key {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -153,18 +153,21 @@ pub enum InputCommand {
     Kill,
 }
 
-use nix::poll::{poll, PollFd, PollFlags};
 use std::os::unix::io::{AsRawFd, RawFd};
+
+use nix::poll::{poll, PollFd, PollFlags};
 use termion::input::TermReadEventsAndRaw;
 /*
- * If we fork (for example start $EDITOR) we want the input-thread to stop reading from stdin. The
- * best way I came up with right now is to send a signal to the thread that is read in the first
- * input in stdin after the fork, and then the thread kills itself. The parent process spawns a new
+ * If we fork (for example start $EDITOR) we want the input-thread to stop
+ * reading from stdin. The best way I came up with right now is to send a
+ * signal to the thread that is read in the first input in stdin after the
+ * fork, and then the thread kills itself. The parent process spawns a new
  * input-thread when the child returns.
  *
  * The main loop uses try_wait_on_child() to check if child has exited.
  */
-/// The thread function that listens for user input and forwards it to the main event loop.
+/// The thread function that listens for user input and forwards it to the main
+/// event loop.
 pub fn get_events(
     mut closure: impl FnMut((Key, Vec<u8>)),
     rx: &Receiver<InputCommand>,
@@ -287,8 +290,8 @@ impl<'de> Deserialize<'de> for Key {
                             }
                         }
                         Err(de::Error::custom(format!(
-                                    "`{}` should be a number 1 <= n <= 12 instead.",
-                                    &s[1..]
+                            "`{}` should be a number 1 <= n <= 12 instead.",
+                            &s[1..]
                         )))
                     }
                     s if s.starts_with("M-") && s.len() == 3 => {
@@ -299,8 +302,8 @@ impl<'de> Deserialize<'de> for Key {
                         }
 
                         Err(de::Error::custom(format!(
-                                    "`{}` should be a lowercase and alphanumeric character instead.",
-                                    &s[2..]
+                            "`{}` should be a lowercase and alphanumeric character instead.",
+                            &s[2..]
                         )))
                     }
                     s if s.starts_with("C-") && s.len() == 3 => {
@@ -310,13 +313,14 @@ impl<'de> Deserialize<'de> for Key {
                             return Ok(Key::Ctrl(c));
                         }
                         Err(de::Error::custom(format!(
-                                    "`{}` should be a lowercase and alphanumeric character instead.",
-                                    &s[2..]
+                            "`{}` should be a lowercase and alphanumeric character instead.",
+                            &s[2..]
                         )))
                     }
                     _ => Err(de::Error::custom(format!(
-                                "Cannot derive shortcut from `{}`. Please consult the manual for valid key inputs.",
-                                value
+                        "Cannot derive shortcut from `{}`. Please consult the manual for valid \
+                         key inputs.",
+                        value
                     ))),
                 }
             }

@@ -19,12 +19,14 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::*;
 use melib::text_processing::LineBreakText;
 
+use super::*;
+
 /// A pager for text.
-/// `Pager` holds its own content in its own `CellBuffer` and when `draw` is called, it draws the
-/// current view of the text. It is responsible for scrolling etc.
+/// `Pager` holds its own content in its own `CellBuffer` and when `draw` is
+/// called, it draws the current view of the text. It is responsible for
+/// scrolling etc.
 #[derive(Default, Debug, Clone)]
 pub struct Pager {
     text: String,
@@ -48,7 +50,7 @@ pub struct Pager {
 
 impl fmt::Display for Pager {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", "pager")
+        write!(f, "pager")
     }
 }
 
@@ -171,10 +173,12 @@ impl Pager {
 
     pub fn filter(&mut self, cmd: &str) {
         let _f = |bin: &str, text: &str| -> Result<CellBuffer> {
-            use std::io::Write;
-            use std::process::{Command, Stdio};
+            use std::{
+                io::Write,
+                process::{Command, Stdio},
+            };
             let mut filter_child = Command::new("sh")
-                .args(&["-c", bin])
+                .args(["-c", bin])
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
                 .spawn()
@@ -708,8 +712,10 @@ impl Component for Pager {
                 self.dirty = true;
             }
             UIEvent::Action(View(Pipe(ref bin, ref args))) => {
-                use std::io::Write;
-                use std::process::{Command, Stdio};
+                use std::{
+                    io::Write,
+                    process::{Command, Stdio},
+                };
                 let mut command_obj = match Command::new(bin)
                     .args(args.as_slice())
                     .stdin(Stdio::piped())

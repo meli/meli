@@ -21,14 +21,14 @@
 
 //! # NNTP backend / client
 //!
-//! Implements an NNTP client as specified by [RFC 3977: Network News Transfer Protocol
-//! (NNTP)](https://datatracker.ietf.org/doc/html/rfc3977). Also implements [RFC 6048: Network News
+//! Implements an NNTP client as specified by [RFC 3977: Network News Transfer
+//! Protocol (NNTP)](https://datatracker.ietf.org/doc/html/rfc3977). Also implements [RFC 6048: Network News
 //! Transfer Protocol (NNTP) Additions to LIST
 //! Command](https://datatracker.ietf.org/doc/html/rfc6048).
 
-use crate::get_conf_val;
-use crate::get_path_hash;
 use smallvec::SmallVec;
+
+use crate::{get_conf_val, get_path_hash};
 #[macro_use]
 mod protocol_parser;
 pub use protocol_parser::*;
@@ -37,21 +37,26 @@ pub use mailbox::*;
 mod operations;
 pub use operations::*;
 mod connection;
-pub use connection::*;
+use std::{
+    collections::{hash_map::DefaultHasher, BTreeSet, HashMap, HashSet},
+    hash::Hasher,
+    pin::Pin,
+    str::FromStr,
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
 
-use crate::conf::AccountSettings;
-use crate::connections::timeout;
-use crate::email::*;
-use crate::error::{Error, Result, ResultIntoError};
-use crate::{backends::*, Collection};
-use futures::lock::Mutex as FutureMutex;
-use futures::stream::Stream;
-use std::collections::{hash_map::DefaultHasher, BTreeSet, HashMap, HashSet};
-use std::hash::Hasher;
-use std::pin::Pin;
-use std::str::FromStr;
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+pub use connection::*;
+use futures::{lock::Mutex as FutureMutex, stream::Stream};
+
+use crate::{
+    backends::*,
+    conf::AccountSettings,
+    connections::timeout,
+    email::*,
+    error::{Error, Result, ResultIntoError},
+    Collection,
+};
 pub type UID = usize;
 
 macro_rules! get_conf_val {
@@ -253,9 +258,21 @@ impl MailBackend for NntpType {
         let uid_store = self.uid_store.clone();
         let connection = self.connection.clone();
         Ok(Box::pin(async move {
-            /* To get updates, either issue NEWNEWS if it's supported by the server, and fallback
-             * to OVER otherwise */
-            let mbox: NntpMailbox = uid_store.mailboxes.lock().await.get(&mailbox_hash).map(std::clone::Clone::clone).ok_or_else(|| Error::new(format!("Mailbox with hash {} not found in NNTP connection, this could possibly be a bug or it was deleted.", mailbox_hash)))?;
+            /* To get updates, either issue NEWNEWS if it's supported by the server, and
+             * fallback to OVER otherwise */
+            let mbox: NntpMailbox = uid_store
+                .mailboxes
+                .lock()
+                .await
+                .get(&mailbox_hash)
+                .map(std::clone::Clone::clone)
+                .ok_or_else(|| {
+                    Error::new(format!(
+                        "Mailbox with hash {} not found in NNTP connection, this could possibly \
+                         be a bug or it was deleted.",
+                        mailbox_hash
+                    ))
+                })?;
             let latest_article: Option<crate::UnixTimestamp> = *mbox.latest_article.lock().unwrap();
             let (over_msgid_support, newnews_support): (bool, bool) = {
                 let caps = uid_store.capabilities.lock().unwrap();
@@ -374,15 +391,15 @@ impl MailBackend for NntpType {
     }
 
     fn operation(&self, env_hash: EnvelopeHash) -> Result<Box<dyn BackendOp>> {
-        let (uid, mailbox_hash) = if let Some(v) =
-            self.uid_store.hash_index.lock().unwrap().get(&env_hash)
-        {
-            *v
-        } else {
-            return Err(Error::new(
-                    "Message not found in local cache, it might have been deleted before you requested it."
+        let (uid, mailbox_hash) =
+            if let Some(v) = self.uid_store.hash_index.lock().unwrap().get(&env_hash) {
+                *v
+            } else {
+                return Err(Error::new(
+                    "Message not found in local cache, it might have been deleted before you \
+                     requested it.",
                 ));
-        };
+            };
         Ok(Box::new(NntpOp::new(
             uid,
             mailbox_hash,
@@ -671,34 +688,35 @@ impl NntpType {
     pub fn validate_config(s: &mut AccountSettings) -> Result<()> {
         let mut keys: HashSet<&'static str> = Default::default();
         macro_rules! get_conf_val {
-    ($s:ident[$var:literal]) => {{
-        keys.insert($var);
-        $s.extra.remove($var).ok_or_else(|| {
-            Error::new(format!(
-                "Configuration error ({}): NNTP connection requires the field `{}` set",
-                $s.name.as_str(),
-                $var
-            ))
-        })
-    }};
-    ($s:ident[$var:literal], $default:expr) => {{
-        keys.insert($var);
-        $s.extra
-            .remove($var)
-            .map(|v| {
-                <_>::from_str(&v).map_err(|e| {
+            ($s:ident[$var:literal]) => {{
+                keys.insert($var);
+                $s.extra.remove($var).ok_or_else(|| {
                     Error::new(format!(
-                        "Configuration error ({}) NNTP: Invalid value for field `{}`: {}\n{}",
+                        "Configuration error ({}): NNTP connection requires the field `{}` set",
                         $s.name.as_str(),
-                        $var,
-                        v,
-                        e
+                        $var
                     ))
                 })
-            })
-            .unwrap_or_else(|| Ok($default))
-    }};
-}
+            }};
+            ($s:ident[$var:literal], $default:expr) => {{
+                keys.insert($var);
+                $s.extra
+                    .remove($var)
+                    .map(|v| {
+                        <_>::from_str(&v).map_err(|e| {
+                            Error::new(format!(
+                                "Configuration error ({}) NNTP: Invalid value for field `{}`: \
+                                 {}\n{}",
+                                $s.name.as_str(),
+                                $var,
+                                v,
+                                e
+                            ))
+                        })
+                    })
+                    .unwrap_or_else(|| Ok($default))
+            }};
+        }
         get_conf_val!(s["require_auth"], false)?;
         get_conf_val!(s["server_hostname"])?;
         get_conf_val!(s["server_username"], String::new())?;
@@ -706,7 +724,8 @@ impl NntpType {
             get_conf_val!(s["server_password"], String::new())?;
         } else if s.extra.contains_key("server_password") {
             return Err(Error::new(format!(
-                "Configuration error ({}): both server_password and server_password_command are set, cannot choose",
+                "Configuration error ({}): both server_password and server_password_command are \
+                 set, cannot choose",
                 s.name.as_str(),
             )));
         }
@@ -716,7 +735,8 @@ impl NntpType {
         let use_starttls = get_conf_val!(s["use_starttls"], server_port != 563)?;
         if !use_tls && use_starttls {
             return Err(Error::new(format!(
-                "Configuration error ({}): incompatible use_tls and use_starttls values: use_tls = false, use_starttls = true",
+                "Configuration error ({}): incompatible use_tls and use_starttls values: use_tls \
+                 = false, use_starttls = true",
                 s.name.as_str(),
             )));
         }
@@ -725,7 +745,8 @@ impl NntpType {
         #[cfg(not(feature = "deflate_compression"))]
         if s.extra.contains_key("use_deflate") {
             return Err(Error::new(format!(
-                "Configuration error ({}): setting `use_deflate` is set but this version of meli isn't compiled with DEFLATE support.",
+                "Configuration error ({}): setting `use_deflate` is set but this version of meli \
+                 isn't compiled with DEFLATE support.",
                 s.name.as_str(),
             )));
         }
@@ -738,8 +759,10 @@ impl NntpType {
         let diff = extra_keys.difference(&keys).collect::<Vec<&&str>>();
         if !diff.is_empty() {
             return Err(Error::new(format!(
-                "Configuration error ({}) NNTP: the following flags are set but are not recognized: {:?}.",
-                s.name.as_str(), diff
+                "Configuration error ({}) NNTP: the following flags are set but are not \
+                 recognized: {:?}.",
+                s.name.as_str(),
+                diff
             )));
         }
         Ok(())

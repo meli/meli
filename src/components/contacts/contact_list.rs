@@ -18,12 +18,12 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
+use std::cmp;
+
+use melib::{backends::AccountHash, CardId};
+
 use super::*;
 use crate::melib::text_processing::TextProcessing;
-use melib::backends::AccountHash;
-use melib::CardId;
-
-use std::cmp;
 
 #[derive(Debug, PartialEq, Eq)]
 enum ViewMode {
@@ -69,7 +69,7 @@ pub struct ContactList {
 
 impl fmt::Display for ContactList {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", "contact list")
+        write!(f, "contact list")
     }
 }
 
@@ -436,8 +436,8 @@ impl ContactList {
                 )));
         }
 
-        /* If cursor position has changed, remove the highlight from the previous position and
-         * apply it in the new one. */
+        /* If cursor position has changed, remove the highlight from the previous
+         * position and apply it in the new one. */
         if self.cursor_pos != self.new_cursor_pos && prev_page_no == page_no {
             let old_cursor_pos = self.cursor_pos;
             self.cursor_pos = self.new_cursor_pos;
@@ -464,7 +464,7 @@ impl ContactList {
         let width = width!(area);
         self.data_columns.widths = Default::default();
         self.data_columns.widths[0] = self.data_columns.columns[0].size().0; /* name */
-        self.data_columns.widths[1] = self.data_columns.columns[1].size().0; /* email*/
+        self.data_columns.widths[1] = self.data_columns.columns[1].size().0; /* email */
         self.data_columns.widths[2] = self.data_columns.columns[2].size().0; /* url */
         self.data_columns.widths[3] = self.data_columns.columns[3].size().0; /* source */
 
@@ -783,7 +783,7 @@ impl Component for ContactList {
                         .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
                     return true;
                 }
-                UIEvent::Input(Key::Char(c)) if ('0'..='9').contains(&c) => {
+                UIEvent::Input(Key::Char(c)) if c.is_ascii_digit() => {
                     self.cmd_buf.push(c);
                     context
                         .replies

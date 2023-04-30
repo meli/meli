@@ -31,36 +31,44 @@
 //!
 //! `mbox` describes a family of incompatible legacy formats.
 //!
-//! "All of the 'mbox' formats store all of the messages in the mailbox in a single file. Delivery appends new messages to the end of the file." [^0]
+//! "All of the 'mbox' formats store all of the messages in the mailbox in a
+//! single file. Delivery appends new messages to the end of the file." [^0]
 //!
-//! "Each message is preceded by a From_ line and followed by a blank line. A From_ line is a line that begins with the five characters 'F', 'r', 'o', 'm', and ' '." [^0]
+//! "Each message is preceded by a From_ line and followed by a blank line. A
+//! From_ line is a line that begins with the five characters 'F', 'r', 'o',
+//! 'm', and ' '." [^0]
 //!
 //! ## `From ` / postmark line
 //!
-//! "An mbox is a text file containing an arbitrary number of e-mail messages. Each message
-//! consists of a postmark, followed by an e-mail message formatted according to RFC822, RFC2822.
-//! The file format is line-oriented. Lines are separated by line feed characters (ASCII 10).
+//! "An mbox is a text file containing an arbitrary number of e-mail messages.
+//! Each message consists of a postmark, followed by an e-mail message formatted
+//! according to RFC822, RFC2822. The file format is line-oriented. Lines are
+//! separated by line feed characters (ASCII 10).
 //!
-//! "A postmark line consists of the four characters 'From', followed by a space character,
-//! followed by the message's envelope sender address, followed by whitespace, and followed by a
-//! time stamp. This line is often called From_ line.
+//! "A postmark line consists of the four characters 'From', followed by a space
+//! character, followed by the message's envelope sender address, followed by
+//! whitespace, and followed by a time stamp. This line is often called From_
+//! line.
 //!
-//! "The sender address is expected to be addr-spec as defined in RFC2822 3.4.1. The date is expected
-//! to be date-time as output by asctime(3). For compatibility reasons with legacy software,
-//! two-digit years greater than or equal to 70 should be interpreted as the years 1970+, while
-//! two-digit years less than 70 should be interpreted as the years 2000-2069. Software reading
-//! files in this format should also be prepared to accept non-numeric timezone information such as
-//! 'CET DST' for Central European Time, daylight saving time.
+//! "The sender address is expected to be addr-spec as defined in RFC2822 3.4.1.
+//! The date is expected to be date-time as output by asctime(3). For
+//! compatibility reasons with legacy software, two-digit years greater than or
+//! equal to 70 should be interpreted as the years 1970+, while two-digit years
+//! less than 70 should be interpreted as the years 2000-2069. Software reading
+//! files in this format should also be prepared to accept non-numeric timezone
+//! information such as 'CET DST' for Central European Time, daylight saving
+//! time.
 //!
 //! "Example:
 //!
 //!```text
-//!From example@example.com Fri Jun 23 02:56:55 2000
-//!```
+//! From example@example.com Fri Jun 23 02:56:55 2000
+//! ```
 //!
-//! "In order to avoid misinterpretation of lines in message bodies which begin with the four
-//! characters 'From', followed by a space character, the mail delivery agent must quote
-//! any occurrence of 'From ' at the start of a body line." [^2]
+//! "In order to avoid misinterpretation of lines in message bodies which begin
+//! with the four characters 'From', followed by a space character, the mail
+//! delivery agent must quote any occurrence of 'From ' at the start of a body
+//! line." [^2]
 //!
 //! ## Metadata
 //!
@@ -77,7 +85,8 @@
 //! # use std::collections::HashMap;
 //! # use std::sync::{Arc, Mutex};
 //! let file_contents = vec![]; // Replace with actual mbox file contents
-//! let index: Arc<Mutex<HashMap<EnvelopeHash, (Offset, Length)>>> = Arc::new(Mutex::new(HashMap::default()));
+//! let index: Arc<Mutex<HashMap<EnvelopeHash, (Offset, Length)>>> =
+//!     Arc::new(Mutex::new(HashMap::default()));
 //! let mut message_iter = MessageIterator {
 //!     index: index.clone(),
 //!     input: &file_contents.as_slice(),
@@ -100,9 +109,9 @@
 //! format.append(
 //!     &mut file,
 //!     mbox_1,
-//!     None, // Envelope From
+//!     None,                         // Envelope From
 //!     Some(melib::datetime::now()), // Delivered date
-//!     Default::default(), // Flags and tags
+//!     Default::default(),           // Flags and tags
 //!     MboxMetadata::None,
 //!     true,
 //!     false,
@@ -121,29 +130,37 @@
 //! # Ok::<(), melib::Error>(())
 //! ```
 
-use crate::backends::*;
-use crate::collection::Collection;
-use crate::conf::AccountSettings;
-use crate::email::parser::BytesExt;
-use crate::email::*;
-use crate::error::{Error, ErrorKind, Result};
-use crate::get_path_hash;
-use crate::shellexpand::ShellExpandTrait;
-use nom::bytes::complete::tag;
-use nom::character::complete::digit1;
-use nom::combinator::map_res;
-use nom::{self, error::Error as NomError, error::ErrorKind as NomErrorKind, IResult};
+use nom::{
+    self,
+    bytes::complete::tag,
+    character::complete::digit1,
+    combinator::map_res,
+    error::{Error as NomError, ErrorKind as NomErrorKind},
+    IResult,
+};
+
+use crate::{
+    backends::*,
+    collection::Collection,
+    conf::AccountSettings,
+    email::{parser::BytesExt, *},
+    error::{Error, ErrorKind, Result},
+    get_path_hash,
+    shellexpand::ShellExpandTrait,
+};
 
 extern crate notify;
+use std::{
+    collections::hash_map::HashMap,
+    fs::File,
+    io::{BufReader, Read},
+    os::unix::io::AsRawFd,
+    path::{Path, PathBuf},
+    str::FromStr,
+    sync::{mpsc::channel, Arc, Mutex, RwLock},
+};
+
 use self::notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
-use std::collections::hash_map::HashMap;
-use std::fs::File;
-use std::io::{BufReader, Read};
-use std::os::unix::io::AsRawFd;
-use std::path::{Path, PathBuf};
-use std::str::FromStr;
-use std::sync::mpsc::channel;
-use std::sync::{Arc, Mutex, RwLock};
 
 pub mod write;
 
@@ -163,7 +180,8 @@ fn get_rw_lock_blocking(f: &File, path: &Path) -> Result<()> {
         l_start: 0,
         l_len: 0, /* "Specifying 0 for l_len has the special meaning: lock all bytes starting at the location
                   specified by l_whence and l_start through to the end of file, no matter how large the file grows." */
-        l_pid: 0, /* "By contrast with traditional record locks, the l_pid field of that structure must be set to zero when using the commands described below." */
+        l_pid: 0, /* "By contrast with traditional record locks, the l_pid field of that
+                   * structure must be set to zero when using the commands described below." */
         #[cfg(target_os = "freebsd")]
         l_sysid: 0,
     };
@@ -368,9 +386,12 @@ impl BackendOp for MboxOp {
 
 #[derive(Debug, Clone, Copy)]
 pub enum MboxMetadata {
-    /// Dovecot uses C-Client (ie. UW-IMAP, Pine) compatible headers in mbox messages to store me
-    /// - X-IMAPbase: Contains UIDVALIDITY, last used UID and list of used keywords
-    /// - X-IMAP: Same as X-IMAPbase but also specifies that the message is a “pseudo message”
+    /// Dovecot uses C-Client (ie. UW-IMAP, Pine) compatible headers in mbox
+    /// messages to store me
+    /// - X-IMAPbase: Contains UIDVALIDITY, last used UID and list of used
+    ///   keywords
+    /// - X-IMAP: Same as X-IMAPbase but also specifies that the message is a
+    ///   “pseudo message”
     /// - X-UID: Message’s allocated UID
     /// - Status: R (Seen) and O (non-Recent) flags
     /// - X-Status: A (Answered), F (Flagged), T (Draft) and D (Deleted) flags
@@ -380,8 +401,8 @@ pub enum MboxMetadata {
     None,
 }
 
-/// Choose between "mboxo", "mboxrd", "mboxcl", "mboxcl2". For new mailboxes, prefer "mboxcl2"
-/// which does not alter the mail body.
+/// Choose between "mboxo", "mboxrd", "mboxcl", "mboxcl2". For new mailboxes,
+/// prefer "mboxcl2" which does not alter the mail body.
 #[derive(Debug, Clone, Copy)]
 pub enum MboxFormat {
     MboxO,
@@ -1406,7 +1427,8 @@ impl MboxType {
                 );
             } else {
                 return Err(Error::new(format!(
-                    "mbox mailbox configuration entry \"{}\" should have a \"path\" value set pointing to an mbox file.",
+                    "mbox mailbox configuration entry \"{}\" should have a \"path\" value set \
+                     pointing to an mbox file.",
                     k
                 )));
             }

@@ -24,19 +24,24 @@ mod backend;
 pub use self::backend::*;
 
 mod stream;
+use std::{
+    collections::hash_map::DefaultHasher,
+    fs,
+    hash::{Hash, Hasher},
+    io::{BufReader, Read},
+    path::{Path, PathBuf},
+    sync::{Arc, Mutex},
+};
+
+use futures::stream::Stream;
 pub use stream::*;
 
-use crate::backends::*;
-use crate::email::Flag;
-use crate::error::{Error, Result};
-use crate::shellexpand::ShellExpandTrait;
-use futures::stream::Stream;
-use std::collections::hash_map::DefaultHasher;
-use std::fs;
-use std::hash::{Hash, Hasher};
-use std::io::{BufReader, Read};
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use crate::{
+    backends::*,
+    email::Flag,
+    error::{Error, Result},
+    shellexpand::ShellExpandTrait,
+};
 
 /// `BackendOp` implementor for Maildir
 #[derive(Debug)]
@@ -96,7 +101,7 @@ impl<'a> BackendOp for MaildirOp {
             let file = std::fs::OpenOptions::new()
                 .read(true)
                 .write(false)
-                .open(&self.path()?)?;
+                .open(self.path()?)?;
             let mut buf_reader = BufReader::new(file);
             let mut contents = Vec::new();
             buf_reader.read_to_end(&mut contents)?;
@@ -141,8 +146,8 @@ impl MaildirMailbox {
         let mut h = DefaultHasher::new();
         pathbuf.hash(&mut h);
 
-        /* Check if mailbox path (Eg `INBOX/Lists/luddites`) is included in the subscribed
-         * mailboxes in user configuration */
+        /* Check if mailbox path (Eg `INBOX/Lists/luddites`) is included in the
+         * subscribed mailboxes in user configuration */
         let fname = pathbuf
             .strip_prefix(
                 PathBuf::from(&settings.root_mailbox)
@@ -279,7 +284,11 @@ impl MaildirPathTrait for Path {
                 'S' => flag |= Flag::SEEN,
                 'T' => flag |= Flag::TRASHED,
                 _ => {
-                    debug!("DEBUG: in MaildirPathTrait::flags(), encountered unknown flag marker {:?}, path is {}", f, path);
+                    debug!(
+                        "DEBUG: in MaildirPathTrait::flags(), encountered unknown flag marker \
+                         {:?}, path is {}",
+                        f, path
+                    );
                 }
             }
         }

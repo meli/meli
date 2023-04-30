@@ -24,23 +24,25 @@
  colors and attributes.
 */
 
-use super::{position::*, Color};
-use crate::state::Context;
-use crate::ThemeAttribute;
-use melib::text_processing::wcwidth;
+use std::{
+    collections::HashMap,
+    convert::From,
+    fmt,
+    ops::{Deref, DerefMut, Index, IndexMut},
+};
 
+use melib::text_processing::wcwidth;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use smallvec::SmallVec;
-use std::collections::HashMap;
-use std::convert::From;
-use std::fmt;
-use std::ops::{Deref, DerefMut, Index, IndexMut};
 
-/// In a scroll region up and down cursor movements shift the region vertically. The new lines are
-/// empty.
+use super::{position::*, Color};
+use crate::{state::Context, ThemeAttribute};
+
+/// In a scroll region up and down cursor movements shift the region vertically.
+/// The new lines are empty.
 ///
-/// See `CellBuffer::scroll_up` and `CellBuffer::scroll_down` for an explanation of how `xterm`
-/// scrolling works.
+/// See `CellBuffer::scroll_up` and `CellBuffer::scroll_down` for an explanation
+/// of how `xterm` scrolling works.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ScrollRegion {
     pub top: usize,
@@ -51,11 +53,12 @@ pub struct ScrollRegion {
 
 /// An array of `Cell`s that represents a terminal display.
 ///
-/// A `CellBuffer` is a two-dimensional array of `Cell`s, each pair of indices correspond to a
-/// single point on the underlying terminal.
+/// A `CellBuffer` is a two-dimensional array of `Cell`s, each pair of indices
+/// correspond to a single point on the underlying terminal.
 ///
-/// The first index, `Cellbuffer[y]`, corresponds to a row, and thus the y-axis. The second
-/// index, `Cellbuffer[y][x]`, corresponds to a column within a row and thus the x-axis.
+/// The first index, `Cellbuffer[y]`, corresponds to a row, and thus the y-axis.
+/// The second index, `Cellbuffer[y][x]`, corresponds to a column within a row
+/// and thus the x-axis.
 #[derive(Clone, PartialEq, Eq)]
 pub struct CellBuffer {
     pub cols: usize,
@@ -97,8 +100,8 @@ impl CellBuffer {
         self.cols = new_cols;
     }
 
-    /// Constructs a new `CellBuffer` with the given number of columns and rows, using the given
-    /// `cell` as a blank.
+    /// Constructs a new `CellBuffer` with the given number of columns and rows,
+    /// using the given `cell` as a blank.
     pub fn new(cols: usize, rows: usize, default_cell: Cell) -> CellBuffer {
         CellBuffer {
             cols,
@@ -146,8 +149,8 @@ impl CellBuffer {
         self.growable = new_val;
     }
 
-    /// Resizes `CellBuffer` to the given number of rows and columns, using the given `Cell` as
-    /// a blank.
+    /// Resizes `CellBuffer` to the given number of rows and columns, using the
+    /// given `Cell` as a blank.
     #[must_use]
     pub fn resize(&mut self, newcols: usize, newrows: usize, blank: Option<Cell>) -> bool {
         let newlen = newcols * newrows;
@@ -196,8 +199,8 @@ impl CellBuffer {
         }
     }
 
-    /// Returns a reference to the `Cell` at the given coordinates, or `None` if the index is out of
-    /// bounds.
+    /// Returns a reference to the `Cell` at the given coordinates, or `None` if
+    /// the index is out of bounds.
     pub fn get(&self, x: usize, y: usize) -> Option<&Cell> {
         match self.pos_to_index(x, y) {
             Some(i) => self.cellvec().get(i),
@@ -205,8 +208,8 @@ impl CellBuffer {
         }
     }
 
-    /// Returns a mutable reference to the `Cell` at the given coordinates, or `None` if the index
-    /// is out of bounds.
+    /// Returns a mutable reference to the `Cell` at the given coordinates, or
+    /// `None` if the index is out of bounds.
     pub fn get_mut(&mut self, x: usize, y: usize) -> Option<&mut Cell> {
         match self.pos_to_index(x, y) {
             Some(i) => self.cellvec_mut().get_mut(i),
@@ -271,7 +274,6 @@ impl CellBuffer {
     ///  | 555555555555 |            | 666666666666 |
     ///  | 666666666666 |            |              |
     ///  ```
-    ///
     pub fn scroll_up(&mut self, scroll_region: &ScrollRegion, top: usize, offset: usize) {
         //debug!(
         //    "scroll_up scroll_region {:?}, top: {} offset {}",
@@ -334,7 +336,6 @@ impl CellBuffer {
     ///  | 555555555555 |            | 444444444444 |
     ///  | 666666666666 |            | 555555555555 |
     ///  ```
-    ///
     pub fn scroll_down(&mut self, scroll_region: &ScrollRegion, top: usize, offset: usize) {
         //debug!(
         //    "scroll_down scroll_region {:?}, top: {} offset {}",
@@ -409,8 +410,10 @@ impl CellBuffer {
     }
 
     pub fn insert_tag(&mut self, tag: FormatTag) -> u64 {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
+        use std::{
+            collections::hash_map::DefaultHasher,
+            hash::{Hash, Hasher},
+        };
 
         let mut hasher = DefaultHasher::new();
         tag.hash(&mut hasher);
@@ -463,7 +466,8 @@ impl IndexMut<Pos> for CellBuffer {
 }
 
 impl Default for CellBuffer {
-    /// Constructs a new `CellBuffer` with a size of `(0, 0)`, using the default `Cell` as a blank.
+    /// Constructs a new `CellBuffer` with a size of `(0, 0)`, using the default
+    /// `Cell` as a blank.
     fn default() -> CellBuffer {
         CellBuffer::new(0, 0, Cell::default())
     }
@@ -491,8 +495,8 @@ impl fmt::Display for CellBuffer {
 pub struct Cell {
     ch: char,
 
-    /// Set a `Cell` as empty when a previous cell spans multiple columns and it would
-    /// "overflow" to this cell.
+    /// Set a `Cell` as empty when a previous cell spans multiple columns and it
+    /// would "overflow" to this cell.
     empty: bool,
     fg: Color,
     bg: Color,
@@ -508,7 +512,7 @@ impl Cell {
     /// # Examples
     ///
     /// ```no_run
-    /// use meli::{Color, Attr, Cell};
+    /// use meli::{Attr, Cell, Color};
     ///
     /// let cell = Cell::new('x', Color::Default, Color::Green, Attr::DEFAULT);
     /// assert_eq!(cell.ch(), 'x');
@@ -534,7 +538,7 @@ impl Cell {
     /// # Examples
     ///
     /// ```no_run
-    /// use meli::{Color, Attr, Cell};
+    /// use meli::{Attr, Cell, Color};
     ///
     /// let mut cell = Cell::with_char('x');
     /// assert_eq!(cell.ch(), 'x');
@@ -551,7 +555,7 @@ impl Cell {
     /// # Examples
     ///
     /// ```no_run
-    /// use meli::{Color, Attr, Cell};
+    /// use meli::{Attr, Cell, Color};
     ///
     /// let mut cell = Cell::with_style(Color::Default, Color::Red, Attr::BOLD);
     /// assert_eq!(cell.fg(), Color::Default);
@@ -603,7 +607,7 @@ impl Cell {
     /// # Examples
     ///
     /// ```no_run
-    /// use meli::{Color, Attr, Cell};
+    /// use meli::{Attr, Cell, Color};
     ///
     /// let mut cell = Cell::with_style(Color::Blue, Color::Default, Attr::DEFAULT);
     /// assert_eq!(cell.fg(), Color::Blue);
@@ -617,7 +621,7 @@ impl Cell {
     /// # Examples
     ///
     /// ```no_run
-    /// use meli::{Color, Cell};
+    /// use meli::{Cell, Color};
     ///
     /// let mut cell = Cell::default();
     /// assert_eq!(cell.fg(), Color::Default);
@@ -637,7 +641,7 @@ impl Cell {
     /// # Examples
     ///
     /// ```no_run
-    /// use meli::{Attr, Color, Cell};
+    /// use meli::{Attr, Cell, Color};
     ///
     /// let mut cell = Cell::with_style(Color::Default, Color::Green, Attr::DEFAULT);
     /// assert_eq!(cell.bg(), Color::Green);
@@ -677,8 +681,8 @@ impl Cell {
         self
     }
 
-    /// Set a `Cell` as empty when a previous cell spans multiple columns and it would
-    /// "overflow" to this cell.
+    /// Set a `Cell` as empty when a previous cell spans multiple columns and it
+    /// would "overflow" to this cell.
     pub fn empty(&self) -> bool {
         self.empty
     }
@@ -688,22 +692,23 @@ impl Cell {
         self
     }
 
-    /// Sets `keep_fg` field. If true, the foreground color will not be altered if attempted so
-    /// until the character content of the cell is changed.
+    /// Sets `keep_fg` field. If true, the foreground color will not be altered
+    /// if attempted so until the character content of the cell is changed.
     pub fn set_keep_fg(&mut self, new_val: bool) -> &mut Cell {
         self.keep_fg = new_val;
         self
     }
 
-    /// Sets `keep_bg` field. If true, the background color will not be altered if attempted so
-    /// until the character content of the cell is changed.
+    /// Sets `keep_bg` field. If true, the background color will not be altered
+    /// if attempted so until the character content of the cell is changed.
     pub fn set_keep_bg(&mut self, new_val: bool) -> &mut Cell {
         self.keep_bg = new_val;
         self
     }
 
-    /// Sets `keep_attrs` field. If true, the text attributes will not be altered if attempted so
-    /// until the character content of the cell is changed.
+    /// Sets `keep_attrs` field. If true, the text attributes will not be
+    /// altered if attempted so until the character content of the cell is
+    /// changed.
     pub fn set_keep_attrs(&mut self, new_val: bool) -> &mut Cell {
         self.keep_attrs = new_val;
         self
@@ -716,7 +721,7 @@ impl Default for Cell {
     /// # Examples
     ///
     /// ```no_run
-    /// use meli::{Color, Cell};
+    /// use meli::{Cell, Color};
     ///
     /// let mut cell = Cell::default();
     /// assert_eq!(cell.ch(), ' ');
@@ -1125,7 +1130,8 @@ macro_rules! inspect_bounds {
     };
 }
 
-/// Write an `&str` to a `CellBuffer` in a specified `Area` with the passed colors.
+/// Write an `&str` to a `CellBuffer` in a specified `Area` with the passed
+/// colors.
 pub fn write_string_to_grid(
     s: &str,
     grid: &mut CellBuffer,
@@ -1225,7 +1231,8 @@ pub fn write_string_to_grid(
     (x, y)
 }
 
-/// Completely clear an `Area` with an empty char and the terminal's default colors.
+/// Completely clear an `Area` with an empty char and the terminal's default
+/// colors.
 pub fn clear_area(grid: &mut CellBuffer, area: Area, attributes: crate::conf::ThemeAttribute) {
     if !is_valid_area!(area) {
         return;
@@ -1241,17 +1248,14 @@ pub fn clear_area(grid: &mut CellBuffer, area: Area, attributes: crate::conf::Th
     }
 }
 
-/// Use `RowIterator` to iterate the cells of a row without the need to do any bounds checking;
-/// the iterator will simply return `None` when it reaches the end of the row.
-/// `RowIterator` can be created via the `CellBuffer::row_iter` method and can be returned by
-/// `BoundsIterator` which iterates each row.
+/// Use `RowIterator` to iterate the cells of a row without the need to do any
+/// bounds checking; the iterator will simply return `None` when it reaches the
+/// end of the row. `RowIterator` can be created via the `CellBuffer::row_iter`
+/// method and can be returned by `BoundsIterator` which iterates each row.
 /// ```no_run
 /// # let mut grid = meli::CellBuffer::new(1, 1, meli::Cell::default());
 /// # let x = 0;
-/// for c in grid.row_iter(
-///     x..(x + 11),
-///     0,
-/// ) {
+/// for c in grid.row_iter(x..(x + 11), 0) {
 ///     grid[c].set_ch('w');
 /// }
 /// ```
@@ -1268,8 +1272,8 @@ pub struct RowIterator {
 /// # let area = ((0, 0), (1, 1));
 /// /* Visit each `Cell` in `area`. */
 /// for row in grid.bounds_iter(area) {
-///    for c in row {
-///     grid[c].set_ch('w');
+///     for c in row {
+///         grid[c].set_ch('w');
 ///     }
 /// }
 /// ```

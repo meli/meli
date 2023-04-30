@@ -21,22 +21,26 @@
 
 //! Application themes.
 //!
-//! * An attribute is a triple of foreground color, background color and terminal attribute `ThemeValue`s.
-//! * A `ThemeValue<T>` is either an actual value or the key name of another value to which it depends. The value is either `Color` or `Attr`.
+//! * An attribute is a triple of foreground color, background color and
+//!   terminal attribute `ThemeValue`s.
+//! * A `ThemeValue<T>` is either an actual value or the key name of another
+//!   value to which it depends. The value is either `Color` or `Attr`.
 //! * `ThemeAttributeInner` is an attribute triplet.
 //! * `ThemeAttribute` is an attribute triplet with the links resolved.
 //!
 //! On startup a [DFS](https://en.wikipedia.org/wiki/Depth-first_search) is performed to see if there are any cycles in the link graph.
 
-use crate::terminal::{Attr, Color};
-use crate::Context;
+use std::{borrow::Cow, collections::HashSet, fmt::Write};
+
 use indexmap::IndexMap;
 use melib::{Error, Result};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use smallvec::SmallVec;
-use std::borrow::Cow;
-use std::collections::HashSet;
-use std::fmt::Write;
+
+use crate::{
+    terminal::{Attr, Color},
+    Context,
+};
 
 #[inline(always)]
 pub fn value(context: &Context, key: &'static str) -> ThemeAttribute {
@@ -364,7 +368,8 @@ impl ThemeLink for Attr {
 }
 
 #[derive(Debug, Clone)]
-/// Holds either an actual value or refers to the key name of the attribute that holds the value.
+/// Holds either an actual value or refers to the key name of the attribute that
+/// holds the value.
 enum ThemeValue<T: ThemeLink> {
     Value(T),
     Alias(Cow<'static, str>),
@@ -839,7 +844,6 @@ impl<'de> Deserialize<'de> for Themes {
                 s.light
                     .keys
                     .keys()
-                    .into_iter()
                     .map(|k| k.as_ref())
                     .collect::<SmallVec<[_; 128]>>()
                     .join(", ")
@@ -895,7 +899,6 @@ impl<'de> Deserialize<'de> for Themes {
                 s.dark
                     .keys
                     .keys()
-                    .into_iter()
                     .map(|k| k.as_ref())
                     .collect::<SmallVec<[_; 128]>>()
                     .join(", ")
@@ -954,7 +957,6 @@ impl<'de> Deserialize<'de> for Themes {
                     theme
                         .keys
                         .keys()
-                        .into_iter()
                         .map(|k| k.as_ref())
                         .collect::<SmallVec<[_; 128]>>()
                         .join(", ")
@@ -2038,7 +2040,8 @@ fn test_theme_parsing() {
     /* MUST SUCCEED: default themes should be valid */
     let def = Themes::default();
     assert!(def.validate().is_ok());
-    /* MUST SUCCEED: new user theme `hunter2`, theme `dark` has user redefinitions */
+    /* MUST SUCCEED: new user theme `hunter2`, theme `dark` has user
+     * redefinitions */
     const TEST_STR: &str = r##"[dark]
 "mail.listing.tag_default" = { fg = "White", bg = "HotPink3" }
 "mail.listing.attachment_flag" = { fg = "mail.listing.tag_default.bg" }
@@ -2147,10 +2150,7 @@ color_aliases= { "Jebediah" = "$JebediahJr", "JebediahJr" = "mail.listing.tag_de
 
 #[test]
 fn test_theme_key_values() {
-    use std::collections::VecDeque;
-    use std::fs::File;
-    use std::io::Read;
-    use std::path::PathBuf;
+    use std::{collections::VecDeque, fs::File, io::Read, path::PathBuf};
     let mut rust_files: VecDeque<PathBuf> = VecDeque::new();
     let mut dirs_queue: VecDeque<PathBuf> = VecDeque::new();
     dirs_queue.push_back("src/".into());
@@ -2162,9 +2162,9 @@ fn test_theme_key_values() {
             let entry = entry.unwrap();
             let path = entry.path();
             if path.is_dir() {
-                dirs_queue.push_back(path.into());
+                dirs_queue.push_back(path);
             } else if path.extension().map(|os_s| os_s == "rs").unwrap_or(false) {
-                rust_files.push_back(path.into());
+                rust_files.push_back(path);
             }
         }
     }
@@ -2176,7 +2176,12 @@ fn test_theme_key_values() {
         for mat in re_conf.captures_iter(&content) {
             let theme_key = &mat[1];
             if !DEFAULT_KEYS.contains(&theme_key) {
-                panic!("Source file {} contains a hardcoded theme key str, {:?}, that is not included in the DEFAULT_KEYS table.", file_path.display(), theme_key);
+                panic!(
+                    "Source file {} contains a hardcoded theme key str, {:?}, that is not \
+                     included in the DEFAULT_KEYS table.",
+                    file_path.display(),
+                    theme_key
+                );
             }
         }
     }

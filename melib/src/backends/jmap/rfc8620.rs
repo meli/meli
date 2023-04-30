@@ -19,23 +19,30 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use crate::email::parser::BytesExt;
 use core::marker::PhantomData;
-use serde::de::DeserializeOwned;
-use serde::ser::{Serialize, SerializeStruct, Serializer};
+use std::{
+    hash::{Hash, Hasher},
+    sync::Arc,
+};
+
+use serde::{
+    de::DeserializeOwned,
+    ser::{Serialize, SerializeStruct, Serializer},
+};
 use serde_json::{value::RawValue, Value};
-use std::hash::{Hash, Hasher};
-use std::sync::Arc;
+
+use crate::email::parser::BytesExt;
 
 mod filters;
 pub use filters::*;
 mod comparator;
 pub use comparator::*;
 mod argument;
+use std::collections::HashMap;
+
 pub use argument::*;
 
 use super::protocol::Method;
-use std::collections::HashMap;
 pub trait Object {
     const NAME: &'static str;
 }
@@ -275,7 +282,6 @@ impl Object for BlobObject {
 ///    - `account_id`: "Id"
 ///
 ///       The id of the account to use.
-///
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Get<OBJ: Object>
@@ -305,31 +311,30 @@ where
         }
     }
     _impl!(
-        ///   -  accountId: "Id"
+        ///   - accountId: "Id"
         ///
         ///      The id of the account to use.
-        ///
         account_id: Id<Account>
     );
     _impl!(
-        ///   -  ids: `Option<JmapArgument<Vec<String>>>`
+        ///   - ids: `Option<JmapArgument<Vec<String>>>`
         ///
-        ///      The ids of the Foo objects to return.  If `None`, then *all* records
-        ///      of the data type are returned, if this is supported for that data
-        ///      type and the number of records does not exceed the
-        ///      "max_objects_in_get" limit.
-        ///
+        ///      The ids of the Foo objects to return.  If `None`, then *all*
+        /// records      of the data type are returned, if this is
+        /// supported for that data      type and the number of records
+        /// does not exceed the      "max_objects_in_get" limit.
         ids: Option<JmapArgument<Vec<Id<OBJ>>>>
     );
     _impl!(
-        ///   -  properties: Option<Vec<String>>
+        ///   - properties: Option<Vec<String>>
         ///
-        ///      If supplied, only the properties listed in the array are returned
-        ///      for each `Foo` object.  If `None`, all properties of the object are
-        ///      returned.  The `id` property of the object is *always* returned,
-        ///      even if not explicitly requested.  If an invalid property is
-        ///      requested, the call WILL be rejected with an "invalid_arguments"
-        ///      error.
+        ///      If supplied, only the properties listed in the array are
+        /// returned      for each `Foo` object.  If `None`, all
+        /// properties of the object are      returned.  The `id`
+        /// property of the object is *always* returned,      even if
+        /// not explicitly requested.  If an invalid property is
+        ///      requested, the call WILL be rejected with an
+        /// "invalid_arguments"      error.
         properties: Option<Vec<String>>
     );
 }
@@ -414,7 +419,15 @@ impl<OBJ: Object + DeserializeOwned> std::convert::TryFrom<&RawValue> for GetRes
     type Error = crate::error::Error;
     fn try_from(t: &RawValue) -> Result<GetResponse<OBJ>, crate::error::Error> {
         let res: (String, GetResponse<OBJ>, String) =
-            serde_json::from_str(t.get()).map_err(|err| crate::error::Error::new(format!("BUG: Could not deserialize server JSON response properly, please report this!\nReply from server: {}", &t)).set_source(Some(Arc::new(err))).set_kind(crate::error::ErrorKind::Bug))?;
+            serde_json::from_str(t.get()).map_err(|err| {
+                crate::error::Error::new(format!(
+                    "BUG: Could not deserialize server JSON response properly, please report \
+                     this!\nReply from server: {}",
+                    &t
+                ))
+                .set_source(Some(Arc::new(err)))
+                .set_kind(crate::error::ErrorKind::Bug)
+            })?;
         assert_eq!(&res.0, &format!("{}/get", OBJ::NAME));
         Ok(res.1)
     }
@@ -519,7 +532,15 @@ impl<OBJ: Object + DeserializeOwned> std::convert::TryFrom<&RawValue> for QueryR
     type Error = crate::error::Error;
     fn try_from(t: &RawValue) -> Result<QueryResponse<OBJ>, crate::error::Error> {
         let res: (String, QueryResponse<OBJ>, String) =
-            serde_json::from_str(t.get()).map_err(|err| crate::error::Error::new(format!("BUG: Could not deserialize server JSON response properly, please report this!\nReply from server: {}", &t)).set_source(Some(Arc::new(err))).set_kind(crate::error::ErrorKind::Bug))?;
+            serde_json::from_str(t.get()).map_err(|err| {
+                crate::error::Error::new(format!(
+                    "BUG: Could not deserialize server JSON response properly, please report \
+                     this!\nReply from server: {}",
+                    &t
+                ))
+                .set_source(Some(Arc::new(err)))
+                .set_kind(crate::error::ErrorKind::Bug)
+            })?;
         assert_eq!(&res.0, &format!("{}/query", OBJ::NAME));
         Ok(res.1)
     }
@@ -543,8 +564,8 @@ impl<M: Method<OBJ>, OBJ: Object> ResultField<M, OBJ> {
     }
 }
 
-// error[E0723]: trait bounds other than `Sized` on const fn parameters are unstable
-//    --> melib/src/backends/jmap/rfc8620.rs:626:6
+// error[E0723]: trait bounds other than `Sized` on const fn parameters are
+// unstable    --> melib/src/backends/jmap/rfc8620.rs:626:6
 //     |
 // 626 | impl<M: Method<OBJ>, OBJ: Object> ResultField<M, OBJ> {
 //     |      ^
@@ -562,8 +583,9 @@ impl<M: Method<OBJ>, OBJ: Object> ResultField<M, OBJ> {
 
 /// #`changes`
 ///
-///    The "Foo/changes" method allows a client to efficiently update the state of its Foo cache
-///    to match the new state on the server. It takes the following arguments:
+///    The "Foo/changes" method allows a client to efficiently update the state
+/// of its Foo cache    to match the new state on the server. It takes the
+/// following arguments:
 ///
 ///    - accountId: "Id" The id of the account to use.
 ///    - sinceState: "String"
@@ -579,7 +601,6 @@ impl<M: Method<OBJ>, OBJ: Object> ResultField<M, OBJ> {
 ///     to return. If supplied by the client, the value MUST be a
 ///     positive integer greater than 0. If a value outside of this range
 ///     is given, the server MUST re
-///
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 /* ch-ch-ch-ch-ch-Changes */
@@ -608,10 +629,9 @@ where
         }
     }
     _impl!(
-        ///   -  accountId: "Id"
+        ///   - accountId: "Id"
         ///
         ///      The id of the account to use.
-        ///
         account_id: Id<Account>
     );
     _impl!(
@@ -620,8 +640,6 @@ where
         ///     returned as the "state" argument in the "Foo/get" response. The
         ///     server will return the changes that have occurred since this
         ///     state.
-        ///
-        ///
         since_state: State<OBJ>
     );
     _impl!(
@@ -630,8 +648,8 @@ where
         ///     MAY choose to return fewer than this value but MUST NOT return
         ///     more. If not given by the client, the server may choose how many
         ///     to return. If supplied by the client, the value MUST be a
-        ///     positive integer greater than 0. If a value outside of this range
-        ///     is given, the server MUST re
+        ///     positive integer greater than 0. If a value outside of this
+        /// range     is given, the server MUST re
         max_changes: Option<u64>
     );
 }
@@ -654,7 +672,15 @@ impl<OBJ: Object + DeserializeOwned> std::convert::TryFrom<&RawValue> for Change
     type Error = crate::error::Error;
     fn try_from(t: &RawValue) -> Result<ChangesResponse<OBJ>, crate::error::Error> {
         let res: (String, ChangesResponse<OBJ>, String) =
-            serde_json::from_str(t.get()).map_err(|err| crate::error::Error::new(format!("BUG: Could not deserialize server JSON response properly, please report this!\nReply from server: {}", &t)).set_source(Some(Arc::new(err))).set_kind(crate::error::ErrorKind::Bug))?;
+            serde_json::from_str(t.get()).map_err(|err| {
+                crate::error::Error::new(format!(
+                    "BUG: Could not deserialize server JSON response properly, please report \
+                     this!\nReply from server: {}",
+                    &t
+                ))
+                .set_source(Some(Arc::new(err)))
+                .set_kind(crate::error::ErrorKind::Bug)
+            })?;
         assert_eq!(&res.0, &format!("{}/changes", OBJ::NAME));
         Ok(res.1)
     }
@@ -707,7 +733,6 @@ where
     ///
     ///   The client MUST omit any properties that may only be set by the
     ///   server (for example, the "id" property on most object types).
-    ///
     pub create: Option<HashMap<Id<OBJ>, OBJ>>,
     ///o  update: "Id[PatchObject]|null"
     ///
@@ -722,26 +747,26 @@ where
     ///   All paths MUST also conform to the following restrictions; if
     ///   there is any violation, the update MUST be rejected with an
     ///   "invalidPatch" error:
-    ///   *  The pointer MUST NOT reference inside an array (i.e., you MUST
-    ///      NOT insert/delete from an array; the array MUST be replaced in
-    ///      its entirety instead).
+    ///   * The pointer MUST NOT reference inside an array (i.e., you MUST NOT
+    ///     insert/delete from an array; the array MUST be replaced in its
+    ///     entirety instead).
     ///
-    ///   *  All parts prior to the last (i.e., the value after the final
-    ///      slash) MUST already exist on the object being patched.
+    ///   * All parts prior to the last (i.e., the value after the final slash)
+    ///     MUST already exist on the object being patched.
     ///
-    ///   *  There MUST NOT be two patches in the PatchObject where the
-    ///      pointer of one is the prefix of the pointer of the other, e.g.,
-    ///      "alerts/1/offset" and "alerts".
+    ///   * There MUST NOT be two patches in the PatchObject where the pointer
+    ///     of one is the prefix of the pointer of the other, e.g.,
+    ///     "alerts/1/offset" and "alerts".
     ///
     ///   The value associated with each pointer determines how to apply
     ///   that patch:
     ///
-    ///   *  If null, set to the default value if specified for this
-    ///      property; otherwise, remove the property from the patched
-    ///      object.  If the key is not present in the parent, this a no-op.
+    ///   * If null, set to the default value if specified for this property;
+    ///     otherwise, remove the property from the patched object.  If the key
+    ///     is not present in the parent, this a no-op.
     ///
-    ///   *  Anything else: The value to set for this property (this may be
-    ///      a replacement or addition to the object being patched).
+    ///   * Anything else: The value to set for this property (this may be a
+    ///     replacement or addition to the object being patched).
     ///
     ///   Any server-set properties MAY be included in the patch if their
     ///   value is identical to the current server value (before applying
@@ -853,7 +878,15 @@ impl<OBJ: Object + DeserializeOwned> std::convert::TryFrom<&RawValue> for SetRes
     type Error = crate::error::Error;
     fn try_from(t: &RawValue) -> Result<SetResponse<OBJ>, crate::error::Error> {
         let res: (String, SetResponse<OBJ>, String) =
-            serde_json::from_str(t.get()).map_err(|err| crate::error::Error::new(format!("BUG: Could not deserialize server JSON response properly, please report this!\nReply from server: {}", &t)).set_source(Some(Arc::new(err))).set_kind(crate::error::ErrorKind::Bug))?;
+            serde_json::from_str(t.get()).map_err(|err| {
+                crate::error::Error::new(format!(
+                    "BUG: Could not deserialize server JSON response properly, please report \
+                     this!\nReply from server: {}",
+                    &t
+                ))
+                .set_source(Some(Arc::new(err)))
+                .set_kind(crate::error::ErrorKind::Bug)
+            })?;
         assert_eq!(&res.0, &format!("{}/set", OBJ::NAME));
         Ok(res.1)
     }
@@ -863,31 +896,41 @@ impl<OBJ: Object + DeserializeOwned> std::convert::TryFrom<&RawValue> for SetRes
 #[serde(rename_all = "camelCase")]
 #[serde(tag = "type", content = "description")]
 pub enum SetError {
-    ///(create; update; destroy).  The create/update/destroy would violate an ACL or other permissions policy.
+    ///(create; update; destroy).  The create/update/destroy would violate an
+    /// ACL or other permissions policy.
     Forbidden(Option<String>),
-    ///(create; update).  The create would exceed a server- defined limit on the number or total size of objects of this type.
+    ///(create; update).  The create would exceed a server- defined limit on
+    /// the number or total size of objects of this type.
     OverQuota(Option<String>),
 
-    ///(create; update).  The create/update would result in an object that exceeds a server-defined limit for the maximum size of a single object of this type.
+    ///(create; update).  The create/update would result in an object that
+    /// exceeds a server-defined limit for the maximum size of a single object
+    /// of this type.
     TooLarge(Option<String>),
 
-    ///(create).  Too many objects of this type have been created recently, and a server-defined rate limit has been reached.  It may work if tried again later.
+    ///(create).  Too many objects of this type have been created recently, and
+    /// a server-defined rate limit has been reached.  It may work if tried
+    /// again later.
     RateLimit(Option<String>),
 
     ///(update; destroy).  The id given to update/destroy cannot be found.
     NotFound(Option<String>),
 
-    ///(update).  The PatchObject given to update the record was not a valid patch (see the patch description).
+    ///(update).  The PatchObject given to update the record was not a valid
+    /// patch (see the patch description).
     InvalidPatch(Option<String>),
 
-    ///(update).  The client requested that an object be both updated and destroyed in the same /set request, and the server has decided to therefore ignore the update.
+    ///(update).  The client requested that an object be both updated and
+    /// destroyed in the same /set request, and the server has decided to
+    /// therefore ignore the update.
     WillDestroy(Option<String>),
     ///(create; update).  The record given is invalid in some way.
     InvalidProperties {
         description: Option<String>,
         properties: Vec<String>,
     },
-    ///(create; destroy).  This is a singleton type, so you cannot create another one or destroy the existing one.
+    ///(create; destroy).  This is a singleton type, so you cannot create
+    /// another one or destroy the existing one.
     Singleton(Option<String>),
     RequestTooLarge(Option<String>),
     StateMismatch(Option<String>),
@@ -1001,8 +1044,9 @@ pub struct UploadResponse {
     pub account_id: Id<Account>,
     ///o  blobId: "Id"
     ///
-    ///The id representing the binary data uploaded.  The data for this id is immutable.
-    ///The id *only* refers to the binary data, not any metadata.
+    ///The id representing the binary data uploaded.  The data for this id is
+    /// immutable. The id *only* refers to the binary data, not any
+    /// metadata.
     pub blob_id: Id<BlobObject>,
     ///o  type: "String"
     ///
@@ -1098,11 +1142,15 @@ where
 pub struct QueryChangesResponse<OBJ: Object> {
     /// The id of the account used for the call.
     pub account_id: Id<Account>,
-    /// This is the "sinceQueryState" argument echoed back; that is, the state from which the server is returning changes.
+    /// This is the "sinceQueryState" argument echoed back; that is, the state
+    /// from which the server is returning changes.
     pub old_query_state: String,
-    ///This is the state the query will be in after applying the set of changes to the old state.
+    ///This is the state the query will be in after applying the set of changes
+    /// to the old state.
     pub new_query_state: String,
-    /// The total number of Foos in the results (given the "filter").  This argument MUST be omitted if the "calculateTotal" request argument is not true.
+    /// The total number of Foos in the results (given the "filter").  This
+    /// argument MUST be omitted if the "calculateTotal" request argument is not
+    /// true.
     #[serde(default)]
     pub total: Option<usize>,
     ///The "id" for every Foo that was in the query results in the old
@@ -1139,9 +1187,9 @@ pub struct QueryChangesResponse<OBJ: Object> {
 
     ///An *AddedItem* object has the following properties:
 
-    ///*  id: "Id"
+    /// * id: "Id"
 
-    ///*  index: "UnsignedInt"
+    /// * index: "UnsignedInt"
 
     ///The result of this is that if the client has a cached sparse array of
     ///Foo ids corresponding to the results in the old state, then:

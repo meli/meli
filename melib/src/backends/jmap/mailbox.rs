@@ -19,9 +19,10 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use std::sync::{Arc, Mutex, RwLock};
+
 use super::*;
 use crate::backends::{LazyCountSet, MailboxPermissions, SpecialUsageMailbox};
-use std::sync::{Arc, Mutex, RwLock};
 
 #[derive(Debug, Clone)]
 pub struct JmapMailbox {

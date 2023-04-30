@@ -28,19 +28,16 @@ The UI crate has an Box<dyn Component>-Component-System design. The System part,
 Input is received in the main loop from threads which listen on the stdin for user input, observe folders for file changes etc. The relevant struct is `ThreadEvent`.
 */
 
-use super::*;
-//use crate::plugins::PluginManager;
-use melib::backends::{AccountHash, BackendEventConsumer};
+use std::{env, os::unix::io::RawFd, sync::Arc, thread};
 
-use crate::jobs::JobExecutor;
-use crate::terminal::screen::Screen;
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use indexmap::IndexMap;
+//use crate::plugins::PluginManager;
+use melib::backends::{AccountHash, BackendEventConsumer};
 use smallvec::SmallVec;
-use std::env;
-use std::os::unix::io::RawFd;
-use std::sync::Arc;
-use std::thread;
+
+use super::*;
+use crate::{jobs::JobExecutor, terminal::screen::Screen};
 
 struct InputHandler {
     pipe: (RawFd, RawFd),
@@ -56,8 +53,8 @@ impl InputHandler {
         let control = Arc::downgrade(&working);
 
         /* Clear channel without blocking. switch_to_main_screen() issues a kill when
-         * returning from a fork and there's no input thread, so the newly created thread will
-         * receive it and die. */
+         * returning from a fork and there's no input thread, so the newly created
+         * thread will receive it and die. */
         //let _ = self.rx.try_iter().count();
         let rx = self.rx.clone();
         let pipe = self.pipe.0;
@@ -228,8 +225,9 @@ impl Context {
     }
 }
 
-/// A State object to manage and own components and components of the UI. `State` is responsible for
-/// managing the terminal and interfacing with `melib`
+/// A State object to manage and own components and components of the UI.
+/// `State` is responsible for managing the terminal and interfacing with
+/// `melib`
 pub struct State {
     screen: Box<Screen>,
     draw_rate_limit: RateLimit,
@@ -284,9 +282,9 @@ impl State {
         receiver: Receiver<ThreadEvent>,
     ) -> Result<Self> {
         /*
-         * Create async channel to block the input-thread if we need to fork and stop it from reading
-         * stdin, see get_events() for details
-         * */
+         * Create async channel to block the input-thread if we need to fork and stop
+         * it from reading stdin, see get_events() for details
+         */
         let input_thread = unbounded();
         let input_thread_pipe = nix::unistd::pipe()
             .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send + Sync + 'static>)?;
@@ -434,7 +432,8 @@ impl State {
     /*
      * When we receive a mailbox hash from a watcher thread,
      * we match the hash to the index of the mailbox, request a reload
-     * and startup a thread to remind us to poll it every now and then till it's finished.
+     * and startup a thread to remind us to poll it every now and then till it's
+     * finished.
      */
     pub fn refresh_event(&mut self, event: RefreshEvent) {
         let account_hash = event.account_hash;
@@ -477,7 +476,8 @@ impl State {
         self.context.restore_input();
     }
 
-    /// On `SIGWNICH` the `State` redraws itself according to the new terminal size.
+    /// On `SIGWNICH` the `State` redraws itself according to the new terminal
+    /// size.
     pub fn update_size(&mut self) {
         self.screen.update_size();
         self.rcv_event(UIEvent::Resize);
@@ -525,8 +525,8 @@ impl State {
         areas.sort_by(|a, b| (a.0).0.partial_cmp(&(b.0).0).unwrap());
 
         if self.display_messages_active {
-            /* Check if any dirty area intersects with the area occupied by floating notification
-             * box */
+            /* Check if any dirty area intersects with the area occupied by floating
+             * notification box */
             let (displ_top, displ_bot) = self.display_messages_area;
             for &((top_x, top_y), (bottom_x, bottom_y)) in &areas {
                 self.display_messages_dirty |= !(bottom_y < displ_top.1
@@ -992,34 +992,51 @@ impl State {
                         )));
                     } else if let Action::ReloadConfiguration = action {
                         match Settings::new().and_then(|new_settings| {
-                            let old_accounts = self.context.settings.accounts.keys().collect::<std::collections::HashSet<&String>>();
-                            let new_accounts = new_settings.accounts.keys().collect::<std::collections::HashSet<&String>>();
+                            let old_accounts = self
+                                .context
+                                .settings
+                                .accounts
+                                .keys()
+                                .collect::<std::collections::HashSet<&String>>();
+                            let new_accounts = new_settings
+                                .accounts
+                                .keys()
+                                .collect::<std::collections::HashSet<&String>>();
                             if old_accounts != new_accounts {
-                                return Err("cannot reload account configuration changes; restart meli instead.".into());
+                                return Err("cannot reload account configuration changes; \
+                                            restart meli instead."
+                                    .into());
                             }
                             for (key, acc) in new_settings.accounts.iter() {
-                                if toml::Value::try_from(&acc) != toml::Value::try_from(&self.context.settings.accounts[key]) {
-                                    return Err("cannot reload account configuration changes; restart meli instead.".into());
+                                if toml::Value::try_from(acc)
+                                    != toml::Value::try_from(&self.context.settings.accounts[key])
+                                {
+                                    return Err("cannot reload account configuration changes; \
+                                                restart meli instead."
+                                        .into());
                                 }
                             }
-                            if toml::Value::try_from(&new_settings) == toml::Value::try_from(&self.context.settings) {
+                            if toml::Value::try_from(&new_settings)
+                                == toml::Value::try_from(&self.context.settings)
+                            {
                                 return Err("No changes detected.".into());
                             }
                             Ok(Box::new(new_settings))
                         }) {
                             Ok(new_settings) => {
-                                let old_settings = std::mem::replace(&mut self.context.settings, new_settings);
-                                self.context.replies.push_back(UIEvent::ConfigReload {
-                                    old_settings
-                                });
+                                let old_settings =
+                                    std::mem::replace(&mut self.context.settings, new_settings);
+                                self.context
+                                    .replies
+                                    .push_back(UIEvent::ConfigReload { old_settings });
                                 self.context.replies.push_back(UIEvent::Resize);
                             }
                             Err(err) => {
                                 self.context.replies.push_back(UIEvent::StatusEvent(
-                                        StatusEvent::DisplayMessage(format!(
-                                                "Could not load configuration: {}",
-                                                err
-                                        )),
+                                    StatusEvent::DisplayMessage(format!(
+                                        "Could not load configuration: {}",
+                                        err
+                                    )),
                                 ));
                             }
                         }
@@ -1221,8 +1238,8 @@ impl State {
         }
         Some(false)
     }
-    /// Switch back to the terminal's main screen (The command line the user sees before opening
-    /// the application)
+    /// Switch back to the terminal's main screen (The command line the user
+    /// sees before opening the application)
     pub fn switch_to_main_screen(&mut self) {
         self.screen.switch_to_main_screen();
     }

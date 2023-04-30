@@ -20,16 +20,16 @@
  */
 
 //!
-//!  This crate contains the frontend stuff of the application. The application entry way on
-//!  `src/bin.rs` creates an event loop and passes input to a thread.
+//!  This crate contains the frontend stuff of the application. The application
+//! entry way on  `src/bin.rs` creates an event loop and passes input to a
+//! thread.
 //!
-//! The mail handling stuff is done in the `melib` crate which includes all backend needs. The
-//! split is done to theoretically be able to create different frontends with the same innards.
-//!
+//! The mail handling stuff is done in the `melib` crate which includes all
+//! backend needs. The split is done to theoretically be able to create
+//! different frontends with the same innards.
 
 use std::alloc::System;
-pub use std::collections::VecDeque;
-pub use std::path::PathBuf;
+pub use std::{collections::VecDeque, path::PathBuf};
 
 #[macro_use]
 extern crate serde_derive;

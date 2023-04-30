@@ -1,3 +1,4 @@
+// @generated
 /*
  * meli - conf/overrides.rs
  *
@@ -83,7 +84,8 @@ pub struct PagerSettingsOverride {
     #[serde(alias = "show-date-in-my-timezone")]
     #[serde(default)]
     pub show_date_in_my_timezone: Option<ToggleFlag>,
-    #[doc = " A command to launch URLs with. The URL will be given as the first argument of the command."]
+    #[doc = " A command to launch URLs with. The URL will be given as the first argument of the \
+             command."]
     #[doc = " Default: None"]
     #[serde(deserialize_with = "non_empty_string")]
     #[serde(default)]
@@ -177,7 +179,8 @@ pub struct ListingSettingsOverride {
     #[doc = " Default: \"📎\""]
     #[serde(default)]
     pub attachment_flag: Option<Option<String>>,
-    #[doc = " Should threads with differentiating Subjects show a list of those subjects on the entry"]
+    #[doc = " Should threads with differentiating Subjects show a list of those subjects on the \
+             entry"]
     #[doc = " title?"]
     #[doc = " Default: \"true\""]
     #[serde(default)]
@@ -222,7 +225,8 @@ pub struct NotificationsSettingsOverride {
     #[doc = " Default: None"]
     #[serde(default)]
     pub new_mail_script: Option<Option<String>>,
-    #[doc = " A file location which has its size changed when new mail arrives (max 128 bytes). Can be"]
+    #[doc = " A file location which has its size changed when new mail arrives (max 128 bytes). \
+             Can be"]
     #[doc = " used to trigger new mail notifications eg with `xbiff(1)`."]
     #[doc = " Default: None"]
     #[serde(alias = "xbiff-file-path")]
@@ -290,7 +294,8 @@ pub struct ComposingSettingsOverride {
     #[doc = " Required"]
     #[serde(default)]
     pub send_mail: Option<SendMail>,
-    #[doc = " Command to launch editor. Can have arguments. Draft filename is given as the last argument. If it's missing, the environment variable $EDITOR is looked up."]
+    #[doc = " Command to launch editor. Can have arguments. Draft filename is given as the last \
+             argument. If it's missing, the environment variable $EDITOR is looked up."]
     #[serde(alias = "editor-command", alias = "editor-cmd", alias = "editor_cmd")]
     #[serde(default)]
     pub editor_command: Option<Option<String>>,
@@ -312,14 +317,18 @@ pub struct ComposingSettingsOverride {
     #[serde(alias = "default-header-values")]
     #[serde(default)]
     pub default_header_values: Option<HashMap<String, String>>,
-    #[doc = " Wrap header preample when editing a draft in an editor. This allows you to write non-plain"]
-    #[doc = " text email without the preamble creating syntax errors. They are stripped when you return"]
-    #[doc = " from the editor. The values should be a two element array of strings, a prefix and suffix."]
+    #[doc = " Wrap header preample when editing a draft in an editor. This allows you to write \
+             non-plain"]
+    #[doc = " text email without the preamble creating syntax errors. They are stripped when you \
+             return"]
+    #[doc = " from the editor. The values should be a two element array of strings, a prefix and \
+             suffix."]
     #[doc = " Default: None"]
     #[serde(alias = "wrap-header-preample")]
     #[serde(default)]
     pub wrap_header_preamble: Option<Option<(String, String)>>,
-    #[doc = " Store sent mail after successful submission. This setting is meant to be disabled for"]
+    #[doc = " Store sent mail after successful submission. This setting is meant to be disabled \
+             for"]
     #[doc = " non-standard behaviour in gmail, which auto-saves sent mail on its own."]
     #[doc = " Default: true"]
     #[serde(default)]
@@ -333,7 +342,8 @@ pub struct ComposingSettingsOverride {
     #[doc = " Default: \"On %a, %0e %b %Y %H:%M, %+f wrote:%n\""]
     #[serde(default)]
     pub attribution_format_string: Option<Option<String>>,
-    #[doc = " Whether the strftime call for the attribution string uses the POSIX locale instead of"]
+    #[doc = " Whether the strftime call for the attribution string uses the POSIX locale instead \
+             of"]
     #[doc = " the user's active locale"]
     #[doc = " Default: true"]
     #[serde(default)]
@@ -344,7 +354,13 @@ pub struct ComposingSettingsOverride {
     #[serde(default)]
     pub forward_as_attachment: Option<ToggleFlag>,
     #[doc = " Alternative lists of reply prefixes (etc. [\"Re:\", \"RE:\", ...]) to strip"]
-    #[doc = " Default: `[\"Re:\", \"RE:\", \"Fwd:\", \"Fw:\", \"回复:\", \"回覆:\", \"SV:\", \"Sv:\", \"VS:\", \"Antw:\", \"Doorst:\", \"VS:\", \"VL:\", \"REF:\", \"TR:\", \"TR:\", \"AW:\", \"WG:\", \"ΑΠ:\", \"Απ:\", \"απ:\", \"ΠΡΘ:\", \"Πρθ:\", \"πρθ:\", \"ΣΧΕΤ:\", \"Σχετ:\", \"σχετ:\", \"ΠΡΘ:\", \"Πρθ:\", \"πρθ:\", \"Vá:\", \"Továbbítás:\", \"R:\", \"I:\", \"RIF:\", \"FS:\", \"BLS:\", \"TRS:\", \"VS:\", \"VB:\", \"RV:\", \"RES:\", \"Res\", \"ENC:\", \"Odp:\", \"PD:\", \"YNT:\", \"İLT:\", \"ATB:\", \"YML:\"]`"]
+    #[doc = " Default: `[\"Re:\", \"RE:\", \"Fwd:\", \"Fw:\", \"回复:\", \"回覆:\", \"SV:\", \
+             \"Sv:\", \"VS:\", \"Antw:\", \"Doorst:\", \"VS:\", \"VL:\", \"REF:\", \"TR:\", \
+             \"TR:\", \"AW:\", \"WG:\", \"ΑΠ:\", \"Απ:\", \"απ:\", \"ΠΡΘ:\", \"Πρθ:\", \"πρθ:\", \
+             \"ΣΧΕΤ:\", \"Σχετ:\", \"σχετ:\", \"ΠΡΘ:\", \"Πρθ:\", \"πρθ:\", \"Vá:\", \
+             \"Továbbítás:\", \"R:\", \"I:\", \"RIF:\", \"FS:\", \"BLS:\", \"TRS:\", \"VS:\", \
+             \"VB:\", \"RV:\", \"RES:\", \"Res\", \"ENC:\", \"Odp:\", \"PD:\", \"YNT:\", \
+             \"İLT:\", \"ATB:\", \"YML:\"]`"]
     #[serde(alias = "reply-prefix-list-to-strip")]
     #[serde(default)]
     pub reply_prefix_list_to_strip: Option<Option<Vec<String>>>,

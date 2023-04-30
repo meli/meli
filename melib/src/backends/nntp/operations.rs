@@ -19,12 +19,10 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::*;
-
-use crate::backends::*;
-use crate::email::*;
-use crate::error::Error;
 use std::sync::Arc;
+
+use super::*;
+use crate::{backends::*, email::*, error::Error};
 
 /// `BackendOp` implementor for Nntp
 #[derive(Debug, Clone)]

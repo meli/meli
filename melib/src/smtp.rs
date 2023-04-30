@@ -24,8 +24,8 @@
 
 //! SMTP client support
 //!
-//! This module implements a client for the SMTP protocol as specified by [RFC 5321 Simple Mail
-//! Transfer Protocol](https://www.rfc-editor.org/rfc/rfc5321).
+//! This module implements a client for the SMTP protocol as specified by [RFC
+//! 5321 Simple Mail Transfer Protocol](https://www.rfc-editor.org/rfc/rfc5321).
 //!
 //! The connection and methods are `async` and uses the `smol` runtime.
 //!# Example
@@ -72,18 +72,18 @@
 //! Ok(())
 //! ```
 
-use crate::connections::{lookup_ipv4, Connection};
-use crate::email::{parser::BytesExt, Address, Envelope};
-use crate::error::{Error, Result, ResultIntoError};
+use std::{borrow::Cow, convert::TryFrom, net::TcpStream, process::Command};
+
 use futures::io::{AsyncReadExt, AsyncWriteExt};
 use native_tls::TlsConnector;
 use smallvec::SmallVec;
-use smol::unblock;
-use smol::Async as AsyncWrapper;
-use std::borrow::Cow;
-use std::convert::TryFrom;
-use std::net::TcpStream;
-use std::process::Command;
+use smol::{unblock, Async as AsyncWrapper};
+
+use crate::{
+    connections::{lookup_ipv4, Connection},
+    email::{parser::BytesExt, Address, Envelope},
+    error::{Error, Result, ResultIntoError},
+};
 
 /// Kind of server security (StartTLS/TLS/None) the client should attempt
 #[derive(Debug, Copy, PartialEq, Eq, Clone, Serialize, Deserialize)]
@@ -191,11 +191,12 @@ pub struct SmtpExtensionSupport {
     /// [RFC 6152: SMTP Service Extension for 8-bit MIME Transport](https://www.rfc-editor.org/rfc/rfc6152)
     #[serde(default = "crate::conf::true_val")]
     _8bitmime: bool,
-    /// Essentially, the PRDR extension to SMTP allows (but does not require) an SMTP server to
-    /// issue multiple responses after a message has been transferred, by mutual consent of the
-    /// client and server. SMTP clients that support the PRDR extension then use the expanded
-    /// responses as supplemental data to the responses that were received during the earlier
-    /// envelope exchange.
+    /// Essentially, the PRDR extension to SMTP allows (but does not require) an
+    /// SMTP server to issue multiple responses after a message has been
+    /// transferred, by mutual consent of the client and server. SMTP
+    /// clients that support the PRDR extension then use the expanded
+    /// responses as supplemental data to the responses that were received
+    /// during the earlier envelope exchange.
     #[serde(default = "crate::conf::true_val")]
     prdr: bool,
     #[serde(default = "crate::conf::true_val")]
@@ -284,7 +285,10 @@ impl SmtpConnection {
                             danger_accept_invalid_certs,
                         };
                     } else {
-                        return Err(Error::new("Please specify what SMTP security transport to use explicitly instead of `auto`."));
+                        return Err(Error::new(
+                            "Please specify what SMTP security transport to use explicitly \
+                             instead of `auto`.",
+                        ));
                     }
                 }
                 socket.write_all(b"EHLO meli.delivery\r\n").await?;
@@ -386,9 +390,11 @@ impl SmtpConnection {
                     .any(|l| l.starts_with("AUTH"))
             {
                 return Err(Error::new(format!(
-                        "SMTP Server doesn't advertise Authentication support. Server response was: {:?}",
-                        pre_auth_extensions_reply
-                    )).set_kind(crate::error::ErrorKind::Authentication));
+                    "SMTP Server doesn't advertise Authentication support. Server response was: \
+                     {:?}",
+                    pre_auth_extensions_reply
+                ))
+                .set_kind(crate::error::ErrorKind::Authentication));
             }
             no_auth_needed =
                 ret.server_conf.auth == SmtpAuth::None || !ret.server_conf.auth.require_auth();
@@ -430,7 +436,7 @@ impl SmtpConnection {
 
                             let mut output = unblock(move || {
                                 Command::new("sh")
-                                    .args(&["-c", &_command])
+                                    .args(["-c", &_command])
                                     .stdin(std::process::Stdio::piped())
                                     .stdout(std::process::Stdio::piped())
                                     .stderr(std::process::Stdio::piped())
@@ -493,7 +499,7 @@ impl SmtpConnection {
                         let _token_command = token_command.clone();
                         let mut output = unblock(move || {
                             Command::new("sh")
-                                .args(&["-c", &_token_command])
+                                .args(["-c", &_token_command])
                                 .stdin(std::process::Stdio::piped())
                                 .stdout(std::process::Stdio::piped())
                                 .stderr(std::process::Stdio::piped())
@@ -538,7 +544,7 @@ impl SmtpConnection {
         self.server_conf.envelope_from = envelope_from;
     }
 
-    fn set_extension_support(&mut self, reply: Reply<'_>) {
+    fn set_extension_support(&mut self, reply: Reply) {
         debug_assert_eq!(reply.code, ReplyCode::_250);
         self.server_conf.extensions.pipelining &= reply.lines.contains(&"PIPELINING");
         self.server_conf.extensions.chunking &= reply.lines.contains(&"CHUNKING");
@@ -595,7 +601,10 @@ impl SmtpConnection {
             .chain_err_summary(|| "SMTP submission was aborted")?;
         let tos = tos.unwrap_or_else(|| envelope.to());
         if tos.is_empty() && envelope.cc().is_empty() && envelope.bcc().is_empty() {
-            return Err(Error::new("SMTP submission was aborted because there was no e-mail address found in the To: header field. Consider adding recipients."));
+            return Err(Error::new(
+                "SMTP submission was aborted because there was no e-mail address found in the To: \
+                 header field. Consider adding recipients.",
+            ));
         }
         let mut current_command: SmallVec<[&[u8]; 16]> = SmallVec::new();
         //first step in the procedure is the MAIL command.
@@ -605,9 +614,17 @@ impl SmtpConnection {
             current_command.push(envelope_from.trim().as_bytes());
         } else {
             if envelope.from().is_empty() {
-                return Err(Error::new("SMTP submission was aborted because there was no e-mail address found in the From: header field. Consider adding a valid value or setting `envelope_from` in SMTP client settings"));
+                return Err(Error::new(
+                    "SMTP submission was aborted because there was no e-mail address found in the \
+                     From: header field. Consider adding a valid value or setting `envelope_from` \
+                     in SMTP client settings",
+                ));
             } else if envelope.from().len() != 1 {
-                return Err(Error::new("SMTP submission was aborted because there was more than one e-mail address found in the From: header field. Consider setting `envelope_from` in SMTP client settings"));
+                return Err(Error::new(
+                    "SMTP submission was aborted because there was more than one e-mail address \
+                     found in the From: header field. Consider setting `envelope_from` in SMTP \
+                     client settings",
+                ));
             }
             current_command.push(envelope.from()[0].address_spec_raw().trim());
         }
@@ -628,12 +645,13 @@ impl SmtpConnection {
         } else {
             pipelining_queue.push(Some((ReplyCode::_250, &[])));
         }
-        //The second step in the procedure is the RCPT command. This step of the procedure can
-        //be repeated any number of times. If accepted, the SMTP server returns a "250 OK"
-        //reply. If the mailbox specification is not acceptable for some reason, the server MUST
-        //return a reply indicating whether the failure is permanent (i.e., will occur again if
-        //the client tries to send the same address again) or temporary (i.e., the address might
-        //be accepted if the client tries again later).
+        //The second step in the procedure is the RCPT command. This step of the
+        // procedure can be repeated any number of times. If accepted, the SMTP
+        // server returns a "250 OK" reply. If the mailbox specification is not
+        // acceptable for some reason, the server MUST return a reply indicating
+        // whether the failure is permanent (i.e., will occur again if
+        // the client tries to send the same address again) or temporary (i.e., the
+        // address might be accepted if the client tries again later).
         for addr in tos
             .iter()
             .chain(envelope.cc().iter())
@@ -651,7 +669,8 @@ impl SmtpConnection {
             self.send_command(&current_command).await?;
 
             //RCPT TO:<forward-path> [ SP <rcpt-parameters> ] <CRLF>
-            //If accepted, the SMTP server returns a "250 OK" reply and stores the forward-path.
+            //If accepted, the SMTP server returns a "250 OK" reply and stores the
+            // forward-path.
             if !self.server_conf.extensions.pipelining {
                 self.read_lines(&mut res, Some((ReplyCode::_250, &[])))
                     .await?;
@@ -660,9 +679,10 @@ impl SmtpConnection {
             }
         }
 
-        //Since it has been a common source of errors, it is worth noting that spaces are not
-        //permitted on either side of the colon following FROM in the MAIL command or TO in the
-        //RCPT command. The syntax is exactly as given above.
+        //Since it has been a common source of errors, it is worth noting that spaces
+        // are not permitted on either side of the colon following FROM in the
+        // MAIL command or TO in the RCPT command. The syntax is exactly as
+        // given above.
 
         if self.server_conf.extensions.binarymime {
             let mail_length = format!("{}", mail.as_bytes().len());
@@ -674,13 +694,14 @@ impl SmtpConnection {
             //(or some alternative specified in a service extension).
             //DATA <CRLF>
             self.send_command(&[b"DATA"]).await?;
-            //Client SMTP implementations that employ pipelining MUST check ALL statuses associated
-            //with each command in a group. For example, if none of the RCPT TO recipient addresses
-            //were accepted the client must then check the response to the DATA command -- the client
-            //cannot assume that the DATA command will be rejected just because none of the RCPT TO
-            //commands worked. If the DATA command was properly rejected the client SMTP can just
-            //issue RSET, but if the DATA command was accepted the client SMTP should send a single
-            //dot.
+            //Client SMTP implementations that employ pipelining MUST check ALL statuses
+            // associated with each command in a group. For example, if none of
+            // the RCPT TO recipient addresses were accepted the client must
+            // then check the response to the DATA command -- the client
+            // cannot assume that the DATA command will be rejected just because none of the
+            // RCPT TO commands worked. If the DATA command was properly
+            // rejected the client SMTP can just issue RSET, but if the DATA
+            // command was accepted the client SMTP should send a single dot.
             let mut _all_error = self.server_conf.extensions.pipelining;
             let mut _any_error = false;
             let mut ignore_mailfrom = true;
@@ -694,15 +715,17 @@ impl SmtpConnection {
                 pipelining_results.push(reply.into());
             }
 
-            //If accepted, the SMTP server returns a 354 Intermediate reply and considers all
-            //succeeding lines up to but not including the end of mail data indicator to be the
-            //message text. When the end of text is successfully received and stored, the
-            //SMTP-receiver sends a "250 OK" reply.
+            //If accepted, the SMTP server returns a 354 Intermediate reply and considers
+            // all succeeding lines up to but not including the end of mail data
+            // indicator to be the message text. When the end of text is
+            // successfully received and stored, the SMTP-receiver sends a "250
+            // OK" reply.
             self.read_lines(&mut res, Some((ReplyCode::_354, &[])))
                 .await?;
 
-            //Before sending a line of mail text, the SMTP client checks the first character of the
-            //line.If it is a period, one additional period is inserted at the beginning of the line.
+            //Before sending a line of mail text, the SMTP client checks the first
+            // character of the line.If it is a period, one additional period is
+            // inserted at the beginning of the line.
             for line in mail.lines() {
                 if line.starts_with('.') {
                     self.stream.write_all(b".").await?;
@@ -715,15 +738,16 @@ impl SmtpConnection {
                 self.stream.write_all(b".\r\n").await?;
             }
 
-            //The mail data are terminated by a line containing only a period, that is, the character
-            //sequence "<CRLF>.<CRLF>", where the first <CRLF> is actually the terminator of the
-            //previous line (see Section 4.5.2). This is the end of mail data indication.
+            //The mail data are terminated by a line containing only a period, that is, the
+            // character sequence "<CRLF>.<CRLF>", where the first <CRLF> is
+            // actually the terminator of the previous line (see Section 4.5.2).
+            // This is the end of mail data indication.
             self.stream.write_all(b".\r\n").await?;
         }
 
-        //The end of mail data indicator also confirms the mail transaction and tells the SMTP
-        //server to now process the stored recipients and mail data. If accepted, the SMTP
-        //server returns a "250 OK" reply.
+        //The end of mail data indicator also confirms the mail transaction and tells
+        // the SMTP server to now process the stored recipients and mail data.
+        // If accepted, the SMTP server returns a "250 OK" reply.
         let reply_code = self
             .read_lines(
                 &mut res,
@@ -760,7 +784,9 @@ pub type ExpectedReplyCode = Option<(ReplyCode, &'static [ReplyCode])>;
 pub enum ReplyCode {
     /// System status, or system help reply
     _211,
-    /// Help message (Information on how to use the receiver or the meaning of a particular non-standard command; this reply is useful only to the human user)
+    /// Help message (Information on how to use the receiver or the meaning of a
+    /// particular non-standard command; this reply is useful only to the human
+    /// user)
     _214,
     /// <domain> Service ready
     _220,
@@ -772,7 +798,8 @@ pub enum ReplyCode {
     _250,
     /// User not local; will forward to <forward-path> (See Section 3.4)
     _251,
-    /// Cannot VRFY user, but will accept message and attempt delivery (See Section 3.5.3)
+    /// Cannot VRFY user, but will accept message and attempt delivery (See
+    /// Section 3.5.3)
     _252,
     /// rfc4954 AUTH continuation request
     _334,
@@ -780,9 +807,11 @@ pub enum ReplyCode {
     _353,
     /// Start mail input; end with <CRLF>.<CRLF>
     _354,
-    /// <domain> Service not available, closing transmission channel (This may be a reply to any command if the service knows it must shut down)
+    /// <domain> Service not available, closing transmission channel (This may
+    /// be a reply to any command if the service knows it must shut down)
     _421,
-    /// Requested mail action not taken: mailbox unavailable (e.g., mailbox busy or temporarily blocked for policy reasons)
+    /// Requested mail action not taken: mailbox unavailable (e.g., mailbox busy
+    /// or temporarily blocked for policy reasons)
     _450,
     /// Requested action aborted: local error in processing
     _451,
@@ -790,7 +819,8 @@ pub enum ReplyCode {
     _452,
     /// Server unable to accommodate parameters
     _455,
-    /// Syntax error, command unrecognized (This may include errors such as command line too long)
+    /// Syntax error, command unrecognized (This may include errors such as
+    /// command line too long)
     _500,
     /// Syntax error in parameters or arguments
     _501,
@@ -802,15 +832,18 @@ pub enum ReplyCode {
     _504,
     /// Authentication failed
     _535,
-    /// Requested action not taken: mailbox unavailable (e.g., mailbox not found, no access, or command rejected for policy reasons)
+    /// Requested action not taken: mailbox unavailable (e.g., mailbox not
+    /// found, no access, or command rejected for policy reasons)
     _550,
     /// User not local; please try <forward-path> (See Section 3.4)
     _551,
     /// Requested mail action aborted: exceeded storage allocation
     _552,
-    /// Requested action not taken: mailbox name not allowed (e.g., mailbox syntax incorrect)
+    /// Requested action not taken: mailbox name not allowed (e.g., mailbox
+    /// syntax incorrect)
     _553,
-    /// Transaction failed (Or, in the case of a connection-opening response, "No SMTP service here")
+    /// Transaction failed (Or, in the case of a connection-opening response,
+    /// "No SMTP service here")
     _554,
     /// MAIL FROM/RCPT TO parameters not recognized or not implemented
     _555,
@@ -844,10 +877,16 @@ impl ReplyCode {
             _503 => "Bad sequence of commands",
             _504 => "Command parameter not implemented",
             _535 => "Authentication failed",
-            _550 => "Requested action not taken: mailbox unavailable (e.g., mailbox not found, no access, or command rejected for policy reasons)",
+            _550 => {
+                "Requested action not taken: mailbox unavailable (e.g., mailbox not found, no \
+                 access, or command rejected for policy reasons)"
+            }
             _551 => "User not local",
             _552 => "Requested mail action aborted: exceeded storage allocation",
-            _553 => "Requested action not taken: mailbox name not allowed (e.g., mailbox syntax incorrect)",
+            _553 => {
+                "Requested action not taken: mailbox name not allowed (e.g., mailbox syntax \
+                 incorrect)"
+            }
             _554 => "Transaction failed",
             _555 => "MAIL FROM/RCPT TO parameters not recognized or not implemented",
             _530 => "Must issue a STARTTLS command first",
@@ -927,19 +966,19 @@ pub struct Reply<'s> {
     pub lines: SmallVec<[&'s str; 16]>,
 }
 
-impl<'s> Into<Result<ReplyCode>> for Reply<'s> {
-    fn into(self: Reply<'s>) -> Result<ReplyCode> {
-        if self.code.is_err() {
-            Err(Error::new(self.lines.join("\n")).set_summary(self.code.as_str()))
+impl<'s> From<Reply<'s>> for Result<ReplyCode> {
+    fn from(val: Reply<'s>) -> Self {
+        if val.code.is_err() {
+            Err(Error::new(val.lines.join("\n")).set_summary(val.code.as_str()))
         } else {
-            Ok(self.code)
+            Ok(val.code)
         }
     }
 }
 
 impl<'s> Reply<'s> {
-    /// `s` must be raw SMTP output i.e each line must start with 3 digit reply code, a space
-    /// or '-' and end with '\r\n'
+    /// `s` must be raw SMTP output i.e each line must start with 3 digit reply
+    /// code, a space or '-' and end with '\r\n'
     pub fn new(s: &'s str, code: ReplyCode) -> Self {
         let lines: SmallVec<_> = s.lines().map(|l| &l[4..l.len()]).collect();
         Reply { lines, code }
@@ -959,7 +998,9 @@ async fn read_lines<'r>(
     let mut returned_code: Option<ReplyCode> = None;
     'read_loop: loop {
         while let Some(pos) = ret[last_line_idx..].find("\r\n") {
-            // "Formally, a reply is defined to be the sequence: a three-digit code, <SP>, one line of text, and <CRLF>, or a multiline reply (as defined in the same section)."
+            // "Formally, a reply is defined to be the sequence: a three-digit code, <SP>,
+            // one line of text, and <CRLF>, or a multiline reply (as defined in the same
+            // section)."
             if ret[last_line_idx..].len() < 4
                 || !ret[last_line_idx..]
                     .chars()
@@ -1022,12 +1063,15 @@ async fn read_lines<'r>(
 
 #[cfg(test)]
 mod test {
-    use super::*;
+    use std::net::IpAddr; //, Ipv4Addr, Ipv6Addr};
+    use std::{
+        sync::{Arc, Mutex},
+        thread,
+    };
 
     use mailin_embedded::{Handler, Response, Server, SslConfig};
-    use std::net::IpAddr; //, Ipv4Addr, Ipv6Addr};
-    use std::sync::{Arc, Mutex};
-    use std::thread;
+
+    use super::*;
 
     const ADDRESS: &str = "127.0.0.1:8825";
     #[derive(Debug, Clone)]
@@ -1229,7 +1273,7 @@ mod test {
             futures::executor::block_on(SmtpConnection::new_connection(smtp_server_conf)).unwrap();
         futures::executor::block_on(connection.mail_transaction(
             input_str,
-            /*tos*/
+            /* tos */
             Some(&[
                 Address::try_from("foo-chat@example.com").unwrap(),
                 Address::try_from("webmaster@example.com").unwrap(),

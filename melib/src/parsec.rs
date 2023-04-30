@@ -442,30 +442,17 @@ pub fn is_not<'a>(slice: &'static [u8]) -> impl Parser<'a, &'a str> {
 ///
 /// let parser = |input| {
 ///     alt([
-///         delimited(
-///             match_literal("{"),
-///             quoted_slice(),
-///             match_literal("}"),
-///         ),
-///         delimited(
-///             match_literal("["),
-///             quoted_slice(),
-///             match_literal("]"),
-///         ),
-///     ]).parse(input)
+///         delimited(match_literal("{"), quoted_slice(), match_literal("}")),
+///         delimited(match_literal("["), quoted_slice(), match_literal("]")),
+///     ])
+///     .parse(input)
 /// };
 ///
 /// let input1: &str = "{\"quoted\"}";
 /// let input2: &str = "[\"quoted\"]";
-/// assert_eq!(
-///     Ok(("", "quoted")),
-///     parser.parse(input1)
-/// );
+/// assert_eq!(Ok(("", "quoted")), parser.parse(input1));
 ///
-/// assert_eq!(
-///     Ok(("", "quoted")),
-///     parser.parse(input2)
-/// );
+/// assert_eq!(Ok(("", "quoted")), parser.parse(input2));
 /// ```
 pub fn alt<'a, P, A, const N: usize>(parsers: [P; N]) -> impl Parser<'a, A>
 where
@@ -591,20 +578,17 @@ pub fn take<'a>(count: usize) -> impl Parser<'a, &'a str> {
 ///```rust
 ///  # use std::str::FromStr;
 ///  # use melib::parsec::{Parser, delimited, match_literal, map_res, is_a, take_literal};
-///  let lit: &str = "{31}\r\nThere is no script by that name\r\n";
-///  assert_eq!(
-///      take_literal(delimited(
-///                 match_literal("{"),
-///                 map_res(is_a(b"0123456789"), |s| usize::from_str(s)),
-///                 match_literal("}\r\n"),
-///             ))
-///             .parse(lit),
-///      Ok((
-///          "\r\n",
-///          "There is no script by that name",
-///      ))
-///  );
-///```
+/// let lit: &str = "{31}\r\nThere is no script by that name\r\n";
+/// assert_eq!(
+///     take_literal(delimited(
+///         match_literal("{"),
+///         map_res(is_a(b"0123456789"), |s| usize::from_str(s)),
+///         match_literal("}\r\n"),
+///     ))
+///     .parse(lit),
+///     Ok(("\r\n", "There is no script by that name",))
+/// );
+/// ```
 pub fn take_literal<'a, P>(parser: P) -> impl Parser<'a, &'a str>
 where
     P: Parser<'a, usize>,
@@ -617,8 +601,9 @@ where
 
 #[cfg(test)]
 mod test {
-    use super::*;
     use std::collections::HashMap;
+
+    use super::*;
 
     #[test]
     fn test_parsec() {
@@ -639,16 +624,16 @@ mod test {
                         either(
                             either(
                                 either(
-                                    map(parse_bool(), |b| JsonValue::JsonBool(b)),
+                                    map(parse_bool(), JsonValue::JsonBool),
                                     map(parse_null(), |()| JsonValue::JsonNull),
                                 ),
-                                map(parse_array(), |vec| JsonValue::JsonArray(vec)),
+                                map(parse_array(), JsonValue::JsonArray),
                             ),
-                            map(parse_object(), |obj| JsonValue::JsonObject(obj)),
+                            map(parse_object(), JsonValue::JsonObject),
                         ),
-                        map(parse_number(), |n| JsonValue::JsonNumber(n)),
+                        map(parse_number(), JsonValue::JsonNumber),
                     ),
-                    map(quoted_string(), |s| JsonValue::JsonString(s)),
+                    map(quoted_string(), JsonValue::JsonString),
                 )
                 .parse(input)
             }

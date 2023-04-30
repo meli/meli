@@ -19,11 +19,15 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-//! Email addresses. Parsing functions are in [melib::email::parser::address](../parser/address/index.html).
+//! Email addresses. Parsing functions are in
+//! [melib::email::parser::address](../parser/address/index.html).
+use std::{
+    collections::HashSet,
+    convert::TryFrom,
+    hash::{Hash, Hasher},
+};
+
 use super::*;
-use std::collections::HashSet;
-use std::convert::TryFrom;
-use std::hash::{Hash, Hasher};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GroupAddress {
@@ -53,7 +57,7 @@ pub struct GroupAddress {
  * > display_name             │
  * >                          │
  * >                    address_spec
- *```
+ * ```
  */
 pub struct MailboxAddress {
     pub raw: Vec<u8>,
@@ -78,14 +82,20 @@ impl PartialEq for MailboxAddress {
 ///
 /// ```rust
 /// # use melib::email::Address;
-/// let addr = Address::new(Some("Jörg Doe".to_string()), "joerg@example.com".to_string());
+/// let addr = Address::new(
+///     Some("Jörg Doe".to_string()),
+///     "joerg@example.com".to_string(),
+/// );
 /// assert_eq!(addr.to_string().as_str(), "Jörg Doe <joerg@example.com>");
 /// ```
 ///
 /// or parse it from a raw value:
 ///
 /// ```rust
-/// let (rest_bytes, addr) = melib::email::parser::address::address("=?utf-8?q?J=C3=B6rg_Doe?= <joerg@example.com>".as_bytes()).unwrap();
+/// let (rest_bytes, addr) = melib::email::parser::address::address(
+///     "=?utf-8?q?J=C3=B6rg_Doe?= <joerg@example.com>".as_bytes(),
+/// )
+/// .unwrap();
 /// assert!(rest_bytes.is_empty());
 /// assert_eq!(addr.get_display_name(), Some("Jörg Doe".to_string()));
 /// assert_eq!(addr.get_email(), "joerg@example.com".to_string());
@@ -154,8 +164,8 @@ impl Address {
 
     /// Get the display name of this address.
     ///
-    /// If it's a group, it's the name of the group. Otherwise it's the `display_name` part of
-    /// the mailbox:
+    /// If it's a group, it's the name of the group. Otherwise it's the
+    /// `display_name` part of the mailbox:
     ///
     ///
     /// ```text
@@ -166,7 +176,7 @@ impl Address {
     /// display_name     │          display_name             │
     ///                  │                                   │
     ///            address_spec                        address_spec
-    ///```
+    /// ```
     pub fn get_display_name(&self) -> Option<String> {
         let ret = match self {
             Address::Mailbox(m) => m.display_name.display(&m.raw),
@@ -179,7 +189,8 @@ impl Address {
         }
     }
 
-    /// Get the address spec part of this address. A group returns an empty `String`.
+    /// Get the address spec part of this address. A group returns an empty
+    /// `String`.
     pub fn get_email(&self) -> String {
         match self {
             Address::Mailbox(m) => m.address_spec.display(&m.raw),
@@ -238,8 +249,8 @@ impl Address {
 
     /// Get subaddress out of an address (e.g. `ken+subaddress@example.org`).
     ///
-    /// Subaddresses are commonly text following a "+" character in an email address's local part
-    /// . They are defined in [RFC5233 `Sieve Email Filtering: Subaddress Extension`](https://tools.ietf.org/html/rfc5233.html)
+    /// Subaddresses are commonly text following a "+" character in an email
+    /// address's local part . They are defined in [RFC5233 `Sieve Email Filtering: Subaddress Extension`](https://tools.ietf.org/html/rfc5233.html)
     ///
     /// # Examples
     ///

@@ -19,12 +19,15 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use crate::backends::{
-    BackendMailbox, LazyCountSet, Mailbox, MailboxHash, MailboxPermissions, SpecialUsageMailbox,
-};
-use crate::error::*;
-use crate::UnixTimestamp;
 use std::sync::{Arc, Mutex};
+
+use crate::{
+    backends::{
+        BackendMailbox, LazyCountSet, Mailbox, MailboxHash, MailboxPermissions, SpecialUsageMailbox,
+    },
+    error::*,
+    UnixTimestamp,
+};
 
 #[derive(Debug, Default, Clone)]
 pub struct NntpMailbox {

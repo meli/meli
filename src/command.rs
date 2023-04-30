@@ -20,34 +20,41 @@
  */
 
 /*! A parser module for user commands passed through Command mode.
-*/
-use crate::melib::parser::BytesExt;
-use melib::nom::{
-    self,
-    branch::alt,
-    bytes::complete::{is_a, is_not, tag, take_until},
-    character::complete::{digit1, not_line_ending},
-    combinator::{map, map_res},
-    error::Error as NomError,
-    multi::separated_list1,
-    sequence::{pair, preceded, separated_pair},
-    IResult,
-};
+ */
 pub use melib::thread::{SortField, SortOrder};
-use melib::Error;
+use melib::{
+    nom::{
+        self,
+        branch::alt,
+        bytes::complete::{is_a, is_not, tag, take_until},
+        character::complete::{digit1, not_line_ending},
+        combinator::{map, map_res},
+        error::Error as NomError,
+        multi::separated_list1,
+        sequence::{pair, preceded, separated_pair},
+        IResult,
+    },
+    Error,
+};
+
+use crate::melib::parser::BytesExt;
 pub mod actions;
-use actions::MailboxOperation;
 use std::collections::HashSet;
+
+use actions::MailboxOperation;
 pub mod history;
-pub use crate::actions::AccountAction::{self, *};
-pub use crate::actions::Action::{self, *};
-pub use crate::actions::ComposeAction::{self, *};
-pub use crate::actions::ListingAction::{self, *};
-pub use crate::actions::MailingListAction::{self, *};
-pub use crate::actions::TabAction::{self, *};
-pub use crate::actions::TagAction::{self, *};
-pub use crate::actions::ViewAction::{self, *};
 use std::str::FromStr;
+
+pub use crate::actions::{
+    AccountAction::{self, *},
+    Action::{self, *},
+    ComposeAction::{self, *},
+    ListingAction::{self, *},
+    MailingListAction::{self, *},
+    TabAction::{self, *},
+    TagAction::{self, *},
+    ViewAction::{self, *},
+};
 
 /// Helper macro to convert an array of tokens into a TokenStream
 macro_rules! to_stream {
@@ -63,7 +70,8 @@ macro_rules! to_stream {
     };
 }
 
-/// Macro to create a const table with every command part that can be auto-completed and its description
+/// Macro to create a const table with every command part that can be
+/// auto-completed and its description
 macro_rules! define_commands {
     ( [$({ tags: [$( $tags:literal),*], desc: $desc:literal, tokens: $tokens:expr, parser: ($parser:item)}),*]) => {
         pub const COMMAND_COMPLETION: &[(&str, &str, TokenStream)] = &[$($( ($tags, $desc, TokenStream { tokens: $tokens } ) ),*),* ];
@@ -142,7 +150,8 @@ impl TokenStream {
                     | t @ QuotedStringValue
                     | t @ AlphanumericStringValue => {
                         let _t = t;
-                        //sugg.insert(format!("{}{:?}", if s.is_empty() { " " } else { "" }, t));
+                        //sugg.insert(format!("{}{:?}", if s.is_empty() { " " }
+                        // else { "" }, t));
                     }
                 }
                 tokens.push((*s, *t.inner()));
@@ -209,7 +218,8 @@ impl TokenStream {
     }
 }
 
-/// `Token` wrapper that defines how many times a token is expected to be repeated
+/// `Token` wrapper that defines how many times a token is expected to be
+/// repeated
 #[derive(Debug, Copy, Clone)]
 pub enum TokenAdicity {
     ZeroOrOne(Token),

@@ -19,11 +19,12 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::mailbox::JmapMailbox;
-use super::*;
+use std::convert::{TryFrom, TryInto};
+
 use serde::Serialize;
 use serde_json::{json, Value};
-use std::convert::{TryFrom, TryInto};
+
+use super::{mailbox::JmapMailbox, *};
 
 pub type UtcDate = String;
 
@@ -97,7 +98,13 @@ pub async fn get_mailboxes(conn: &JmapConnection) -> Result<HashMap<MailboxHash,
     let res_text = res.text().await?;
     let mut v: MethodResponse = match serde_json::from_str(&res_text) {
         Err(err) => {
-            let err = Error::new(format!("BUG: Could not deserialize {} server JSON response properly, please report this!\nReply from server: {}", &conn.server_conf.server_url, &res_text)).set_source(Some(Arc::new(err))).set_kind(ErrorKind::Bug);
+            let err = Error::new(format!(
+                "BUG: Could not deserialize {} server JSON response properly, please report \
+                 this!\nReply from server: {}",
+                &conn.server_conf.server_url, &res_text
+            ))
+            .set_source(Some(Arc::new(err)))
+            .set_kind(ErrorKind::Bug);
             *conn.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
             return Err(err);
         }
@@ -108,8 +115,9 @@ pub async fn get_mailboxes(conn: &JmapConnection) -> Result<HashMap<MailboxHash,
     let GetResponse::<MailboxObject> {
         list, account_id, ..
     } = m;
-    // Is account set as `personal`? (`isPersonal` property). Then, even if `isSubscribed` is false
-    // on a mailbox, it should be regarded as subscribed.
+    // Is account set as `personal`? (`isPersonal` property). Then, even if
+    // `isSubscribed` is false on a mailbox, it should be regarded as
+    // subscribed.
     let is_personal: bool = {
         let session = conn.session_guard();
         session
@@ -204,7 +212,13 @@ pub async fn get_message_list(
     let res_text = res.text().await?;
     let mut v: MethodResponse = match serde_json::from_str(&res_text) {
         Err(err) => {
-            let err = Error::new(format!("BUG: Could not deserialize {} server JSON response properly, please report this!\nReply from server: {}", &conn.server_conf.server_url, &res_text)).set_source(Some(Arc::new(err))).set_kind(ErrorKind::Bug);
+            let err = Error::new(format!(
+                "BUG: Could not deserialize {} server JSON response properly, please report \
+                 this!\nReply from server: {}",
+                &conn.server_conf.server_url, &res_text
+            ))
+            .set_source(Some(Arc::new(err)))
+            .set_kind(ErrorKind::Bug);
             *conn.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
             return Err(err);
         }
@@ -284,7 +298,13 @@ pub async fn fetch(
 
     let mut v: MethodResponse = match serde_json::from_str(&res_text) {
         Err(err) => {
-            let err = Error::new(format!("BUG: Could not deserialize {} server JSON response properly, please report this!\nReply from server: {}", &conn.server_conf.server_url, &res_text)).set_source(Some(Arc::new(err))).set_kind(ErrorKind::Bug);
+            let err = Error::new(format!(
+                "BUG: Could not deserialize {} server JSON response properly, please report \
+                 this!\nReply from server: {}",
+                &conn.server_conf.server_url, &res_text
+            ))
+            .set_source(Some(Arc::new(err)))
+            .set_kind(ErrorKind::Bug);
             *conn.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
             return Err(err);
         }

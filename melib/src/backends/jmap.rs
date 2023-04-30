@@ -19,21 +19,26 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use crate::backends::*;
-use crate::conf::AccountSettings;
-use crate::connections::timeout;
-use crate::email::*;
-use crate::error::{Error, Result};
-use crate::Collection;
+use std::{
+    collections::{HashMap, HashSet},
+    convert::TryFrom,
+    str::FromStr,
+    sync::{Arc, Mutex, RwLock},
+    time::{Duration, Instant},
+};
+
 use futures::lock::Mutex as FutureMutex;
-use isahc::config::RedirectPolicy;
-use isahc::{AsyncReadResponseExt, HttpClient};
+use isahc::{config::RedirectPolicy, AsyncReadResponseExt, HttpClient};
 use serde_json::Value;
-use std::collections::{HashMap, HashSet};
-use std::convert::TryFrom;
-use std::str::FromStr;
-use std::sync::{Arc, Mutex, RwLock};
-use std::time::{Duration, Instant};
+
+use crate::{
+    backends::*,
+    conf::AccountSettings,
+    connections::timeout,
+    email::*,
+    error::{Error, Result},
+    Collection,
+};
 
 #[macro_export]
 macro_rules! _impl {
@@ -131,7 +136,9 @@ impl JmapServerConf {
                 ^ s.extra.contains_key("server_password"))
         {
             return Err(Error::new(format!(
-                "({}) `use_token` use requires either the `server_password_command` set with a command that returns an Bearer token of your account, or `server_password` with the API Bearer token as a string. Consult documentation for guidance.",
+                "({}) `use_token` use requires either the `server_password_command` set with a \
+                 command that returns an Bearer token of your account, or `server_password` with \
+                 the API Bearer token as a string. Consult documentation for guidance.",
                 s.name,
             )));
         }
@@ -416,7 +423,13 @@ impl MailBackend for JmapType {
 
             let upload_response: UploadResponse = match serde_json::from_str(&res_text) {
                 Err(err) => {
-                    let err = Error::new(format!("BUG: Could not deserialize {} server JSON response properly, please report this!\nReply from server: {}", &conn.server_conf.server_url, &res_text)).set_source(Some(Arc::new(err))).set_kind(ErrorKind::Bug);
+                    let err = Error::new(format!(
+                        "BUG: Could not deserialize {} server JSON response properly, please \
+                         report this!\nReply from server: {}",
+                        &conn.server_conf.server_url, &res_text
+                    ))
+                    .set_source(Some(Arc::new(err)))
+                    .set_kind(ErrorKind::Bug);
                     *conn.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
                     return Err(err);
                 }
@@ -447,7 +460,13 @@ impl MailBackend for JmapType {
 
             let mut v: MethodResponse = match serde_json::from_str(&res_text) {
                 Err(err) => {
-                    let err = Error::new(format!("BUG: Could not deserialize {} server JSON response properly, please report this!\nReply from server: {}", &conn.server_conf.server_url, &res_text)).set_source(Some(Arc::new(err))).set_kind(ErrorKind::Bug);
+                    let err = Error::new(format!(
+                        "BUG: Could not deserialize {} server JSON response properly, please \
+                         report this!\nReply from server: {}",
+                        &conn.server_conf.server_url, &res_text
+                    ))
+                    .set_source(Some(Arc::new(err)))
+                    .set_kind(ErrorKind::Bug);
                     *conn.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
                     return Err(err);
                 }
@@ -528,7 +547,13 @@ impl MailBackend for JmapType {
             let res_text = res.text().await?;
             let mut v: MethodResponse = match serde_json::from_str(&res_text) {
                 Err(err) => {
-                    let err = Error::new(format!("BUG: Could not deserialize {} server JSON response properly, please report this!\nReply from server: {}", &conn.server_conf.server_url, &res_text)).set_source(Some(Arc::new(err))).set_kind(ErrorKind::Bug);
+                    let err = Error::new(format!(
+                        "BUG: Could not deserialize {} server JSON response properly, please \
+                         report this!\nReply from server: {}",
+                        &conn.server_conf.server_url, &res_text
+                    ))
+                    .set_source(Some(Arc::new(err)))
+                    .set_kind(ErrorKind::Bug);
                     *conn.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
                     return Err(err);
                 }
@@ -664,7 +689,13 @@ impl MailBackend for JmapType {
 
             let mut v: MethodResponse = match serde_json::from_str(&res_text) {
                 Err(err) => {
-                    let err = Error::new(format!("BUG: Could not deserialize {} server JSON response properly, please report this!\nReply from server: {}", &conn.server_conf.server_url, &res_text)).set_source(Some(Arc::new(err))).set_kind(ErrorKind::Bug);
+                    let err = Error::new(format!(
+                        "BUG: Could not deserialize {} server JSON response properly, please \
+                         report this!\nReply from server: {}",
+                        &conn.server_conf.server_url, &res_text
+                    ))
+                    .set_source(Some(Arc::new(err)))
+                    .set_kind(ErrorKind::Bug);
                     *conn.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
                     return Err(err);
                 }
@@ -771,12 +802,22 @@ impl MailBackend for JmapType {
 
             let res_text = res.text().await?;
             /*
-             *{"methodResponses":[["Email/set",{"notUpdated":null,"notDestroyed":null,"oldState":"86","newState":"87","accountId":"u148940c7","updated":{"M045926eed54b11423918f392":{"id":"M045926eed54b11423918f392"}},"created":null,"destroyed":null,"notCreated":null},"m3"]],"sessionState":"cyrus-0;p-5;vfs-0"}
+             *{"methodResponses":[["Email/set",{"notUpdated":null,"notDestroyed":null,"
+             * oldState":"86","newState":"87","accountId":"u148940c7","updated":{"
+             * M045926eed54b11423918f392":{"id":"M045926eed54b11423918f392"}},"created":
+             * null,"destroyed":null,"notCreated":null},"m3"]],"sessionState":"cyrus-0;
+             * p-5;vfs-0"}
              */
             //debug!("res_text = {}", &res_text);
             let mut v: MethodResponse = match serde_json::from_str(&res_text) {
                 Err(err) => {
-                    let err = Error::new(format!("BUG: Could not deserialize {} server JSON response properly, please report this!\nReply from server: {}", &conn.server_conf.server_url, &res_text)).set_source(Some(Arc::new(err))).set_kind(ErrorKind::Bug);
+                    let err = Error::new(format!(
+                        "BUG: Could not deserialize {} server JSON response properly, please \
+                         report this!\nReply from server: {}",
+                        &conn.server_conf.server_url, &res_text
+                    ))
+                    .set_source(Some(Arc::new(err)))
+                    .set_kind(ErrorKind::Bug);
                     *conn.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
                     return Err(err);
                 }

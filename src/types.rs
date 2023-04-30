@@ -21,32 +21,36 @@
 
 /*! UI types used throughout meli.
  *
- * The `segment_tree` module performs maximum range queries. This is used in getting the maximum
- * element of a column within a specific range in e-mail lists. That way a very large value that
- * is not the in the currently displayed page does not cause the column to be rendered bigger
+ * The `segment_tree` module performs maximum range queries. This is used in
+ * getting the maximum element of a column within a specific range in e-mail
+ * lists. That way a very large value that is not the in the currently
+ * displayed page does not cause the column to be rendered bigger
  * than it has to.
  *
- * `UIMode` describes the application's... mode. Same as in the modal editor `vi`.
+ * `UIMode` describes the application's... mode. Same as in the modal editor
+ * `vi`.
  *
  * `UIEvent` is the type passed around `Component`s when something happens.
  */
 extern crate serde;
 #[macro_use]
 mod helpers;
-pub use self::helpers::*;
+use std::{borrow::Cow, fmt, sync::Arc};
 
-use super::command::Action;
-use super::jobs::{JobExecutor, JobId};
-use super::terminal::*;
-use crate::components::{Component, ComponentId, ScrollUpdate};
-use std::borrow::Cow;
-use std::sync::Arc;
-
-use melib::backends::{AccountHash, BackendEvent, MailboxHash};
-use melib::uuid::Uuid;
-use melib::{EnvelopeHash, RefreshEvent, ThreadHash};
+use melib::{
+    backends::{AccountHash, BackendEvent, MailboxHash},
+    uuid::Uuid,
+    EnvelopeHash, RefreshEvent, ThreadHash,
+};
 use nix::unistd::Pid;
-use std::fmt;
+
+pub use self::helpers::*;
+use super::{
+    command::Action,
+    jobs::{JobExecutor, JobId},
+    terminal::*,
+};
+use crate::components::{Component, ComponentId, ScrollUpdate};
 
 #[derive(Debug)]
 pub enum StatusEvent {
@@ -62,8 +66,8 @@ pub enum StatusEvent {
     ScrollUpdate(ScrollUpdate),
 }
 
-/// `ThreadEvent` encapsulates all of the possible values we need to transfer between our threads
-/// to the main process.
+/// `ThreadEvent` encapsulates all of the possible values we need to transfer
+/// between our threads to the main process.
 #[derive(Debug)]
 pub enum ThreadEvent {
     /// User input.
@@ -196,12 +200,13 @@ impl fmt::Display for UIMode {
 }
 
 pub mod segment_tree {
-    /*! Simple segment tree implementation for maximum in range queries. This is useful if given an
-     *  array of numbers you want to get the maximum value inside an interval quickly.
+    /*! Simple segment tree implementation for maximum in range queries. This
+     * is useful if given an  array of numbers you want to get the
+     * maximum value inside an interval quickly.
      */
+    use std::{convert::TryFrom, iter::FromIterator};
+
     use smallvec::SmallVec;
-    use std::convert::TryFrom;
-    use std::iter::FromIterator;
 
     #[derive(Default, Debug, Clone)]
     pub struct SegmentTree {
@@ -299,7 +304,7 @@ pub mod segment_tree {
             .iter()
             .cloned()
             .collect::<SmallVec<[u8; 1024]>>();
-        let mut segment_tree = SegmentTree::from(array.clone());
+        let mut segment_tree = SegmentTree::from(array);
 
         assert_eq!(segment_tree.get_max(0, 5), 23);
         assert_eq!(segment_tree.get_max(6, 9), 37);

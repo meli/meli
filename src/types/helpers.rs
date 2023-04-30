@@ -19,11 +19,13 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::fs;
-use std::fs::OpenOptions;
-use std::io::{Read, Write};
-use std::os::unix::fs::PermissionsExt;
-use std::path::PathBuf;
+use std::{
+    fs,
+    fs::OpenOptions,
+    io::{Read, Write},
+    os::unix::fs::PermissionsExt,
+    path::PathBuf,
+};
 
 use melib::uuid::Uuid;
 
@@ -65,8 +67,8 @@ impl File {
     }
 }
 
-/// Returned `File` will be deleted when dropped if delete_on_drop is set, so make sure to add it on `context.temp_files`
-/// to reap it later.
+/// Returned `File` will be deleted when dropped if delete_on_drop is set, so
+/// make sure to add it on `context.temp_files` to reap it later.
 pub fn create_temp_file(
     bytes: &[u8],
     filename: Option<&str>,

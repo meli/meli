@@ -19,8 +19,9 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::*;
 use std::collections::HashMap;
+
+use super::*;
 
 mod contact_list;
 

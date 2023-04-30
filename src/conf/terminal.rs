@@ -21,10 +21,9 @@
 
 //! Settings for terminal display
 
-use super::deserializers::non_empty_string;
-use super::DotAddressable;
-use super::Themes;
 use melib::{Error, Result, ToggleFlag};
+
+use super::{deserializers::non_empty_string, DotAddressable, Themes};
 
 /// Settings for terminal display
 #[derive(Debug, Deserialize, Clone, Serialize)]
@@ -35,8 +34,8 @@ pub struct TerminalSettings {
     pub themes: Themes,
     pub ascii_drawing: bool,
     pub use_color: ToggleFlag,
-    /// Use mouse events. This will disable text selection, but you will be able to resize some
-    /// widgets.
+    /// Use mouse events. This will disable text selection, but you will be able
+    /// to resize some widgets.
     /// Default: False
     pub use_mouse: ToggleFlag,
     /// String to show in status bar if mouse is active.
@@ -47,9 +46,9 @@ pub struct TerminalSettings {
     pub window_title: Option<String>,
     #[serde(deserialize_with = "non_empty_string")]
     pub file_picker_command: Option<String>,
-    /// Choose between 30-something built in sequences (integers between 0-30) or define your own
-    /// list of strings for the progress spinner animation.
-    /// Default: 0
+    /// Choose between 30-something built in sequences (integers between 0-30)
+    /// or define your own list of strings for the progress spinner
+    /// animation. Default: 0
     #[serde(default)]
     pub progress_spinner_sequence: Option<ProgressSpinnerSequence>,
 }

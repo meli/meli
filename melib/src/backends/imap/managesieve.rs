@@ -19,19 +19,25 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::{ImapConnection, ImapProtocol, ImapServerConf, UIDStore};
-use crate::conf::AccountSettings;
-use crate::email::parser::IResult;
-use crate::error::{Error, Result};
-use crate::get_conf_val;
-use crate::imap::RequiredResponses;
+use std::{
+    str::FromStr,
+    sync::{Arc, Mutex},
+    time::SystemTime,
+};
+
 use nom::{
     branch::alt, bytes::complete::tag, combinator::map, multi::separated_list1,
     sequence::separated_pair,
 };
-use std::str::FromStr;
-use std::sync::{Arc, Mutex};
-use std::time::SystemTime;
+
+use super::{ImapConnection, ImapProtocol, ImapServerConf, UIDStore};
+use crate::{
+    conf::AccountSettings,
+    email::parser::IResult,
+    error::{Error, Result},
+    get_conf_val,
+    imap::RequiredResponses,
+};
 
 pub struct ManageSieveConnection {
     pub inner: ImapConnection,
@@ -61,12 +67,17 @@ pub enum ManageSieveResponse<'a> {
 }
 
 mod parser {
+    use nom::{
+        bytes::complete::tag,
+        character::complete::crlf,
+        combinator::{iterator, map, opt},
+    };
+    pub use nom::{
+        bytes::complete::{is_not, tag_no_case},
+        sequence::{delimited, pair, preceded, terminated},
+    };
+
     use super::*;
-    use nom::bytes::complete::tag;
-    pub use nom::bytes::complete::{is_not, tag_no_case};
-    use nom::character::complete::crlf;
-    use nom::combinator::{iterator, map, opt};
-    pub use nom::sequence::{delimited, pair, preceded, terminated};
 
     pub fn sieve_name(input: &[u8]) -> IResult<&[u8], &[u8]> {
         crate::backends::imap::protocol_parser::string_token(input)

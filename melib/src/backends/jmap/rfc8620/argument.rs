@@ -19,9 +19,10 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use crate::backends::jmap::protocol::Method;
-use crate::backends::jmap::rfc8620::Object;
-use crate::backends::jmap::rfc8620::ResultField;
+use crate::backends::jmap::{
+    protocol::Method,
+    rfc8620::{Object, ResultField},
+};
 
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]

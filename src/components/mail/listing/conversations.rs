@@ -19,12 +19,12 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::*;
-use crate::components::PageMovement;
-use crate::jobs::JoinHandle;
+use std::{collections::BTreeMap, iter::FromIterator};
+
 use indexmap::IndexSet;
-use std::collections::BTreeMap;
-use std::iter::FromIterator;
+
+use super::*;
+use crate::{components::PageMovement, jobs::JoinHandle};
 
 macro_rules! row_attr {
     ($field:ident, $color_cache:expr, $unseen:expr, $highlighted:expr, $selected:expr  $(,)*) => {{
@@ -91,8 +91,8 @@ macro_rules! row_attr {
     }};
 }
 
-/// A list of all mail (`Envelope`s) in a `Mailbox`. On `\n` it opens the `Envelope` content in a
-/// `ThreadView`.
+/// A list of all mail (`Envelope`s) in a `Mailbox`. On `\n` it opens the
+/// `Envelope` content in a `ThreadView`.
 #[derive(Debug)]
 pub struct ConversationsListing {
     /// (x, y, z): x is accounts, y is mailboxes, z is index inside a mailbox.
@@ -455,8 +455,8 @@ impl ListingTrait for ConversationsListing {
 
         let top_idx = page_no * rows;
 
-        /* If cursor position has changed, remove the highlight from the previous position and
-         * apply it in the new one. */
+        /* If cursor position has changed, remove the highlight from the previous
+         * position and apply it in the new one. */
         if self.cursor_pos.2 != self.new_cursor_pos.2 && prev_page_no == page_no {
             let old_cursor_pos = self.cursor_pos;
             self.cursor_pos = self.new_cursor_pos;
@@ -582,9 +582,10 @@ impl ListingTrait for ConversationsListing {
                 self.view
                     .process_event(&mut UIEvent::VisibilityChange(false), context);
                 self.dirty = true;
-                /* If self.rows.row_updates is not empty and we exit a thread, the row_update events
-                 * will be performed but the list will not be drawn. So force a draw in any case.
-                 * */
+                /* If self.rows.row_updates is not empty and we exit a thread, the row_update
+                 * events will be performed but the list will not be drawn.
+                 * So force a draw in any case.
+                 */
                 self.force_draw = true;
             }
             Focus::Entry => {
@@ -1181,7 +1182,7 @@ impl Component for ConversationsListing {
 
             if !self.rows.row_updates.is_empty() {
                 /* certain rows need to be updated (eg an unseen message was just set seen)
-                 * */
+                 */
                 while let Some(row) = self.rows.row_updates.pop() {
                     self.update_line(context, row);
                     let row: usize = self.rows.env_order[&row];
@@ -1379,7 +1380,8 @@ impl Component for ConversationsListing {
                         // FIXME subsort
                         //if !self.filtered_selection.is_empty() {
                         //    let threads = &account.collection.threads[&self.cursor_pos.1];
-                        //    threads.vec_inner_sort_by(&mut self.filtered_selection, self.sort, &account.collection);
+                        //    threads.vec_inner_sort_by(&mut self.filtered_selection, self.sort,
+                        // &account.collection);
                         //} else {
                         //    self.refresh_mailbox(context, false);
                         //}
