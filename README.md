@@ -96,6 +96,7 @@ or if building directly with cargo, use the flag `--features="jmap"'.
 ### HTML Rendering
 
 HTML rendering is achieved using [w3m](https://github.com/tats/w3m) by default.
+You can use the `pager.html_filter` setting to override this (for more details you can consult [`meli.conf(5)`](./docs/meli.conf.5)).
 
 # Development
 
