@@ -94,7 +94,11 @@ help:
 
 .PHONY: check
 check:
-	@${CARGO_BIN} test ${CARGO_ARGS} ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" --workspace
+	@${CARGO_BIN} check ${CARGO_ARGS} ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" ${FEATURES} --all --tests --examples --benches --bins
+
+.PHONY: test
+test:
+	@${CARGO_BIN} test ${CARGO_ARGS} ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" --all --tests --examples --benches --bins
 
 .PHONY: check-deps
 check-deps:
