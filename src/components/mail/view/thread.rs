@@ -583,7 +583,6 @@ impl ThreadView {
                     crate::conf::value(context, "theme_default"),
                 );
             }
-            self.dirty = false;
             context.dirty_areas.push_back(area);
         } else {
             let old_cursor_pos = self.cursor_pos;
@@ -735,6 +734,7 @@ impl ThreadView {
             }
         }
     }
+
     fn draw_horz(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
@@ -979,11 +979,7 @@ impl Component for ThreadView {
 
         if self.entries.len() == 1 {
             self.mailview.draw(grid, area, context);
-            self.dirty = false;
-            return;
-        }
-
-        if total_cols >= self.content.size().0 + 74 {
+        } else if total_cols >= self.content.size().0 + 74 {
             self.draw_vert(grid, area, context);
         } else {
             self.draw_horz(grid, area, context);
@@ -1149,13 +1145,16 @@ impl Component for ThreadView {
         }
         false
     }
+
     fn is_dirty(&self) -> bool {
         self.dirty || (self.show_mailview && self.mailview.is_dirty())
     }
+
     fn set_dirty(&mut self, value: bool) {
         self.dirty = value;
         self.mailview.set_dirty(value);
     }
+
     fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut map = self.mailview.get_shortcuts(context);
 

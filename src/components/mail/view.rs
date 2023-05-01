@@ -1180,7 +1180,6 @@ impl Component for MailView {
         if !self.is_dirty() && !self.force_draw_headers {
             return;
         }
-        self.dirty = false;
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
 
@@ -1228,7 +1227,7 @@ impl Component for MailView {
                                         (set_y(upper_left, y), bottom_right),
                                         Some(get_x(upper_left)),
                                     );
-                                    if let Some(cell) = grid.get_mut(_x,_y) {
+                                    if let Some(cell) = grid.get_mut(_x, _y) {
                                         cell.set_ch(' ')
                                             .set_fg(headers_area.fg)
                                             .set_bg(headers_area.bg)
@@ -1241,10 +1240,17 @@ impl Component for MailView {
                                         headers.fg,
                                         headers.bg,
                                         headers.attrs,
-                                        ((_x +1, _y), bottom_right),
+                                        ((_x + 1, _y), bottom_right),
                                         Some(get_x(upper_left)),
                                     );
-                                    clear_area(grid, ((std::cmp::min(_x, get_x(bottom_right)), _y), (get_x(bottom_right), _y)), headers_area);
+                                    clear_area(
+                                        grid,
+                                        (
+                                            (std::cmp::min(_x, get_x(bottom_right)), _y),
+                                            (get_x(bottom_right), _y),
+                                        ),
+                                        headers_area,
+                                    );
                                     y = _y + 1;
                                 }
                             } else {
@@ -1516,7 +1522,6 @@ impl Component for MailView {
                 return;
             };
             self.initialised = true;
-            //let body = AttachmentBuilder::new(bytes).build();
             match self.mode {
                 ViewMode::Attachment(aidx) => {
                     let mut text = "Viewing attachment. Press `r` to return \n".to_string();
@@ -1642,19 +1647,6 @@ impl Component for MailView {
                         self.pager.filter(filter);
                     }
                 }
-                /*
-                ViewMode::Ansi(ref buf) => {
-                    write_string_to_grid(
-                        &format!("Viewing `{}`. Press `r` to return", buf.title()),
-                        grid,
-                        Color::Default,
-                        Color::Default,
-                        Attr::DEFAULT,
-                        (set_y(upper_left, y), bottom_right),
-                        Some(get_x(upper_left)),
-                    );
-                }
-                */
                 ViewMode::Url => {
                     let mut text = body_text.clone();
                     if links.is_empty() {
@@ -1735,10 +1727,6 @@ impl Component for MailView {
                     s.draw(grid, (set_y(upper_left, y), bottom_right), context);
                 }
             }
-            /*
-            ViewMode::Ansi(ref mut buf) => {
-                buf.draw(grid, (set_y(upper_left, y + 1), bottom_right), context);
-            }*/
             _ => {
                 self.pager
                     .draw(grid, (set_y(upper_left, y), bottom_right), context);
@@ -1751,6 +1739,8 @@ impl Component for MailView {
         if let ForceCharset::Dialog(ref mut s) = self.force_charset {
             s.draw(grid, area, context);
         }
+
+        self.dirty = false;
     }
 
     fn process_event(&mut self, mut event: &mut UIEvent, context: &mut Context) -> bool {
