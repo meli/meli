@@ -30,7 +30,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-use melib::{email::Attachment, text_processing::GlobMatch, Error, Result};
+use melib::{email::Attachment, log, text_processing::GlobMatch, Error, Result};
 
 use crate::{
     state::Context,
@@ -186,10 +186,7 @@ impl MailcapEntry {
                     })
                     .collect::<Vec<String>>();
                 let cmd_string = format!("{} {}", cmd, args.join(" "));
-                melib::log(
-                    format!("Executing: sh -c \"{}\"", cmd_string.replace('"', "\\\"")),
-                    melib::DEBUG,
-                );
+                log::debug!("Executing: sh -c \"{}\"", cmd_string.replace('"', "\\\""));
                 if copiousoutput {
                     let out = if needs_stdin {
                         let mut child = Command::new("sh")

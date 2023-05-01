@@ -100,6 +100,7 @@ impl ThreadView {
         view.new_cursor_pos = view.new_expanded_pos;
         view
     }
+
     pub fn update(&mut self, context: &Context) {
         if self.entries.is_empty() {
             return;
@@ -439,7 +440,6 @@ impl ThreadView {
         copy_area(grid, &self.content, dest_area, src_area);
     }
 
-    /// draw the list
     fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         let (upper_left, bottom_right) = area;
         let (width, height) = self.content.size();
@@ -492,8 +492,7 @@ impl ThreadView {
         let page_no = (self.new_cursor_pos).wrapping_div(rows);
 
         let top_idx = page_no * rows;
-        /* This closure (written for code clarity, should be inlined by the compiler)
-         * returns the **line** of an entry in the ThreadView grid. */
+        /* returns the **line** of an entry in the ThreadView grid. */
         let get_entry_area = |idx: usize, entries: &[ThreadEntry]| {
             let entries = &entries;
             let visual_indentation = entries[idx].index.0 * 4;
@@ -991,6 +990,7 @@ impl Component for ThreadView {
         }
         self.dirty = false;
     }
+
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         if let UIEvent::Action(Listing(OpenInNewTab)) = event {
             /* Handle this before self.mailview does */

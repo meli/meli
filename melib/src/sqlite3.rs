@@ -24,7 +24,7 @@ use std::path::PathBuf;
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput};
 pub use rusqlite::{self, params, Connection};
 
-use crate::{error::*, logging::log, Envelope};
+use crate::{error::*, log, Envelope};
 
 #[derive(Copy, Clone, Debug)]
 pub struct DatabaseDescription {
@@ -61,13 +61,10 @@ pub fn open_or_create_db(
         }?;
         let mut set_mode = false;
         if !db_path.exists() {
-            log(
-                format!(
-                    "Creating {} database in {}",
-                    description.name,
-                    db_path.display()
-                ),
-                crate::INFO,
+            log::info!(
+                "Creating {} database in {}",
+                description.name,
+                db_path.display()
             );
             set_mode = true;
         }
@@ -83,12 +80,10 @@ pub fn open_or_create_db(
         }
         let version: i32 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
         if version != 0_i32 && version as u32 != description.version {
-            log(
-                format!(
-                    "Database version mismatch, is {} but expected {}",
-                    version, description.version
-                ),
-                crate::INFO,
+            log::info!(
+                "Database version mismatch, is {} but expected {}",
+                version,
+                description.version
             );
             if second_try {
                 return Err(Error::new(format!(
@@ -124,13 +119,10 @@ pub fn reset_db(description: &DatabaseDescription, identifier: Option<&str>) -> 
     if !db_path.exists() {
         return Ok(());
     }
-    log(
-        format!(
-            "Resetting {} database in {}",
-            description.name,
-            db_path.display()
-        ),
-        crate::INFO,
+    log::info!(
+        "Resetting {} database in {}",
+        description.name,
+        db_path.display()
     );
     std::fs::remove_file(&db_path)?;
     Ok(())

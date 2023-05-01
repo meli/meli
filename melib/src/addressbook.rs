@@ -120,12 +120,10 @@ impl AddressBook {
                     }
                 }
                 Err(err) => {
-                    crate::log(
-                        format!(
-                            "Could not load mutt alias file {:?}: {}",
-                            mutt_alias_file, err
-                        ),
-                        crate::WARN,
+                    log::warn!(
+                        "Could not load mutt alias file {:?}: {}",
+                        mutt_alias_file,
+                        err
                     );
                 }
             }
@@ -139,10 +137,7 @@ impl AddressBook {
                     }
                 }
                 Err(err) => {
-                    crate::log(
-                        format!("Could not load vcards from {:?}: {}", vcard_path, err),
-                        crate::WARN,
-                    );
+                    log::warn!("Could not load vcards from {:?}: {}", vcard_path, err);
                 }
             }
         }

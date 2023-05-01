@@ -557,7 +557,7 @@ pub trait MailListingTrait: ListingTrait {
                                 name: "message copying".into(),
                                 handle,
                                 on_finish: None,
-                                logging_level: melib::LoggingLevel::INFO,
+                                log_level: LogLevel::INFO,
                             },
                         );
                     }
@@ -594,7 +594,7 @@ pub trait MailListingTrait: ListingTrait {
                                 name: "message moving".into(),
                                 handle,
                                 on_finish: None,
-                                logging_level: melib::LoggingLevel::INFO,
+                                log_level: LogLevel::INFO,
                             },
                         );
                     }
@@ -692,7 +692,7 @@ pub trait MailListingTrait: ListingTrait {
                                 ),
                             });
                         }))),
-                        logging_level: melib::LoggingLevel::INFO,
+                        log_level: LogLevel::INFO,
                     },
                 );
             }

@@ -1501,7 +1501,7 @@ impl Component for MailView {
                     err.to_string(),
                     Some(NotificationType::Error(err.kind)),
                 ));
-                log(format!("Failed to open envelope: {}", err), ERROR);
+                log::error!("Failed to open envelope: {err}");
                 self.init_futures(context);
                 return;
             } else {
@@ -2140,7 +2140,7 @@ impl Component for MailView {
                                                     .unwrap_or_else(|| "Not found".into()),
                                                 err
                                             );
-                                            log(&err_string, ERROR);
+                                            log::error!("{err_string}");
                                             context.replies.push_back(UIEvent::Notification(
                                                 Some("Failed to open e-mail".to_string()),
                                                 err_string,
@@ -2151,7 +2151,7 @@ impl Component for MailView {
                                 }
                             }
                         }))),
-                        logging_level: melib::LoggingLevel::DEBUG,
+                        log_level: LogLevel::DEBUG,
                     },
                 );
                 return true;
@@ -2503,7 +2503,7 @@ impl Component for MailView {
                         err.to_string(),
                         Some(NotificationType::Error(err.kind)),
                     ));
-                    log(format!("Failed to open envelope: {}", err), ERROR);
+                    log::error!("Failed to open envelope: {err}");
                     self.init_futures(context);
                     return true;
                 } else {
@@ -2523,10 +2523,7 @@ impl Component for MailView {
                             err.to_string(),
                             Some(NotificationType::Error(melib::ErrorKind::External)),
                         ));
-                        log(
-                            format!("Failed to create file at {}: {}", path.display(), err),
-                            ERROR,
-                        );
+                        log::error!("Failed to create file at {}: {err}", path.display());
                         return true;
                     }
                     Ok(()) => {
@@ -2557,7 +2554,7 @@ impl Component for MailView {
                         err.to_string(),
                         Some(NotificationType::Error(err.kind)),
                     ));
-                    log(format!("Failed to open envelope: {}", err), ERROR);
+                    log::error!("Failed to open envelope: {err}");
                     self.init_futures(context);
                     return true;
                 } else {
@@ -2582,10 +2579,7 @@ impl Component for MailView {
                                 err.to_string(),
                                 Some(NotificationType::Error(melib::ErrorKind::External)),
                             ));
-                            log(
-                                format!("Failed to create file at {}: {}", path.display(), err),
-                                ERROR,
-                            );
+                            log::error!("Failed to create file at {}: {err}", path.display());
                         }
                         Ok(()) => {
                             context.replies.push_back(UIEvent::Notification(
@@ -2609,10 +2603,7 @@ impl Component for MailView {
                                 err.to_string(),
                                 Some(NotificationType::Error(melib::ErrorKind::External)),
                             ));
-                            log(
-                                format!("Failed to create file at {}: {}", path.display(), err),
-                                ERROR,
-                            );
+                            log::error!("Failed to create file at {}: {err}", path.display());
                             return true;
                         }
                         Ok(()) => {

@@ -27,7 +27,7 @@ use std::{
     },
 };
 
-use melib::{error::*, log, ERROR};
+use melib::{error::*, log};
 #[cfg(not(target_os = "macos"))]
 use nix::{
     fcntl::{open, OFlag},
@@ -123,23 +123,15 @@ pub fn create_pty(
             nix::unistd::setsid().unwrap();
             match unsafe { set_controlling_terminal(slave_fd) } {
                 Ok(c) if c < 0 => {
-                    log(
-                        format!(
-                            "Could not execute `{}`: ioctl(fd, TIOCSCTTY, NULL) returned {}",
-                            command, c,
-                        ),
-                        ERROR,
+                    log::error!(
+                        "Could not execute `{command}`: ioctl(fd, TIOCSCTTY, NULL) returned {c}",
                     );
                     std::process::exit(c);
                 }
                 Ok(_) => {}
                 Err(err) => {
-                    log(
-                        format!(
-                            "Could not execute `{}`: ioctl(fd, TIOCSCTTY, NULL) returned {}",
-                            command, err,
-                        ),
-                        ERROR,
+                    log::error!(
+                        "Could not execute `{command}`: ioctl(fd, TIOCSCTTY, NULL) returned {err}",
                     );
                     std::process::exit(-1);
                 }
@@ -160,18 +152,15 @@ pub fn create_pty(
                             &CString::new(command.as_bytes()).unwrap(),
                         ],
                     ) {
-                        log(format!("Could not execute `{}`: {}", command, e,), ERROR);
+                        log::error!("Could not execute `{command}`: {e}");
                         std::process::exit(-1);
                     }
                 }
             }
-            log(
-                format!(
-                    "Could not execute `{}`: did not find the standard POSIX sh shell in PATH = {}",
-                    command,
-                    String::from_utf8_lossy(&path_var),
-                ),
-                ERROR,
+            log::error!(
+                "Could not execute `{command}`: did not find the standard POSIX sh shell in PATH \
+                 = {}",
+                String::from_utf8_lossy(&path_var),
             );
             std::process::exit(-1);
         }

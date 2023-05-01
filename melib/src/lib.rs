@@ -43,41 +43,20 @@
 //! - A `ShellExpandTrait` to expand paths like a shell.
 //! - A `debug` macro that works like `std::dbg` but for multiple threads. (see
 //!   [`debug` macro](./macro.debug.html))
+
 #[macro_use]
 pub mod dbg {
-
-    #[macro_export]
-    macro_rules! log_tag {
-        () => {
-            eprint!(
-                "[{}][{:?}] {}:{}_{}: ",
-                $crate::datetime::timestamp_to_string(
-                    $crate::datetime::now(),
-                    Some("%Y-%m-%d %T"),
-                    false
-                ),
-                std::thread::current()
-                    .name()
-                    .map(std::string::ToString::to_string)
-                    .unwrap_or_else(|| format!("{:?}", std::thread::current().id())),
-                file!(),
-                line!(),
-                column!()
-            );
-        };
-    }
 
     #[allow(clippy::redundant_closure)]
     #[macro_export]
     macro_rules! debug {
         ($val:literal) => {
             {
-            if cfg!(feature="debug-tracing") {
-                log_tag!();
-                eprintln!($val);
+                if cfg!(feature="debug-tracing") {
+                    $crate::log::debug!($val);
+                }
+                $val
             }
-            $val
-        }
         };
         ($val:expr) => {
             if cfg!(feature="debug-tracing") {
@@ -86,8 +65,7 @@ pub mod dbg {
                 // of temporaries - https://stackoverflow.com/a/48732525/1063961
                 match $val {
                     tmp => {
-                        log_tag!();
-                        eprintln!("{} = {:?}", stringify, tmp);
+                        $crate::log::debug!("{} = {:?}", stringify, tmp);
                         tmp
                     }
                 }
@@ -97,8 +75,7 @@ pub mod dbg {
         };
         ($fmt:literal, $($arg:tt)*) => {
             if cfg!(feature="debug-tracing") {
-                log_tag!();
-                eprintln!($fmt, $($arg)*);
+                $crate::log::debug!($fmt, $($arg)*);
             }
         };
     }
@@ -112,7 +89,7 @@ pub use datetime::UnixTimestamp;
 
 #[macro_use]
 mod logging;
-pub use self::logging::{LoggingLevel::*, *};
+pub use self::logging::{LogLevel, StderrLogger};
 
 pub mod addressbook;
 pub use addressbook::*;
@@ -142,6 +119,7 @@ pub mod sqlite3;
 
 #[macro_use]
 extern crate serde_derive;
+pub extern crate log;
 /* parser */
 extern crate data_encoding;
 extern crate encoding;

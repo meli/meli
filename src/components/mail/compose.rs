@@ -1748,12 +1748,9 @@ impl Component for Composer {
                 }
 
                 let editor_command = format!("{} {}", editor, f.path().display());
-                log(
-                    format!(
-                        "Executing: sh -c \"{}\"",
-                        editor_command.replace('"', "\\\"")
-                    ),
-                    DEBUG,
+                log::debug!(
+                    "Executing: sh -c \"{}\"",
+                    editor_command.replace('"', "\\\"")
                 );
                 match Command::new("sh")
                     .args(["-c", &editor_command])
@@ -1893,10 +1890,7 @@ impl Component for Composer {
                         context.input_kill();
                     }
 
-                    log(
-                        format!("Executing: sh -c \"{}\"", command.replace('"', "\\\"")),
-                        DEBUG,
-                    );
+                    log::debug!("Executing: sh -c \"{}\"", command.replace('"', "\\\""));
                     match Command::new("sh")
                         .args(["-c", command])
                         .stdin(Stdio::inherit())
@@ -2170,13 +2164,9 @@ pub fn send_draft(
     match output {
         Err(err) => {
             debug!("{:?} could not sign draft msg", err);
-            log(
-                format!(
-                    "Could not sign draft in account `{}`: {}.",
+            log::error!(
+                    "Could not sign draft in account `{}`: {err}.",
                     context.accounts[&account_hash].name(),
-                    err.to_string()
-                ),
-                ERROR,
             );
             context.replies.push_back(UIEvent::Notification(
                 Some(format!(
@@ -2358,12 +2348,9 @@ pub fn send_draft_async(
                 .unwrap();
         } else if !store_sent_mail && is_ok {
             let f = create_temp_file(message.as_bytes(), None, None, false);
-            log(
-                format!(
-                    "store_sent_mail is false; stored sent mail to {}",
-                    f.path().display()
-                ),
-                INFO,
+            log::info!(
+                "store_sent_mail is false; stored sent mail to {}",
+                f.path().display()
             );
         }
         ret

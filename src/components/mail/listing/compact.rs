@@ -1426,7 +1426,7 @@ impl CompactListing {
                     "Encountered an error while searching for `{}`: {}.",
                     search_term, &err
                 );
-                log(message.clone(), ERROR);
+                log::error!("{}", message);
                 context.replies.push_back(UIEvent::Notification(
                     Some("Could not perform search".to_string()),
                     message,

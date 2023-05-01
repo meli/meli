@@ -47,9 +47,10 @@ use melib::{
     backends::*,
     email::*,
     error::{Error, ErrorKind, Result},
+    log,
     text_processing::GlobMatch,
     thread::{SortField, SortOrder, Threads},
-    AddressBook, Collection,
+    AddressBook, Collection, LogLevel,
 };
 use smallvec::SmallVec;
 
@@ -127,12 +128,10 @@ impl MailboxEntry {
                 ret.path = melib::backends::utf7::decode_utf7_imap(&ret.path);
             }
             Some(other) => {
-                melib::log(
-                    format!(
-                        "mailbox `{}`: unrecognized mailbox name charset: {}",
-                        &ret.name, other
-                    ),
-                    melib::WARN,
+                log::warn!(
+                    "mailbox `{}`: unrecognized mailbox name charset: {}",
+                    &ret.name,
+                    other
                 );
             }
         }
@@ -199,7 +198,7 @@ pub enum JobRequest {
     },
     Generic {
         name: Cow<'static, str>,
-        logging_level: melib::LoggingLevel,
+        log_level: LogLevel,
         handle: JoinHandle<Result<()>>,
         on_finish: Option<crate::types::CallbackFn>,
     },
@@ -636,13 +635,11 @@ impl Account {
         }
 
         for missing_mailbox in &mailbox_conf_hash_set {
-            melib::log(
-                format!(
-                    "Account `{}` mailbox `{}` configured but not present in account's mailboxes. \
-                     Is it misspelled?",
-                    &self.name, missing_mailbox,
-                ),
-                melib::WARN,
+            log::warn!(
+                "Account `{}` mailbox `{}` configured but not present in account's mailboxes. Is \
+                 it misspelled?",
+                &self.name,
+                missing_mailbox,
             );
             self.sender
                 .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
@@ -667,12 +664,10 @@ impl Account {
                 });
             mailbox_comma_sep_list_string
                 .drain(mailbox_comma_sep_list_string.len().saturating_sub(2)..);
-            melib::log(
-                format!(
-                    "Account `{}` has the following mailboxes: [{}]",
-                    &self.name, mailbox_comma_sep_list_string,
-                ),
-                melib::WARN,
+            log::warn!(
+                "Account `{}` has the following mailboxes: [{}]",
+                &self.name,
+                mailbox_comma_sep_list_string,
             );
             self.sender
                 .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
@@ -766,13 +761,10 @@ impl Account {
                             )
                         }) {
                             Err(err) => {
-                                melib::log(
-                                    format!(
-                                        "Failed to update envelope {} in cache: {}",
-                                        envelope.message_id_display(),
-                                        err
-                                    ),
-                                    melib::ERROR,
+                                log::error!(
+                                    "Failed to update envelope {} in cache: {}",
+                                    envelope.message_id_display(),
+                                    err
                                 );
                             }
                             Ok(job) => {
@@ -786,7 +778,7 @@ impl Account {
                                         )
                                         .into(),
                                         handle,
-                                        logging_level: melib::LoggingLevel::TRACE,
+                                        log_level: LogLevel::TRACE,
                                         on_finish: None,
                                     },
                                 );
@@ -833,20 +825,17 @@ impl Account {
                                         )
                                         .into(),
                                         handle,
-                                        logging_level: melib::LoggingLevel::TRACE,
+                                        log_level: LogLevel::TRACE,
                                         on_finish: None,
                                     },
                                 );
                             }
                             Err(err) => {
-                                melib::log(
-                                    format!(
-                                        "Failed to update envelope {} in cache: {}",
-                                        self.collection.envelopes.read().unwrap()[&env_hash]
-                                            .message_id_display(),
-                                        err
-                                    ),
-                                    melib::ERROR,
+                                log::error!(
+                                    "Failed to update envelope {} in cache: {}",
+                                    self.collection.envelopes.read().unwrap()[&env_hash]
+                                        .message_id_display(),
+                                    err
                                 );
                             }
                         }
@@ -869,14 +858,11 @@ impl Account {
                             )
                         }) {
                             Err(err) => {
-                                melib::log(
-                                    format!(
-                                        "Failed to update envelope {} in cache: {}",
-                                        &self.collection.envelopes.read().unwrap()[&new_hash]
-                                            .message_id_display(),
-                                        err
-                                    ),
-                                    melib::ERROR,
+                                log::error!(
+                                    "Failed to update envelope {} in cache: {}",
+                                    &self.collection.envelopes.read().unwrap()[&new_hash]
+                                        .message_id_display(),
+                                    err
                                 );
                             }
                             Ok(job) => {
@@ -891,7 +877,7 @@ impl Account {
                                         )
                                         .into(),
                                         handle,
-                                        logging_level: melib::LoggingLevel::TRACE,
+                                        log_level: LogLevel::TRACE,
                                         on_finish: None,
                                     },
                                 );
@@ -934,7 +920,7 @@ impl Account {
                                 )
                                 .into(),
                                 handle,
-                                logging_level: melib::LoggingLevel::TRACE,
+                                log_level: LogLevel::TRACE,
                                 on_finish: None,
                             },
                         );
@@ -996,14 +982,11 @@ impl Account {
                     if self.settings.conf.search_backend == crate::conf::SearchBackend::Sqlite3 {
                         if let Err(err) = crate::sqlite3::remove(env_hash) {
                             let envelopes = self.collection.envelopes.read().unwrap();
-                            melib::log(
-                                format!(
-                                    "Failed to remove envelope {} [{}] in cache: {}",
-                                    &envelopes[&env_hash].message_id_display(),
-                                    env_hash,
-                                    err
-                                ),
-                                melib::ERROR,
+                            log::error!(
+                                "Failed to remove envelope {} [{}] in cache: {}",
+                                &envelopes[&env_hash].message_id_display(),
+                                env_hash,
+                                err
                             );
                         }
                     }
@@ -1235,10 +1218,7 @@ impl Account {
             if let Some(mailbox_hash) = mailbox {
                 if let Err(err) = self.save(bytes, *mailbox_hash, Some(flags)) {
                     debug!("{:?} could not save msg", err);
-                    melib::log(
-                        format!("Could not save in '{}' mailbox: {}.", *mailbox_hash, err),
-                        melib::ERROR,
-                    );
+                    log::error!("Could not save in '{}' mailbox: {}.", *mailbox_hash, err);
                 } else {
                     saved_at = Some(*mailbox_hash);
                     break;
@@ -1253,12 +1233,9 @@ impl Account {
         } else {
             let file = crate::types::create_temp_file(bytes, None, None, false);
             debug!("message saved in {}", file.path.display());
-            melib::log(
-                format!(
-                    "Message was stored in {} so that you can restore it manually.",
-                    file.path.display()
-                ),
-                melib::INFO,
+            log::info!(
+                "Message was stored in {} so that you can restore it manually.",
+                file.path.display()
             );
             Err(Error::new(format!(
                 "Message was stored in {} so that you can restore it manually.",
@@ -1336,7 +1313,7 @@ impl Account {
                 }
                 let output = msmtp.wait().expect("Failed to wait on mailer");
                 if output.success() {
-                    melib::log("Message sent.", melib::LoggingLevel::TRACE);
+                    log::trace!("Message sent.");
                 } else {
                     let error_message = if let Some(exit_code) = output.code() {
                         format!(
@@ -1349,7 +1326,7 @@ impl Account {
                             command
                         )
                     };
-                    melib::log(&error_message, melib::LoggingLevel::ERROR);
+                    log::error!("{}", error_message);
                     return Err(Error::new(error_message).set_summary("Message not sent."));
                 }
                 Ok(None)
@@ -1426,7 +1403,7 @@ impl Account {
                         }
                         let output = msmtp.wait().expect("Failed to wait on mailer");
                         if output.success() {
-                            melib::log("Message sent.", melib::LoggingLevel::TRACE);
+                            log::trace!("Message sent.");
                         } else {
                             let error_message = if let Some(exit_code) = output.code() {
                                 format!(
@@ -1440,7 +1417,7 @@ impl Account {
                                     command
                                 )
                             };
-                            melib::log(&error_message, melib::LoggingLevel::ERROR);
+                            log::error!("{}", error_message);
                             return Err(Error::new(error_message).set_summary("Message not sent."));
                         }
                         Ok(())
@@ -1895,15 +1872,12 @@ impl Account {
                     ..
                 } => {
                     if let Ok(Some(Err(err))) = handle.chan.try_recv() {
-                        melib::log(format!("Could not save message: {}", err), melib::ERROR);
+                        log::error!("Could not save message: {err}");
                         let file = crate::types::create_temp_file(bytes, None, None, false);
-                        debug!("message saved in {}", file.path.display());
-                        melib::log(
-                            format!(
-                                "Message was stored in {} so that you can restore it manually.",
-                                file.path.display()
-                            ),
-                            melib::INFO,
+                        log::debug!("message saved in {}", file.path.display());
+                        log::info!(
+                            "Message was stored in {} so that you can restore it manually.",
+                            file.path.display()
                         );
                         self.sender
                             .send(ThreadEvent::UIEvent(UIEvent::Notification(
@@ -2199,7 +2173,7 @@ impl Account {
                     ref name,
                     ref mut handle,
                     ref mut on_finish,
-                    logging_level,
+                    log_level,
                 } => {
                     match handle.chan.try_recv() {
                         Ok(Some(Err(err))) => {
@@ -2212,7 +2186,7 @@ impl Account {
                                 .expect("Could not send event on main channel");
                         }
                         Ok(Some(Ok(()))) if on_finish.is_none() => {
-                            if logging_level <= melib::LoggingLevel::INFO {
+                            if log_level <= LogLevel::INFO {
                                 self.sender
                                     .send(ThreadEvent::UIEvent(UIEvent::Notification(
                                         Some(format!("{}: {} succeeded", &self.name, name,)),

@@ -753,13 +753,10 @@ impl MailBackend for ImapType {
                                 cmd.push_str("\\Draft ");
                             }
                             Ok(_) => {
-                                crate::log(
-                                    format!(
-                                        "Application error: more than one flag bit set in \
-                                         set_flags: {:?}",
-                                        flags
-                                    ),
-                                    crate::ERROR,
+                                log::error!(
+                                    "Application error: more than one flag bit set in set_flags: \
+                                     {:?}",
+                                    flags
                                 );
                                 return Err(Error::new(format!(
                                     "Application error: more than one flag bit set in set_flags: \
@@ -826,13 +823,10 @@ impl MailBackend for ImapType {
                                 cmd.push_str("\\Draft ");
                             }
                             Ok(_) => {
-                                crate::log(
-                                    format!(
-                                        "Application error: more than one flag bit set in \
-                                         set_flags: {:?}",
-                                        flags
-                                    ),
-                                    crate::ERROR,
+                                log::error!(
+                                    "Application error: more than one flag bit set in set_flags: \
+                                     {:?}",
+                                    flags
                                 );
                                 return Err(Error::new(format!(
                                     "Application error: more than one flag bit set in set_flags: \
@@ -1716,23 +1710,18 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
             FetchStage::InitialCache => {
                 match cache::fetch_cached_envs(state).await {
                     Err(err) => {
-                        crate::log(
-                            format!(
-                                "IMAP cache error: could not fetch cache for {}. Reason: {}",
-                                state.uid_store.account_name, err
-                            ),
-                            crate::ERROR,
+                        log::error!(
+                            "IMAP cache error: could not fetch cache for {}. Reason: {}",
+                            state.uid_store.account_name,
+                            err
                         );
                         /* Try resetting the database */
                         if let Some(ref mut cache_handle) = state.cache_handle {
                             if let Err(err) = cache_handle.reset() {
-                                crate::log(
-                                    format!(
-                                        "IMAP cache error: could not reset cache for {}. Reason: \
-                                         {}",
-                                        state.uid_store.account_name, err
-                                    ),
-                                    crate::ERROR,
+                                log::error!(
+                                    "IMAP cache error: could not reset cache for {}. Reason: {}",
+                                    state.uid_store.account_name,
+                                    err
                                 );
                             }
                         }

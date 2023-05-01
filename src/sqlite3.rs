@@ -36,7 +36,7 @@ use melib::{
     },
     sqlite3::{self as melib_sqlite3, rusqlite::params, DatabaseDescription},
     thread::{SortField, SortOrder},
-    Error, Result, ERROR,
+    Error, Result,
 };
 use smallvec::SmallVec;
 
@@ -174,13 +174,9 @@ pub async fn insert(
                     err
                 )
             );
-            log(
-                format!(
-                    "Failed to open envelope {}: {}",
-                    envelope.message_id_display(),
-                    err
-                ),
-                ERROR,
+            log::error!(
+                "Failed to open envelope {}: {err}",
+                envelope.message_id_display(),
             );
             return Err(err);
         }
@@ -195,13 +191,9 @@ pub async fn insert(
             envelope.message_id_display(),
             err
         );
-        log(
-            format!(
-                "Failed to insert envelope {}: {}",
-                envelope.message_id_display(),
-                err
-            ),
-            ERROR,
+        log::error!(
+            "Failed to insert envelope {}: {err}",
+            envelope.message_id_display(),
         );
         return Err(Error::new(err.to_string()));
     }
@@ -246,18 +238,13 @@ pub async fn insert(
         )
         .map_err(|e| Error::new(e.to_string()))
     {
-        debug!(
-            "Failed to insert envelope {}: {}",
+        log::debug!(
+            "Failed to insert envelope {}: {err}",
             envelope.message_id_display(),
-            err
         );
-        log(
-            format!(
-                "Failed to insert envelope {}: {}",
-                envelope.message_id_display(),
-                err
-            ),
-            ERROR,
+        log::error!(
+            "Failed to insert envelope {}: {err}",
+            envelope.message_id_display(),
         );
     }
     Ok(())
@@ -279,11 +266,8 @@ pub fn remove(env_hash: EnvelopeHash) -> Result<()> {
         )
         .map_err(|e| Error::new(e.to_string()))
     {
-        debug!("Failed to remove envelope {}: {}", env_hash, err);
-        log(
-            format!("Failed to remove envelope {}: {}", env_hash, err),
-            ERROR,
-        );
+        log::debug!("Failed to remove envelope {env_hash}: {err}");
+        log::error!("Failed to remove envelope {env_hash}: {err}");
         return Err(err);
     }
     Ok(())

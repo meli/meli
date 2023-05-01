@@ -287,7 +287,7 @@ impl ImapConnection {
                             )
                         })
                     {
-                        crate::log(err.to_string(), crate::INFO);
+                        log::info!("{err}");
                     }
                 }
                 for response in v {
@@ -391,7 +391,7 @@ impl ImapConnection {
                                     )
                                 })
                             {
-                                crate::log(err.to_string(), crate::INFO);
+                                log::info!("{err}");
                             }
                         }
                         for response in v {

@@ -25,6 +25,7 @@ use crate::{
     connections::{lookup_ipv4, timeout, Connection},
     email::parser::BytesExt,
     error::*,
+    LogLevel,
 };
 extern crate native_tls;
 use std::{
@@ -260,10 +261,7 @@ impl ImapStream {
             .get_ref()
             .set_keepalive(Some(Duration::new(60 * 9, 0)))
         {
-            crate::log(
-                format!("Could not set TCP keepalive in IMAP connection: {}", err),
-                crate::LoggingLevel::WARN,
-            );
+            log::warn!("Could not set TCP keepalive in IMAP connection: {}", err);
         }
         let mut res = Vec::with_capacity(8 * 1024);
         let mut ret = ImapStream {
@@ -658,13 +656,11 @@ impl ImapConnection {
                             | ImapResponse::Bad(code)
                             | ImapResponse::Preauth(code)
                             | ImapResponse::Bye(code) => {
-                                crate::log(
-                                    format!(
-                                        "Could not use COMPRESS=DEFLATE in account `{}`: server \
-                                         replied with `{}`",
-                                        self.uid_store.account_name, code
-                                    ),
-                                    crate::LoggingLevel::WARN,
+                                log::warn!(
+                                    "Could not use COMPRESS=DEFLATE in account `{}`: server \
+                                     replied with `{}`",
+                                    self.uid_store.account_name,
+                                    code
                                 );
                             }
                             ImapResponse::Ok(_) => {
@@ -737,7 +733,7 @@ impl ImapConnection {
                                 crate::backends::BackendEvent::Notice {
                                     description: response_code.to_string(),
                                     content: None,
-                                    level: crate::logging::LoggingLevel::ERROR,
+                                    level: LogLevel::ERROR,
                                 },
                             );
                             ret.extend_from_slice(&response);
@@ -754,7 +750,7 @@ impl ImapConnection {
                                 crate::backends::BackendEvent::Notice {
                                     description: response_code.to_string(),
                                     content: None,
-                                    level: crate::logging::LoggingLevel::ERROR,
+                                    level: LogLevel::ERROR,
                                 },
                             );
                             ret.extend_from_slice(&response);

@@ -117,11 +117,8 @@ mod dbus {
                 }
 
                 if let Err(err) = notification.show() {
-                    debug!("Could not show dbus notification: {:?}", &err);
-                    melib::log(
-                        format!("Could not show dbus notification: {}", err),
-                        melib::ERROR,
-                    );
+                    log::debug!("Could not show dbus notification: {:?}", &err);
+                    log::error!("Could not show dbus notification: {err}");
                 }
             }
             false
@@ -194,8 +191,8 @@ impl Component for NotificationCommand {
                 if *kind == Some(NotificationType::NewMail) {
                     if let Some(ref path) = context.settings.notifications.xbiff_file_path {
                         if let Err(err) = update_xbiff(path) {
-                            debug!("Could not update xbiff file: {:?}", &err);
-                            melib::log(format!("Could not update xbiff file: {}.", err), ERROR);
+                            log::debug!("Could not update xbiff file: {:?}", &err);
+                            log::error!("Could not update xbiff file: {err}.");
                         }
                     }
                 }
@@ -220,11 +217,8 @@ impl Component for NotificationCommand {
                             context.children.push(child);
                         }
                         Err(err) => {
-                            log(
-                                format!("Could not run notification script: {}.", err),
-                                ERROR,
-                            );
-                            debug!("Could not run notification script: {:?}", err);
+                            log::error!("Could not run notification script: {err}.");
+                            log::debug!("Could not run notification script: {:?}", err);
                         }
                     }
                 } else {
@@ -256,11 +250,8 @@ impl Component for NotificationCommand {
                                 return false;
                             }
                             Err(err) => {
-                                log(
-                                    format!("Could not run notification script: {}.", err),
-                                    ERROR,
-                                );
-                                debug!("Could not run notification script: {:?}", err);
+                                log::error!("Could not run notification script: {err}.");
+                                log::debug!("Could not run notification script: {:?}", err);
                             }
                         }
                     }

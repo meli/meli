@@ -881,7 +881,7 @@ impl State {
                                 name: "Message index rebuild".into(),
                                 handle,
                                 on_finish: None,
-                                logging_level: melib::LoggingLevel::INFO,
+                                log_level: LogLevel::INFO,
                             },
                         );
                         self.context.replies.push_back(UIEvent::Notification(
@@ -1080,15 +1080,13 @@ impl State {
                     level,
                 },
             ) => {
-                log(
-                    format!(
-                        "{}: {}{}{}",
-                        self.context.accounts[&account_hash].name(),
-                        description.as_str(),
-                        if content.is_some() { ": " } else { "" },
-                        content.as_ref().map(|s| s.as_str()).unwrap_or("")
-                    ),
-                    level,
+                log::log!(
+                    level.into(),
+                    "{}: {}{}{}",
+                    self.context.accounts[&account_hash].name(),
+                    description.as_str(),
+                    if content.is_some() { ": " } else { "" },
+                    content.as_ref().map(|s| s.as_str()).unwrap_or("")
                 );
                 self.rcv_event(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
                     description.to_string(),
@@ -1208,7 +1206,7 @@ impl State {
                     Ok(Some(_)) => true,
                     Ok(None) => false,
                     Err(err) => {
-                        log(format!("Failed to wait on editor process: {}", err), ERROR);
+                        log::error!("Failed to wait on editor process: {err}");
                         return None;
                     }
                 }
@@ -1219,7 +1217,7 @@ impl State {
                     Ok(Some(_)) => true,
                     Ok(None) => false,
                     Err(err) => {
-                        log(format!("Failed to wait on child process: {}", err), ERROR);
+                        log::error!("Failed to wait on child process: {err}");
                         return None;
                     }
                 }

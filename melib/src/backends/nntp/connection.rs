@@ -24,6 +24,7 @@ use crate::{
     connections::{lookup_ipv4, Connection},
     email::parser::BytesExt,
     error::*,
+    log,
 };
 extern crate native_tls;
 use std::{collections::HashSet, future::Future, pin::Pin, sync::Arc, time::Instant};
@@ -199,10 +200,7 @@ impl NntpStream {
             .get_ref()
             .set_keepalive(Some(std::time::Duration::new(60 * 9, 0)))
         {
-            crate::log(
-                format!("Could not set TCP keepalive in NNTP connection: {}", err),
-                crate::LoggingLevel::WARN,
-            );
+            log::warn!("Could not set TCP keepalive in NNTP connection: {}", err);
         }
 
         ret.read_response(&mut res, false, &["200 ", "201 "])

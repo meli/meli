@@ -305,10 +305,7 @@ pub fn load_cards(p: &std::path::Path) -> Result<Vec<Card>> {
                         }
                     }
                     Err(err) => {
-                        crate::log(
-                            format!("Could not parse vcard from {}: {}", f.display(), err),
-                            crate::WARN,
-                        );
+                        log::warn!("Could not parse vcard from {}: {}", f.display(), err);
                     }
                 }
             }

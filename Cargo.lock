@@ -1178,6 +1178,7 @@ dependencies = [
  "isahc",
  "libc",
  "libloading",
+ "log",
  "mailin-embedded",
  "native-tls",
  "nix",

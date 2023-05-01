@@ -32,7 +32,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-use melib::{backends::TagHash, search::Query};
+use melib::{backends::TagHash, search::Query, StderrLogger};
 
 use crate::{conf::deserializers::non_empty_string, terminal::Color};
 
@@ -610,6 +610,8 @@ pub struct Settings {
     pub pgp: PGPSettings,
     pub terminal: TerminalSettings,
     pub log: LogSettings,
+    #[serde(skip)]
+    _logger: StderrLogger,
 }
 
 impl Settings {
@@ -624,11 +626,10 @@ impl Settings {
             s.insert(id, ac);
         }
 
+        let mut _logger = StderrLogger::new(fs.log.maximum_level);
+
         if let Some(ref log_path) = fs.log.log_file {
-            melib::change_log_dest(log_path.into());
-        }
-        if fs.log.maximum_level != melib::LoggingLevel::default() {
-            melib::change_log_level(fs.log.maximum_level);
+            _logger.change_log_dest(log_path.into());
         }
 
         Ok(Settings {
@@ -642,16 +643,16 @@ impl Settings {
             pgp: fs.pgp,
             terminal: fs.terminal,
             log: fs.log,
+            _logger,
         })
     }
 
     pub fn without_accounts() -> Result<Settings> {
         let fs = FileSettings::new()?;
+        let mut _logger = StderrLogger::new(fs.log.maximum_level);
+
         if let Some(ref log_path) = fs.log.log_file {
-            melib::change_log_dest(log_path.into());
-        }
-        if fs.log.maximum_level != melib::LoggingLevel::default() {
-            melib::change_log_level(fs.log.maximum_level);
+            _logger.change_log_dest(log_path.into());
         }
 
         Ok(Settings {
@@ -665,6 +666,7 @@ impl Settings {
             pgp: fs.pgp,
             terminal: fs.terminal,
             log: fs.log,
+            _logger,
         })
     }
 }
@@ -1015,7 +1017,7 @@ pub struct LogSettings {
     #[serde(default)]
     pub log_file: Option<PathBuf>,
     #[serde(default)]
-    pub maximum_level: melib::LoggingLevel,
+    pub maximum_level: melib::LogLevel,
 }
 
 pub use dotaddressable::*;
@@ -1047,7 +1049,7 @@ mod dotaddressable {
     impl DotAddressable for crate::terminal::Key {}
     impl DotAddressable for usize {}
     impl DotAddressable for Query {}
-    impl DotAddressable for melib::LoggingLevel {}
+    impl DotAddressable for melib::LogLevel {}
     impl DotAddressable for PathBuf {}
     impl DotAddressable for ToggleFlag {}
     impl DotAddressable for SearchBackend {}

@@ -23,30 +23,98 @@ use std::{
     fs::OpenOptions,
     io::{BufWriter, Write},
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicU8, Ordering},
+        Arc, Mutex,
+    },
 };
+
+use log::{Level, LevelFilter, Log, Metadata, Record};
 
 use crate::shellexpand::ShellExpandTrait;
 
-#[derive(Copy, Clone, PartialEq, PartialOrd, Hash, Debug, Serialize, Deserialize)]
-pub enum LoggingLevel {
-    OFF,
-    FATAL,
+#[derive(Copy, Clone, Default, PartialEq, PartialOrd, Hash, Debug, Serialize, Deserialize)]
+#[repr(u8)]
+pub enum LogLevel {
+    OFF = 0,
     ERROR,
     WARN,
+    #[default]
     INFO,
     DEBUG,
     TRACE,
 }
 
-impl std::fmt::Display for LoggingLevel {
+impl From<u8> for LogLevel {
+    fn from(verbosity: u8) -> Self {
+        match verbosity {
+            0 => LogLevel::OFF,
+            1 => LogLevel::ERROR,
+            2 => LogLevel::WARN,
+            3 => LogLevel::INFO,
+            4 => LogLevel::DEBUG,
+            _ => LogLevel::TRACE,
+        }
+    }
+}
+
+impl From<Level> for LogLevel {
+    fn from(l: Level) -> Self {
+        match l {
+            Level::Error => Self::ERROR,
+            Level::Warn => Self::WARN,
+            Level::Info => Self::INFO,
+            Level::Debug => Self::DEBUG,
+            Level::Trace => Self::TRACE,
+        }
+    }
+}
+
+impl From<LogLevel> for Level {
+    fn from(l: LogLevel) -> Self {
+        match l {
+            LogLevel::ERROR => Self::Error,
+            LogLevel::WARN => Self::Warn,
+            LogLevel::OFF | LogLevel::INFO => Self::Info,
+            LogLevel::DEBUG => Self::Debug,
+            LogLevel::TRACE => Self::Trace,
+        }
+    }
+}
+
+impl From<LevelFilter> for LogLevel {
+    fn from(l: LevelFilter) -> Self {
+        match l {
+            LevelFilter::Off => Self::OFF,
+            LevelFilter::Error => Self::ERROR,
+            LevelFilter::Warn => Self::WARN,
+            LevelFilter::Info => Self::INFO,
+            LevelFilter::Debug => Self::DEBUG,
+            LevelFilter::Trace => Self::TRACE,
+        }
+    }
+}
+
+impl From<LogLevel> for LevelFilter {
+    fn from(l: LogLevel) -> Self {
+        match l {
+            LogLevel::OFF => Self::Off,
+            LogLevel::ERROR => Self::Error,
+            LogLevel::WARN => Self::Warn,
+            LogLevel::INFO => Self::Info,
+            LogLevel::DEBUG => Self::Debug,
+            LogLevel::TRACE => Self::Trace,
+        }
+    }
+}
+
+impl std::fmt::Display for LogLevel {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
             f,
             "{}",
             match self {
                 OFF => "OFF",
-                FATAL => "FATAL",
                 ERROR => "ERROR",
                 WARN => "WARN",
                 INFO => "INFO",
@@ -57,73 +125,173 @@ impl std::fmt::Display for LoggingLevel {
     }
 }
 
-impl Default for LoggingLevel {
-    fn default() -> Self {
-        LoggingLevel::INFO
+use LogLevel::*;
+
+#[derive(Copy, Clone, Default, PartialEq, PartialOrd, Hash, Debug, Serialize, Deserialize)]
+pub enum Destination {
+    File,
+    #[default]
+    Stderr,
+    None,
+}
+
+#[derive(Clone)]
+pub struct StderrLogger {
+    dest: Arc<Mutex<BufWriter<std::fs::File>>>,
+    level: Arc<AtomicU8>,
+    print_level: bool,
+    print_module_names: bool,
+    debug_dest: Destination,
+}
+
+impl std::fmt::Debug for StderrLogger {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        fmt.debug_struct(stringify!(StderrLogger))
+            .field("level", &LogLevel::from(self.level.load(Ordering::SeqCst)))
+            .field("print_level", &self.print_level)
+            .field("print_module_names", &self.print_module_names)
+            .field("debug_dest", &self.debug_dest)
+            .finish()
     }
 }
 
-use LoggingLevel::*;
-
-struct LoggingBackend {
-    dest: BufWriter<std::fs::File>,
-    level: LoggingLevel,
+impl Default for StderrLogger {
+    fn default() -> Self {
+        Self::new(LogLevel::default())
+    }
 }
 
-thread_local!(static LOG: Arc<Mutex<LoggingBackend>> = Arc::new(Mutex::new({
-    let data_dir = xdg::BaseDirectories::with_prefix("meli").unwrap();
-    let log_file = OpenOptions::new().append(true) /* writes will append to a file instead of overwriting previous contents */
-        .create(true) /* a new file will be created if the file does not yet already exist.*/
-        .read(true)
-        .open(data_dir.place_data_file("meli.log").unwrap()).unwrap();
-    LoggingBackend {
-        dest: BufWriter::new(log_file),
-        level: LoggingLevel::default(),
-    }}))
-);
+impl StderrLogger {
+    pub fn new(level: LogLevel) -> Self {
+        let logger = {
+            let data_dir = xdg::BaseDirectories::with_prefix("meli").unwrap();
+            let log_file = OpenOptions::new().append(true) /* writes will append to a file instead of overwriting previous contents */
+            .create(true) /* a new file will be created if the file does not yet already exist.*/
+            .read(true)
+            .open(data_dir.place_data_file("meli.log").unwrap()).unwrap();
+            StderrLogger {
+                dest: Arc::new(Mutex::new(BufWriter::new(log_file).into())),
+                level: Arc::new(AtomicU8::new(level as u8)),
+                print_level: true,
+                print_module_names: true,
+                #[cfg(feature = "debug-tracing")]
+                debug_dest: Destination::Stderr,
+                #[cfg(not(feature = "debug-tracing"))]
+                debug_dest: Destination::None,
+            }
+        };
 
-pub fn log<S: AsRef<str>>(val: S, level: LoggingLevel) {
-    LOG.with(|f| {
-        let mut b = f.lock().unwrap();
-        if level <= b.level {
-            b.dest
+        #[cfg(feature = "debug-tracing")]
+        log::set_max_level(
+            if matches!(LevelFilter::from(logger.log_level()), LevelFilter::Off) {
+                LevelFilter::Off
+            } else {
+                LevelFilter::Trace
+            },
+        );
+        #[cfg(not(feature = "debug-tracing"))]
+        log::set_max_level(LevelFilter::from(logger.log_level()));
+        log::set_boxed_logger(Box::new(logger.clone())).unwrap();
+        logger
+    }
+
+    pub fn log_level(&self) -> LogLevel {
+        self.level.load(Ordering::SeqCst).into()
+    }
+
+    pub fn change_log_dest(&mut self, path: PathBuf) {
+        let path = path.expand(); // expand shell stuff
+        let mut dest = self.dest.lock().unwrap();
+        *dest = BufWriter::new(OpenOptions::new().append(true) /* writes will append to a file instead of overwriting previous contents */
+                         .create(true) /* a new file will be created if the file does not yet already exist.*/
+                         .read(true)
+                         .open(path).unwrap()).into();
+    }
+}
+
+impl Log for StderrLogger {
+    fn enabled(&self, metadata: &Metadata) -> bool {
+        !["polling", "async_io"]
+            .iter()
+            .any(|t| metadata.target().starts_with(t))
+            && (metadata.level() <= Level::from(self.log_level())
+                || !matches!(self.debug_dest, Destination::None))
+        //metadata.level() <= self.log_level_filter() &&
+        // self.includes_module(metadata.target())
+    }
+
+    fn log(&self, record: &Record) {
+        if !self.enabled(record.metadata()) {
+            return;
+        }
+
+        fn write(
+            writer: &mut impl Write,
+            record: &Record,
+            (print_level, print_module_names): (bool, bool),
+        ) -> Option<()> {
+            writer
                 .write_all(
                     crate::datetime::timestamp_to_string(crate::datetime::now(), None, false)
                         .as_bytes(),
                 )
-                .unwrap();
-            b.dest.write_all(b" [").unwrap();
-            b.dest.write_all(level.to_string().as_bytes()).unwrap();
-            b.dest.write_all(b"]: ").unwrap();
-            b.dest.write_all(val.as_ref().as_bytes()).unwrap();
-            b.dest.write_all(b"\n").unwrap();
-            b.dest.flush().unwrap();
+                .ok()?;
+            writer.write_all(b" [").ok()?;
+            if print_level {
+                writer
+                    .write_all(record.level().to_string().as_bytes())
+                    .ok()?;
+            }
+            write!(writer, "]: ").ok()?;
+            if print_module_names {
+                write!(writer, "{}: ", record.metadata().target()).ok()?;
+            }
+            write!(writer, "{}", record.args()).ok()?;
+            writer.write_all(b"\n").ok()?;
+            writer.flush().ok()?;
+            Some(())
         }
-    });
-}
 
-pub fn get_log_level() -> LoggingLevel {
-    let mut level = INFO;
-    LOG.with(|f| {
-        level = f.lock().unwrap().level;
-    });
-    level
-}
+        // if logging isn't enabled for this level do a quick out
+        match (
+            self.debug_dest,
+            record.metadata().level() <= Level::from(self.log_level()),
+        ) {
+            (Destination::None, false) => return,
+            (Destination::None | Destination::File, _) => {
+                _ = self.dest.lock().ok().and_then(|mut d| {
+                    write(
+                        &mut (*d),
+                        record,
+                        (self.print_level, self.print_module_names),
+                    )
+                });
+            }
+            (Destination::Stderr, true) => {
+                _ = self.dest.lock().ok().and_then(|mut d| {
+                    write(
+                        &mut (*d),
+                        record,
+                        (self.print_level, self.print_module_names),
+                    )
+                });
+                _ = write(
+                    &mut std::io::stderr(),
+                    record,
+                    (self.print_level, self.print_module_names),
+                );
+            }
+            (Destination::Stderr, false) => {
+                _ = write(
+                    &mut std::io::stderr(),
+                    record,
+                    (self.print_level, self.print_module_names),
+                );
+            }
+        }
+    }
 
-pub fn change_log_dest(path: PathBuf) {
-    LOG.with(|f| {
-        let path = path.expand(); // expand shell stuff
-        let mut backend = f.lock().unwrap();
-        backend.dest = BufWriter::new(OpenOptions::new().append(true) /* writes will append to a file instead of overwriting previous contents */
-                         .create(true) /* a new file will be created if the file does not yet already exist.*/
-                         .read(true)
-                         .open(path).unwrap());
-    });
-}
-
-pub fn change_log_level(new_val: LoggingLevel) {
-    LOG.with(|f| {
-        let mut backend = f.lock().unwrap();
-        backend.level = new_val;
-    });
+    fn flush(&self) {
+        self.dest.lock().ok().and_then(|mut w| w.flush().ok());
+    }
 }

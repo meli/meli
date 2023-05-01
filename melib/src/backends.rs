@@ -62,6 +62,7 @@ use super::email::{Envelope, EnvelopeHash, Flag};
 use crate::{
     conf::AccountSettings,
     error::{Error, ErrorKind, Result},
+    LogLevel,
 };
 
 #[macro_export]
@@ -261,7 +262,7 @@ pub enum BackendEvent {
     Notice {
         description: String,
         content: Option<String>,
-        level: crate::LoggingLevel,
+        level: LogLevel,
     },
     Refresh(RefreshEvent),
     AccountStateChange {
@@ -275,7 +276,7 @@ impl From<Error> for BackendEvent {
         BackendEvent::Notice {
             description: val.summary.to_string(),
             content: Some(val.to_string()),
-            level: crate::LoggingLevel::ERROR,
+            level: LogLevel::ERROR,
         }
     }
 }
