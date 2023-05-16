@@ -24,6 +24,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `d0de0485` add {in,de}crease_sidebar shortcuts
 - `340d6451` add config setting for sidebar ratio
 - `36e29cb6` Add configurable mailbox sort order
+- `7606317f` melib/notmuch: add support for virtual mailbox hierarchy
+  Add optional `parent` property to notmuch mailbox configuration.
+- `d9c07def` Add command to select charset encoding for email
+  Open dialog to select charset with `d`.
+- `d679a744` melib/jmap: Implement Bearer token authentication
+  Fastmail now uses an API token in a http header for authentication.
+  This can be used either as a server_password or provided by a
+  `server_password_command` like oauth2.
+- `47e6d5d9` add edit-config CLI subcommand that opens config files on `EDITOR`
+- `8c671935` Add compose (pre-submission) hooks for validation/linting
+  compose-hooks run before submitting an e-mail.
+  They perform draft validation and/or transformations.
+  If a hook encounters an error or warning, it will show up as a notification.
+  The currently available hooks are:
+  - `past-date-warn`
+    Warn if Date header value is far in the past or future.
+  - `important-header-warn`
+    Warn if important headers (From, Date, To, Cc, Bcc) are missing or invalid.
+  - `missing-attachment-warn`
+    Warn if Subject, draft body mention attachments but they are missing.
+  - `empty-draft-warn`
+    Warn if draft has no subject and no body.
+
+  They can be disabled with `[composing.disabled_compose_hooks]` setting.
 
 ### Changed
 
