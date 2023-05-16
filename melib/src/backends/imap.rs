@@ -1366,7 +1366,7 @@ impl ImapType {
             timeout,
         };
         let account_hash = AccountHash::from_bytes(s.name.as_bytes());
-        let account_name = Arc::new(s.name().to_string());
+        let account_name = Arc::new(s.name.to_string());
         let uid_store: Arc<UIDStore> = Arc::new(UIDStore {
             keep_offline_cache,
             ..UIDStore::new(

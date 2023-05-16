@@ -607,7 +607,7 @@ impl NntpType {
             },
         };
         let account_hash = AccountHash::from_bytes(s.name.as_bytes());
-        let account_name = Arc::new(s.name().to_string());
+        let account_name = Arc::new(s.name.to_string());
         let mut mailboxes = HashMap::default();
         for (k, _f) in s.mailboxes.iter() {
             let mailbox_hash = MailboxHash(get_path_hash!(&k));

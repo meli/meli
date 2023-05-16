@@ -52,33 +52,18 @@ pub struct AccountSettings {
 }
 
 impl AccountSettings {
-    pub fn format(&self) -> &str {
-        &self.format
-    }
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-    pub fn set_name(&mut self, s: String) {
-        self.name = s;
-    }
-    pub fn root_mailbox(&self) -> &str {
-        &self.root_mailbox
-    }
-    pub fn identity(&self) -> &str {
-        &self.identity
-    }
-    pub fn read_only(&self) -> bool {
-        self.read_only
-    }
-    pub fn display_name(&self) -> Option<&String> {
-        self.display_name.as_ref()
-    }
-    pub fn order(&self) -> Option<(SortField, SortOrder)> {
-        Some(self.order)
+    /// Create the account's display name from fields
+    /// [`AccountSettings::identity`] and [`AccountSettings::display_name`].
+    pub fn make_display_name(&self) -> String {
+        if let Some(d) = self.display_name.as_ref() {
+            format!("{} <{}>", d, self.identity)
+        } else {
+            self.identity.to_string()
+        }
     }
 
-    pub fn subscribed_mailboxes(&self) -> &Vec<String> {
-        &self.subscribed_mailboxes
+    pub fn order(&self) -> Option<(SortField, SortOrder)> {
+        Some(self.order)
     }
 
     #[cfg(feature = "vcard")]

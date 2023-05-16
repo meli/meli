@@ -2664,10 +2664,10 @@ impl Component for MailView {
                                             let mut draft: Draft = mailto.into();
                                             draft.set_header(
                                                 "From",
-                                                crate::components::mail::get_display_name(
-                                                    context,
-                                                    self.coordinates.0,
-                                                ),
+                                                context.accounts[&self.coordinates.0]
+                                                    .settings
+                                                    .account()
+                                                    .make_display_name(),
                                             );
                                             /* Manually drop stuff because borrowck doesn't do it
                                              * on its own */

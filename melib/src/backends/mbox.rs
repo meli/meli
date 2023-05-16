@@ -1315,12 +1315,12 @@ impl MboxType {
             return Err(Error::new(format!(
                 "\"root_mailbox\" {} for account {} is not a valid path.",
                 s.root_mailbox.as_str(),
-                s.name()
+                s.name
             )));
         }
         let prefer_mbox_type: String = get_conf_val!(s["prefer_mbox_type"], "auto".to_string())?;
         let ret = MboxType {
-            account_name: s.name().to_string(),
+            account_name: s.name.to_string(),
             event_consumer,
             path,
             prefer_mbox_type: match prefer_mbox_type.as_str() {
@@ -1332,8 +1332,7 @@ impl MboxType {
                 _ => {
                     return Err(Error::new(format!(
                         "{} invalid `prefer_mbox_type` value: `{}`",
-                        s.name(),
-                        prefer_mbox_type,
+                        s.name, prefer_mbox_type,
                     )))
                 }
             },
@@ -1469,7 +1468,7 @@ impl MboxType {
             return Err(Error::new(format!(
                 "\"root_mailbox\" {} for account {} is not a valid path.",
                 s.root_mailbox.as_str(),
-                s.name()
+                s.name
             )));
         }
         let prefer_mbox_type: Result<String> =

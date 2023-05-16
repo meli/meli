@@ -337,7 +337,11 @@ impl Composer {
             }
             to.extend(envelope.to().iter().cloned());
             if let Ok(ours) = TryInto::<Address>::try_into(
-                crate::components::mail::get_display_name(context, coordinates.0).as_str(),
+                context.accounts[&coordinates.0]
+                    .settings
+                    .account()
+                    .make_display_name()
+                    .as_str(),
             ) {
                 to.remove(&ours);
             }
@@ -558,17 +562,7 @@ To: {}
                         c.accounts
                             .values()
                             .map(|acc| {
-                                let addr = if let Some(display_name) =
-                                    acc.settings.account.display_name()
-                                {
-                                    format!(
-                                        "{} <{}>",
-                                        display_name,
-                                        acc.settings.account.identity()
-                                    )
-                                } else {
-                                    acc.settings.account.identity().to_string()
-                                };
+                                let addr = acc.settings.account.make_display_name();
                                 let desc =
                                     match account_settings!(c[acc.hash()].composing.send_mail) {
                                         crate::conf::composing::SendMail::ShellCommand(ref cmd) => {
@@ -805,7 +799,10 @@ impl Component for Composer {
             {
                 self.draft.set_header(
                     "From",
-                    crate::components::mail::get_display_name(context, self.account_hash),
+                    context.accounts[&self.account_hash]
+                        .settings
+                        .account()
+                        .make_display_name(),
                 );
             }
             self.pager.update_from_str(self.draft.body(), Some(77));

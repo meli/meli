@@ -326,8 +326,7 @@ impl NotmuchDb {
                         return Err(Error::new(format!(
                             "Notmuch `library_file_path` setting value `{}` for account {} does \
                              not exist or is a directory or not a valid library file.",
-                            dlpath,
-                            s.name()
+                            dlpath, s.name
                         ))
                         .set_kind(ErrorKind::Configuration)
                         .set_source(Some(Arc::new(err))));
@@ -344,7 +343,7 @@ impl NotmuchDb {
             return Err(Error::new(format!(
                 "Notmuch `root_mailbox` {} for account {} does not exist.",
                 s.root_mailbox.as_str(),
-                s.name()
+                s.name
             ))
             .set_kind(ErrorKind::Configuration));
         }
@@ -352,7 +351,7 @@ impl NotmuchDb {
             return Err(Error::new(format!(
                 "Notmuch `root_mailbox` {} for account {} is not a directory.",
                 s.root_mailbox.as_str(),
-                s.name()
+                s.name
             ))
             .set_kind(ErrorKind::Configuration));
         }
@@ -362,7 +361,7 @@ impl NotmuchDb {
                 "Notmuch `root_mailbox` {} for account {} does not contain a `.notmuch` \
                  subdirectory.",
                 s.root_mailbox.as_str(),
-                s.name()
+                s.name
             ))
             .set_kind(ErrorKind::Configuration));
         }
@@ -394,8 +393,7 @@ impl NotmuchDb {
                 return Err(Error::new(format!(
                     "notmuch mailbox configuration entry `{}` for account {} should have a \
                      `query` value set.",
-                    k,
-                    s.name(),
+                    k, s.name,
                 ))
                 .set_kind(ErrorKind::Configuration));
             }
@@ -423,7 +421,7 @@ impl NotmuchDb {
             }
         }
 
-        let account_hash = AccountHash::from_bytes(s.name().as_bytes());
+        let account_hash = AccountHash::from_bytes(s.name.as_bytes());
         Ok(Box::new(NotmuchDb {
             lib,
             revision_uuid: Arc::new(RwLock::new(0)),
@@ -434,7 +432,7 @@ impl NotmuchDb {
 
             mailboxes: Arc::new(RwLock::new(mailboxes)),
             save_messages_to: None,
-            _account_name: Arc::new(s.name().to_string()),
+            _account_name: Arc::new(s.name.to_string()),
             account_hash,
             event_consumer,
         }))
@@ -446,7 +444,7 @@ impl NotmuchDb {
             return Err(Error::new(format!(
                 "Notmuch `root_mailbox` {} for account {} does not exist.",
                 s.root_mailbox.as_str(),
-                s.name()
+                s.name
             ))
             .set_kind(ErrorKind::Configuration));
         }
@@ -454,7 +452,7 @@ impl NotmuchDb {
             return Err(Error::new(format!(
                 "Notmuch `root_mailbox` {} for account {} is not a directory.",
                 s.root_mailbox.as_str(),
-                s.name()
+                s.name
             ))
             .set_kind(ErrorKind::Configuration));
         }
@@ -464,20 +462,19 @@ impl NotmuchDb {
                 "Notmuch `root_mailbox` {} for account {} does not contain a `.notmuch` \
                  subdirectory.",
                 s.root_mailbox.as_str(),
-                s.name()
+                s.name
             ))
             .set_kind(ErrorKind::Configuration));
         }
         path.pop();
 
-        let account_name = s.name().to_string();
+        let account_name = s.name.to_string();
         if let Some(lib_path) = s.extra.remove("library_file_path") {
             if !Path::new(&lib_path).exists() || Path::new(&lib_path).is_dir() {
                 return Err(Error::new(format!(
                     "Notmuch `library_file_path` setting value `{}` for account {} does not exist \
                      or is a directory.",
-                    &lib_path,
-                    s.name()
+                    &lib_path, s.name
                 ))
                 .set_kind(ErrorKind::Configuration));
             }

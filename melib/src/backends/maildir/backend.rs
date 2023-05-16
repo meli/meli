@@ -1187,17 +1187,17 @@ impl MaildirType {
             }
             Ok(children)
         }
-        let root_mailbox = PathBuf::from(settings.root_mailbox()).expand();
+        let root_mailbox = PathBuf::from(&settings.root_mailbox).expand();
         if !root_mailbox.exists() {
             return Err(Error::new(format!(
                 "Configuration error ({}): root_mailbox `{}` is not a valid directory.",
-                settings.name(),
+                settings.name,
                 settings.root_mailbox.as_str()
             )));
         } else if !root_mailbox.is_dir() {
             return Err(Error::new(format!(
                 "Configuration error ({}): root_mailbox `{}` is not a directory.",
-                settings.name(),
+                settings.name,
                 settings.root_mailbox.as_str()
             )));
         }
@@ -1255,7 +1255,7 @@ impl MaildirType {
             );
         }
         Ok(Box::new(MaildirType {
-            name: settings.name().to_string(),
+            name: settings.name.to_string(),
             mailboxes,
             hash_indexes: Arc::new(Mutex::new(hash_indexes)),
             mailbox_index: Default::default(),
@@ -1335,17 +1335,17 @@ impl MaildirType {
     }
 
     pub fn validate_config(s: &mut AccountSettings) -> Result<()> {
-        let root_mailbox = PathBuf::from(s.root_mailbox()).expand();
+        let root_mailbox = PathBuf::from(&s.root_mailbox).expand();
         if !root_mailbox.exists() {
             return Err(Error::new(format!(
                 "Configuration error ({}): root_mailbox `{}` is not a valid directory.",
-                s.name(),
+                s.name,
                 s.root_mailbox.as_str()
             )));
         } else if !root_mailbox.is_dir() {
             return Err(Error::new(format!(
                 "Configuration error ({}): root_mailbox `{}` is not a directory.",
-                s.name(),
+                s.name,
                 s.root_mailbox.as_str()
             )));
         }

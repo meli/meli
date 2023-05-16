@@ -438,7 +438,7 @@ impl Account {
         event_consumer: BackendEventConsumer,
     ) -> Result<Self> {
         let s = settings.clone();
-        let backend = map.get(settings.account().format())(
+        let backend = map.get(&settings.account().format)(
             settings.account(),
             Box::new(move |path: &str| {
                 s.account.subscribed_mailboxes.is_empty()
@@ -1251,7 +1251,7 @@ impl Account {
         mailbox_hash: MailboxHash,
         flags: Option<Flag>,
     ) -> Result<()> {
-        if self.settings.account.read_only() {
+        if self.settings.account.read_only {
             return Err(Error::new(format!(
                 "Account {} is read-only.",
                 self.name.as_str()
@@ -1453,7 +1453,7 @@ impl Account {
     }
     pub fn operation(&self, h: EnvelopeHash) -> Result<Box<dyn BackendOp>> {
         let operation = self.backend.read().unwrap().operation(h)?;
-        Ok(if self.settings.account.read_only() {
+        Ok(if self.settings.account.read_only {
             ReadOnlyOp::new(operation)
         } else {
             operation
@@ -1465,7 +1465,7 @@ impl Account {
         op: crate::command::actions::MailboxOperation,
     ) -> Result<()> {
         use crate::command::actions::MailboxOperation;
-        if self.settings.account.read_only() {
+        if self.settings.account.read_only {
             return Err(Error::new("Account is read-only."));
         }
         match op {

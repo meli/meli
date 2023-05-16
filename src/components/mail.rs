@@ -41,12 +41,3 @@ pub mod pgp;
 
 mod status;
 pub use self::status::*;
-
-fn get_display_name(context: &Context, account_hash: AccountHash) -> String {
-    let settings = context.accounts[&account_hash].settings.account();
-    if let Some(d) = settings.display_name.as_ref() {
-        format!("{} <{}>", d, settings.identity)
-    } else {
-        settings.identity.to_string()
-    }
-}
