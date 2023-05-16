@@ -19,8 +19,8 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*! Entities that handle Mail specific functions.
- */
+//! Entities that handle Mail specific functions.
+
 use melib::{
     backends::{AccountHash, Mailbox, MailboxHash},
     email::{attachment_types::*, attachments::*},

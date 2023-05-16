@@ -147,15 +147,15 @@ impl MailboxConf {
     }
 }
 
-pub fn true_val() -> bool {
+pub const fn true_val() -> bool {
     true
 }
 
-pub fn false_val() -> bool {
+pub const fn false_val() -> bool {
     false
 }
 
-pub fn none<T>() -> Option<T> {
+pub const fn none<T>() -> Option<T> {
     None
 }
 

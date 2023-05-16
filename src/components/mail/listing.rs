@@ -1037,7 +1037,6 @@ impl Component for Listing {
                             },
                         })
                         .collect::<_>();
-                    self.set_dirty(true);
                     self.menu_content.empty();
                     context
                         .replies
@@ -1945,6 +1944,7 @@ impl Component for Listing {
         }
         false
     }
+
     fn is_dirty(&self) -> bool {
         self.dirty
             || self
@@ -1953,6 +1953,7 @@ impl Component for Listing {
                 .map(Component::is_dirty)
                 .unwrap_or_else(|| self.component.is_dirty())
     }
+
     fn set_dirty(&mut self, value: bool) {
         self.dirty = value;
         if let Some(s) = self.status.as_mut() {
@@ -2577,6 +2578,7 @@ impl Listing {
                         .process_event(&mut UIEvent::VisibilityChange(false), context);
                     self.component
                         .set_coordinates((account_hash, *mailbox_hash));
+                    self.component.refresh_mailbox(context, true);
                     /* Check if per-mailbox configuration overrides general configuration */
 
                     let index_style =
