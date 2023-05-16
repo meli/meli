@@ -67,19 +67,18 @@ impl EmbedStatus {
 
 impl std::ops::Deref for EmbedStatus {
     type Target = Arc<Mutex<EmbedTerminal>>;
-    fn deref(&self) -> &Arc<Mutex<EmbedTerminal>> {
-        use EmbedStatus::*;
+
+    fn deref(&self) -> &Self::Target {
         match self {
-            Stopped(ref e) | Running(ref e) => e,
+            Self::Stopped(ref e) | Self::Running(ref e) => e,
         }
     }
 }
 
 impl std::ops::DerefMut for EmbedStatus {
-    fn deref_mut(&mut self) -> &mut Arc<Mutex<EmbedTerminal>> {
-        use EmbedStatus::*;
+    fn deref_mut(&mut self) -> &mut Self::Target {
         match self {
-            Stopped(ref mut e) | Running(ref mut e) => e,
+            Self::Stopped(ref mut e) | Self::Running(ref mut e) => e,
         }
     }
 }

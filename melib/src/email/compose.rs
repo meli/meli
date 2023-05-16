@@ -491,6 +491,38 @@ fn print_attachment(ret: &mut String, a: AttachmentBuilder) {
     }
 }
 
+/// Reads file from given path, and returns an 'application/octet-stream'
+/// AttachmentBuilder object
+pub fn attachment_from_file<I>(path: &I) -> Result<AttachmentBuilder>
+where
+    I: AsRef<OsStr>,
+{
+    let path: PathBuf = Path::new(path).expand();
+    if !path.is_file() {
+        return Err(Error::new(format!("{} is not a file", path.display())));
+    }
+
+    let mut file = std::fs::File::open(&path)?;
+    let mut contents = Vec::new();
+    file.read_to_end(&mut contents)?;
+    let mut attachment = AttachmentBuilder::default();
+
+    attachment
+        .set_raw(contents)
+        .set_body_to_raw()
+        .set_content_type(ContentType::Other {
+            name: path.file_name().map(|s| s.to_string_lossy().into()),
+            tag: if let Ok(mime_type) = query_mime_info(&path) {
+                mime_type
+            } else {
+                b"application/octet-stream".to_vec()
+            },
+            parameters: vec![],
+        });
+
+    Ok(attachment)
+}
+
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
@@ -600,36 +632,4 @@ mod tests {
         println!("{}", default.finalise().unwrap());
     }
         */
-}
-
-/// Reads file from given path, and returns an 'application/octet-stream'
-/// AttachmentBuilder object
-pub fn attachment_from_file<I>(path: &I) -> Result<AttachmentBuilder>
-where
-    I: AsRef<OsStr>,
-{
-    let path: PathBuf = Path::new(path).expand();
-    if !path.is_file() {
-        return Err(Error::new(format!("{} is not a file", path.display())));
-    }
-
-    let mut file = std::fs::File::open(&path)?;
-    let mut contents = Vec::new();
-    file.read_to_end(&mut contents)?;
-    let mut attachment = AttachmentBuilder::default();
-
-    attachment
-        .set_raw(contents)
-        .set_body_to_raw()
-        .set_content_type(ContentType::Other {
-            name: path.file_name().map(|s| s.to_string_lossy().into()),
-            tag: if let Ok(mime_type) = query_mime_info(&path) {
-                mime_type
-            } else {
-                b"application/octet-stream".to_vec()
-            },
-            parameters: vec![],
-        });
-
-    Ok(attachment)
 }

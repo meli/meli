@@ -67,14 +67,15 @@ pub struct MaildirPath {
 
 impl Deref for MaildirPath {
     type Target = PathBuf;
-    fn deref(&self) -> &PathBuf {
+
+    fn deref(&self) -> &Self::Target {
         assert!(!(self.removed && self.modified.is_none()));
         &self.buf
     }
 }
 
 impl DerefMut for MaildirPath {
-    fn deref_mut(&mut self) -> &mut PathBuf {
+    fn deref_mut(&mut self) -> &mut Self::Target {
         assert!(!(self.removed && self.modified.is_none()));
         &mut self.buf
     }
@@ -98,13 +99,14 @@ pub struct HashIndex {
 
 impl Deref for HashIndex {
     type Target = HashMap<EnvelopeHash, MaildirPath>;
-    fn deref(&self) -> &HashMap<EnvelopeHash, MaildirPath> {
+
+    fn deref(&self) -> &Self::Target {
         &self.index
     }
 }
 
 impl DerefMut for HashIndex {
-    fn deref_mut(&mut self) -> &mut HashMap<EnvelopeHash, MaildirPath> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.index
     }
 }

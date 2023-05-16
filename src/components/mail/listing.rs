@@ -374,12 +374,13 @@ macro_rules! column_str {
 
         impl Deref for $name {
             type Target = String;
-            fn deref(&self) -> &String {
+
+            fn deref(&self) -> &Self::Target {
                 &self.0
             }
         }
         impl DerefMut for $name {
-            fn deref_mut(&mut self) -> &mut String {
+            fn deref_mut(&mut self) -> &mut Self::Target {
                 &mut self.0
             }
         }

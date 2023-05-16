@@ -252,8 +252,10 @@ impl HeaderMap {
         (self.0).get_mut(HeaderNameType(key).borrow() as &dyn HeaderKey)
     }
 
-    pub fn get(&self, key: &str) -> Option<&String> {
-        (self.0).get(HeaderNameType(key).borrow() as &dyn HeaderKey)
+    pub fn get(&self, key: &str) -> Option<&str> {
+        (self.0)
+            .get(HeaderNameType(key).borrow() as &dyn HeaderKey)
+            .map(|x| x.as_str())
     }
 
     pub fn contains_key(&self, key: &str) -> bool {
@@ -274,7 +276,7 @@ impl Deref for HeaderMap {
 }
 
 impl DerefMut for HeaderMap {
-    fn deref_mut(&mut self) -> &mut IndexMap<HeaderName, String> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }

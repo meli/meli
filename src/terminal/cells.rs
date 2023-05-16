@@ -438,13 +438,13 @@ impl CellBuffer {
 impl Deref for CellBuffer {
     type Target = [Cell];
 
-    fn deref(&self) -> &[Cell] {
+    fn deref(&self) -> &Self::Target {
         &self.buf
     }
 }
 
 impl DerefMut for CellBuffer {
-    fn deref_mut(&mut self) -> &mut [Cell] {
+    fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.buf
     }
 }

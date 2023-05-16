@@ -19,10 +19,10 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#[cfg(not(test))]
+use std::{fs::OpenOptions, path::PathBuf};
 use std::{
-    fs::OpenOptions,
     io::{BufWriter, Write},
-    path::PathBuf,
     sync::{
         atomic::{AtomicU8, Ordering},
         Arc, Mutex,
@@ -30,8 +30,6 @@ use std::{
 };
 
 use log::{Level, LevelFilter, Log, Metadata, Record};
-
-use crate::shellexpand::ShellExpandTrait;
 
 #[derive(Copy, Clone, Default, PartialEq, PartialOrd, Hash, Debug, Serialize, Deserialize)]
 #[repr(u8)]
@@ -137,6 +135,9 @@ pub enum Destination {
 
 #[derive(Clone)]
 pub struct StderrLogger {
+    #[cfg(test)]
+    dest: Arc<Mutex<BufWriter<std::io::Stderr>>>,
+    #[cfg(not(test))]
     dest: Arc<Mutex<BufWriter<std::fs::File>>>,
     level: Arc<AtomicU8>,
     print_level: bool,
@@ -163,6 +164,11 @@ impl Default for StderrLogger {
 
 impl StderrLogger {
     pub fn new(level: LogLevel) -> Self {
+        use std::sync::Once;
+
+        static INIT_STDERR_LOGGING: Once = Once::new();
+
+        #[cfg(not(test))]
         let logger = {
             let data_dir = xdg::BaseDirectories::with_prefix("meli").unwrap();
             let log_file = OpenOptions::new().append(true) /* writes will append to a file instead of overwriting previous contents */
@@ -180,6 +186,16 @@ impl StderrLogger {
                 debug_dest: Destination::None,
             }
         };
+        #[cfg(test)]
+        let logger = {
+            StderrLogger {
+                dest: Arc::new(Mutex::new(BufWriter::new(std::io::stderr()).into())),
+                level: Arc::new(AtomicU8::new(level as u8)),
+                print_level: true,
+                print_module_names: true,
+                debug_dest: Destination::Stderr,
+            }
+        };
 
         #[cfg(feature = "debug-tracing")]
         log::set_max_level(
@@ -191,7 +207,10 @@ impl StderrLogger {
         );
         #[cfg(not(feature = "debug-tracing"))]
         log::set_max_level(LevelFilter::from(logger.log_level()));
-        log::set_boxed_logger(Box::new(logger.clone())).unwrap();
+
+        INIT_STDERR_LOGGING.call_once(|| {
+            log::set_boxed_logger(Box::new(logger.clone())).unwrap();
+        });
         logger
     }
 
@@ -199,7 +218,10 @@ impl StderrLogger {
         self.level.load(Ordering::SeqCst).into()
     }
 
+    #[cfg(not(test))]
     pub fn change_log_dest(&mut self, path: PathBuf) {
+        use crate::shellexpand::ShellExpandTrait;
+
         let path = path.expand(); // expand shell stuff
         let mut dest = self.dest.lock().unwrap();
         *dest = BufWriter::new(OpenOptions::new().append(true) /* writes will append to a file instead of overwriting previous contents */

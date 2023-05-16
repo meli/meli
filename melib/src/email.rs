@@ -444,7 +444,6 @@ impl Envelope {
         if self.bcc.is_empty() {
             self.other_headers
                 .get("Bcc")
-                .map(|s| s.as_str())
                 .unwrap_or_default()
                 .to_string()
         } else {
@@ -460,11 +459,7 @@ impl Envelope {
 
     pub fn field_cc_to_string(&self) -> String {
         if self.cc.is_empty() {
-            self.other_headers
-                .get("Cc")
-                .map(|s| s.as_str())
-                .unwrap_or_default()
-                .to_string()
+            self.other_headers.get("Cc").unwrap_or_default().to_string()
         } else {
             self.cc.iter().fold(String::new(), |mut acc, x| {
                 if !acc.is_empty() {
@@ -480,7 +475,6 @@ impl Envelope {
         if self.from.is_empty() {
             self.other_headers
                 .get("From")
-                .map(|s| s.as_str())
                 .unwrap_or_default()
                 .to_string()
         } else {
@@ -508,11 +502,7 @@ impl Envelope {
 
     pub fn field_to_to_string(&self) -> String {
         if self.to.is_empty() {
-            self.other_headers
-                .get("To")
-                .map(|s| s.as_str())
-                .unwrap_or_default()
-                .to_string()
+            self.other_headers.get("To").unwrap_or_default().to_string()
         } else {
             self.to
                 .iter()
@@ -532,7 +522,6 @@ impl Envelope {
         if refs.is_empty() {
             self.other_headers
                 .get("References")
-                .map(|s| s.as_str())
                 .unwrap_or_default()
                 .to_string()
         } else {

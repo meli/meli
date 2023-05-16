@@ -66,6 +66,7 @@ syn = { version = "1.0.92", features = [] }
 
 [dev-dependencies]
 regex = "1"
+tempfile = "3.3"
 
 [profile.release]
 lto = "fat"

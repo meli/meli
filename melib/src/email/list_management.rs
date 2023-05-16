@@ -87,7 +87,6 @@ pub fn list_id_header(envelope: &'_ Envelope) -> Option<&'_ str> {
         .other_headers()
         .get("List-ID")
         .or_else(|| envelope.other_headers().get("List-Id"))
-        .map(String::as_str)
 }
 
 pub fn list_id(header: Option<&'_ str>) -> Option<&'_ str> {

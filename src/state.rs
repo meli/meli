@@ -162,7 +162,7 @@ impl Context {
     }
 
     #[cfg(test)]
-    pub fn new_mock() -> Self {
+    pub fn new_mock(dir: &tempfile::TempDir) -> Self {
         let (sender, receiver) =
             crossbeam::channel::bounded(32 * ::std::mem::size_of::<ThreadEvent>());
         let job_executor = Arc::new(JobExecutor::new(sender.clone()));
@@ -177,7 +177,7 @@ impl Context {
             let mut account_conf = AccountConf::default();
             account_conf.conf.format = "maildir".to_string();
             account_conf.account.format = "maildir".to_string();
-            account_conf.account.root_mailbox = "/tmp/".to_string();
+            account_conf.account.root_mailbox = dir.path().display().to_string();
             let sender = sender.clone();
             let account_hash = AccountHash::from_bytes(name.as_bytes());
             Account::new(

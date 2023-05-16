@@ -127,6 +127,7 @@ theme = "light"
 Available options are listed below.
 Default values are shown in parentheses.
 .Sh ACCOUNTS
+Default values are shown in parentheses.
 .Bl -tag -width 36n
 .It Ic root_mailbox Ar String
 The backend-specific path of the root_mailbox, usually INBOX.
@@ -513,7 +514,8 @@ Useful only for mUTF-7 mailboxes.
 .Pq Em "utf7", "utf-7", "utf8", "utf-8"
 .El
 .Sh COMPOSING
-Composing specific options
+Composing specific options.
+Default values are shown in parentheses.
 .Bl -tag -width 36n
 .It Ic send_mail Ar String|SmtpServerConf
 Command to pipe new mail to (exit code must be 0 for success) or settings for an SMTP server connection.
@@ -611,8 +613,30 @@ When used in a reply, the field body MAY start with the string "Re: " (from
 the Latin "res", in the matter of) followed by the contents of the "Subject:"
 field body of the original message.
 .Ed
+.It Ic disabled_compose_hooks Ar [String]
+.Pq Em optional
+Disabled compose-hooks.
+compose-hooks run before submitting an e-mail.
+They perform draft validation and/or transformations.
+If a hook encounters an error or warning, it will show up as a notification.
+The currently available hooks are:
+.Bl -bullet -compact
+.It
+.Ic past-date-warn
+— Warn if Date header value is far in the past or future.
+.It
+.Ic important-header-warn
+— Warn if important headers (From, Date, To, Cc, Bcc) are missing or invalid.
+.It
+.Ic missing-attachment-warn
+— Warn if Subject, draft body mention attachments but they are missing.
+.It
+.Ic empty-draft-warn
+— Warn if draft has no subject and no body.
+.El
 .El
 .Sh SHORTCUTS
+Default values are shown in parentheses.
 Shortcuts can take the following values:
 .Bl -bullet -compact
 .It
@@ -1040,6 +1064,7 @@ toggle thread view visibility
 .El
 .sp
 .Sh NOTIFICATIONS
+Default values are shown in parentheses.
 .Bl -tag -width 36n
 .It Ic enable Ar boolean
 Enable notifications.
@@ -1074,6 +1099,7 @@ Play sound file in notifications if possible.
 .Pq Em none
 .El
 .Sh PAGER
+Default values are shown in parentheses.
 .Bl -tag -width 36n
 .It Ic headers_sticky Ar boolean
 .Pq Em optional
@@ -1128,6 +1154,7 @@ The URL will be given as the first argument of the command.
 .Pq Em xdg-open
 .El
 .Sh LISTING
+Default values are shown in parentheses.
 .Bl -tag -width 36n
 .It Ic show_menu_scrollbar Ar boolean
 .Pq Em optional
@@ -1269,6 +1296,7 @@ no_sibling_leaf = " \\_"
 .Ed
 .sp
 .Sh TAGS
+Default values are shown in parentheses.
 .Bl -tag -width 36n
 .It Ic colours Ar hash table String[Color]
 .Pq Em optional
@@ -1291,6 +1319,7 @@ colors = { signed="#Ff6600", replied="DeepSkyBlue4", draft="#f00", replied="8" }
   "INBOX" = {  tags.ignore_tags=["inbox", ] }
 .Ed
 .Sh PGP
+Default values are shown in parentheses.
 .Bl -tag -width 36n
 .It Ic auto_verify_signatures Ar boolean
 Auto verify signed e-mail according to RFC3156
@@ -1308,6 +1337,7 @@ Key to be used when signing/encrypting (not functional yet)
 .Pq Em none
 .El
 .Sh TERMINAL
+Default values are shown in parentheses.
 .Bl -tag -width 36n
 .It Ic theme Ar String
 .Pq Em optional
@@ -1431,6 +1461,7 @@ progress_spinner_sequence = { interval_ms = 150, frames = [ "-", "=", "≡" ] }
 .Ed
 .El
 .Sh LOG
+Default values are shown in parentheses.
 .Bl -tag -width 36n
 .It Ic log_file Ar String
 .Pq Em optional
@@ -1467,6 +1498,7 @@ to
 .Pq Em INFO
 .El
 .Sh SMTP Connections
+Default values are shown in parentheses.
 .Bl -tag -width 36n
 .It Ic hostname Ar String
 server hostname

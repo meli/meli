@@ -22,6 +22,7 @@
 use std::{
     convert::TryInto,
     future::Future,
+    io::Write,
     pin::Pin,
     process::{Command, Stdio},
     sync::{Arc, Mutex},
@@ -40,8 +41,10 @@ use crate::{conf::accounts::JobRequest, jobs::JoinHandle, terminal::embed::Embed
 #[cfg(feature = "gpgme")]
 mod gpg;
 
-mod edit_attachments;
+pub mod edit_attachments;
 use edit_attachments::*;
+
+pub mod hooks;
 
 #[derive(Debug, PartialEq, Eq)]
 enum Cursor {
@@ -67,19 +70,18 @@ impl EmbedStatus {
 
 impl std::ops::Deref for EmbedStatus {
     type Target = Arc<Mutex<EmbedTerminal>>;
-    fn deref(&self) -> &Arc<Mutex<EmbedTerminal>> {
-        use EmbedStatus::*;
+
+    fn deref(&self) -> &Self::Target {
         match self {
-            Stopped(ref e, _) | Running(ref e, _) => e,
+            Self::Stopped(ref e, _) | Self::Running(ref e, _) => e,
         }
     }
 }
 
 impl std::ops::DerefMut for EmbedStatus {
-    fn deref_mut(&mut self) -> &mut Arc<Mutex<EmbedTerminal>> {
-        use EmbedStatus::*;
+    fn deref_mut(&mut self) -> &mut Self::Target {
         match self {
-            Stopped(ref mut e, _) | Running(ref mut e, _) => e,
+            Self::Stopped(ref mut e, _) | Self::Running(ref mut e, _) => e,
         }
     }
 }
@@ -104,6 +106,7 @@ pub struct Composer {
     dirty: bool,
     has_changes: bool,
     initialized: bool,
+    hooks: Vec<hooks::Hook>,
     id: ComponentId,
 }
 
@@ -156,6 +159,12 @@ impl Composer {
             cursor: Cursor::Headers,
             pager,
             draft: Draft::default(),
+            hooks: vec![
+                hooks::HEADERWARN,
+                hooks::PASTDATEWARN,
+                hooks::MISSINGATTACHMENTWARN,
+                hooks::EMPTYDRAFTWARN,
+            ],
             form: FormWidget::default(),
             mode: ViewMode::Edit,
             #[cfg(feature = "gpgme")]
@@ -174,6 +183,11 @@ impl Composer {
             account_hash,
             ..Composer::new(context)
         };
+        ret.hooks.retain(|h| {
+            !account_settings!(context[account_hash].composing.disabled_compose_hooks)
+                .iter()
+                .any(|hn| hn.as_str() == h.name())
+        });
         for (h, v) in
             account_settings!(context[account_hash].composing.default_header_values).iter()
         {
@@ -202,6 +216,11 @@ impl Composer {
         context: &Context,
     ) -> Result<Self> {
         let mut ret = Composer::with_account(account_hash, context);
+        ret.hooks.retain(|h| {
+            !account_settings!(context[account_hash].composing.disabled_compose_hooks)
+                .iter()
+                .any(|hn| hn.as_str() == h.name())
+        });
         let envelope: EnvelopeRef = context.accounts[&account_hash].collection.get_env(env_hash);
 
         ret.draft = Draft::edit(&envelope, bytes)?;
@@ -211,13 +230,18 @@ impl Composer {
     }
 
     pub fn reply_to(
-        coordinates: (AccountHash, MailboxHash, EnvelopeHash),
+        coordinates @ (account_hash, _, _): (AccountHash, MailboxHash, EnvelopeHash),
         reply_body: String,
         context: &mut Context,
         reply_to_all: bool,
     ) -> Self {
-        let mut ret = Composer::with_account(coordinates.0, context);
-        let account = &context.accounts[&coordinates.0];
+        let mut ret = Composer::with_account(account_hash, context);
+        ret.hooks.retain(|h| {
+            !account_settings!(context[account_hash].composing.disabled_compose_hooks)
+                .iter()
+                .any(|hn| hn.as_str() == h.name())
+        });
+        let account = &context.accounts[&account_hash];
         let envelope = account.collection.get_env(coordinates.2);
         let subject = {
             let subject = envelope.subject();
@@ -267,7 +291,7 @@ impl Composer {
         ret.draft
             .set_header("In-Reply-To", envelope.message_id_display().into());
 
-        if let Some(reply_to) = envelope.other_headers().get("To").map(|v| v.as_str()) {
+        if let Some(reply_to) = envelope.other_headers().get("To") {
             let to: &str = reply_to;
             let extra_identities = &account.settings.account.extra_identities;
             if let Some(extra) = extra_identities
@@ -299,13 +323,13 @@ impl Composer {
             if let Some(reply_to) = envelope
                 .other_headers()
                 .get("Mail-Followup-To")
-                .and_then(|v| v.as_str().try_into().ok())
+                .and_then(|v| v.try_into().ok())
             {
                 to.insert(reply_to);
             } else if let Some(reply_to) = envelope
                 .other_headers()
                 .get("Reply-To")
-                .and_then(|v| v.as_str().try_into().ok())
+                .and_then(|v| v.try_into().ok())
             {
                 to.insert(reply_to);
             } else {
@@ -368,12 +392,12 @@ impl Composer {
     }
 
     pub fn reply_to_select(
-        coordinates: (AccountHash, MailboxHash, EnvelopeHash),
+        coordinates @ (account_hash, _, _): (AccountHash, MailboxHash, EnvelopeHash),
         reply_body: String,
         context: &mut Context,
     ) -> Self {
         let mut ret = Composer::reply_to(coordinates, reply_body, context, false);
-        let account = &context.accounts[&coordinates.0];
+        let account = &context.accounts[&account_hash];
         let parent_message = account.collection.get_env(coordinates.2);
         /* If message is from a mailing list and we detect a List-Post header, ask
          * user if they want to reply to the mailing list or the submitter of
@@ -494,6 +518,15 @@ To: {}
                 *v = vn.as_str().to_string();
             }
         }
+    }
+
+    fn run_hooks(&mut self, ctx: &mut Context) -> Result<()> {
+        for h in self.hooks.iter_mut() {
+            if let err @ Err(_) = h(ctx, &mut self.draft) {
+                return err;
+            }
+        }
+        Ok(())
     }
 
     fn update_form(&mut self) {
@@ -1408,6 +1441,11 @@ impl Component for Composer {
                     && self.mode.is_edit() =>
             {
                 self.update_draft();
+                if let Err(err) = self.run_hooks(context) {
+                    context
+                        .replies
+                        .push_back(UIEvent::Notification(None, err.to_string(), None));
+                }
                 self.mode = ViewMode::Send(UIConfirmationDialog::new(
                     "send mail?",
                     vec![(true, "yes".to_string()), (false, "no".to_string())],
@@ -1434,7 +1472,6 @@ impl Component for Composer {
                 self.set_dirty(true);
             }
             UIEvent::EmbedInput((ref k, ref b)) => {
-                use std::io::Write;
                 if let Some(ref mut embed) = self.embed {
                     let mut embed_guard = embed.lock().unwrap();
                     if embed_guard.write_all(b).is_err() {
@@ -2390,10 +2427,13 @@ fn attribution_string(
     melib::datetime::timestamp_to_string(date, Some(fmt.as_str()), posix)
 }
 
-#[test]
-#[ignore]
-fn test_compose_reply_subject_prefix() {
-    let raw_mail = r#"From: "some name" <some@example.com>
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_compose_reply_subject_prefix() {
+        let raw_mail = r#"From: "some name" <some@example.com>
 To: "me" <myself@example.com>
 Cc:
 Subject: RE: your e-mail
@@ -2403,26 +2443,28 @@ Content-Type: text/plain
 hello world.
 "#;
 
-    let envelope = Envelope::from_bytes(raw_mail.as_bytes(), None).expect("Could not parse mail");
-    let mut context = Context::new_mock();
-    let account_hash = context.accounts[0].hash();
-    let mailbox_hash = MailboxHash::default();
-    let envelope_hash = envelope.hash();
-    context.accounts[0]
-        .collection
-        .insert(envelope, mailbox_hash);
-    let composer = Composer::reply_to(
-        (account_hash, mailbox_hash, envelope_hash),
-        String::new(),
-        &mut context,
-        false,
-    );
-    assert_eq!(&composer.draft.headers()["Subject"], "RE: your e-mail");
-    assert_eq!(
-        &composer.draft.headers()["To"],
-        r#"some name <some@example.com>"#
-    );
-    let raw_mail = r#"From: "some name" <some@example.com>
+        let envelope =
+            Envelope::from_bytes(raw_mail.as_bytes(), None).expect("Could not parse mail");
+        let tempdir = tempfile::tempdir().unwrap();
+        let mut context = Context::new_mock(&tempdir);
+        let account_hash = context.accounts[0].hash();
+        let mailbox_hash = MailboxHash::default();
+        let envelope_hash = envelope.hash();
+        context.accounts[0]
+            .collection
+            .insert(envelope, mailbox_hash);
+        let composer = Composer::reply_to(
+            (account_hash, mailbox_hash, envelope_hash),
+            String::new(),
+            &mut context,
+            false,
+        );
+        assert_eq!(&composer.draft.headers()["Subject"], "RE: your e-mail");
+        assert_eq!(
+            &composer.draft.headers()["To"],
+            r#"some name <some@example.com>"#
+        );
+        let raw_mail = r#"From: "some name" <some@example.com>
 To: "me" <myself@example.com>
 Cc:
 Subject: your e-mail
@@ -2431,20 +2473,22 @@ Content-Type: text/plain
 
 hello world.
 "#;
-    let envelope = Envelope::from_bytes(raw_mail.as_bytes(), None).expect("Could not parse mail");
-    let envelope_hash = envelope.hash();
-    context.accounts[0]
-        .collection
-        .insert(envelope, mailbox_hash);
-    let composer = Composer::reply_to(
-        (account_hash, mailbox_hash, envelope_hash),
-        String::new(),
-        &mut context,
-        false,
-    );
-    assert_eq!(&composer.draft.headers()["Subject"], "Re: your e-mail");
-    assert_eq!(
-        &composer.draft.headers()["To"],
-        r#"some name <some@example.com>"#
-    );
+        let envelope =
+            Envelope::from_bytes(raw_mail.as_bytes(), None).expect("Could not parse mail");
+        let envelope_hash = envelope.hash();
+        context.accounts[0]
+            .collection
+            .insert(envelope, mailbox_hash);
+        let composer = Composer::reply_to(
+            (account_hash, mailbox_hash, envelope_hash),
+            String::new(),
+            &mut context,
+            false,
+        );
+        assert_eq!(&composer.draft.headers()["Subject"], "Re: your e-mail");
+        assert_eq!(
+            &composer.draft.headers()["To"],
+            r#"some name <some@example.com>"#
+        );
+    }
 }

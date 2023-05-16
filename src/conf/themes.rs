@@ -30,7 +30,12 @@
 //!
 //! On startup a [DFS](https://en.wikipedia.org/wiki/Depth-first_search) is performed to see if there are any cycles in the link graph.
 
-use std::{borrow::Cow, collections::HashSet, fmt::Write};
+use std::{
+    borrow::Cow,
+    collections::HashSet,
+    fmt::Write,
+    ops::{Deref, DerefMut},
+};
 
 use indexmap::IndexMap;
 use melib::{Error, Result};
@@ -740,16 +745,16 @@ mod regexp {
     }
 }
 
-use std::ops::{Deref, DerefMut};
 impl Deref for Theme {
     type Target = IndexMap<Cow<'static, str>, ThemeAttributeInner>;
+
     fn deref(&self) -> &Self::Target {
         &self.keys
     }
 }
 
 impl DerefMut for Theme {
-    fn deref_mut(&mut self) -> &mut IndexMap<Cow<'static, str>, ThemeAttributeInner> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.keys
     }
 }

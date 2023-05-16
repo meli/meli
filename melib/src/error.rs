@@ -477,9 +477,9 @@ impl Error {
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, "{}", self.summary)?;
+        write!(f, "{}", self.summary)?;
         if let Some(details) = self.details.as_ref() {
-            write!(f, "{}", details)?;
+            write!(f, "\n{}", details)?;
         }
         if let Some(source) = self.source.as_ref() {
             write!(f, "\nCaused by: {}", source)?;

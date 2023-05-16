@@ -1155,6 +1155,7 @@ dependencies = [
  "structopt",
  "svg",
  "syn",
+ "tempfile",
  "termion",
  "toml",
  "unicode-segmentation",

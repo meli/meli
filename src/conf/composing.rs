@@ -100,6 +100,9 @@ pub struct ComposingSettings {
     /// The prefix to use in reply subjects. The de facto prefix is "Re:".
     #[serde(default = "res", alias = "reply-prefix")]
     pub reply_prefix: String,
+    /// Disabled `compose-hooks`.
+    #[serde(default, alias = "disabled-compose-hooks")]
+    pub disabled_compose_hooks: Vec<String>,
 }
 
 impl Default for ComposingSettings {
@@ -118,6 +121,7 @@ impl Default for ComposingSettings {
             forward_as_attachment: ToggleFlag::Ask,
             reply_prefix_list_to_strip: None,
             reply_prefix: res(),
+            disabled_compose_hooks: vec![],
         }
     }
 }
