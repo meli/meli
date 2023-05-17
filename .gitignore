@@ -15,3 +15,6 @@ debian/debhelper-build-stamp
 debian/files
 debian/meli.substvars
 debian/meli/
+
+# CLion IDE
+.idea
