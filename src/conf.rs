@@ -348,11 +348,19 @@ changequote(`"', `"')dnl
         let mut file = std::fs::File::open(&p)?;
         file.read_to_string(&mut contents)?;
 
-        let mut handle = Command::new("m4")
+        let mut handle = match Command::new("m4")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
-            .spawn()?;
+            .spawn()
+        {
+            Ok(handle) => handle,
+            Err(error) => match error.kind() {
+                io::ErrorKind::NotFound => return Err("`m4` executable not found. Please install.".into()),
+                _ => return Err(error.into()),
+            }
+        };
+
         let mut stdin = handle.stdin.take().unwrap();
         stdin.write_all(M4_PREAMBLE.as_bytes())?;
         stdin.write_all(contents.as_bytes())?;
