@@ -356,9 +356,11 @@ changequote(`"', `"')dnl
         {
             Ok(handle) => handle,
             Err(error) => match error.kind() {
-                io::ErrorKind::NotFound => return Err("`m4` executable not found. Please install.".into()),
+                io::ErrorKind::NotFound => {
+                    return Err("`m4` executable not found. Please install.".into())
+                }
                 _ => return Err(error.into()),
-            }
+            },
         };
 
         let mut stdin = handle.stdin.take().unwrap();

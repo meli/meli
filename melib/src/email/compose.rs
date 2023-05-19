@@ -111,7 +111,9 @@ impl Draft {
             ret.headers.insert(k.try_into()?, v.into());
         }
 
-        ret.body = envelope.body_bytes(bytes).text();
+        let body = envelope.body_bytes(bytes);
+        ret.body = body.text();
+        ret.attachments = body.attachments().into_iter().map(Into::into).collect();
 
         Ok(ret)
     }
@@ -292,8 +294,13 @@ impl Draft {
 
     pub fn finalise(mut self) -> Result<String> {
         let mut ret = String::new();
+        let has_from: bool = self.headers.contains_key("From");
+        let has_msg_id: bool = self.headers.contains_key("Message-ID");
+        let has_mime: bool = self.headers.contains_key("MIME-Version");
+        let has_ctype: bool = self.headers.contains_key("Content-Type");
+        let has_cte: bool = self.headers.contains_key("Content-Transfer-Encoding");
 
-        if self.headers.contains_key("From") && !self.headers.contains_key("Message-ID") {
+        if has_from && !has_msg_id {
             if let Ok((_, addr)) = super::parser::address::mailbox(self.headers["From"].as_bytes())
             {
                 if let Some(fqdn) = addr.get_fqdn() {
@@ -311,19 +318,26 @@ impl Draft {
                 ret.push_str(&format!("{}: {}\r\n", k, mime::encode_header(v)));
             }
         }
-        ret.push_str("MIME-Version: 1.0\r\n");
+        if !has_mime {
+            ret.push_str("MIME-Version: 1.0\r\n");
+        }
 
         if self.attachments.is_empty() {
-            let content_type: ContentType = Default::default();
-            let content_transfer_encoding: ContentTransferEncoding = ContentTransferEncoding::_8Bit;
-            ret.push_str(&format!(
-                "Content-Type: {}; charset=\"utf-8\"\r\n",
-                content_type
-            ));
-            ret.push_str(&format!(
-                "Content-Transfer-Encoding: {}\r\n",
-                content_transfer_encoding
-            ));
+            if !has_ctype {
+                let content_type: ContentType = Default::default();
+                let content_transfer_encoding: ContentTransferEncoding =
+                    ContentTransferEncoding::_8Bit;
+                ret.push_str(&format!(
+                    "Content-Type: {}; charset=\"utf-8\"\r\n",
+                    content_type
+                ));
+                if !has_cte {
+                    ret.push_str(&format!(
+                        "Content-Transfer-Encoding: {}\r\n",
+                        content_transfer_encoding
+                    ));
+                }
+            }
             ret.push_str("\r\n");
             for line in self.body.lines() {
                 ret.push_str(line);
