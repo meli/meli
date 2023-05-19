@@ -24,7 +24,6 @@ pub use std::borrow::Cow;
 
 use super::*;
 
-/*
 pub enum HookFn {
     /// Stateful hook.
     Closure(Box<dyn FnMut(&mut Context, &mut Draft) -> Result<()> + Send + Sync>),
@@ -32,22 +31,49 @@ pub enum HookFn {
     /// Static hook.
     Ptr(fn(&mut Context, &mut Draft) -> Result<()>),
 }
-*/
 
+impl std::fmt::Debug for HookFn {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        f.debug_struct(stringify!(HookFn))
+            .field(
+                "kind",
+                &match self {
+                    Self::Closure(_) => "closure",
+                    Self::Ptr(_) => "function ptr",
+                },
+            )
+            .finish()
+    }
+}
+
+impl std::ops::Deref for HookFn {
+    type Target = dyn FnMut(&mut Context, &mut Draft) -> Result<()> + Send + Sync;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Ptr(ref v) => v,
+            Self::Closure(ref v) => v,
+        }
+    }
+}
+
+impl std::ops::DerefMut for HookFn {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        match self {
+            Self::Ptr(ref mut v) => v,
+            Self::Closure(ref mut v) => v,
+        }
+    }
+}
+
+#[derive(Debug)]
 /// Pre-submission hook for draft validation and/or transformations.
 pub struct Hook {
     /// Hook name for enabling/disabling it from configuration.
     ///
     /// See [`ComposingSettings::disabled_compose_hooks`].
     name: Cow<'static, str>,
-    hook_fn: fn(&mut Context, &mut Draft) -> Result<()>,
-    //hook_fn: HookFn,
-}
-
-impl std::fmt::Debug for Hook {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        f.debug_struct(self.name.as_ref()).finish()
-    }
+    hook_fn: HookFn,
 }
 
 impl Hook {
@@ -57,19 +83,72 @@ impl Hook {
     pub fn name(&self) -> &str {
         self.name.as_ref()
     }
+
+    pub fn new_shell_command(name: Cow<'static, str>, command: String) -> Self {
+        let name_ = name.clone();
+        Self {
+            name,
+            hook_fn: HookFn::Closure(Box::new(move |_, draft| -> Result<()> {
+                use std::thread;
+
+                let mut child = Command::new("sh")
+                    .arg("-c")
+                    .arg(&command)
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped())
+                    .spawn()
+                    .map_err(|err| -> Error {
+                        format!(
+                            "could not execute `{command}`. Check if its binary is in PATH or if \
+                             the command is valid. Original error: {err}"
+                        )
+                        .into()
+                    })?;
+                let mut stdin = child
+                    .stdin
+                    .take()
+                    .ok_or_else(|| Error::new("failed to get stdin"))?;
+
+                thread::scope(|s| {
+                    s.spawn(move || {
+                        stdin
+                            .write_all(draft.body.as_bytes())
+                            .expect("failed to write to stdin");
+                    });
+                });
+                let output = child.wait_with_output().map_err(|err| -> Error {
+                    format!("failed to wait on hook child {name_}: {err}").into()
+                })?;
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                if !output.status.success() || !stdout.is_empty() || !stderr.is_empty() {
+                    return Err(format!(
+                        "{name_}\n  exit code: {:?}\n  stdout:\n{}\n  stderr:\n{}",
+                        output.status.code(),
+                        stdout,
+                        stderr,
+                    )
+                    .into());
+                }
+
+                Ok(())
+            })),
+        }
+    }
 }
 
 impl std::ops::Deref for Hook {
     type Target = dyn FnMut(&mut Context, &mut Draft) -> Result<()> + Send + Sync;
 
     fn deref(&self) -> &Self::Target {
-        &self.hook_fn
+        self.hook_fn.deref()
     }
 }
 
 impl std::ops::DerefMut for Hook {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.hook_fn
+        self.hook_fn.deref_mut()
     }
 }
 
@@ -98,7 +177,7 @@ fn past_date_warn(_ctx: &mut Context, draft: &mut Draft) -> Result<()> {
 /// Warn if [`melib::Draft`] Date is far in the past/future.
 pub const PASTDATEWARN: Hook = Hook {
     name: Cow::Borrowed("past-date-warn"),
-    hook_fn: past_date_warn,
+    hook_fn: HookFn::Ptr(past_date_warn),
 };
 
 fn important_header_warn(_ctx: &mut Context, draft: &mut Draft) -> Result<()> {
@@ -138,7 +217,7 @@ fn important_header_warn(_ctx: &mut Context, draft: &mut Draft) -> Result<()> {
 /// Warn if important [`melib::Draft`] header is missing or invalid.
 pub const HEADERWARN: Hook = Hook {
     name: Cow::Borrowed("important-header-warn"),
-    hook_fn: important_header_warn,
+    hook_fn: HookFn::Ptr(important_header_warn),
 };
 
 fn missing_attachment_warn(_ctx: &mut Context, draft: &mut Draft) -> Result<()> {
@@ -162,7 +241,7 @@ fn missing_attachment_warn(_ctx: &mut Context, draft: &mut Draft) -> Result<()> 
 /// Warn if Subject and/or draft body mentions attachments but they are missing.
 pub const MISSINGATTACHMENTWARN: Hook = Hook {
     name: Cow::Borrowed("missing-attachment-warn"),
-    hook_fn: missing_attachment_warn,
+    hook_fn: HookFn::Ptr(missing_attachment_warn),
 };
 
 fn empty_draft_warn(_ctx: &mut Context, draft: &mut Draft) -> Result<()> {
@@ -182,7 +261,7 @@ fn empty_draft_warn(_ctx: &mut Context, draft: &mut Draft) -> Result<()> {
 /// Warn if draft has no subject and no body.
 pub const EMPTYDRAFTWARN: Hook = Hook {
     name: Cow::Borrowed("empty-draft-warn"),
-    hook_fn: empty_draft_warn,
+    hook_fn: HookFn::Ptr(empty_draft_warn),
 };
 
 #[cfg(test)]

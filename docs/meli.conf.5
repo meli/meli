@@ -613,6 +613,20 @@ When used in a reply, the field body MAY start with the string "Re: " (from
 the Latin "res", in the matter of) followed by the contents of the "Subject:"
 field body of the original message.
 .Ed
+.It Ic custom_compose_hooks Ar [{ name = String, command = String }]
+.Pq Em optional
+Custom compose-hooks that run shell scripts.
+compose-hooks run before submitting an e-mail.
+They perform draft validation and/or transformations.
+If a custom hook exits with an error status or prints output to stdout and stderr, it will show up in the UI as a notification.
+.Pp
+Example:
+.Bd -literal
+[composing]
+editor_cmd = '~/.local/bin/vim +/^$'
+embed = true
+custom_compose_hooks = [ { name ="spellcheck", command="aspell --mode email --dont-suggest --ignore-case list" }]
+.Ed
 .It Ic disabled_compose_hooks Ar [String]
 .Pq Em optional
 Disabled compose-hooks.

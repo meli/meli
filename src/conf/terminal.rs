@@ -23,7 +23,7 @@
 
 use melib::{Error, Result, ToggleFlag};
 
-use super::{deserializers::non_empty_string, DotAddressable, Themes};
+use super::{deserializers::non_empty_opt_string, DotAddressable, Themes};
 
 /// Settings for terminal display
 #[derive(Debug, Deserialize, Clone, Serialize)]
@@ -40,11 +40,11 @@ pub struct TerminalSettings {
     pub use_mouse: ToggleFlag,
     /// String to show in status bar if mouse is active.
     /// Default: "🖱️ "
-    #[serde(deserialize_with = "non_empty_string")]
+    #[serde(deserialize_with = "non_empty_opt_string")]
     pub mouse_flag: Option<String>,
-    #[serde(deserialize_with = "non_empty_string")]
+    #[serde(deserialize_with = "non_empty_opt_string")]
     pub window_title: Option<String>,
-    #[serde(deserialize_with = "non_empty_string")]
+    #[serde(deserialize_with = "non_empty_opt_string")]
     pub file_picker_command: Option<String>,
     /// Choose between 30-something built in sequences (integers between 0-30)
     /// or define your own list of strings for the progress spinner

@@ -183,6 +183,16 @@ impl Composer {
             account_hash,
             ..Composer::new(context)
         };
+
+        // Add user's custom hooks.
+        for hook in account_settings!(context[account_hash].composing.custom_compose_hooks)
+            .iter()
+            .cloned()
+            .map(Into::into)
+        {
+            ret.hooks.push(hook);
+        }
+
         ret.hooks.retain(|h| {
             !account_settings!(context[account_hash].composing.disabled_compose_hooks)
                 .iter()
@@ -216,6 +226,14 @@ impl Composer {
         context: &Context,
     ) -> Result<Self> {
         let mut ret = Composer::with_account(account_hash, context);
+        // Add user's custom hooks.
+        for hook in account_settings!(context[account_hash].composing.custom_compose_hooks)
+            .iter()
+            .cloned()
+            .map(Into::into)
+        {
+            ret.hooks.push(hook);
+        }
         ret.hooks.retain(|h| {
             !account_settings!(context[account_hash].composing.disabled_compose_hooks)
                 .iter()
@@ -236,6 +254,14 @@ impl Composer {
         reply_to_all: bool,
     ) -> Self {
         let mut ret = Composer::with_account(account_hash, context);
+        // Add user's custom hooks.
+        for hook in account_settings!(context[account_hash].composing.custom_compose_hooks)
+            .iter()
+            .cloned()
+            .map(Into::into)
+        {
+            ret.hooks.push(hook);
+        }
         ret.hooks.retain(|h| {
             !account_settings!(context[account_hash].composing.disabled_compose_hooks)
                 .iter()
@@ -522,15 +548,6 @@ To: {}
                 *v = vn.as_str().to_string();
             }
         }
-    }
-
-    fn run_hooks(&mut self, ctx: &mut Context) -> Result<()> {
-        for h in self.hooks.iter_mut() {
-            if let err @ Err(_) = h(ctx, &mut self.draft) {
-                return err;
-            }
-        }
-        Ok(())
     }
 
     fn update_form(&mut self) {
@@ -1438,10 +1455,31 @@ impl Component for Composer {
                     && self.mode.is_edit() =>
             {
                 self.update_draft();
-                if let Err(err) = self.run_hooks(context) {
-                    context
-                        .replies
-                        .push_back(UIEvent::Notification(None, err.to_string(), None));
+
+                {
+                    let Self {
+                        ref mut hooks,
+                        ref mut draft,
+                        ..
+                    } = self;
+
+                    for err in hooks
+                        .iter_mut()
+                        .filter_map(|h| {
+                            if let Err(err) = h(context, draft) {
+                                Some(err)
+                            } else {
+                                None
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                    {
+                        context.replies.push_back(UIEvent::Notification(
+                            None,
+                            err.to_string(),
+                            None,
+                        ));
+                    }
                 }
                 self.mode = ViewMode::Send(UIConfirmationDialog::new(
                     "send mail?",

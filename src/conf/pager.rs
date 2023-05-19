@@ -51,14 +51,14 @@ pub struct PagerSettings {
 
     /// A command to pipe mail output through for viewing in pager.
     /// Default: None
-    #[serde(default = "none", deserialize_with = "non_empty_string")]
+    #[serde(default = "none", deserialize_with = "non_empty_opt_string")]
     pub filter: Option<String>,
 
     /// A command to pipe html output before displaying it in a pager
     /// Default: None
     #[serde(
         default = "none",
-        deserialize_with = "non_empty_string",
+        deserialize_with = "non_empty_opt_string",
         alias = "html-filter"
     )]
     pub html_filter: Option<String>,
@@ -94,14 +94,14 @@ pub struct PagerSettings {
 
     /// A command to launch URLs with. The URL will be given as the first
     /// argument of the command. Default: None
-    #[serde(default = "none", deserialize_with = "non_empty_string")]
+    #[serde(default = "none", deserialize_with = "non_empty_opt_string")]
     pub url_launcher: Option<String>,
 
     /// A command to open html files.
     /// Default: None
     #[serde(
         default = "none",
-        deserialize_with = "non_empty_string",
+        deserialize_with = "non_empty_opt_string",
         alias = "html-open"
     )]
     pub html_open: Option<String>,

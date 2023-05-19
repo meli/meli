@@ -24,7 +24,10 @@ use std::collections::HashMap;
 
 use melib::ToggleFlag;
 
-use super::default_vals::{ask, false_val, none, true_val};
+use super::{
+    default_vals::{ask, false_val, none, true_val},
+    deserializers::non_empty_string,
+};
 
 /// Settings for writing and sending new e-mail
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -100,6 +103,9 @@ pub struct ComposingSettings {
     /// The prefix to use in reply subjects. The de facto prefix is "Re:".
     #[serde(default = "res", alias = "reply-prefix")]
     pub reply_prefix: String,
+    /// Custom `compose-hooks`.
+    #[serde(default, alias = "custom-compose-hooks")]
+    pub custom_compose_hooks: Vec<ComposeHook>,
     /// Disabled `compose-hooks`.
     #[serde(default, alias = "disabled-compose-hooks")]
     pub disabled_compose_hooks: Vec<String>,
@@ -121,6 +127,7 @@ impl Default for ComposingSettings {
             forward_as_attachment: ToggleFlag::Ask,
             reply_prefix_list_to_strip: None,
             reply_prefix: res(),
+            custom_compose_hooks: vec![],
             disabled_compose_hooks: vec![],
         }
     }
@@ -176,4 +183,20 @@ pub enum SendMail {
     #[serde(with = "strings::server_submission")]
     ServerSubmission,
     ShellCommand(String),
+}
+
+/// Shell command compose hooks (See [`Hook`])
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct ComposeHook {
+    #[serde(deserialize_with = "non_empty_string")]
+    name: String,
+    #[serde(deserialize_with = "non_empty_string")]
+    command: String,
+}
+
+impl From<ComposeHook> for crate::components::mail::hooks::Hook {
+    fn from(c: ComposeHook) -> Self {
+        Self::new_shell_command(c.name.into(), c.command)
+    }
 }

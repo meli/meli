@@ -34,7 +34,7 @@ use std::{
 
 use melib::{backends::TagHash, search::Query, StderrLogger};
 
-use crate::{conf::deserializers::non_empty_string, terminal::Color};
+use crate::{conf::deserializers::non_empty_opt_string, terminal::Color};
 
 #[rustfmt::skip]
 mod overrides;
@@ -729,8 +729,9 @@ mod default_vals {
 }
 
 mod deserializers {
-    use serde::{Deserialize, Deserializer};
-    pub(in crate::conf) fn non_empty_string<'de, D, T: std::convert::From<Option<String>>>(
+    use serde::{de, Deserialize, Deserializer};
+
+    pub(in crate::conf) fn non_empty_opt_string<'de, D, T: std::convert::From<Option<String>>>(
         deserializer: D,
     ) -> std::result::Result<T, D::Error>
     where
@@ -741,6 +742,20 @@ mod deserializers {
             Ok(None.into())
         } else {
             Ok(Some(s).into())
+        }
+    }
+
+    pub(in crate::conf) fn non_empty_string<'de, D, T: std::convert::From<String>>(
+        deserializer: D,
+    ) -> std::result::Result<T, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = <String>::deserialize(deserializer)?;
+        if s.is_empty() {
+            Err(de::Error::custom("This field value cannot be empty."))
+        } else {
+            Ok(s.into())
         }
     }
 
