@@ -58,14 +58,28 @@ the author's formatting.
 Create a `mail.vim` file type plugin in:
 
 - `$HOME/.vim/after/ftplugin/mail.vim` for vim
-- `$HOME/.config/nvim/ftplugin/mail.vim` for neovim
+- `$HOME/.config/nvim/after/ftplugin/mail.vim` for neovim
 
 ```vim
-setl tw=72
-setl fo=awq
-setl comments+=nb:>
+setlocal nomodeline
+setlocal textwidth=72
+setlocal formatoptions=aqtw2r
+setlocal nojoinspaces
+setlocal nosmartindent
+setlocal comments+=nb:>
 match ErrorMsg '\s\+$'
 ```
+
+Also, don't forget that you can easily quote stuff with `MailQuote`.
+From `:help ft-mail-plugin`:
+
+> Local mappings:
+> `<LocalLeader>q`   or   `\\MailQuote`
+>   Quotes the text selected in Visual mode, or from the cursor position
+>   to the end of the file in Normal mode.
+>   This means "> " is inserted in each line.
+
+See the accompanying [`mail.vim`](./mail.vim) for comments for each setting.
 
 ## `xbiff`
 
