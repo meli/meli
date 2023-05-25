@@ -615,6 +615,7 @@ mod tests {
             .set_wrap_header_preamble(Some(("<!--".to_string(), "-->".to_string())));
         let original = default.clone();
         let s = default.to_edit_string();
+        #[rustfmt::skip]
         assert_eq!(
             s,
             "<!--\nDate: Sun, 16 Jun 2013 17:56:45 +0200\nFrom: \nTo: \nCc: \nBcc: \nSubject: \
