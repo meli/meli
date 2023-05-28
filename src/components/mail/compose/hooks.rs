@@ -275,8 +275,8 @@ mod tests {
         let mut draft = Draft::default();
         draft
             .set_body("αδφαφσαφασ".to_string())
-            .set_header("Subject", "test_update()".into())
-            .set_header("Date", "Sun, 16 Jun 2013 17:56:45 +0200".into());
+            .set_header(HeaderName::SUBJECT, "test_update()".into())
+            .set_header(HeaderName::DATE, "Sun, 16 Jun 2013 17:56:45 +0200".into());
         println!("Check that past Date header value produces a warning…");
         #[allow(const_item_mutation)]
         let err_msg = PASTDATEWARN(&mut ctx, &mut draft).unwrap_err().to_string();
@@ -299,8 +299,8 @@ mod tests {
         let mut draft = Draft::default();
         draft
             .set_body("αδφαφσαφασ".to_string())
-            .set_header("Subject", "test_update()".into())
-            .set_header("Date", "Sun sds16 Jun 2013 17:56:45 +0200".into());
+            .set_header(HeaderName::SUBJECT, "test_update()".into())
+            .set_header(HeaderName::DATE, "Sun sds16 Jun 2013 17:56:45 +0200".into());
         let mut hook = HEADERWARN;
 
         println!("Check for missing/empty From header value…");
@@ -312,7 +312,7 @@ mod tests {
             "HEADERWARN should complain about From value being empty: {}",
             err_msg
         );
-        draft.set_header("From", "user <user@example.com>".into());
+        draft.set_header(HeaderName::FROM, "user <user@example.com>".into());
 
         println!("Check for missing/empty To header value…");
         let err_msg = hook(&mut ctx, &mut draft).unwrap_err().to_string();
@@ -323,7 +323,7 @@ mod tests {
             "HEADERWARN should complain about To value being empty: {}",
             err_msg
         );
-        draft.set_header("To", "other user <user@example.com>".into());
+        draft.set_header(HeaderName::TO, "other user <user@example.com>".into());
 
         println!("Check for invalid Date header value…");
         let err_msg = hook(&mut ctx, &mut draft).unwrap_err().to_string();
@@ -337,11 +337,11 @@ mod tests {
         draft = Draft::default();
         draft
             .set_body("αδφαφσαφασ".to_string())
-            .set_header("From", "user <user@example.com>".into())
-            .set_header("To", "other user <user@example.com>".into())
-            .set_header("Subject", "test_update()".into());
+            .set_header(HeaderName::FROM, "user <user@example.com>".into())
+            .set_header(HeaderName::TO, "other user <user@example.com>".into())
+            .set_header(HeaderName::SUBJECT, "test_update()".into());
         hook(&mut ctx, &mut draft).unwrap();
-        draft.set_header("From", "user user@example.com>".into());
+        draft.set_header(HeaderName::FROM, "user user@example.com>".into());
 
         println!("Check for invalid From header value…");
         let err_msg = hook(&mut ctx, &mut draft).unwrap_err().to_string();
@@ -361,8 +361,8 @@ mod tests {
         let mut draft = Draft::default();
         draft
             .set_body("αδφαφσαφασ".to_string())
-            .set_header("Subject", "Attachments included".into())
-            .set_header("Date", "Sun, 16 Jun 2013 17:56:45 +0200".into());
+            .set_header(HeaderName::SUBJECT, "Attachments included".into())
+            .set_header(HeaderName::DATE, "Sun, 16 Jun 2013 17:56:45 +0200".into());
 
         let mut hook = MISSINGATTACHMENTWARN;
 
@@ -378,7 +378,7 @@ mod tests {
         );
 
         draft
-            .set_header("Subject", "Hello.".into())
+            .set_header(HeaderName::SUBJECT, "Hello.".into())
             .set_body("Attachments included".to_string());
         println!(
             "Check that mentioning attachments in body produces a warning if draft has no \
@@ -394,7 +394,7 @@ mod tests {
         println!(
             "Check that mentioning attachments produces no warnings if draft has attachments…"
         );
-        draft.set_header("Subject", "Attachments included".into());
+        draft.set_header(HeaderName::SUBJECT, "Attachments included".into());
         let mut attachment = AttachmentBuilder::new(b"");
         attachment
             .set_raw(b"foobar".to_vec())
@@ -414,7 +414,7 @@ mod tests {
         let tempdir = tempfile::tempdir().unwrap();
         let mut ctx = Context::new_mock(&tempdir);
         let mut draft = Draft::default();
-        draft.set_header("Date", "Sun, 16 Jun 2013 17:56:45 +0200".into());
+        draft.set_header(HeaderName::DATE, "Sun, 16 Jun 2013 17:56:45 +0200".into());
 
         let mut hook = EMPTYDRAFTWARN;
 
@@ -427,7 +427,7 @@ mod tests {
         );
 
         println!("Check that non-empty draft produces no warning…");
-        draft.set_header("Subject", "Ping".into());
+        draft.set_header(HeaderName::SUBJECT, "Ping".into());
         hook(&mut ctx, &mut draft).unwrap();
     }
 }

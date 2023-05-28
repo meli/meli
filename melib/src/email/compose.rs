@@ -21,6 +21,7 @@
 
 /*! Compose a `Draft`, with MIME and attachment support */
 use std::{
+    convert::TryFrom,
     ffi::OsStr,
     io::Read,
     path::{Path, PathBuf},
@@ -59,18 +60,18 @@ impl Default for Draft {
     fn default() -> Self {
         let mut headers = HeaderMap::default();
         headers.insert(
-            HeaderName::new_unchecked("Date"),
+            HeaderName::DATE,
             crate::datetime::timestamp_to_string(
                 crate::datetime::now(),
                 Some(crate::datetime::RFC822_DATE),
                 true,
             ),
         );
-        headers.insert(HeaderName::new_unchecked("From"), "".into());
-        headers.insert(HeaderName::new_unchecked("To"), "".into());
-        headers.insert(HeaderName::new_unchecked("Cc"), "".into());
-        headers.insert(HeaderName::new_unchecked("Bcc"), "".into());
-        headers.insert(HeaderName::new_unchecked("Subject"), "".into());
+        headers.insert(HeaderName::FROM, "".into());
+        headers.insert(HeaderName::TO, "".into());
+        headers.insert(HeaderName::CC, "".into());
+        headers.insert(HeaderName::BCC, "".into());
+        headers.insert(HeaderName::SUBJECT, "".into());
 
         Draft {
             headers,
@@ -118,10 +119,18 @@ impl Draft {
         Ok(ret)
     }
 
-    pub fn set_header(&mut self, header: &str, value: String) -> &mut Self {
-        self.headers
-            .insert(HeaderName::new_unchecked(header), value);
+    pub fn set_header(&mut self, header: HeaderName, value: String) -> &mut Self {
+        self.headers.insert(header, value);
         self
+    }
+
+    pub fn try_set_header(
+        &mut self,
+        header: &str,
+        value: String,
+    ) -> std::result::Result<&mut Self, InvalidHeaderName> {
+        self.headers.insert(HeaderName::try_from(header)?, value);
+        Ok(self)
     }
 
     pub fn set_wrap_header_preamble(&mut self, value: Option<(String, String)>) -> &mut Self {
@@ -160,7 +169,7 @@ impl Draft {
     pub fn new_reply(envelope: &Envelope, bytes: &[u8], reply_to_all: bool) -> Self {
         let mut ret = Draft::default();
         ret.headers_mut().insert(
-            HeaderName::new_unchecked("References"),
+            HeaderName::REFERENCES,
             format!(
                 "{} {}",
                 envelope
@@ -177,7 +186,7 @@ impl Draft {
             ),
         );
         ret.headers_mut().insert(
-            HeaderName::new_unchecked("In-Reply-To"),
+            HeaderName::IN_REPLY_TO,
             envelope.message_id_display().into(),
         );
         // "Mail-Followup-To/(To+Cc+(Mail-Reply-To/Reply-To/From)) for follow-up,
@@ -186,33 +195,27 @@ impl Draft {
         if reply_to_all {
             if let Some(reply_to) = envelope.other_headers().get("Mail-Followup-To") {
                 ret.headers_mut()
-                    .insert(HeaderName::new_unchecked("To"), reply_to.to_string());
+                    .insert(HeaderName::TO, reply_to.to_string());
             } else if let Some(reply_to) = envelope.other_headers().get("Reply-To") {
                 ret.headers_mut()
-                    .insert(HeaderName::new_unchecked("To"), reply_to.to_string());
+                    .insert(HeaderName::TO, reply_to.to_string());
             } else {
-                ret.headers_mut().insert(
-                    HeaderName::new_unchecked("To"),
-                    envelope.field_from_to_string(),
-                );
+                ret.headers_mut()
+                    .insert(HeaderName::TO, envelope.field_from_to_string());
             }
             // FIXME: add To/Cc
         } else if let Some(reply_to) = envelope.other_headers().get("Mail-Reply-To") {
             ret.headers_mut()
-                .insert(HeaderName::new_unchecked("To"), reply_to.to_string());
+                .insert(HeaderName::TO, reply_to.to_string());
         } else if let Some(reply_to) = envelope.other_headers().get("Reply-To") {
             ret.headers_mut()
-                .insert(HeaderName::new_unchecked("To"), reply_to.to_string());
+                .insert(HeaderName::TO, reply_to.to_string());
         } else {
-            ret.headers_mut().insert(
-                HeaderName::new_unchecked("To"),
-                envelope.field_from_to_string(),
-            );
+            ret.headers_mut()
+                .insert(HeaderName::TO, envelope.field_from_to_string());
         }
-        ret.headers_mut().insert(
-            HeaderName::new_unchecked("Cc"),
-            envelope.field_cc_to_string(),
-        );
+        ret.headers_mut()
+            .insert(HeaderName::CC, envelope.field_cc_to_string());
         let body = envelope.body_bytes(bytes);
         ret.body = {
             let reply_body_bytes = body.decode_rec(Default::default());
@@ -221,7 +224,7 @@ impl Draft {
             let mut ret = format!(
                 "On {} {} wrote:\n",
                 envelope.date_as_str(),
-                &ret.headers()["To"]
+                &ret.headers()[HeaderName::TO]
             );
             for l in lines {
                 ret.push('>');
@@ -304,10 +307,8 @@ impl Draft {
             if let Ok((_, addr)) = super::parser::address::mailbox(self.headers["From"].as_bytes())
             {
                 if let Some(fqdn) = addr.get_fqdn() {
-                    self.headers.insert(
-                        HeaderName::new_unchecked("Message-ID"),
-                        random::gen_message_id(&fqdn),
-                    );
+                    self.headers
+                        .insert(HeaderName::MESSAGE_ID, random::gen_message_id(&fqdn));
                 }
             }
         }
@@ -559,8 +560,8 @@ mod tests {
         default
             .set_wrap_header_preamble(Some(("<!--".to_string(), "-->".to_string())))
             .set_body("αδφαφσαφασ".to_string())
-            .set_header("Subject", "test_update()".into())
-            .set_header("Date", "Sun, 16 Jun 2013 17:56:45 +0200".into());
+            .set_header(HeaderName::SUBJECT, "test_update()".into())
+            .set_header(HeaderName::DATE, "Sun, 16 Jun 2013 17:56:45 +0200".into());
 
         let original = default.clone();
         let s = default.to_edit_string();

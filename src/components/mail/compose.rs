@@ -141,7 +141,7 @@ impl fmt::Display for Composer {
             write!(
                 f,
                 "reply: {}",
-                (&self.draft.headers()["Subject"]).trim_at_boundary(8)
+                (&self.draft.headers()[HeaderName::SUBJECT]).trim_at_boundary(8)
             )
         } else {
             write!(f, "composing")
@@ -204,11 +204,11 @@ impl Composer {
             if v.is_empty() {
                 continue;
             }
-            ret.draft.set_header(h, v.into());
+            ret.draft.set_header(h.into(), v.into());
         }
         if *account_settings!(context[account_hash].composing.insert_user_agent) {
             ret.draft.set_header(
-                "User-Agent",
+                HeaderName::USER_AGENT,
                 format!("meli {}", option_env!("CARGO_PKG_VERSION").unwrap_or("0.0")),
             );
         }
@@ -296,9 +296,9 @@ impl Composer {
                 subject.to_string()
             }
         };
-        ret.draft.set_header("Subject", subject);
+        ret.draft.set_header(HeaderName::SUBJECT, subject);
         ret.draft.set_header(
-            "References",
+            HeaderName::REFERENCES,
             format!(
                 "{} {}",
                 envelope
@@ -314,17 +314,19 @@ impl Composer {
                 envelope.message_id_display()
             ),
         );
-        ret.draft
-            .set_header("In-Reply-To", envelope.message_id_display().into());
+        ret.draft.set_header(
+            HeaderName::IN_REPLY_TO,
+            envelope.message_id_display().into(),
+        );
 
-        if let Some(reply_to) = envelope.other_headers().get("To") {
+        if let Some(reply_to) = envelope.other_headers().get(HeaderName::TO) {
             let to: &str = reply_to;
             let extra_identities = &account.settings.account.extra_identities;
             if let Some(extra) = extra_identities
                 .iter()
                 .find(|extra| to.contains(extra.as_str()))
             {
-                ret.draft.set_header("From", extra.into());
+                ret.draft.set_header(HeaderName::FROM, extra.into());
             }
         }
 
@@ -348,13 +350,13 @@ impl Composer {
             }
             if let Some(reply_to) = envelope
                 .other_headers()
-                .get("Mail-Followup-To")
+                .get(HeaderName::MAIL_FOLLOWUP_TO)
                 .and_then(|v| v.try_into().ok())
             {
                 to.insert(reply_to);
             } else if let Some(reply_to) = envelope
                 .other_headers()
-                .get("Reply-To")
+                .get(HeaderName::REPLY_TO)
                 .and_then(|v| v.try_into().ok())
             {
                 to.insert(reply_to);
@@ -371,7 +373,7 @@ impl Composer {
             ) {
                 to.remove(&ours);
             }
-            ret.draft.set_header("To", {
+            ret.draft.set_header(HeaderName::TO, {
                 let mut ret: String =
                     to.into_iter()
                         .fold(String::new(), |mut s: String, n: Address| {
@@ -383,13 +385,15 @@ impl Composer {
                 ret.pop();
                 ret
             });
-            ret.draft.set_header("Cc", envelope.field_cc_to_string());
-        } else if let Some(reply_to) = envelope.other_headers().get("Mail-Reply-To") {
-            ret.draft.set_header("To", reply_to.to_string());
-        } else if let Some(reply_to) = envelope.other_headers().get("Reply-To") {
-            ret.draft.set_header("To", reply_to.to_string());
+            ret.draft
+                .set_header(HeaderName::CC, envelope.field_cc_to_string());
+        } else if let Some(reply_to) = envelope.other_headers().get(HeaderName::MAIL_REPLY_TO) {
+            ret.draft.set_header(HeaderName::TO, reply_to.to_string());
+        } else if let Some(reply_to) = envelope.other_headers().get(HeaderName::REPLY_TO) {
+            ret.draft.set_header(HeaderName::TO, reply_to.to_string());
         } else {
-            ret.draft.set_header("To", envelope.field_from_to_string());
+            ret.draft
+                .set_header(HeaderName::TO, envelope.field_from_to_string());
         }
         ret.draft.body = {
             let mut ret = attribution_string(
@@ -495,7 +499,7 @@ impl Composer {
     ) -> Self {
         let mut composer = Composer::with_account(coordinates.0, context);
         let mut draft: Draft = Draft::default();
-        draft.set_header("Subject", format!("Fwd: {}", env.subject()));
+        draft.set_header(HeaderName::SUBJECT, format!("Fwd: {}", env.subject()));
         let preamble = format!(
             r#"
 ---------- Forwarded message ---------
@@ -557,8 +561,15 @@ To: {}
         self.form.set_cursor(old_cursor);
         let headers = self.draft.headers();
         let account_hash = self.account_hash;
-        for &k in &["Date", "From", "To", "Cc", "Bcc", "Subject"] {
-            if k == "To" || k == "Cc" || k == "Bcc" {
+        for k in &[
+            HeaderName::DATE,
+            HeaderName::FROM,
+            HeaderName::TO,
+            HeaderName::CC,
+            HeaderName::BCC,
+            HeaderName::SUBJECT,
+        ] {
+            if k == HeaderName::TO || k == HeaderName::CC || k == HeaderName::BCC {
                 self.form.push_cl((
                     k.into(),
                     headers[k].to_string(),
@@ -571,7 +582,7 @@ To: {}
                             .collect::<Vec<AutoCompleteEntry>>()
                     }),
                 ));
-            } else if k == "From" {
+            } else if k == HeaderName::FROM {
                 self.form.push_cl((
                     k.into(),
                     headers[k].to_string(),
@@ -812,10 +823,11 @@ impl Component for Composer {
                     context[self.account_hash].pgp.auto_sign
                 ));
             }
-            if !self.draft.headers().contains_key("From") || self.draft.headers()["From"].is_empty()
+            if !self.draft.headers().contains_key(HeaderName::FROM)
+                || self.draft.headers()[HeaderName::FROM].is_empty()
             {
                 self.draft.set_header(
-                    "From",
+                    HeaderName::FROM,
                     context.accounts[&self.account_hash]
                         .settings
                         .account()
@@ -1230,7 +1242,8 @@ impl Component for Composer {
                 UIEvent::FinishedUIDialog(id, ref mut result),
             ) if selector.id() == *id => {
                 if let Some(to_val) = result.downcast_mut::<String>() {
-                    self.draft.set_header("To", std::mem::take(to_val));
+                    self.draft
+                        .set_header(HeaderName::TO, std::mem::take(to_val));
                     self.update_form();
                 }
                 self.mode = ViewMode::Edit;
@@ -1381,28 +1394,6 @@ impl Component for Composer {
             UIEvent::Resize => {
                 self.set_dirty(true);
             }
-            /*
-            /* Switch e-mail From: field to the `left` configured account. */
-            UIEvent::Input(Key::Left) if self.cursor == Cursor::From => {
-            self.draft.headers_mut().insert(
-            "From".into(),
-            get_display_name(context, self.account_hash),
-            );
-            self.dirty = true;
-            return true;
-            }
-            /* Switch e-mail From: field to the `right` configured account. */
-            UIEvent::Input(Key::Right) if self.cursor == Cursor::From => {
-            if self.account_cursor + 1 < context.accounts.len() {
-            self.account_cursor += 1;
-            self.draft.headers_mut().insert(
-            "From".into(),
-            get_display_name(context, self.account_cursor),
-            );
-            self.dirty = true;
-            }
-            return true;
-            }*/
             UIEvent::Input(ref key)
                 if self.mode.is_edit()
                     && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["scroll_up"]) =>
@@ -2494,9 +2485,12 @@ hello world.
             &mut context,
             false,
         );
-        assert_eq!(&composer.draft.headers()["Subject"], "RE: your e-mail");
         assert_eq!(
-            &composer.draft.headers()["To"],
+            &composer.draft.headers()[HeaderName::SUBJECT],
+            "RE: your e-mail"
+        );
+        assert_eq!(
+            &composer.draft.headers()[HeaderName::TO],
             r#"some name <some@example.com>"#
         );
         let raw_mail = r#"From: "some name" <some@example.com>
@@ -2520,9 +2514,12 @@ hello world.
             &mut context,
             false,
         );
-        assert_eq!(&composer.draft.headers()["Subject"], "Re: your e-mail");
         assert_eq!(
-            &composer.draft.headers()["To"],
+            &composer.draft.headers()[HeaderName::SUBJECT],
+            "Re: your e-mail"
+        );
+        assert_eq!(
+            &composer.draft.headers()[HeaderName::TO],
             r#"some name <some@example.com>"#
         );
     }

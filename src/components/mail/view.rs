@@ -2663,7 +2663,7 @@ impl Component for MailView {
                                         if let Ok(mailto) = Mailto::try_from(*email) {
                                             let mut draft: Draft = mailto.into();
                                             draft.set_header(
-                                                "From",
+                                                HeaderName::FROM,
                                                 context.accounts[&self.coordinates.0]
                                                     .settings
                                                     .account()
