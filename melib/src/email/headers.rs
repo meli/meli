@@ -20,102 +20,18 @@
  */
 
 /*! Wrapper type `HeaderName` for case-insensitive comparisons */
+
+pub mod names;
 use std::{
     borrow::Borrow,
     cmp::{Eq, PartialEq},
-    convert::TryFrom,
-    fmt,
+    convert::{TryFrom, TryInto},
     hash::{Hash, Hasher},
     ops::{Deref, DerefMut},
 };
 
 use indexmap::IndexMap;
-use smallvec::SmallVec;
-
-use crate::error::Error;
-
-#[derive(Clone, Copy, Serialize, Deserialize)]
-pub struct HeaderNameType<S>(S);
-
-/// Case insensitive wrapper for a header name. As of `RFC5322` it's
-/// guaranteed to be ASCII.
-pub type HeaderName = HeaderNameType<SmallVec<[u8; 32]>>;
-
-impl HeaderName {
-    pub fn new_unchecked(from: &str) -> Self {
-        HeaderNameType(from.as_bytes().into())
-    }
-}
-
-impl<S: AsRef<[u8]>> fmt::Display for HeaderNameType<S> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.normalize())
-    }
-}
-
-impl<S: AsRef<[u8]>> fmt::Debug for HeaderNameType<S> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.as_str())
-    }
-}
-
-impl<S: AsRef<[u8]>> PartialEq<[u8]> for HeaderNameType<S> {
-    fn eq(&self, other: &[u8]) -> bool {
-        self.0.as_ref().eq_ignore_ascii_case(other)
-    }
-}
-
-impl<S: AsRef<[u8]>> PartialEq<&str> for HeaderNameType<S> {
-    fn eq(&self, other: &&str) -> bool {
-        self.0.as_ref().eq_ignore_ascii_case(other.as_bytes())
-    }
-}
-
-impl<S1: AsRef<[u8]>, S2: AsRef<[u8]>> PartialEq<HeaderNameType<S2>> for HeaderNameType<S1> {
-    fn eq(&self, other: &HeaderNameType<S2>) -> bool {
-        self.0.as_ref().eq_ignore_ascii_case(other.0.as_ref())
-    }
-}
-
-impl<S: AsRef<[u8]>> Eq for HeaderNameType<S> {}
-
-impl<S: AsRef<[u8]>> Hash for HeaderNameType<S> {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        for b in self.0.as_ref().iter() {
-            b.to_ascii_lowercase().hash(state);
-        }
-    }
-}
-
-impl TryFrom<&[u8]> for HeaderName {
-    type Error = Error;
-
-    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-        if value.is_ascii() {
-            Ok(HeaderNameType(value.into()))
-        } else {
-            Err(Error::new(format!(
-                "Header value is not ascii: {:?}",
-                value
-            )))
-        }
-    }
-}
-
-impl TryFrom<&str> for HeaderName {
-    type Error = Error;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        if value.is_ascii() {
-            Ok(HeaderNameType(value.as_bytes().into()))
-        } else {
-            Err(Error::new(format!(
-                "Header value is not ascii: {:?}",
-                value
-            )))
-        }
-    }
-}
+pub use names::{HeaderName, InvalidHeaderName, Protocol, Standard, StandardHeader, Status};
 
 trait HeaderKey {
     fn to_key(&self) -> &[u8];
@@ -137,9 +53,9 @@ impl PartialEq for dyn HeaderKey + '_ {
 
 impl Eq for dyn HeaderKey + '_ {}
 
-impl<S: AsRef<[u8]>> HeaderKey for HeaderNameType<S> {
+impl HeaderKey for HeaderName {
     fn to_key(&self) -> &[u8] {
-        self.0.as_ref()
+        self.as_bytes()
     }
 }
 
@@ -151,119 +67,94 @@ impl<'a> Borrow<dyn HeaderKey + 'a> for HeaderName {
     }
 }
 
-impl<S: AsRef<[u8]>> HeaderNameType<S> {
-    pub fn as_str(&self) -> &str {
-        // HeadersType are ascii so valid utf8
-        unsafe { std::str::from_utf8_unchecked(self.0.as_ref()) }
-    }
-
-    pub fn normalize(&self) -> &str {
-        if self == &b"subject"[..] {
-            "Subject"
-        } else if self == &b"from"[..] {
-            "From"
-        } else if self == &b"to"[..] {
-            "To"
-        } else if self == &b"cc"[..] {
-            "Cc"
-        } else if self == &b"bcc"[..] {
-            "Bcc"
-        } else if self == &b"reply-to"[..] {
-            "Reply-To"
-        } else if self == &b"in-reply-to"[..] {
-            "In-Reply-To"
-        } else if self == &b"references"[..] {
-            "References"
-        } else if self == &b"sender"[..] {
-            "Sender"
-        } else if self == &b"mail-reply-to"[..] {
-            "Mail-Reply-To"
-        } else if self == &b"mail-followup-to"[..] {
-            "Mail-Followup-To"
-        } else if self == &b"mime-version"[..] {
-            "MIME-Version"
-        } else if self == &b"content-disposition"[..] {
-            "Content-Disposition"
-        } else if self == &b"content-transfer-encoding"[..] {
-            "Content-Transfer-Encoding"
-        } else if self == &b"content-type"[..] {
-            "Content-Type"
-        } else if self == &b"content-id"[..] {
-            "Content-ID"
-        } else if self == &b"content-description"[..] {
-            "Content-Description"
-        } else if self == &b"authentication-results"[..] {
-            "Authentication-Results"
-        } else if self == &b"dkim-signature"[..] {
-            "DKIM-Signature"
-        } else if self == &b"delivered-to"[..] {
-            "Delivered-To"
-        } else if self == &b"message-id"[..] {
-            "Message-ID"
-        } else if self == &b"comments"[..] {
-            "Comments"
-        } else if self == &b"keywords"[..] {
-            "Keywords"
-        } else if self == &b"resent-from"[..] {
-            "Resent-From"
-        } else if self == &b"resent-sender"[..] {
-            "Resent-Sender"
-        } else if self == &b"resent-to"[..] {
-            "Resent-To"
-        } else if self == &b"resent-cc"[..] {
-            "Resent-Cc"
-        } else if self == &b"resent-bcc"[..] {
-            "Resent-Bcc"
-        } else if self == &b"resent-date"[..] {
-            "Resent-Date"
-        } else if self == &b"resent-message-id"[..] {
-            "Resent-Message-ID"
-        } else if self == &b"resent-reply-to"[..] {
-            "Resent-Reply-To"
-        } else if self == &b"return-path"[..] {
-            "Return-Path"
-        } else if self == &b"received"[..] {
-            "Received"
-        } else {
-            self.as_str()
-        }
-    }
-}
-
+/// Map of mail headers and values.
+///
+/// Can be indexed by:
+///
+/// - `usize`
+/// - `&[u8]`, which panics if it's not a valid header value.
+/// - `&str`, which also panics if it's not a valid header value.
+/// - [HeaderName], which is guaranteed to be valid.
+///
+/// # Panics
+///
+/// Except for the above, indexing will also panic if index is out of range or
+/// header key is not present in the map.
 #[derive(Debug, Default, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub struct HeaderMap(indexmap::IndexMap<HeaderName, String>);
+
+impl std::ops::Index<usize> for HeaderMap {
+    type Output = str;
+    fn index(&self, k: usize) -> &Self::Output {
+        (self.0)[k].as_str()
+    }
+}
 
 impl std::ops::Index<&[u8]> for HeaderMap {
     type Output = str;
     fn index(&self, k: &[u8]) -> &Self::Output {
-        (self.0)[HeaderNameType(k).borrow() as &dyn HeaderKey].as_str()
+        (self.0)[HeaderName::try_from(k)
+            .expect("Invalid bytes in header name.")
+            .borrow() as &dyn HeaderKey]
+            .as_str()
     }
 }
 
 impl std::ops::Index<&str> for HeaderMap {
     type Output = str;
     fn index(&self, k: &str) -> &Self::Output {
-        (self.0)[HeaderNameType(k).borrow() as &dyn HeaderKey].as_str()
+        (self.0)[&HeaderName::try_from(k).expect("Invalid bytes in header name.")].as_str()
+    }
+}
+
+impl std::ops::Index<&HeaderName> for HeaderMap {
+    type Output = str;
+    fn index(&self, k: &HeaderName) -> &Self::Output {
+        (self.0)[k].as_str()
+    }
+}
+
+impl std::ops::Index<HeaderName> for HeaderMap {
+    type Output = str;
+    fn index(&self, k: HeaderName) -> &Self::Output {
+        (self.0)[&k].as_str()
     }
 }
 
 impl HeaderMap {
-    pub fn get_mut(&mut self, key: &str) -> Option<&mut String> {
-        (self.0).get_mut(HeaderNameType(key).borrow() as &dyn HeaderKey)
+    pub fn get_mut<T: TryInto<HeaderName> + std::fmt::Debug>(
+        &mut self,
+        key: T,
+    ) -> Option<&mut String>
+    where
+        <T as TryInto<HeaderName>>::Error: std::fmt::Debug,
+    {
+        let k = key.try_into().expect("Invalid bytes in header name.");
+        (self.0).get_mut(&k)
     }
 
-    pub fn get(&self, key: &str) -> Option<&str> {
-        (self.0)
-            .get(HeaderNameType(key).borrow() as &dyn HeaderKey)
-            .map(|x| x.as_str())
+    pub fn get<T: TryInto<HeaderName> + std::fmt::Debug>(&self, key: T) -> Option<&str>
+    where
+        <T as TryInto<HeaderName>>::Error: std::fmt::Debug,
+    {
+        let k = key.try_into().expect("Invalid bytes in header name.");
+        (self.0).get(&k).map(|x| x.as_str())
     }
 
-    pub fn contains_key(&self, key: &str) -> bool {
-        (self.0).contains_key(HeaderNameType(key).borrow() as &dyn HeaderKey)
+    pub fn contains_key<T: TryInto<HeaderName> + std::fmt::Debug>(&self, key: T) -> bool
+    where
+        <T as TryInto<HeaderName>>::Error: std::fmt::Debug,
+    {
+        let k = key.try_into().expect("Invalid bytes in header name.");
+        (self.0).contains_key(&k)
     }
 
-    pub fn remove(&mut self, key: &str) -> Option<String> {
-        (self.0).remove(HeaderNameType(key).borrow() as &dyn HeaderKey)
+    pub fn remove<T: TryInto<HeaderName> + std::fmt::Debug>(&mut self, key: T) -> Option<String>
+    where
+        <T as TryInto<HeaderName>>::Error: std::fmt::Debug,
+    {
+        let k = key.try_into().expect("Invalid bytes in header name.");
+        (self.0).remove(&k)
     }
 }
 

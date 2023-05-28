@@ -43,11 +43,11 @@ impl From<Mailto> for Draft {
             bcc,
             body,
         } = val;
-        ret.set_header("Subject", subject.unwrap_or_default());
-        ret.set_header("Cc", cc.unwrap_or_default());
-        ret.set_header("Bcc", bcc.unwrap_or_default());
+        ret.set_header(HeaderName::SUBJECT, subject.unwrap_or_default());
+        ret.set_header(HeaderName::CC, cc.unwrap_or_default());
+        ret.set_header(HeaderName::BCC, bcc.unwrap_or_default());
+        ret.set_header(HeaderName::TO, address.to_string());
         ret.set_body(body.unwrap_or_default());
-        ret.set_header("To", address.to_string());
         ret
     }
 }

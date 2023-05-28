@@ -306,6 +306,7 @@ impl From<isahc::http::StatusCode> for NetworkErrorKind {
 }
 
 #[derive(Debug, Copy, PartialEq, Eq, Clone)]
+#[non_exhaustive]
 pub enum ErrorKind {
     None,
     External,
@@ -317,6 +318,7 @@ pub enum ErrorKind {
     OSError,
     NotImplemented,
     NotSupported,
+    ValueError,
 }
 
 impl fmt::Display for ErrorKind {
@@ -325,16 +327,17 @@ impl fmt::Display for ErrorKind {
             fmt,
             "{}",
             match self {
-                ErrorKind::None => "None",
-                ErrorKind::External => "External",
-                ErrorKind::Authentication => "Authentication",
-                ErrorKind::Bug => "Bug, please report this!",
-                ErrorKind::Network(ref inner) => inner.as_str(),
-                ErrorKind::Timeout => "Timeout",
-                ErrorKind::OSError => "OS Error",
-                ErrorKind::Configuration => "Configuration",
-                ErrorKind::NotImplemented => "Not implemented",
-                ErrorKind::NotSupported => "Not supported",
+                Self::None => "None",
+                Self::External => "External",
+                Self::Authentication => "Authentication",
+                Self::Bug => "Bug, please report this!",
+                Self::Network(ref inner) => inner.as_str(),
+                Self::Timeout => "Timeout",
+                Self::OSError => "OS Error",
+                Self::Configuration => "Configuration",
+                Self::NotImplemented => "Not implemented",
+                Self::NotSupported => "Not supported",
+                Self::ValueError => "Invalid value",
             }
         )
     }
@@ -342,15 +345,15 @@ impl fmt::Display for ErrorKind {
 
 impl ErrorKind {
     pub fn is_network(&self) -> bool {
-        matches!(self, ErrorKind::Network(_))
+        matches!(self, Self::Network(_))
     }
 
     pub fn is_timeout(&self) -> bool {
-        matches!(self, ErrorKind::Timeout)
+        matches!(self, Self::Timeout)
     }
 
     pub fn is_authentication(&self) -> bool {
-        matches!(self, ErrorKind::Authentication)
+        matches!(self, Self::Authentication)
     }
 }
 
@@ -688,6 +691,15 @@ impl From<nom::Err<(&str, nom::error::ErrorKind)>> for Error {
     #[inline]
     fn from(kind: nom::Err<(&str, nom::error::ErrorKind)>) -> Error {
         Error::new("Parsing error").set_details(kind.to_string())
+    }
+}
+
+impl From<crate::email::InvalidHeaderName> for Error {
+    #[inline]
+    fn from(kind: crate::email::InvalidHeaderName) -> Error {
+        Error::new(kind.to_string())
+            .set_source(Some(Arc::new(kind)))
+            .set_kind(ErrorKind::Network(NetworkErrorKind::InvalidTLSConnection))
     }
 }
 

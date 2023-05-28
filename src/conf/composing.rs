@@ -22,7 +22,7 @@
 //! Configuration for composing email.
 use std::collections::HashMap;
 
-use melib::ToggleFlag;
+use melib::{email::HeaderName, ToggleFlag};
 
 use super::{
     default_vals::{ask, false_val, none, true_val},
@@ -60,7 +60,7 @@ pub struct ComposingSettings {
     /// Set default header values for new drafts
     /// Default: empty
     #[serde(default, alias = "default-header-values")]
-    pub default_header_values: HashMap<String, String>,
+    pub default_header_values: HashMap<HeaderName, String>,
     /// Wrap header preample when editing a draft in an editor. This allows you
     /// to write non-plain text email without the preamble creating syntax
     /// errors. They are stripped when you return from the editor. The
