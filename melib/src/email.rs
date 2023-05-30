@@ -215,16 +215,20 @@ crate::declare_u64_hash!(EnvelopeHash);
 /// bytes into an `Attachment` object.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Envelope {
-    pub hash: EnvelopeHash,
+    // ----- IMAP4rev1 -----
     pub date: String,
-    pub timestamp: UnixTimestamp,
+    pub subject: Option<String>,
     pub from: SmallVec<[Address; 1]>,
+    // pub sender
+    // pub reply_to
     pub to: SmallVec<[Address; 1]>,
     pub cc: SmallVec<[Address; 1]>,
     pub bcc: Vec<Address>,
-    pub subject: Option<String>,
-    pub message_id: MessageID,
     pub in_reply_to: Option<MessageID>,
+    pub message_id: MessageID,
+    // ----- Other -----
+    pub hash: EnvelopeHash,
+    pub timestamp: UnixTimestamp,
     pub references: Option<References>,
     pub other_headers: HeaderMap,
     pub thread: ThreadNodeHash,
