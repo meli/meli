@@ -122,6 +122,10 @@ impl std::ops::Index<HeaderName> for HeaderMap {
 }
 
 impl HeaderMap {
+    pub fn empty() -> Self {
+        Self::default()
+    }
+
     pub fn get_mut<T: TryInto<HeaderName> + std::fmt::Debug>(
         &mut self,
         key: T,
@@ -155,6 +159,10 @@ impl HeaderMap {
     {
         let k = key.try_into().expect("Invalid bytes in header name.");
         (self.0).remove(&k)
+    }
+
+    pub fn into_inner(self) -> indexmap::IndexMap<HeaderName, String> {
+        self.0
     }
 }
 

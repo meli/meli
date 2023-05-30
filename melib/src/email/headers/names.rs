@@ -567,6 +567,15 @@ impl HeaderName {
             })
         }
     }
+
+    pub const fn is_standard(&self) -> bool {
+        matches!(
+            self,
+            Self {
+                inner: Repr::Standard(_)
+            }
+        )
+    }
 }
 
 impl FromStr for HeaderName {

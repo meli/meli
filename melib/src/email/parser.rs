@@ -19,8 +19,9 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*! Parsers for email. See submodules */
-use std::borrow::Cow;
+//! Parsers for email. See submodules.
+
+use std::{borrow::Cow, convert::TryFrom, fmt::Write};
 
 use nom::{
     branch::alt,
@@ -34,7 +35,16 @@ use nom::{
 };
 use smallvec::SmallVec;
 
-use crate::error::{Error, Result, ResultIntoError};
+use crate::{
+    email::{
+        address::Address,
+        headers::{HeaderMap, HeaderName},
+        mailto::Mailto,
+    },
+    error::{Error, Result, ResultIntoError},
+    html_escape::HtmlEntity,
+    percent_encoding::percent_decode,
+};
 
 macro_rules! to_str {
     ($l:expr) => {{
@@ -913,85 +923,157 @@ pub mod generic {
         }
     }
 
-    use crate::email::{address::Address, mailto::Mailto};
     pub fn mailto(mut input: &[u8]) -> IResult<&[u8], Mailto> {
+        let orig_input = input;
         if !input.starts_with(b"mailto:") {
             return Err(nom::Err::Error(
                 (input, "mailto(): input doesn't start with `mailto:`").into(),
             ));
         }
 
+        let mut body = None;
+        let mut headers = HeaderMap::empty();
+        let mut address: Vec<Address>;
+
+        if String::from_utf8_lossy(input).matches('?').count() > 1 {
+            return Err(nom::Err::Error(
+                (input, "mailto(): Using '?' twice is invalid.").into(),
+            ));
+        }
         input = &input[b"mailto:".len()..];
+        let mut decoded_owned = percent_decode(input).decode_utf8().unwrap().to_string();
 
-        let end = input.iter().position(|e| *e == b'?').unwrap_or(input.len());
-        let address: Address;
+        let mut substitutions = vec![];
+        for (i, _) in decoded_owned.match_indices('&') {
+            if let Some(j) = HtmlEntity::ALL
+                .iter()
+                .position(|e| decoded_owned[i..].starts_with(e))
+            {
+                substitutions.push((i, HtmlEntity::ALL[j].len(), HtmlEntity::GLYPHS[j]));
+            }
+        }
 
-        if let Ok((_, addr)) = crate::email::parser::address::address(&input[..end]) {
+        for (i, len, g) in substitutions.into_iter().rev() {
+            decoded_owned.replace_range(i..(i + len), g);
+        }
+
+        let mut decoded = decoded_owned.as_str();
+
+        let end = decoded.as_bytes().iter().position(|e| *e == b'?');
+        let end_or_len = end.unwrap_or(decoded.len());
+
+        if let Ok(addr) = Address::list_try_from(&decoded[..end_or_len]) {
             address = addr;
-            input = if input[end..].is_empty() {
-                &input[end..]
+            decoded = if decoded[end_or_len..].is_empty() {
+                &decoded[end_or_len..]
             } else {
-                &input[end + 1..]
+                &decoded[end_or_len + 1..]
             };
+        } else if end.is_some() {
+            decoded = &decoded[1..];
+            address = vec![];
         } else {
             return Err(nom::Err::Error(
-                (input, "mailto(): address not found in input").into(),
+                (
+                    input,
+                    format!("input {:?}", String::from_utf8_lossy(orig_input)),
+                )
+                    .into(),
             ));
         }
 
-        let mut subject = None;
-        let mut cc = None;
-        let mut bcc = None;
-        let mut body = None;
-        while !input.is_empty() {
-            let tag = if let Some(tag_pos) = input.iter().position(|e| *e == b'=') {
-                let ret = &input[0..tag_pos];
-                input = &input[tag_pos + 1..];
+        if !address.is_empty() {
+            let mut full_address = String::new();
+            for address in &address {
+                write!(&mut full_address, "{}, ", address)
+                    .expect("Could not write into a String, are you out of memory?");
+            }
+            if full_address.ends_with(", ") {
+                let len = full_address.len();
+                full_address.truncate(len - ", ".len());
+            }
+            headers.insert(HeaderName::TO, full_address);
+        }
+
+        while !decoded.is_empty() {
+            if decoded.starts_with("&amp;") {
+                decoded = &decoded["&amp;".len()..];
+                continue;
+            }
+
+            let tag = if let Some(tag_pos) = decoded.as_bytes().iter().position(|e| *e == b'=') {
+                let ret = &decoded[0..tag_pos];
+                decoded = &decoded[tag_pos + 1..];
                 ret
             } else {
                 return Err(nom::Err::Error(
-                    (input, "mailto(): extra characters found in input").into(),
+                    (
+                        input,
+                        format!("mailto(): extra characters found in input: {}", decoded),
+                    )
+                        .into(),
                 ));
             };
 
-            let value_end = input.iter().position(|e| *e == b'&').unwrap_or(input.len());
+            let value_end = decoded
+                .as_bytes()
+                .iter()
+                .position(|e| *e == b'&')
+                .unwrap_or(decoded.len());
 
-            let value = String::from_utf8_lossy(&input[..value_end]).to_string();
+            let value = decoded[..value_end].to_string();
             match tag {
-                b"subject" if subject.is_none() => {
-                    subject = Some(value.replace("%20", " "));
+                "body" if body.is_none() => {
+                    body = Some(value);
                 }
-                b"cc" if cc.is_none() => {
-                    cc = Some(value);
-                }
-                b"bcc" if bcc.is_none() => {
-                    bcc = Some(value);
-                }
-                b"body" if body.is_none() => {
-                    /* FIXME:
-                     * Parse escaped characters properly.
-                     */
-                    body = Some(value.replace("%20", " ").replace("%0A", "\n"));
-                }
-                _ => {
-                    return Err(nom::Err::Error(
-                        (input, "mailto(): unknown tag in input").into(),
-                    ));
-                }
+                other => match HeaderName::try_from(other) {
+                    Ok(hdr) if hdr == HeaderName::TO => {
+                        if !headers.contains_key(&hdr) {
+                            if let Ok(address_val) = Address::list_try_from(value.as_str()) {
+                                address.extend(address_val.into_iter());
+                            }
+                            headers.insert(HeaderName::TO, value);
+                        }
+                    }
+                    Ok(hdr) if hdr.is_standard() => {
+                        if Mailto::IGNORE_HEADERS.contains(&hdr) {
+                            log::warn!(
+                                "parsing mailto(): header {} is not allowed in mailto URIs for \
+                                 safety and will be ignored. Value was {:?}",
+                                hdr,
+                                value
+                            );
+                        }
+                        if !headers.contains_key(&hdr) {
+                            headers.insert(hdr, value);
+                        }
+                    }
+                    Ok(hdr) => {
+                        log::warn!(
+                            "parsing mailto(): header {} is not a known header and it will be \
+                             ignored.Value was {:?}",
+                            hdr,
+                            value
+                        );
+                    }
+                    _ => {
+                        return Err(nom::Err::Error(
+                            (input, "mailto(): unknown tag in input").into(),
+                        ));
+                    }
+                },
             }
-            if input[value_end..].is_empty() {
+            if decoded[value_end..].is_empty() {
                 break;
             }
-            input = &input[value_end + 1..];
+            decoded = &decoded[value_end + 1..];
         }
         Ok((
             input,
             Mailto {
                 address,
-                subject,
-                cc,
-                bcc,
                 body,
+                headers,
             },
         ))
     }
