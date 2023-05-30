@@ -72,7 +72,8 @@ impl File {
 pub fn create_temp_file(
     bytes: &[u8],
     filename: Option<&str>,
-    path: Option<&PathBuf>,
+    path: Option<&mut PathBuf>,
+    extension: Option<&str>,
     delete_on_drop: bool,
 ) -> File {
     let mut dir = std::env::temp_dir();
@@ -89,10 +90,13 @@ pub fn create_temp_file(
             let u = Uuid::new_v4();
             dir.push(u.as_hyphenated().to_string());
         }
-        &dir
+        &mut dir
     });
+    if let Some(ext) = extension {
+        path.set_extension(ext);
+    }
 
-    let mut f = std::fs::File::create(path).unwrap();
+    let mut f = std::fs::File::create(&path).unwrap();
     let metadata = f.metadata().unwrap();
     let mut permissions = metadata.permissions();
 

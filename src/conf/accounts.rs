@@ -1231,7 +1231,7 @@ impl Account {
         if let Some(mailbox_hash) = saved_at {
             Ok(mailbox_hash)
         } else {
-            let file = crate::types::create_temp_file(bytes, None, None, false);
+            let file = crate::types::create_temp_file(bytes, None, None, Some("eml"), false);
             debug!("message saved in {}", file.path.display());
             log::info!(
                 "Message was stored in {} so that you can restore it manually.",
@@ -1873,7 +1873,8 @@ impl Account {
                 } => {
                     if let Ok(Some(Err(err))) = handle.chan.try_recv() {
                         log::error!("Could not save message: {err}");
-                        let file = crate::types::create_temp_file(bytes, None, None, false);
+                        let file =
+                            crate::types::create_temp_file(bytes, None, None, Some("eml"), false);
                         log::debug!("message saved in {}", file.path.display());
                         log::info!(
                             "Message was stored in {} so that you can restore it manually.",

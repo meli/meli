@@ -796,7 +796,11 @@ impl MailView {
                     .args(["-c", filter_invocation])
                     .stdin(Stdio::piped())
                     .stdout(Stdio::piped())
-                    .spawn();
+                    .spawn()
+                    .and_then(|mut cmd| {
+                        cmd.stdin.as_mut().unwrap().write_all(&bytes)?;
+                        Ok(String::from_utf8_lossy(&cmd.wait_with_output()?.stdout).to_string())
+                    });
                 match command_obj {
                     Err(err) => {
                         context.replies.push_back(UIEvent::Notification(
@@ -819,21 +823,11 @@ impl MailView {
                             text,
                         });
                     }
-                    Ok(mut html_filter) => {
-                        html_filter
-                            .stdin
-                            .as_mut()
-                            .unwrap()
-                            .write_all(&bytes)
-                            .expect("Failed to write to stdin");
+                    Ok(text) => {
                         let comment = Some(format!(
                             "Text piped through `{}`. Press `v` to open in web browser. \n\n",
                             filter_invocation
                         ));
-                        let text = String::from_utf8_lossy(
-                            &html_filter.wait_with_output().unwrap().stdout,
-                        )
-                        .to_string();
                         acc.push(AttachmentDisplay::InlineText {
                             inner: Box::new(a.clone()),
                             comment,
@@ -2305,6 +2299,7 @@ impl Component for MailView {
                                         let p = create_temp_file(
                                             &attachment.decode(Default::default()),
                                             filename.as_deref(),
+                                            None,
                                             None,
                                             true,
                                         );

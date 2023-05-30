@@ -152,8 +152,15 @@ impl Component for HtmlView {
             } else {
                 query_default_app("text/html").ok()
             };
+            let command = if cfg!(target_os = "macos") {
+                command.or_else(|| Some("open".into()))
+            } else if cfg!(target_os = "linux") {
+                command.or_else(|| Some("xdg-open".into()))
+            } else {
+                command
+            };
             if let Some(command) = command {
-                let p = create_temp_file(&self.bytes, None, None, true);
+                let p = create_temp_file(&self.bytes, None, None, Some("html"), true);
                 let exec_cmd =
                     super::desktop_exec_to_command(&command, p.path.display().to_string(), false);
                 match Command::new("sh")

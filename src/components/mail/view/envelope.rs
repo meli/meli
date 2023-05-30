@@ -443,6 +443,7 @@ impl Component for EnvelopeView {
                                     &u.decode(Default::default()),
                                     filename.as_deref(),
                                     None,
+                                    None,
                                     true,
                                 );
                                 let exec_cmd = super::desktop_exec_to_command(

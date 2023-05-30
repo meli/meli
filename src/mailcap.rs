@@ -165,8 +165,13 @@ impl MailcapEntry {
                     .map(|arg| match *arg {
                         "%s" => {
                             needs_stdin = false;
-                            let _f =
-                                create_temp_file(&a.decode(Default::default()), None, None, true);
+                            let _f = create_temp_file(
+                                &a.decode(Default::default()),
+                                None,
+                                None,
+                                None,
+                                true,
+                            );
                             let p = _f.path().display().to_string();
                             f = Some(_f);
                             p

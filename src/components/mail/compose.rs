@@ -1774,6 +1774,7 @@ impl Component for Composer {
                     self.draft.to_edit_string().as_str().as_bytes(),
                     None,
                     None,
+                    Some("eml"),
                     true,
                 );
 
@@ -1867,7 +1868,7 @@ impl Component for Composer {
                         ));
                         return false;
                     }
-                    let f = create_temp_file(&[], None, None, true);
+                    let f = create_temp_file(&[], None, None, None, true);
                     match Command::new("sh")
                         .args(["-c", command])
                         .stdin(Stdio::null())
@@ -2409,7 +2410,7 @@ pub fn send_draft_async(
                 ))))
                 .unwrap();
         } else if !store_sent_mail && is_ok {
-            let f = create_temp_file(message.as_bytes(), None, None, false);
+            let f = create_temp_file(message.as_bytes(), None, None, Some("eml"), false);
             log::info!(
                 "store_sent_mail is false; stored sent mail to {}",
                 f.path().display()
