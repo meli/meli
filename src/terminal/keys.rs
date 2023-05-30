@@ -157,17 +157,18 @@ use std::os::unix::io::{AsRawFd, RawFd};
 
 use nix::poll::{poll, PollFd, PollFlags};
 use termion::input::TermReadEventsAndRaw;
-/*
- * If we fork (for example start $EDITOR) we want the input-thread to stop
- * reading from stdin. The best way I came up with right now is to send a
- * signal to the thread that is read in the first input in stdin after the
- * fork, and then the thread kills itself. The parent process spawns a new
- * input-thread when the child returns.
- *
- * The main loop uses try_wait_on_child() to check if child has exited.
- */
+
 /// The thread function that listens for user input and forwards it to the main
 /// event loop.
+///
+/// If we fork (for example start `$EDITOR`) we want the `input-thread` to stop
+/// reading from stdin. The best way I came up with right now is to send a
+/// signal to the thread that is read in the first input in stdin after the
+/// fork, and then the thread kills itself. The parent process spawns a new
+/// input-thread when the child returns.
+///
+/// The main loop uses [`State::try_wait_on_child`] to check if child has
+/// exited.
 pub fn get_events(
     mut closure: impl FnMut((Key, Vec<u8>)),
     rx: &Receiver<InputCommand>,

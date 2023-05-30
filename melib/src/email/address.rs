@@ -231,8 +231,8 @@ impl Address {
             .collect::<_>()
     }
 
-    pub fn list_try_from(val: &str) -> Result<Vec<Address>> {
-        Ok(parser::address::rfc2822address_list(val.as_bytes())?
+    pub fn list_try_from<T: AsRef<[u8]>>(val: T) -> Result<Vec<Address>> {
+        Ok(parser::address::rfc2822address_list(val.as_ref())?
             .1
             .to_vec())
     }
@@ -380,6 +380,7 @@ impl core::fmt::Debug for Address {
 
 impl TryFrom<&str> for Address {
     type Error = Error;
+
     fn try_from(val: &str) -> Result<Address> {
         Ok(parser::address::address(val.as_bytes())?.1)
     }

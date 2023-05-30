@@ -343,7 +343,7 @@ impl Composer {
                             melib::email::parser::generic::mailto(list_post_addr)
                                 .map(|(_, m)| m.address)
                         {
-                            to.insert(list_address);
+                            to.extend(list_address.into_iter());
                         }
                     }
                 }
@@ -439,19 +439,18 @@ impl Composer {
         if let Some(actions) = list_management::ListActions::detect(&parent_message) {
             if let Some(post) = actions.post {
                 if let list_management::ListAction::Email(list_post_addr) = post[0] {
-                    if let Ok(list_address) = melib::email::parser::generic::mailto(list_post_addr)
-                        .map(|(_, m)| m.address)
-                    {
-                        let list_address_string = list_address.to_string();
+                    if let Ok((_, mailto)) = melib::email::parser::generic::mailto(list_post_addr) {
+                        let mut addresses = vec![(
+                            parent_message.from()[0].clone(),
+                            parent_message.field_from_to_string(),
+                        )];
+                        for add in mailto.address {
+                            let add_s = add.to_string();
+                            addresses.push((add, add_s));
+                        }
                         ret.mode = ViewMode::SelectRecipients(UIDialog::new(
                             "select recipients",
-                            vec![
-                                (
-                                    parent_message.from()[0].clone(),
-                                    parent_message.field_from_to_string(),
-                                ),
-                                (list_address, list_address_string),
-                            ],
+                            addresses,
                             false,
                             Some(Box::new(move |id: ComponentId, results: &[Address]| {
                                 Some(UIEvent::FinishedUIDialog(
