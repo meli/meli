@@ -24,6 +24,7 @@
 
 use std::{
     borrow::{Borrow, Cow},
+    cmp::Ordering,
     convert::TryFrom,
     error::Error,
     hash::{Hash, Hasher},
@@ -52,10 +53,25 @@ pub struct HeaderName {
     inner: Repr<Custom>,
 }
 
+impl Custom {
+    fn as_str(&self) -> &str {
+        unsafe { std::str::from_utf8_unchecked(&*self.0) }
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 enum Repr<T> {
     Standard(StandardHeader),
     Custom(T),
+}
+
+impl<T: std::fmt::Display> std::fmt::Display for Repr<T> {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Standard(inner) => write!(fmt, "{}", inner.as_str()),
+            Self::Custom(inner) => inner.fmt(fmt),
+        }
+    }
 }
 
 // Used to hijack the Hash impl
@@ -527,18 +543,20 @@ const HEADER_CHARS: [u8; 128] = [
 impl HeaderName {
     /// Returns a `str` representation of the header.
     ///
-    /// The returned string will always be lower case.
+    /// The returned string will always be lower case. Use `Display` for a
+    /// properly formatted representation.
     #[inline]
     pub fn as_str(&self) -> &str {
         match self.inner {
             Repr::Standard(v) => v.as_str(),
-            Repr::Custom(ref v) => unsafe { std::str::from_utf8_unchecked(&*v.0) },
+            Repr::Custom(ref v) => v.as_str(),
         }
     }
 
     /// Returns a `&[u8]` representation of the header.
     ///
-    /// The returned slice will always be lower case.
+    /// The returned string will always be lower case. Use `Display` for a
+    /// properly formatted representation.
     #[inline]
     pub fn as_bytes(&self) -> &[u8] {
         match self.inner {
@@ -606,7 +624,7 @@ impl Borrow<str> for HeaderName {
 
 impl std::fmt::Display for HeaderName {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(fmt, "{}", self.as_str())
+        write!(fmt, "{}", &self.inner)
     }
 }
 
@@ -805,5 +823,128 @@ impl Hash for Custom {
         for b in self.0.as_slice() {
             hasher.write_u8(b.to_ascii_lowercase())
         }
+    }
+}
+const UPPERCASE_TOKENS: &[&str] = &[
+    "ARC", "DKIM", "DL", "EDIINT", "ID", "IPMS", "MD5", "MIME", "MT", "MTS", "NNTP", "PICS", "RSS",
+    "SIO", "SPF", "TLS", "VBR",
+];
+
+impl std::fmt::Display for Custom {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let as_str = self.as_str();
+        let len = as_str.len();
+        let mut bytes_count = 0;
+        for chunk in as_str.split('-') {
+            if let Ok(tok) = UPPERCASE_TOKENS.binary_search_by(|probe| {
+                if probe.eq_ignore_ascii_case(chunk) {
+                    Ordering::Equal
+                } else {
+                    let mut iter = AsciiIgnoreCaseCmp {
+                        ord: Ordering::Equal,
+                        a: probe.as_bytes(),
+                        b: chunk.as_bytes(),
+                    };
+                    let _cnt: usize = iter.by_ref().fuse().count();
+                    debug_assert!(_cnt < probe.len());
+                    debug_assert!(_cnt < chunk.len());
+                    iter.ord
+                }
+            }) {
+                write!(fmt, "{}", UPPERCASE_TOKENS[tok])?;
+            } else {
+                if let Some(first) = chunk.chars().next() {
+                    write!(fmt, "{}", first.to_ascii_uppercase())?;
+                }
+                for ch in chunk.chars().skip(1) {
+                    write!(fmt, "{}", ch.to_ascii_lowercase())?
+                }
+            }
+            bytes_count += chunk.len();
+            if bytes_count != len {
+                bytes_count += 1;
+                write!(fmt, "-")?;
+            }
+        }
+        Ok(())
+    }
+}
+
+// an iterator which alternates between Some and None
+struct AsciiIgnoreCaseCmp<'a, 'b> {
+    ord: Ordering,
+    a: &'a [u8],
+    b: &'b [u8],
+}
+
+impl<'a, 'b> Iterator for AsciiIgnoreCaseCmp<'a, 'b> {
+    type Item = ();
+
+    fn next(&mut self) -> Option<()> {
+        match (self.a.get(0), self.b.get(0)) {
+            (Some(a_char), Some(b_char)) => {
+                self.ord = a_char
+                    .to_ascii_lowercase()
+                    .cmp(&b_char.to_ascii_lowercase());
+                self.a = &self.a[1..];
+                self.b = &self.b[1..];
+                if self.ord == Ordering::Equal {
+                    Some(())
+                } else {
+                    None
+                }
+            }
+            (Some(_), None) => {
+                self.ord = Ordering::Greater;
+                None
+            }
+            (None, Some(_)) => {
+                self.ord = Ordering::Less;
+                None
+            }
+            (None, None) => None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_headername_display() {
+        assert_eq!(&HeaderName::SUBJECT.to_string(), "Subject");
+        assert_eq!(&HeaderName::CC.to_string(), "Cc");
+        assert_eq!(&HeaderName::IN_REPLY_TO.to_string(), "In-Reply-To");
+        assert_eq!(
+            &HeaderName::ORIGINAL_MESSAGE_ID.to_string(),
+            "Original-Message-ID"
+        );
+        assert_eq!(
+            &HeaderName::try_from("x-user-agent").unwrap().to_string(),
+            "X-User-Agent"
+        );
+        assert_eq!(
+            &HeaderName::try_from("arc-foobar").unwrap().to_string(),
+            "ARC-Foobar"
+        );
+        assert_eq!(
+            &HeaderName::try_from("x-rss-feed").unwrap().to_string(),
+            "X-RSS-Feed"
+        );
+        assert_eq!(
+            &HeaderName::try_from("With-regards-to").unwrap().to_string(),
+            "With-Regards-To"
+        );
+        assert_eq!(
+            &HeaderName::try_from("in-response-to-id")
+                .unwrap()
+                .to_string(),
+            "In-Response-To-ID"
+        );
+        assert_eq!(
+            &HeaderName::try_from("something-dKim").unwrap().to_string(),
+            "Something-DKIM"
+        );
     }
 }
