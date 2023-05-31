@@ -28,7 +28,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-use melib::{email::attachment_types::ContentType, list_management, parser::BytesExt};
+use melib::{email::attachment_types::ContentType, list_management, parser::BytesExt, HeaderName};
 use smallvec::SmallVec;
 
 use super::*;
@@ -1208,12 +1208,12 @@ impl Component for MailView {
                 ) || height_p < height;
                 let (_, mut y) = upper_left;
                 macro_rules! print_header {
-                    ($(($header:literal, $string:expr)),*$(,)?) => {
+                    ($(($header:path, $string:expr)),*$(,)?) => {
                         $({
                             if sticky || skip_header_ctr == 0 {
                                 if y <= get_y(bottom_right) {
                                     let (_x, _y) = write_string_to_grid(
-                                        $header,
+                                        &format!("{}:", $header),
                                         grid,
                                         headers_names.fg,
                                         headers_names.bg,
@@ -1299,25 +1299,28 @@ impl Component for MailView {
                     orig_date.into()
                 };
                 print_header!(
-                    ("Date:", date_str),
-                    ("From:", envelope.field_from_to_string()),
-                    ("To:", envelope.field_to_to_string()),
+                    (HeaderName::DATE, date_str),
+                    (HeaderName::FROM, envelope.field_from_to_string()),
+                    (HeaderName::TO, envelope.field_to_to_string()),
                 );
-                if envelope.other_headers().contains_key("Cc")
-                    && !envelope.other_headers()["Cc"].is_empty()
+                if envelope.other_headers().contains_key(HeaderName::CC)
+                    && !envelope.other_headers()[HeaderName::CC].is_empty()
                 {
-                    print_header!(("Cc:", envelope.field_cc_to_string()));
+                    print_header!((HeaderName::CC, envelope.field_cc_to_string()));
                 }
                 print_header!(
-                    ("Subject:", envelope.subject()),
-                    ("Message-ID:", format!("<{}>", envelope.message_id_raw()))
+                    (HeaderName::SUBJECT, envelope.subject()),
+                    (
+                        HeaderName::MESSAGE_ID,
+                        format!("<{}>", envelope.message_id_raw())
+                    )
                 );
                 if self.expand_headers {
                     if let Some(val) = envelope.in_reply_to_display() {
                         print_header!(
-                            ("In-Reply-To:", val),
+                            (HeaderName::IN_REPLY_TO, val),
                             (
-                                "References:",
+                                HeaderName::REFERENCES,
                                 envelope
                                     .references()
                                     .iter()
@@ -1326,6 +1329,18 @@ impl Component for MailView {
                                     .join(", ")
                             )
                         );
+                    }
+                }
+                for hdr in mailbox_settings!(
+                    context[self.coordinates.0][&self.coordinates.1]
+                        .pager
+                        .show_extra_headers
+                ) {
+                    if let Some((val, hdr)) = HeaderName::try_from(hdr)
+                        .ok()
+                        .and_then(|hdr| Some((envelope.other_headers().get(&hdr)?, hdr)))
+                    {
+                        print_header!((hdr, val));
                     }
                 }
                 if let Some(list_management::ListActions {

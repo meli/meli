@@ -599,7 +599,7 @@ Forward emails as attachment? (Alternative is inline).
 .Pq Em optional
 Alternative lists of reply prefixes (etc. ["Re:", "RE:", ...]) to strip.
 .\" default value
-.Pq Em ["Re:", "RE:", "Fwd:", "Fw:", "回复:", "回覆:", "SV:", "Sv:", "VS:", "Antw:", "Doorst:", "VS:", "VL:", "REF:", "TR:", "TR:", "AW:", "WG:", "ΑΠ:", "Απ:", "απ:", "ΠΡΘ:", "Πρθ:", "πρθ:", "ΣΧΕΤ:", "Σχετ:", "σχετ:", "ΠΡΘ:", "Πρθ:", "πρθ:", "Vá:", "Továbbítás:", "R:", "I:", "RIF:", "FS:", "BLS:", "TRS:", "VS:", "VB:", "RV:", "RES:", "Res", "ENC:", "Odp:", "PD:", "YNT:", "İLT:", "ATB:", "YML:"]
+.Dl Em [Re:, RE:, Fwd:, Fw:, 回复:, 回覆:, SV:, Sv:, VS:, Antw:, Doorst:, VS:, VL:, REF:, TR:, TR:, AW:, WG:, ΑΠ:, Απ:, απ:, ΠΡΘ:, Πρθ:, πρθ:, ΣΧΕΤ:, Σχετ:, σχετ:, ΠΡΘ:, Πρθ:, πρθ:, Vá:, Továbbítás:, R:, I:, RIF:, FS:, BLS:, TRS:, VS:, VB:, RV:, RES:, Res, ENC:, Odp:, PD:, YNT:, İLT:, ATB:, YML:]
 .It Ic reply_prefix Ar String
 .Pq Em optional
 The prefix to use in reply subjects.
@@ -1166,6 +1166,26 @@ A command to launch URLs with.
 The URL will be given as the first argument of the command.
 .\" default value
 .Pq Em xdg-open
+.It Ic show_extra_headers Ar [String]
+.Pq Em optional
+Extra headers to display, if present, in the default header preamble of the pager.
+This setting is useful especially when used per-folder or per-account.
+For example, if you use
+.Ql rss2email
+.Pq See Xr r2e 1
+the e-mail you will receive will have the
+.Ql X-RSS-Feed
+header by default.
+You can show them only in the folder where you keep your feed items:
+.Pp
+.Bd -literal -compact
+[accounts."personal".mailboxes]
+INBOX = {}
+"INBOX/Sent" = { sort_order=0 }
+"INBOX/Feeds" = { pager.show_extra_headers = ["X-RSS-Feed"] }
+.Ed
+.\" default value
+.Pq Em empty
 .El
 .Sh LISTING
 Default values are shown in parentheses.

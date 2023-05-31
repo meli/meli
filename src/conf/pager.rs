@@ -105,6 +105,11 @@ pub struct PagerSettings {
         alias = "html-open"
     )]
     pub html_open: Option<String>,
+
+    /// Extra headers to display, if present, in the default header preamble.
+    /// Default: []
+    #[serde(default = "Vec::new", alias = "show-extra-headers")]
+    pub show_extra_headers: Vec<String>,
 }
 
 impl Default for PagerSettings {
@@ -123,6 +128,7 @@ impl Default for PagerSettings {
             auto_choose_multipart_alternative: ToggleFlag::InternalVal(true),
             show_date_in_my_timezone: ToggleFlag::InternalVal(true),
             url_launcher: None,
+            show_extra_headers: vec![],
         }
     }
 }
@@ -148,6 +154,7 @@ impl DotAddressable for PagerSettings {
                     }
                     "show_date_in_my_timezone" => self.show_date_in_my_timezone.lookup(field, tail),
                     "url_launcher" => self.html_filter.lookup(field, tail),
+                    "show_extra_headers" => self.show_extra_headers.lookup(field, tail),
                     other => Err(Error::new(format!(
                         "{} has no field named {}",
                         parent_field, other
