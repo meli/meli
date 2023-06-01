@@ -26,6 +26,7 @@ use std::{
 };
 
 use quote::{format_ident, quote};
+extern crate proc_macro;
 
 // Write ConfigStructOverride to overrides.rs
 pub fn override_derive(filenames: &[(&str, &str)]) {
@@ -111,7 +112,7 @@ use melib::HeaderName;
                         .iter()
                         .filter_map(|f| {
                             let mut new_attr = f.clone();
-                            if let quote::__private::TokenTree::Group(g) =
+                            if let proc_macro2::TokenTree::Group(g) =
                                 f.tokens.clone().into_iter().next().unwrap()
                             {
                                 let attr_inner_value = f.tokens.to_string();
