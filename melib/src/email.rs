@@ -157,11 +157,11 @@ macro_rules! flag_impl {
 }
 
 impl Flag {
-    flag_impl!(fn is_seen, Flag::SEEN);
-    flag_impl!(fn is_draft, Flag::DRAFT);
-    flag_impl!(fn is_trashed, Flag::TRASHED);
     flag_impl!(fn is_passed, Flag::PASSED);
     flag_impl!(fn is_replied, Flag::REPLIED);
+    flag_impl!(fn is_seen, Flag::SEEN);
+    flag_impl!(fn is_trashed, Flag::TRASHED);
+    flag_impl!(fn is_draft, Flag::DRAFT);
     flag_impl!(fn is_flagged, Flag::FLAGGED);
 }
 
