@@ -205,7 +205,7 @@ impl Component for ContactManager {
                                     (
                                         s.to_string(),
                                         match v {
-                                            Field::Text(v, _) => v.as_str().to_string(),
+                                            Field::Text(v) => v.as_str().to_string(),
                                             Field::Choice(mut v, c) => v.remove(c).to_string(),
                                         },
                                     )

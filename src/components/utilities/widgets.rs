@@ -23,8 +23,6 @@ use std::{borrow::Cow, collections::HashMap, time::Duration};
 
 use super::*;
 
-type AutoCompleteFn = Box<dyn Fn(&Context, &str) -> Vec<AutoCompleteEntry> + Send + Sync>;
-
 #[derive(Debug, PartialEq, Eq, Default)]
 enum FormFocus {
     #[default]
@@ -36,32 +34,30 @@ enum FormFocus {
 type Cursor = usize;
 
 pub enum Field {
-    Text(UText, Option<(AutoCompleteFn, Box<AutoComplete>)>),
+    Text(TextField),
     Choice(Vec<Cow<'static, str>>, Cursor),
 }
 
 impl Debug for Field {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Text(s, _) => fmt::Debug::fmt(s, f),
+            Self::Text(ref t) => fmt::Debug::fmt(t, f),
             k => fmt::Debug::fmt(k, f),
         }
     }
 }
 
-use crate::Field::*;
-
 impl Default for Field {
     fn default() -> Field {
-        Field::Text(UText::new(String::with_capacity(256)), None)
+        Field::Text(TextField::default())
     }
 }
 
 impl Field {
     pub fn as_str(&self) -> &str {
         match self {
-            Text(ref s, _) => s.as_str(),
-            Choice(ref v, cursor) => {
+            Self::Text(ref s) => s.as_str(),
+            Self::Choice(ref v, cursor) => {
                 if v.is_empty() {
                     ""
                 } else {
@@ -73,8 +69,8 @@ impl Field {
 
     pub fn cursor(&self) -> usize {
         match self {
-            Text(ref s, _) => s.grapheme_pos(),
-            Choice(_, ref cursor) => *cursor,
+            Self::Text(ref s) => s.cursor(),
+            Self::Choice(_, ref cursor) => *cursor,
         }
     }
 
@@ -84,15 +80,15 @@ impl Field {
 
     pub fn into_string(self) -> String {
         match self {
-            Text(s, _) => s.into_string(),
-            Choice(mut v, cursor) => v.remove(cursor).to_string(),
+            Self::Text(s) => s.into_string(),
+            Self::Choice(mut v, cursor) => v.remove(cursor).to_string(),
         }
     }
 
     pub fn clear(&mut self) {
         match self {
-            Text(s, _) => s.clear(),
-            Choice(_, _) => {}
+            Self::Text(s) => s.clear(),
+            Self::Choice(_, _) => {}
         }
     }
 
@@ -103,31 +99,11 @@ impl Field {
         secondary_area: Area,
         context: &mut Context,
     ) {
-        let upper_left = upper_left!(area);
         match self {
-            Text(ref term, auto_complete_fn) => {
-                let width = width!(area);
-                let pos = if width < term.grapheme_pos() {
-                    width
-                } else {
-                    term.grapheme_pos()
-                };
-                change_colors(
-                    grid,
-                    (pos_inc(upper_left, (pos, 0)), pos_inc(upper_left, (pos, 0))),
-                    crate::conf::value(context, "theme_default").fg,
-                    crate::conf::value(context, "highlight").bg,
-                );
-                if term.grapheme_len() <= 2 {
-                    return;
-                }
-                if let Some((auto_complete_fn, auto_complete)) = auto_complete_fn {
-                    let entries = auto_complete_fn(context, term.as_str());
-                    auto_complete.set_suggestions(entries);
-                    auto_complete.draw(grid, secondary_area, context);
-                }
+            Self::Text(ref mut text_field) => {
+                text_field.draw_cursor(grid, area, secondary_area, context);
             }
-            Choice(_, _cursor) => {}
+            Self::Choice(_, _cursor) => {}
         }
     }
 }
@@ -135,78 +111,12 @@ impl Field {
 impl Component for Field {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         let theme_attr = crate::conf::value(context, "widgets.form.field");
-        let width = width!(area);
         let str = self.as_str();
         match self {
-            Text(ref term, _) => {
-                /* Calculate which part of the str is visible
-                 * ##########################################
-                 *
-                 * Example:
-                 * For the string "The quick brown fox jumps over the lazy dog" with visible
-                 * width of field of 10 columns
-                 *
-                 *
-                 * Cursor <= width
-                 * =================
-                 * Cursor at:
-                 * ⇩
-                 * The quick brown fox jumps over the lazy dog
-                 *
-                 * cursor
-                 * ⇩
-                 * ┌──────────┐
-                 * │The quick │ brown fox jumps over the lazy dog
-                 * └──────────┘
-                 *
-                 * No skip.
-                 *
-                 * Cursor at the end
-                 * =================
-                 * Cursor at:
-                 *                                           ⇩
-                 * The quick brown fox jumps over the lazy dog
-                 *
-                 * remainder                                        cursor
-                 * ⇩⇩⇩⇩⇩                                              ⇩
-                 * +╌╌╌+╭┅┅┅┅┅┅┅┅┅┅╮╭┅┅┅┅┅┅┅┅┅┅╮╭┅┅┅┅┅┅┅┅┅┅╮┌──────────┐
-                 * |The|┊ quick bro┊┊wn fox jum┊┊ps over th┊│e lazy dog│
-                 * +╌╌╌+╰┅┅┅┅┅┅┅┅┅┅╯╰┅┅┅┅┅┅┅┅┅┅╯╰┅┅┅┅┅┅┅┅┅┅╯└──────────┘
-                 *  ⇧⇧⇧++⇧⇧⇧⇧⇧⇧⇧⇧⇧⇧++⇧⇧⇧⇧⇧⇧⇧⇧⇧⇧++⇧⇧⇧⇧⇧⇧⇧⇧⇧⇧
-                 *              skip offset
-                 *
-                 * Intermediate cursor
-                 * ===================
-                 * Cursor at:
-                 *                               ⇩
-                 * The quick brown fox jumps over the lazy dog
-                 *
-                 * remainder                        cursor
-                 * ⇩                                  ⇩
-                 * +╭┅┅┅┅┅┅┅┅┅┅╮╭┅┅┅┅┅┅┅┅┅┅╮┌──────────┐
-                 * T|he quick b┊┊rown fox j┊│umps over │ the lazy dog
-                 * +╰┅┅┅┅┅┅┅┅┅┅╯╰┅┅┅┅┅┅┅┅┅┅╯└──────────┘
-                 * ⇧+⇧⇧⇧⇧⇧⇧⇧⇧⇧⇧++⇧⇧⇧⇧⇧⇧⇧⇧⇧⇧
-                 *              skip offset
-                 */
-                write_string_to_grid(
-                    if width < term.grapheme_pos() {
-                        str.trim_left_at_boundary(
-                            width * term.grapheme_pos().wrapping_div(width).saturating_sub(1)
-                                + term.grapheme_pos().wrapping_rem(width),
-                        )
-                    } else {
-                        str
-                    },
-                    grid,
-                    theme_attr.fg,
-                    theme_attr.bg,
-                    theme_attr.attrs,
-                    area,
-                    None,
-                );
+            Self::Text(ref mut text_field) => {
+                text_field.draw(grid, area, context);
             }
-            Choice(_, _) => {
+            Self::Choice(_, _) => {
                 write_string_to_grid(
                     str,
                     grid,
@@ -220,53 +130,16 @@ impl Component for Field {
         }
     }
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+        if let Self::Text(ref mut t) = self {
+            return t.process_event(event, context);
+        }
+
         match *event {
-            UIEvent::InsertInput(Key::Char('\t')) => {
-                if let Text(ref mut s, Some((_, auto_complete))) = self {
-                    if let Some(suggestion) = auto_complete.get_suggestion() {
-                        *s = UText::new(suggestion);
-                        let len = s.as_str().len();
-                        s.set_cursor(len);
-                        return true;
-                    }
-                }
-                if let Text(ref mut s, _) = self {
-                    s.insert_char(' ');
-                }
-                return true;
-            }
-            UIEvent::InsertInput(Key::Char('\n')) => {
-                if let Text(ref mut s, Some((_, auto_complete))) = self {
-                    if let Some(suggestion) = auto_complete.get_suggestion() {
-                        *s = UText::new(suggestion);
-                        let len = s.as_str().len();
-                        s.set_cursor(len);
-                    }
-                }
-                context
-                    .replies
-                    .push_back(UIEvent::ChangeMode(UIMode::Normal));
-                return true;
-            }
-            UIEvent::InsertInput(Key::Up) => {
-                if let Text(_, Some((_, auto_complete))) = self {
-                    auto_complete.dec_cursor();
-                } else {
-                    return false;
-                }
-            }
-            UIEvent::InsertInput(Key::Down) => {
-                if let Text(_, Some((_, auto_complete))) = self {
-                    auto_complete.inc_cursor();
-                } else {
-                    return false;
-                }
-            }
             UIEvent::InsertInput(Key::Right) => match self {
-                Text(ref mut s, _) => {
-                    s.cursor_inc();
+                Self::Text(_) => {
+                    return false;
                 }
-                Choice(ref vec, ref mut cursor) => {
+                Self::Choice(ref vec, ref mut cursor) => {
                     *cursor = if *cursor == vec.len().saturating_sub(1) {
                         0
                     } else {
@@ -275,10 +148,10 @@ impl Component for Field {
                 }
             },
             UIEvent::InsertInput(Key::Left) => match self {
-                Text(ref mut s, _) => {
-                    s.cursor_dec();
+                Self::Text(_) => {
+                    return false;
                 }
-                Choice(_, ref mut cursor) => {
+                Self::Choice(_, ref mut cursor) => {
                     if *cursor == 0 {
                         return false;
                     } else {
@@ -286,73 +159,6 @@ impl Component for Field {
                     }
                 }
             },
-            UIEvent::InsertInput(Key::Char(k)) => {
-                if let Text(ref mut s, _) = self {
-                    s.insert_char(k);
-                }
-            }
-            UIEvent::InsertInput(Key::Paste(ref p)) => {
-                if let Text(ref mut s, _) = self {
-                    for c in p.chars() {
-                        s.insert_char(c);
-                    }
-                }
-            }
-            UIEvent::InsertInput(Key::Backspace) | UIEvent::InsertInput(Key::Ctrl('h')) => {
-                if let Text(ref mut s, auto_complete) = self {
-                    s.backspace();
-                    if let Some(ac) = auto_complete.as_mut() {
-                        ac.1.set_suggestions(Vec::new());
-                    }
-                }
-            }
-            UIEvent::InsertInput(Key::Ctrl('a')) => {
-                if let Text(ref mut s, _) = self {
-                    s.set_cursor(0);
-                }
-            }
-            UIEvent::InsertInput(Key::Ctrl('b')) => {
-                /* Backward one character */
-                if let Text(ref mut s, _) = self {
-                    s.cursor_dec();
-                }
-            }
-            UIEvent::InsertInput(Key::Ctrl('f')) => {
-                /* Forward one character */
-                if let Text(ref mut s, _) = self {
-                    s.cursor_inc();
-                }
-            }
-            UIEvent::InsertInput(Key::Ctrl('w')) => {
-                /* Cut previous word */
-                if let Text(ref mut s, _) = self {
-                    while s.as_str()[..s.cursor_pos()]
-                        .last_grapheme()
-                        .map(|(_, graph)| !graph.is_empty() && graph.trim().is_empty())
-                        .unwrap_or(false)
-                    {
-                        s.backspace();
-                    }
-                    while s.as_str()[..s.cursor_pos()]
-                        .last_grapheme()
-                        .map(|(_, graph)| !graph.is_empty() && !graph.trim().is_empty())
-                        .unwrap_or(false)
-                    {
-                        s.backspace();
-                    }
-                }
-            }
-            UIEvent::InsertInput(Key::Ctrl('u')) => {
-                if let Text(ref mut s, _) = self {
-                    s.cut_left()
-                }
-            }
-            UIEvent::InsertInput(Key::Ctrl('e')) => {
-                if let Text(ref mut s, _) = self {
-                    s.set_cursor(s.as_str().len());
-                }
-            }
-            /* TODO: add rest of readline shortcuts */
             _ => {
                 return false;
             }
@@ -360,14 +166,17 @@ impl Component for Field {
         self.set_dirty(true);
         true
     }
+
     fn is_dirty(&self) -> bool {
         false
     }
+
     fn set_dirty(&mut self, _value: bool) {}
 
     fn id(&self) -> ComponentId {
         ComponentId::nil()
     }
+
     fn set_id(&mut self, _id: ComponentId) {}
 }
 
@@ -377,8 +186,8 @@ impl fmt::Display for Field {
             f,
             "{}",
             match self {
-                Text(ref s, _) => s.as_str(),
-                Choice(ref v, ref cursor) => v[*cursor].as_ref(),
+                Self::Text(ref s) => s.as_str(),
+                Self::Choice(ref v, ref cursor) => v[*cursor].as_ref(),
             }
         )
     }
@@ -456,23 +265,26 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> FormWidget<T> 
     pub fn push_choices(&mut self, value: (Cow<'static, str>, Vec<Cow<'static, str>>)) {
         self.field_name_max_length = std::cmp::max(self.field_name_max_length, value.0.len());
         self.layout.push(value.0.clone());
-        self.fields.insert(value.0, Choice(value.1, 0));
+        self.fields.insert(value.0, Field::Choice(value.1, 0));
     }
     pub fn push_cl(&mut self, value: (Cow<'static, str>, String, AutoCompleteFn)) {
         self.field_name_max_length = std::cmp::max(self.field_name_max_length, value.0.len());
         self.layout.push(value.0.clone());
         self.fields.insert(
             value.0,
-            Text(
+            Field::Text(TextField::new(
                 UText::new(value.1),
                 Some((value.2, AutoComplete::new(Vec::new()))),
-            ),
+            )),
         );
     }
     pub fn push(&mut self, value: (Cow<'static, str>, String)) {
         self.field_name_max_length = std::cmp::max(self.field_name_max_length, value.0.len());
         self.layout.push(value.0.clone());
-        self.fields.insert(value.0, Text(UText::new(value.1), None));
+        self.fields.insert(
+            value.0,
+            Field::Text(TextField::new(UText::new(value.1), None)),
+        );
     }
 
     pub fn insert(&mut self, index: usize, value: (Cow<'static, str>, Field)) {

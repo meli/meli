@@ -23,10 +23,15 @@
  */
 use text_processing::Reflow;
 
+pub type AutoCompleteFn = Box<dyn Fn(&Context, &str) -> Vec<AutoCompleteEntry> + Send + Sync>;
+
 use super::*;
 
 mod pager;
 pub use self::pager::*;
+
+mod text;
+pub use self::text::*;
 
 mod widgets;
 pub use self::widgets::*;
@@ -58,7 +63,7 @@ pub struct StatusBar {
     status: String,
     status_message: String,
     substatus_message: String,
-    ex_buffer: Field,
+    ex_buffer: TextField,
     ex_buffer_cmd_history_pos: Option<usize>,
     display_buffer: String,
     mode: UIMode,
@@ -102,7 +107,7 @@ impl StatusBar {
             status: String::with_capacity(256),
             status_message: String::with_capacity(256),
             substatus_message: String::with_capacity(256),
-            ex_buffer: Field::Text(UText::new(String::with_capacity(256)), None),
+            ex_buffer: TextField::new(UText::new(String::with_capacity(256)), None),
             ex_buffer_cmd_history_pos: None,
             display_buffer: String::with_capacity(8),
             dirty: true,
@@ -595,7 +600,7 @@ impl Component for StatusBar {
                     utext.set_cursor(len);
                     self.container.set_dirty(true);
                     self.set_dirty(true);
-                    self.ex_buffer = Field::Text(utext, None);
+                    self.ex_buffer = TextField::new(utext, None);
                 }
             }
             UIEvent::CmdInput(Key::Char(c)) => {
@@ -622,27 +627,15 @@ impl Component for StatusBar {
             }
             UIEvent::CmdInput(Key::Down) => {
                 self.auto_complete.inc_cursor();
-                self.dirty = true;
+                self.set_dirty(true);
             }
             UIEvent::CmdInput(Key::Left) => {
-                if let Field::Text(ref mut utext, _) = self.ex_buffer {
-                    utext.cursor_dec();
-                } else {
-                    unsafe {
-                        std::hint::unreachable_unchecked();
-                    }
-                }
-                self.dirty = true;
+                self.ex_buffer.cursor_dec();
+                self.set_dirty(true);
             }
             UIEvent::CmdInput(Key::Right) => {
-                if let Field::Text(ref mut utext, _) = self.ex_buffer {
-                    utext.cursor_inc();
-                } else {
-                    unsafe {
-                        std::hint::unreachable_unchecked();
-                    }
-                }
-                self.dirty = true;
+                self.ex_buffer.cursor_inc();
+                self.set_dirty(true);
             }
             UIEvent::CmdInput(Key::Ctrl('p')) => {
                 if self.cmd_history.is_empty() {
@@ -659,7 +652,7 @@ impl Component for StatusBar {
                     utext.set_cursor(len);
                     self.container.set_dirty(true);
                     self.set_dirty(true);
-                    self.ex_buffer = Field::Text(utext, None);
+                    self.ex_buffer = TextField::new(utext, None);
                     self.ex_buffer_cmd_history_pos = pos;
                     self.dirty = true;
                 }
@@ -684,7 +677,7 @@ impl Component for StatusBar {
                     utext.set_cursor(len);
                     self.container.set_dirty(true);
                     self.set_dirty(true);
-                    self.ex_buffer = Field::Text(utext, None);
+                    self.ex_buffer = TextField::new(utext, None);
                     self.ex_buffer_cmd_history_pos = pos;
                     self.dirty = true;
                 }
@@ -778,11 +771,15 @@ impl Component for StatusBar {
     }
 
     fn is_dirty(&self) -> bool {
-        self.dirty || self.container.is_dirty() || self.progress_spinner.is_dirty()
+        self.dirty
+            || self.container.is_dirty()
+            || self.ex_buffer.is_dirty()
+            || self.progress_spinner.is_dirty()
     }
 
     fn set_dirty(&mut self, value: bool) {
         self.dirty = value;
+        self.ex_buffer.set_dirty(value);
         self.progress_spinner.set_dirty(value);
     }
 
