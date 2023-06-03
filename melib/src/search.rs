@@ -288,6 +288,35 @@ pub mod query_parser {
             }
         }
     }
+}
+
+#[inline(always)]
+pub fn escape_double_quote(w: &str) -> Cow<str> {
+    if w.contains('"') {
+        Cow::from(w.replace('"', "\"\""))
+    } else {
+        Cow::from(w)
+    }
+}
+
+use serde::{de, Deserialize, Deserializer};
+impl<'de> Deserialize<'de> for Query {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = <String>::deserialize(deserializer)?;
+        let ret = query()
+            .parse(&s)
+            .map(|(_, q)| q)
+            .map_err(|err| de::Error::custom(format!("invalid query value: {}", err)));
+        ret
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
 
     #[test]
     fn test_query_parsing() {
@@ -377,32 +406,12 @@ pub mod query_parser {
             query().parse_complete("tags:seen")
         );
         assert_eq!(
+            query().parse_complete("is:unseen"),
+            query().parse_complete("tags:unseen")
+        );
+        assert_eq!(
             Ok(("", Flags(vec!["f".to_string()]))),
             query().parse_complete("tags:f")
         );
-    }
-}
-
-#[inline(always)]
-pub fn escape_double_quote(w: &str) -> Cow<str> {
-    if w.contains('"') {
-        Cow::from(w.replace('"', "\"\""))
-    } else {
-        Cow::from(w)
-    }
-}
-
-use serde::{de, Deserialize, Deserializer};
-impl<'de> Deserialize<'de> for Query {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = <String>::deserialize(deserializer)?;
-        let ret = query()
-            .parse(&s)
-            .map(|(_, q)| q)
-            .map_err(|err| de::Error::custom(format!("invalid query value: {}", err)));
-        ret
     }
 }

@@ -31,6 +31,8 @@ mod connection;
 pub use connection::*;
 mod watch;
 pub use watch::*;
+mod search;
+pub use search::*;
 mod cache;
 use cache::{ImapCacheReset, ModSequence};
 pub mod managesieve;
@@ -1180,94 +1182,7 @@ impl MailBackend for ImapType {
             ));
         }
         let mailbox_hash = mailbox_hash.unwrap();
-        fn rec(q: &crate::search::Query, s: &mut String) {
-            use crate::search::{escape_double_quote, Query::*};
-            match q {
-                Subject(t) => {
-                    s.push_str(" SUBJECT \"");
-                    s.extend(escape_double_quote(t).chars());
-                    s.push('"');
-                }
-                From(t) => {
-                    s.push_str(" FROM \"");
-                    s.extend(escape_double_quote(t).chars());
-                    s.push('"');
-                }
-                To(t) => {
-                    s.push_str(" TO \"");
-                    s.extend(escape_double_quote(t).chars());
-                    s.push('"');
-                }
-                Cc(t) => {
-                    s.push_str(" CC \"");
-                    s.extend(escape_double_quote(t).chars());
-                    s.push('"');
-                }
-                Bcc(t) => {
-                    s.push_str(" BCC \"");
-                    s.extend(escape_double_quote(t).chars());
-                    s.push('"');
-                }
-                AllText(t) => {
-                    s.push_str(" TEXT \"");
-                    s.extend(escape_double_quote(t).chars());
-                    s.push('"');
-                }
-                Flags(v) => {
-                    for f in v {
-                        match f.as_str() {
-                            "draft" => {
-                                s.push_str(" DRAFT ");
-                            }
-                            "deleted" => {
-                                s.push_str(" DELETED ");
-                            }
-                            "flagged" => {
-                                s.push_str(" FLAGGED ");
-                            }
-                            "recent" => {
-                                s.push_str(" RECENT ");
-                            }
-                            "seen" | "read" => {
-                                s.push_str(" SEEN ");
-                            }
-                            "unseen" | "unread" => {
-                                s.push_str(" UNSEEN ");
-                            }
-                            "answered" => {
-                                s.push_str(" ANSWERED ");
-                            }
-                            "unanswered" => {
-                                s.push_str(" UNANSWERED ");
-                            }
-                            keyword => {
-                                s.push_str(" KEYWORD ");
-                                s.push_str(keyword);
-                                s.push(' ');
-                            }
-                        }
-                    }
-                }
-                And(q1, q2) => {
-                    rec(q1, s);
-                    s.push(' ');
-                    rec(q2, s);
-                }
-                Or(q1, q2) => {
-                    s.push_str(" OR ");
-                    rec(q1, s);
-                    s.push(' ');
-                    rec(q2, s);
-                }
-                Not(q) => {
-                    s.push_str(" NOT ");
-                    rec(q, s);
-                }
-                _ => {}
-            }
-        }
-        let mut query_str = String::new();
-        rec(&query, &mut query_str);
+        let query_str = query.to_imap_search();
         let connection = self.connection.clone();
         let uid_store = self.uid_store.clone();
 

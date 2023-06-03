@@ -56,6 +56,8 @@ pub const DEFAULT_FMT: &str = "%a, %d %b %Y %R\0";
 //"Tue May 21 13:46:22 1991\n"
 //"Wed Sep  9 00:27:54 2020\n"
 pub const ASCTIME_FMT: &str = "%a %b %d %H:%M:%S %Y\n\0";
+/// Source: RFC3501 Section 9. Formal syntax, item `date-text`
+pub const IMAP_DATE: &str = "%d-%b-%Y\0";
 
 extern "C" {
     fn strptime(
