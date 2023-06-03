@@ -93,10 +93,7 @@ impl std::ops::Index<usize> for HeaderMap {
 impl std::ops::Index<&[u8]> for HeaderMap {
     type Output = str;
     fn index(&self, k: &[u8]) -> &Self::Output {
-        (self.0)[HeaderName::try_from(k)
-            .expect("Invalid bytes in header name.")
-            .borrow() as &dyn HeaderKey]
-            .as_str()
+        (self.0)[&HeaderName::try_from(k).expect("Invalid bytes in header name.")].as_str()
     }
 }
 
@@ -133,7 +130,7 @@ impl HeaderMap {
     where
         <T as TryInto<HeaderName>>::Error: std::fmt::Debug,
     {
-        let k = key.try_into().expect("Invalid bytes in header name.");
+        let k = key.try_into().ok()?;
         (self.0).get_mut(&k)
     }
 
@@ -141,7 +138,7 @@ impl HeaderMap {
     where
         <T as TryInto<HeaderName>>::Error: std::fmt::Debug,
     {
-        let k = key.try_into().expect("Invalid bytes in header name.");
+        let k = key.try_into().ok()?;
         (self.0).get(&k).map(|x| x.as_str())
     }
 
@@ -149,16 +146,17 @@ impl HeaderMap {
     where
         <T as TryInto<HeaderName>>::Error: std::fmt::Debug,
     {
-        let k = key.try_into().expect("Invalid bytes in header name.");
-        (self.0).contains_key(&k)
+        key.try_into()
+            .ok()
+            .map(|k| (self.0).contains_key(&k))
+            .unwrap_or(false)
     }
 
     pub fn remove<T: TryInto<HeaderName> + std::fmt::Debug>(&mut self, key: T) -> Option<String>
     where
         <T as TryInto<HeaderName>>::Error: std::fmt::Debug,
     {
-        let k = key.try_into().expect("Invalid bytes in header name.");
-        (self.0).remove(&k)
+        key.try_into().ok().and_then(|k| (self.0).remove(&k))
     }
 
     pub fn into_inner(self) -> indexmap::IndexMap<HeaderName, String> {
@@ -180,16 +178,36 @@ impl DerefMut for HeaderMap {
     }
 }
 
-#[test]
-fn test_headers_case_sensitivity() {
-    use std::convert::TryInto;
-    let mut headers = HeaderMap::default();
-    headers.insert("from".try_into().unwrap(), "Myself <a@b.c>".into());
-    assert_eq!(&headers["From"], "Myself <a@b.c>");
-    assert_eq!(&headers["From"], &headers["from"]);
-    assert_eq!(&headers["fROm"], &headers["from"]);
-    headers.get_mut("from").unwrap().pop();
-    assert_eq!(&headers["From"], "Myself <a@b.c");
-    headers.insert("frOM".try_into().unwrap(), "nada".into());
-    assert_eq!(&headers["fROm"], "nada");
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_headers_case_sensitivity() {
+        let mut headers = HeaderMap::default();
+        headers.insert("from".try_into().unwrap(), "Myself <a@b.c>".into());
+        dbg!(&headers);
+        assert_eq!(&headers["From"], "Myself <a@b.c>");
+        assert_eq!(&headers["From"], &headers["from"]);
+        assert_eq!(&headers["fROm"], &headers["from"]);
+        headers.get_mut("from").unwrap().pop();
+        assert_eq!(&headers["From"], "Myself <a@b.c");
+        headers.insert("frOM".try_into().unwrap(), "nada".into());
+        assert_eq!(&headers["fROm"], "nada");
+    }
+
+    #[test]
+    fn test_headers_map_index() {
+        let mut headers = HeaderMap::default();
+        headers.insert(HeaderName::SUBJECT, "foobar".into());
+        headers.insert(HeaderName::MESSAGE_ID, "foobar@examplecom".into());
+        dbg!(&headers);
+        assert_eq!(&headers[0], "foobar");
+        assert_eq!(&headers[HeaderName::SUBJECT], "foobar");
+        assert_eq!(&headers[&HeaderName::SUBJECT], "foobar");
+        assert_eq!(&headers["subject"], "foobar");
+        assert_eq!(&headers["Subject"], "foobar");
+        assert_eq!(&headers[b"Subject".as_slice()], "foobar");
+        assert!(&headers[HeaderName::MESSAGE_ID] != "foobar");
+    }
 }

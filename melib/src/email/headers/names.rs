@@ -175,40 +175,6 @@ macro_rules! standard_headers {
                 (StandardHeader::$konst, $name),
             )+
         ];
-
-        #[test]
-        fn test_parse_standard_headers() {
-            for &(std, name) in TEST_HEADERS {
-                // Test lower case
-                assert_eq!(HeaderName::from_bytes(name.as_bytes()).unwrap(), HeaderName::from(std));
-
-                // Test upper case
-                let upper = std::str::from_utf8(name.as_bytes()).expect("byte string constants are all utf-8").to_uppercase();
-                assert_eq!(HeaderName::from_bytes(upper.as_bytes()).unwrap(), HeaderName::from(std));
-              }
-        }
-
-        #[test]
-        fn test_standard_headers_into_bytes() {
-            //for &(std, name) in TEST_HEADERS {
-                //let name = std::str::from_utf8(name.as_bytes()).unwrap();
-                //let std = HeaderName::from(std);
-                // Test lower case
-                //let bytes: Bytes =
-                //    HeaderName::from_bytes(name.as_bytes()).unwrap().inner.into();
-                //assert_eq!(bytes, name);
-                //assert_eq!(HeaderName::from_bytes(name.as_bytes()).unwrap(), std);
-
-                // Test upper case
-             //   let upper = name.to_uppercase();
-                //let bytes: Bytes =
-                //    HeaderName::from_bytes(upper.as_bytes()).unwrap().inner.into();
-                //assert_eq!(bytes, name.as_bytes());
-                //assert_eq!(HeaderName::from_bytes(upper.as_bytes()).unwrap(),
-                 //          std);
-            //}
-
-        }
     }
 }
 
@@ -912,7 +878,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_headername_display() {
+    fn test_email_headers_headername_display() {
         assert_eq!(&HeaderName::SUBJECT.to_string(), "Subject");
         assert_eq!(&HeaderName::CC.to_string(), "Cc");
         assert_eq!(&HeaderName::IN_REPLY_TO.to_string(), "In-Reply-To");
@@ -946,5 +912,25 @@ mod tests {
             &HeaderName::try_from("something-dKim").unwrap().to_string(),
             "Something-DKIM"
         );
+    }
+
+    #[test]
+    fn test_email_headers_parse_standard_headers() {
+        for &(std, name) in TEST_HEADERS {
+            // Test lower case
+            assert_eq!(
+                HeaderName::from_bytes(name.to_ascii_lowercase().as_bytes()).unwrap(),
+                HeaderName::from(std)
+            );
+
+            // Test upper case
+            let upper = std::str::from_utf8(name.as_bytes())
+                .expect("byte string constants are all utf-8")
+                .to_uppercase();
+            assert_eq!(
+                HeaderName::from_bytes(upper.as_bytes()).unwrap(),
+                HeaderName::from(std)
+            );
+        }
     }
 }
