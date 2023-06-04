@@ -635,9 +635,9 @@ impl ImapConnection {
                                         .await?;
                                 } else {
                                     self.send_command(
-                                b"STATUS INBOX (UIDNEXT UIDVALIDITY UNSEEN MESSAGES HIGHESTMODSEQ)",
-                            )
-                            .await?;
+                                        b"STATUS INBOX (UIDNEXT UIDVALIDITY UNSEEN MESSAGES HIGHESTMODSEQ)",
+                                    )
+                                        .await?;
                                     self.read_response(&mut ret, RequiredResponses::empty())
                                         .await?;
                                 }
