@@ -26,7 +26,7 @@
 use std::path::PathBuf;
 
 pub use melib::thread::{SortField, SortOrder};
-use melib::uuid::Uuid;
+use melib::{email::mailto::Mailto, uuid::Uuid};
 
 use crate::components::Component;
 
@@ -91,7 +91,7 @@ pub enum ComposeAction {
     SaveDraft,
     ToggleSign,
     ToggleEncrypt,
-    Mailto(melib::Mailto),
+    Mailto(Mailto),
 }
 
 #[derive(Debug)]

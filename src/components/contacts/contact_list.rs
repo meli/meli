@@ -18,12 +18,12 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
+
 use std::cmp;
 
-use melib::{backends::AccountHash, CardId};
+use melib::{backends::AccountHash, text_processing::TextProcessing, CardId, Draft};
 
 use super::*;
-use crate::melib::text_processing::TextProcessing;
 
 #[derive(Debug, PartialEq, Eq)]
 enum ViewMode {

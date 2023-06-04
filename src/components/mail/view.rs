@@ -29,7 +29,8 @@ use std::{
 };
 
 use melib::{
-    datetime, email::attachment_types::ContentType, list_management, parser::BytesExt, HeaderName,
+    datetime, email::attachment_types::ContentType, list_management, mailto::Mailto,
+    parser::BytesExt, Card, Draft, HeaderName, SpecialUsageMailbox,
 };
 use smallvec::SmallVec;
 
@@ -46,7 +47,7 @@ pub use self::thread::*;
 
 mod envelope;
 use linkify::LinkFinder;
-use xdg_utils::query_default_app;
+use melib::xdg_utils::query_default_app;
 
 pub use self::envelope::*;
 

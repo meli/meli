@@ -2396,77 +2396,82 @@ fn build_mailboxes_order(
     }
 }
 
-#[test]
-fn test_mailbox_utf7() {
-    #[derive(Debug)]
-    struct TestMailbox(String);
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    impl melib::BackendMailbox for TestMailbox {
-        fn hash(&self) -> MailboxHash {
-            unimplemented!()
+    #[test]
+    fn test_mailbox_utf7() {
+        #[derive(Debug)]
+        struct TestMailbox(String);
+
+        impl melib::BackendMailbox for TestMailbox {
+            fn hash(&self) -> MailboxHash {
+                unimplemented!()
+            }
+
+            fn name(&self) -> &str {
+                &self.0
+            }
+
+            fn path(&self) -> &str {
+                &self.0
+            }
+
+            fn children(&self) -> &[MailboxHash] {
+                unimplemented!()
+            }
+
+            fn clone(&self) -> Mailbox {
+                unimplemented!()
+            }
+
+            fn special_usage(&self) -> SpecialUsageMailbox {
+                unimplemented!()
+            }
+
+            fn parent(&self) -> Option<MailboxHash> {
+                unimplemented!()
+            }
+
+            fn permissions(&self) -> MailboxPermissions {
+                unimplemented!()
+            }
+
+            fn is_subscribed(&self) -> bool {
+                unimplemented!()
+            }
+
+            fn set_is_subscribed(&mut self, _: bool) -> Result<()> {
+                unimplemented!()
+            }
+
+            fn set_special_usage(&mut self, _: SpecialUsageMailbox) -> Result<()> {
+                unimplemented!()
+            }
+
+            fn count(&self) -> Result<(usize, usize)> {
+                unimplemented!()
+            }
         }
+        for (n, d) in [
+            ("~peter/mail/&U,BTFw-/&ZeVnLIqe-", "~peter/mail/台北/日本語"),
+            ("&BB4EQgQ,BEAEMAQyBDsENQQ9BD0ESwQ1-", "Отправленные"),
+        ] {
+            let ref_mbox = TestMailbox(n.to_string());
+            let mut conf: melib::MailboxConf = Default::default();
+            conf.extra.insert("encoding".to_string(), "utf7".into());
 
-        fn name(&self) -> &str {
-            &self.0
+            let entry = MailboxEntry::new(
+                MailboxStatus::None,
+                n.to_string(),
+                Box::new(ref_mbox),
+                FileMailboxConf {
+                    mailbox_conf: conf,
+                    ..Default::default()
+                },
+            );
+            assert_eq!(&entry.path, d);
         }
-
-        fn path(&self) -> &str {
-            &self.0
-        }
-
-        fn children(&self) -> &[MailboxHash] {
-            unimplemented!()
-        }
-
-        fn clone(&self) -> Mailbox {
-            unimplemented!()
-        }
-
-        fn special_usage(&self) -> SpecialUsageMailbox {
-            unimplemented!()
-        }
-
-        fn parent(&self) -> Option<MailboxHash> {
-            unimplemented!()
-        }
-
-        fn permissions(&self) -> MailboxPermissions {
-            unimplemented!()
-        }
-
-        fn is_subscribed(&self) -> bool {
-            unimplemented!()
-        }
-
-        fn set_is_subscribed(&mut self, _: bool) -> Result<()> {
-            unimplemented!()
-        }
-
-        fn set_special_usage(&mut self, _: SpecialUsageMailbox) -> Result<()> {
-            unimplemented!()
-        }
-
-        fn count(&self) -> Result<(usize, usize)> {
-            unimplemented!()
-        }
-    }
-    for (n, d) in [
-        ("~peter/mail/&U,BTFw-/&ZeVnLIqe-", "~peter/mail/台北/日本語"),
-        ("&BB4EQgQ,BEAEMAQyBDsENQQ9BD0ESwQ1-", "Отправленные"),
-    ] {
-        let ref_mbox = TestMailbox(n.to_string());
-        let mut conf: melib::MailboxConf = Default::default();
-        conf.extra.insert("encoding".to_string(), "utf7".into());
-
-        let entry = MailboxEntry::new(
-            MailboxStatus::None,
-            n.to_string(),
-            Box::new(ref_mbox),
-            FileMailboxConf {
-                mailbox_conf: conf,
-                ..Default::default()
-            },
-        );
-        assert_eq!(&entry.path, d);
     }
 }

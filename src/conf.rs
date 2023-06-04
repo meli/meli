@@ -67,6 +67,7 @@ use melib::{
     conf::{AccountSettings, MailboxConf, ToggleFlag},
     error::*,
 };
+use pager::PagerSettings;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
 pub use self::{accounts::Account, composing::*, pgp::*, shortcuts::*, tags::*};
@@ -74,7 +75,6 @@ use self::{
     default_vals::*, listing::ListingSettings, notifications::NotificationsSettings,
     terminal::TerminalSettings,
 };
-use crate::pager::PagerSettings;
 
 #[macro_export]
 macro_rules! split_command {

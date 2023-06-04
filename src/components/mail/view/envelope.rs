@@ -22,7 +22,7 @@
 use std::process::{Command, Stdio};
 
 use linkify::{Link, LinkFinder};
-use xdg_utils::query_default_app;
+use melib::xdg_utils::query_default_app;
 
 use super::*;
 

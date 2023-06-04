@@ -33,7 +33,10 @@ use std::{env, os::unix::io::RawFd, sync::Arc, thread};
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use indexmap::IndexMap;
 //use crate::plugins::PluginManager;
-use melib::backends::{AccountHash, BackendEventConsumer};
+use melib::{
+    backends::{AccountHash, BackendEvent, BackendEventConsumer, Backends, RefreshEvent},
+    UnixTimestamp,
+};
 use smallvec::SmallVec;
 
 use super::*;
@@ -177,7 +180,7 @@ impl Context {
         let settings = Box::new(Settings::new().unwrap());
         let accounts = vec![{
             let name = "test".to_string();
-            let mut account_conf = AccountConf::default();
+            let mut account_conf = crate::conf::AccountConf::default();
             account_conf.conf.format = "maildir".to_string();
             account_conf.account.format = "maildir".to_string();
             account_conf.account.root_mailbox = dir.path().display().to_string();

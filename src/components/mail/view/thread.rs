@@ -21,6 +21,8 @@
 
 use std::cmp;
 
+use melib::UnixTimestamp;
+
 use super::*;
 use crate::components::PageMovement;
 

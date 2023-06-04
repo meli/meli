@@ -21,6 +21,8 @@
 
 use std::collections::HashMap;
 
+use melib::Card;
+
 use super::*;
 
 mod contact_list;

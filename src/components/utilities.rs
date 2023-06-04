@@ -21,7 +21,8 @@
 
 /*! Various useful components that can be used in a generic fashion.
  */
-use text_processing::Reflow;
+
+use melib::{text_processing::Reflow, ShellExpandTrait};
 
 pub type AutoCompleteFn = Box<dyn Fn(&Context, &str) -> Vec<AutoCompleteEntry> + Send + Sync>;
 

@@ -22,6 +22,7 @@
 use std::{collections::BTreeMap, iter::FromIterator};
 
 use indexmap::IndexSet;
+use melib::{TagHash, Threads, UnixTimestamp};
 
 use super::*;
 use crate::{components::PageMovement, jobs::JoinHandle};

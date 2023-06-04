@@ -433,7 +433,9 @@ fn main() -> std::io::Result<()> {
                 recv(receiver) -> r => {
                     match r {
                          Ok(ThreadEvent::Pulse) | Ok(ThreadEvent::UIEvent(UIEvent::Timer(_))) => {},
-                        _ => {debug!(&r);}
+                        _ => {
+                            log::debug!("{:?}", &r);
+                        }
                     }
                     match r.unwrap() {
                         ThreadEvent::Input((Key::Ctrl('z'), _)) if state.mode != UIMode::Embed => {
@@ -528,7 +530,7 @@ fn main() -> std::io::Result<()> {
                             state.redraw();
                         },
                         ThreadEvent::JobFinished(id) => {
-                            debug!("Job finished {}", id);
+                            log::debug!("Job finished {}", id);
                             for account in state.context.accounts.values_mut() {
                                 if account.process_event(&id) {
                                     break;
@@ -553,7 +555,7 @@ fn main() -> std::io::Result<()> {
 
                         }
                         other => {
-                            debug!("got other signal: {:?}", other);
+                            log::debug!("got other signal: {:?}", other);
                         }
                     }
                 },

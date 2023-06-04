@@ -19,6 +19,8 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use melib::{MailBackendExtensionStatus, SpecialUsageMailbox};
+
 use super::*;
 
 #[derive(Debug)]

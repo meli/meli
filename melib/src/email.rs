@@ -112,7 +112,6 @@ pub use address::{Address, MessageID, References, StrBuild, StrBuilder};
 pub use attachments::{Attachment, AttachmentBuilder};
 pub use compose::{attachment_from_file, Draft};
 pub use headers::*;
-pub use mailto::*;
 use smallvec::SmallVec;
 
 use crate::{

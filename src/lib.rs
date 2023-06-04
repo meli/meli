@@ -48,8 +48,11 @@ pub use structopt::StructOpt;
 static GLOBAL: System = System;
 
 #[macro_use]
-extern crate melib;
-pub use melib::*;
+pub extern crate melib;
+pub use melib::{
+    error::*, log, AccountHash, Envelope, EnvelopeHash, EnvelopeRef, Flag, LogLevel, Mail, Mailbox,
+    MailboxHash, ThreadHash, ToggleFlag,
+};
 
 #[macro_use]
 pub mod types;
@@ -71,7 +74,9 @@ pub use crate::components::*;
 
 #[macro_use]
 pub mod conf;
-pub use crate::conf::*;
+pub use crate::conf::{
+    Account, DotAddressable, IndexStyle, SearchBackend, Settings, Shortcuts, ThemeAttribute,
+};
 
 #[cfg(feature = "sqlite3")]
 pub mod sqlite3;

@@ -31,7 +31,8 @@ use std::{
 use indexmap::IndexSet;
 use melib::{
     email::attachment_types::{ContentType, MultipartType},
-    list_management, Draft,
+    list_management, Address, AddressBook, Draft, HeaderName, SpecialUsageMailbox, SubjectPrefix,
+    UnixTimestamp,
 };
 use nix::sys::wait::WaitStatus;
 

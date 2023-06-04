@@ -21,6 +21,8 @@
 
 use std::{cmp, convert::TryInto, fmt::Write, iter::FromIterator};
 
+use melib::{ThreadNode, Threads};
+
 use super::*;
 use crate::components::PageMovement;
 

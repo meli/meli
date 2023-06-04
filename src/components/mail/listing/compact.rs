@@ -22,6 +22,7 @@
 use std::{cmp, collections::BTreeMap, convert::TryInto, iter::FromIterator};
 
 use indexmap::IndexSet;
+use melib::{TagHash, Threads};
 
 use super::*;
 use crate::{components::PageMovement, jobs::JoinHandle};

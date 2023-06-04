@@ -25,7 +25,7 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use melib::backends::EnvelopeHashBatch;
+use melib::{backends::EnvelopeHashBatch, Address};
 use smallvec::SmallVec;
 
 use super::*;

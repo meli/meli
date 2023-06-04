@@ -21,6 +21,8 @@
 
 use std::{cmp, iter::FromIterator};
 
+use melib::{Address, ThreadNode};
+
 use super::{EntryStrings, *};
 use crate::{components::PageMovement, jobs::JoinHandle};
 
