@@ -20,6 +20,7 @@
  */
 
 use super::*;
+use crate::datetime;
 
 impl MboxFormat {
     pub fn append(
@@ -49,9 +50,9 @@ impl MboxFormat {
         }
         writer.write_all(&b" "[..])?;
         writer.write_all(
-            crate::datetime::timestamp_to_string(
-                delivery_date.unwrap_or_else(crate::datetime::now),
-                Some(crate::datetime::ASCTIME_FMT),
+            datetime::timestamp_to_string(
+                delivery_date.unwrap_or_else(datetime::now),
+                Some(datetime::formats::ASCTIME_FMT),
                 true,
             )
             .trim()

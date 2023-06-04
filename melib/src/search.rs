@@ -24,7 +24,10 @@ use std::{borrow::Cow, convert::TryFrom};
 pub use query_parser::query;
 use Query::*;
 
-use crate::{parsec::*, UnixTimestamp};
+use crate::{
+    datetime::{formats, UnixTimestamp},
+    parsec::*,
+};
 
 #[derive(Debug, PartialEq, Clone, Serialize)]
 pub enum Query {
@@ -50,6 +53,18 @@ pub enum Query {
     And(Box<Query>, Box<Query>),
     Or(Box<Query>, Box<Query>),
     Not(Box<Query>),
+    /// By us.
+    Answered,
+    /// By an address/name.
+    AnsweredBy {
+        by: String,
+    },
+    Larger {
+        than: usize,
+    },
+    Smaller {
+        than: usize,
+    },
 }
 
 pub trait QueryTrait {
@@ -85,7 +100,38 @@ impl QueryTrait for crate::Envelope {
             And(q_a, q_b) => self.is_match(q_a) && self.is_match(q_b),
             Or(q_a, q_b) => self.is_match(q_a) || self.is_match(q_b),
             Not(q) => !self.is_match(q),
-            _ => false,
+            InReplyTo(_) => {
+                log::warn!("Filtering with InReplyTo is unimplemented.");
+                false
+            }
+            References(_) => {
+                log::warn!("Filtering with References is unimplemented.");
+                false
+            }
+            AllText(_) => {
+                log::warn!("Filtering with AllText is unimplemented.");
+                false
+            }
+            Body(_) => {
+                log::warn!("Filtering with Body is unimplemented.");
+                false
+            }
+            Answered => {
+                log::warn!("Filtering with Answered is unimplemented.");
+                false
+            }
+            AnsweredBy { .. } => {
+                log::warn!("Filtering with AnsweredBy is unimplemented.");
+                false
+            }
+            Larger { .. } => {
+                log::warn!("Filtering with Larger is unimplemented.");
+                false
+            }
+            Smaller { .. } => {
+                log::warn!("Filtering with Smaller is unimplemented.");
+                false
+            }
         }
     }
 }
@@ -102,6 +148,87 @@ impl TryFrom<&str> for Query {
 
 pub mod query_parser {
     use super::*;
+
+    fn date<'a>() -> impl Parser<'a, UnixTimestamp> {
+        move |input| {
+            literal().parse(input).and_then(|(next_input, result)| {
+                if let Ok((_, t)) =
+                    crate::datetime::parse_timestamp_from_string(result, formats::RFC3339_DATE)
+                {
+                    Ok((next_input, t))
+                } else {
+                    Err(next_input)
+                }
+            })
+        }
+    }
+
+    fn before<'a>() -> impl Parser<'a, Query> {
+        prefix(
+            whitespace_wrap(match_literal("before:")),
+            whitespace_wrap(date()),
+        )
+        .map(Query::Before)
+    }
+
+    fn after<'a>() -> impl Parser<'a, Query> {
+        prefix(
+            whitespace_wrap(match_literal("after:")),
+            whitespace_wrap(date()),
+        )
+        .map(Query::After)
+    }
+
+    fn between<'a>() -> impl Parser<'a, Query> {
+        prefix(
+            whitespace_wrap(match_literal("between:")),
+            pair(
+                suffix(whitespace_wrap(date()), whitespace_wrap(match_literal(","))),
+                whitespace_wrap(date()),
+            ),
+        )
+        .map(|(t1, t2)| Query::Between(t1, t2))
+    }
+
+    fn on<'a>() -> impl Parser<'a, Query> {
+        prefix(
+            whitespace_wrap(match_literal("on:")),
+            whitespace_wrap(date()),
+        )
+        .map(Query::After)
+    }
+
+    fn smaller<'a>() -> impl Parser<'a, Query> {
+        prefix(
+            whitespace_wrap(match_literal("smaller:")),
+            whitespace_wrap(integer()),
+        )
+        .map(|than| Query::Smaller { than })
+    }
+
+    fn larger<'a>() -> impl Parser<'a, Query> {
+        prefix(
+            whitespace_wrap(match_literal("larger:")),
+            whitespace_wrap(integer()),
+        )
+        .map(|than| Query::Larger { than })
+    }
+
+    fn answered_by<'a>() -> impl Parser<'a, Query> {
+        prefix(
+            whitespace_wrap(match_literal("answered-by:")),
+            whitespace_wrap(literal()),
+        )
+        .map(|by| Query::AnsweredBy { by })
+    }
+
+    fn answered<'a>() -> impl Parser<'a, Query> {
+        move |input| {
+            whitespace_wrap(match_literal_anycase("answered"))
+                .map(|()| Query::Answered)
+                .parse(input)
+        }
+    }
 
     fn subject<'a>() -> impl Parser<'a, Query> {
         prefix(
@@ -141,6 +268,14 @@ pub mod query_parser {
             whitespace_wrap(literal()),
         )
         .map(Query::Bcc)
+    }
+
+    fn all_addresses<'a>() -> impl Parser<'a, Query> {
+        prefix(
+            whitespace_wrap(match_literal("all-addresses:")),
+            whitespace_wrap(literal()),
+        )
+        .map(Query::AllAddresses)
     }
 
     fn or<'a>() -> impl Parser<'a, Query> {
@@ -249,8 +384,17 @@ pub mod query_parser {
                 .or_else(|_| to().parse(input))
                 .or_else(|_| cc().parse(input))
                 .or_else(|_| bcc().parse(input))
+                .or_else(|_| all_addresses().parse(input))
                 .or_else(|_| subject().parse(input))
+                .or_else(|_| before().parse(input))
+                .or_else(|_| after().parse(input))
+                .or_else(|_| on().parse(input))
+                .or_else(|_| between().parse(input))
                 .or_else(|_| flags().parse(input))
+                .or_else(|_| answered().parse(input))
+                .or_else(|_| answered_by().parse(input))
+                .or_else(|_| larger().parse(input))
+                .or_else(|_| smaller().parse(input))
                 .or_else(|_| has_attachment().parse(input))
             {
                 Ok(q)
@@ -282,7 +426,7 @@ pub mod query_parser {
             } else if let Ok((rest, query_b)) = or().parse(rest) {
                 Ok((rest, Or(Box::new(query_a), Box::new(query_b))))
             } else if let Ok((rest, query_b)) = query().parse(rest) {
-                Ok((rest, Or(Box::new(query_a), Box::new(query_b))))
+                Ok((rest, And(Box::new(query_a), Box::new(query_b))))
             } else {
                 Ok((rest, query_a))
             }
@@ -321,8 +465,8 @@ mod tests {
     #[test]
     fn test_query_parsing() {
         assert_eq!(
-            Err("subject: test and"),
-            query().parse_complete("subject: test and")
+            Err("subject:test and"),
+            query().parse_complete("subject:test and")
         );
         assert_eq!(
             Ok((
@@ -332,7 +476,7 @@ mod tests {
                     Box::new(AllText("i".to_string()))
                 )
             )),
-            query().parse_complete("subject: test and i")
+            query().parse_complete("subject:test and i")
         );
         assert_eq!(
             Ok(("", AllText("test".to_string()))),
@@ -340,7 +484,17 @@ mod tests {
         );
         assert_eq!(
             Ok(("", Subject("test".to_string()))),
-            query().parse_complete("subject: test")
+            query().parse_complete("subject:test")
+        );
+        assert_eq!(
+            Ok((
+                "",
+                And(
+                    Box::new(From("Manos".to_string())),
+                    Box::new(From("Sia".to_string()))
+                )
+            )),
+            query().parse_complete("from:Manos and from:Sia")
         );
         assert_eq!(
             Ok((
@@ -353,7 +507,7 @@ mod tests {
                     ))
                 )
             )),
-            query().parse_complete("subject: \"wah ah ah\" or (from: Manos and from: Sia)")
+            query().parse_complete("subject:\"wah ah ah\" or (from:Manos and from:Sia)")
         );
         assert_eq!(
             Ok((
@@ -369,8 +523,7 @@ mod tests {
                     ))
                 )
             )),
-            query()
-                .parse_complete("subject: wah or (from: Manos and (subject:foo or subject: bar))")
+            query().parse_complete("subject:wah or (from:Manos and (subject:foo or subject:bar))")
         );
         assert_eq!(
             Ok((
@@ -390,7 +543,7 @@ mod tests {
                 )
             )),
             query().parse_complete(
-                "(from: Manos and (subject:foo or subject: bar) and (from:woo or from:my))"
+                "(from:Manos and (subject:foo or subject:bar) and (from:woo or from:my))"
             )
         );
         assert_eq!(

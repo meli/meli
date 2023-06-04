@@ -515,23 +515,28 @@ pub fn query_to_sql(q: &Query) -> String {
     ret
 }
 
-#[test]
-fn test_query_to_sql() {
-    use melib::{parsec::Parser, search::query};
-    assert_eq!(
-        "(subject LIKE \"%test%\" ) AND (body_text LIKE \"%i%\" ) ",
-        &query_to_sql(&query().parse_complete("subject: test and i").unwrap().1)
-    );
-    assert_eq!(
-        "(subject LIKE \"%github%\" ) OR ((_from LIKE \"%epilys%\" ) AND ((subject LIKE \"%lib%\" \
-         ) OR (subject LIKE \"%meli%\" ) ) ) ",
-        &query_to_sql(
-            &query()
-                .parse_complete(
-                    "subject: github or (from: epilys and (subject:lib or subject: meli))"
-                )
-                .unwrap()
-                .1
-        )
-    );
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_query_to_sql() {
+        use melib::{parsec::Parser, search::query};
+        assert_eq!(
+            "(subject LIKE \"%test%\" ) AND (body_text LIKE \"%i%\" ) ",
+            &query_to_sql(&query().parse_complete("subject:test and i").unwrap().1)
+        );
+        assert_eq!(
+            "(subject LIKE \"%github%\" ) OR ((_from LIKE \"%epilys%\" ) AND ((subject LIKE \
+             \"%lib%\" ) OR (subject LIKE \"%meli%\" ) ) ) ",
+            &query_to_sql(
+                &query()
+                    .parse_complete(
+                        "subject:github or (from:epilys and (subject:lib or subject:meli))"
+                    )
+                    .unwrap()
+                    .1
+            )
+        );
+    }
 }

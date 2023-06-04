@@ -21,6 +21,10 @@
 
 //! Parser combinators.
 
+use std::borrow::Cow;
+
+use crate::datetime::{parse_timestamp_from_string, UnixTimestamp};
+
 pub type Result<'a, Output> = std::result::Result<(&'a str, Output), &'a str>;
 
 pub trait Parser<'a, Output> {
@@ -390,7 +394,10 @@ pub fn any_char(input: &str) -> Result<char> {
 }
 
 pub fn string<'a>() -> impl Parser<'a, String> {
-    one_or_more(pred(any_char, |c| c.is_alphanumeric())).map(|r| r.into_iter().collect())
+    one_or_more(pred(any_char, |c| {
+        c.is_alphanumeric() || (c.is_ascii_graphic() && !['"', '(', ')', ' '].contains(c))
+    }))
+    .map(|r| r.into_iter().collect())
 }
 
 pub fn space1<'a>() -> impl Parser<'a, Vec<char>> {
@@ -597,6 +604,19 @@ where
         let (rest, length) = parser.parse(input)?;
         take(length).parse(rest)
     }
+}
+
+pub fn date<'a, T: Into<Cow<'static, str>>>(fmt: T) -> impl Parser<'a, UnixTimestamp> {
+    let fmt = fmt.into();
+    move |input: &'a str| match parse_timestamp_from_string(input, &fmt) {
+        Ok((idx, t)) => Ok((&input[idx..], t)),
+        Err(_) => Err(input),
+    }
+}
+
+pub fn integer<'a>() -> impl Parser<'a, usize> {
+    use std::str::FromStr;
+    map_res(is_a(b"0123456789"), |s| usize::from_str(s))
 }
 
 #[cfg(test)]

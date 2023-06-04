@@ -33,6 +33,7 @@ use xdg_utils::query_mime_info;
 
 use super::*;
 use crate::{
+    datetime,
     email::{
         attachment_types::{Charset, ContentTransferEncoding, ContentType, MultipartType},
         attachments::AttachmentBuilder,
@@ -61,9 +62,9 @@ impl Default for Draft {
         let mut headers = HeaderMap::default();
         headers.insert(
             HeaderName::DATE,
-            crate::datetime::timestamp_to_string(
-                crate::datetime::now(),
-                Some(crate::datetime::RFC822_DATE),
+            datetime::timestamp_to_string(
+                datetime::now(),
+                Some(datetime::formats::RFC822_DATE),
                 true,
             ),
         );

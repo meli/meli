@@ -1258,6 +1258,10 @@ impl MelibQueryToNotmuchQuery for crate::search::Query {
                 q.query_to_string(ret);
                 ret.push_str("))");
             }
+            Answered => todo!(),
+            AnsweredBy { .. } => todo!(),
+            Larger { .. } => todo!(),
+            Smaller { .. } => todo!(),
         }
     }
 }

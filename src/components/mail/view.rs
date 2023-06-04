@@ -28,7 +28,9 @@ use std::{
     process::{Command, Stdio},
 };
 
-use melib::{email::attachment_types::ContentType, list_management, parser::BytesExt, HeaderName};
+use melib::{
+    datetime, email::attachment_types::ContentType, list_management, parser::BytesExt, HeaderName,
+};
 use smallvec::SmallVec;
 
 use super::*;
@@ -1276,9 +1278,9 @@ impl Component for MailView {
                 )
                 .is_true()
                 {
-                    let local_date = melib::datetime::timestamp_to_string(
+                    let local_date = datetime::timestamp_to_string(
                         envelope.timestamp,
-                        Some(melib::datetime::RFC822_DATE),
+                        Some(datetime::formats::RFC822_DATE),
                         false,
                     );
                     let orig_offset = find_offset(orig_date);

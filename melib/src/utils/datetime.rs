@@ -47,17 +47,27 @@ use std::{
 use crate::error::{Result, ResultIntoError};
 
 pub type UnixTimestamp = u64;
-pub const RFC3339_FMT_WITH_TIME: &str = "%Y-%m-%dT%H:%M:%S\0";
-pub const RFC3339_FMT: &str = "%Y-%m-%d\0";
-pub const RFC822_DATE: &str = "%a, %d %b %Y %H:%M:%S %z\0";
-pub const RFC822_FMT_WITH_TIME: &str = "%a, %e %h %Y %H:%M:%S \0";
-pub const RFC822_FMT: &str = "%e %h %Y %H:%M:%S \0";
-pub const DEFAULT_FMT: &str = "%a, %d %b %Y %R\0";
-//"Tue May 21 13:46:22 1991\n"
-//"Wed Sep  9 00:27:54 2020\n"
-pub const ASCTIME_FMT: &str = "%a %b %d %H:%M:%S %Y\n\0";
-/// Source: RFC3501 Section 9. Formal syntax, item `date-text`
-pub const IMAP_DATE: &str = "%d-%b-%Y\0";
+
+pub mod formats {
+    /// <date>T<time>
+    pub const RFC3339_DATETIME: &str = "%Y-%m-%dT%H:%M:%S\0";
+    /// <date>T<time>
+    pub const RFC3339_DATETIME_AND_SPACE: &str = "%Y-%m-%d %H:%M:%S\0";
+
+    pub const RFC3339_DATE: &str = "%Y-%m-%d\0";
+
+    pub const RFC822_DATE: &str = "%a, %d %b %Y %H:%M:%S %z\0";
+    pub const RFC822_FMT_WITH_TIME: &str = "%a, %e %h %Y %H:%M:%S \0";
+    pub const RFC822_FMT: &str = "%e %h %Y %H:%M:%S \0";
+    pub const DEFAULT_FMT: &str = "%a, %d %b %Y %R\0";
+    //"Tue May 21 13:46:22 1991\n"
+    //"Wed Sep  9 00:27:54 2020\n"
+    pub const ASCTIME_FMT: &str = "%a %b %d %H:%M:%S %Y\n\0";
+    /// Source: RFC3501 Section 9. Formal syntax, item `date-text`
+    pub const IMAP_DATE: &str = "%d-%b-%Y\0";
+}
+
+use formats as fmt;
 
 extern "C" {
     fn strptime(
@@ -195,7 +205,7 @@ pub fn timestamp_to_string(timestamp: UnixTimestamp, fmt: Option<&str>, posix: b
     {
         Cow::from(cstring)
     } else {
-        unsafe { CStr::from_bytes_with_nul_unchecked(DEFAULT_FMT.as_bytes()).into() }
+        unsafe { CStr::from_bytes_with_nul_unchecked(fmt::DEFAULT_FMT.as_bytes()).into() }
     };
 
     let mut vec: [u8; 256] = [0; 256];
@@ -338,7 +348,7 @@ where
 {
     let s = CString::new(s)?;
     let mut new_tm: libc::tm = unsafe { std::mem::zeroed() };
-    for fmt in &[RFC822_FMT_WITH_TIME, RFC822_FMT, ASCTIME_FMT] {
+    for fmt in &[fmt::RFC822_FMT_WITH_TIME, fmt::RFC822_FMT, fmt::ASCTIME_FMT] {
         let fmt = unsafe { CStr::from_bytes_with_nul_unchecked(fmt.as_bytes()) };
         let ret = {
             let _with_locale = Locale::new(
@@ -400,7 +410,7 @@ where
 {
     let s = CString::new(s)?;
     let mut new_tm: libc::tm = unsafe { std::mem::zeroed() };
-    for fmt in &[RFC3339_FMT_WITH_TIME, RFC3339_FMT] {
+    for fmt in &[fmt::RFC3339_DATETIME, fmt::RFC3339_DATE] {
         let fmt = unsafe { CStr::from_bytes_with_nul_unchecked(fmt.as_bytes()) };
         let ret = {
             let _with_locale = Locale::new(
@@ -456,8 +466,14 @@ where
     Ok(0)
 }
 
-// FIXME: Handle non-local timezone?
 pub fn timestamp_from_string<T>(s: T, fmt: &str) -> Result<Option<UnixTimestamp>>
+where
+    T: Into<Vec<u8>>,
+{
+    Ok(Some(parse_timestamp_from_string(s, fmt)?.1))
+}
+
+pub fn parse_timestamp_from_string<T>(s: T, fmt: &str) -> Result<(usize, UnixTimestamp)>
 where
     T: Into<Vec<u8>>,
 {
@@ -468,15 +484,13 @@ where
         Cow::from(CString::new(fmt.as_bytes())?)
     };
     unsafe {
-        let ret = strptime(
-            CString::new(s)?.as_ptr(),
-            fmt.as_ptr(),
-            &mut new_tm as *mut _,
-        );
+        let val = CString::new(s)?;
+        let ret = strptime(val.as_ptr(), fmt.as_ptr(), &mut new_tm as *mut _);
         if ret.is_null() {
-            return Ok(None);
+            return Err("Could not parse time with strptime.".into());
         }
-        Ok(Some(mktime(&new_tm as *const _) as u64))
+        let rest: isize = val.as_ptr().offset_from(ret);
+        Ok((rest.unsigned_abs(), mktime(&new_tm as *const _) as u64))
     }
 }
 
@@ -491,124 +505,6 @@ pub fn now() -> UnixTimestamp {
         }
         (tv.assume_init()).tv_sec as UnixTimestamp
     }
-}
-
-#[test]
-fn test_datetime_timestamp() {
-    timestamp_to_string(0, None, false);
-}
-
-#[test]
-fn test_datetime_rfcs() {
-    if unsafe { libc::setlocale(libc::LC_ALL, b"\0".as_ptr() as _) }.is_null() {
-        println!("Unable to set locale.");
-    }
-    /* Some tests were lazily stolen from https://rachelbythebay.com/w/2013/06/11/time/ */
-
-    assert_eq!(
-        rfc822_to_timestamp("Wed, 8 Jan 2020 10:44:03 -0800").unwrap(),
-        1578509043
-    );
-
-    /*
-    macro_rules! mkt {
-        ($year:literal, $month:literal, $day:literal, $hour:literal, $minute:literal, $second:literal) => {
-            libc::tm {
-                tm_sec: $second,
-                tm_min: $minute,
-                tm_hour: $hour,
-                tm_mday: $day,
-                tm_mon: $month - 1,
-                tm_year: $year - 1900,
-                tm_wday: 0,
-                tm_yday: 0,
-                tm_isdst: 0,
-                tm_gmtoff: 0,
-                tm_zone: std::ptr::null(),
-            }
-        };
-    }
-    */
-    //unsafe { __tm_to_secs(&mkt!(2009, 02, 13, 23, 31, 30) as *const _) },
-    assert_eq!(
-        rfc822_to_timestamp("Fri, 13 Feb 2009 15:31:30 -0800").unwrap(),
-        1234567890
-    );
-
-    //unsafe { __tm_to_secs(&mkt!(2931, 05, 05, 00, 33, 09) as *const _) },
-    assert_eq!(
-        rfc822_to_timestamp("Sat, 05 May 2931 00:33:09 +0000").unwrap(),
-        30336942789
-    );
-    //2214-11-06 20:05:12 = 7726651512 [OK]
-    assert_eq!(
-        rfc822_to_timestamp("Sun, 06 Nov 2214 17:05:12 -0300").unwrap(), //2214-11-06 20:05:12
-        7726651512
-    );
-    assert_eq!(
-        rfc822_to_timestamp("Sun, 06 Nov 2214 17:05:12 -0300").unwrap(), //2214-11-06 20:05:12
-        rfc822_to_timestamp("Sun, 06 Nov 2214 17:05:12 (ADT)").unwrap(), //2214-11-06 20:05:12
-    );
-    //2661-11-06 06:38:02 = 21832612682 [OK]
-    assert_eq!(
-        rfc822_to_timestamp("Wed, 06 Nov 2661 06:38:02 +0000").unwrap(), //2661-11-06 06:38:02
-        21832612682
-    );
-    //2508-12-09 04:27:08 = 17007251228 [OK]
-    assert_eq!(
-        rfc822_to_timestamp("Sun, 09 Dec 2508 04:27:08 +0000").unwrap(), //2508-12-09 04:27:08
-        17007251228
-    );
-    //2375-11-07 05:08:24 = 12807349704 [OK]
-    assert_eq!(
-        rfc822_to_timestamp("Fri, 07 Nov 2375 05:08:24 +0000").unwrap(), //2375-11-07 05:08:24
-        12807349704
-    );
-    //2832-09-03 02:46:10 = 27223353970 [OK]
-    assert_eq!(
-        rfc822_to_timestamp("Fri, 03 Sep 2832 02:46:10 +0000").unwrap(), //2832-09-03 02:46:10
-        27223353970
-    );
-    //2983-02-25 12:47:17 = 31972020437 [OK]
-    assert_eq!(
-        rfc822_to_timestamp("Tue, 25 Feb 2983 15:47:17 +0300").unwrap(), //2983-02-25 12:47:17
-        31972020437
-    );
-
-    assert_eq!(
-        rfc822_to_timestamp("Thu, 30 Mar 2017 17:32:06 +0300 (EEST)").unwrap(),
-        1490884326
-    );
-
-    assert_eq!(
-        rfc822_to_timestamp("Mon, 24 Apr 2017 17:36:34 +0530").unwrap(),
-        1493035594
-    );
-
-    assert_eq!(
-        rfc822_to_timestamp("Mon, 24 Apr 2017 17:36:34 +0530").unwrap(),
-        rfc822_to_timestamp("Mon, 24 Apr 2017 12:06:34 +0000").unwrap(),
-    );
-
-    assert_eq!(
-        rfc822_to_timestamp("Mon, 24 Apr 2017 17:36:34 +0530").unwrap(),
-        rfc822_to_timestamp("Mon, 24 Apr 2017 17:36:34 (SLST)").unwrap(),
-    );
-
-    assert_eq!(
-        rfc822_to_timestamp("Mon, 24 Apr 2017 17:36:34 +0530").unwrap(),
-        rfc822_to_timestamp("Mon, 24 Apr 2017 17:36:34 SLST").unwrap(),
-    );
-
-    assert_eq!(
-        rfc822_to_timestamp("27 Dec 2019 14:42:46 +0100").unwrap(),
-        1577454166
-    );
-
-    assert_eq!(
-        rfc822_to_timestamp("Mon, 16 Mar 2020 10:23:01 +0200").unwrap(),
-        1584346981
-    );
 }
 
 #[allow(clippy::zero_prefixed_literal)]
@@ -803,3 +699,126 @@ const TIMEZONE_ABBR: &[(&[u8], (i8, i8))] = &[
     (b"YAKT", (09, 0)),
     (b"YEKT", (05, 0)),
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_datetime_timestamp() {
+        timestamp_to_string(0, None, false);
+    }
+
+    #[test]
+    fn test_datetime_rfcs() {
+        if unsafe { libc::setlocale(libc::LC_ALL, b"\0".as_ptr() as _) }.is_null() {
+            println!("Unable to set locale.");
+        }
+        /* Some tests were lazily stolen from https://rachelbythebay.com/w/2013/06/11/time/ */
+
+        assert_eq!(
+            rfc822_to_timestamp("Wed, 8 Jan 2020 10:44:03 -0800").unwrap(),
+            1578509043
+        );
+
+        /*
+        macro_rules! mkt {
+        ($year:literal, $month:literal, $day:literal, $hour:literal, $minute:literal, $second:literal) => {
+        libc::tm {
+        tm_sec: $second,
+        tm_min: $minute,
+        tm_hour: $hour,
+        tm_mday: $day,
+        tm_mon: $month - 1,
+        tm_year: $year - 1900,
+        tm_wday: 0,
+        tm_yday: 0,
+        tm_isdst: 0,
+        tm_gmtoff: 0,
+        tm_zone: std::ptr::null(),
+        }
+        };
+        }
+        */
+        //unsafe { __tm_to_secs(&mkt!(2009, 02, 13, 23, 31, 30) as *const _) },
+        assert_eq!(
+            rfc822_to_timestamp("Fri, 13 Feb 2009 15:31:30 -0800").unwrap(),
+            1234567890
+        );
+
+        //unsafe { __tm_to_secs(&mkt!(2931, 05, 05, 00, 33, 09) as *const _) },
+        assert_eq!(
+            rfc822_to_timestamp("Sat, 05 May 2931 00:33:09 +0000").unwrap(),
+            30336942789
+        );
+        //2214-11-06 20:05:12 = 7726651512 [OK]
+        assert_eq!(
+            rfc822_to_timestamp("Sun, 06 Nov 2214 17:05:12 -0300").unwrap(), //2214-11-06 20:05:12
+            7726651512
+        );
+        assert_eq!(
+            rfc822_to_timestamp("Sun, 06 Nov 2214 17:05:12 -0300").unwrap(), //2214-11-06 20:05:12
+            rfc822_to_timestamp("Sun, 06 Nov 2214 17:05:12 (ADT)").unwrap(), //2214-11-06 20:05:12
+        );
+        //2661-11-06 06:38:02 = 21832612682 [OK]
+        assert_eq!(
+            rfc822_to_timestamp("Wed, 06 Nov 2661 06:38:02 +0000").unwrap(), //2661-11-06 06:38:02
+            21832612682
+        );
+        //2508-12-09 04:27:08 = 17007251228 [OK]
+        assert_eq!(
+            rfc822_to_timestamp("Sun, 09 Dec 2508 04:27:08 +0000").unwrap(), //2508-12-09 04:27:08
+            17007251228
+        );
+        //2375-11-07 05:08:24 = 12807349704 [OK]
+        assert_eq!(
+            rfc822_to_timestamp("Fri, 07 Nov 2375 05:08:24 +0000").unwrap(), //2375-11-07 05:08:24
+            12807349704
+        );
+        //2832-09-03 02:46:10 = 27223353970 [OK]
+        assert_eq!(
+            rfc822_to_timestamp("Fri, 03 Sep 2832 02:46:10 +0000").unwrap(), //2832-09-03 02:46:10
+            27223353970
+        );
+        //2983-02-25 12:47:17 = 31972020437 [OK]
+        assert_eq!(
+            rfc822_to_timestamp("Tue, 25 Feb 2983 15:47:17 +0300").unwrap(), //2983-02-25 12:47:17
+            31972020437
+        );
+
+        assert_eq!(
+            rfc822_to_timestamp("Thu, 30 Mar 2017 17:32:06 +0300 (EEST)").unwrap(),
+            1490884326
+        );
+
+        assert_eq!(
+            rfc822_to_timestamp("Mon, 24 Apr 2017 17:36:34 +0530").unwrap(),
+            1493035594
+        );
+
+        assert_eq!(
+            rfc822_to_timestamp("Mon, 24 Apr 2017 17:36:34 +0530").unwrap(),
+            rfc822_to_timestamp("Mon, 24 Apr 2017 12:06:34 +0000").unwrap(),
+        );
+
+        assert_eq!(
+            rfc822_to_timestamp("Mon, 24 Apr 2017 17:36:34 +0530").unwrap(),
+            rfc822_to_timestamp("Mon, 24 Apr 2017 17:36:34 (SLST)").unwrap(),
+        );
+
+        assert_eq!(
+            rfc822_to_timestamp("Mon, 24 Apr 2017 17:36:34 +0530").unwrap(),
+            rfc822_to_timestamp("Mon, 24 Apr 2017 17:36:34 SLST").unwrap(),
+        );
+
+        assert_eq!(
+            rfc822_to_timestamp("27 Dec 2019 14:42:46 +0100").unwrap(),
+            1577454166
+        );
+
+        assert_eq!(
+            rfc822_to_timestamp("Mon, 16 Mar 2020 10:23:01 +0200").unwrap(),
+            1584346981
+        );
+    }
+}

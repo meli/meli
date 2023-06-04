@@ -24,7 +24,7 @@
 use std::collections::VecDeque;
 
 use crate::{
-    datetime::{timestamp_to_string, IMAP_DATE},
+    datetime::{formats::IMAP_DATE, timestamp_to_string},
     search::*,
 };
 
@@ -41,8 +41,11 @@ impl private::Sealed for Query {}
 
 macro_rules! space_pad {
     ($s:ident) => {{
-        if !$s.is_empty() {
+        if !$s.is_empty() && !$s.ends_with('(') && !$s.ends_with(' ') {
             $s.push(' ');
+            false
+        } else {
+            true
         }
     }};
 }
@@ -65,36 +68,43 @@ impl ToImapSearch for Query {
                     s.push(lit);
                 }
                 Q(Subject(t)) => {
+                    space_pad!(s);
                     s.push_str("SUBJECT \"");
                     s.extend(escape_double_quote(t).chars());
                     s.push('"');
                 }
                 Q(From(t)) => {
+                    space_pad!(s);
                     s.push_str("FROM \"");
                     s.extend(escape_double_quote(t).chars());
                     s.push('"');
                 }
                 Q(To(t)) => {
+                    space_pad!(s);
                     s.push_str("TO \"");
                     s.extend(escape_double_quote(t).chars());
                     s.push('"');
                 }
                 Q(Cc(t)) => {
+                    space_pad!(s);
                     s.push_str("CC \"");
                     s.extend(escape_double_quote(t).chars());
                     s.push('"');
                 }
                 Q(Bcc(t)) => {
+                    space_pad!(s);
                     s.push_str("BCC \"");
                     s.extend(escape_double_quote(t).chars());
                     s.push('"');
                 }
                 Q(AllText(t)) => {
+                    space_pad!(s);
                     s.push_str("TEXT \"");
                     s.extend(escape_double_quote(t).chars());
                     s.push('"');
                 }
                 Q(Flags(v)) => {
+                    space_pad!(s);
                     for f in v {
                         match f.as_str() {
                             "draft" => {
@@ -130,21 +140,26 @@ impl ToImapSearch for Query {
                     }
                 }
                 Q(And(q1, q2)) => {
-                    space_pad!(s);
+                    let is_empty = space_pad!(s);
+                    if !is_empty {
+                        stack.push_front(Lit(')'));
+                    }
                     stack.push_front(Q(q2));
-                    stack.push_front(Lit(' '));
                     stack.push_front(Q(q1));
+                    if !is_empty {
+                        stack.push_front(Lit('('));
+                    }
                 }
                 Q(Or(q1, q2)) => {
                     space_pad!(s);
-                    s.push_str("OR ");
+                    s.push_str("OR");
                     stack.push_front(Q(q2));
-                    stack.push_front(Lit(' '));
                     stack.push_front(Q(q1));
                 }
                 Q(Not(q)) => {
                     space_pad!(s);
-                    s.push_str("NOT ");
+                    s.push_str("NOT (");
+                    stack.push_front(Lit(')'));
                     stack.push_front(Q(q));
                 }
                 Q(Before(t)) => {
@@ -182,8 +197,23 @@ impl ToImapSearch for Query {
                     s.extend(escape_double_quote(t).chars());
                     s.push('"');
                 }
-                Q(AllAddresses(_)) => {
-                    // From OR To OR Cc OR Bcc
+                Q(AllAddresses(t)) => {
+                    let is_empty = space_pad!(s);
+                    if !is_empty {
+                        s.push('(');
+                    }
+                    s.push_str("OR FROM \"");
+                    s.extend(escape_double_quote(t).chars());
+                    s.push_str("\" (OR TO \"");
+                    s.extend(escape_double_quote(t).chars());
+                    s.push_str("\" (OR CC \"");
+                    s.extend(escape_double_quote(t).chars());
+                    s.push_str("\" BCC \"");
+                    s.extend(escape_double_quote(t).chars());
+                    s.push_str(r#""))"#);
+                    if !is_empty {
+                        s.push(')');
+                    }
                 }
                 Q(Body(t)) => {
                     space_pad!(s);
@@ -192,9 +222,32 @@ impl ToImapSearch for Query {
                     s.push('"');
                 }
                 Q(HasAttachment) => {
-                    // ???
+                    log::warn!("HasAttachment in IMAP is unimplemented.");
+                }
+                Q(Answered) => {
+                    space_pad!(s);
+                    s.push_str(r#"ANSWERED ""#);
+                }
+                Q(AnsweredBy { by }) => {
+                    space_pad!(s);
+                    s.push_str(r#"HEADER "From" ""#);
+                    s.extend(escape_double_quote(by).chars());
+                    s.push('"');
+                }
+                Q(Larger { than }) => {
+                    space_pad!(s);
+                    s.push_str("LARGER ");
+                    s.push_str(&than.to_string());
+                }
+                Q(Smaller { than }) => {
+                    space_pad!(s);
+                    s.push_str("SMALLER ");
+                    s.push_str(&than.to_string());
                 }
             }
+        }
+        while s.ends_with(' ') {
+            s.pop();
         }
         s
     }
@@ -230,6 +283,29 @@ mod tests {
         assert_eq!(
             &timestamp_to_string(1685739600, Some(IMAP_DATE), true),
             "03-Jun-2023"
+        );
+
+        let (_, q) = query()
+            .parse_complete("before:2023-06-04 from:user@example.org")
+            .unwrap();
+        assert_eq!(
+            &q.to_imap_search(),
+            r#"BEFORE 04-Jun-2023 FROM "user@example.org""#
+        );
+        let (_, q) = query()
+            .parse_complete(r#"subject:"wah ah ah" or (from:Manos and from:Sia)"#)
+            .unwrap();
+        assert_eq!(
+            &q.to_imap_search(),
+            r#"OR SUBJECT "wah ah ah" (FROM "Manos" FROM "Sia")"#
+        );
+
+        let (_, q) = query()
+            .parse_complete(r#"subject:wo or (all-addresses:Manos)"#)
+            .unwrap();
+        assert_eq!(
+            &q.to_imap_search(),
+            r#"OR SUBJECT "wo" (OR FROM "Manos" (OR TO "Manos" (OR CC "Manos" BCC "Manos")))"#
         );
     }
 }
