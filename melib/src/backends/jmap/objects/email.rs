@@ -589,7 +589,7 @@ impl From<crate::search::Query> for Filter<EmailFilterCondition, EmailObject> {
         let mut ret = Filter::Condition(EmailFilterCondition::new().into());
         fn rec(q: &crate::search::Query, f: &mut Filter<EmailFilterCondition, EmailObject>) {
             use crate::{
-                datetime::{timestamp_to_string, RFC3339_FMT},
+                datetime::{formats::RFC3339_DATE, timestamp_to_string},
                 search::Query::*,
             };
             match q {
@@ -617,26 +617,26 @@ impl From<crate::search::Query> for Filter<EmailFilterCondition, EmailObject> {
                 Before(t) => {
                     *f = Filter::Condition(
                         EmailFilterCondition::new()
-                            .before(timestamp_to_string(*t, Some(RFC3339_FMT), true))
+                            .before(timestamp_to_string(*t, Some(RFC3339_DATE), true))
                             .into(),
                     );
                 }
                 After(t) => {
                     *f = Filter::Condition(
                         EmailFilterCondition::new()
-                            .after(timestamp_to_string(*t, Some(RFC3339_FMT), true))
+                            .after(timestamp_to_string(*t, Some(RFC3339_DATE), true))
                             .into(),
                     );
                 }
                 Between(a, b) => {
                     *f = Filter::Condition(
                         EmailFilterCondition::new()
-                            .after(timestamp_to_string(*a, Some(RFC3339_FMT), true))
+                            .after(timestamp_to_string(*a, Some(RFC3339_DATE), true))
                             .into(),
                     );
                     *f &= Filter::Condition(
                         EmailFilterCondition::new()
-                            .before(timestamp_to_string(*b, Some(RFC3339_FMT), true))
+                            .before(timestamp_to_string(*b, Some(RFC3339_DATE), true))
                             .into(),
                     );
                 }
@@ -737,6 +737,18 @@ impl From<crate::search::Query> for Filter<EmailFilterCondition, EmailObject> {
                     let mut qhs = Filter::Condition(EmailFilterCondition::new().into());
                     rec(q, &mut qhs);
                     *f = !qhs;
+                }
+                Answered => {
+                    // TODO
+                }
+                AnsweredBy { .. } => {
+                    // TODO
+                }
+                Larger { .. } => {
+                    // TODO
+                }
+                Smaller { .. } => {
+                    // TODO
                 }
             }
         }
