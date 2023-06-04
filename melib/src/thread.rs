@@ -950,11 +950,12 @@ impl Threads {
             }
         }
         let envelopes_lck = envelopes.read().unwrap();
+        let message_id = envelopes_lck[&env_hash].message_id().raw();
         let reply_to_id: Option<ThreadNodeHash> = envelopes_lck[&env_hash]
             .in_reply_to()
             .map(StrBuild::raw)
+            .filter(|irt| irt != &message_id)
             .and_then(|r| self.message_ids.get(r).cloned());
-        let message_id = envelopes_lck[&env_hash].message_id().raw();
 
         if other_mailbox
             && reply_to_id.is_none()
@@ -1038,7 +1039,11 @@ impl Threads {
         *self.envelope_to_thread.entry(env_hash).or_default() = thread_hash;
         if let Some(reply_to_id) = reply_to_id {
             make!((reply_to_id) parent of (new_id), self);
-        } else if let Some(r) = envelopes_lck[&env_hash].in_reply_to().map(StrBuild::raw) {
+        } else if let Some(r) = envelopes_lck[&env_hash]
+            .in_reply_to()
+            .map(StrBuild::raw)
+            .filter(|irt| irt != &message_id)
+        {
             let reply_to_id = ThreadNodeHash::from(r);
             self.thread_nodes.insert(
                 reply_to_id,
@@ -1068,11 +1073,16 @@ impl Threads {
         if envelopes_lck[&env_hash].references.is_some() {
             let mut current_descendant_id = new_id;
             let mut references = envelopes_lck[&env_hash].references();
-            if references.first() == envelopes_lck[&env_hash].in_reply_to().as_ref() {
+            if references.first().filter(|irt| irt.raw() != message_id)
+                == envelopes_lck[&env_hash].in_reply_to().as_ref()
+            {
                 references.reverse();
             }
 
             for reference in references.into_iter().rev() {
+                if reference.raw() == message_id {
+                    continue;
+                }
                 if let Some(&id) = self.message_ids.get(reference.raw()) {
                     if self.thread_nodes[&id].date > self.thread_nodes[&current_descendant_id].date
                         || self.thread_nodes[&current_descendant_id].parent.is_some()
