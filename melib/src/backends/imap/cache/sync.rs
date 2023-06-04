@@ -101,12 +101,12 @@ impl ImapConnection {
             .get(&mailbox_hash)
             .cloned();
         // 3.  tag2 UID FETCH 1:<lastseenuid> FLAGS
-        if cached_uidvalidity.is_none() || cached_max_uid.is_none() {
-            return Ok(None);
-        }
+        //if cached_uidvalidity.is_none() || cached_max_uid.is_none() {
+        //    return Ok(None);
+        //}
 
-        let current_uidvalidity: UID = cached_uidvalidity.unwrap();
-        let max_uid: UID = cached_max_uid.unwrap();
+        let current_uidvalidity: UID = cached_uidvalidity.unwrap_or(1);
+        let max_uid: UID = cached_max_uid.unwrap_or(1);
         let (mailbox_path, mailbox_exists, unseen) = {
             let f = &self.uid_store.mailboxes.lock().await[&mailbox_hash];
             (
