@@ -25,14 +25,13 @@ path = "src/smtp_conn.rs"
 name = "embed"
 path = "src/embed.rs"
 
-
 [dependencies]
-melib = { path = "../melib", version = "*", features = ["debug-tracing", "unicode_algorithms"] }
-meli = { path = "..", version = "*" }
 crossbeam = { version = "^0.8" }
+meli = { path = "..", version = "*" }
+melib = { path = "../melib", version = "*", features = ["debug-tracing", "unicode_algorithms"] }
+nix = { version = "^0.24", default-features = false }
 signal-hook = { version = "^0.3", default-features = false }
 signal-hook-registry = { version = "1.2.0", default-features = false }
-nix = { version = "^0.24", default-features = false }
 
 [features]
 default = ["debug-tracing"]
