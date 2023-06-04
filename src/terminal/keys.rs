@@ -167,8 +167,8 @@ use termion::input::TermReadEventsAndRaw;
 /// fork, and then the thread kills itself. The parent process spawns a new
 /// input-thread when the child returns.
 ///
-/// The main loop uses [`State::try_wait_on_child`] to check if child has
-/// exited.
+/// The main loop uses [`crate::state::State::try_wait_on_child`] to check if
+/// child has exited.
 pub fn get_events(
     mut closure: impl FnMut((Key, Vec<u8>)),
     rx: &Receiver<InputCommand>,

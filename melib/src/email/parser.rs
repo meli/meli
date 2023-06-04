@@ -344,15 +344,15 @@ pub mod dates {
         }
     }
 
-    ///In the obsolete time zone, "UT" and "GMT" are indications of
-    ///"Universal Time" and "Greenwich Mean Time", respectively, and are
-    ///both semantically identical to "+0000".
+    /// In the obsolete time zone, "UT" and "GMT" are indications of
+    /// "Universal Time" and "Greenwich Mean Time", respectively, and are
+    /// both semantically identical to "+0000".
 
-    ///The remaining three character zones are the US time zones.  The first
-    ///letter, "E", "C", "M", or "P" stands for "Eastern", "Central",
-    ///"Mountain", and "Pacific".  The second letter is either "S" for
-    ///"Standard" time, or "D" for "Daylight Savings" (or summer) time.
-    ///Their interpretations are as follows:
+    /// The remaining three character zones are the US time zones.  The first
+    /// letter, "E", "C", "M", or "P" stands for "Eastern", "Central",
+    /// "Mountain", and "Pacific".  The second letter is either "S" for
+    /// "Standard" time, or "D" for "Daylight Savings" (or summer) time.
+    /// Their interpretations are as follows:
 
     ///   EDT is semantically equivalent to -0400
     ///   EST is semantically equivalent to -0500
@@ -363,21 +363,21 @@ pub mod dates {
     ///   PDT is semantically equivalent to -0700
     ///   PST is semantically equivalent to -0800
 
-    ///The 1 character military time zones were defined in a non-standard
-    ///way in [RFC0822] and are therefore unpredictable in their meaning.
-    ///The original definitions of the military zones "A" through "I" are
-    ///equivalent to "+0100" through "+0900", respectively; "K", "L", and
-    ///"M" are equivalent to "+1000", "+1100", and "+1200", respectively;
-    ///"N" through "Y" are equivalent to "-0100" through "-1200".
-    ///respectively; and "Z" is equivalent to "+0000".  However, because of
-    ///the error in [RFC0822], they SHOULD all be considered equivalent to
-    ///"-0000" unless there is out-of-band information confirming their
-    ///meaning.
+    /// The 1 character military time zones were defined in a non-standard
+    /// way in RFC0822 and are therefore unpredictable in their meaning.
+    /// The original definitions of the military zones "A" through "I" are
+    /// equivalent to "+0100" through "+0900", respectively; "K", "L", and
+    /// "M" are equivalent to "+1000", "+1100", and "+1200", respectively;
+    /// "N" through "Y" are equivalent to "-0100" through "-1200".
+    /// respectively; and "Z" is equivalent to "+0000".  However, because of
+    /// the error in RFC0822, they SHOULD all be considered equivalent to
+    /// "-0000" unless there is out-of-band information confirming their
+    /// meaning.
 
-    ///Other multi-character (usually between 3 and 5) alphabetic time zones
-    ///have been used in Internet messages.  Any such time zone whose
-    ///meaning is not known SHOULD be considered equivalent to "-0000"
-    ///unless there is out-of-band information confirming their meaning.
+    /// Other multi-character (usually between 3 and 5) alphabetic time zones
+    /// have been used in Internet messages.  Any such time zone whose
+    /// meaning is not known SHOULD be considered equivalent to "-0000"
+    /// unless there is out-of-band information confirming their meaning.
     fn obs_zone(input: &[u8]) -> IResult<&[u8], (&[u8], &[u8])> {
         alt((
             map(tag("UT"), |_| (&b"+"[..], &b"0000"[..])),
@@ -394,7 +394,9 @@ pub mod dates {
         ))(input)
     }
 
-    ///zone            =   (FWS ( "+" / "-" ) 4DIGIT) / obs-zone
+    /// ```text
+    /// zone            =   (FWS ( "+" / "-" ) 4DIGIT) / obs-zone
+    /// ```
     fn zone(input: &[u8]) -> IResult<&[u8], (&[u8], &[u8])> {
         alt((
             |input| {
@@ -406,13 +408,15 @@ pub mod dates {
         ))(input)
     }
 
-    ///date-time       =   [ day-of-week "," ] date time [CFWS]
-    ///date            =   day month year
-    ///time            =   time-of-day zone
-    ///time-of-day     =   hour ":" minute [ ":" second ]
-    ///hour            =   2DIGIT / obs-hour
-    ///minute          =   2DIGIT / obs-minute
-    ///second          =   2DIGIT / obs-second
+    /// ```text
+    /// date-time       =   [ day-of-week "," ] date time [CFWS]
+    /// date            =   day month year
+    /// time            =   time-of-day zone
+    /// time-of-day     =   hour ":" minute [ ":" second ]
+    /// hour            =   2DIGIT / obs-hour
+    /// minute          =   2DIGIT / obs-minute
+    /// second          =   2DIGIT / obs-second
+    /// ```
     fn date_time(input: &[u8]) -> IResult<&[u8], UnixTimestamp> {
         let orig_input = input;
         let mut accum: SmallVec<[u8; 32]> = SmallVec::new();
@@ -459,8 +463,9 @@ pub mod dates {
         }
     }
 
-    ///e.g Wed Sep  9 00:27:54 2020
-    ///```text
+    /// e.g Wed Sep  9 00:27:54 2020
+    ///
+    /// ```text
     /// day-of-week month day time year
     /// date-time       =   [ day-of-week "," ] date time [CFWS]
     /// date            =   day month year
@@ -520,9 +525,11 @@ pub mod dates {
         }
     }
 
-    ///`day-of-week     =   ([FWS] day-name) / obs-day-of-week`
-    ///day-name        =   "Mon" / "Tue" / "Wed" / "Thu" /
+    /// ```text
+    /// day-of-week     =   ([FWS] day-name) / obs-day-of-week
+    /// day-name        =   "Mon" / "Tue" / "Wed" / "Thu" /
     ///                    "Fri" / "Sat" / "Sun"
+    /// ```
     fn day_of_week(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
         let (input, day_name) = alt((
             tag("Mon"),
@@ -536,7 +543,7 @@ pub mod dates {
         Ok((input, day_name.into()))
     }
 
-    ///day             =   ([FWS] 1*2DIGIT FWS) / obs-day
+    /// `day             =   ([FWS] 1*2DIGIT FWS) / obs-day`
     fn day(input: &[u8]) -> IResult<&[u8], &[u8]> {
         let (input, _) = opt(fws)(input)?;
         let (input, ret) = alt((take_n_digits(2), take_n_digits(1)))(input)?;
@@ -545,9 +552,11 @@ pub mod dates {
         Ok((input, ret))
     }
 
-    ///month           =   "Jan" / "Feb" / "Mar" / "Apr" /
+    /// ```text
+    /// month           =   "Jan" / "Feb" / "Mar" / "Apr" /
     ///                    "May" / "Jun" / "Jul" / "Aug" /
     ///                    "Sep" / "Oct" / "Nov" / "Dec"
+    /// ```
     fn month(input: &[u8]) -> IResult<&[u8], &[u8]> {
         alt((
             tag("Jan"),

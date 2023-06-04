@@ -71,7 +71,7 @@ impl std::ops::DerefMut for HookFn {
 pub struct Hook {
     /// Hook name for enabling/disabling it from configuration.
     ///
-    /// See [`ComposingSettings::disabled_compose_hooks`].
+    /// See [`crate::conf::ComposingSettings::disabled_compose_hooks`].
     name: Cow<'static, str>,
     hook_fn: HookFn,
 }
@@ -79,7 +79,7 @@ pub struct Hook {
 impl Hook {
     /// Hook name for enabling/disabling it from configuration.
     ///
-    /// See [`ComposingSettings::disabled_compose_hooks`].
+    /// See [`crate::conf::ComposingSettings::disabled_compose_hooks`].
     pub fn name(&self) -> &str {
         self.name.as_ref()
     }

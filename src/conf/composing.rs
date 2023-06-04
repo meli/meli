@@ -185,7 +185,8 @@ pub enum SendMail {
     ShellCommand(String),
 }
 
-/// Shell command compose hooks (See [`Hook`])
+/// Shell command compose hooks (See
+/// [`crate::components::mail::compose::hooks::Hook`])
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct ComposeHook {

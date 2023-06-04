@@ -19,20 +19,24 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*! The application's state.
-
-The UI crate has an Box<dyn Component>-Component-System design. The System part, is also the application's state, so they're both merged in the `State` struct.
-
-`State` owns all the Components of the UI. In the application's main event loop, input is handed to the state in the form of `UIEvent` objects which traverse the component graph. Components decide to handle each input or not.
-
-Input is received in the main loop from threads which listen on the stdin for user input, observe folders for file changes etc. The relevant struct is `ThreadEvent`.
-*/
+//! The application's state.
+//!
+//! The UI crate has an `Box<dyn Component>`-Component-System design. The system
+//! part, is also the application's state, so they're both merged in the
+//! [`State`] struct.
+//!
+//! [`State`] owns all the Components of the UI. In the application's main event
+//! loop, input is handed to the state in the form of [`UIEvent`] objects which
+//! traverse the component graph. Components decide to handle each input or not.
+//!
+//! Input is received in the main loop from threads which listen on the stdin
+//! for user input, observe folders for file changes etc. The relevant struct is
+//! [`ThreadEvent`].
 
 use std::{env, os::unix::io::RawFd, sync::Arc, thread};
 
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use indexmap::IndexMap;
-//use crate::plugins::PluginManager;
 use melib::{
     backends::{AccountHash, BackendEvent, BackendEventConsumer, Backends, RefreshEvent},
     UnixTimestamp,

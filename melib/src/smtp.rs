@@ -202,7 +202,7 @@ pub struct SmtpExtensionSupport {
     #[serde(default = "crate::conf::true_val")]
     binarymime: bool,
     /// Resources:
-    /// - http://www.postfix.org/SMTPUTF8_README.html
+    /// - <http://www.postfix.org/SMTPUTF8_README.html>
     #[serde(default = "crate::conf::true_val")]
     smtputf8: bool,
     #[serde(default = "crate::conf::true_val")]
@@ -608,7 +608,7 @@ impl SmtpConnection {
         }
         let mut current_command: SmallVec<[&[u8]; 16]> = SmallVec::new();
         //first step in the procedure is the MAIL command.
-        // MAIL FROM:<reverse-path> [SP <mail-parameters> ] <CRLF>
+        // `MAIL FROM:<reverse-path> [SP <mail-parameters> ] <CRLF>`
         current_command.push(b"MAIL FROM:<");
         if !envelope_from.is_empty() {
             current_command.push(envelope_from.trim().as_bytes());
@@ -668,8 +668,8 @@ impl SmtpConnection {
             }
             self.send_command(&current_command).await?;
 
-            //RCPT TO:<forward-path> [ SP <rcpt-parameters> ] <CRLF>
-            //If accepted, the SMTP server returns a "250 OK" reply and stores the
+            //`RCPT TO:<forward-path> [ SP <rcpt-parameters> ] <CRLF>`
+            // If accepted, the SMTP server returns a "250 OK" reply and stores the
             // forward-path.
             if !self.server_conf.extensions.pipelining {
                 self.read_lines(&mut res, Some((ReplyCode::_250, &[])))
@@ -679,7 +679,7 @@ impl SmtpConnection {
             }
         }
 
-        //Since it has been a common source of errors, it is worth noting that spaces
+        // Since it has been a common source of errors, it is worth noting that spaces
         // are not permitted on either side of the colon following FROM in the
         // MAIL command or TO in the RCPT command. The syntax is exactly as
         // given above.
@@ -692,7 +692,7 @@ impl SmtpConnection {
         } else {
             //The third step in the procedure is the DATA command
             //(or some alternative specified in a service extension).
-            //DATA <CRLF>
+            //DATA `<CRLF>`
             self.send_command(&[b"DATA"]).await?;
             //Client SMTP implementations that employ pipelining MUST check ALL statuses
             // associated with each command in a group. For example, if none of
@@ -739,7 +739,7 @@ impl SmtpConnection {
             }
 
             //The mail data are terminated by a line containing only a period, that is, the
-            // character sequence "<CRLF>.<CRLF>", where the first <CRLF> is
+            // character sequence "`<CRLF>`.`<CRLF>`", where the first `<CRLF>` is
             // actually the terminator of the previous line (see Section 4.5.2).
             // This is the end of mail data indication.
             self.stream.write_all(b".\r\n").await?;
@@ -788,15 +788,15 @@ pub enum ReplyCode {
     /// particular non-standard command; this reply is useful only to the human
     /// user)
     _214,
-    /// <domain> Service ready
+    /// `<domain>` Service ready
     _220,
-    /// <domain> Service closing transmission channel
+    /// `<domain>` Service closing transmission channel
     _221,
     /// Authentication successful,
     _235,
     /// Requested mail action okay, completed
     _250,
-    /// User not local; will forward to <forward-path> (See Section 3.4)
+    /// User not local; will forward to `<forward-path>` (See Section 3.4)
     _251,
     /// Cannot VRFY user, but will accept message and attempt delivery (See
     /// Section 3.5.3)
@@ -805,9 +805,9 @@ pub enum ReplyCode {
     _334,
     /// PRDR specific, eg "content analysis has started|
     _353,
-    /// Start mail input; end with <CRLF>.<CRLF>
+    /// Start mail input; end with `<CRLF>`.`<CRLF>`
     _354,
-    /// <domain> Service not available, closing transmission channel (This may
+    /// `<domain>` Service not available, closing transmission channel (This may
     /// be a reply to any command if the service knows it must shut down)
     _421,
     /// Requested mail action not taken: mailbox unavailable (e.g., mailbox busy
@@ -835,7 +835,7 @@ pub enum ReplyCode {
     /// Requested action not taken: mailbox unavailable (e.g., mailbox not
     /// found, no access, or command rejected for policy reasons)
     _550,
-    /// User not local; please try <forward-path> (See Section 3.4)
+    /// User not local; please try `<forward-path>` (See Section 3.4)
     _551,
     /// Requested mail action aborted: exceeded storage allocation
     _552,
@@ -998,8 +998,8 @@ async fn read_lines<'r>(
     let mut returned_code: Option<ReplyCode> = None;
     'read_loop: loop {
         while let Some(pos) = ret[last_line_idx..].find("\r\n") {
-            // "Formally, a reply is defined to be the sequence: a three-digit code, <SP>,
-            // one line of text, and <CRLF>, or a multiline reply (as defined in the same
+            // "Formally, a reply is defined to be the sequence: a three-digit code, `<SP>`,
+            // one line of text, and `<CRLF>`, or a multiline reply (as defined in the same
             // section)."
             if ret[last_line_idx..].len() < 4
                 || !ret[last_line_idx..]
