@@ -369,7 +369,7 @@ impl ManageSieveConnection {
 
     pub async fn listscripts(&mut self) -> Result<Vec<(Vec<u8>, bool)>> {
         let mut ret = Vec::new();
-        self.inner.send_command(b"Listscripts").await?;
+        self.inner.send_command_raw(b"Listscripts").await?;
         self.inner
             .read_response(&mut ret, RequiredResponses::empty())
             .await?;

@@ -19,7 +19,9 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::convert::TryInto;
+use std::convert::{TryFrom, TryInto};
+
+use imap_codec::{command::CommandBody, search::SearchKey, sequence::SequenceSet};
 
 use super::{ImapConnection, MailboxSelection, UID};
 use crate::{
@@ -32,6 +34,7 @@ use crate::{
         RefreshEventKind::{self, *},
         TagHash,
     },
+    email::common_attributes,
     error::*,
 };
 
@@ -89,7 +92,12 @@ impl ImapConnection {
                         n,
                         self.uid_store.msn_index.lock().unwrap().get(&mailbox_hash)
                     );
-                    self.send_command("UID SEARCH 1:*".as_bytes()).await?;
+                    self.send_command(CommandBody::search(
+                        None,
+                        SearchKey::SequenceSet(SequenceSet::from(..)),
+                        true,
+                    ))
+                    .await?;
                     self.read_response(&mut response, RequiredResponses::SEARCH)
                         .await?;
                     let results = super::protocol_parser::search_results(&response)?
@@ -199,7 +207,7 @@ impl ImapConnection {
                 debug!("exists {}", n);
                 try_fail!(
                     mailbox_hash,
-                    self.send_command(format!("FETCH {} (UID FLAGS ENVELOPE BODY.PEEK[HEADER.FIELDS (REFERENCES)] BODYSTRUCTURE)", n).as_bytes()).await
+                    self.send_command(CommandBody::fetch(n, common_attributes(), false)?).await
                     self.read_response(&mut response, RequiredResponses::FETCH_REQUIRED).await
                 );
                 let mut v = match super::protocol_parser::fetch_responses(&response) {
@@ -307,7 +315,7 @@ impl ImapConnection {
             UntaggedResponse::Recent(_) => {
                 try_fail!(
                     mailbox_hash,
-                    self.send_command(b"UID SEARCH RECENT").await
+                    self.send_command(CommandBody::search(None, SearchKey::Recent, true)).await
                     self.read_response(&mut response, RequiredResponses::SEARCH).await
                 );
                 match super::protocol_parser::search_results_raw(&response)
@@ -334,7 +342,7 @@ impl ImapConnection {
                         };
                         try_fail!(
                             mailbox_hash,
-                            self.send_command(command.as_bytes()).await
+                            self.send_command_raw(command.as_bytes()).await
                             self.read_response(&mut response, RequiredResponses::FETCH_REQUIRED).await
                         );
                         let mut v = match super::protocol_parser::fetch_responses(&response) {
@@ -465,8 +473,12 @@ impl ImapConnection {
                     } else {
                         try_fail!(
                             mailbox_hash,
-                            self.send_command(format!("UID SEARCH {}", msg_seq).as_bytes())
-                                .await,
+                            self.send_command(CommandBody::search(
+                                None,
+                                SearchKey::SequenceSet(SequenceSet::try_from(msg_seq)?),
+                                true
+                            ))
+                            .await,
                             self.read_response(&mut response, RequiredResponses::SEARCH)
                                 .await,
                         );

@@ -49,6 +49,12 @@ use std::{
 };
 
 use futures::{lock::Mutex as FutureMutex, stream::Stream};
+use imap_codec::{
+    command::CommandBody,
+    core::Literal,
+    flag::{Flag as ImapCodecFlag, StoreResponse, StoreType},
+    sequence::{SequenceSet, ONE},
+};
 
 use crate::{
     backends::{
@@ -584,32 +590,18 @@ impl MailBackend for ImapType {
                 .unwrap()
                 .iter()
                 .any(|cap| cap.eq_ignore_ascii_case(b"LITERAL+"));
-            if has_literal_plus {
-                conn.send_command(
-                    format!(
-                        "APPEND \"{}\" ({}) {{{}+}}",
-                        &path,
-                        flags_to_imap_list!(flags),
-                        bytes.len()
-                    )
-                    .as_bytes(),
-                )
-                .await?;
+            let data = if has_literal_plus {
+                Literal::try_from(bytes)?.into_non_sync()
             } else {
-                conn.send_command(
-                    format!(
-                        "APPEND \"{}\" ({}) {{{}}}",
-                        &path,
-                        flags_to_imap_list!(flags),
-                        bytes.len()
-                    )
-                    .as_bytes(),
-                )
-                .await?;
-                // wait for "+ Ready for literal data" reply
-                conn.wait_for_continuation_request().await?;
-            }
-            conn.send_literal(&bytes).await?;
+                Literal::try_from(bytes)?
+            };
+            conn.send_command(CommandBody::append(
+                path,
+                flags.derive_imap_codec_flags(),
+                None,
+                data,
+            )?)
+            .await?;
             conn.read_response(&mut response, RequiredResponses::empty())
                 .await?;
             Ok(())
@@ -658,36 +650,24 @@ impl MailBackend for ImapType {
             conn.select_mailbox(source_mailbox_hash, &mut response, false)
                 .await?;
             if has_move {
-                let command = {
-                    let mut cmd = format!("UID MOVE {}", uids[0]);
-                    for uid in uids.iter().skip(1) {
-                        cmd = format!("{},{}", cmd, uid);
-                    }
-                    format!("{} \"{}\"", cmd, dest_path)
-                };
-                conn.send_command(command.as_bytes()).await?;
+                conn.send_command(CommandBody::r#move(uids.as_slice(), dest_path, true)?)
+                    .await?;
                 conn.read_response(&mut response, RequiredResponses::empty())
                     .await?;
             } else {
-                let command = {
-                    let mut cmd = format!("UID COPY {}", uids[0]);
-                    for uid in uids.iter().skip(1) {
-                        cmd = format!("{},{}", cmd, uid);
-                    }
-                    format!("{} \"{}\"", cmd, dest_path)
-                };
-                conn.send_command(command.as_bytes()).await?;
+                conn.send_command(CommandBody::copy(uids.as_slice(), dest_path, true)?)
+                    .await?;
                 conn.read_response(&mut response, RequiredResponses::empty())
                     .await?;
                 if move_ {
-                    let command = {
-                        let mut cmd = format!("UID STORE {}", uids[0]);
-                        for uid in uids.iter().skip(1) {
-                            cmd = format!("{},{}", cmd, uid);
-                        }
-                        format!("{} +FLAGS (\\Deleted)", cmd)
-                    };
-                    conn.send_command(command.as_bytes()).await?;
+                    conn.send_command(CommandBody::store(
+                        uids.as_slice(),
+                        StoreType::Add,
+                        StoreResponse::Answer,
+                        vec![ImapCodecFlag::Deleted],
+                        true,
+                    )?)
+                    .await?;
                     conn.read_response(&mut response, RequiredResponses::empty())
                         .await?;
                 }
@@ -782,7 +762,7 @@ impl MailBackend for ImapType {
                     cmd.push(')');
                     cmd
                 };
-                conn.send_command(command.as_bytes()).await?;
+                conn.send_command_raw(command.as_bytes()).await?;
                 conn.read_response(&mut response, RequiredResponses::empty())
                     .await?;
                 if set_seen {
@@ -847,7 +827,7 @@ impl MailBackend for ImapType {
                     cmd.push(')');
                     cmd
                 };
-                conn.send_command(command.as_bytes()).await?;
+                conn.send_command_raw(command.as_bytes()).await?;
                 conn.read_response(&mut response, RequiredResponses::empty())
                     .await?;
                 if set_unseen {
@@ -878,7 +858,7 @@ impl MailBackend for ImapType {
             flag_future.await?;
             let mut response = Vec::with_capacity(8 * 1024);
             let mut conn = connection.lock().await;
-            conn.send_command("EXPUNGE".as_bytes()).await?;
+            conn.send_command(CommandBody::Expunge).await?;
             conn.read_response(&mut response, RequiredResponses::empty())
                 .await?;
             debug!("EXPUNGE response: {}", &String::from_utf8_lossy(&response));
@@ -951,13 +931,13 @@ impl MailBackend for ImapType {
                 conn_lck.unselect().await?;
 
                 conn_lck
-                    .send_command(format!("CREATE \"{}\"", path,).as_bytes())
+                    .send_command(CommandBody::create(path.as_str())?)
                     .await?;
                 conn_lck
                     .read_response(&mut response, RequiredResponses::empty())
                     .await?;
                 conn_lck
-                    .send_command(format!("SUBSCRIBE \"{}\"", path,).as_bytes())
+                    .send_command(CommandBody::subscribe(path.as_str())?)
                     .await?;
                 conn_lck
                     .read_response(&mut response, RequiredResponses::empty())
@@ -1013,7 +993,7 @@ impl MailBackend for ImapType {
                 conn_lck.unselect().await?;
                 if is_subscribed {
                     conn_lck
-                        .send_command(format!("UNSUBSCRIBE \"{}\"", &imap_path).as_bytes())
+                        .send_command(CommandBody::unsubscribe(imap_path.as_str())?)
                         .await?;
                     conn_lck
                         .read_response(&mut response, RequiredResponses::empty())
@@ -1021,7 +1001,7 @@ impl MailBackend for ImapType {
                 }
 
                 conn_lck
-                    .send_command(debug!(format!("DELETE \"{}\"", &imap_path,)).as_bytes())
+                    .send_command(debug!(CommandBody::delete(imap_path.as_str())?))
                     .await?;
                 conn_lck
                     .read_response(&mut response, RequiredResponses::empty())
@@ -1050,23 +1030,24 @@ impl MailBackend for ImapType {
         let uid_store = self.uid_store.clone();
         let connection = self.connection.clone();
         Ok(Box::pin(async move {
-            let command: String;
-            {
+            let imap_path = {
                 let mailboxes = uid_store.mailboxes.lock().await;
                 if mailboxes[&mailbox_hash].is_subscribed() == new_val {
                     return Ok(());
                 }
-                command = format!("SUBSCRIBE \"{}\"", mailboxes[&mailbox_hash].imap_path());
-            }
+                mailboxes[&mailbox_hash].imap_path().to_string()
+            };
 
             let mut response = Vec::with_capacity(8 * 1024);
             {
                 let mut conn_lck = connection.lock().await;
                 if new_val {
-                    conn_lck.send_command(command.as_bytes()).await?;
+                    conn_lck
+                        .send_command(CommandBody::subscribe(imap_path.as_str())?)
+                        .await?;
                 } else {
                     conn_lck
-                        .send_command(format!("UN{}", command).as_bytes())
+                        .send_command(CommandBody::unsubscribe(imap_path.as_str())?)
                         .await?;
                 }
                 conn_lck
@@ -1125,7 +1106,9 @@ impl MailBackend for ImapType {
             }
             {
                 let mut conn_lck = connection.lock().await;
-                conn_lck.send_command(debug!(command).as_bytes()).await?;
+                conn_lck
+                    .send_command_raw(debug!(command).as_bytes())
+                    .await?;
                 conn_lck
                     .read_response(&mut response, RequiredResponses::empty())
                     .await?;
@@ -1191,8 +1174,10 @@ impl MailBackend for ImapType {
             let mut conn = connection.lock().await;
             conn.examine_mailbox(mailbox_hash, &mut response, false)
                 .await?;
-            conn.send_command(format!("UID SEARCH CHARSET UTF-8 {}", query_str.trim()).as_bytes())
-                .await?;
+            conn.send_command_raw(
+                format!("UID SEARCH CHARSET UTF-8 {}", query_str.trim()).as_bytes(),
+            )
+            .await?;
             conn.read_response(&mut response, RequiredResponses::SEARCH)
                 .await?;
             debug!(
@@ -1310,7 +1295,7 @@ impl ImapType {
         let mut res = Vec::with_capacity(8 * 1024);
         futures::executor::block_on(timeout(
             self.server_conf.timeout,
-            conn.send_command(b"NOOP"),
+            conn.send_command(CommandBody::Noop),
         ))
         .unwrap()
         .unwrap();
@@ -1330,7 +1315,7 @@ impl ImapType {
                 Ok(_) => {
                     futures::executor::block_on(timeout(
                         self.server_conf.timeout,
-                        conn.send_command(input.as_bytes()),
+                        conn.send_command_raw(input.as_bytes()),
                     ))
                     .unwrap()
                     .unwrap();
@@ -1373,7 +1358,7 @@ impl ImapType {
             .iter()
             .any(|cap| cap.eq_ignore_ascii_case(b"LIST-STATUS"));
         if has_list_status {
-            conn.send_command(b"LIST \"\" \"*\" RETURN (STATUS (MESSAGES UNSEEN))")
+            conn.send_command_raw(b"LIST \"\" \"*\" RETURN (STATUS (MESSAGES UNSEEN))")
                 .await?;
             conn.read_response(
                 &mut res,
@@ -1381,7 +1366,7 @@ impl ImapType {
             )
             .await?;
         } else {
-            conn.send_command(b"LIST \"\" \"*\"").await?;
+            conn.send_command(CommandBody::list("", "*")?).await?;
             conn.read_response(&mut res, RequiredResponses::LIST_REQUIRED)
                 .await?;
         }
@@ -1433,7 +1418,7 @@ impl ImapType {
             }
         }
         mailboxes.retain(|_, v| !v.hash.is_null());
-        conn.send_command(b"LSUB \"\" \"*\"").await?;
+        conn.send_command(CommandBody::lsub("", "*")?).await?;
         conn.read_response(&mut res, RequiredResponses::LSUB_REQUIRED)
             .await?;
         debug!("LSUB reply: {}", String::from_utf8_lossy(&res));
@@ -1721,20 +1706,20 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
                     .await?;
                 if max_uid_left > 0 {
                     debug!("{} max_uid_left= {}", mailbox_hash, max_uid_left);
-                    let command = if max_uid_left == 1 {
-                        "UID FETCH 1 (UID FLAGS ENVELOPE BODY.PEEK[HEADER.FIELDS (REFERENCES)] \
-                         BODYSTRUCTURE)"
-                            .to_string()
+                    let sequence_set = if max_uid_left == 1 {
+                        SequenceSet::from(ONE)
                     } else {
-                        format!(
-                            "UID FETCH {}:{} (UID FLAGS ENVELOPE BODY.PEEK[HEADER.FIELDS \
-                             (REFERENCES)] BODYSTRUCTURE)",
-                            std::cmp::max(max_uid_left.saturating_sub(chunk_size), 1),
-                            max_uid_left
-                        )
+                        let min = std::cmp::max(max_uid_left.saturating_sub(chunk_size), 1);
+                        let max = max_uid_left;
+
+                        SequenceSet::try_from(min..=max)?
                     };
-                    debug!("sending {:?}", &command);
-                    conn.send_command(command.as_bytes()).await?;
+                    conn.send_command(CommandBody::Fetch {
+                        sequence_set,
+                        attributes: common_attributes(),
+                        uid: true,
+                    })
+                    .await?;
                     conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)
                         .await
                         .chain_err_summary(|| {

@@ -3,6 +3,15 @@
 version = 3
 
 [[package]]
+name = "abnf-core"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c44e09c43ae1c368fb91a03a566472d0087c26cf7e1b9e8e289c14ede681dd7d"
+dependencies = [
+ "nom",
+]
+
+[[package]]
 name = "adler"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -184,6 +193,12 @@ name = "base64"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "904dfeac50f3cdaba28fc6f57fdcddb75f49ed61346676a78c4ffe55877802fd"
+
+[[package]]
+name = "base64"
+version = "0.21.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "604178f6c5c21f02dc555784810edfb88d34ac2c73b2eae109655649ee73ce3d"
 
 [[package]]
 name = "bincode"
@@ -870,6 +885,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "imap-codec"
+version = "1.0.0-dev"
+source = "git+https://github.com/duesee/imap-codec?rev=95acd5186dacc6c6892603954e3f28d18a9f1193#95acd5186dacc6c6892603954e3f28d18a9f1193"
+dependencies = [
+ "abnf-core",
+ "base64 0.21.2",
+ "chrono",
+ "imap-types",
+ "nom",
+]
+
+[[package]]
+name = "imap-types"
+version = "1.0.0-dev"
+source = "git+https://github.com/duesee/imap-codec?rev=95acd5186dacc6c6892603954e3f28d18a9f1193#95acd5186dacc6c6892603954e3f28d18a9f1193"
+dependencies = [
+ "base64 0.21.2",
+ "chrono",
+ "subtle",
+ "thiserror",
+]
+
+[[package]]
 name = "indexmap"
 version = "1.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1087,7 +1125,7 @@ version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "24d0411d6d3cf6baacae37461dc5b0a32b9c68ae99ddef61bcd88174b8da890a"
 dependencies = [
- "base64",
+ "base64 0.13.0",
  "either",
  "log",
  "nom",
@@ -1167,7 +1205,7 @@ name = "melib"
 version = "0.7.2"
 dependencies = [
  "async-stream",
- "base64",
+ "base64 0.13.0",
  "bincode",
  "bitflags",
  "data-encoding",
@@ -1175,6 +1213,7 @@ dependencies = [
  "encoding_rs",
  "flate2",
  "futures",
+ "imap-codec",
  "indexmap",
  "isahc",
  "libc",
@@ -1712,7 +1751,7 @@ version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0864aeff53f8c05aa08d86e5ef839d3dfcf07aeba2db32f12db0ef716e87bd55"
 dependencies = [
- "base64",
+ "base64 0.13.0",
 ]
 
 [[package]]
@@ -1958,6 +1997,12 @@ dependencies = [
  "quote",
  "syn",
 ]
+
+[[package]]
+name = "subtle"
+version = "2.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "81cdd64d312baedb58e21336b31bc043b77e01cc99033ce76ef539f78e965ebc"
 
 [[package]]
 name = "svg"

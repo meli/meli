@@ -39,6 +39,20 @@ use std::{
 };
 
 use futures::io::{AsyncReadExt, AsyncWriteExt};
+#[cfg(feature = "deflate_compression")]
+use imap_codec::extensions::compress::CompressionAlgorithm;
+use imap_codec::{
+    auth::{AuthMechanism, AuthMechanismOther},
+    codec::{Encode, Fragment},
+    command::{Command, CommandBody},
+    core::{AString, Atom, NonEmptyVec, Tag},
+    extensions::enable::CapabilityEnable,
+    mailbox::Mailbox,
+    search::SearchKey,
+    secret::Secret,
+    sequence::SequenceSet,
+    status::StatusAttribute,
+};
 use native_tls::TlsConnector;
 pub use smol::Async as AsyncWrapper;
 
@@ -272,21 +286,15 @@ impl ImapStream {
             timeout: server_conf.timeout,
         };
         if let ImapProtocol::ManageSieve = server_conf.protocol {
-            use data_encoding::BASE64;
             ret.read_response(&mut res).await?;
-            ret.send_command(
-                format!(
-                    "AUTHENTICATE \"PLAIN\" \"{}\"",
-                    BASE64.encode(
-                        format!(
-                            "\0{}\0{}",
-                            &server_conf.server_username, &server_conf.server_password
-                        )
-                        .as_bytes()
-                    )
-                )
-                .as_bytes(),
-            )
+            let credentials = format!(
+                "\0{}\0{}",
+                &server_conf.server_username, &server_conf.server_password
+            );
+            ret.send_command(CommandBody::authenticate(
+                AuthMechanism::Plain,
+                Some(credentials.as_bytes()),
+            ))
             .await?;
             ret.read_response(&mut res).await?;
             return Ok((Default::default(), ret));
@@ -298,7 +306,7 @@ impl ImapStream {
                 message: "Negotiating server capabilities.".into(),
             },
         );
-        ret.send_command(b"CAPABILITY").await?;
+        ret.send_command(CommandBody::Capability).await?;
         ret.read_response(&mut res).await?;
         let capabilities: std::result::Result<Vec<&[u8]>, _> = res
             .split_rn()
@@ -364,30 +372,26 @@ impl ImapStream {
                             .join(" ")
                     )));
                 }
-                ret.send_command(
-                    format!("AUTHENTICATE XOAUTH2 {}", &server_conf.server_password).as_bytes(),
-                )
+                let xoauth2 = base64::decode(&server_conf.server_password)
+                    .map_err(|_| Error::new("Bad XOAUTH2 in config"))?;
+                // TODO(#222): Improve this as soon as imap-codec supports XOAUTH2.
+                ret.send_command(CommandBody::authenticate(
+                    AuthMechanism::Other(
+                        AuthMechanismOther::try_from(Atom::unchecked("XOAUTH2")).unwrap(),
+                    ),
+                    Some(&xoauth2),
+                ))
                 .await?;
             }
             _ => {
-                ret.send_command(
-                    format!(
-                        r#"LOGIN "{}" {{{}}}"#,
-                        &server_conf
-                            .server_username
-                            .replace('\\', r#"\\"#)
-                            .replace('"', r#"\""#)
-                            .replace('{', r#"\{"#)
-                            .replace('}', r#"\}"#),
-                        &server_conf.server_password.as_bytes().len()
-                    )
-                    .as_bytes(),
-                )
+                let username = AString::try_from(server_conf.server_username.as_str())?;
+                let password = AString::try_from(server_conf.server_password.as_str())?;
+
+                ret.send_command(CommandBody::Login {
+                    username,
+                    password: Secret::new(password),
+                })
                 .await?;
-                // wait for "+ Ready for literal data" reply
-                ret.wait_for_continuation_request().await?;
-                ret.send_literal(server_conf.server_password.as_bytes())
-                    .await?;
             }
         }
         let tag_start = format!("M{} ", (ret.cmd_id - 1));
@@ -425,7 +429,7 @@ impl ImapStream {
             /* sending CAPABILITY after LOGIN automatically is an RFC recommendation, so
              * check for lazy servers */
             drop(capabilities);
-            ret.send_command(b"CAPABILITY").await?;
+            ret.send_command(CommandBody::Capability).await?;
             ret.read_response(&mut res).await.unwrap();
             let capabilities = protocol_parser::capabilities(&res)?.1;
             let capabilities = HashSet::from_iter(capabilities.into_iter().map(|s| s.to_vec()));
@@ -500,7 +504,40 @@ impl ImapStream {
         Ok(())
     }
 
-    pub async fn send_command(&mut self, command: &[u8]) -> Result<()> {
+    pub async fn send_command(&mut self, body: CommandBody<'_>) -> Result<()> {
+        timeout(self.timeout, async {
+            let command = {
+                let tag = Tag::unchecked(format!("M{}", self.cmd_id.to_string()));
+
+                Command { tag, body }
+            };
+
+            for action in command.encode() {
+                match action {
+                    Fragment::Line { data } => {
+                        self.stream.write_all(&data).await?;
+                    }
+                    Fragment::Literal { data, sync } => {
+                        // We only need to wait for a continuation request when we are about to
+                        // send a synchronizing literal, i.e., when not using LITERAL+.
+                        if sync {
+                            self.wait_for_continuation_request().await?;
+                        }
+                        self.stream.write_all(&data).await?;
+                    }
+                }
+                // Note: This is required for compression to work...
+                self.stream.flush().await?;
+            }
+
+            self.cmd_id += 1;
+
+            Ok(())
+        })
+        .await?
+    }
+
+    pub async fn send_command_raw(&mut self, command: &[u8]) -> Result<()> {
         _ = timeout(
             self.timeout,
             try_await(async move {
@@ -589,7 +626,7 @@ impl ImapConnection {
             if self.stream.is_ok() {
                 let mut ret = Vec::new();
                 if let Err(err) = try_await(async {
-                    self.send_command(b"NOOP").await?;
+                    self.send_command(CommandBody::Noop).await?;
                     self.read_response(&mut ret, RequiredResponses::empty())
                         .await
                 })
@@ -630,14 +667,27 @@ impl ImapConnection {
                                 /* Upgrade to Condstore */
                                 let mut ret = Vec::new();
                                 if capabilities.contains(&b"ENABLE"[..]) {
-                                    self.send_command(b"ENABLE CONDSTORE").await?;
+                                    self.send_command(CommandBody::Enable {
+                                        capabilities: NonEmptyVec::from(
+                                            CapabilityEnable::CondStore,
+                                        ),
+                                    })
+                                    .await?;
                                     self.read_response(&mut ret, RequiredResponses::empty())
                                         .await?;
                                 } else {
-                                    self.send_command(
-                                        b"STATUS INBOX (UIDNEXT UIDVALIDITY UNSEEN MESSAGES HIGHESTMODSEQ)",
-                                    )
-                                        .await?;
+                                    self.send_command(CommandBody::Status {
+                                        mailbox: Mailbox::Inbox,
+                                        attributes: vec![
+                                            StatusAttribute::UidNext,
+                                            StatusAttribute::UidValidity,
+                                            StatusAttribute::Unseen,
+                                            StatusAttribute::Messages,
+                                            StatusAttribute::HighestModSeq,
+                                        ]
+                                        .into(),
+                                    })
+                                    .await?;
                                     self.read_response(&mut ret, RequiredResponses::empty())
                                         .await?;
                                 }
@@ -648,7 +698,8 @@ impl ImapConnection {
                     #[cfg(feature = "deflate_compression")]
                     if capabilities.contains(&b"COMPRESS=DEFLATE"[..]) && deflate {
                         let mut ret = Vec::new();
-                        self.send_command(b"COMPRESS DEFLATE").await?;
+                        self.send_command(CommandBody::compress(CompressionAlgorithm::Deflate))
+                            .await?;
                         self.read_response(&mut ret, RequiredResponses::empty())
                             .await?;
                         match ImapResponse::try_from(ret.as_slice())? {
@@ -798,9 +849,24 @@ impl ImapConnection {
         Ok(())
     }
 
-    pub async fn send_command(&mut self, command: &[u8]) -> Result<()> {
+    pub async fn send_command(&mut self, command: CommandBody<'_>) -> Result<()> {
         if let Err(err) =
             try_await(async { self.stream.as_mut()?.send_command(command).await }).await
+        {
+            self.stream = Err(err.clone());
+            if err.kind.is_network() {
+                self.connect().await?;
+            }
+            Err(err)
+        } else {
+            *self.uid_store.is_online.lock().unwrap() = (SystemTime::now(), Ok(()));
+            Ok(())
+        }
+    }
+
+    pub async fn send_command_raw(&mut self, command: &[u8]) -> Result<()> {
+        if let Err(err) =
+            try_await(async { self.stream.as_mut()?.send_command_raw(command).await }).await
         {
             self.stream = Err(err.clone());
             if err.kind.is_network() {
@@ -863,7 +929,7 @@ impl ImapConnection {
             ))
             .set_kind(crate::error::ErrorKind::Bug));
         }
-        self.send_command(format!("SELECT \"{}\"", imap_path).as_bytes())
+        self.send_command(CommandBody::select(imap_path.as_str())?)
             .await?;
         self.read_response(ret, RequiredResponses::SELECT_REQUIRED)
             .await?;
@@ -949,7 +1015,7 @@ impl ImapConnection {
             ))
             .set_kind(crate::error::ErrorKind::Bug));
         }
-        self.send_command(format!("EXAMINE \"{}\"", &imap_path).as_bytes())
+        self.send_command(CommandBody::examine(imap_path.as_str())?)
             .await?;
         self.read_response(ret, RequiredResponses::EXAMINE_REQUIRED)
             .await?;
@@ -985,7 +1051,7 @@ impl ImapConnection {
                     .iter()
                     .any(|cap| cap.eq_ignore_ascii_case(b"UNSELECT"))
                 {
-                    self.send_command(b"UNSELECT").await?;
+                    self.send_command(CommandBody::Unselect).await?;
                     self.read_response(&mut response, RequiredResponses::empty())
                         .await?;
                 } else {
@@ -1000,8 +1066,7 @@ impl ImapConnection {
                             nonexistent.push('p');
                         }
                     }
-                    self.send_command(format!("SELECT \"{}\"", nonexistent).as_bytes())
-                        .await?;
+                    self.send_command(CommandBody::select(nonexistent)?).await?;
                     self.read_response(&mut response, RequiredResponses::NO_REQUIRED)
                         .await?;
                 }
@@ -1025,9 +1090,14 @@ impl ImapConnection {
         _select_response: &SelectResponse,
     ) -> Result<()> {
         debug_assert!(low > 0);
+        self.send_command(CommandBody::search(
+            None,
+            SearchKey::SequenceSet(SequenceSet::try_from(low..)?),
+            true,
+        ))
+        .await?;
+
         let mut response = Vec::new();
-        self.send_command(format!("UID SEARCH {}:*", low).as_bytes())
-            .await?;
         self.read_response(&mut response, RequiredResponses::SEARCH)
             .await?;
         let mut msn_index_lck = self.uid_store.msn_index.lock().unwrap();

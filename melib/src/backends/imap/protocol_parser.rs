@@ -763,40 +763,6 @@ pub fn uid_fetch_flags_response(input: &[u8]) -> IResult<&[u8], (UID, (Flag, Vec
     Ok((input, (uid_flags.0, uid_flags.1)))
 }
 
-macro_rules! flags_to_imap_list {
-    ($flags:ident) => {{
-        let mut ret = String::new();
-        if !($flags & Flag::REPLIED).is_empty() {
-            ret.push_str("\\Answered");
-        }
-        if !($flags & Flag::FLAGGED).is_empty() {
-            if !ret.is_empty() {
-                ret.push(' ');
-            }
-            ret.push_str("\\Flagged");
-        }
-        if !($flags & Flag::TRASHED).is_empty() {
-            if !ret.is_empty() {
-                ret.push(' ');
-            }
-            ret.push_str("\\Deleted");
-        }
-        if !($flags & Flag::SEEN).is_empty() {
-            if !ret.is_empty() {
-                ret.push(' ');
-            }
-            ret.push_str("\\Seen");
-        }
-        if !($flags & Flag::DRAFT).is_empty() {
-            if !ret.is_empty() {
-                ret.push(' ');
-            }
-            ret.push_str("\\Draft");
-        }
-        ret
-    }};
-}
-
 /* Input Example:
  * ==============
  *

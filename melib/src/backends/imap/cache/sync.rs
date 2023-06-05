@@ -19,6 +19,13 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use imap_codec::{
+    fetch::{FetchAttribute, MacroOrFetchAttributes},
+    search::SearchKey,
+    sequence::SequenceSet,
+    status::StatusAttribute,
+};
+
 use super::*;
 
 impl ImapConnection {
@@ -128,14 +135,11 @@ impl ImapConnection {
         cache_handle.update_mailbox(mailbox_hash, &select_response)?;
 
         // 2.  tag1 UID FETCH <lastseenuid+1>:* <descriptors>
-        self.send_command(
-            format!(
-                "UID FETCH {}:* (UID FLAGS ENVELOPE BODY.PEEK[HEADER.FIELDS (REFERENCES)] \
-                 BODYSTRUCTURE)",
-                max_uid + 1
-            )
-            .as_bytes(),
-        )
+        self.send_command(CommandBody::fetch(
+            max_uid + 1..,
+            common_attributes(),
+            true,
+        )?)
         .await?;
         self.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)
             .await?;
@@ -229,12 +233,17 @@ impl ImapConnection {
         }
         mailbox_exists.lock().unwrap().insert_set(payload_hash_set);
         // 3.  tag2 UID FETCH 1:<lastseenuid> FLAGS
-        if max_uid == 0 {
-            self.send_command("UID FETCH 1:* FLAGS".as_bytes()).await?;
+        let sequence_set = if max_uid == 0 {
+            SequenceSet::from(..)
         } else {
-            self.send_command(format!("UID FETCH 1:{} FLAGS", max_uid).as_bytes())
-                .await?;
-        }
+            SequenceSet::try_from(..=max_uid)?
+        };
+        self.send_command(CommandBody::Fetch {
+            sequence_set,
+            attributes: MacroOrFetchAttributes::FetchAttributes(vec![FetchAttribute::Flags]),
+            uid: true,
+        })
+        .await?;
         self.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)
             .await?;
         //1) update cached flags for old messages;
@@ -414,7 +423,7 @@ impl ImapConnection {
             //       "SEARCH MODSEQ <cached-value>".
 
             // 2.  tag1 UID FETCH <lastseenuid+1>:* <descriptors>
-            self.send_command(
+            self.send_command_raw(
                 format!(
                     "UID FETCH {}:* (UID FLAGS ENVELOPE BODY.PEEK[HEADER.FIELDS (REFERENCES)] \
                      BODYSTRUCTURE) (CHANGEDSINCE {})",
@@ -511,7 +520,7 @@ impl ImapConnection {
             mailbox_exists.lock().unwrap().insert_set(payload_hash_set);
             // 3.  tag2 UID FETCH 1:<lastseenuid> FLAGS
             if cached_max_uid == 0 {
-                self.send_command(
+                self.send_command_raw(
                     format!(
                         "UID FETCH 1:* FLAGS (CHANGEDSINCE {})",
                         cached_highestmodseq
@@ -520,7 +529,7 @@ impl ImapConnection {
                 )
                 .await?;
             } else {
-                self.send_command(
+                self.send_command_raw(
                     format!(
                         "UID FETCH 1:{} FLAGS (CHANGEDSINCE {})",
                         cached_max_uid, cached_highestmodseq
@@ -575,7 +584,8 @@ impl ImapConnection {
         let mut valid_envs = BTreeSet::default();
         // This should be UID SEARCH 1:<maxuid> but it's difficult to compare to cached
         // UIDs at the point of calling this function
-        self.send_command(b"UID SEARCH ALL").await?;
+        self.send_command(CommandBody::search(None, SearchKey::All, true))
+            .await?;
         self.read_response(&mut response, RequiredResponses::SEARCH)
             .await?;
         //1) update cached flags for old messages;
@@ -683,8 +693,11 @@ impl ImapConnection {
             .await?;
         if select_response.uidnext == 0 {
             /* UIDNEXT shouldn't be 0, since exists != 0 at this point */
-            self.send_command(format!("STATUS \"{}\" (UIDNEXT)", mailbox_path).as_bytes())
-                .await?;
+            self.send_command(CommandBody::status(
+                mailbox_path,
+                [StatusAttribute::UidNext].as_slice(),
+            )?)
+            .await?;
             self.read_response(&mut response, RequiredResponses::STATUS)
                 .await?;
             let (_, status) = protocol_parser::status_response(response.as_slice())?;

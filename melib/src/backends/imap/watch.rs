@@ -20,6 +20,8 @@
  */
 use std::sync::Arc;
 
+use imap_codec::search::SearchKey;
+
 use super::*;
 use crate::backends::SpecialUsageMailbox;
 
@@ -120,7 +122,7 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
         }
         examine_updates(mailbox, &mut conn, &uid_store).await?;
     }
-    conn.send_command(b"IDLE").await?;
+    conn.send_command(CommandBody::Idle).await?;
     let mut blockn = ImapBlockingConnection::from(conn);
     let mut watch = std::time::Instant::now();
     /* duration interval to send heartbeat */
@@ -144,7 +146,7 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
                     .conn
                     .read_response(&mut response, RequiredResponses::empty())
                     .await?;
-                blockn.conn.send_command(b"IDLE").await?;
+                blockn.conn.send_command(CommandBody::Idle).await?;
                 let mut main_conn_lck = timeout(uid_store.timeout, main_conn.lock()).await?;
                 main_conn_lck.connect().await?;
                 continue;
@@ -192,7 +194,7 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
                 }
                 blockn.conn.process_untagged(l).await?;
             }
-            blockn.conn.send_command(b"IDLE").await?;
+            blockn.conn.send_command(CommandBody::Idle).await?;
         }
     }
 }
@@ -259,7 +261,7 @@ pub async fn examine_updates(
                 .iter()
                 .any(|cap| cap.eq_ignore_ascii_case(b"LIST-STATUS"));
             if has_list_status {
-                conn.send_command(
+                conn.send_command_raw(
                     format!(
                         "LIST \"{}\" \"\" RETURN (STATUS (MESSAGES UNSEEN))",
                         mailbox.imap_path()
@@ -299,7 +301,8 @@ pub async fn examine_updates(
                     }
                 }
             } else {
-                conn.send_command(b"SEARCH UNSEEN").await?;
+                conn.send_command(CommandBody::search(None, SearchKey::Unseen, false))
+                    .await?;
                 conn.read_response(&mut response, RequiredResponses::SEARCH)
                     .await?;
                 let unseen_count = protocol_parser::search_results(&response)?.1.len();
@@ -318,7 +321,8 @@ pub async fn examine_updates(
 
         if select_response.recent > 0 {
             /* UID SEARCH RECENT */
-            conn.send_command(b"UID SEARCH RECENT").await?;
+            conn.send_command(CommandBody::search(None, SearchKey::Recent, true))
+                .await?;
             conn.read_response(&mut response, RequiredResponses::SEARCH)
                 .await?;
             let v = protocol_parser::search_results(response.as_slice()).map(|(_, v)| v)?;
@@ -329,30 +333,15 @@ pub async fn examine_updates(
                 );
                 return Ok(());
             }
-            let mut cmd = "UID FETCH ".to_string();
-            cmd.push_str(&v[0].to_string());
-            if v.len() != 1 {
-                for n in v.into_iter().skip(1) {
-                    cmd.push(',');
-                    cmd.push_str(&n.to_string());
-                }
-            }
-            cmd.push_str(
-                " (UID FLAGS ENVELOPE BODY.PEEK[HEADER.FIELDS (REFERENCES)] BODYSTRUCTURE)",
-            );
-            conn.send_command(cmd.as_bytes()).await?;
+            conn.send_command(CommandBody::fetch(v.as_slice(), common_attributes(), true)?)
+                .await?;
             conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)
                 .await?;
         } else if select_response.exists > mailbox.exists.lock().unwrap().len() {
-            conn.send_command(
-                format!(
-                    "FETCH {}:* (UID FLAGS ENVELOPE BODY.PEEK[HEADER.FIELDS (REFERENCES)] \
-                     BODYSTRUCTURE)",
-                    std::cmp::max(mailbox.exists.lock().unwrap().len(), 1)
-                )
-                .as_bytes(),
-            )
-            .await?;
+            let min = std::cmp::max(mailbox.exists.lock().unwrap().len(), 1);
+
+            conn.send_command(CommandBody::fetch(min.., common_attributes(), false)?)
+                .await?;
             conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)
                 .await?;
         } else {

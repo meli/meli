@@ -53,6 +53,21 @@ uuid = { version = "^1", features = ["serde", "v4", "v5"] }
 xdg = "2.1.0"
 xdg-utils = "^0.4.0"
 
+[dependencies.imap-codec]
+# TODO(#222): Replace `git` and `rev` with `version`.
+git = "https://github.com/duesee/imap-codec"
+rev = "95acd5186dacc6c6892603954e3f28d18a9f1193"
+features = [
+    "ext_condstore_qresync",
+    "ext_enable",
+    "ext_idle",
+    "ext_literal",
+    "ext_move",
+    "ext_sasl_ir",
+    "ext_unselect"
+]
+optional = true
+
 [dev-dependencies]
 mailin-embedded = { version = "0.7", features = ["rtls"] }
 stderrlog = "^0.5"
@@ -61,11 +76,11 @@ stderrlog = "^0.5"
 default = ["unicode_algorithms", "imap_backend", "maildir_backend", "mbox_backend", "vcard", "sqlite3", "smtp", "deflate_compression"]
 
 debug-tracing = []
-deflate_compression = ["flate2", ]
+deflate_compression = ["flate2", "imap-codec/ext_compress"]
 gpgme = []
 http = ["isahc"]
 http-static = ["isahc", "isahc/static-curl"]
-imap_backend = ["tls"]
+imap_backend = ["imap-codec", "tls"]
 jmap_backend = ["http", "serde_json"]
 maildir_backend = ["notify"]
 mbox_backend = ["notify"]

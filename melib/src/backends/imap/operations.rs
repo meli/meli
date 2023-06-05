@@ -21,6 +21,8 @@
 
 use std::sync::Arc;
 
+use imap_codec::fetch::FetchAttribute;
+
 use super::*;
 use crate::{backends::*, email::*, error::Error};
 
@@ -68,8 +70,12 @@ impl BackendOp for ImapOp {
                     conn.connect().await?;
                     conn.examine_mailbox(mailbox_hash, &mut response, false)
                         .await?;
-                    conn.send_command(format!("UID FETCH {} (FLAGS RFC822)", uid).as_bytes())
-                        .await?;
+                    conn.send_command(CommandBody::fetch(
+                        uid,
+                        vec![FetchAttribute::Flags, FetchAttribute::Rfc822],
+                        true,
+                    )?)
+                    .await?;
                     conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)
                         .await?;
                 }
@@ -127,7 +133,7 @@ impl BackendOp for ImapOp {
                 conn.connect().await?;
                 conn.examine_mailbox(mailbox_hash, &mut response, false)
                     .await?;
-                conn.send_command(format!("UID FETCH {} FLAGS", uid).as_bytes())
+                conn.send_command(CommandBody::fetch(uid, vec![FetchAttribute::Flags], true)?)
                     .await?;
                 conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)
                     .await?;

@@ -112,6 +112,12 @@ pub use address::{Address, MessageID, References, StrBuild, StrBuilder};
 pub use attachments::{Attachment, AttachmentBuilder};
 pub use compose::{attachment_from_file, Draft};
 pub use headers::*;
+use imap_codec::{
+    core::{AString, Atom, NonEmptyVec},
+    fetch::{FetchAttribute, MacroOrFetchAttributes},
+    flag::Flag as ImapCodecFlag,
+    section::Section,
+};
 use smallvec::SmallVec;
 
 use crate::{
@@ -121,6 +127,24 @@ use crate::{
     thread::ThreadNodeHash,
     TagHash,
 };
+
+// TODO(#222): Make this `const` as soon as it is possible.
+pub(crate) fn common_attributes() -> MacroOrFetchAttributes<'static> {
+    MacroOrFetchAttributes::FetchAttributes(vec![
+        FetchAttribute::Uid,
+        FetchAttribute::Flags,
+        FetchAttribute::Envelope,
+        FetchAttribute::BodyExt {
+            section: Some(Section::HeaderFields(
+                None,
+                NonEmptyVec::from(AString::from(Atom::unchecked("REFERENCES"))),
+            )),
+            partial: None,
+            peek: true,
+        },
+        FetchAttribute::BodyStructure,
+    ])
+}
 
 bitflags! {
     #[derive(Default, Serialize, Deserialize)]
@@ -163,6 +187,39 @@ impl Flag {
     flag_impl!(fn is_trashed, Flag::TRASHED);
     flag_impl!(fn is_draft, Flag::DRAFT);
     flag_impl!(fn is_flagged, Flag::FLAGGED);
+}
+
+#[cfg(feature = "imap_backend")]
+impl Flag {
+    pub(crate) fn derive_imap_codec_flags(&self) -> Vec<ImapCodecFlag> {
+        let mut flags = Vec::new();
+
+        if self.is_passed() {
+            // This is from http://cr.yp.to/proto/maildir.html and not meaningful in IMAP.
+        }
+
+        if self.is_replied() {
+            flags.push(ImapCodecFlag::Answered);
+        }
+
+        if self.is_seen() {
+            flags.push(ImapCodecFlag::Seen);
+        }
+
+        if self.is_trashed() {
+            flags.push(ImapCodecFlag::Deleted);
+        }
+
+        if self.is_draft() {
+            flags.push(ImapCodecFlag::Draft);
+        }
+
+        if self.is_flagged() {
+            flags.push(ImapCodecFlag::Flagged);
+        }
+
+        flags
+    }
 }
 
 ///`Mail` holds both the envelope info of an email in its `envelope` field and
