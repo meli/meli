@@ -56,6 +56,7 @@ use smallvec::SmallVec;
 
 use super::{AccountConf, FileMailboxConf};
 use crate::{
+    command::actions::AccountAction,
     jobs::{JobExecutor, JobId, JoinHandle},
     types::UIEvent::{self, EnvelopeRemove, EnvelopeRename, EnvelopeUpdate, Notification},
     StatusEvent, ThreadEvent,
@@ -523,13 +524,14 @@ impl Account {
             };
             if let Some(db_path) = db_path {
                 if !db_path.exists() {
+                    log::info!(
+                        "An sqlite3 search database for account `{}` seems to be missing, a new \
+                         one will be created.",
+                        name
+                    );
                     sender
-                        .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(format!(
-                                "An sqlite3 search database for account `{}` seems to be missing, \
-                                 a new one must be created with the `reindex` command.",
-                                name
-                            )),
+                        .send(ThreadEvent::UIEvent(UIEvent::Action(
+                            (name.clone(), AccountAction::ReIndex).into(),
                         )))
                         .unwrap();
                 }

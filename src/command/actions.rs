@@ -146,3 +146,38 @@ impl Action {
 type AccountName = String;
 type MailboxPath = String;
 type NewMailboxPath = String;
+
+macro_rules! impl_into_action {
+    ($({$t:ty => $var:tt}),*) => {
+        $(
+            impl From<$t> for Action {
+                fn from(v: $t) -> Self {
+                    Self::$var(v)
+                }
+            }
+        )*
+    };
+}
+macro_rules! impl_tuple_into_action {
+    ($({$a:ty,$b:ty => $var:tt}),*) => {
+        $(
+            impl From<($a,$b)> for Action {
+                fn from((a, b): ($a,$b)) -> Self {
+                    Self::$var(a, b)
+                }
+            }
+        )*
+    };
+}
+
+impl_into_action!(
+    { ListingAction => Listing },
+    { TabAction => Tab },
+    { MailingListAction => MailingListAction },
+    { ViewAction => View },
+    { ComposeAction => Compose }
+);
+impl_tuple_into_action!(
+    { AccountName, MailboxOperation => Mailbox },
+    { AccountName, AccountAction => AccountAction }
+);
