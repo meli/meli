@@ -112,6 +112,7 @@ pub use address::{Address, MessageID, References, StrBuild, StrBuilder};
 pub use attachments::{Attachment, AttachmentBuilder};
 pub use compose::{attachment_from_file, Draft};
 pub use headers::*;
+#[cfg(feature = "imap_backend")]
 use imap_codec::{
     core::{AString, Atom, NonEmptyVec},
     fetch::{FetchAttribute, MacroOrFetchAttributes},
@@ -128,6 +129,7 @@ use crate::{
     TagHash,
 };
 
+#[cfg(feature = "imap_backend")]
 // TODO(#222): Make this `const` as soon as it is possible.
 pub(crate) fn common_attributes() -> MacroOrFetchAttributes<'static> {
     MacroOrFetchAttributes::FetchAttributes(vec![
@@ -187,10 +189,8 @@ impl Flag {
     flag_impl!(fn is_trashed, Flag::TRASHED);
     flag_impl!(fn is_draft, Flag::DRAFT);
     flag_impl!(fn is_flagged, Flag::FLAGGED);
-}
 
-#[cfg(feature = "imap_backend")]
-impl Flag {
+    #[cfg(feature = "imap_backend")]
     pub(crate) fn derive_imap_codec_flags(&self) -> Vec<ImapCodecFlag> {
         let mut flags = Vec::new();
 

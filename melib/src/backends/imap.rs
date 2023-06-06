@@ -35,6 +35,7 @@ mod search;
 pub use search::*;
 mod cache;
 use cache::{ImapCacheReset, ModSequence};
+pub mod error;
 pub mod managesieve;
 mod untagged;
 
