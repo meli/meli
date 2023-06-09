@@ -402,8 +402,8 @@ impl fmt::Display for Attachment {
                 match Mail::new(self.body.display_bytes(&self.raw).to_vec(), None) {
                     Ok(wrapper) => write!(
                         f,
-                        "{} - {} - {} [message/rfc822] {}",
-                        wrapper.date(),
+                        "{} {} {} [message/rfc822] {}",
+                        wrapper.date_as_str(),
                         wrapper.field_from_to_string(),
                         wrapper.subject(),
                         crate::Bytes(self.raw.len()),
