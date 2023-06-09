@@ -19,9 +19,18 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use std::os::unix::io::{AsRawFd, RawFd};
+
 use crossbeam::{channel::Receiver, select};
+use nix::poll::{poll, PollFd, PollFlags};
 use serde::{Serialize, Serializer};
-use termion::event::{Event as TermionEvent, Key as TermionKey};
+use termion::{
+    event::{
+        Event as TermionEvent, Key as TermionKey, MouseButton as TermionMouseButton,
+        MouseEvent as TermionMouseEvent,
+    },
+    input::TermReadEventsAndRaw,
+};
 
 use super::*;
 
@@ -66,11 +75,71 @@ pub enum Key {
     Null,
     /// Esc key.
     Esc,
-    Mouse(termion::event::MouseEvent),
+    Mouse(MouseEvent),
     Paste(String),
 }
 
-pub use termion::event::{MouseButton, MouseEvent};
+/// A mouse related event.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum MouseEvent {
+    /// A mouse button was pressed.
+    ///
+    /// The coordinates are one-based.
+    Press(MouseButton, u16, u16),
+    /// A mouse button was released.
+    ///
+    /// The coordinates are one-based.
+    Release(u16, u16),
+    /// A mouse button is held over the given coordinates.
+    ///
+    /// The coordinates are one-based.
+    Hold(u16, u16),
+}
+
+impl From<TermionMouseEvent> for MouseEvent {
+    fn from(val: TermionMouseEvent) -> Self {
+        use TermionMouseEvent::*;
+        match val {
+            Press(btn, a, b) => Self::Press(btn.into(), a, b),
+            Release(a, b) => Self::Release(a, b),
+            Hold(a, b) => Self::Hold(a, b),
+        }
+    }
+}
+
+/// A mouse button.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum MouseButton {
+    /// The left mouse button.
+    Left,
+    /// The right mouse button.
+    Right,
+    /// The middle mouse button.
+    Middle,
+    /// Mouse wheel is going up.
+    ///
+    /// This event is typically only used with Mouse::Press.
+    WheelUp,
+    /// Mouse wheel is going down.
+    ///
+    /// This event is typically only used with Mouse::Press.
+    WheelDown,
+}
+
+impl From<TermionMouseButton> for MouseButton {
+    fn from(val: TermionMouseButton) -> Self {
+        use TermionMouseButton::*;
+        match val {
+            Left => Self::Left,
+            Right => Self::Right,
+            Middle => Self::Middle,
+            WheelUp => Self::WheelUp,
+            WheelDown => Self::WheelDown,
+        }
+    }
+}
 
 impl fmt::Display for Key {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -153,11 +222,6 @@ pub enum InputCommand {
     Kill,
 }
 
-use std::os::unix::io::{AsRawFd, RawFd};
-
-use nix::poll::{poll, PollFd, PollFlags};
-use termion::input::TermReadEventsAndRaw;
-
 /// The thread function that listens for user input and forwards it to the main
 /// event loop.
 ///
@@ -215,7 +279,7 @@ pub fn get_events(
                                     continue 'poll_while;
                                 }
                             (Ok((TermionEvent::Mouse(mev), bytes)), InputMode::Normal) => {
-                                closure((Key::Mouse(mev), bytes));
+                                closure((Key::Mouse(mev.into()), bytes));
                                 continue 'poll_while;
                                 }
                             _ => {
@@ -356,7 +420,7 @@ impl Serialize for Key {
             Key::Alt(c) => serializer.serialize_str(&format!("M-{}", c)),
             Key::Ctrl(c) => serializer.serialize_str(&format!("C-{}", c)),
             Key::Null => serializer.serialize_str("Null"),
-            Key::Mouse(_) => unreachable!(),
+            Key::Mouse(mev) => mev.serialize(serializer),
             Key::Paste(s) => serializer.serialize_str(s),
         }
     }
