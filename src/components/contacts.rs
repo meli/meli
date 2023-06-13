@@ -40,7 +40,7 @@ enum ViewMode {
 #[derive(Debug)]
 pub struct ContactManager {
     id: ComponentId,
-    parent_id: ComponentId,
+    parent_id: Option<ComponentId>,
     pub card: Card,
     mode: ViewMode,
     form: FormWidget<bool>,
@@ -63,8 +63,8 @@ impl ContactManager {
     fn new(context: &Context) -> Self {
         let theme_default: ThemeAttribute = crate::conf::value(context, "theme_default");
         ContactManager {
-            id: Uuid::nil(),
-            parent_id: Uuid::nil(),
+            id: ComponentId::default(),
+            parent_id: None,
             card: Card::new(),
             mode: ViewMode::Edit,
             form: FormWidget::default(),
@@ -135,7 +135,7 @@ impl ContactManager {
     }
 
     pub fn set_parent_id(&mut self, new_val: ComponentId) {
-        self.parent_id = new_val;
+        self.parent_id = Some(new_val);
     }
 }
 
@@ -188,11 +188,11 @@ impl Component for ContactManager {
                 }
             }
             ViewMode::Edit => {
-                if let &mut UIEvent::Input(Key::Esc) = event {
+                if let (Some(parent_id), &UIEvent::Input(Key::Esc)) = (self.parent_id, &event) {
                     if self.can_quit_cleanly(context) {
                         context
                             .replies
-                            .push_back(UIEvent::Action(Tab(Kill(self.parent_id))));
+                            .push_back(UIEvent::Action(Tab(Kill(parent_id))));
                     }
                     return true;
                 }
@@ -208,7 +208,7 @@ impl Component for ContactManager {
                                         s.to_string(),
                                         match v {
                                             Field::Text(v) => v.as_str().to_string(),
-                                            Field::Choice(mut v, c) => v.remove(c).to_string(),
+                                            Field::Choice(mut v, c, _) => v.remove(c).to_string(),
                                         },
                                     )
                                 })
@@ -277,25 +277,28 @@ impl Component for ContactManager {
             return true;
         }
 
-        let parent_id = self.parent_id;
-        /* Play it safe and ask user for confirmation */
-        self.mode = ViewMode::Discard(Box::new(UIDialog::new(
-            "this contact has unsaved changes",
-            vec![
-                ('x', "quit without saving".to_string()),
-                ('y', "save draft and quit".to_string()),
-                ('n', "cancel".to_string()),
-            ],
-            true,
-            Some(Box::new(move |_, results: &[char]| match results[0] {
-                'x' => Some(UIEvent::Action(Tab(Kill(parent_id)))),
-                'n' => None,
-                'y' => None,
-                _ => None,
-            })),
-            context,
-        )));
-        self.set_dirty(true);
-        false
+        if let Some(parent_id) = self.parent_id {
+            /* Play it safe and ask user for confirmation */
+            self.mode = ViewMode::Discard(Box::new(UIDialog::new(
+                "this contact has unsaved changes",
+                vec![
+                    ('x', "quit without saving".to_string()),
+                    ('y', "save draft and quit".to_string()),
+                    ('n', "cancel".to_string()),
+                ],
+                true,
+                Some(Box::new(move |_, results: &[char]| match results[0] {
+                    'x' => Some(UIEvent::Action(Tab(Kill(parent_id)))),
+                    'n' => None,
+                    'y' => None,
+                    _ => None,
+                })),
+                context,
+            )));
+            self.set_dirty(true);
+            false
+        } else {
+            true
+        }
     }
 }

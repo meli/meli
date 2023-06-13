@@ -194,7 +194,7 @@ impl Component for KeySelection {
                         Ok(Some(Err(err))) => {
                             *self = KeySelection::Error {
                                 err,
-                                id: ComponentId::new_v4(),
+                                id: ComponentId::default(),
                             };
                         }
                     }
@@ -229,14 +229,14 @@ impl Component for KeySelection {
         }
     }
 
-    fn kill(&mut self, _uuid: Uuid, _context: &mut Context) {}
+    fn kill(&mut self, _uuid: ComponentId, _context: &mut Context) {}
 
-    fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
+    fn shortcuts(&self, context: &Context) -> ShortcutMaps {
         match self {
             KeySelection::LoadingKeys { .. } | KeySelection::Error { .. } => {
                 ShortcutMaps::default()
             }
-            KeySelection::Loaded { ref widget, .. } => widget.get_shortcuts(context),
+            KeySelection::Loaded { ref widget, .. } => widget.shortcuts(context),
         }
     }
 

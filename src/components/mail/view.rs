@@ -354,7 +354,7 @@ impl MailView {
             state: MailViewState::default(),
             force_charset: ForceCharset::None,
             cmd_buf: String::with_capacity(4),
-            id: ComponentId::new_v4(),
+            id: ComponentId::default(),
         };
 
         ret.init_futures(context);
@@ -1789,7 +1789,7 @@ impl Component for MailView {
             _ => {}
         }
 
-        let shortcuts = self.get_shortcuts(context);
+        let shortcuts = self.shortcuts(context);
         match (&mut self.mode, &mut event) {
             /*(ViewMode::Ansi(ref mut buf), _) => {
                 if buf.process_event(event, context) {
@@ -2015,7 +2015,7 @@ impl Component for MailView {
             },
         }
 
-        let shortcuts = &self.get_shortcuts(context);
+        let shortcuts = &self.shortcuts(context);
         match *event {
             UIEvent::ConfigReload { old_settings: _ } => {
                 self.theme_default = crate::conf::value(context, "theme_default");
@@ -2571,8 +2571,10 @@ impl Component for MailView {
                         if let Some(filename) = u.filename() {
                             path.push(filename);
                         } else {
-                            let u = melib::uuid::Uuid::new_v4();
-                            path.push(u.as_hyphenated().to_string());
+                            path.push(format!(
+                                "meli_attachment_{a_i}_{}",
+                                Uuid::new_v4().as_simple()
+                            ));
                         }
                     }
                     match save_attachment(&path, &u.decode(Default::default())) {
@@ -2874,11 +2876,11 @@ impl Component for MailView {
         }
     }
 
-    fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
+    fn shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut map = if let Some(ref sbv) = self.subview {
-            sbv.get_shortcuts(context)
+            sbv.shortcuts(context)
         } else {
-            self.pager.get_shortcuts(context)
+            self.pager.shortcuts(context)
         };
 
         let mut our_map = context.settings.shortcuts.envelope_view.key_values();

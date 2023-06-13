@@ -101,7 +101,7 @@ impl EmbedContainer {
             embed_area: ((0, 0), (80, 20)),
             dirty: true,
             log_file: File::open(".embed.out").unwrap(),
-            id: ComponentId::new_v4(),
+            id: ComponentId::default(),
         })
     }
 }

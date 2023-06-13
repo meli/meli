@@ -87,7 +87,7 @@ impl MailboxManager {
             initialized: false,
             dirty: true,
             movement: None,
-            id: ComponentId::new_v4(),
+            id: ComponentId::default(),
         }
     }
 
@@ -416,7 +416,7 @@ impl Component for MailboxManager {
             return s.process_event(event, context);
         }
 
-        let shortcuts = self.get_shortcuts(context);
+        let shortcuts = self.shortcuts(context);
         match event {
             UIEvent::AccountStatusChange(account_hash, msg)
                 if *account_hash == self.account_hash =>
@@ -428,8 +428,8 @@ impl Component for MailboxManager {
                 context
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(match msg {
-                        Some(msg) => format!("{} {}", self.get_status(context), msg),
-                        None => self.get_status(context),
+                        Some(msg) => format!("{} {}", self.status(context), msg),
+                        None => self.status(context),
                     })));
             }
             UIEvent::Input(ref key)
@@ -522,12 +522,12 @@ impl Component for MailboxManager {
         }
     }
 
-    fn kill(&mut self, uuid: Uuid, context: &mut Context) {
+    fn kill(&mut self, uuid: ComponentId, context: &mut Context) {
         debug_assert!(uuid == self.id);
         context.replies.push_back(UIEvent::Action(Tab(Kill(uuid))));
     }
 
-    fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
+    fn shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut map = ShortcutMaps::default();
 
         map.insert(
@@ -550,7 +550,7 @@ impl Component for MailboxManager {
         true
     }
 
-    fn get_status(&self, _context: &Context) -> String {
+    fn status(&self, _context: &Context) -> String {
         format!("{} entries", self.entries.len())
     }
 }

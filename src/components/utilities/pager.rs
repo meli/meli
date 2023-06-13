@@ -158,7 +158,7 @@ impl Pager {
             minimum_width: pager_minimum_width,
             initialised: false,
             dirty: true,
-            id: ComponentId::new_v4(),
+            id: ComponentId::default(),
             filtered_content: None,
             colors,
             ..Default::default()
@@ -648,7 +648,7 @@ impl Component for Pager {
     }
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
-        let shortcuts = self.get_shortcuts(context);
+        let shortcuts = self.shortcuts(context);
         match event {
             UIEvent::ConfigReload { old_settings: _ } => {
                 self.set_colors(crate::conf::value(context, "theme_default"));
@@ -829,7 +829,7 @@ impl Component for Pager {
         self.dirty = value;
     }
 
-    fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
+    fn shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut ret: ShortcutMaps = Default::default();
         ret.insert(
             Shortcuts::PAGER,

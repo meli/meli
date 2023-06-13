@@ -49,7 +49,7 @@ impl HSplit {
             bottom,
             show_divider,
             ratio,
-            id: ComponentId::new_v4(),
+            id: ComponentId::default(),
         }
     }
 }
@@ -101,9 +101,9 @@ impl Component for HSplit {
         self.bottom.set_dirty(value);
     }
 
-    fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
-        let mut top_map = self.top.get_shortcuts(context);
-        top_map.extend(self.bottom.get_shortcuts(context).into_iter());
+    fn shortcuts(&self, context: &Context) -> ShortcutMaps {
+        let mut top_map = self.top.shortcuts(context);
+        top_map.extend(self.bottom.shortcuts(context).into_iter());
         top_map
     }
 
@@ -147,7 +147,7 @@ impl VSplit {
             show_divider,
             prev_visibility: (true, true),
             ratio,
-            id: ComponentId::new_v4(),
+            id: ComponentId::default(),
         }
     }
 }
@@ -241,9 +241,9 @@ impl Component for VSplit {
         self.right.set_dirty(value);
     }
 
-    fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
-        let mut right_map = self.right.get_shortcuts(context);
-        right_map.extend(self.left.get_shortcuts(context).into_iter());
+    fn shortcuts(&self, context: &Context) -> ShortcutMaps {
+        let mut right_map = self.right.shortcuts(context);
+        right_map.extend(self.left.shortcuts(context).into_iter());
         right_map
     }
 

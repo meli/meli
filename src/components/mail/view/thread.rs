@@ -86,7 +86,7 @@ impl ThreadView {
             cursor_pos: 1,
             new_cursor_pos: 0,
             dirty: true,
-            id: ComponentId::new_v4(),
+            id: ComponentId::default(),
             indentation_colors: [
                 crate::conf::value(context, "mail.view.thread.indentation.a"),
                 crate::conf::value(context, "mail.view.thread.indentation.b"),
@@ -1002,7 +1002,7 @@ impl Component for ThreadView {
             return true;
         }
 
-        let shortcuts = self.get_shortcuts(context);
+        let shortcuts = self.shortcuts(context);
         match *event {
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Shortcuts::THREAD_VIEW]["scroll_up"]) =>
@@ -1157,8 +1157,8 @@ impl Component for ThreadView {
         self.mailview.set_dirty(value);
     }
 
-    fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
-        let mut map = self.mailview.get_shortcuts(context);
+    fn shortcuts(&self, context: &Context) -> ShortcutMaps {
+        let mut map = self.mailview.shortcuts(context);
 
         map.insert(
             Shortcuts::THREAD_VIEW,

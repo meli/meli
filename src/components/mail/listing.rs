@@ -1041,8 +1041,8 @@ impl Component for Listing {
                     context
                         .replies
                         .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(match msg {
-                            Some(msg) => format!("{} {}", self.get_status(context), msg),
-                            None => self.get_status(context),
+                            Some(msg) => format!("{} {}", self.status(context), msg),
+                            None => self.status(context),
                         })));
                 }
             }
@@ -1105,7 +1105,7 @@ impl Component for Listing {
                 context
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
-                        self.get_status(context),
+                        self.status(context),
                     )));
                 self.set_dirty(true);
                 return true;
@@ -1149,7 +1149,7 @@ impl Component for Listing {
             return true;
         }
 
-        let shortcuts = self.get_shortcuts(context);
+        let shortcuts = self.shortcuts(context);
         if self.focus == ListingFocus::Mailbox {
             match *event {
                 UIEvent::Input(Key::Mouse(MouseEvent::Press(MouseButton::Left, x, _y)))
@@ -1634,7 +1634,7 @@ impl Component for Listing {
                     context
                         .replies
                         .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
-                            self.get_status(context),
+                            self.status(context),
                         )));
                     return true;
                 }
@@ -1910,7 +1910,7 @@ impl Component for Listing {
                 context
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
-                        self.get_status(context),
+                        self.status(context),
                     )));
             }
             UIEvent::Input(Key::Backspace) if !self.cmd_buf.is_empty() => {
@@ -1963,11 +1963,11 @@ impl Component for Listing {
         }
     }
 
-    fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
+    fn shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut map = if let Some(s) = self.status.as_ref() {
-            s.get_shortcuts(context)
+            s.shortcuts(context)
         } else {
-            self.component.get_shortcuts(context)
+            self.component.shortcuts(context)
         };
         let mut config_map = context.settings.shortcuts.listing.key_values();
         if self.focus != ListingFocus::Menu {
@@ -1985,7 +1985,7 @@ impl Component for Listing {
         self.component.set_id(id);
     }
 
-    fn get_status(&self, context: &Context) -> String {
+    fn status(&self, context: &Context) -> String {
         let mailbox_hash = match self.cursor_pos.1 {
             MenuEntryCursor::Mailbox(idx) => {
                 if let Some(MailboxMenuEntry { mailbox_hash, .. }) =
@@ -2075,7 +2075,7 @@ impl Listing {
             show_menu_scrollbar: ShowMenuScrollbar::Never,
             startup_checks_rate: RateLimit::new(2, 1000, context.job_executor.clone()),
             theme_default: conf::value(context, "theme_default"),
-            id: ComponentId::new_v4(),
+            id: ComponentId::default(),
             sidebar_divider: *account_settings!(
                 context[first_account_hash].listing.sidebar_divider
             ),
@@ -2592,7 +2592,7 @@ impl Listing {
                 context
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
-                        self.get_status(context),
+                        self.status(context),
                     )));
             }
             MenuEntryCursor::Status => {
@@ -2618,7 +2618,7 @@ impl Listing {
         context
             .replies
             .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
-                self.get_status(context),
+                self.status(context),
             )));
     }
 

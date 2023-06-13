@@ -696,7 +696,7 @@ impl ThreadListing {
             movement: None,
             modifier_active: false,
             modifier_command: None,
-            id: ComponentId::new_v4(),
+            id: ComponentId::default(),
             search_job: None,
         })
     }
@@ -1316,7 +1316,7 @@ impl Component for ThreadListing {
     }
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
-        let shortcuts = self.get_shortcuts(context);
+        let shortcuts = self.shortcuts(context);
 
         match (&event, self.focus) {
             (UIEvent::Input(ref k), Focus::Entry)
@@ -1559,11 +1559,11 @@ impl Component for ThreadListing {
         self.dirty = value;
     }
 
-    fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
+    fn shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut map = if self.unfocused() {
             self.view
                 .as_ref()
-                .map(|p| p.get_shortcuts(context))
+                .map(|p| p.shortcuts(context))
                 .unwrap_or_default()
         } else {
             ShortcutMaps::default()

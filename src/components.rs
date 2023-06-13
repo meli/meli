@@ -22,8 +22,9 @@
 /*! Components visual and logical separations of application interfaces.
  *
  * They can draw on the terminal and receive events, but also do other stuff
- * as well. (For example, see the `notifications` module.)
- * See the `Component` Trait for more details.
+ * as well.
+ * For an example, see the [`notifications`] module.
+ * See also the [`Component`] trait for more details.
  */
 
 use super::*;
@@ -57,7 +58,46 @@ use std::{
 use indexmap::IndexMap;
 use uuid::Uuid;
 
-pub type ComponentId = Uuid;
+#[derive(Clone, Copy, Eq, Deserialize, Hash, Ord, PartialOrd, PartialEq, Serialize)]
+#[repr(transparent)]
+pub struct ComponentId(Uuid);
+
+impl AsRef<Uuid> for ComponentId {
+    fn as_ref(&self) -> &Uuid {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for ComponentId {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        std::fmt::Display::fmt(&self.0.as_simple(), fmt)
+    }
+}
+
+impl std::fmt::Debug for ComponentId {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        std::fmt::Display::fmt(&self.0.as_simple(), fmt)
+    }
+}
+
+impl Default for ComponentId {
+    fn default() -> Self {
+        Self(Uuid::new_v4())
+    }
+}
+
+impl std::fmt::LowerHex for ComponentId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::LowerHex::fmt(self.0.as_hyphenated(), f)
+    }
+}
+
+impl std::fmt::UpperHex for ComponentId {
+    #[inline]
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::UpperHex::fmt(self.0.as_hyphenated(), f)
+    }
+}
 
 pub type ShortcutMap = IndexMap<&'static str, Key>;
 pub type ShortcutMaps = IndexMap<&'static str, ShortcutMap>;
@@ -92,28 +132,37 @@ pub enum ScrollUpdate {
 
 /// Types implementing this Trait can draw on the terminal and receive events.
 /// If a type wants to skip drawing if it has not changed anything, it can hold
-/// some flag in its fields (eg self.dirty = false) and act upon that in their
-/// `draw` implementation.
+/// some flag in its fields (eg `self.dirty = false`) and act upon that in their
+/// [`draw`](Component::draw) implementation.
 pub trait Component: Display + Debug + Send + Sync {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context);
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool;
     fn is_dirty(&self) -> bool;
+    /// If the component is meant to be currently visible to the user.
     fn is_visible(&self) -> bool {
         true
     }
+
+    /// If the component can quit right away without any unsaved or ongoing
+    /// operations.
     fn can_quit_cleanly(&mut self, _context: &Context) -> bool {
         true
     }
+
     fn set_dirty(&mut self, value: bool);
+
     fn kill(&mut self, _id: ComponentId, _context: &mut Context) {}
+
     fn set_id(&mut self, _id: ComponentId) {}
+
     fn id(&self) -> ComponentId;
 
-    fn get_shortcuts(&self, _context: &Context) -> ShortcutMaps {
+    fn shortcuts(&self, _context: &Context) -> ShortcutMaps {
         Default::default()
     }
 
-    fn get_status(&self, _context: &Context) -> String {
+    /// Get status message for the status line.
+    fn status(&self, _context: &Context) -> String {
         String::new()
     }
 }

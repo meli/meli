@@ -24,11 +24,13 @@ use super::*;
 pub struct TextField {
     inner: UText,
     autocomplete: Option<(AutoCompleteFn, Box<AutoComplete>)>,
+    id: ComponentId,
 }
 
 impl Debug for TextField {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         fmt.debug_struct(stringify!(TextField))
+            .field("id", &self.id)
             .field("inner", &self.inner)
             .field("has AutoComplete", &self.autocomplete.is_some())
             .finish()
@@ -40,6 +42,7 @@ impl Default for TextField {
         Self {
             inner: UText::new(String::with_capacity(256)),
             autocomplete: None,
+            id: ComponentId::default(),
         }
     }
 }
@@ -49,6 +52,7 @@ impl TextField {
         Self {
             inner,
             autocomplete,
+            id: ComponentId::default(),
         }
     }
 
@@ -304,15 +308,20 @@ impl Component for TextField {
         self.set_dirty(true);
         true
     }
+
     fn is_dirty(&self) -> bool {
         false
     }
+
     fn set_dirty(&mut self, _value: bool) {}
 
     fn id(&self) -> ComponentId {
-        ComponentId::nil()
+        self.id
     }
-    fn set_id(&mut self, _id: ComponentId) {}
+
+    fn set_id(&mut self, id: ComponentId) {
+        self.id = id;
+    }
 }
 
 impl fmt::Display for TextField {

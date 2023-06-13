@@ -79,7 +79,7 @@ impl EnvelopeView {
             mail,
             _account_hash,
             cmd_buf: String::with_capacity(4),
-            id: ComponentId::new_v4(),
+            id: ComponentId::default(),
         }
     }
 

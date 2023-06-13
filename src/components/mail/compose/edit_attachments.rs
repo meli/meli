@@ -57,7 +57,7 @@ impl EditAttachments {
             buttons,
             cursor: EditAttachmentCursor::Buttons,
             dirty: true,
-            id: ComponentId::new_v4(),
+            id: ComponentId::default(),
         }
     }
 }
@@ -291,9 +291,9 @@ impl Component for EditAttachmentsRefMut<'_, '_> {
         }
     }
 
-    fn kill(&mut self, _uuid: Uuid, _context: &mut Context) {}
+    fn kill(&mut self, _uuid: ComponentId, _context: &mut Context) {}
 
-    fn get_shortcuts(&self, _context: &Context) -> ShortcutMaps {
+    fn shortcuts(&self, _context: &Context) -> ShortcutMaps {
         ShortcutMaps::default()
     }
 

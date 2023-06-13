@@ -38,6 +38,7 @@ mod dbus {
     #[derive(Debug)]
     pub struct DbusNotifications {
         rate_limit: RateLimit,
+        id: ComponentId,
     }
 
     impl fmt::Display for DbusNotifications {
@@ -50,6 +51,7 @@ mod dbus {
         pub fn new(context: &Context) -> Self {
             DbusNotifications {
                 rate_limit: RateLimit::new(1000, 1000, context.job_executor.clone()),
+                id: ComponentId::default(),
             }
         }
     }
@@ -131,10 +133,12 @@ mod dbus {
         }
 
         fn id(&self) -> ComponentId {
-            ComponentId::nil()
+            self.id
         }
 
-        fn set_id(&mut self, _id: ComponentId) {}
+        fn set_id(&mut self, id: ComponentId) {
+            self.id = id;
+        }
     }
 
     fn escape_str(s: &str) -> String {
@@ -168,11 +172,13 @@ mod dbus {
 
 /// Passes notifications to a user defined shell command
 #[derive(Default, Debug)]
-pub struct NotificationCommand {}
+pub struct NotificationCommand {
+    id: ComponentId,
+}
 
 impl NotificationCommand {
     pub fn new() -> Self {
-        NotificationCommand {}
+        NotificationCommand::default()
     }
 }
 
@@ -270,14 +276,20 @@ impl Component for NotificationCommand {
 
         false
     }
-    fn id(&self) -> ComponentId {
-        ComponentId::nil()
-    }
+
     fn is_dirty(&self) -> bool {
         false
     }
+
     fn set_dirty(&mut self, _value: bool) {}
-    fn set_id(&mut self, _id: ComponentId) {}
+
+    fn id(&self) -> ComponentId {
+        self.id
+    }
+
+    fn set_id(&mut self, id: ComponentId) {
+        self.id = id;
+    }
 }
 
 fn update_xbiff(path: &str) -> Result<()> {

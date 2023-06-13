@@ -19,27 +19,27 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*! UI types used throughout meli.
- *
- * The `segment_tree` module performs maximum range queries. This is used in
- * getting the maximum element of a column within a specific range in e-mail
- * lists. That way a very large value that is not the in the currently
- * displayed page does not cause the column to be rendered bigger
- * than it has to.
- *
- * `UIMode` describes the application's... mode. Same as in the modal editor
- * `vi`.
- *
- * `UIEvent` is the type passed around `Component`s when something happens.
- */
-extern crate serde;
+//! UI types used throughout meli.
+//!
+//! The [`segment_tree`] module performs maximum range queries.
+//! This is used in getting the maximum element of a column within a specific
+//! range in e-mail lists.
+//! That way a very large value that is not the in the currently displayed page
+//! does not cause the column to be rendered bigger than it has to.
+//!
+//! [`UIMode`] describes the application's... mode. Same as in the modal editor
+//! `vi`.
+//!
+//! [`UIEvent`] is the type passed around
+//! [`Component`](crate::components::Component)'s when something happens.
+
 #[macro_use]
 mod helpers;
+
 use std::{borrow::Cow, fmt, sync::Arc};
 
 use melib::{
     backends::{AccountHash, BackendEvent, MailboxHash},
-    uuid::Uuid,
     EnvelopeHash, RefreshEvent, ThreadHash,
 };
 use nix::unistd::Pid;
@@ -47,7 +47,7 @@ use nix::unistd::Pid;
 pub use self::helpers::*;
 use super::{
     command::Action,
-    jobs::{JobExecutor, JobId},
+    jobs::{JobExecutor, JobId, TimerId},
     terminal::*,
 };
 use crate::components::{Component, ComponentId, ScrollUpdate};
@@ -66,7 +66,7 @@ pub enum StatusEvent {
     ScrollUpdate(ScrollUpdate),
 }
 
-/// `ThreadEvent` encapsulates all of the possible values we need to transfer
+/// [`ThreadEvent`] encapsulates all of the possible values we need to transfer
 /// between our threads to the main process.
 #[derive(Debug)]
 pub enum ThreadEvent {
@@ -140,7 +140,7 @@ pub enum UIEvent {
     MailboxDelete((AccountHash, MailboxHash)),
     MailboxCreate((AccountHash, MailboxHash)),
     AccountStatusChange(AccountHash, Option<Cow<'static, str>>),
-    ComponentKill(Uuid),
+    ComponentKill(ComponentId),
     BackendEvent(AccountHash, BackendEvent),
     StartupCheck(MailboxHash),
     RefreshEvent(Box<RefreshEvent>),
@@ -152,7 +152,7 @@ pub enum UIEvent {
     FinishedUIDialog(ComponentId, UIMessage),
     Callback(CallbackFn),
     GlobalUIDialog(Box<dyn Component>),
-    Timer(Uuid),
+    Timer(TimerId),
     ConfigReload {
         old_settings: Box<crate::conf::Settings>,
     },
@@ -200,10 +200,10 @@ impl fmt::Display for UIMode {
 }
 
 pub mod segment_tree {
-    /*! Simple segment tree implementation for maximum in range queries. This
-     * is useful if given an  array of numbers you want to get the
-     * maximum value inside an interval quickly.
-     */
+    //! Simple segment tree implementation for maximum in range queries. This is
+    //! useful if given an array of numbers you want to get the maximum
+    //! value inside an interval quickly.
+
     use std::{convert::TryFrom, iter::FromIterator};
 
     use smallvec::SmallVec;
@@ -298,20 +298,25 @@ pub mod segment_tree {
         }
     }
 
-    #[test]
-    fn test_segment_tree() {
-        let array: SmallVec<[u8; 1024]> = [9, 1, 17, 2, 3, 23, 4, 5, 6, 37]
-            .iter()
-            .cloned()
-            .collect::<SmallVec<[u8; 1024]>>();
-        let mut segment_tree = SegmentTree::from(array);
+    #[cfg(test)]
+    mod tests {
+        use super::*;
 
-        assert_eq!(segment_tree.get_max(0, 5), 23);
-        assert_eq!(segment_tree.get_max(6, 9), 37);
+        #[test]
+        fn test_segment_tree() {
+            let array: SmallVec<[u8; 1024]> = [9, 1, 17, 2, 3, 23, 4, 5, 6, 37]
+                .iter()
+                .cloned()
+                .collect::<SmallVec<[u8; 1024]>>();
+            let mut segment_tree = SegmentTree::from(array);
 
-        segment_tree.update(2_usize, 24_u8);
+            assert_eq!(segment_tree.get_max(0, 5), 23);
+            assert_eq!(segment_tree.get_max(6, 9), 37);
 
-        assert_eq!(segment_tree.get_max(0, 5), 24);
+            segment_tree.update(2_usize, 24_u8);
+
+            assert_eq!(segment_tree.get_max(0, 5), 24);
+        }
     }
 }
 
@@ -354,83 +359,9 @@ impl RateLimit {
     }
 
     #[inline(always)]
-    pub fn id(&self) -> Uuid {
+    pub fn id(&self) -> TimerId {
         self.timer.id()
     }
-}
-
-#[test]
-fn test_rate_limit() {
-    /*
-    let (sender, receiver) =
-        crossbeam::channel::bounded(4096 * ::std::mem::size_of::<ThreadEvent>());
-    use std::sync::Arc;
-    let job_executor = Arc::new(JobExecutor::new(sender));
-    /* Accept at most one request per 3 milliseconds */
-    let mut rt = RateLimit::new(1, 3, job_executor.clone());
-    std::thread::sleep(std::time::Duration::from_millis(2000));
-    /* assert that only one request per 3 milliseconds is accepted */
-    for _ in 0..5 {
-        assert!(rt.tick());
-        std::thread::sleep(std::time::Duration::from_millis(1));
-        assert!(!rt.tick());
-        std::thread::sleep(std::time::Duration::from_millis(1));
-        assert!(!rt.tick());
-        std::thread::sleep(std::time::Duration::from_millis(1));
-        /* How many times was the signal handler called? We've slept for at least 3
-         * milliseconds, so it should have been called once */
-        let mut ctr = 0;
-        while receiver.try_recv().is_ok() {
-            ctr += 1;
-            println!("got {}", ctr);
-        }
-        println!("ctr =  {} {}", ctr, ctr == 1);
-        assert_eq!(ctr, 1);
-    }
-    /* next, test at most 100 requests per second */
-    let mut rt = RateLimit::new(100, 1000, job_executor.clone());
-    for _ in 0..5 {
-        let mut ctr = 0;
-        for _ in 0..500 {
-            if rt.tick() {
-                ctr += 1;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(2));
-        }
-        /* around 100 requests should succeed. might be 99 if in first loop, since
-         * RateLimit::new() has a delay */
-        assert!(ctr > 97 && ctr < 103);
-        /* alarm should expire in 1 second */
-        std::thread::sleep(std::time::Duration::from_millis(1000));
-        /* How many times was the signal handler called? */
-        ctr = 0;
-        while receiver.try_recv().is_ok() {
-            ctr += 1;
-        }
-        assert_eq!(ctr, 1);
-    }
-    /* next, test at most 500 requests per second */
-    let mut rt = RateLimit::new(500, 1000, job_executor.clone());
-    for _ in 0..5 {
-        let mut ctr = 0;
-        for _ in 0..500 {
-            if rt.tick() {
-                ctr += 1;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(2));
-        }
-        /* all requests should succeed.  */
-        assert!(ctr < 503 && ctr > 497);
-        /* alarm should expire in 1 second */
-        std::thread::sleep(std::time::Duration::from_millis(1000));
-        /* How many times was the signal handler called? */
-        ctr = 0;
-        while receiver.try_recv().is_ok() {
-            ctr += 1;
-        }
-        assert_eq!(ctr, 1);
-    }
-    */
 }
 
 #[derive(Debug)]
@@ -444,3 +375,82 @@ pub enum ComposeEvent {
 }
 
 pub type UIMessage = Box<dyn 'static + std::any::Any + Send + Sync>;
+
+#[cfg(test)]
+mod tests {
+    //use super::*;
+
+    #[test]
+    fn test_rate_limit() {
+        /*
+           let (sender, receiver) =
+           crossbeam::channel::bounded(4096 * ::std::mem::size_of::<ThreadEvent>());
+           use std::sync::Arc;
+           let job_executor = Arc::new(JobExecutor::new(sender));
+        /* Accept at most one request per 3 milliseconds */
+        let mut rt = RateLimit::new(1, 3, job_executor.clone());
+        std::thread::sleep(std::time::Duration::from_millis(2000));
+        /* assert that only one request per 3 milliseconds is accepted */
+        for _ in 0..5 {
+            assert!(rt.tick());
+            std::thread::sleep(std::time::Duration::from_millis(1));
+            assert!(!rt.tick());
+            std::thread::sleep(std::time::Duration::from_millis(1));
+            assert!(!rt.tick());
+            std::thread::sleep(std::time::Duration::from_millis(1));
+            /* How many times was the signal handler called? We've slept for at least 3
+             * milliseconds, so it should have been called once */
+            let mut ctr = 0;
+            while receiver.try_recv().is_ok() {
+                ctr += 1;
+                println!("got {}", ctr);
+            }
+            println!("ctr =  {} {}", ctr, ctr == 1);
+            assert_eq!(ctr, 1);
+        }
+        /* next, test at most 100 requests per second */
+        let mut rt = RateLimit::new(100, 1000, job_executor.clone());
+        for _ in 0..5 {
+            let mut ctr = 0;
+            for _ in 0..500 {
+                if rt.tick() {
+                    ctr += 1;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(2));
+            }
+            /* around 100 requests should succeed. might be 99 if in first loop, since
+             * RateLimit::new() has a delay */
+            assert!(ctr > 97 && ctr < 103);
+            /* alarm should expire in 1 second */
+            std::thread::sleep(std::time::Duration::from_millis(1000));
+            /* How many times was the signal handler called? */
+            ctr = 0;
+            while receiver.try_recv().is_ok() {
+                ctr += 1;
+            }
+            assert_eq!(ctr, 1);
+        }
+        /* next, test at most 500 requests per second */
+        let mut rt = RateLimit::new(500, 1000, job_executor.clone());
+        for _ in 0..5 {
+            let mut ctr = 0;
+            for _ in 0..500 {
+                if rt.tick() {
+                    ctr += 1;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(2));
+            }
+            /* all requests should succeed.  */
+            assert!(ctr < 503 && ctr > 497);
+            /* alarm should expire in 1 second */
+            std::thread::sleep(std::time::Duration::from_millis(1000));
+            /* How many times was the signal handler called? */
+            ctr = 0;
+            while receiver.try_recv().is_ok() {
+                ctr += 1;
+            }
+            assert_eq!(ctr, 1);
+        }
+        */
+    }
+}

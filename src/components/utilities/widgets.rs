@@ -35,7 +35,7 @@ type Cursor = usize;
 
 pub enum Field {
     Text(TextField),
-    Choice(Vec<Cow<'static, str>>, Cursor),
+    Choice(Vec<Cow<'static, str>>, Cursor, ComponentId),
 }
 
 impl Debug for Field {
@@ -57,7 +57,7 @@ impl Field {
     pub fn as_str(&self) -> &str {
         match self {
             Self::Text(ref s) => s.as_str(),
-            Self::Choice(ref v, cursor) => {
+            Self::Choice(ref v, cursor, _) => {
                 if v.is_empty() {
                     ""
                 } else {
@@ -70,7 +70,7 @@ impl Field {
     pub fn cursor(&self) -> usize {
         match self {
             Self::Text(ref s) => s.cursor(),
-            Self::Choice(_, ref cursor) => *cursor,
+            Self::Choice(_, ref cursor, _) => *cursor,
         }
     }
 
@@ -81,14 +81,14 @@ impl Field {
     pub fn into_string(self) -> String {
         match self {
             Self::Text(s) => s.into_string(),
-            Self::Choice(mut v, cursor) => v.remove(cursor).to_string(),
+            Self::Choice(mut v, cursor, _) => v.remove(cursor).to_string(),
         }
     }
 
     pub fn clear(&mut self) {
         match self {
             Self::Text(s) => s.clear(),
-            Self::Choice(_, _) => {}
+            Self::Choice(_, _, _) => {}
         }
     }
 
@@ -103,7 +103,7 @@ impl Field {
             Self::Text(ref mut text_field) => {
                 text_field.draw_cursor(grid, area, secondary_area, context);
             }
-            Self::Choice(_, _cursor) => {}
+            Self::Choice(_, _cursor, _) => {}
         }
     }
 }
@@ -116,7 +116,7 @@ impl Component for Field {
             Self::Text(ref mut text_field) => {
                 text_field.draw(grid, area, context);
             }
-            Self::Choice(_, _) => {
+            Self::Choice(_, _, _) => {
                 write_string_to_grid(
                     str,
                     grid,
@@ -139,7 +139,7 @@ impl Component for Field {
                 Self::Text(_) => {
                     return false;
                 }
-                Self::Choice(ref vec, ref mut cursor) => {
+                Self::Choice(ref vec, ref mut cursor, _) => {
                     *cursor = if *cursor == vec.len().saturating_sub(1) {
                         0
                     } else {
@@ -151,7 +151,7 @@ impl Component for Field {
                 Self::Text(_) => {
                     return false;
                 }
-                Self::Choice(_, ref mut cursor) => {
+                Self::Choice(_, ref mut cursor, _) => {
                     if *cursor == 0 {
                         return false;
                     } else {
@@ -174,10 +174,18 @@ impl Component for Field {
     fn set_dirty(&mut self, _value: bool) {}
 
     fn id(&self) -> ComponentId {
-        ComponentId::nil()
+        match self {
+            Self::Text(i) => i.id(),
+            Self::Choice(_, _, i) => *i,
+        }
     }
 
-    fn set_id(&mut self, _id: ComponentId) {}
+    fn set_id(&mut self, id: ComponentId) {
+        match self {
+            Self::Text(ref mut i) => i.set_id(id),
+            Self::Choice(_, _, i) => *i = id,
+        }
+    }
 }
 
 impl fmt::Display for Field {
@@ -187,7 +195,7 @@ impl fmt::Display for Field {
             "{}",
             match self {
                 Self::Text(ref s) => s.as_str(),
-                Self::Choice(ref v, ref cursor) => v[*cursor].as_ref(),
+                Self::Choice(ref v, ref cursor, _) => v[*cursor].as_ref(),
             }
         )
     }
@@ -231,7 +239,7 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> FormWidget<T> 
             buttons: ButtonWidget::new(action),
             focus: FormFocus::Fields,
             hide_buttons: false,
-            id: ComponentId::new_v4(),
+            id: ComponentId::default(),
             dirty: true,
             ..Default::default()
         }
@@ -265,7 +273,8 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> FormWidget<T> 
     pub fn push_choices(&mut self, value: (Cow<'static, str>, Vec<Cow<'static, str>>)) {
         self.field_name_max_length = std::cmp::max(self.field_name_max_length, value.0.len());
         self.layout.push(value.0.clone());
-        self.fields.insert(value.0, Field::Choice(value.1, 0));
+        self.fields
+            .insert(value.0, Field::Choice(value.1, 0, ComponentId::default()));
     }
     pub fn push_cl(&mut self, value: (Cow<'static, str>, String, AutoCompleteFn)) {
         self.field_name_max_length = std::cmp::max(self.field_name_max_length, value.0.len());
@@ -568,7 +577,7 @@ where
             cursor: 0,
             focus: false,
             dirty: true,
-            id: ComponentId::new_v4(),
+            id: ComponentId::default(),
         }
     }
 
@@ -814,7 +823,7 @@ impl AutoComplete {
             content: CellBuffer::default(),
             cursor: 0,
             dirty: true,
-            id: ComponentId::new_v4(),
+            id: ComponentId::default(),
         };
         ret.set_suggestions(entries);
         Box::new(ret)
@@ -1145,7 +1154,7 @@ impl ProgressSpinner {
             theme_attr,
             dirty: true,
             active: false,
-            id: ComponentId::new_v4(),
+            id: ComponentId::default(),
         }
     }
 

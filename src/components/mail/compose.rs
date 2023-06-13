@@ -113,7 +113,7 @@ pub struct Composer {
 
 #[derive(Debug)]
 enum ViewMode {
-    Discard(Uuid, UIDialog<char>),
+    Discard(ComponentId, UIDialog<char>),
     EditAttachments {
         widget: EditAttachments,
     },
@@ -175,7 +175,7 @@ impl Composer {
             embed_area: ((0, 0), (0, 0)),
             embed: None,
             initialized: false,
-            id: ComponentId::new_v4(),
+            id: ComponentId::default(),
         }
     }
 
@@ -1122,7 +1122,7 @@ impl Component for Composer {
         if let UIEvent::VisibilityChange(_) = event {
             self.pager.process_event(event, context);
         }
-        let shortcuts = self.get_shortcuts(context);
+        let shortcuts = self.shortcuts(context);
         match (&mut self.mode, &mut event) {
             (ViewMode::Edit, _) => {
                 if self.pager.process_event(event, context) {
@@ -2090,7 +2090,7 @@ impl Component for Composer {
         }
     }
 
-    fn kill(&mut self, uuid: Uuid, context: &mut Context) {
+    fn kill(&mut self, uuid: ComponentId, context: &mut Context) {
         if self.id != uuid {
             return;
         }
@@ -2121,9 +2121,9 @@ impl Component for Composer {
         );
     }
 
-    fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
+    fn shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut map = if self.mode.is_edit() {
-            self.pager.get_shortcuts(context)
+            self.pager.shortcuts(context)
         } else {
             Default::default()
         };

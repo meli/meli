@@ -19,16 +19,14 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*!
- * User actions that need to be handled by the UI
- */
+//! User actions that need to be handled by the UI
 
 use std::path::PathBuf;
 
+use melib::email::mailto::Mailto;
 pub use melib::thread::{SortField, SortOrder};
-use melib::{email::mailto::Mailto, uuid::Uuid};
 
-use crate::components::Component;
+use crate::components::{Component, ComponentId};
 
 #[derive(Debug)]
 pub enum TagAction {
@@ -61,7 +59,7 @@ pub enum ListingAction {
 #[derive(Debug)]
 pub enum TabAction {
     Close,
-    Kill(Uuid),
+    Kill(ComponentId),
     New(Option<Box<dyn Component>>),
     ManageMailboxes,
 }

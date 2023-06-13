@@ -57,7 +57,7 @@ impl AccountStatus {
             content,
             dirty: true,
             theme_default,
-            id: ComponentId::new_v4(),
+            id: ComponentId::default(),
         }
     }
 }
@@ -398,7 +398,7 @@ impl Component for AccountStatus {
     }
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
-        let shortcuts = self.get_shortcuts(context);
+        let shortcuts = self.shortcuts(context);
         match *event {
             UIEvent::ConfigReload { old_settings: _ } => {
                 self.theme_default = crate::conf::value(context, "theme_default");
@@ -447,7 +447,7 @@ impl Component for AccountStatus {
         false
     }
 
-    fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
+    fn shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut ret: ShortcutMaps = ShortcutMaps::default();
         ret.insert(
             Shortcuts::GENERAL,

@@ -63,9 +63,7 @@ fn find_task<T>(local: &Worker<T>, global: &Injector<T>, stealers: &[Stealer<T>]
 
 macro_rules! uuid_hash_type {
     ($n:ident) => {
-        #[derive(
-            PartialEq, Hash, Eq, Copy, Clone, Ord, PartialOrd, Serialize, Deserialize, Default,
-        )]
+        #[derive(PartialEq, Hash, Eq, Copy, Clone, Ord, PartialOrd, Serialize, Deserialize)]
         pub struct $n(Uuid);
 
         impl core::fmt::Debug for $n {
@@ -80,17 +78,24 @@ macro_rules! uuid_hash_type {
             }
         }
 
+        impl Default for $n {
+            fn default() -> Self {
+                Self::new()
+            }
+        }
+
         impl $n {
             pub fn new() -> Self {
-                $n(Uuid::new_v4())
+                Self(Uuid::new_v4())
             }
             pub fn null() -> Self {
-                $n(Uuid::nil())
+                Self(Uuid::nil())
             }
         }
     };
 }
 uuid_hash_type!(JobId);
+uuid_hash_type!(TimerId);
 
 /// A spawned future and its current state.
 pub struct MeliTask {
@@ -105,7 +110,7 @@ pub struct JobExecutor {
     workers: Vec<Stealer<MeliTask>>,
     sender: Sender<ThreadEvent>,
     parkers: Vec<Unparker>,
-    timers: Arc<Mutex<HashMap<Uuid, TimerPrivate>>>,
+    timers: Arc<Mutex<HashMap<TimerId, TimerPrivate>>>,
 }
 
 #[derive(Debug, Default)]
@@ -121,12 +126,12 @@ struct TimerPrivate {
 
 #[derive(Debug)]
 pub struct Timer {
-    id: Uuid,
+    id: TimerId,
     job_executor: Arc<JobExecutor>,
 }
 
 impl Timer {
-    pub fn id(&self) -> Uuid {
+    pub fn id(&self) -> TimerId {
         self.id
     }
 
@@ -260,7 +265,6 @@ impl JobExecutor {
     }
 
     pub fn create_timer(self: Arc<JobExecutor>, interval: Duration, value: Duration) -> Timer {
-        let id = Uuid::new_v4();
         let timer = TimerPrivate {
             interval,
             cancel: Arc::new(Mutex::new(false)),
@@ -268,6 +272,7 @@ impl JobExecutor {
             active: true,
             handle: None,
         };
+        let id = TimerId::default();
         self.timers.lock().unwrap().insert(id, timer);
         self.arm_timer(id, value);
         Timer {
@@ -276,7 +281,7 @@ impl JobExecutor {
         }
     }
 
-    pub fn rearm(&self, timer_id: Uuid) {
+    pub fn rearm(&self, timer_id: TimerId) {
         let mut timers_lck = self.timers.lock().unwrap();
         if let Some(timer) = timers_lck.get_mut(&timer_id) {
             let value = timer.value;
@@ -285,7 +290,7 @@ impl JobExecutor {
         }
     }
 
-    fn arm_timer(&self, id: Uuid, value: Duration) {
+    fn arm_timer(&self, id: TimerId, value: Duration) {
         let job_id = JobId::new();
         let sender = self.sender.clone();
         let injector = self.global_queue.clone();
@@ -337,7 +342,7 @@ impl JobExecutor {
         }
     }
 
-    fn disable_timer(&self, id: Uuid) {
+    fn disable_timer(&self, id: TimerId) {
         let mut timers_lck = self.timers.lock().unwrap();
         if let Some(timer) = timers_lck.get_mut(&id) {
             timer.active = false;
@@ -345,7 +350,7 @@ impl JobExecutor {
         }
     }
 
-    fn set_interval(&self, id: Uuid, new_val: Duration) {
+    fn set_interval(&self, id: TimerId, new_val: Duration) {
         let mut timers_lck = self.timers.lock().unwrap();
         if let Some(timer) = timers_lck.get_mut(&id) {
             timer.interval = new_val;

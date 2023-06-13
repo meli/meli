@@ -113,7 +113,7 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
         }
 
         let (width, height) = self.content.size();
-        let shortcuts = self.get_shortcuts(context);
+        let shortcuts = self.shortcuts(context);
         let mut highlighted_attrs = crate::conf::value(context, "widgets.options.highlighted");
         if !context.settings.terminal.use_color() {
             highlighted_attrs.attrs |= Attr::REVERSE;
@@ -404,7 +404,7 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
         false
     }
 
-    fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
+    fn shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut map = ShortcutMaps::default();
         map.insert(
             Shortcuts::GENERAL,
@@ -442,7 +442,7 @@ impl Component for UIConfirmationDialog {
         }
 
         let (width, height) = self.content.size();
-        let shortcuts = self.get_shortcuts(context);
+        let shortcuts = self.shortcuts(context);
         let mut highlighted_attrs = crate::conf::value(context, "widgets.options.highlighted");
         if !context.settings.terminal.use_color() {
             highlighted_attrs.attrs |= Attr::REVERSE;
@@ -733,7 +733,7 @@ impl Component for UIConfirmationDialog {
         false
     }
 
-    fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
+    fn shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut map = ShortcutMaps::default();
         map.insert(
             Shortcuts::GENERAL,
@@ -791,7 +791,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selec
             done_fn,
             dirty: true,
             theme_default: Default::default(),
-            id: ComponentId::new_v4(),
+            id: ComponentId::default(),
         };
         ret.initialise(context);
         ret

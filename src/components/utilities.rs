@@ -115,7 +115,7 @@ impl StatusBar {
             mode: UIMode::Normal,
             mouse: context.settings.terminal.use_mouse.is_true(),
             height: 1,
-            id: ComponentId::new_v4(),
+            id: ComponentId::default(),
             auto_complete: AutoComplete::new(Vec::new()),
             progress_spinner,
             in_progress_jobs: HashSet::default(),
@@ -784,8 +784,8 @@ impl Component for StatusBar {
         self.progress_spinner.set_dirty(value);
     }
 
-    fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
-        self.container.get_shortcuts(context)
+    fn shortcuts(&self, context: &Context) -> ShortcutMaps {
+        self.container.shortcuts(context)
     }
 
     fn id(&self) -> ComponentId {
@@ -823,7 +823,7 @@ impl Tabbed {
         let mut ret = Tabbed {
             help_curr_views: children
                 .get(0)
-                .map(|c| c.get_shortcuts(context))
+                .map(|c| c.shortcuts(context))
                 .unwrap_or_default(),
             help_content: CellBuffer::default(),
             help_screen_cursor: (0, 0),
@@ -834,10 +834,10 @@ impl Tabbed {
             cursor_pos: 0,
             show_shortcuts: false,
             dirty: true,
-            id: ComponentId::new_v4(),
+            id: ComponentId::default(),
         };
         ret.help_curr_views
-            .extend(ret.get_shortcuts(context).into_iter());
+            .extend(ret.shortcuts(context).into_iter());
         ret
     }
     fn draw_tabs(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
@@ -969,8 +969,8 @@ impl Component for Tabbed {
         }
 
         if (self.show_shortcuts && self.dirty) || must_redraw_shortcuts {
-            let mut children_maps = self.children[self.cursor_pos].get_shortcuts(context);
-            let our_map = self.get_shortcuts(context);
+            let mut children_maps = self.children[self.cursor_pos].shortcuts(context);
+            let our_map = self.shortcuts(context);
             children_maps.extend(our_map.into_iter());
             if children_maps.is_empty() {
                 return;
@@ -1343,13 +1343,13 @@ impl Component for Tabbed {
                     self.children[self.cursor_pos]
                         .process_event(&mut UIEvent::VisibilityChange(false), context);
                     self.cursor_pos = no % self.children.len();
-                    let mut children_maps = self.children[self.cursor_pos].get_shortcuts(context);
-                    children_maps.extend(self.get_shortcuts(context));
+                    let mut children_maps = self.children[self.cursor_pos].shortcuts(context);
+                    children_maps.extend(self.shortcuts(context));
                     self.help_curr_views = children_maps;
                     context
                         .replies
                         .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
-                            self.children[self.cursor_pos].get_status(context),
+                            self.children[self.cursor_pos].status(context),
                         )));
                     self.set_dirty(true);
                 }
@@ -1361,13 +1361,13 @@ impl Component for Tabbed {
                 self.children[self.cursor_pos]
                     .process_event(&mut UIEvent::VisibilityChange(false), context);
                 self.cursor_pos = (self.cursor_pos + 1) % self.children.len();
-                let mut children_maps = self.children[self.cursor_pos].get_shortcuts(context);
-                children_maps.extend(self.get_shortcuts(context));
+                let mut children_maps = self.children[self.cursor_pos].shortcuts(context);
+                children_maps.extend(self.shortcuts(context));
                 self.help_curr_views = children_maps;
                 context
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
-                        self.children[self.cursor_pos].get_status(context),
+                        self.children[self.cursor_pos].status(context),
                     )));
                 self.set_dirty(true);
                 return true;
@@ -1394,8 +1394,8 @@ impl Component for Tabbed {
                     .process_event(&mut UIEvent::VisibilityChange(false), context);
                 self.cursor_pos = self.children.len() - 1;
                 self.children[self.cursor_pos].set_dirty(true);
-                let mut children_maps = self.children[self.cursor_pos].get_shortcuts(context);
-                children_maps.extend(self.get_shortcuts(context));
+                let mut children_maps = self.children[self.cursor_pos].shortcuts(context);
+                children_maps.extend(self.shortcuts(context));
                 self.help_curr_views = children_maps;
                 return true;
             }
@@ -1405,8 +1405,8 @@ impl Component for Tabbed {
                 }
                 let id = self.children[self.cursor_pos].id();
                 self.children[self.cursor_pos].kill(id, context);
-                let mut children_maps = self.children[self.cursor_pos].get_shortcuts(context);
-                children_maps.extend(self.get_shortcuts(context));
+                let mut children_maps = self.children[self.cursor_pos].shortcuts(context);
+                children_maps.extend(self.shortcuts(context));
                 self.help_curr_views = children_maps;
                 self.set_dirty(true);
                 return true;
@@ -1421,8 +1421,8 @@ impl Component for Tabbed {
                     self.children.remove(c_idx);
                     self.cursor_pos = 0;
                     self.set_dirty(true);
-                    let mut children_maps = self.children[self.cursor_pos].get_shortcuts(context);
-                    children_maps.extend(self.get_shortcuts(context));
+                    let mut children_maps = self.children[self.cursor_pos].shortcuts(context);
+                    children_maps.extend(self.shortcuts(context));
                     self.help_curr_views = children_maps;
                     return true;
                 } else {
@@ -1525,9 +1525,11 @@ impl Component for Tabbed {
                 })
         }
     }
+
     fn is_dirty(&self) -> bool {
         self.dirty || self.children[self.cursor_pos].is_dirty()
     }
+
     fn set_dirty(&mut self, value: bool) {
         self.dirty = value;
         self.children[self.cursor_pos].set_dirty(value);
@@ -1536,11 +1538,12 @@ impl Component for Tabbed {
     fn id(&self) -> ComponentId {
         self.id
     }
+
     fn set_id(&mut self, id: ComponentId) {
         self.id = id;
     }
 
-    fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
+    fn shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut map = ShortcutMaps::default();
         map.insert(
             Shortcuts::GENERAL,
@@ -1566,6 +1569,7 @@ pub struct RawBuffer {
     pub buf: CellBuffer,
     title: Option<String>,
     cursor: (usize, usize),
+    id: ComponentId,
     dirty: bool,
 }
 
@@ -1639,7 +1643,11 @@ impl Component for RawBuffer {
     }
 
     fn id(&self) -> ComponentId {
-        ComponentId::nil()
+        self.id
+    }
+
+    fn set_id(&mut self, id: ComponentId) {
+        self.id = id;
     }
 }
 
@@ -1648,8 +1656,9 @@ impl RawBuffer {
         RawBuffer {
             buf,
             title,
-            dirty: true,
             cursor: (0, 0),
+            dirty: true,
+            id: ComponentId::default(),
         }
     }
     pub fn title(&self) -> &str {

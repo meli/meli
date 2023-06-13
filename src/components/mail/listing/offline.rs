@@ -117,7 +117,7 @@ impl OfflineListing {
             _selection: HashMap::default(),
             messages: vec![],
             dirty: true,
-            id: ComponentId::new_v4(),
+            id: ComponentId::default(),
         })
     }
 }

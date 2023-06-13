@@ -105,7 +105,7 @@ impl ContactList {
             sidebar_divider: context.settings.listing.sidebar_divider,
             sidebar_divider_theme: conf::value(context, "mail.sidebar_divider"),
             menu_visibility: true,
-            id: ComponentId::new_v4(),
+            id: ComponentId::default(),
         }
     }
 
@@ -631,7 +631,7 @@ impl Component for ContactList {
                 return true;
             }
         }
-        let shortcuts = self.get_shortcuts(context);
+        let shortcuts = self.shortcuts(context);
         if self.view.is_none() {
             match *event {
                 UIEvent::Input(ref key)
@@ -724,7 +724,7 @@ impl Component for ContactList {
                         context
                             .replies
                             .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
-                                self.get_status(context),
+                                self.status(context),
                             )));
                     }
 
@@ -761,7 +761,7 @@ impl Component for ContactList {
                         context
                             .replies
                             .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
-                                self.get_status(context),
+                                self.status(context),
                             )));
                     }
                     return true;
@@ -928,15 +928,15 @@ impl Component for ContactList {
         self.dirty = value;
     }
 
-    fn kill(&mut self, uuid: Uuid, context: &mut Context) {
+    fn kill(&mut self, uuid: ComponentId, context: &mut Context) {
         debug_assert!(uuid == self.id);
         context.replies.push_back(UIEvent::Action(Tab(Kill(uuid))));
     }
-    fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
+    fn shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut map = self
             .view
             .as_ref()
-            .map(|p| p.get_shortcuts(context))
+            .map(|p| p.shortcuts(context))
             .unwrap_or_default();
 
         map.insert(
@@ -966,7 +966,7 @@ impl Component for ContactList {
             .unwrap_or(true)
     }
 
-    fn get_status(&self, context: &Context) -> String {
+    fn status(&self, context: &Context) -> String {
         format!(
             "{} entries",
             context.accounts[self.account_pos].address_book.len()

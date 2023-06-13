@@ -894,7 +894,7 @@ impl CompactListing {
             movement: None,
             modifier_active: false,
             modifier_command: None,
-            id: ComponentId::new_v4(),
+            id: ComponentId::default(),
         })
     }
 
@@ -1687,7 +1687,7 @@ impl Component for CompactListing {
     }
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
-        let shortcuts = self.get_shortcuts(context);
+        let shortcuts = self.shortcuts(context);
 
         match (&event, self.focus) {
             (UIEvent::Input(ref k), Focus::Entry)
@@ -2023,9 +2023,9 @@ impl Component for CompactListing {
         }
     }
 
-    fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
+    fn shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut map = if self.unfocused() {
-            self.view.get_shortcuts(context)
+            self.view.shortcuts(context)
         } else {
             ShortcutMaps::default()
         };

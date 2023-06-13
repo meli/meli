@@ -36,7 +36,7 @@ pub struct HtmlView {
 
 impl HtmlView {
     pub fn new(body: &Attachment, context: &mut Context) -> Self {
-        let id = ComponentId::new_v4();
+        let id = ComponentId::default();
         let bytes: Vec<u8> = body.decode_rec(Default::default());
 
         let settings = &context.settings;
@@ -193,12 +193,15 @@ impl Component for HtmlView {
         }
         false
     }
-    fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
-        self.pager.get_shortcuts(context)
+
+    fn shortcuts(&self, context: &Context) -> ShortcutMaps {
+        self.pager.shortcuts(context)
     }
+
     fn is_dirty(&self) -> bool {
         self.pager.is_dirty()
     }
+
     fn set_dirty(&mut self, value: bool) {
         self.pager.set_dirty(value);
     }
@@ -206,6 +209,7 @@ impl Component for HtmlView {
     fn id(&self) -> ComponentId {
         self.id
     }
+
     fn set_id(&mut self, id: ComponentId) {
         self.id = id;
     }
