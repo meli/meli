@@ -164,3 +164,45 @@ pub trait Component: Display + Debug + Send + Sync {
         String::new()
     }
 }
+
+impl Component for Box<dyn Component> {
+    fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        (**self).draw(grid, area, context)
+    }
+
+    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+        (**self).process_event(event, context)
+    }
+
+    fn is_dirty(&self) -> bool {
+        (**self).is_dirty()
+    }
+
+    fn is_visible(&self) -> bool {
+        (**self).is_visible()
+    }
+
+    fn can_quit_cleanly(&mut self, context: &Context) -> bool {
+        (**self).can_quit_cleanly(context)
+    }
+
+    fn set_dirty(&mut self, value: bool) {
+        (**self).set_dirty(value)
+    }
+
+    fn kill(&mut self, id: ComponentId, context: &mut Context) {
+        (**self).kill(id, context)
+    }
+
+    fn id(&self) -> ComponentId {
+        (**self).id()
+    }
+
+    fn shortcuts(&self, context: &Context) -> ShortcutMaps {
+        (**self).shortcuts(context)
+    }
+
+    fn status(&self, context: &Context) -> String {
+        (**self).status(context)
+    }
+}

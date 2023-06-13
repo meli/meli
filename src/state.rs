@@ -21,8 +21,9 @@
 
 //! The application's state.
 //!
-//! The UI crate has an `Box<dyn Component>`-Component-System design. The system
-//! part, is also the application's state, so they're both merged in the
+//! The UI crate has an [`Box<dyn
+//! Component>`](crate::components::Component)-Component-System design. The
+//! system part, is also the application's state, so they're both merged in the
 //! [`State`] struct.
 //!
 //! [`State`] owns all the Components of the UI. In the application's main event
@@ -1246,6 +1247,7 @@ impl State {
         }
         Some(false)
     }
+
     /// Switch back to the terminal's main screen (The command line the user
     /// sees before opening the application)
     pub fn switch_to_main_screen(&mut self) {
