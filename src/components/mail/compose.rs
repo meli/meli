@@ -2138,9 +2138,6 @@ impl Component for Composer {
     fn id(&self) -> ComponentId {
         self.id
     }
-    fn set_id(&mut self, id: ComponentId) {
-        self.id = id;
-    }
 
     fn can_quit_cleanly(&mut self, context: &Context) -> bool {
         if !self.has_changes {

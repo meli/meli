@@ -424,9 +424,6 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
     fn id(&self) -> ComponentId {
         self.id
     }
-    fn set_id(&mut self, id: ComponentId) {
-        self.id = id;
-    }
 }
 
 impl Component for UIConfirmationDialog {
@@ -752,10 +749,6 @@ impl Component for UIConfirmationDialog {
 
     fn id(&self) -> ComponentId {
         self.id
-    }
-
-    fn set_id(&mut self, id: ComponentId) {
-        self.id = id;
     }
 }
 

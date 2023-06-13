@@ -791,9 +791,6 @@ impl Component for StatusBar {
     fn id(&self) -> ComponentId {
         self.id
     }
-    fn set_id(&mut self, id: ComponentId) {
-        self.id = id;
-    }
 
     fn can_quit_cleanly(&mut self, context: &Context) -> bool {
         self.container.can_quit_cleanly(context)
@@ -1539,10 +1536,6 @@ impl Component for Tabbed {
         self.id
     }
 
-    fn set_id(&mut self, id: ComponentId) {
-        self.id = id;
-    }
-
     fn shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut map = ShortcutMaps::default();
         map.insert(
@@ -1644,10 +1637,6 @@ impl Component for RawBuffer {
 
     fn id(&self) -> ComponentId {
         self.id
-    }
-
-    fn set_id(&mut self, id: ComponentId) {
-        self.id = id;
     }
 }
 

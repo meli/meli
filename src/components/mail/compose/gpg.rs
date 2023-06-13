@@ -250,17 +250,6 @@ impl Component for KeySelection {
             KeySelection::Loaded { ref widget, .. } => widget.id(),
         }
     }
-
-    fn set_id(&mut self, new_id: ComponentId) {
-        match self {
-            KeySelection::LoadingKeys {
-                ref mut progress_spinner,
-                ..
-            } => progress_spinner.set_id(new_id),
-            KeySelection::Error { ref mut id, .. } => *id = new_id,
-            KeySelection::Loaded { ref mut widget, .. } => widget.set_id(new_id),
-        }
-    }
 }
 
 #[derive(Debug, Clone)]

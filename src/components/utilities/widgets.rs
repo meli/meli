@@ -179,13 +179,6 @@ impl Component for Field {
             Self::Choice(_, _, i) => *i,
         }
     }
-
-    fn set_id(&mut self, id: ComponentId) {
-        match self {
-            Self::Text(ref mut i) => i.set_id(id),
-            Self::Choice(_, _, i) => *i = id,
-        }
-    }
 }
 
 impl fmt::Display for Field {
@@ -535,9 +528,6 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> Component for 
     fn id(&self) -> ComponentId {
         self.id
     }
-    fn set_id(&mut self, id: ComponentId) {
-        self.id = id;
-    }
 }
 
 #[derive(Debug, Default)]
@@ -675,9 +665,6 @@ where
     fn id(&self) -> ComponentId {
         self.id
     }
-    fn set_id(&mut self, id: ComponentId) {
-        self.id = id;
-    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -810,9 +797,6 @@ impl Component for AutoComplete {
 
     fn id(&self) -> ComponentId {
         self.id
-    }
-    fn set_id(&mut self, id: ComponentId) {
-        self.id = id;
     }
 }
 
@@ -1259,9 +1243,5 @@ impl Component for ProgressSpinner {
 
     fn id(&self) -> ComponentId {
         self.id
-    }
-
-    fn set_id(&mut self, id: ComponentId) {
-        self.id = id;
     }
 }

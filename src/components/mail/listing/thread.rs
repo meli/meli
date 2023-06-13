@@ -1580,7 +1580,4 @@ impl Component for ThreadListing {
     fn id(&self) -> ComponentId {
         self.id
     }
-    fn set_id(&mut self, id: ComponentId) {
-        self.id = id;
-    }
 }

@@ -1172,10 +1172,6 @@ impl Component for ThreadView {
         self.id
     }
 
-    fn set_id(&mut self, id: ComponentId) {
-        self.id = id;
-    }
-
     fn kill(&mut self, id: ComponentId, context: &mut Context) {
         debug_assert!(self.id == id);
         context

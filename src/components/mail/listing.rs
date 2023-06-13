@@ -1981,9 +1981,6 @@ impl Component for Listing {
     fn id(&self) -> ComponentId {
         self.component.id()
     }
-    fn set_id(&mut self, id: ComponentId) {
-        self.component.set_id(id);
-    }
 
     fn status(&self, context: &Context) -> String {
         let mailbox_hash = match self.cursor_pos.1 {

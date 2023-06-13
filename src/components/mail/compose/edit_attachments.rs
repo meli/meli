@@ -300,8 +300,4 @@ impl Component for EditAttachmentsRefMut<'_, '_> {
     fn id(&self) -> ComponentId {
         self.inner.id
     }
-
-    fn set_id(&mut self, new_id: ComponentId) {
-        self.inner.id = new_id;
-    }
 }

@@ -955,10 +955,6 @@ impl Component for ContactList {
         self.id
     }
 
-    fn set_id(&mut self, id: ComponentId) {
-        self.id = id;
-    }
-
     fn can_quit_cleanly(&mut self, context: &Context) -> bool {
         self.view
             .as_mut()

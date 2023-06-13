@@ -638,8 +638,4 @@ impl Component for EnvelopeView {
             .replies
             .push_back(UIEvent::Action(Tab(Kill(self.id))));
     }
-
-    fn set_id(&mut self, id: ComponentId) {
-        self.id = id;
-    }
 }

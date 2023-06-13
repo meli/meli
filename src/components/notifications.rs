@@ -135,10 +135,6 @@ mod dbus {
         fn id(&self) -> ComponentId {
             self.id
         }
-
-        fn set_id(&mut self, id: ComponentId) {
-            self.id = id;
-        }
     }
 
     fn escape_str(s: &str) -> String {
@@ -285,10 +281,6 @@ impl Component for NotificationCommand {
 
     fn id(&self) -> ComponentId {
         self.id
-    }
-
-    fn set_id(&mut self, id: ComponentId) {
-        self.id = id;
     }
 }
 

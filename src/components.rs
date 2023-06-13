@@ -153,8 +153,6 @@ pub trait Component: Display + Debug + Send + Sync {
 
     fn kill(&mut self, _id: ComponentId, _context: &mut Context) {}
 
-    fn set_id(&mut self, _id: ComponentId) {}
-
     fn id(&self) -> ComponentId;
 
     fn shortcuts(&self, _context: &Context) -> ShortcutMaps {

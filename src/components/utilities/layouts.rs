@@ -110,9 +110,6 @@ impl Component for HSplit {
     fn id(&self) -> ComponentId {
         self.id
     }
-    fn set_id(&mut self, id: ComponentId) {
-        self.id = id;
-    }
 }
 
 /// A vertically split in half container.
@@ -249,8 +246,5 @@ impl Component for VSplit {
 
     fn id(&self) -> ComponentId {
         self.id
-    }
-    fn set_id(&mut self, id: ComponentId) {
-        self.id = id;
     }
 }
