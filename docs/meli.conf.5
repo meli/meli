@@ -263,6 +263,11 @@ The port to connect to
 If port is 993 and use_starttls is unspecified, it becomes false by default.
 .\" default value
 .Pq Em true
+.It Ic use_tls Ar boolean
+.Pq Em optional
+Connect with TLS (or upgrade from plain connection to TLS if STARTTLS is set).
+.\" default value
+.Pq Em true
 .It Ic danger_accept_invalid_certs Ar boolean
 .Pq Em optional
 Do not validate TLS certificates.
