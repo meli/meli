@@ -91,7 +91,7 @@
 #[pager]
 #filter = "COLUMNS=72 /usr/local/bin/pygmentize -l email"
 #pager_context = 0 # default, optional
-#headers_sticky = true # default, optional
+#sticky_headers = true # default, optional
 #
 #[notifications]
 #script = "notify-send"

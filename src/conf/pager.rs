@@ -41,8 +41,14 @@ pub struct PagerSettings {
 
     /// Always show headers when scrolling.
     /// Default: true
-    #[serde(default = "true_val", alias = "headers-sticky")]
-    pub headers_sticky: bool,
+    #[serde(
+        default = "true_val",
+        alias = "sticky-headers",
+        /* deprecated names */
+        alias = "headers-sticky",
+        alias = "headers_sticky"
+    )]
+    pub sticky_headers: bool,
 
     /// The height of the pager in mail view, in percent.
     /// Default: 80
@@ -117,7 +123,7 @@ impl Default for PagerSettings {
         Self {
             pager_context: 0,
             pager_stop: false,
-            headers_sticky: true,
+            sticky_headers: true,
             pager_ratio: 80,
             filter: None,
             html_filter: None,
@@ -141,7 +147,7 @@ impl DotAddressable for PagerSettings {
                 match *field {
                     "pager_context" => self.pager_context.lookup(field, tail),
                     "pager_stop" => self.pager_stop.lookup(field, tail),
-                    "headers_sticky" => self.headers_sticky.lookup(field, tail),
+                    "sticky_headers" => self.sticky_headers.lookup(field, tail),
                     "pager_ratio" => self.pager_ratio.lookup(field, tail),
                     "filter" => self.filter.lookup(field, tail),
                     "html_filter" => self.html_filter.lookup(field, tail),

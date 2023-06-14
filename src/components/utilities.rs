@@ -795,6 +795,57 @@ impl Component for StatusBar {
     fn can_quit_cleanly(&mut self, context: &Context) -> bool {
         self.container.can_quit_cleanly(context)
     }
+
+    fn attributes(&self) -> &'static ComponentAttr {
+        &ComponentAttr::CONTAINER
+    }
+
+    fn children(&self) -> IndexMap<ComponentId, &dyn Component> {
+        let mut ret = IndexMap::default();
+        ret.insert(self.container.id(), &self.container as _);
+        ret.insert(self.ex_buffer.id(), &self.ex_buffer as _);
+        ret.insert(self.progress_spinner.id(), &self.progress_spinner as _);
+        ret
+    }
+
+    fn children_mut(&mut self) -> IndexMap<ComponentId, &mut dyn Component> {
+        IndexMap::default()
+    }
+
+    fn realize(&self, parent: Option<ComponentId>, context: &mut Context) {
+        context.realized.insert(self.id(), parent);
+        log::debug!(
+            "Realizing statusbar id {} w/ parent {:?}",
+            self.id(),
+            &parent
+        );
+        log::debug!(
+            "Realizing statusbar container id {} w/ parent {:?}",
+            self.container.id(),
+            &self.id
+        );
+        self.container.realize(self.id().into(), context);
+        log::debug!(
+            "Realizing progress_spinner container id {} w/ parent {:?}",
+            self.progress_spinner.id(),
+            &self.id
+        );
+        log::debug!(
+            "Realizing ex_buffer container id {} w/ parent {:?}",
+            self.ex_buffer.id(),
+            &self.id
+        );
+        self.progress_spinner.realize(self.id().into(), context);
+        self.ex_buffer.realize(self.id().into(), context);
+    }
+
+    fn unrealize(&self, context: &mut Context) {
+        log::debug!("Unrealizing id {}", self.id());
+        context.unrealized.insert(self.id());
+        self.container.unrealize(context);
+        self.progress_spinner.unrealize(context);
+        self.ex_buffer.unrealize(context);
+    }
 }
 
 #[derive(Debug)]
@@ -837,6 +888,7 @@ impl Tabbed {
             .extend(ret.shortcuts(context).into_iter());
         ret
     }
+
     fn draw_tabs(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
@@ -911,7 +963,8 @@ impl Tabbed {
 
         context.dirty_areas.push_back(area);
     }
-    pub fn add_component(&mut self, new: Box<dyn Component>) {
+    pub fn add_component(&mut self, new: Box<dyn Component>, context: &mut Context) {
+        new.realize(self.id().into(), context);
         self.children.push(new);
     }
 }
@@ -1386,7 +1439,7 @@ impl Component for Tabbed {
                 return true;
             }
             UIEvent::Action(Tab(New(ref mut e))) if e.is_some() => {
-                self.add_component(e.take().unwrap());
+                self.add_component(e.take().unwrap(), context);
                 self.children[self.cursor_pos]
                     .process_event(&mut UIEvent::VisibilityChange(false), context);
                 self.cursor_pos = self.children.len() - 1;
@@ -1415,6 +1468,7 @@ impl Component for Tabbed {
                 if let Some(c_idx) = self.children.iter().position(|x| x.id() == *id) {
                     self.children[c_idx]
                         .process_event(&mut UIEvent::VisibilityChange(false), context);
+                    self.children[c_idx].unrealize(context);
                     self.children.remove(c_idx);
                     self.cursor_pos = 0;
                     self.set_dirty(true);
@@ -1554,6 +1608,41 @@ impl Component for Tabbed {
             }
         }
         true
+    }
+
+    fn attributes(&self) -> &'static ComponentAttr {
+        &ComponentAttr::CONTAINER
+    }
+
+    fn children(&self) -> IndexMap<ComponentId, &dyn Component> {
+        let mut ret = IndexMap::default();
+        for c in &self.children {
+            ret.insert(c.id(), c as _);
+        }
+        ret
+    }
+
+    fn children_mut(&mut self) -> IndexMap<ComponentId, &mut dyn Component> {
+        IndexMap::default()
+    }
+
+    fn realize(&self, parent: Option<ComponentId>, context: &mut Context) {
+        log::debug!("Realizing Tabbed id {} w/ parent {:?}", self.id(), &parent);
+        context.realized.insert(self.id(), parent);
+        for c in &self.children {
+            log::debug!("Realizing child id {} w/ parent {:?}", c.id(), &self.id);
+            c.realize(self.id().into(), context);
+        }
+    }
+
+    fn unrealize(&self, context: &mut Context) {
+        log::debug!("Unrealizing id {}", self.id());
+        context
+            .replies
+            .push_back(UIEvent::ComponentUnrealize(self.id()));
+        for c in &self.children {
+            c.unrealize(context);
+        }
     }
 }
 

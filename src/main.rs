@@ -265,11 +265,13 @@ fn run_app(opt: Opt) -> Result<()> {
             sender,
             receiver.clone(),
         )?;
+        let main_loop_handler = state.context.main_loop_handler.clone();
         state.register_component(Box::new(EnvelopeView::new(
             wrapper,
             None,
             None,
-            AccountHash::default(),
+            None,
+            main_loop_handler,
         )));
     } else {
         state = State::new(None, sender, receiver.clone())?;

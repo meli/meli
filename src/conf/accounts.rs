@@ -37,7 +37,6 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use crossbeam::channel::Sender;
 use futures::{
     future::FutureExt,
     stream::{Stream, StreamExt},
@@ -57,9 +56,9 @@ use smallvec::SmallVec;
 use super::{AccountConf, FileMailboxConf};
 use crate::{
     command::actions::AccountAction,
-    jobs::{JobExecutor, JobId, JoinHandle},
+    jobs::{JobId, JoinHandle},
     types::UIEvent::{self, EnvelopeRemove, EnvelopeRename, EnvelopeUpdate, Notification},
-    StatusEvent, ThreadEvent,
+    MainLoopHandler, StatusEvent, ThreadEvent,
 };
 
 #[macro_export]
@@ -177,10 +176,9 @@ pub struct Account {
     pub settings: AccountConf,
     pub backend: Arc<RwLock<Box<dyn MailBackend>>>,
 
-    pub job_executor: Arc<JobExecutor>,
+    pub main_loop_handler: MainLoopHandler,
     pub active_jobs: HashMap<JobId, JobRequest>,
     pub active_job_instants: BTreeMap<std::time::Instant, JobId>,
-    pub sender: Sender<ThreadEvent>,
     pub event_queue: VecDeque<(MailboxHash, RefreshEvent)>,
     pub backend_capabilities: MailBackendCapabilities,
 }
@@ -434,8 +432,7 @@ impl Account {
         name: String,
         mut settings: AccountConf,
         map: &Backends,
-        job_executor: Arc<JobExecutor>,
-        sender: Sender<ThreadEvent>,
+        main_loop_handler: MainLoopHandler,
         event_consumer: BackendEventConsumer,
     ) -> Result<Self> {
         let s = settings.clone();
@@ -490,18 +487,20 @@ impl Account {
         if let Ok(mailboxes_job) = backend.mailboxes() {
             if let Ok(online_job) = backend.is_online() {
                 let handle = if backend.capabilities().is_async {
-                    job_executor.spawn_specialized(online_job.then(|_| mailboxes_job))
+                    main_loop_handler
+                        .job_executor
+                        .spawn_specialized(online_job.then(|_| mailboxes_job))
                 } else {
-                    job_executor.spawn_blocking(online_job.then(|_| mailboxes_job))
+                    main_loop_handler
+                        .job_executor
+                        .spawn_blocking(online_job.then(|_| mailboxes_job))
                 };
                 let job_id = handle.job_id;
                 active_jobs.insert(job_id, JobRequest::Mailboxes { handle });
                 active_job_instants.insert(std::time::Instant::now(), job_id);
-                sender
-                    .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
-                        StatusEvent::NewJob(job_id),
-                    )))
-                    .unwrap();
+                main_loop_handler.send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
+                    StatusEvent::NewJob(job_id),
+                )));
             }
         }
 
@@ -509,15 +508,13 @@ impl Account {
         if settings.conf.search_backend == crate::conf::SearchBackend::Sqlite3 {
             let db_path = match crate::sqlite3::db_path() {
                 Err(err) => {
-                    sender
-                        .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(format!(
-                                "Error with setting up an sqlite3 search database for account \
+                    main_loop_handler.send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
+                        StatusEvent::DisplayMessage(format!(
+                            "Error with setting up an sqlite3 search database for account \
                                  `{}`: {}",
-                                name, err
-                            )),
-                        )))
-                        .unwrap();
+                            name, err
+                        )),
+                    )));
                     None
                 }
                 Ok(path) => Some(path),
@@ -529,11 +526,9 @@ impl Account {
                          one will be created.",
                         name
                     );
-                    sender
-                        .send(ThreadEvent::UIEvent(UIEvent::Action(
-                            (name.clone(), AccountAction::ReIndex).into(),
-                        )))
-                        .unwrap();
+                    main_loop_handler.send(ThreadEvent::UIEvent(UIEvent::Action(
+                        (name.clone(), AccountAction::ReIndex).into(),
+                    )));
                 }
             }
         }
@@ -553,8 +548,7 @@ impl Account {
             sent_mailbox: Default::default(),
             collection: backend.collection(),
             settings,
-            sender,
-            job_executor,
+            main_loop_handler,
             active_jobs,
             active_job_instants,
             event_queue: VecDeque::with_capacity(8),
@@ -643,15 +637,14 @@ impl Account {
                 &self.name,
                 missing_mailbox,
             );
-            self.sender
+            self.main_loop_handler
                 .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
                     StatusEvent::DisplayMessage(format!(
                         "Account `{}` mailbox `{}` configured but not present in account's \
                          mailboxes. Is it misspelled?",
                         &self.name, missing_mailbox,
                     )),
-                )))
-                .unwrap();
+                )));
         }
         if !mailbox_conf_hash_set.is_empty() {
             let mut mailbox_comma_sep_list_string = mailbox_entries
@@ -671,14 +664,13 @@ impl Account {
                 &self.name,
                 mailbox_comma_sep_list_string,
             );
-            self.sender
+            self.main_loop_handler
                 .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
                     StatusEvent::DisplayMessage(format!(
                         "Account `{}` has the following mailboxes: [{}]",
                         &self.name, mailbox_comma_sep_list_string,
                     )),
-                )))
-                .unwrap();
+                )));
         }
 
         let mut tree: Vec<MailboxNode> = Vec::new();
@@ -697,16 +689,19 @@ impl Account {
                     if let Ok(mailbox_job) = self.backend.write().unwrap().fetch(*h) {
                         let mailbox_job = mailbox_job.into_future();
                         let handle = if self.backend_capabilities.is_async {
-                            self.job_executor.spawn_specialized(mailbox_job)
+                            self.main_loop_handler
+                                .job_executor
+                                .spawn_specialized(mailbox_job)
                         } else {
-                            self.job_executor.spawn_blocking(mailbox_job)
+                            self.main_loop_handler
+                                .job_executor
+                                .spawn_blocking(mailbox_job)
                         };
                         let job_id = handle.job_id;
-                        self.sender
+                        self.main_loop_handler
                             .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
                                 StatusEvent::NewJob(job_id),
-                            )))
-                            .unwrap();
+                            )));
                         self.active_jobs.insert(
                             job_id,
                             JobRequest::Fetch {
@@ -770,7 +765,8 @@ impl Account {
                                 );
                             }
                             Ok(job) => {
-                                let handle = self.job_executor.spawn_blocking(job);
+                                let handle =
+                                    self.main_loop_handler.job_executor.spawn_blocking(job);
                                 self.insert_job(
                                     handle.job_id,
                                     JobRequest::Generic {
@@ -816,7 +812,8 @@ impl Account {
                             )
                         }) {
                             Ok(job) => {
-                                let handle = self.job_executor.spawn_blocking(job);
+                                let handle =
+                                    self.main_loop_handler.job_executor.spawn_blocking(job);
                                 self.insert_job(
                                     handle.job_id,
                                     JobRequest::Generic {
@@ -868,7 +865,8 @@ impl Account {
                                 );
                             }
                             Ok(job) => {
-                                let handle = self.job_executor.spawn_blocking(job);
+                                let handle =
+                                    self.main_loop_handler.job_executor.spawn_blocking(job);
                                 self.insert_job(
                                     handle.job_id,
                                     JobRequest::Generic {
@@ -908,11 +906,13 @@ impl Account {
                     };
                     #[cfg(feature = "sqlite3")]
                     if self.settings.conf.search_backend == crate::conf::SearchBackend::Sqlite3 {
-                        let handle = self.job_executor.spawn_blocking(crate::sqlite3::insert(
-                            (*envelope).clone(),
-                            self.backend.clone(),
-                            self.name.clone(),
-                        ));
+                        let handle = self.main_loop_handler.job_executor.spawn_blocking(
+                            crate::sqlite3::insert(
+                                (*envelope).clone(),
+                                self.backend.clone(),
+                                self.name.clone(),
+                            ),
+                        );
                         self.insert_job(
                             handle.job_id,
                             JobRequest::Generic {
@@ -1027,8 +1027,7 @@ impl Account {
                             Some(format!("{} watcher exited with error", &self.name)),
                             e.to_string(),
                             Some(crate::types::NotificationType::Error(err.kind)),
-                        )))
-                        .expect("Could not send event on main channel");
+                        )));
                     */
                     self.watch();
                     return Some(Notification(
@@ -1057,24 +1056,26 @@ impl Account {
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::piped())
                 .spawn()?;
-            self.sender
+            self.main_loop_handler
                 .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
                     StatusEvent::DisplayMessage(format!("Running command {}", refresh_command)),
-                )))
-                .unwrap();
-            self.sender
+                )));
+            self.main_loop_handler
                 .send(ThreadEvent::UIEvent(UIEvent::Fork(
                     crate::ForkType::Generic(child),
-                )))
-                .unwrap();
+                )));
             return Ok(());
         }
         let refresh_job = self.backend.write().unwrap().refresh(mailbox_hash);
         if let Ok(refresh_job) = refresh_job {
             let handle = if self.backend_capabilities.is_async {
-                self.job_executor.spawn_specialized(refresh_job)
+                self.main_loop_handler
+                    .job_executor
+                    .spawn_specialized(refresh_job)
             } else {
-                self.job_executor.spawn_blocking(refresh_job)
+                self.main_loop_handler
+                    .job_executor
+                    .spawn_blocking(refresh_job)
             };
             self.insert_job(
                 handle.job_id,
@@ -1096,9 +1097,9 @@ impl Account {
             match self.backend.read().unwrap().watch() {
                 Ok(fut) => {
                     let handle = if self.backend_capabilities.is_async {
-                        self.job_executor.spawn_specialized(fut)
+                        self.main_loop_handler.job_executor.spawn_specialized(fut)
                     } else {
-                        self.job_executor.spawn_blocking(fut)
+                        self.main_loop_handler.job_executor.spawn_blocking(fut)
                     };
                     self.active_jobs
                         .insert(handle.job_id, JobRequest::Watch { handle });
@@ -1107,14 +1108,13 @@ impl Account {
                     if e.kind == ErrorKind::NotSupported || e.kind == ErrorKind::NotImplemented => {
                 }
                 Err(e) => {
-                    self.sender
+                    self.main_loop_handler
                         .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
                             StatusEvent::DisplayMessage(format!(
                                 "Account `{}` watch action returned error: {}",
                                 &self.name, e
                             )),
-                        )))
-                        .unwrap();
+                        )));
                 }
             }
         }
@@ -1174,9 +1174,13 @@ impl Account {
                         Ok(mailbox_job) => {
                             let mailbox_job = mailbox_job.into_future();
                             let handle = if self.backend_capabilities.is_async {
-                                self.job_executor.spawn_specialized(mailbox_job)
+                                self.main_loop_handler
+                                    .job_executor
+                                    .spawn_specialized(mailbox_job)
                             } else {
-                                self.job_executor.spawn_blocking(mailbox_job)
+                                self.main_loop_handler
+                                    .job_executor
+                                    .spawn_blocking(mailbox_job)
                             };
                             self.insert_job(
                                 handle.job_id,
@@ -1192,9 +1196,8 @@ impl Account {
                                 .and_modify(|entry| {
                                     entry.status = MailboxStatus::Failed(err);
                                 });
-                            self.sender
-                                .send(ThreadEvent::UIEvent(UIEvent::StartupCheck(mailbox_hash)))
-                                .unwrap();
+                            self.main_loop_handler
+                                .send(ThreadEvent::UIEvent(UIEvent::StartupCheck(mailbox_hash)));
                         }
                     }
                 }
@@ -1266,9 +1269,9 @@ impl Account {
             .save(bytes.to_vec(), mailbox_hash, flags)?;
 
         let handle = if self.backend_capabilities.is_async {
-            self.job_executor.spawn_specialized(job)
+            self.main_loop_handler.job_executor.spawn_specialized(job)
         } else {
-            self.job_executor.spawn_blocking(job)
+            self.main_loop_handler.job_executor.spawn_blocking(job)
         };
         self.insert_job(
             handle.job_id,
@@ -1335,11 +1338,14 @@ impl Account {
             }
             #[cfg(feature = "smtp")]
             SendMail::Smtp(conf) => {
-                let handle = self.job_executor.spawn_specialized(async move {
-                    let mut smtp_connection =
-                        melib::smtp::SmtpConnection::new_connection(conf).await?;
-                    smtp_connection.mail_transaction(&message, None).await
-                });
+                let handle = self
+                    .main_loop_handler
+                    .job_executor
+                    .spawn_specialized(async move {
+                        let mut smtp_connection =
+                            melib::smtp::SmtpConnection::new_connection(conf).await?;
+                        smtp_connection.mail_transaction(&message, None).await
+                    });
                 if complete_in_background {
                     self.insert_job(handle.job_id, JobRequest::SendMessageBackground { handle });
                     return Ok(None);
@@ -1357,9 +1363,9 @@ impl Account {
                             .submit(message.into_bytes(), None, None)?;
 
                     let handle = if self.backend_capabilities.is_async {
-                        self.job_executor.spawn_specialized(job)
+                        self.main_loop_handler.job_executor.spawn_specialized(job)
                     } else {
-                        self.job_executor.spawn_blocking(job)
+                        self.main_loop_handler.job_executor.spawn_blocking(job)
                     };
                     self.insert_job(handle.job_id, JobRequest::SendMessageBackground { handle });
                     return Ok(None);
@@ -1478,9 +1484,9 @@ impl Account {
                     .unwrap()
                     .create_mailbox(path.to_string())?;
                 let handle = if self.backend_capabilities.is_async {
-                    self.job_executor.spawn_specialized(job)
+                    self.main_loop_handler.job_executor.spawn_specialized(job)
                 } else {
-                    self.job_executor.spawn_blocking(job)
+                    self.main_loop_handler.job_executor.spawn_blocking(job)
                 };
                 self.insert_job(handle.job_id, JobRequest::CreateMailbox { path, handle });
                 Ok(())
@@ -1493,9 +1499,9 @@ impl Account {
                 let mailbox_hash = self.mailbox_by_path(&path)?;
                 let job = self.backend.write().unwrap().delete_mailbox(mailbox_hash)?;
                 let handle = if self.backend_capabilities.is_async {
-                    self.job_executor.spawn_specialized(job)
+                    self.main_loop_handler.job_executor.spawn_specialized(job)
                 } else {
-                    self.job_executor.spawn_blocking(job)
+                    self.main_loop_handler.job_executor.spawn_blocking(job)
                 };
                 self.insert_job(
                     handle.job_id,
@@ -1514,9 +1520,9 @@ impl Account {
                     .unwrap()
                     .set_mailbox_subscription(mailbox_hash, true)?;
                 let handle = if self.backend_capabilities.is_async {
-                    self.job_executor.spawn_specialized(job)
+                    self.main_loop_handler.job_executor.spawn_specialized(job)
                 } else {
-                    self.job_executor.spawn_blocking(job)
+                    self.main_loop_handler.job_executor.spawn_blocking(job)
                 };
                 self.insert_job(
                     handle.job_id,
@@ -1536,9 +1542,9 @@ impl Account {
                     .unwrap()
                     .set_mailbox_subscription(mailbox_hash, false)?;
                 let handle = if self.backend_capabilities.is_async {
-                    self.job_executor.spawn_specialized(job)
+                    self.main_loop_handler.job_executor.spawn_specialized(job)
                 } else {
-                    self.job_executor.spawn_blocking(job)
+                    self.main_loop_handler.job_executor.spawn_blocking(job)
                 };
                 self.insert_job(
                     handle.job_id,
@@ -1587,9 +1593,13 @@ impl Account {
             let online_job = self.backend.read().unwrap().is_online();
             if let Ok(online_job) = online_job {
                 let handle = if self.backend_capabilities.is_async {
-                    self.job_executor.spawn_specialized(online_job)
+                    self.main_loop_handler
+                        .job_executor
+                        .spawn_specialized(online_job)
                 } else {
-                    self.job_executor.spawn_blocking(online_job)
+                    self.main_loop_handler
+                        .job_executor
+                        .spawn_blocking(online_job)
                 };
                 self.insert_job(handle.job_id, JobRequest::IsOnline { handle });
             }
@@ -1643,11 +1653,10 @@ impl Account {
     }
 
     pub fn process_event(&mut self, job_id: &JobId) -> bool {
-        self.sender
+        self.main_loop_handler
             .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
                 StatusEvent::JobFinished(*job_id),
-            )))
-            .unwrap();
+            )));
 
         if let Some(mut job) = self.active_jobs.remove(job_id) {
             match job {
@@ -1655,32 +1664,36 @@ impl Account {
                     if let Ok(Some(mailboxes)) = handle.chan.try_recv() {
                         if let Err(err) = mailboxes.and_then(|mailboxes| self.init(mailboxes)) {
                             if err.kind.is_authentication() {
-                                self.sender
-                                    .send(ThreadEvent::UIEvent(UIEvent::Notification(
+                                self.main_loop_handler.send(ThreadEvent::UIEvent(
+                                    UIEvent::Notification(
                                         Some(format!("{}: authentication error", &self.name)),
                                         err.to_string(),
                                         Some(crate::types::NotificationType::Error(err.kind)),
-                                    )))
-                                    .expect("Could not send event on main channel");
+                                    ),
+                                ));
                                 self.is_online = Err(err);
                                 return true;
                             }
                             let mailboxes_job = self.backend.read().unwrap().mailboxes();
                             if let Ok(mailboxes_job) = mailboxes_job {
                                 let handle = if self.backend_capabilities.is_async {
-                                    self.job_executor.spawn_specialized(mailboxes_job)
+                                    self.main_loop_handler
+                                        .job_executor
+                                        .spawn_specialized(mailboxes_job)
                                 } else {
-                                    self.job_executor.spawn_blocking(mailboxes_job)
+                                    self.main_loop_handler
+                                        .job_executor
+                                        .spawn_blocking(mailboxes_job)
                                 };
                                 self.insert_job(handle.job_id, JobRequest::Mailboxes { handle });
                             };
                         } else {
-                            self.sender
-                                .send(ThreadEvent::UIEvent(UIEvent::AccountStatusChange(
+                            self.main_loop_handler.send(ThreadEvent::UIEvent(
+                                UIEvent::AccountStatusChange(
                                     self.hash,
                                     Some("Loaded mailboxes.".into()),
-                                )))
-                                .unwrap();
+                                ),
+                            ));
                         }
                     }
                 }
@@ -1705,40 +1718,38 @@ impl Account {
                                 .and_modify(|entry| {
                                     entry.status = MailboxStatus::Available;
                                 });
-                            self.sender
-                                .send(ThreadEvent::UIEvent(UIEvent::MailboxUpdate((
-                                    self.hash,
-                                    mailbox_hash,
-                                ))))
-                                .unwrap();
+                            self.main_loop_handler.send(ThreadEvent::UIEvent(
+                                UIEvent::MailboxUpdate((self.hash, mailbox_hash)),
+                            ));
                             return true;
                         }
                         Ok(Some((Some(Err(err)), _))) => {
-                            self.sender
-                                .send(ThreadEvent::UIEvent(UIEvent::Notification(
+                            self.main_loop_handler.send(ThreadEvent::UIEvent(
+                                UIEvent::Notification(
                                     Some(format!("{}: could not fetch mailbox", &self.name)),
                                     err.to_string(),
                                     Some(crate::types::NotificationType::Error(err.kind)),
-                                )))
-                                .expect("Could not send event on main channel");
+                                ),
+                            ));
                             self.mailbox_entries
                                 .entry(mailbox_hash)
                                 .and_modify(|entry| {
                                     entry.status = MailboxStatus::Failed(err);
                                 });
-                            self.sender
-                                .send(ThreadEvent::UIEvent(UIEvent::MailboxUpdate((
-                                    self.hash,
-                                    mailbox_hash,
-                                ))))
-                                .unwrap();
+                            self.main_loop_handler.send(ThreadEvent::UIEvent(
+                                UIEvent::MailboxUpdate((self.hash, mailbox_hash)),
+                            ));
                             return true;
                         }
                         Ok(Some((Some(Ok(payload)), rest))) => {
                             let handle = if self.backend_capabilities.is_async {
-                                self.job_executor.spawn_specialized(rest.into_future())
+                                self.main_loop_handler
+                                    .job_executor
+                                    .spawn_specialized(rest.into_future())
                             } else {
-                                self.job_executor.spawn_blocking(rest.into_future())
+                                self.main_loop_handler
+                                    .job_executor
+                                    .spawn_blocking(rest.into_future())
                             };
                             self.insert_job(
                                 handle.job_id,
@@ -1756,29 +1767,22 @@ impl Account {
                                     .merge(envelopes, mailbox_hash, self.sent_mailbox)
                             {
                                 for f in updated_mailboxes {
-                                    self.sender
-                                        .send(ThreadEvent::UIEvent(UIEvent::MailboxUpdate((
-                                            self.hash, f,
-                                        ))))
-                                        .unwrap();
+                                    self.main_loop_handler.send(ThreadEvent::UIEvent(
+                                        UIEvent::MailboxUpdate((self.hash, f)),
+                                    ));
                                 }
                             }
-                            self.sender
-                                .send(ThreadEvent::UIEvent(UIEvent::MailboxUpdate((
-                                    self.hash,
-                                    mailbox_hash,
-                                ))))
-                                .unwrap();
+                            self.main_loop_handler.send(ThreadEvent::UIEvent(
+                                UIEvent::MailboxUpdate((self.hash, mailbox_hash)),
+                            ));
                         }
                     }
                 }
                 JobRequest::IsOnline { ref mut handle, .. } => {
                     if let Ok(Some(is_online)) = handle.chan.try_recv() {
-                        self.sender
-                            .send(ThreadEvent::UIEvent(UIEvent::AccountStatusChange(
-                                self.hash, None,
-                            )))
-                            .unwrap();
+                        self.main_loop_handler.send(ThreadEvent::UIEvent(
+                            UIEvent::AccountStatusChange(self.hash, None),
+                        ));
                         if is_online.is_ok() {
                             if self.is_online.is_err()
                                 && !self
@@ -1798,9 +1802,13 @@ impl Account {
                     let online_job = self.backend.read().unwrap().is_online();
                     if let Ok(online_job) = online_job {
                         let handle = if self.backend_capabilities.is_async {
-                            self.job_executor.spawn_specialized(online_job)
+                            self.main_loop_handler
+                                .job_executor
+                                .spawn_specialized(online_job)
                         } else {
-                            self.job_executor.spawn_blocking(online_job)
+                            self.main_loop_handler
+                                .job_executor
+                                .spawn_blocking(online_job)
                         };
                         self.insert_job(handle.job_id, JobRequest::IsOnline { handle });
                     };
@@ -1829,11 +1837,9 @@ impl Account {
                                     .is_authentication())
                             {
                                 self.is_online = Ok(());
-                                self.sender
-                                    .send(ThreadEvent::UIEvent(UIEvent::AccountStatusChange(
-                                        self.hash, None,
-                                    )))
-                                    .unwrap();
+                                self.main_loop_handler.send(ThreadEvent::UIEvent(
+                                    UIEvent::AccountStatusChange(self.hash, None),
+                                ));
                             }
                         }
                         Ok(Some(Err(err))) => {
@@ -1841,31 +1847,32 @@ impl Account {
                                 let online_job = self.backend.read().unwrap().is_online();
                                 if let Ok(online_job) = online_job {
                                     let handle = if self.backend_capabilities.is_async {
-                                        self.job_executor.spawn_specialized(online_job)
+                                        self.main_loop_handler
+                                            .job_executor
+                                            .spawn_specialized(online_job)
                                     } else {
-                                        self.job_executor.spawn_blocking(online_job)
+                                        self.main_loop_handler
+                                            .job_executor
+                                            .spawn_blocking(online_job)
                                     };
                                     self.insert_job(handle.job_id, JobRequest::IsOnline { handle });
                                 };
                             }
                             self.is_online = Err(err);
-                            self.sender
-                                .send(ThreadEvent::UIEvent(UIEvent::AccountStatusChange(
-                                    self.hash, None,
-                                )))
-                                .unwrap();
+                            self.main_loop_handler.send(ThreadEvent::UIEvent(
+                                UIEvent::AccountStatusChange(self.hash, None),
+                            ));
                         }
                     }
                 }
                 JobRequest::SetFlags { ref mut handle, .. } => {
                     if let Ok(Some(Err(err))) = handle.chan.try_recv() {
-                        self.sender
+                        self.main_loop_handler
                             .send(ThreadEvent::UIEvent(UIEvent::Notification(
                                 Some(format!("{}: could not set flag", &self.name)),
                                 err.to_string(),
                                 Some(crate::types::NotificationType::Error(err.kind)),
-                            )))
-                            .expect("Could not send event on main channel");
+                            )));
                     }
                 }
                 JobRequest::SaveMessage {
@@ -1882,7 +1889,7 @@ impl Account {
                             "Message was stored in {} so that you can restore it manually.",
                             file.path.display()
                         );
-                        self.sender
+                        self.main_loop_handler
                             .send(ThreadEvent::UIEvent(UIEvent::Notification(
                                 Some(format!("{}: could not save message", &self.name)),
                                 format!(
@@ -1890,31 +1897,28 @@ impl Account {
                                     file.path.display()
                                 ),
                                 Some(crate::types::NotificationType::Info),
-                            )))
-                            .expect("Could not send event on main channel");
+                            )));
                     }
                 }
                 JobRequest::SendMessage => {}
                 JobRequest::SendMessageBackground { ref mut handle, .. } => {
                     if let Ok(Some(Err(err))) = handle.chan.try_recv() {
-                        self.sender
+                        self.main_loop_handler
                             .send(ThreadEvent::UIEvent(UIEvent::Notification(
                                 Some("Could not send message".to_string()),
                                 err.to_string(),
                                 Some(crate::types::NotificationType::Error(err.kind)),
-                            )))
-                            .expect("Could not send event on main channel");
+                            )));
                     }
                 }
                 JobRequest::DeleteMessages { ref mut handle, .. } => {
                     if let Ok(Some(Err(err))) = handle.chan.try_recv() {
-                        self.sender
+                        self.main_loop_handler
                             .send(ThreadEvent::UIEvent(UIEvent::Notification(
                                 Some(format!("{}: could not delete message", &self.name)),
                                 err.to_string(),
                                 Some(crate::types::NotificationType::Error(err.kind)),
-                            )))
-                            .expect("Could not send event on main channel");
+                            )));
                     }
                 }
                 JobRequest::CreateMailbox {
@@ -1925,24 +1929,21 @@ impl Account {
                     if let Ok(Some(r)) = handle.chan.try_recv() {
                         match r {
                             Err(err) => {
-                                self.sender
-                                    .send(ThreadEvent::UIEvent(UIEvent::Notification(
+                                self.main_loop_handler.send(ThreadEvent::UIEvent(
+                                    UIEvent::Notification(
                                         Some(format!(
                                             "{}: could not create mailbox {}",
                                             &self.name, path
                                         )),
                                         err.to_string(),
                                         Some(crate::types::NotificationType::Error(err.kind)),
-                                    )))
-                                    .expect("Could not send event on main channel");
+                                    ),
+                                ));
                             }
                             Ok((mailbox_hash, mut mailboxes)) => {
-                                self.sender
-                                    .send(ThreadEvent::UIEvent(UIEvent::MailboxCreate((
-                                        self.hash,
-                                        mailbox_hash,
-                                    ))))
-                                    .unwrap();
+                                self.main_loop_handler.send(ThreadEvent::UIEvent(
+                                    UIEvent::MailboxCreate((self.hash, mailbox_hash)),
+                                ));
                                 let mut new = FileMailboxConf::default();
                                 new.mailbox_conf.subscribe = super::ToggleFlag::InternalVal(true);
                                 new.mailbox_conf.usage = if mailboxes[&mailbox_hash].special_usage()
@@ -2013,21 +2014,18 @@ impl Account {
                         Err(_) => { /* canceled */ }
                         Ok(None) => {}
                         Ok(Some(Err(err))) => {
-                            self.sender
-                                .send(ThreadEvent::UIEvent(UIEvent::Notification(
+                            self.main_loop_handler.send(ThreadEvent::UIEvent(
+                                UIEvent::Notification(
                                     Some(format!("{}: could not delete mailbox", &self.name)),
                                     err.to_string(),
                                     Some(crate::types::NotificationType::Error(err.kind)),
-                                )))
-                                .expect("Could not send event on main channel");
+                                ),
+                            ));
                         }
                         Ok(Some(Ok(mut mailboxes))) => {
-                            self.sender
-                                .send(ThreadEvent::UIEvent(UIEvent::MailboxDelete((
-                                    self.hash,
-                                    mailbox_hash,
-                                ))))
-                                .unwrap();
+                            self.main_loop_handler.send(ThreadEvent::UIEvent(
+                                UIEvent::MailboxDelete((self.hash, mailbox_hash)),
+                            ));
                             if let Some(pos) =
                                 self.mailboxes_order.iter().position(|&h| h == mailbox_hash)
                             {
@@ -2069,13 +2067,13 @@ impl Account {
                             );
                             // FIXME remove from settings as well
 
-                            self.sender
-                                .send(ThreadEvent::UIEvent(UIEvent::Notification(
+                            self.main_loop_handler.send(ThreadEvent::UIEvent(
+                                UIEvent::Notification(
                                     Some(format!("{}: mailbox deleted successfully", &self.name)),
                                     String::new(),
                                     Some(crate::types::NotificationType::Info),
-                                )))
-                                .expect("Could not send event on main channel");
+                                ),
+                            ));
                         }
                     }
                 }
@@ -2085,28 +2083,28 @@ impl Account {
                         Err(_) => { /* canceled */ }
                         Ok(None) => {}
                         Ok(Some(Err(err))) => {
-                            self.sender
-                                .send(ThreadEvent::UIEvent(UIEvent::Notification(
+                            self.main_loop_handler.send(ThreadEvent::UIEvent(
+                                UIEvent::Notification(
                                     Some(format!(
                                         "{}: could not set mailbox permissions",
                                         &self.name
                                     )),
                                     err.to_string(),
                                     Some(crate::types::NotificationType::Error(err.kind)),
-                                )))
-                                .expect("Could not send event on main channel");
+                                ),
+                            ));
                         }
                         Ok(Some(Ok(_))) => {
-                            self.sender
-                                .send(ThreadEvent::UIEvent(UIEvent::Notification(
+                            self.main_loop_handler.send(ThreadEvent::UIEvent(
+                                UIEvent::Notification(
                                     Some(format!(
                                         "{}: mailbox permissions set successfully",
                                         &self.name
                                     )),
                                     String::new(),
                                     Some(crate::types::NotificationType::Info),
-                                )))
-                                .expect("Could not send event on main channel");
+                                ),
+                            ));
                         }
                     }
                 }
@@ -2119,16 +2117,16 @@ impl Account {
                         Err(_) => { /* canceled */ }
                         Ok(None) => {}
                         Ok(Some(Err(err))) => {
-                            self.sender
-                                .send(ThreadEvent::UIEvent(UIEvent::Notification(
+                            self.main_loop_handler.send(ThreadEvent::UIEvent(
+                                UIEvent::Notification(
                                     Some(format!(
                                         "{}: could not set mailbox subscription",
                                         &self.name
                                     )),
                                     err.to_string(),
                                     Some(crate::types::NotificationType::Error(err.kind)),
-                                )))
-                                .expect("Could not send event on main channel");
+                                ),
+                            ));
                         }
                         Ok(Some(Ok(()))) if self.mailbox_entries.contains_key(mailbox_hash) => {
                             self.mailbox_entries.entry(*mailbox_hash).and_modify(|m| {
@@ -2139,8 +2137,8 @@ impl Account {
                                 };
                                 let _ = m.ref_mailbox.set_is_subscribed(*new_value);
                             });
-                            self.sender
-                                .send(ThreadEvent::UIEvent(UIEvent::Notification(
+                            self.main_loop_handler.send(ThreadEvent::UIEvent(
+                                UIEvent::Notification(
                                     Some(format!(
                                         "{}: `{}` has been {}subscribed.",
                                         &self.name,
@@ -2149,8 +2147,8 @@ impl Account {
                                     )),
                                     String::new(),
                                     Some(crate::types::NotificationType::Info),
-                                )))
-                                .expect("Could not send event on main channel");
+                                ),
+                            ));
                         }
                         Ok(Some(Ok(()))) => {}
                     }
@@ -2162,13 +2160,13 @@ impl Account {
                             self.watch();
                         } else {
                             //TODO: relaunch watch job with ratelimit for failure
-                            self.sender
-                                .send(ThreadEvent::UIEvent(UIEvent::Notification(
+                            self.main_loop_handler.send(ThreadEvent::UIEvent(
+                                UIEvent::Notification(
                                     Some(format!("{}: watch thread failed", &self.name)),
                                     err.to_string(),
                                     Some(crate::types::NotificationType::Error(err.kind)),
-                                )))
-                                .expect("Could not send event on main channel");
+                                ),
+                            ));
                         }
                     }
                 }
@@ -2180,34 +2178,33 @@ impl Account {
                 } => {
                     match handle.chan.try_recv() {
                         Ok(Some(Err(err))) => {
-                            self.sender
-                                .send(ThreadEvent::UIEvent(UIEvent::Notification(
+                            self.main_loop_handler.send(ThreadEvent::UIEvent(
+                                UIEvent::Notification(
                                     Some(format!("{}: {} failed", &self.name, name,)),
                                     err.to_string(),
                                     Some(crate::types::NotificationType::Error(err.kind)),
-                                )))
-                                .expect("Could not send event on main channel");
+                                ),
+                            ));
                         }
                         Ok(Some(Ok(()))) if on_finish.is_none() => {
                             if log_level <= LogLevel::INFO {
-                                self.sender
-                                    .send(ThreadEvent::UIEvent(UIEvent::Notification(
+                                self.main_loop_handler.send(ThreadEvent::UIEvent(
+                                    UIEvent::Notification(
                                         Some(format!("{}: {} succeeded", &self.name, name,)),
                                         String::new(),
                                         Some(crate::types::NotificationType::Info),
-                                    )))
-                                    .expect("Could not send event on main channel");
+                                    ),
+                                ));
                             }
                         }
                         Err(_) => { /* canceled */ }
                         Ok(Some(Ok(()))) | Ok(None) => {}
                     }
                     if on_finish.is_some() {
-                        self.sender
+                        self.main_loop_handler
                             .send(ThreadEvent::UIEvent(UIEvent::Callback(
                                 on_finish.take().unwrap(),
-                            )))
-                            .unwrap();
+                            )));
                     }
                 }
             }
@@ -2221,20 +2218,18 @@ impl Account {
         self.active_jobs.insert(job_id, job);
         self.active_job_instants
             .insert(std::time::Instant::now(), job_id);
-        self.sender
+        self.main_loop_handler
             .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
                 StatusEvent::NewJob(job_id),
-            )))
-            .unwrap();
+            )));
     }
 
     pub fn cancel_job(&mut self, job_id: JobId) -> Option<JobRequest> {
         if let Some(req) = self.active_jobs.remove(&job_id) {
-            self.sender
+            self.main_loop_handler
                 .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
                     StatusEvent::JobCanceled(job_id),
-                )))
-                .unwrap();
+                )));
             Some(req)
         } else {
             None

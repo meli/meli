@@ -899,7 +899,9 @@ impl Component for ContactList {
             }
         } else {
             match event {
-                UIEvent::ComponentKill(ref kill_id) if self.mode == ViewMode::View(*kill_id) => {
+                UIEvent::ComponentUnrealize(ref kill_id)
+                    if self.mode == ViewMode::View(*kill_id) =>
+                {
                     self.mode = ViewMode::List;
                     self.view.take();
                     self.set_dirty(true);

@@ -1158,7 +1158,7 @@ impl Component for Composer {
                         Flag::SEEN,
                     ) {
                         Ok(job) => {
-                            let handle = context.job_executor.spawn_blocking(job);
+                            let handle = context.main_loop_handler.job_executor.spawn_blocking(job);
                             context
                                 .replies
                                 .push_back(UIEvent::StatusEvent(StatusEvent::NewJob(
@@ -1208,26 +1208,29 @@ impl Component for Composer {
                 self.set_dirty(true);
                 return true;
             }
-            (ViewMode::Send(ref dialog), UIEvent::ComponentKill(ref id)) if *id == dialog.id() => {
-                self.mode = ViewMode::Edit;
-                self.set_dirty(true);
-            }
-            (ViewMode::SelectRecipients(ref dialog), UIEvent::ComponentKill(ref id))
+            (ViewMode::Send(ref dialog), UIEvent::ComponentUnrealize(ref id))
                 if *id == dialog.id() =>
             {
                 self.mode = ViewMode::Edit;
                 self.set_dirty(true);
             }
-            (ViewMode::Discard(_, ref dialog), UIEvent::ComponentKill(ref id))
+            (ViewMode::SelectRecipients(ref dialog), UIEvent::ComponentUnrealize(ref id))
+                if *id == dialog.id() =>
+            {
+                self.mode = ViewMode::Edit;
+                self.set_dirty(true);
+            }
+            (ViewMode::Discard(_, ref dialog), UIEvent::ComponentUnrealize(ref id))
                 if *id == dialog.id() =>
             {
                 self.mode = ViewMode::Edit;
                 self.set_dirty(true);
             }
             #[cfg(feature = "gpgme")]
-            (ViewMode::SelectEncryptKey(_, ref mut selector), UIEvent::ComponentKill(ref id))
-                if *id == selector.id() =>
-            {
+            (
+                ViewMode::SelectEncryptKey(_, ref mut selector),
+                UIEvent::ComponentUnrealize(ref id),
+            ) if *id == selector.id() => {
                 self.mode = ViewMode::Edit;
                 self.set_dirty(true);
                 return true;
@@ -2315,7 +2318,7 @@ pub fn send_draft_async(
 ) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send>>> {
     let store_sent_mail = *account_settings!(context[account_hash].composing.store_sent_mail);
     let format_flowed = *account_settings!(context[account_hash].composing.format_flowed);
-    let event_sender = context.sender.clone();
+    let event_sender = context.main_loop_handler.sender.clone();
     #[cfg(feature = "gpgme")]
     #[allow(clippy::type_complexity)]
     let mut filters_stack: Vec<

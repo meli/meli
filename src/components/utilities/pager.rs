@@ -41,6 +41,12 @@ pub struct Pager {
     colors: ThemeAttribute,
     initialised: bool,
     show_scrollbar: bool,
+    /// At the last draw, were the visible columns plus horizontal cursor less than total width?
+    /// Used to decide whether to accept `scroll_right` key events.
+    cols_lt_width: bool,
+    /// At the last draw, were the visible rows plus vertical cursor less than total height?
+    /// Used to decide whether to accept `scroll_down` key events.
+    rows_lt_height: bool,
     filtered_content: Option<(String, Result<CellBuffer>)>,
     text_lines: Vec<String>,
     line_breaker: LineBreakText,
@@ -525,9 +531,6 @@ impl Component for Pager {
 
         clear_area(grid, area, crate::conf::value(context, "theme_default"));
         let (mut cols, mut rows) = (width!(area), height!(area));
-        if cols < 2 || rows < 2 {
-            return;
-        }
         let (has_more_lines, (width, height)) = if self.filtered_content.is_some() {
             (false, (self.width, self.height))
         } else {
@@ -536,6 +539,14 @@ impl Component for Pager {
                 (self.line_breaker.width().unwrap_or(cols), self.height),
             )
         };
+
+        self.cols_lt_width = cols + self.cursor.0 < width;
+        self.rows_lt_height = rows + self.cursor.1 < height;
+
+        if cols < 2 || rows < 2 {
+            return;
+        }
+
         if self.show_scrollbar && rows < height {
             cols -= 1;
             rows -= 1;
@@ -655,42 +666,32 @@ impl Component for Pager {
                 self.set_dirty(true);
             }
             UIEvent::Input(ref key)
-                if shortcut!(key == shortcuts[Shortcuts::PAGER]["scroll_up"]) =>
+                if shortcut!(key == shortcuts[Shortcuts::PAGER]["scroll_up"])
+                    && self.cursor.1 > 0 =>
             {
                 self.movement = Some(PageMovement::Up(1));
                 self.dirty = true;
                 return true;
             }
             UIEvent::Input(ref key)
-                if shortcut!(key == shortcuts[Shortcuts::PAGER]["scroll_down"]) =>
+                if shortcut!(key == shortcuts[Shortcuts::PAGER]["scroll_down"])
+                    && self.rows_lt_height =>
             {
                 self.movement = Some(PageMovement::Down(1));
                 self.dirty = true;
                 return true;
             }
             UIEvent::Input(ref key)
-                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["home_page"]) =>
-            {
-                self.movement = Some(PageMovement::Home);
-                self.dirty = true;
-                return true;
-            }
-            UIEvent::Input(ref key)
-                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["end_page"]) =>
-            {
-                self.movement = Some(PageMovement::End);
-                self.dirty = true;
-                return true;
-            }
-            UIEvent::Input(ref key)
-                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_left"]) =>
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_left"])
+                    && self.cursor.0 > 0 =>
             {
                 self.movement = Some(PageMovement::Left(1));
                 self.dirty = true;
                 return true;
             }
             UIEvent::Input(ref key)
-                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_right"]) =>
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_right"])
+                    && dbg!(self.cols_lt_width) =>
             {
                 self.movement = Some(PageMovement::Right(1));
                 self.dirty = true;
@@ -705,6 +706,20 @@ impl Component for Pager {
                 if shortcut!(key == shortcuts[Shortcuts::PAGER]["page_down"]) =>
             {
                 self.movement = Some(PageMovement::PageDown(1));
+                self.dirty = true;
+                return true;
+            }
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["home_page"]) =>
+            {
+                self.movement = Some(PageMovement::Home);
+                self.dirty = true;
+                return true;
+            }
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["end_page"]) =>
+            {
+                self.movement = Some(PageMovement::End);
                 self.dirty = true;
                 return true;
             }
@@ -802,7 +817,10 @@ impl Component for Pager {
             }
             UIEvent::Resize => {
                 self.initialised = false;
-                self.dirty = true;
+                self.set_dirty(true);
+            }
+            UIEvent::VisibilityChange(true) => {
+                self.set_dirty(true);
             }
             UIEvent::VisibilityChange(false) => {
                 context

@@ -82,6 +82,10 @@ impl ListingTrait for OfflineListing {
 
     fn draw_list(&mut self, _: &mut CellBuffer, _: Area, _: &mut Context) {}
 
+    fn view_area(&self) -> Option<Area> {
+        None
+    }
+
     fn unfocused(&self) -> bool {
         false
     }

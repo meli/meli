@@ -251,7 +251,6 @@ const DEFAULT_KEYS: &[&str] = &[
     "text.error",
     "text.highlight",
     "error_message",
-    "email_header",
     "highlight",
     "status.bar",
     "status.command_bar",
@@ -1316,8 +1315,6 @@ impl Default for Themes {
         add!("text.highlight", dark = { fg: Color::Blue, bg: "theme_default", attrs: Attr::REVERSE }, light = { fg: Color::Blue, bg: "theme_default", attrs: Attr::REVERSE });
 
         /* rest */
-        add!("email_header", dark = { fg: Color::Byte(33), bg: Color::Default, attrs: Attr::DEFAULT }, light = { fg: Color::Byte(33), bg: Color::Default, attrs: Attr::DEFAULT });
-
         add!("highlight", dark = { fg: Color::Byte(240), bg: Color::Byte(237), attrs: Attr::BOLD }, light = { fg: Color::Byte(240), bg: Color::Byte(237), attrs: Attr::BOLD });
 
         add!("status.bar", dark = { fg: Color::Byte(123), bg: Color::Byte(26) }, light = { fg: Color::Byte(123), bg: Color::Byte(26) });

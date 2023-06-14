@@ -34,10 +34,10 @@
 //! for user input, observe folders for file changes etc. The relevant struct is
 //! [`ThreadEvent`].
 
-use std::{env, os::unix::io::RawFd, sync::Arc, thread};
+use std::{collections::BTreeSet, env, os::unix::io::RawFd, sync::Arc, thread};
 
 use crossbeam::channel::{unbounded, Receiver, Sender};
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 use melib::{
     backends::{AccountHash, BackendEvent, BackendEventConsumer, Backends, RefreshEvent},
     UnixTimestamp,
@@ -102,6 +102,21 @@ impl InputHandler {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct MainLoopHandler {
+    pub sender: Sender<ThreadEvent>,
+    pub job_executor: Arc<JobExecutor>,
+}
+
+impl MainLoopHandler {
+    #[inline]
+    pub fn send(&self, event: ThreadEvent) {
+        if let Err(err) = self.sender.send(event) {
+            log::error!("Could not send event to main loop: {}", err);
+        }
+    }
+}
+
 /// A context container for loaded settings, accounts, UI changes, etc.
 pub struct Context {
     pub accounts: IndexMap<AccountHash, Account>,
@@ -112,10 +127,11 @@ pub struct Context {
 
     /// Events queue that components send back to the state
     pub replies: VecDeque<UIEvent>,
-    pub sender: Sender<ThreadEvent>,
+    pub realized: IndexMap<ComponentId, Option<ComponentId>>,
+    pub unrealized: IndexSet<ComponentId>,
+    pub main_loop_handler: MainLoopHandler,
     receiver: Receiver<ThreadEvent>,
     input_thread: InputHandler,
-    pub job_executor: Arc<JobExecutor>,
     pub children: Vec<std::process::Child>,
 
     pub temp_files: Vec<File>,
@@ -196,8 +212,10 @@ impl Context {
                 name,
                 account_conf,
                 &backends,
-                job_executor.clone(),
-                sender.clone(),
+                MainLoopHandler {
+                    job_executor: job_executor.clone(),
+                    sender: sender.clone(),
+                },
                 BackendEventConsumer::new(Arc::new(
                     move |account_hash: AccountHash, ev: BackendEvent| {
                         sender
@@ -219,8 +237,9 @@ impl Context {
             settings,
             dirty_areas: VecDeque::with_capacity(0),
             replies: VecDeque::with_capacity(0),
+            realized: IndexMap::default(),
+            unrealized: IndexSet::default(),
             temp_files: Vec::new(),
-            job_executor,
             children: vec![],
 
             input_thread: InputHandler {
@@ -230,7 +249,10 @@ impl Context {
                 control,
                 state_tx: sender.clone(),
             },
-            sender,
+            main_loop_handler: MainLoopHandler {
+                job_executor,
+                sender,
+            },
             receiver,
         }
     }
@@ -244,8 +266,9 @@ pub struct State {
     draw_rate_limit: RateLimit,
     child: Option<ForkType>,
     pub mode: UIMode,
-    overlay: Vec<Box<dyn Component>>,
-    components: Vec<Box<dyn Component>>,
+    overlay: IndexMap<ComponentId, Box<dyn Component>>,
+    components: IndexMap<ComponentId, Box<dyn Component>>,
+    component_tree: IndexMap<ComponentId, ComponentPath>,
     pub context: Box<Context>,
     timer: thread::JoinHandle<()>,
 
@@ -337,8 +360,10 @@ impl State {
                         n.to_string(),
                         a_s.clone(),
                         &backends,
-                        job_executor.clone(),
-                        sender.clone(),
+                        MainLoopHandler {
+                            job_executor: job_executor.clone(),
+                            sender: sender.clone(),
+                        },
                         BackendEventConsumer::new(Arc::new(
                             move |account_hash: AccountHash, ev: BackendEvent| {
                                 sender
@@ -388,8 +413,9 @@ impl State {
             }),
             child: None,
             mode: UIMode::Normal,
-            components: Vec::with_capacity(8),
-            overlay: Vec::new(),
+            components: IndexMap::default(),
+            overlay: IndexMap::default(),
+            component_tree: IndexMap::default(),
             timer,
             draw_rate_limit: RateLimit::new(1, 3, job_executor.clone()),
             display_messages: SmallVec::new(),
@@ -404,8 +430,9 @@ impl State {
                 settings,
                 dirty_areas: VecDeque::with_capacity(5),
                 replies: VecDeque::with_capacity(5),
+                realized: IndexMap::default(),
+                unrealized: IndexSet::default(),
                 temp_files: Vec::new(),
-                job_executor,
                 children: vec![],
 
                 input_thread: InputHandler {
@@ -415,7 +442,10 @@ impl State {
                     control,
                     state_tx: sender.clone(),
                 },
-                sender,
+                main_loop_handler: MainLoopHandler {
+                    job_executor,
+                    sender,
+                },
                 receiver,
             }),
         };
@@ -480,7 +510,7 @@ impl State {
     }
 
     pub fn sender(&self) -> Sender<ThreadEvent> {
-        self.context.sender.clone()
+        self.context.main_loop_handler.sender.clone()
     }
 
     pub fn restore_input(&mut self) {
@@ -759,7 +789,7 @@ impl State {
                 ),
             );
             copy_area(&mut self.screen.overlay_grid, &self.screen.grid, area, area);
-            self.overlay.get_mut(0).unwrap().draw(
+            self.overlay.get_index_mut(0).unwrap().1.draw(
                 &mut self.screen.overlay_grid,
                 area,
                 &mut self.context,
@@ -809,11 +839,12 @@ impl State {
             ref context,
             ..
         } = self;
-        components.iter_mut().all(|c| c.can_quit_cleanly(context))
+        components.values_mut().all(|c| c.can_quit_cleanly(context))
     }
 
     pub fn register_component(&mut self, component: Box<dyn Component>) {
-        self.components.push(component);
+        component.realize(None, &mut self.context);
+        self.components.insert(component.id(), component);
     }
 
     /// Convert user commands to actions/method calls.
@@ -885,7 +916,11 @@ impl State {
                 }
                 match crate::sqlite3::index(&mut self.context, account_index) {
                     Ok(job) => {
-                        let handle = self.context.job_executor.spawn_blocking(job);
+                        let handle = self
+                            .context
+                            .main_loop_handler
+                            .job_executor
+                            .spawn_blocking(job);
                         self.context.accounts[account_index].active_jobs.insert(
                             handle.job_id,
                             crate::conf::accounts::JobRequest::Generic {
@@ -963,6 +998,7 @@ impl State {
             }
             Quit => {
                 self.context
+                    .main_loop_handler
                     .sender
                     .send(ThreadEvent::Input((
                         self.context.settings.shortcuts.general.quit.clone(),
@@ -989,7 +1025,7 @@ impl State {
             UIEvent::Command(cmd) => {
                 if let Ok(action) = parse_command(cmd.as_bytes()) {
                     if action.needs_confirmation() {
-                        self.overlay.push(Box::new(UIConfirmationDialog::new(
+                        let new = Box::new(UIConfirmationDialog::new(
                             "You sure?",
                             vec![(true, "yes".to_string()), (false, "no".to_string())],
                             true,
@@ -1000,7 +1036,9 @@ impl State {
                                 ))
                             })),
                             &self.context,
-                        )));
+                        ));
+
+                        self.overlay.insert(new.id(), new);
                     } else if let Action::ReloadConfiguration = action {
                         match Settings::new().and_then(|new_settings| {
                             let old_accounts = self
@@ -1114,6 +1152,7 @@ impl State {
             }
             UIEvent::ChangeMode(m) => {
                 self.context
+                    .main_loop_handler
                     .sender
                     .send(ThreadEvent::UIEvent(UIEvent::ChangeMode(m)))
                     .unwrap();
@@ -1164,13 +1203,7 @@ impl State {
                 self.display_messages_pos = self.display_messages.len() - 1;
                 self.redraw();
             }
-            UIEvent::ComponentKill(ref id) if self.overlay.iter().any(|c| c.id() == *id) => {
-                let pos = self.overlay.iter().position(|c| c.id() == *id).unwrap();
-                self.overlay.remove(pos);
-            }
-            UIEvent::FinishedUIDialog(ref id, ref mut results)
-                if self.overlay.iter().any(|c| c.id() == *id) =>
-            {
+            UIEvent::FinishedUIDialog(ref id, ref mut results) if self.overlay.contains_key(id) => {
                 if let Some(ref mut action @ Some(_)) = results.downcast_mut::<Option<Action>>() {
                     self.exec_command(action.take().unwrap());
 
@@ -1182,7 +1215,7 @@ impl State {
                 return;
             }
             UIEvent::GlobalUIDialog(dialog) => {
-                self.overlay.push(dialog);
+                self.overlay.insert(dialog.id(), dialog);
                 return;
             }
             _ => {}
@@ -1195,10 +1228,58 @@ impl State {
         } = self;
 
         /* inform each component */
-        for c in overlay.iter_mut().chain(components.iter_mut()) {
+        for c in overlay.values_mut().chain(components.values_mut()) {
             if c.process_event(&mut event, context) {
                 break;
             }
+        }
+
+        while let Some((id, parent)) = self.context.realized.pop() {
+            match parent {
+                None => {
+                    self.component_tree.insert(id, ComponentPath::new(id));
+                }
+                Some(parent) if self.component_tree.contains_key(&parent) => {
+                    let mut v = self.component_tree[&parent].clone();
+                    v.push_front(id);
+                    if let Some(p) = v.root() {
+                        assert_eq!(
+                            v.resolve(&self.components[p] as &dyn Component)
+                                .unwrap()
+                                .id(),
+                            id
+                        );
+                    }
+                    self.component_tree.insert(id, v);
+                }
+                Some(parent) if !self.context.realized.contains_key(&parent) => {
+                    log::debug!(
+                        "BUG: component_realize new_id = {:?} parent = {:?} but component_tree \
+                         does not include parent, skipping.",
+                        id,
+                        parent
+                    );
+                    self.component_tree.insert(id, ComponentPath::new(id));
+                }
+                Some(_) => {
+                    let from_index = self.context.realized.len();
+                    self.context.realized.insert(id, parent);
+                    self.context.realized.move_index(from_index, 0);
+                }
+            }
+        }
+        while let Some(id) = self.context.unrealized.pop() {
+            let mut to_delete = BTreeSet::new();
+            for (desc, _) in self.component_tree.iter().filter(|(_, path)| {
+                path.parent()
+                    .map(|p| self.context.unrealized.contains(p) || *p == id)
+                    .unwrap_or(false)
+            }) {
+                to_delete.insert(*desc);
+            }
+            self.context.unrealized.extend(to_delete.into_iter());
+            self.component_tree.remove(&id);
+            self.components.remove(&id);
         }
 
         if !self.context.replies.is_empty() {

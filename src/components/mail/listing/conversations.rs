@@ -113,14 +113,15 @@ pub struct ConversationsListing {
     /// If we must redraw on next redraw event
     dirty: bool,
     force_draw: bool,
-    /// If `self.view` exists or not.
+    /// If `self.view` is visible or not.
     focus: Focus,
-    view: ThreadView,
     color_cache: ColorCache,
 
     movement: Option<PageMovement>,
     modifier_active: bool,
     modifier_command: Option<Modifier>,
+    view_area: Option<Area>,
+    parent: ComponentId,
     id: ComponentId,
 }
 
@@ -204,6 +205,7 @@ impl MailListingTrait for ConversationsListing {
             self.sort,
             &context.accounts[&self.cursor_pos.0].collection.envelopes,
         );
+        drop(threads);
 
         self.redraw_threads_list(
             context,
@@ -212,10 +214,22 @@ impl MailListingTrait for ConversationsListing {
 
         if !force && old_cursor_pos == self.new_cursor_pos && old_mailbox_hash == self.cursor_pos.1
         {
-            self.view.update(context);
+            self.kick_parent(self.parent, ListingMessage::UpdateView, context);
         } else if self.unfocused() {
-            if let Some(thread_group) = self.get_thread_under_cursor(self.cursor_pos.2) {
-                self.view = ThreadView::new(self.new_cursor_pos, thread_group, None, context);
+            if let Some((thread_hash, env_hash)) = self
+                .get_thread_under_cursor(self.cursor_pos.2)
+                .and_then(|thread| self.rows.thread_to_env.get(&thread).map(|e| (thread, e[0])))
+            {
+                self.kick_parent(
+                    self.parent,
+                    ListingMessage::OpenEntryUnderCursor {
+                        thread_hash,
+                        env_hash,
+                        show_thread: true,
+                    },
+                    context,
+                );
+                self.set_focus(Focus::Entry, context);
             }
         }
     }
@@ -377,7 +391,6 @@ impl ListingTrait for ConversationsListing {
     fn set_coordinates(&mut self, coordinates: (AccountHash, MailboxHash)) {
         self.new_cursor_pos = (coordinates.0, coordinates.1, 0);
         self.focus = Focus::None;
-        self.view = ThreadView::default();
         self.filtered_selection.clear();
         self.filtered_order.clear();
         self.filter_term.clear();
@@ -556,6 +569,10 @@ impl ListingTrait for ConversationsListing {
         );
     }
 
+    fn view_area(&self) -> Option<Area> {
+        self.view_area
+    }
+
     fn unfocused(&self) -> bool {
         !matches!(self.focus, Focus::None)
     }
@@ -580,8 +597,6 @@ impl ListingTrait for ConversationsListing {
     fn set_focus(&mut self, new_value: Focus, context: &mut Context) {
         match new_value {
             Focus::None => {
-                self.view
-                    .process_event(&mut UIEvent::VisibilityChange(false), context);
                 self.dirty = true;
                 /* If self.rows.row_updates is not empty and we exit a thread, the row_update
                  * events will be performed but the list will not be drawn.
@@ -592,13 +607,15 @@ impl ListingTrait for ConversationsListing {
             Focus::Entry => {
                 self.force_draw = true;
                 self.dirty = true;
-                self.view.set_dirty(true);
             }
-            Focus::EntryFullscreen => {
-                self.view.set_dirty(true);
-            }
+            Focus::EntryFullscreen => {}
         }
         self.focus = new_value;
+        self.kick_parent(
+            self.parent,
+            ListingMessage::FocusUpdate { new_value },
+            context,
+        );
     }
 
     fn focus(&self) -> Focus {
@@ -615,7 +632,7 @@ impl fmt::Display for ConversationsListing {
 impl ConversationsListing {
     //const PADDING_CHAR: char = ' '; //░';
 
-    pub fn new(coordinates: (AccountHash, MailboxHash)) -> Box<Self> {
+    pub fn new(parent: ComponentId, coordinates: (AccountHash, MailboxHash)) -> Box<Self> {
         Box::new(Self {
             cursor_pos: (coordinates.0, MailboxHash::default(), 0),
             new_cursor_pos: (coordinates.0, coordinates.1, 0),
@@ -631,11 +648,12 @@ impl ConversationsListing {
             dirty: true,
             force_draw: true,
             focus: Focus::None,
-            view: ThreadView::default(),
             color_cache: ColorCache::default(),
             movement: None,
             modifier_active: false,
             modifier_command: None,
+            view_area: None,
+            parent,
             id: ComponentId::default(),
         })
     }
@@ -969,12 +987,13 @@ impl ConversationsListing {
 
 impl Component for ConversationsListing {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        if !self.is_dirty() {
+        if matches!(self.focus, Focus::EntryFullscreen) {
+            self.view_area = area.into();
             return;
         }
 
-        if matches!(self.focus, Focus::EntryFullscreen) {
-            return self.view.draw(grid, area, context);
+        if !self.is_dirty() {
+            return;
         }
 
         let (upper_left, bottom_right) = area;
@@ -1228,7 +1247,7 @@ impl Component for ConversationsListing {
             );
             clear_area(grid, gap_area, self.color_cache.theme_default);
             context.dirty_areas.push_back(gap_area);
-            self.view.draw(grid, entry_area, context);
+            self.view_area = entry_area.into();
         }
         self.dirty = false;
     }
@@ -1258,10 +1277,6 @@ impl Component for ConversationsListing {
             _ => {}
         }
 
-        if self.unfocused() && self.view.process_event(event, context) {
-            return true;
-        }
-
         if self.length > 0 {
             match *event {
                 UIEvent::Input(ref k)
@@ -1269,8 +1284,21 @@ impl Component for ConversationsListing {
                         && (shortcut!(k == shortcuts[Shortcuts::LISTING]["open_entry"])
                             || shortcut!(k == shortcuts[Shortcuts::LISTING]["focus_right"])) =>
                 {
-                    if let Some(thread) = self.get_thread_under_cursor(self.cursor_pos.2) {
-                        self.view = ThreadView::new(self.cursor_pos, thread, None, context);
+                    if let Some((thread_hash, env_hash)) = self
+                        .get_thread_under_cursor(self.cursor_pos.2)
+                        .and_then(|thread| {
+                            self.rows.thread_to_env.get(&thread).map(|e| (thread, e[0]))
+                        })
+                    {
+                        self.kick_parent(
+                            self.parent,
+                            ListingMessage::OpenEntryUnderCursor {
+                                thread_hash,
+                                env_hash,
+                                show_thread: true,
+                            },
+                            context,
+                        );
                         self.set_focus(Focus::Entry, context);
                     }
                     return true;
@@ -1336,13 +1364,6 @@ impl Component for ConversationsListing {
                     }
 
                     self.set_dirty(true);
-
-                    if self.unfocused() {
-                        self.view.process_event(
-                            &mut UIEvent::EnvelopeRename(*old_hash, *new_hash),
-                            context,
-                        );
-                    }
                 }
                 UIEvent::EnvelopeRemove(ref _env_hash, ref thread_hash) => {
                     if self.rows.thread_order.contains_key(thread_hash) {
@@ -1368,11 +1389,6 @@ impl Component for ConversationsListing {
                     }
 
                     self.set_dirty(true);
-
-                    if self.unfocused() {
-                        self.view
-                            .process_event(&mut UIEvent::EnvelopeUpdate(*env_hash), context);
-                    }
                 }
                 UIEvent::Action(ref action) => match action {
                     Action::SubSort(field, order) if !self.unfocused() => {
@@ -1464,6 +1480,7 @@ impl Component for ConversationsListing {
                     ) {
                         Ok(job) => {
                             let handle = context.accounts[&self.cursor_pos.0]
+                                .main_loop_handler
                                 .job_executor
                                 .spawn_specialized(job);
                             self.search_job = Some((filter_term.to_string(), handle));
@@ -1533,24 +1550,17 @@ impl Component for ConversationsListing {
     fn is_dirty(&self) -> bool {
         match self.focus {
             Focus::None => self.dirty,
-            Focus::Entry => self.dirty || self.view.is_dirty(),
-            Focus::EntryFullscreen => self.view.is_dirty(),
+            Focus::Entry => self.dirty,
+            Focus::EntryFullscreen => false,
         }
     }
 
     fn set_dirty(&mut self, value: bool) {
-        if self.unfocused() {
-            self.view.set_dirty(value);
-        }
         self.dirty = value;
     }
 
     fn shortcuts(&self, context: &Context) -> ShortcutMaps {
-        let mut map = if self.unfocused() {
-            self.view.shortcuts(context)
-        } else {
-            ShortcutMaps::default()
-        };
+        let mut map = ShortcutMaps::default();
 
         map.insert(
             Shortcuts::LISTING,

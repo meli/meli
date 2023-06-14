@@ -221,10 +221,10 @@ impl Component for ContactManager {
                             context.replies.push_back(UIEvent::StatusEvent(
                                 StatusEvent::DisplayMessage("Saved.".into()),
                             ));
-                            context.replies.push_back(UIEvent::ComponentKill(self.id));
+                            self.unrealize(context);
                         }
                         Some(false) => {
-                            context.replies.push_back(UIEvent::ComponentKill(self.id));
+                            self.unrealize(context);
                         }
                     }
                     self.set_dirty(true);
@@ -237,7 +237,7 @@ impl Component for ContactManager {
             ViewMode::ReadOnly => {
                 if let &mut UIEvent::Input(Key::Esc) = event {
                     if self.can_quit_cleanly(context) {
-                        context.replies.push_back(UIEvent::ComponentKill(self.id));
+                        self.unrealize(context);
                     }
                     return true;
                 }

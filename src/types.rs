@@ -38,19 +38,21 @@ mod helpers;
 
 use std::{borrow::Cow, fmt, sync::Arc};
 
+pub use helpers::*;
 use melib::{
     backends::{AccountHash, BackendEvent, MailboxHash},
     EnvelopeHash, RefreshEvent, ThreadHash,
 };
 use nix::unistd::Pid;
 
-pub use self::helpers::*;
 use super::{
     command::Action,
     jobs::{JobExecutor, JobId, TimerId},
     terminal::*,
 };
 use crate::components::{Component, ComponentId, ScrollUpdate};
+
+pub type UIMessage = Box<dyn 'static + std::any::Any + Send + Sync>;
 
 #[derive(Debug)]
 pub enum StatusEvent {
@@ -70,15 +72,13 @@ pub enum StatusEvent {
 /// between our threads to the main process.
 #[derive(Debug)]
 pub enum ThreadEvent {
-    /// User input.
-    Input((Key, Vec<u8>)),
     /// User input and input as raw bytes.
+    Input((Key, Vec<u8>)),
     /// A watched Mailbox has been refreshed.
     RefreshMailbox(Box<RefreshEvent>),
     UIEvent(UIEvent),
     /// A thread has updated some of its information
     Pulse,
-    //Decode { _ }, // For gpg2 signature check
     JobFinished(JobId),
 }
 
@@ -126,9 +126,7 @@ pub enum UIEvent {
     CmdInput(Key),
     InsertInput(Key),
     EmbedInput((Key, Vec<u8>)),
-    //Quit?
     Resize,
-    /// Force redraw.
     Fork(ForkType),
     ChangeMailbox(usize),
     ChangeMode(UIMode),
@@ -140,7 +138,7 @@ pub enum UIEvent {
     MailboxDelete((AccountHash, MailboxHash)),
     MailboxCreate((AccountHash, MailboxHash)),
     AccountStatusChange(AccountHash, Option<Cow<'static, str>>),
-    ComponentKill(ComponentId),
+    ComponentUnrealize(ComponentId),
     BackendEvent(AccountHash, BackendEvent),
     StartupCheck(MailboxHash),
     RefreshEvent(Box<RefreshEvent>),
@@ -150,6 +148,11 @@ pub enum UIEvent {
     Contacts(ContactEvent),
     Compose(ComposeEvent),
     FinishedUIDialog(ComponentId, UIMessage),
+    IntraComm {
+        from: ComponentId,
+        to: ComponentId,
+        content: UIMessage,
+    },
     Callback(CallbackFn),
     GlobalUIDialog(Box<dyn Component>),
     Timer(TimerId),
@@ -373,8 +376,6 @@ pub enum ContactEvent {
 pub enum ComposeEvent {
     SetReceipients(Vec<melib::Address>),
 }
-
-pub type UIMessage = Box<dyn 'static + std::any::Any + Send + Sync>;
 
 #[cfg(test)]
 mod tests {

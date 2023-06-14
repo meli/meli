@@ -124,7 +124,7 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                 self.done = true;
                 if let Some(event) = self.done() {
                     context.replies.push_back(event);
-                    context.replies.push_back(UIEvent::ComponentKill(self.id));
+                    self.unrealize(context);
                 }
                 return true;
             }
@@ -160,7 +160,7 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                 self.done = true;
                 if let Some(event) = self.done() {
                     context.replies.push_back(event);
-                    context.replies.push_back(UIEvent::ComponentKill(self.id));
+                    self.unrealize(context);
                 }
                 return true;
             }
@@ -171,7 +171,7 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                 self.done = true;
                 if let Some(event) = self.done() {
                     context.replies.push_back(event);
-                    context.replies.push_back(UIEvent::ComponentKill(self.id));
+                    self.unrealize(context);
                 }
                 return true;
             }
@@ -182,7 +182,7 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                 self.done = true;
                 if let Some(event) = self.done() {
                     context.replies.push_back(event);
-                    context.replies.push_back(UIEvent::ComponentKill(self.id));
+                    self.unrealize(context);
                 }
                 return true;
             }
@@ -450,7 +450,7 @@ impl Component for UIConfirmationDialog {
                 self.done = true;
                 if let Some(event) = self.done() {
                     context.replies.push_back(event);
-                    context.replies.push_back(UIEvent::ComponentKill(self.id));
+                    self.unrealize(context);
                 }
                 return true;
             }
@@ -486,7 +486,7 @@ impl Component for UIConfirmationDialog {
                 self.done = true;
                 if let Some(event) = self.done() {
                     context.replies.push_back(event);
-                    context.replies.push_back(UIEvent::ComponentKill(self.id));
+                    self.unrealize(context);
                 }
                 return true;
             }
@@ -497,7 +497,7 @@ impl Component for UIConfirmationDialog {
                 self.done = true;
                 if let Some(event) = self.done() {
                     context.replies.push_back(event);
-                    context.replies.push_back(UIEvent::ComponentKill(self.id));
+                    self.unrealize(context);
                 }
                 return true;
             }
@@ -508,7 +508,7 @@ impl Component for UIConfirmationDialog {
                 self.done = true;
                 if let Some(event) = self.done() {
                     context.replies.push_back(event);
-                    context.replies.push_back(UIEvent::ComponentKill(self.id));
+                    self.unrealize(context);
                 }
                 return true;
             }

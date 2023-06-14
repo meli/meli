@@ -68,7 +68,10 @@ impl KeySelection {
             ctx.set_auto_key_locate(LocateKey::WKD | LocateKey::LOCAL)?;
         }
         let job = ctx.keylist(secret, Some(pattern.clone()))?;
-        let handle = context.job_executor.spawn_specialized(job);
+        let handle = context
+            .main_loop_handler
+            .job_executor
+            .spawn_specialized(job);
         let mut progress_spinner = ProgressSpinner::new(8, context);
         progress_spinner.start();
         Ok(KeySelection::LoadingKeys {

@@ -37,6 +37,15 @@ struct ThreadEntry {
     hidden: bool,
     heading: String,
     timestamp: UnixTimestamp,
+    mailview: Box<MailView>,
+}
+
+#[derive(Debug, Default, Copy, Clone)]
+pub enum ThreadViewFocus {
+    #[default]
+    None,
+    Thread,
+    MailView,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -46,11 +55,9 @@ pub struct ThreadView {
     expanded_pos: usize,
     new_expanded_pos: usize,
     reversed: bool,
-    coordinates: (AccountHash, MailboxHash, usize),
+    coordinates: (AccountHash, MailboxHash, EnvelopeHash),
     thread_group: ThreadHash,
-    mailview: MailView,
-    show_mailview: bool,
-    show_thread: bool,
+    focus: ThreadViewFocus,
     entries: Vec<ThreadEntry>,
     visible_entries: Vec<Vec<usize>>,
     indentation_colors: [ThemeAttribute; 6],
@@ -64,24 +71,24 @@ pub struct ThreadView {
 
 impl ThreadView {
     /*
-     * coordinates: (account index, mailbox_hash, root set thread_node index)
-     * expanded_hash: optional position of expanded entry when we render the
-     * threadview. Default  expanded message is the last one.
-     * context: current context
+     * @coordinates: (account index, mailbox_hash, root set thread_node index)
+     * @expanded_hash: optional position of expanded entry when we render the
+     *                 ThreadView.
+     *                 default: expanded message is the last one.
+     * @context: current context
      */
     pub fn new(
-        coordinates: (AccountHash, MailboxHash, usize),
+        coordinates: (AccountHash, MailboxHash, EnvelopeHash),
         thread_group: ThreadHash,
-        expanded_hash: Option<ThreadNodeHash>,
-        context: &Context,
+        expanded_hash: Option<EnvelopeHash>,
+        focus: Option<ThreadViewFocus>,
+        context: &mut Context,
     ) -> Self {
         let mut view = ThreadView {
             reversed: false,
             coordinates,
             thread_group,
-            mailview: MailView::default(),
-            show_mailview: true,
-            show_thread: true,
+            focus: focus.unwrap_or_default(),
             entries: Vec::new(),
             cursor_pos: 1,
             new_cursor_pos: 0,
@@ -103,7 +110,7 @@ impl ThreadView {
         view
     }
 
-    pub fn update(&mut self, context: &Context) {
+    pub fn update(&mut self, context: &mut Context) {
         if self.entries.is_empty() {
             return;
         }
@@ -122,7 +129,7 @@ impl ThreadView {
             None
         };
 
-        let expanded_hash = old_expanded_entry.as_ref().map(|e| e.index.1);
+        let expanded_hash = old_expanded_entry.as_ref().map(|e| e.msg_hash);
         self.initiate(expanded_hash, context);
 
         let mut old_cursor = 0;
@@ -165,18 +172,25 @@ impl ThreadView {
         self.set_dirty(true);
     }
 
-    fn initiate(&mut self, expanded_hash: Option<ThreadNodeHash>, context: &Context) {
+    fn initiate(&mut self, expanded_hash: Option<EnvelopeHash>, context: &mut Context) {
         #[inline(always)]
         fn make_entry(
             i: (usize, ThreadNodeHash, usize),
+            account_hash: AccountHash,
+            mailbox_hash: MailboxHash,
             msg_hash: EnvelopeHash,
             seen: bool,
             timestamp: UnixTimestamp,
+            context: &mut Context,
         ) -> ThreadEntry {
             let (ind, _, _) = i;
             ThreadEntry {
                 index: i,
                 indentation: ind,
+                mailview: Box::new(MailView::new(
+                    Some((account_hash, mailbox_hash, msg_hash)),
+                    context,
+                )),
                 msg_hash,
                 seen,
                 dirty: true,
@@ -186,36 +200,43 @@ impl ThreadView {
             }
         }
 
-        let account = &context.accounts[&self.coordinates.0];
-        let threads = account.collection.get_threads(self.coordinates.1);
+        let collection = context.accounts[&self.coordinates.0].collection.clone();
+        let threads = collection.get_threads(self.coordinates.1);
 
         if !threads.groups.contains_key(&self.thread_group) {
             return;
         }
+        let (account_hash, mailbox_hash, _) = self.coordinates;
 
         let thread_iter = threads.thread_group_iter(self.thread_group);
         self.entries.clear();
         for (line, (ind, thread_node_hash)) in thread_iter.enumerate() {
             let entry = if let Some(msg_hash) = threads.thread_nodes()[&thread_node_hash].message()
             {
-                let env_ref = account.collection.get_env(msg_hash);
+                let (is_seen, timestamp) = {
+                    let env_ref = collection.get_env(msg_hash);
+                    (env_ref.is_seen(), env_ref.timestamp)
+                };
                 make_entry(
                     (ind, thread_node_hash, line),
+                    account_hash,
+                    mailbox_hash,
                     msg_hash,
-                    env_ref.is_seen(),
-                    env_ref.timestamp,
+                    is_seen,
+                    timestamp,
+                    context,
                 )
             } else {
                 continue;
             };
-            self.entries.push(entry);
             match expanded_hash {
-                Some(expanded_hash) if expanded_hash == thread_node_hash => {
+                Some(expanded_hash) if expanded_hash == entry.msg_hash => {
                     self.new_expanded_pos = self.entries.len().saturating_sub(1);
                     self.expanded_pos = self.new_expanded_pos + 1;
                 }
                 _ => {}
             }
+            self.entries.push(entry);
         }
         if expanded_hash.is_none() {
             self.new_expanded_pos = self
@@ -712,18 +733,21 @@ impl ThreadView {
                 .set_bg(theme_default.bg);
         }
 
-        match (self.show_mailview, self.show_thread) {
-            (true, true) => {
+        match self.focus {
+            ThreadViewFocus::None => {
                 self.draw_list(
                     grid,
                     (set_y(upper_left, y), set_x(bottom_right, mid - 1)),
                     context,
                 );
                 let upper_left = (mid + 1, get_y(upper_left) + y - 1);
-                self.mailview
-                    .draw(grid, (upper_left, bottom_right), context);
+                self.entries[self.new_expanded_pos].mailview.draw(
+                    grid,
+                    (upper_left, bottom_right),
+                    context,
+                );
             }
-            (false, true) => {
+            ThreadViewFocus::Thread => {
                 clear_area(
                     grid,
                     ((mid + 1, get_y(upper_left) + y - 1), bottom_right),
@@ -731,8 +755,10 @@ impl ThreadView {
                 );
                 self.draw_list(grid, (set_y(upper_left, y), bottom_right), context);
             }
-            (_, false) => {
-                self.mailview.draw(grid, area, context);
+            ThreadViewFocus::MailView => {
+                self.entries[self.new_expanded_pos]
+                    .mailview
+                    .draw(grid, area, context);
             }
         }
     }
@@ -820,8 +846,8 @@ impl ThreadView {
         );
         let (width, height) = self.content.size();
 
-        match (self.show_mailview, self.show_thread) {
-            (true, true) => {
+        match self.focus {
+            ThreadViewFocus::None => {
                 let area = (set_y(upper_left, y), set_y(bottom_right, mid));
                 let upper_left = upper_left!(area);
                 let bottom_right = bottom_right!(area);
@@ -841,7 +867,7 @@ impl ThreadView {
                 );
                 context.dirty_areas.push_back(area);
             }
-            (false, true) => {
+            ThreadViewFocus::Thread => {
                 let area = (set_y(upper_left, y), bottom_right);
                 let upper_left = upper_left!(area);
 
@@ -859,11 +885,11 @@ impl ThreadView {
                 );
                 context.dirty_areas.push_back(area);
             }
-            (_, false) => { /* show only envelope */ }
+            ThreadViewFocus::MailView => { /* show only envelope */ }
         }
 
-        match (self.show_mailview, self.show_thread) {
-            (true, true) => {
+        match self.focus {
+            ThreadViewFocus::None => {
                 let area = (set_y(upper_left, mid), set_y(bottom_right, mid));
                 context.dirty_areas.push_back(area);
                 for x in get_x(upper_left)..=get_x(bottom_right) {
@@ -874,15 +900,20 @@ impl ThreadView {
                 }
                 let area = (set_y(upper_left, y), set_y(bottom_right, mid - 1));
                 self.draw_list(grid, area, context);
-                self.mailview
-                    .draw(grid, (set_y(upper_left, mid + 1), bottom_right), context);
+                self.entries[self.new_expanded_pos].mailview.draw(
+                    grid,
+                    (set_y(upper_left, mid + 1), bottom_right),
+                    context,
+                );
             }
-            (false, true) => {
+            ThreadViewFocus::Thread => {
                 self.dirty = true;
                 self.draw_list(grid, (set_y(upper_left, y), bottom_right), context);
             }
-            (_, false) => {
-                self.mailview.draw(grid, area, context);
+            ThreadViewFocus::MailView => {
+                self.entries[self.new_expanded_pos]
+                    .mailview
+                    .draw(grid, area, context);
             }
         }
     }
@@ -971,16 +1002,12 @@ impl Component for ThreadView {
         /* If user has selected another mail to view, change to it */
         if self.new_expanded_pos != self.expanded_pos {
             self.expanded_pos = self.new_expanded_pos;
-            let coordinates = (
-                self.coordinates.0,
-                self.coordinates.1,
-                self.entries[self.current_pos()].msg_hash,
-            );
-            self.mailview.update(coordinates, context);
         }
 
         if self.entries.len() == 1 {
-            self.mailview.draw(grid, area, context);
+            self.entries[self.new_expanded_pos]
+                .mailview
+                .draw(grid, area, context);
         } else if total_cols >= self.content.size().0 + 74 {
             self.draw_vert(grid, area, context);
         } else {
@@ -998,7 +1025,13 @@ impl Component for ThreadView {
             return true;
         }
 
-        if self.show_mailview && self.mailview.process_event(event, context) {
+        if matches!(
+            self.focus,
+            ThreadViewFocus::None | ThreadViewFocus::MailView
+        ) && self.entries[self.new_expanded_pos]
+            .mailview
+            .process_event(event, context)
+        {
             return true;
         }
 
@@ -1035,34 +1068,45 @@ impl Component for ThreadView {
                 self.movement = Some(PageMovement::PageDown(1));
                 self.dirty = true;
             }
-            UIEvent::Input(ref key) if *key == Key::Home => {
+            UIEvent::Input(ref k) if shortcut!(k == shortcuts[Shortcuts::GENERAL]["home_page"]) => {
                 self.movement = Some(PageMovement::Home);
                 self.dirty = true;
             }
-            UIEvent::Input(ref key) if *key == Key::End => {
+            UIEvent::Input(ref k) if shortcut!(k == shortcuts[Shortcuts::GENERAL]["end_page"]) => {
                 self.movement = Some(PageMovement::End);
                 self.dirty = true;
             }
-            UIEvent::Input(Key::Char('\n')) => {
+            UIEvent::Input(ref k)
+                if shortcut!(k == shortcuts[Shortcuts::GENERAL]["open_entry"]) =>
+            {
                 if self.entries.len() < 2 {
                     return true;
                 }
                 self.new_expanded_pos = self.current_pos();
-                self.show_mailview = true;
+                self.expanded_pos = self.current_pos();
+                if matches!(self.focus, ThreadViewFocus::Thread) {
+                    self.focus = ThreadViewFocus::None;
+                }
                 self.set_dirty(true);
                 return true;
             }
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Shortcuts::THREAD_VIEW]["toggle_mailview"]) =>
             {
-                self.show_mailview = !self.show_mailview;
+                self.focus = match self.focus {
+                    ThreadViewFocus::None | ThreadViewFocus::MailView => ThreadViewFocus::Thread,
+                    ThreadViewFocus::Thread => ThreadViewFocus::None,
+                };
                 self.set_dirty(true);
                 return true;
             }
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Shortcuts::THREAD_VIEW]["toggle_threadview"]) =>
             {
-                self.show_thread = !self.show_thread;
+                self.focus = match self.focus {
+                    ThreadViewFocus::None | ThreadViewFocus::Thread => ThreadViewFocus::MailView,
+                    ThreadViewFocus::MailView => ThreadViewFocus::None,
+                };
                 self.set_dirty(true);
                 return true;
             }
@@ -1070,7 +1114,7 @@ impl Component for ThreadView {
                 if shortcut!(key == shortcuts[Shortcuts::THREAD_VIEW]["reverse_thread_order"]) =>
             {
                 self.reversed = !self.reversed;
-                let expanded_hash = self.entries[self.expanded_pos].index.1;
+                let expanded_hash = self.entries[self.expanded_pos].msg_hash;
                 self.initiate(Some(expanded_hash), context);
                 self.dirty = true;
                 return true;
@@ -1107,7 +1151,7 @@ impl Component for ThreadView {
                 self.dirty = true;
                 return true;
             }
-            UIEvent::Resize => {
+            UIEvent::Resize | UIEvent::VisibilityChange(true) => {
                 self.set_dirty(true);
             }
             UIEvent::EnvelopeRename(ref old_hash, ref new_hash) => {
@@ -1116,31 +1160,35 @@ impl Component for ThreadView {
                     if e.msg_hash == *old_hash {
                         e.msg_hash = *new_hash;
                         let seen: bool = account.collection.get_env(*new_hash).is_seen();
-                        if seen != e.seen {
-                            self.dirty = true;
-                        }
                         e.seen = seen;
+                        e.mailview.process_event(
+                            &mut UIEvent::EnvelopeRename(*old_hash, *new_hash),
+                            context,
+                        );
+                        self.set_dirty(true);
+                        break;
                     }
                 }
-                self.mailview
-                    .process_event(&mut UIEvent::EnvelopeRename(*old_hash, *new_hash), context);
             }
             UIEvent::EnvelopeUpdate(ref env_hash) => {
                 let account = &context.accounts[&self.coordinates.0];
                 for e in self.entries.iter_mut() {
                     if e.msg_hash == *env_hash {
                         let seen: bool = account.collection.get_env(*env_hash).is_seen();
-                        if seen != e.seen {
-                            self.dirty = true;
-                        }
                         e.seen = seen;
+                        e.mailview
+                            .process_event(&mut UIEvent::EnvelopeUpdate(*env_hash), context);
+                        self.set_dirty(true);
+                        break;
                     }
                 }
-                self.mailview
-                    .process_event(&mut UIEvent::EnvelopeUpdate(*env_hash), context);
             }
             _ => {
-                if self.mailview.process_event(event, context) {
+                if self
+                    .entries
+                    .iter_mut()
+                    .any(|entry| entry.mailview.process_event(event, context))
+                {
                     return true;
                 }
             }
@@ -1149,20 +1197,41 @@ impl Component for ThreadView {
     }
 
     fn is_dirty(&self) -> bool {
-        self.dirty || (self.show_mailview && self.mailview.is_dirty())
+        self.dirty
+            || (!matches!(self.focus, ThreadViewFocus::Thread)
+                && !self.entries.is_empty()
+                && self.entries[self.new_expanded_pos].mailview.is_dirty())
     }
 
     fn set_dirty(&mut self, value: bool) {
         self.dirty = value;
-        self.mailview.set_dirty(value);
+        self.entries[self.new_expanded_pos]
+            .mailview
+            .set_dirty(value);
     }
 
     fn shortcuts(&self, context: &Context) -> ShortcutMaps {
-        let mut map = self.mailview.shortcuts(context);
+        let mut map = self.entries[self.new_expanded_pos]
+            .mailview
+            .shortcuts(context);
 
         map.insert(
+            Shortcuts::GENERAL,
+            mailbox_settings!(
+                context[self.coordinates.0][&self.coordinates.1]
+                    .shortcuts
+                    .general
+            )
+            .key_values(),
+        );
+        map.insert(
             Shortcuts::THREAD_VIEW,
-            context.settings.shortcuts.thread_view.key_values(),
+            mailbox_settings!(
+                context[self.coordinates.0][&self.coordinates.1]
+                    .shortcuts
+                    .thread_view
+            )
+            .key_values(),
         );
 
         map

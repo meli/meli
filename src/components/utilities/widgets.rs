@@ -1122,6 +1122,7 @@ impl ProgressSpinner {
             .unwrap_or(0);
         let interval = Self::KINDS[kind].0;
         let timer = context
+            .main_loop_handler
             .job_executor
             .clone()
             .create_timer(interval, interval);

@@ -55,6 +55,7 @@ pub const DEFAULT_SNOOZED_FLAG: &str = "💤";
 pub struct RowsState<T> {
     pub selection: HashMap<EnvelopeHash, bool>,
     pub row_updates: SmallVec<[EnvelopeHash; 8]>,
+    /// FIXME: env vec should have at least one element guaranteed
     pub thread_to_env: HashMap<ThreadHash, SmallVec<[EnvelopeHash; 8]>>,
     pub env_to_thread: HashMap<EnvelopeHash, ThreadHash>,
     pub thread_order: HashMap<ThreadHash, usize>,
@@ -412,6 +413,20 @@ struct AccountMenuEntry {
 }
 
 pub trait MailListingTrait: ListingTrait {
+    fn as_component(&self) -> &dyn Component
+    where
+        Self: Sized,
+    {
+        self
+    }
+
+    fn as_component_mut(&mut self) -> &mut dyn Component
+    where
+        Self: Sized,
+    {
+        self
+    }
+
     fn perform_action(
         &mut self,
         context: &mut Context,
@@ -450,7 +465,10 @@ pub trait MailListingTrait: ListingTrait {
                         ));
                     }
                     Ok(fut) => {
-                        let handle = account.job_executor.spawn_specialized(fut);
+                        let handle = account
+                            .main_loop_handler
+                            .job_executor
+                            .spawn_specialized(fut);
                         account
                             .insert_job(handle.job_id, JobRequest::SetFlags { env_hashes, handle });
                     }
@@ -469,7 +487,10 @@ pub trait MailListingTrait: ListingTrait {
                         ));
                     }
                     Ok(fut) => {
-                        let handle = account.job_executor.spawn_specialized(fut);
+                        let handle = account
+                            .main_loop_handler
+                            .job_executor
+                            .spawn_specialized(fut);
                         account
                             .insert_job(handle.job_id, JobRequest::SetFlags { env_hashes, handle });
                     }
@@ -488,7 +509,10 @@ pub trait MailListingTrait: ListingTrait {
                         ));
                     }
                     Ok(fut) => {
-                        let handle = account.job_executor.spawn_specialized(fut);
+                        let handle = account
+                            .main_loop_handler
+                            .job_executor
+                            .spawn_specialized(fut);
                         account
                             .insert_job(handle.job_id, JobRequest::SetFlags { env_hashes, handle });
                     }
@@ -507,7 +531,10 @@ pub trait MailListingTrait: ListingTrait {
                         ));
                     }
                     Ok(fut) => {
-                        let handle = account.job_executor.spawn_specialized(fut);
+                        let handle = account
+                            .main_loop_handler
+                            .job_executor
+                            .spawn_specialized(fut);
                         account
                             .insert_job(handle.job_id, JobRequest::SetFlags { env_hashes, handle });
                     }
@@ -526,7 +553,10 @@ pub trait MailListingTrait: ListingTrait {
                         ));
                     }
                     Ok(fut) => {
-                        let handle = account.job_executor.spawn_specialized(fut);
+                        let handle = account
+                            .main_loop_handler
+                            .job_executor
+                            .spawn_specialized(fut);
                         account.insert_job(
                             handle.job_id,
                             JobRequest::DeleteMessages { env_hashes, handle },
@@ -551,7 +581,10 @@ pub trait MailListingTrait: ListingTrait {
                         ));
                     }
                     Ok(fut) => {
-                        let handle = account.job_executor.spawn_specialized(fut);
+                        let handle = account
+                            .main_loop_handler
+                            .job_executor
+                            .spawn_specialized(fut);
                         account.insert_job(
                             handle.job_id,
                             JobRequest::Generic {
@@ -588,7 +621,10 @@ pub trait MailListingTrait: ListingTrait {
                         ));
                     }
                     Ok(fut) => {
-                        let handle = account.job_executor.spawn_specialized(fut);
+                        let handle = account
+                            .main_loop_handler
+                            .job_executor
+                            .spawn_specialized(fut);
                         account.insert_job(
                             handle.job_id,
                             JobRequest::Generic {
@@ -667,7 +703,7 @@ pub trait MailListingTrait: ListingTrait {
                         let _ = sender.send(r);
                         Ok(())
                     });
-                let handle = account.job_executor.spawn_blocking(fut);
+                let handle = account.main_loop_handler.job_executor.spawn_blocking(fut);
                 let path = path.to_path_buf();
                 account.insert_job(
                     handle.job_id,
@@ -743,12 +779,27 @@ pub trait ListingTrait: Component {
     ) {
     }
     fn unfocused(&self) -> bool;
+    fn view_area(&self) -> Option<Area>;
     fn set_modifier_active(&mut self, _new_val: bool);
     fn set_modifier_command(&mut self, _new_val: Option<Modifier>);
     fn modifier_command(&self) -> Option<Modifier>;
     fn set_movement(&mut self, mvm: PageMovement);
     fn focus(&self) -> Focus;
     fn set_focus(&mut self, new_value: Focus, context: &mut Context);
+
+    fn kick_parent(&self, parent: ComponentId, msg: ListingMessage, context: &mut Context) {
+        log::trace!(
+            "kick_parent self is {} parent is {} msg is {:?}",
+            self.id(),
+            parent,
+            &msg
+        );
+        context.replies.push_back(UIEvent::IntraComm {
+            from: self.id(),
+            to: parent,
+            content: Box::new(msg),
+        });
+    }
 }
 
 #[derive(Debug)]
@@ -788,32 +839,13 @@ impl core::ops::DerefMut for ListingComponent {
 }
 
 impl ListingComponent {
-    fn set_style(&mut self, new_style: IndexStyle) {
-        match new_style {
-            IndexStyle::Plain => {
-                if let Plain(_) = self {
-                    return;
-                }
-                *self = Plain(PlainListing::new(self.coordinates()));
-            }
-            IndexStyle::Threaded => {
-                if let Threaded(_) = self {
-                    return;
-                }
-                *self = Threaded(ThreadListing::new(self.coordinates()));
-            }
-            IndexStyle::Compact => {
-                if let Compact(_) = self {
-                    return;
-                }
-                *self = Compact(CompactListing::new(self.coordinates()));
-            }
-            IndexStyle::Conversations => {
-                if let Conversations(_) = self {
-                    return;
-                }
-                *self = Conversations(ConversationsListing::new(self.coordinates()));
-            }
+    fn id(&self) -> ComponentId {
+        match self {
+            Compact(l) => l.as_component().id(),
+            Plain(l) => l.as_component().id(),
+            Threaded(l) => l.as_component().id(),
+            Conversations(l) => l.as_component().id(),
+            Offline(l) => l.as_component().id(),
         }
     }
 }
@@ -862,6 +894,7 @@ pub struct Listing {
     prev_ratio: usize,
     menu_width: WidgetWidth,
     focus: ListingFocus,
+    view: Box<ThreadView>,
 }
 
 impl fmt::Display for Listing {
@@ -930,14 +963,20 @@ impl Component for Listing {
             if context.is_online(account_hash).is_err()
                 && !matches!(self.component, ListingComponent::Offline(_))
             {
+                self.component.unrealize(context);
                 self.component =
                     Offline(OfflineListing::new((account_hash, MailboxHash::default())));
+                self.component.realize(self.id().into(), context);
             }
 
             if let Some(s) = self.status.as_mut() {
                 s.draw(grid, area, context);
             } else {
                 self.component.draw(grid, area, context);
+                if self.component.unfocused() {
+                    self.view
+                        .draw(grid, self.component.view_area().unwrap_or(area), context);
+                }
             }
         } else if right_component_width == 0 {
             self.draw_menu(grid, area, context);
@@ -950,14 +989,20 @@ impl Component for Listing {
             if context.is_online(account_hash).is_err()
                 && !matches!(self.component, ListingComponent::Offline(_))
             {
+                self.component.unrealize(context);
                 self.component =
                     Offline(OfflineListing::new((account_hash, MailboxHash::default())));
+                self.component.realize(self.id().into(), context);
             }
             if let Some(s) = self.status.as_mut() {
                 s.draw(grid, (set_x(upper_left, mid + 1), bottom_right), context);
             } else {
-                self.component
-                    .draw(grid, (set_x(upper_left, mid + 1), bottom_right), context);
+                let area = (set_x(upper_left, mid + 1), bottom_right);
+                self.component.draw(grid, area, context);
+                if self.component.unfocused() {
+                    self.view
+                        .draw(grid, self.component.view_area().unwrap_or(area), context);
+                }
             }
         }
         self.dirty = false;
@@ -1132,7 +1177,71 @@ impl Component for Listing {
                 }
                 return true;
             }
+            UIEvent::IntraComm {
+                from,
+                to,
+                ref content,
+            } if (*from, *to) == (self.component.id(), self.id()) => {
+                match content.downcast_ref::<ListingMessage>().map(|msg| *msg) {
+                    None => {}
+                    Some(ListingMessage::FocusUpdate { new_value }) => {
+                        self.view.process_event(
+                            &mut UIEvent::VisibilityChange(!matches!(new_value, Focus::None)),
+                            context,
+                        );
+                        if matches!(new_value, Focus::Entry) {
+                            // Need to clear gap between sidebar and listing component, if any.
+                            self.dirty = true;
+                        }
+                    }
+                    Some(ListingMessage::UpdateView) => {
+                        log::trace!("UpdateView");
+                    }
+                    Some(ListingMessage::OpenEntryUnderCursor {
+                        env_hash,
+                        thread_hash,
+                        show_thread,
+                    }) => {
+                        let (a, m) = self.component.coordinates();
+                        self.view.unrealize(context);
+                        self.view = Box::new(ThreadView::new(
+                            (a, m, env_hash),
+                            thread_hash,
+                            Some(env_hash),
+                            if show_thread {
+                                None
+                            } else {
+                                Some(ThreadViewFocus::MailView)
+                            },
+                            context,
+                        ));
+                    }
+                }
+            }
+            #[cfg(feature = "debug-tracing")]
+            UIEvent::IntraComm {
+                from,
+                to,
+                ref content,
+            } => {
+                if *from == self.component.id() || *to == self.id() {
+                    log::debug!(
+                        "BUG intracomm event: {:?} downcast content {:?}",
+                        event,
+                        content.downcast_ref::<ListingMessage>().map(|msg| *msg)
+                    );
+                    log::debug!(
+                        "BUG component is {} and self id is {}",
+                        self.component.id(),
+                        self.id()
+                    );
+                }
+            }
             _ => {}
+        }
+
+        if self.component.unfocused() && self.view.process_event(event, context) {
+            return true;
         }
 
         if self.focus == ListingFocus::Mailbox && self.status.is_some() {
@@ -1142,11 +1251,12 @@ impl Component for Listing {
                 }
             }
         }
-        if self.focus == ListingFocus::Mailbox
-            && self.status.is_none()
-            && self.component.process_event(event, context)
-        {
-            return true;
+        if self.focus == ListingFocus::Mailbox && self.status.is_none() {
+            if self.component.unfocused() && self.view.process_event(event, context) {
+                return true;
+            } else if self.component.process_event(event, context) {
+                return true;
+            }
         }
 
         let shortcuts = self.shortcuts(context);
@@ -1336,19 +1446,19 @@ impl Component for Listing {
                 match event {
                     UIEvent::Action(ref action) => match action {
                         Action::Listing(ListingAction::SetPlain) => {
-                            self.component.set_style(IndexStyle::Plain);
+                            self.set_style(IndexStyle::Plain, context);
                             return true;
                         }
                         Action::Listing(ListingAction::SetThreaded) => {
-                            self.component.set_style(IndexStyle::Threaded);
+                            self.set_style(IndexStyle::Threaded, context);
                             return true;
                         }
                         Action::Listing(ListingAction::SetCompact) => {
-                            self.component.set_style(IndexStyle::Compact);
+                            self.set_style(IndexStyle::Compact, context);
                             return true;
                         }
                         Action::Listing(ListingAction::SetConversations) => {
-                            self.component.set_style(IndexStyle::Conversations);
+                            self.set_style(IndexStyle::Conversations, context);
                             return true;
                         }
                         Action::Listing(ListingAction::Import(file_path, mailbox_path)) => {
@@ -1952,6 +2062,11 @@ impl Component for Listing {
                 .as_ref()
                 .map(Component::is_dirty)
                 .unwrap_or_else(|| self.component.is_dirty())
+            || if self.component.unfocused() {
+                self.view.is_dirty()
+            } else {
+                self.component.is_dirty()
+            }
     }
 
     fn set_dirty(&mut self, value: bool) {
@@ -1960,6 +2075,9 @@ impl Component for Listing {
             s.set_dirty(value);
         } else {
             self.component.set_dirty(value);
+            if self.component.unfocused() {
+                self.view.set_dirty(value);
+            }
         }
     }
 
@@ -1972,6 +2090,9 @@ impl Component for Listing {
         let mut config_map = context.settings.shortcuts.listing.key_values();
         if self.focus != ListingFocus::Menu {
             config_map.remove("open_mailbox");
+            if self.component.unfocused() {
+                map.extend(self.view.shortcuts(context).into_iter());
+            }
         }
         map.insert(Shortcuts::LISTING, config_map);
 
@@ -1979,7 +2100,7 @@ impl Component for Listing {
     }
 
     fn id(&self) -> ComponentId {
-        self.component.id()
+        self.id
     }
 
     fn status(&self, context: &Context) -> String {
@@ -2022,6 +2143,38 @@ impl Component for Listing {
             MailboxStatus::Failed(_) | MailboxStatus::None => account[&mailbox_hash].status(),
         }
     }
+
+    fn children(&self) -> IndexMap<ComponentId, &dyn Component> {
+        let mut ret = IndexMap::default();
+        ret.insert(
+            self.component.id(),
+            match &self.component {
+                Compact(l) => l.as_component(),
+                Plain(l) => l.as_component(),
+                Threaded(l) => l.as_component(),
+                Conversations(l) => l.as_component(),
+                Offline(l) => l.as_component(),
+            },
+        );
+
+        ret
+    }
+
+    fn children_mut(&mut self) -> IndexMap<ComponentId, &mut dyn Component> {
+        let mut ret = IndexMap::default();
+        ret.insert(
+            self.component.id(),
+            match &mut self.component {
+                Compact(l) => l.as_component_mut(),
+                Plain(l) => l.as_component_mut(),
+                Threaded(l) => l.as_component_mut(),
+                Conversations(l) => l.as_component_mut(),
+                Offline(l) => l.as_component_mut(),
+            },
+        );
+
+        ret
+    }
 }
 
 impl Listing {
@@ -2059,18 +2212,23 @@ impl Listing {
                 first_account_hash,
                 MailboxHash::default(),
             ))),
+            view: Box::new(ThreadView::default()),
             accounts: account_entries,
             status: None,
             dirty: true,
             cursor_pos: (0, MenuEntryCursor::Mailbox(0)),
             menu_cursor_pos: (0, MenuEntryCursor::Mailbox(0)),
             menu_content: CellBuffer::new_with_context(0, 0, None, context),
-            menu_scrollbar_show_timer: context.job_executor.clone().create_timer(
+            menu_scrollbar_show_timer: context.main_loop_handler.job_executor.clone().create_timer(
                 std::time::Duration::from_secs(0),
                 std::time::Duration::from_millis(1200),
             ),
             show_menu_scrollbar: ShowMenuScrollbar::Never,
-            startup_checks_rate: RateLimit::new(2, 1000, context.job_executor.clone()),
+            startup_checks_rate: RateLimit::new(
+                2,
+                1000,
+                context.main_loop_handler.job_executor.clone(),
+            ),
             theme_default: conf::value(context, "theme_default"),
             id: ComponentId::default(),
             sidebar_divider: *account_settings!(
@@ -2084,6 +2242,7 @@ impl Listing {
             focus: ListingFocus::Mailbox,
             cmd_buf: String::with_capacity(4),
         };
+        ret.component.realize(ret.id().into(), context);
         ret.change_account(context);
         ret
     }
@@ -2580,10 +2739,12 @@ impl Listing {
 
                     let index_style =
                         mailbox_settings!(context[account_hash][mailbox_hash].listing.index_style);
-                    self.component.set_style(*index_style);
+                    self.set_style(*index_style, context);
                 } else if !matches!(self.component, ListingComponent::Offline(_)) {
+                    self.component.unrealize(context);
                     self.component =
                         Offline(OfflineListing::new((account_hash, MailboxHash::default())));
+                    self.component.realize(self.id().into(), context);
                 }
                 self.status = None;
                 context
@@ -2622,4 +2783,64 @@ impl Listing {
     fn is_menu_visible(&self) -> bool {
         !matches!(self.component.focus(), Focus::EntryFullscreen) && self.menu_visibility
     }
+
+    fn set_style(&mut self, new_style: IndexStyle, context: &mut Context) {
+        let old = match new_style {
+            IndexStyle::Plain => {
+                if matches!(self.component, Plain(_)) {
+                    return;
+                }
+                let coordinates = self.component.coordinates();
+                std::mem::replace(
+                    &mut self.component,
+                    Plain(PlainListing::new(self.id, coordinates)),
+                )
+            }
+            IndexStyle::Threaded => {
+                if matches!(self.component, Threaded(_)) {
+                    return;
+                }
+                let coordinates = self.component.coordinates();
+                std::mem::replace(
+                    &mut self.component,
+                    Threaded(ThreadListing::new(self.id, coordinates, context)),
+                )
+            }
+            IndexStyle::Compact => {
+                if matches!(self.component, Compact(_)) {
+                    return;
+                }
+                let coordinates = self.component.coordinates();
+                std::mem::replace(
+                    &mut self.component,
+                    Compact(CompactListing::new(self.id, coordinates)),
+                )
+            }
+            IndexStyle::Conversations => {
+                if matches!(self.component, Conversations(_)) {
+                    return;
+                }
+                let coordinates = self.component.coordinates();
+                std::mem::replace(
+                    &mut self.component,
+                    Conversations(ConversationsListing::new(self.id, coordinates)),
+                )
+            }
+        };
+        old.unrealize(context);
+        self.component.realize(self.id.into(), context);
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum ListingMessage {
+    FocusUpdate {
+        new_value: Focus,
+    },
+    OpenEntryUnderCursor {
+        env_hash: EnvelopeHash,
+        thread_hash: ThreadHash,
+        show_thread: bool,
+    },
+    UpdateView,
 }

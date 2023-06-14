@@ -141,13 +141,14 @@ pub struct PlainListing {
     /// If we must redraw on next redraw event
     dirty: bool,
     force_draw: bool,
-    /// If `self.view` exists or not.
+    /// If view is visible or not.
     focus: Focus,
-    view: MailView,
     color_cache: ColorCache,
     movement: Option<PageMovement>,
     modifier_active: bool,
     modifier_command: Option<Modifier>,
+    view_area: Option<Area>,
+    parent: ComponentId,
     id: ComponentId,
 }
 
@@ -261,11 +262,21 @@ impl MailListingTrait for PlainListing {
         drop(env_lck);
 
         if let Some(env_hash) = self.get_env_under_cursor(self.cursor_pos.2) {
-            let temp = (self.new_cursor_pos.0, self.new_cursor_pos.1, env_hash);
             if !force && old_cursor_pos == self.new_cursor_pos {
-                self.view.update(temp, context);
+                self.kick_parent(self.parent, ListingMessage::UpdateView, context);
             } else if self.unfocused() {
-                self.view = MailView::new(temp, None, None, context);
+                let thread_hash = self.rows.env_to_thread[&env_hash];
+                self.force_draw = true;
+                self.dirty = true;
+                self.kick_parent(
+                    self.parent,
+                    ListingMessage::OpenEntryUnderCursor {
+                        thread_hash,
+                        env_hash,
+                        show_thread: false,
+                    },
+                    context,
+                );
             }
         }
     }
@@ -304,7 +315,6 @@ impl ListingTrait for PlainListing {
     fn set_coordinates(&mut self, coordinates: (AccountHash, MailboxHash)) {
         self.new_cursor_pos = (coordinates.0, coordinates.1, 0);
         self.focus = Focus::None;
-        self.view = MailView::default();
         self.filtered_selection.clear();
         self.filtered_order.clear();
         self.filter_term.clear();
@@ -544,6 +554,10 @@ impl ListingTrait for PlainListing {
         );
     }
 
+    fn view_area(&self) -> Option<Area> {
+        self.view_area
+    }
+
     fn unfocused(&self) -> bool {
         !matches!(self.focus, Focus::None)
     }
@@ -568,8 +582,7 @@ impl ListingTrait for PlainListing {
     fn set_focus(&mut self, new_value: Focus, context: &mut Context) {
         match new_value {
             Focus::None => {
-                self.view
-                    .process_event(&mut UIEvent::VisibilityChange(false), context);
+                //self.view .process_event(&mut UIEvent::VisibilityChange(false), context);
                 self.dirty = true;
                 /* If self.rows.row_updates is not empty and we exit a thread, the row_update
                  * events will be performed but the list will not be drawn.
@@ -578,20 +591,33 @@ impl ListingTrait for PlainListing {
                 self.force_draw = true;
             }
             Focus::Entry => {
-                if let Some(env_hash) = self.get_env_under_cursor(self.cursor_pos.2) {
-                    let temp = (self.cursor_pos.0, self.cursor_pos.1, env_hash);
-                    self.view = MailView::new(temp, None, None, context);
+                if let Some((thread_hash, env_hash)) = self
+                    .get_env_under_cursor(self.cursor_pos.2)
+                    .map(|env_hash| (self.rows.env_to_thread[&env_hash], env_hash))
+                {
                     self.force_draw = true;
                     self.dirty = true;
-                    self.view.set_dirty(true);
+                    self.kick_parent(
+                        self.parent,
+                        ListingMessage::OpenEntryUnderCursor {
+                            thread_hash,
+                            env_hash,
+                            show_thread: false,
+                        },
+                        context,
+                    );
                 }
             }
             Focus::EntryFullscreen => {
                 self.dirty = true;
-                self.view.set_dirty(true);
             }
         }
         self.focus = new_value;
+        self.kick_parent(
+            self.parent,
+            ListingMessage::FocusUpdate { new_value },
+            context,
+        );
     }
 
     fn focus(&self) -> Focus {
@@ -606,7 +632,7 @@ impl fmt::Display for PlainListing {
 }
 
 impl PlainListing {
-    pub fn new(coordinates: (AccountHash, MailboxHash)) -> Box<Self> {
+    pub fn new(parent: ComponentId, coordinates: (AccountHash, MailboxHash)) -> Box<Self> {
         Box::new(PlainListing {
             cursor_pos: (AccountHash::default(), MailboxHash::default(), 0),
             new_cursor_pos: (coordinates.0, coordinates.1, 0),
@@ -623,11 +649,12 @@ impl PlainListing {
             dirty: true,
             force_draw: true,
             focus: Focus::None,
-            view: MailView::default(),
             color_cache: ColorCache::default(),
             movement: None,
             modifier_active: false,
             modifier_command: None,
+            view_area: None,
+            parent,
             id: ComponentId::default(),
         })
     }
@@ -1097,12 +1124,13 @@ impl PlainListing {
 
 impl Component for PlainListing {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        if !self.is_dirty() {
+        if matches!(self.focus, Focus::EntryFullscreen) {
+            self.view_area = area.into();
             return;
         }
 
-        if matches!(self.focus, Focus::EntryFullscreen) {
-            return self.view.draw(grid, area, context);
+        if !self.is_dirty() {
+            return;
         }
 
         if matches!(self.focus, Focus::None) {
@@ -1340,7 +1368,7 @@ impl Component for PlainListing {
                 return;
             }
 
-            self.view.draw(grid, area, context);
+            self.view_area = area.into();
         }
         self.dirty = false;
     }
@@ -1368,10 +1396,6 @@ impl Component for PlainListing {
                 return true;
             }
             _ => {}
-        }
-
-        if self.unfocused() && self.view.process_event(event, context) {
-            return true;
         }
 
         if self.length > 0 {
@@ -1481,11 +1505,6 @@ impl Component for PlainListing {
                 }
 
                 self.set_dirty(true);
-
-                if self.unfocused() {
-                    self.view
-                        .process_event(&mut UIEvent::EnvelopeRename(*old_hash, *new_hash), context);
-                }
             }
             UIEvent::EnvelopeUpdate(ref env_hash) => {
                 let account = &context.accounts[&self.cursor_pos.0];
@@ -1500,11 +1519,6 @@ impl Component for PlainListing {
 
                 self.rows.row_updates.push(*env_hash);
                 self.set_dirty(true);
-
-                if self.unfocused() {
-                    self.view
-                        .process_event(&mut UIEvent::EnvelopeUpdate(*env_hash), context);
-                }
             }
             UIEvent::ChangeMode(UIMode::Normal) => {
                 self.set_dirty(true);
@@ -1539,6 +1553,7 @@ impl Component for PlainListing {
                 ) {
                     Ok(job) => {
                         let handle = context.accounts[&self.cursor_pos.0]
+                            .main_loop_handler
                             .job_executor
                             .spawn_specialized(job);
                         self.search_job = Some((filter_term.to_string(), handle));
@@ -1583,23 +1598,16 @@ impl Component for PlainListing {
     fn is_dirty(&self) -> bool {
         match self.focus {
             Focus::None => self.dirty,
-            Focus::Entry | Focus::EntryFullscreen => self.view.is_dirty(),
+            Focus::Entry | Focus::EntryFullscreen => false,
         }
     }
 
     fn set_dirty(&mut self, value: bool) {
         self.dirty = value;
-        if self.unfocused() {
-            self.view.set_dirty(value);
-        }
     }
 
     fn shortcuts(&self, context: &Context) -> ShortcutMaps {
-        let mut map = if self.unfocused() {
-            self.view.shortcuts(context)
-        } else {
-            ShortcutMaps::default()
-        };
+        let mut map = ShortcutMaps::default();
 
         map.insert(
             Shortcuts::LISTING,

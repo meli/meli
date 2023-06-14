@@ -24,6 +24,8 @@ use std::{
     process::{Command, Stdio},
 };
 
+use melib::xdg_utils::query_default_app;
+
 use super::*;
 
 #[derive(Debug)]

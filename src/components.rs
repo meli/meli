@@ -32,6 +32,7 @@ use crate::{
     melib::text_processing::{TextProcessing, Truncate},
     terminal::boundaries::*,
 };
+use smallvec::SmallVec;
 
 pub mod mail;
 pub use crate::mail::*;
@@ -163,6 +164,31 @@ pub trait Component: Display + Debug + Send + Sync {
     fn status(&self, _context: &Context) -> String {
         String::new()
     }
+
+    fn attributes(&self) -> &'static ComponentAttr {
+        &ComponentAttr::DEFAULT
+    }
+
+    fn children(&self) -> IndexMap<ComponentId, &dyn Component> {
+        IndexMap::default()
+    }
+
+    fn children_mut(&mut self) -> IndexMap<ComponentId, &mut dyn Component> {
+        IndexMap::default()
+    }
+
+    fn realize(&self, parent: Option<ComponentId>, context: &mut Context) {
+        log::debug!("Realizing id {} w/ parent {:?}", self.id(), &parent);
+        context.realized.insert(self.id(), parent);
+    }
+
+    fn unrealize(&self, context: &mut Context) {
+        log::debug!("Unrealizing id {}", self.id());
+        context.unrealized.insert(self.id());
+        context
+            .replies
+            .push_back(UIEvent::ComponentUnrealize(self.id()));
+    }
 }
 
 impl Component for Box<dyn Component> {
@@ -204,5 +230,90 @@ impl Component for Box<dyn Component> {
 
     fn status(&self, context: &Context) -> String {
         (**self).status(context)
+    }
+
+    fn attributes(&self) -> &'static ComponentAttr {
+        (**self).attributes()
+    }
+
+    fn children(&self) -> IndexMap<ComponentId, &dyn Component> {
+        (**self).children()
+    }
+
+    fn children_mut(&mut self) -> IndexMap<ComponentId, &mut dyn Component> {
+        (**self).children_mut()
+    }
+
+    fn realize(&self, parent: Option<ComponentId>, context: &mut Context) {
+        (**self).realize(parent, context)
+    }
+
+    fn unrealize(&self, context: &mut Context) {
+        (**self).unrealize(context)
+    }
+}
+
+bitflags::bitflags! {
+    /// Attributes of a [`Component`] widget.
+    ///
+    /// `ComponentAttr::DEFAULT` represents no attribute.
+    pub struct ComponentAttr: u8 {
+        /// Nothing special going on.
+        const DEFAULT        = 0;
+        const HAS_ANIMATIONS = 1;
+        const CONTAINER      = 1 << 1;
+    }
+}
+
+impl Default for ComponentAttr {
+    fn default() -> Self {
+        Self::DEFAULT
+    }
+}
+
+#[derive(Eq, PartialEq, Debug, Clone)]
+pub struct ComponentPath {
+    id: ComponentId,
+    tail: SmallVec<[ComponentId; 8]>,
+}
+
+impl ComponentPath {
+    pub fn new(id: ComponentId) -> Self {
+        Self {
+            id,
+            tail: SmallVec::default(),
+        }
+    }
+
+    pub fn push_front(&mut self, id: ComponentId) {
+        self.tail.insert(0, self.id);
+        self.id = id;
+    }
+
+    pub fn push_back(&mut self, id: ComponentId) {
+        self.tail.push(id);
+    }
+
+    pub fn resolve<'c>(&self, root: &'c dyn Component) -> Option<&'c dyn Component> {
+        let mut cursor = root;
+        for id in self.tail.iter().rev().chain(std::iter::once(&self.id)) {
+            log::trace!("resolve cursor = {} next id is {}", cursor.id(), &id);
+            if *id == cursor.id() {
+                log::trace!("continue;");
+                continue;
+            }
+            cursor = cursor.children().remove(id)?;
+        }
+        Some(cursor)
+    }
+
+    #[inline]
+    pub fn parent(&self) -> Option<&ComponentId> {
+        self.tail.first()
+    }
+
+    #[inline]
+    pub fn root(&self) -> Option<&ComponentId> {
+        self.tail.last()
     }
 }

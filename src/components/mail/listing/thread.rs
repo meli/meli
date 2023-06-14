@@ -102,8 +102,8 @@ macro_rules! row_attr {
     }};
 }
 
-/// A list of all mail (`Envelope`s) in a `Mailbox`. On `\n` it opens the
-/// `Envelope` content in a `MailView`.
+/// A list of all mail ([`Envelope`](melib::Envelope)s) in a `Mailbox`. On `\n` it opens the
+/// [`Envelope`](melib::Envelope) content in a [`MailView`].
 #[derive(Debug)]
 pub struct ThreadListing {
     /// (x, y, z): x is accounts, y is mailboxes, z is index inside a mailbox.
@@ -126,13 +126,14 @@ pub struct ThreadListing {
     /// If we must redraw on next redraw event
     dirty: bool,
     force_draw: bool,
-    /// If `self.view` is focused or not.
+    /// If `self.view` is visible or not.
     focus: Focus,
-    initialised: bool,
-    view: Option<Box<MailView>>,
+    initialized: bool,
     modifier_active: bool,
     modifier_command: Option<Modifier>,
     movement: Option<PageMovement>,
+    view_area: Option<Area>,
+    parent: ComponentId,
     id: ComponentId,
 }
 
@@ -171,6 +172,7 @@ impl MailListingTrait for ThreadListing {
     /// mailbox the user has chosen.
     fn refresh_mailbox(&mut self, context: &mut Context, _force: bool) {
         self.set_dirty(true);
+        self.initialized = true;
         if !(self.cursor_pos.0 == self.new_cursor_pos.0
             && self.cursor_pos.1 == self.new_cursor_pos.1)
         {
@@ -425,13 +427,14 @@ impl ListingTrait for ThreadListing {
     fn set_coordinates(&mut self, coordinates: (AccountHash, MailboxHash)) {
         self.new_cursor_pos = (coordinates.0, coordinates.1, 0);
         self.focus = Focus::None;
-        self.view = None;
         self.rows.clear();
-        self.initialised = false;
+        self.initialized = false;
     }
 
     fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        if self.cursor_pos.1 != self.new_cursor_pos.1 || self.cursor_pos.0 != self.new_cursor_pos.0
+        if !self.initialized
+            || self.cursor_pos.1 != self.new_cursor_pos.1
+            || self.cursor_pos.0 != self.new_cursor_pos.0
         {
             self.refresh_mailbox(context, false);
         }
@@ -608,6 +611,10 @@ impl ListingTrait for ThreadListing {
         let _account = &context.accounts[&self.cursor_pos.0];
     }
 
+    fn view_area(&self) -> Option<Area> {
+        self.view_area
+    }
+
     fn unfocused(&self) -> bool {
         !matches!(self.focus, Focus::None)
     }
@@ -632,7 +639,6 @@ impl ListingTrait for ThreadListing {
     fn set_focus(&mut self, new_value: Focus, context: &mut Context) {
         match new_value {
             Focus::None => {
-                self.view = None;
                 self.dirty = true;
                 /* If self.rows.row_updates is not empty and we exit a thread, the row_update
                  * events will be performed but the list will not be drawn.
@@ -641,29 +647,34 @@ impl ListingTrait for ThreadListing {
                 self.force_draw = true;
             }
             Focus::Entry => {
-                if let Some(env_hash) = self.get_env_under_cursor(self.cursor_pos.2) {
+                if let Some((thread_hash, env_hash)) = self
+                    .get_env_under_cursor(self.cursor_pos.2)
+                    .map(|env_hash| (self.rows.env_to_thread[&env_hash], env_hash))
+                {
                     self.force_draw = true;
                     self.dirty = true;
-                    let coordinates = (self.cursor_pos.0, self.cursor_pos.1, env_hash);
 
-                    if let Some(ref mut v) = self.view {
-                        v.update(coordinates, context);
-                    } else {
-                        self.view = Some(Box::new(MailView::new(coordinates, None, None, context)));
-                    }
-
-                    if let Some(ref mut s) = self.view {
-                        s.set_dirty(true);
-                    }
+                    self.kick_parent(
+                        self.parent,
+                        ListingMessage::OpenEntryUnderCursor {
+                            thread_hash,
+                            env_hash,
+                            show_thread: false,
+                        },
+                        context,
+                    );
                 }
             }
             Focus::EntryFullscreen => {
-                if let Some(ref mut s) = self.view {
-                    s.set_dirty(true);
-                }
+                self.dirty = true;
             }
         }
         self.focus = new_value;
+        self.kick_parent(
+            self.parent,
+            ListingMessage::FocusUpdate { new_value },
+            context,
+        );
     }
 
     fn focus(&self) -> Focus {
@@ -678,26 +689,31 @@ impl fmt::Display for ThreadListing {
 }
 
 impl ThreadListing {
-    pub fn new(coordinates: (AccountHash, MailboxHash)) -> Box<Self> {
+    pub fn new(
+        parent: ComponentId,
+        coordinates: (AccountHash, MailboxHash),
+        context: &mut Context,
+    ) -> Box<Self> {
         Box::new(ThreadListing {
             cursor_pos: (coordinates.0, MailboxHash::default(), 0),
             new_cursor_pos: (coordinates.0, coordinates.1, 0),
             length: 0,
             sort: (Default::default(), Default::default()),
             subsort: (Default::default(), Default::default()),
-            color_cache: ColorCache::default(),
+            color_cache: ColorCache::new(context, IndexStyle::Threaded),
             data_columns: DataColumns::default(),
             rows: RowsState::default(),
+            search_job: None,
             dirty: true,
             force_draw: true,
             focus: Focus::None,
-            view: None,
-            initialised: false,
+            initialized: false,
             movement: None,
             modifier_active: false,
             modifier_command: None,
+            view_area: None,
+            parent,
             id: ComponentId::default(),
-            search_job: None,
         })
     }
 
@@ -1026,6 +1042,11 @@ impl ThreadListing {
 
 impl Component for ThreadListing {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        if matches!(self.focus, Focus::EntryFullscreen) {
+            self.view_area = area.into();
+            return;
+        }
+
         let (upper_left, bottom_right) = area;
         let rows = get_y(bottom_right) - get_y(upper_left) + 1;
 
@@ -1210,12 +1231,6 @@ impl Component for ThreadListing {
             return;
         }
 
-        if matches!(self.focus, Focus::EntryFullscreen) {
-            if let Some(v) = self.view.as_mut() {
-                return v.draw(grid, area, context);
-            }
-        }
-
         if !self.unfocused() {
             self.dirty = false;
             /* Draw the entire list */
@@ -1290,27 +1305,7 @@ impl Component for ThreadListing {
                     .push_back((set_y(upper_left, mid), set_y(bottom_right, mid)));
             }
 
-            if !self.dirty {
-                if let Some(v) = self.view.as_mut() {
-                    v.draw(grid, (set_y(upper_left, mid + 1), bottom_right), context);
-                }
-                return;
-            }
-
-            if let Some(env_hash) = self.get_env_under_cursor(self.cursor_pos.2) {
-                let coordinates = (self.cursor_pos.0, self.cursor_pos.1, env_hash);
-
-                if let Some(ref mut v) = self.view {
-                    v.update(coordinates, context);
-                } else {
-                    self.view = Some(Box::new(MailView::new(coordinates, None, None, context)));
-                }
-            }
-
-            if let Some(v) = self.view.as_mut() {
-                v.draw(grid, (set_y(upper_left, mid + 1), bottom_right), context);
-            }
-
+            self.view_area = (set_y(upper_left, mid + 1), bottom_right).into();
             self.dirty = false;
         }
     }
@@ -1338,12 +1333,6 @@ impl Component for ThreadListing {
                 return true;
             }
             _ => {}
-        }
-
-        if let Some(ref mut v) = self.view {
-            if !matches!(self.focus, Focus::None) && v.process_event(event, context) {
-                return true;
-            }
         }
 
         match *event {
@@ -1411,15 +1400,6 @@ impl Component for ThreadListing {
                 }
 
                 self.set_dirty(true);
-
-                if self.unfocused() {
-                    if let Some(v) = self.view.as_mut() {
-                        v.process_event(
-                            &mut UIEvent::EnvelopeRename(*old_hash, *new_hash),
-                            context,
-                        );
-                    }
-                }
             }
             UIEvent::EnvelopeRemove(ref env_hash, _) => {
                 if self.rows.contains_env(*env_hash) {
@@ -1437,12 +1417,6 @@ impl Component for ThreadListing {
                 }
 
                 self.set_dirty(true);
-
-                if self.unfocused() {
-                    if let Some(v) = self.view.as_mut() {
-                        v.process_event(&mut UIEvent::EnvelopeUpdate(*env_hash), context);
-                    }
-                }
             }
             UIEvent::ChangeMode(UIMode::Normal) => {
                 self.set_dirty(true);
@@ -1500,6 +1474,7 @@ impl Component for ThreadListing {
                     ) {
                         Ok(job) => {
                             let handle = context.accounts[&self.cursor_pos.0]
+                                .main_loop_handler
                                 .job_executor
                                 .spawn_specialized(job);
                             self.search_job = Some((filter_term.to_string(), handle));
@@ -1547,27 +1522,17 @@ impl Component for ThreadListing {
     fn is_dirty(&self) -> bool {
         match self.focus {
             Focus::None => self.dirty,
-            Focus::Entry => self.dirty || self.view.as_ref().map(|p| p.is_dirty()).unwrap_or(false),
-            Focus::EntryFullscreen => self.view.as_ref().map(|p| p.is_dirty()).unwrap_or(false),
+            Focus::Entry => self.dirty,
+            Focus::EntryFullscreen => false,
         }
     }
 
     fn set_dirty(&mut self, value: bool) {
-        if let Some(p) = self.view.as_mut() {
-            p.set_dirty(value);
-        };
         self.dirty = value;
     }
 
     fn shortcuts(&self, context: &Context) -> ShortcutMaps {
-        let mut map = if self.unfocused() {
-            self.view
-                .as_ref()
-                .map(|p| p.shortcuts(context))
-                .unwrap_or_default()
-        } else {
-            ShortcutMaps::default()
-        };
+        let mut map = ShortcutMaps::default();
 
         map.insert(
             Shortcuts::LISTING,

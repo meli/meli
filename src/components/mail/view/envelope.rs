@@ -21,40 +21,53 @@
 
 use std::process::{Command, Stdio};
 
-use linkify::{Link, LinkFinder};
+use linkify::LinkFinder;
 use melib::xdg_utils::query_default_app;
 
 use super::*;
+use crate::ThreadEvent;
 
-#[derive(PartialEq, Eq, Debug)]
-enum ViewMode {
-    Normal,
-    Url,
-    Attachment(usize),
-    Raw,
-    Subview,
-}
-
-impl ViewMode {
-    fn is_attachment(&self) -> bool {
-        matches!(self, ViewMode::Attachment(_))
-    }
-}
-
-/// Contains an Envelope view, with sticky headers, a pager for the body, and
-/// subviews for more menus
+/// Envelope view, with sticky headers, a pager for the body, and
+/// subviews for more menus.
+///
+/// Doesn't have a concept of accounts, mailboxes or mail backends.
+/// Therefore all settings it needs need to be provided through the `view_settings` field of type
+/// [`ViewSettings`].
 #[derive(Debug)]
 pub struct EnvelopeView {
-    pager: Option<Pager>,
-    subview: Option<Box<dyn Component>>,
-    dirty: bool,
-    mode: ViewMode,
-    mail: Mail,
+    pub pager: Pager,
+    pub subview: Option<Box<dyn Component>>,
+    pub dirty: bool,
+    pub initialised: bool,
+    pub force_draw_headers: bool,
+    pub mode: ViewMode,
+    pub mail: Mail,
+    pub body: Box<Attachment>,
+    pub display: Vec<AttachmentDisplay>,
+    pub body_text: String,
+    pub links: Vec<Link>,
+    pub attachment_tree: String,
+    pub attachment_paths: Vec<Vec<usize>>,
+    pub headers_no: usize,
+    pub headers_cursor: usize,
+    pub force_charset: ForceCharset,
+    pub view_settings: ViewSettings,
+    pub cmd_buf: String,
+    pub active_jobs: HashSet<JobId>,
+    pub main_loop_handler: MainLoopHandler,
+    pub id: ComponentId,
+}
 
-    _account_hash: AccountHash,
-    force_charset: ForceCharset,
-    cmd_buf: String,
-    id: ComponentId,
+impl Clone for EnvelopeView {
+    fn clone(&self) -> Self {
+        Self::new(
+            self.mail.clone(),
+            Some(self.pager.clone()),
+            None,
+            Some(self.view_settings.clone()),
+            self.main_loop_handler.clone(),
+        )
+    }
 }
 
 impl fmt::Display for EnvelopeView {
@@ -68,23 +81,537 @@ impl EnvelopeView {
         mail: Mail,
         pager: Option<Pager>,
         subview: Option<Box<dyn Component>>,
-        _account_hash: AccountHash,
+        view_settings: Option<ViewSettings>,
+        main_loop_handler: MainLoopHandler,
     ) -> Self {
-        EnvelopeView {
-            pager,
+        let view_settings = view_settings.unwrap_or_default();
+        let body = Box::new(AttachmentBuilder::new(&mail.bytes).build());
+        let mut ret = EnvelopeView {
+            pager: pager.unwrap_or_default(),
             subview,
             dirty: true,
+            initialised: false,
+            force_draw_headers: false,
             mode: ViewMode::Normal,
             force_charset: ForceCharset::None,
+            attachment_tree: String::new(),
+            attachment_paths: vec![],
+            body,
+            display: vec![],
+            links: vec![],
+            body_text: String::new(),
+            view_settings,
+            headers_no: 5,
+            headers_cursor: 0,
             mail,
-            _account_hash,
+            main_loop_handler,
+            active_jobs: HashSet::default(),
             cmd_buf: String::with_capacity(4),
             id: ComponentId::default(),
+        };
+
+        ret.parse_attachments();
+
+        ret
+    }
+
+    fn attachment_to_display_helper(
+        a: &Attachment,
+        main_loop_handler: &MainLoopHandler,
+        active_jobs: &mut HashSet<JobId>,
+        acc: &mut Vec<AttachmentDisplay>,
+        view_settings: &ViewSettings,
+        force_charset: Option<Charset>,
+    ) {
+        if a.content_disposition.kind.is_attachment() || a.content_type == "message/rfc822" {
+            acc.push(AttachmentDisplay::Attachment {
+                inner: Box::new(a.clone()),
+            });
+        } else if a.content_type().is_text_html() {
+            let bytes = a.decode(force_charset.into());
+            let filter_invocation = view_settings
+                .html_filter
+                .as_deref()
+                .unwrap_or("w3m -I utf-8 -T text/html");
+            let command_obj = Command::new("sh")
+                .args(["-c", filter_invocation])
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .spawn()
+                .and_then(|mut cmd| {
+                    cmd.stdin.as_mut().unwrap().write_all(&bytes)?;
+                    Ok(String::from_utf8_lossy(&cmd.wait_with_output()?.stdout).to_string())
+                });
+            match command_obj {
+                Err(err) => {
+                    main_loop_handler.send(ThreadEvent::UIEvent(UIEvent::Notification(
+                        Some(format!(
+                            "Failed to start html filter process: {}",
+                            filter_invocation,
+                        )),
+                        err.to_string(),
+                        Some(NotificationType::Error(melib::ErrorKind::External)),
+                    )));
+                    let comment = Some(format!(
+                        "Failed to start html filter process: `{}`. Press `v` to open in web \
+                         browser. \n\n",
+                        filter_invocation
+                    ));
+                    let text = String::from_utf8_lossy(&bytes).to_string();
+                    acc.push(AttachmentDisplay::InlineText {
+                        inner: Box::new(a.clone()),
+                        comment,
+                        text,
+                    });
+                }
+                Ok(text) => {
+                    let comment = Some(format!(
+                        "Text piped through `{}`. Press `v` to open in web browser. \n\n",
+                        filter_invocation
+                    ));
+                    acc.push(AttachmentDisplay::InlineText {
+                        inner: Box::new(a.clone()),
+                        comment,
+                        text,
+                    });
+                }
+            }
+        } else if a.is_text() {
+            let bytes = a.decode(force_charset.into());
+            acc.push(AttachmentDisplay::InlineText {
+                inner: Box::new(a.clone()),
+                comment: None,
+                text: String::from_utf8_lossy(&bytes).to_string(),
+            });
+        } else if let ContentType::Multipart {
+            ref kind,
+            ref parts,
+            ..
+        } = a.content_type
+        {
+            match kind {
+                MultipartType::Alternative => {
+                    if parts.is_empty() {
+                        return;
+                    }
+                    let mut display = vec![];
+                    let mut chosen_attachment_idx = 0;
+                    if let Some(text_attachment_pos) =
+                        parts.iter().position(|a| a.content_type == "text/plain")
+                    {
+                        let bytes = &parts[text_attachment_pos].decode(force_charset.into());
+                        if bytes.trim().is_empty()
+                            && view_settings.auto_choose_multipart_alternative
+                        {
+                            if let Some(text_attachment_pos) =
+                                parts.iter().position(|a| a.content_type == "text/html")
+                            {
+                                /* Select html alternative since text/plain is empty */
+                                chosen_attachment_idx = text_attachment_pos;
+                            }
+                        } else {
+                            /* Select text/plain alternative */
+                            chosen_attachment_idx = text_attachment_pos;
+                        }
+                    }
+                    for a in parts {
+                        EnvelopeView::attachment_to_display_helper(
+                            a,
+                            main_loop_handler,
+                            active_jobs,
+                            &mut display,
+                            view_settings,
+                            force_charset,
+                        );
+                    }
+                    acc.push(AttachmentDisplay::Alternative {
+                        inner: Box::new(a.clone()),
+                        shown_display: chosen_attachment_idx,
+                        display,
+                    });
+                }
+                MultipartType::Signed => {
+                    #[cfg(not(feature = "gpgme"))]
+                    {
+                        acc.push(AttachmentDisplay::SignedUnverified {
+                            inner: Box::new(a.clone()),
+                            display: {
+                                let mut v = vec![];
+                                EnvelopeView::attachment_to_display_helper(
+                                    &parts[0],
+                                    main_loop_handler,
+                                    active_jobs,
+                                    &mut v,
+                                    view_settings,
+                                    force_charset,
+                                );
+                                v
+                            },
+                        });
+                    }
+                    #[cfg(feature = "gpgme")]
+                    {
+                        if view_settings.auto_verify_signatures {
+                            let verify_fut = crate::components::mail::pgp::verify(a.clone());
+                            let handle =
+                                main_loop_handler.job_executor.spawn_specialized(verify_fut);
+                            active_jobs.insert(handle.job_id);
+                            main_loop_handler.send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
+                                StatusEvent::NewJob(handle.job_id),
+                            )));
+                            acc.push(AttachmentDisplay::SignedPending {
+                                inner: Box::new(a.clone()),
+                                job_id: handle.job_id,
+                                display: {
+                                    let mut v = vec![];
+                                    EnvelopeView::attachment_to_display_helper(
+                                        &parts[0],
+                                        main_loop_handler,
+                                        active_jobs,
+                                        &mut v,
+                                        view_settings,
+                                        force_charset,
+                                    );
+                                    v
+                                },
+                                handle,
+                            });
+                        } else {
+                            acc.push(AttachmentDisplay::SignedUnverified {
+                                inner: Box::new(a.clone()),
+                                display: {
+                                    let mut v = vec![];
+                                    EnvelopeView::attachment_to_display_helper(
+                                        &parts[0],
+                                        main_loop_handler,
+                                        active_jobs,
+                                        &mut v,
+                                        view_settings,
+                                        force_charset,
+                                    );
+                                    v
+                                },
+                            });
+                        }
+                    }
+                }
+                MultipartType::Encrypted => {
+                    for a in parts {
+                        if a.content_type == "application/octet-stream" {
+                            #[cfg(not(feature = "gpgme"))]
+                            {
+                                acc.push(AttachmentDisplay::EncryptedFailed {
+                                    inner: Box::new(a.clone()),
+                                    error: Error::new(
+                                        "Cannot decrypt: meli must be compiled with libgpgme \
+                                         support.",
+                                    ),
+                                });
+                            }
+                            #[cfg(feature = "gpgme")]
+                            {
+                                if view_settings.auto_decrypt {
+                                    let decrypt_fut =
+                                        crate::components::mail::pgp::decrypt(a.raw().to_vec());
+                                    let handle = main_loop_handler
+                                        .job_executor
+                                        .spawn_specialized(decrypt_fut);
+                                    active_jobs.insert(handle.job_id);
+                                    main_loop_handler.send(ThreadEvent::UIEvent(
+                                        UIEvent::StatusEvent(StatusEvent::NewJob(handle.job_id)),
+                                    ));
+                                    acc.push(AttachmentDisplay::EncryptedPending {
+                                        inner: Box::new(a.clone()),
+                                        handle,
+                                    });
+                                } else {
+                                    acc.push(AttachmentDisplay::EncryptedFailed {
+                                        inner: Box::new(a.clone()),
+                                        error: Error::new("Undecrypted."),
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => {
+                    for a in parts {
+                        EnvelopeView::attachment_to_display_helper(
+                            a,
+                            main_loop_handler,
+                            active_jobs,
+                            acc,
+                            view_settings,
+                            force_charset,
+                        );
+                    }
+                }
+            }
         }
     }
 
+    pub fn parse_attachments(&mut self) {
+        let mut display = vec![];
+        Self::attachment_to_display_helper(
+            &self.body,
+            &self.main_loop_handler,
+            &mut self.active_jobs,
+            &mut display,
+            &self.view_settings,
+            (&self.force_charset).into(),
+        );
+        let (attachment_paths, attachment_tree) = self.attachment_displays_to_tree(&display);
+        let body_text = self.attachment_displays_to_text(&display, true);
+        self.display = display;
+        self.body_text = body_text;
+        self.attachment_tree = attachment_tree;
+        self.attachment_paths = attachment_paths;
+    }
+
+    pub fn attachment_displays_to_text(
+        &self,
+        displays: &[AttachmentDisplay],
+        show_comments: bool,
+    ) -> String {
+        let mut acc = String::new();
+        for d in displays {
+            use AttachmentDisplay::*;
+            match d {
+                Alternative {
+                    inner: _,
+                    shown_display,
+                    display,
+                } => {
+                    acc.push_str(&self.attachment_displays_to_text(
+                        &display[*shown_display..(*shown_display + 1)],
+                        show_comments,
+                    ));
+                }
+                InlineText {
+                    inner: _,
+                    text,
+                    comment: Some(comment),
+                } if show_comments => {
+                    acc.push_str(comment);
+                    if !acc.ends_with("\n\n") {
+                        acc.push_str("\n\n");
+                    }
+                    acc.push_str(text);
+                }
+                InlineText {
+                    inner: _,
+                    text,
+                    comment: _,
+                } => acc.push_str(text),
+                InlineOther { inner } => {
+                    if !acc.ends_with("\n\n") {
+                        acc.push_str("\n\n");
+                    }
+                    acc.push_str(&inner.to_string());
+                    if !acc.ends_with("\n\n") {
+                        acc.push_str("\n\n");
+                    }
+                }
+                Attachment { inner: _ } => {}
+                SignedPending {
+                    inner: _,
+                    display,
+                    handle: _,
+                    job_id: _,
+                } => {
+                    if show_comments {
+                        acc.push_str("Waiting for signature verification.\n\n");
+                    }
+                    acc.push_str(&self.attachment_displays_to_text(display, show_comments));
+                }
+                SignedUnverified { inner: _, display } => {
+                    if show_comments {
+                        acc.push_str("Unverified signature.\n\n");
+                    }
+                    acc.push_str(&self.attachment_displays_to_text(display, show_comments))
+                }
+                SignedFailed {
+                    inner: _,
+                    display,
+                    error,
+                } => {
+                    if show_comments {
+                        let _ = writeln!(acc, "Failed to verify signature: {}.\n", error);
+                    }
+                    acc.push_str(&self.attachment_displays_to_text(display, show_comments));
+                }
+                SignedVerified {
+                    inner: _,
+                    display,
+                    description,
+                } => {
+                    if show_comments {
+                        if description.is_empty() {
+                            acc.push_str("Verified signature.\n\n");
+                        } else {
+                            acc.push_str(description);
+                            acc.push_str("\n\n");
+                        }
+                    }
+                    acc.push_str(&self.attachment_displays_to_text(display, show_comments));
+                }
+                EncryptedPending { .. } => acc.push_str("Waiting for decryption result."),
+                EncryptedFailed { inner: _, error } => {
+                    let _ = write!(acc, "Decryption failed: {}.", &error);
+                }
+                EncryptedSuccess {
+                    inner: _,
+                    plaintext: _,
+                    plaintext_display,
+                    description,
+                } => {
+                    if show_comments {
+                        if description.is_empty() {
+                            acc.push_str("Succesfully decrypted.\n\n");
+                        } else {
+                            acc.push_str(description);
+                            acc.push_str("\n\n");
+                        }
+                    }
+                    acc.push_str(
+                        &self.attachment_displays_to_text(plaintext_display, show_comments),
+                    );
+                }
+            }
+        }
+        acc
+    }
+
+    fn attachment_displays_to_tree(
+        &self,
+        displays: &[AttachmentDisplay],
+    ) -> (Vec<Vec<usize>>, String) {
+        let mut acc = String::new();
+        let mut branches = SmallVec::new();
+        let mut paths = Vec::with_capacity(displays.len());
+        let mut cur_path = vec![];
+        let mut idx = 0;
+
+        fn append_entry(
+            (idx, (depth, att_display)): (&mut usize, (usize, &AttachmentDisplay)),
+            branches: &mut SmallVec<[bool; 8]>,
+            paths: &mut Vec<Vec<usize>>,
+            cur_path: &mut Vec<usize>,
+            has_sibling: bool,
+            s: &mut String,
+        ) {
+            use AttachmentDisplay::*;
+            let mut default_alternative: Option<usize> = None;
+            let (att, sub_att_display_vec) = match att_display {
+                Alternative {
+                    inner,
+                    shown_display,
+                    display,
+                } => {
+                    default_alternative = Some(*shown_display);
+                    (inner, display.as_slice())
+                }
+                InlineText {
+                    inner,
+                    text: _,
+                    comment: _,
+                }
+                | InlineOther { inner }
+                | Attachment { inner }
+                | EncryptedPending { inner, handle: _ }
+                | EncryptedFailed { inner, error: _ } => (inner, &[][..]),
+                SignedPending {
+                    inner,
+                    display,
+                    handle: _,
+                    job_id: _,
+                }
+                | SignedUnverified { inner, display }
+                | SignedFailed {
+                    inner,
+                    display,
+                    error: _,
+                }
+                | SignedVerified {
+                    inner,
+                    display,
+                    description: _,
+                }
+                | EncryptedSuccess {
+                    inner: _,
+                    plaintext: inner,
+                    plaintext_display: display,
+                    description: _,
+                } => (inner, display.as_slice()),
+            };
+            s.extend(format!("\n[{}]", idx).chars());
+            for &b in branches.iter() {
+                if b {
+                    s.push('|');
+                } else {
+                    s.push(' ');
+                }
+                s.push(' ');
+            }
+            if depth > 0 {
+                if has_sibling {
+                    s.push('|');
+                } else {
+                    s.push(' ');
+                }
+                s.push_str("\\_ ");
+            } else {
+                s.push(' ');
+                s.push(' ');
+            }
+
+            s.push_str(&att.to_string());
+            paths.push(cur_path.clone());
+            if matches!(att.content_type, ContentType::Multipart { .. }) {
+                let mut iter = (0..sub_att_display_vec.len()).peekable();
+                if has_sibling {
+                    branches.push(true);
+                } else {
+                    branches.push(false);
+                }
+                while let Some(i) = iter.next() {
+                    *idx += 1;
+                    cur_path.push(i);
+                    append_entry(
+                        (idx, (depth + 1, &sub_att_display_vec[i])),
+                        branches,
+                        paths,
+                        cur_path,
+                        iter.peek().is_some(),
+                        s,
+                    );
+                    if Some(i) == default_alternative {
+                        s.push_str(" (displayed by default)");
+                    }
+                    cur_path.pop();
+                }
+                branches.pop();
+            }
+        }
+
+        for (i, d) in displays.iter().enumerate() {
+            cur_path.push(i);
+            append_entry(
+                (&mut idx, (0, d)),
+                &mut branches,
+                &mut paths,
+                &mut cur_path,
+                i + 1 < displays.len(),
+                &mut acc,
+            );
+            cur_path.pop();
+            idx += 1;
+        }
+        (paths, acc)
+    }
+
     /// Returns the string to be displayed in the Viewer
-    fn attachment_to_text(&self, body: &Attachment, context: &mut Context) -> String {
+    pub fn attachment_to_text(&mut self, body: &Attachment, context: &mut Context) -> String {
         let finder = LinkFinder::new();
         let body_text = String::from_utf8_lossy(&body.decode_rec(DecodeOptions {
             filter: Some(Box::new(|a: &Attachment, v: &mut Vec<u8>| {
@@ -148,7 +675,48 @@ impl EnvelopeView {
                 }
                 t
             }
-            ViewMode::Raw => String::from_utf8_lossy(body.body()).into_owned(),
+            ViewMode::Source(Source::Raw) => {
+                let text = { String::from_utf8_lossy(body.body()).into_owned() };
+                self.view_settings.body_theme = crate::conf::value(context, "mail.view.body");
+                text
+            }
+            ViewMode::Source(Source::Decoded) => {
+                let text = {
+                    /* Decode each header value */
+                    let mut ret = melib::email::parser::headers::headers(body.body())
+                        .map(|(_, v)| v)
+                        .map_err(|err| err.into())
+                        .and_then(|headers| {
+                            Ok(headers
+                                .into_iter()
+                                .map(|(h, v)| {
+                                    melib::email::parser::encodings::phrase(v, true)
+                                        .map(|(_, v)| {
+                                            let mut h = h.to_vec();
+                                            h.push(b':');
+                                            h.push(b' ');
+                                            h.extend(v.into_iter());
+                                            h
+                                        })
+                                        .map_err(|err| err.into())
+                                })
+                                .collect::<Result<Vec<Vec<u8>>>>()?
+                                .join(&b"\n"[..]))
+                        })
+                        .map(|v| String::from_utf8_lossy(&v).into_owned())
+                        .unwrap_or_else(|err: Error| err.to_string());
+                    if !ret.ends_with("\n\n") {
+                        ret.push_str("\n\n");
+                    }
+                    ret.push_str(&body_text);
+                    if !ret.ends_with("\n\n") {
+                        ret.push_str("\n\n");
+                    }
+                    // ret.push_str(&self.attachment_tree);
+                    ret
+                };
+                text
+            }
             ViewMode::Url => {
                 let mut t = body_text;
                 for (lidx, l) in finder.links(&body.text()).enumerate() {
@@ -183,147 +751,608 @@ impl EnvelopeView {
             }
         }
     }
+
+    fn open_attachment(
+        &'_ self,
+        lidx: usize,
+        context: &mut Context,
+    ) -> Option<&'_ melib::Attachment> {
+        if let Some(path) = self.attachment_paths.get(lidx).and_then(|path| {
+            if !path.is_empty() {
+                Some(path)
+            } else {
+                None
+            }
+        }) {
+            let first = path[0];
+            use AttachmentDisplay::*;
+            let root_attachment = match &self.display[first] {
+                Alternative {
+                    inner,
+                    shown_display: _,
+                    display: _,
+                }
+                | InlineText {
+                    inner,
+                    text: _,
+                    comment: _,
+                }
+                | InlineOther { inner }
+                | Attachment { inner }
+                | SignedPending {
+                    inner,
+                    display: _,
+                    handle: _,
+                    job_id: _,
+                }
+                | SignedFailed {
+                    inner,
+                    display: _,
+                    error: _,
+                }
+                | SignedVerified {
+                    inner,
+                    display: _,
+                    description: _,
+                }
+                | SignedUnverified { inner, display: _ }
+                | EncryptedPending { inner, handle: _ }
+                | EncryptedFailed { inner, error: _ }
+                | EncryptedSuccess {
+                    inner: _,
+                    plaintext: inner,
+                    plaintext_display: _,
+                    description: _,
+                } => inner,
+            };
+            fn find_attachment<'a>(
+                a: &'a melib::Attachment,
+                path: &[usize],
+            ) -> Option<&'a melib::Attachment> {
+                if path.is_empty() {
+                    return Some(a);
+                }
+                if let ContentType::Multipart { ref parts, .. } = a.content_type {
+                    let first = path[0];
+                    if first < parts.len() {
+                        return find_attachment(&parts[first], &path[1..]);
+                    }
+                }
+                None
+            }
+
+            let ret = find_attachment(root_attachment, &path[1..]);
+            if lidx == 0 {
+                return ret.and_then(|a| {
+                    if a.content_disposition.kind.is_attachment()
+                        || a.content_type == "message/rfc822"
+                    {
+                        Some(a)
+                    } else {
+                        None
+                    }
+                });
+            } else {
+                return ret;
+            }
+        }
+        context
+            .replies
+            .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(format!(
+                "Attachment `{}` not found.",
+                lidx
+            ))));
+        None
+    }
 }
 
 impl Component for EnvelopeView {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
-        let theme_default = crate::conf::value(context, "theme_default");
-        let email_header_theme = crate::conf::value(context, "email_header");
+
+        self.view_settings.theme_default = crate::conf::value(context, "theme_default");
+
+        let headers = crate::conf::value(context, "mail.view.headers");
+        let headers_names = crate::conf::value(context, "mail.view.headers_names");
+        let headers_area = crate::conf::value(context, "mail.view.headers_area");
 
         let y: usize = {
-            if self.mode == ViewMode::Raw {
-                clear_area(grid, area, crate::conf::value(context, "theme_default"));
+            if self.mode.is_source() {
+                clear_area(grid, area, self.view_settings.theme_default);
                 context.dirty_areas.push_back(area);
-                get_y(upper_left).saturating_sub(1)
+                get_y(upper_left)
             } else {
-                let (x, y) = write_string_to_grid(
-                    &format!("Date: {}", self.mail.date_as_str()),
-                    grid,
-                    email_header_theme.fg,
-                    email_header_theme.bg,
-                    email_header_theme.attrs,
-                    area,
-                    Some(get_x(upper_left)),
-                );
-                for x in x..=get_x(bottom_right) {
-                    grid[(x, y)]
-                        .set_ch(' ')
-                        .set_fg(theme_default.fg)
-                        .set_bg(theme_default.bg);
+                let envelope = &self.mail;
+                let height_p = self.pager.size().1;
+
+                let height = height!(area) - self.headers_no - 1;
+
+                self.headers_no = 0;
+                let mut skip_header_ctr = self.headers_cursor;
+                let sticky = self.view_settings.sticky_headers || height_p < height;
+                let (_, mut y) = upper_left;
+                macro_rules! print_header {
+                    ($(($header:path, $string:expr)),*$(,)?) => {
+                        $({
+                            if sticky || skip_header_ctr == 0 {
+                                if y <= get_y(bottom_right) {
+                                    let (_x, _y) = write_string_to_grid(
+                                        &format!("{}:", $header),
+                                        grid,
+                                        headers_names.fg,
+                                        headers_names.bg,
+                                        headers_names.attrs,
+                                        (set_y(upper_left, y), bottom_right),
+                                        Some(get_x(upper_left)),
+                                    );
+                                    if let Some(cell) = grid.get_mut(_x, _y) {
+                                        cell.set_ch(' ')
+                                            .set_fg(headers_area.fg)
+                                            .set_bg(headers_area.bg)
+                                            .set_attrs(headers_area.attrs);
+                                    }
+
+                                    let (_x, _y) = write_string_to_grid(
+                                        &$string,
+                                        grid,
+                                        headers.fg,
+                                        headers.bg,
+                                        headers.attrs,
+                                        ((_x + 1, _y), bottom_right),
+                                        Some(get_x(upper_left)),
+                                    );
+                                    clear_area(
+                                        grid,
+                                        (
+                                            (std::cmp::min(_x, get_x(bottom_right)), _y),
+                                            (get_x(bottom_right), _y),
+                                        ),
+                                        headers_area,
+                                    );
+                                    y = _y + 1;
+                                }
+                            } else {
+                                skip_header_ctr -= 1;
+                            }
+                            self.headers_no += 1;
+                        })+
+                    };
                 }
-                let (x, y) = write_string_to_grid(
-                    &format!("From: {}", self.mail.field_from_to_string()),
-                    grid,
-                    email_header_theme.fg,
-                    email_header_theme.bg,
-                    email_header_theme.attrs,
-                    (set_y(upper_left, y + 1), bottom_right),
-                    Some(get_x(upper_left)),
+                let find_offset = |s: &str| -> (bool, (i64, i64)) {
+                    let mut diff = (true, (0, 0));
+                    if let Some(pos) = s.as_bytes().iter().position(|b| *b == b'+' || *b == b'-') {
+                        let offset = &s[pos..];
+                        diff.0 = offset.starts_with('+');
+                        if let (Ok(hr_offset), Ok(min_offset)) =
+                            (offset[1..3].parse::<i64>(), offset[3..5].parse::<i64>())
+                        {
+                            diff.1 .0 = hr_offset;
+                            diff.1 .1 = min_offset;
+                        }
+                    }
+                    diff
+                };
+                let orig_date = envelope.date_as_str();
+                let date_str: std::borrow::Cow<str> = if self.view_settings.show_date_in_my_timezone
+                {
+                    let local_date = datetime::timestamp_to_string(
+                        envelope.timestamp,
+                        Some(datetime::formats::RFC822_DATE),
+                        false,
+                    );
+                    let orig_offset = find_offset(orig_date);
+                    let local_offset = find_offset(&local_date);
+                    if orig_offset == local_offset {
+                        orig_date.into()
+                    } else {
+                        format!(
+                            "{} [actual timezone: {}{:02}{:02}]",
+                            local_date,
+                            if orig_offset.0 { '+' } else { '-' },
+                            orig_offset.1 .0,
+                            orig_offset.1 .1
+                        )
+                        .into()
+                    }
+                } else {
+                    orig_date.into()
+                };
+                print_header!(
+                    (HeaderName::DATE, date_str),
+                    (HeaderName::FROM, envelope.field_from_to_string()),
+                    (HeaderName::TO, envelope.field_to_to_string()),
                 );
-                for x in x..=get_x(bottom_right) {
-                    grid[(x, y)]
-                        .set_ch(' ')
-                        .set_fg(theme_default.fg)
-                        .set_bg(theme_default.bg);
+                if envelope.other_headers().contains_key(HeaderName::CC)
+                    && !envelope.other_headers()[HeaderName::CC].is_empty()
+                {
+                    print_header!((HeaderName::CC, envelope.field_cc_to_string()));
                 }
-                let (x, y) = write_string_to_grid(
-                    &format!("To: {}", self.mail.field_to_to_string()),
-                    grid,
-                    email_header_theme.fg,
-                    email_header_theme.bg,
-                    email_header_theme.attrs,
-                    (set_y(upper_left, y + 1), bottom_right),
-                    Some(get_x(upper_left)),
+                print_header!(
+                    (HeaderName::SUBJECT, envelope.subject()),
+                    (
+                        HeaderName::MESSAGE_ID,
+                        format!("<{}>", envelope.message_id_raw())
+                    )
                 );
-                for x in x..=get_x(bottom_right) {
-                    grid[(x, y)]
-                        .set_ch(' ')
-                        .set_fg(theme_default.fg)
-                        .set_bg(theme_default.bg);
+                if self.view_settings.expand_headers {
+                    if let Some(val) = envelope.in_reply_to_display() {
+                        print_header!(
+                            (HeaderName::IN_REPLY_TO, val),
+                            (
+                                HeaderName::REFERENCES,
+                                envelope
+                                    .references()
+                                    .iter()
+                                    .map(std::string::ToString::to_string)
+                                    .collect::<Vec<String>>()
+                                    .join(", ")
+                            )
+                        );
+                    }
                 }
-                let (x, y) = write_string_to_grid(
-                    &format!("Subject: {}", self.mail.subject()),
-                    grid,
-                    email_header_theme.fg,
-                    email_header_theme.bg,
-                    email_header_theme.attrs,
-                    (set_y(upper_left, y + 1), bottom_right),
-                    Some(get_x(upper_left)),
-                );
-                for x in x..=get_x(bottom_right) {
-                    grid[(x, y)]
-                        .set_ch(' ')
-                        .set_fg(theme_default.fg)
-                        .set_bg(theme_default.bg);
+                for hdr in &self.view_settings.show_extra_headers {
+                    if let Some((val, hdr)) = HeaderName::try_from(hdr)
+                        .ok()
+                        .and_then(|hdr| Some((envelope.other_headers().get(&hdr)?, hdr)))
+                    {
+                        print_header!((hdr, val));
+                    }
                 }
-                let (x, y) = write_string_to_grid(
-                    &format!("Message-ID: <{}>", self.mail.message_id_raw()),
-                    grid,
-                    email_header_theme.fg,
-                    email_header_theme.bg,
-                    email_header_theme.attrs,
-                    (set_y(upper_left, y + 1), bottom_right),
-                    Some(get_x(upper_left)),
-                );
-                for x in x..=get_x(bottom_right) {
-                    grid[(x, y)]
-                        .set_ch(' ')
-                        .set_fg(theme_default.fg)
-                        .set_bg(theme_default.bg);
+                if let Some(list_management::ListActions {
+                    ref id,
+                    ref archive,
+                    ref post,
+                    ref unsubscribe,
+                }) = list_management::ListActions::detect(&envelope)
+                {
+                    let mut x = get_x(upper_left);
+                    if let Some(id) = id {
+                        if sticky || skip_header_ctr == 0 {
+                            clear_area(
+                                grid,
+                                (set_y(upper_left, y), set_y(bottom_right, y)),
+                                headers_area,
+                            );
+                            let (_x, _) = write_string_to_grid(
+                                "List-ID: ",
+                                grid,
+                                headers_names.fg,
+                                headers_names.bg,
+                                headers_names.attrs,
+                                (set_y(upper_left, y), bottom_right),
+                                None,
+                            );
+                            let (_x, _y) = write_string_to_grid(
+                                id,
+                                grid,
+                                headers.fg,
+                                headers.bg,
+                                headers.attrs,
+                                ((_x, y), bottom_right),
+                                None,
+                            );
+                            x = _x;
+                            if _y != y {
+                                x = get_x(upper_left);
+                            }
+                            y = _y;
+                        }
+                        self.headers_no += 1;
+                    }
+                    if sticky || skip_header_ctr == 0 {
+                        if archive.is_some() || post.is_some() || unsubscribe.is_some() {
+                            let (_x, _y) = write_string_to_grid(
+                                " Available actions: [ ",
+                                grid,
+                                headers_names.fg,
+                                headers_names.bg,
+                                headers_names.attrs,
+                                ((x, y), bottom_right),
+                                Some(get_x(upper_left)),
+                            );
+                            x = _x;
+                            y = _y;
+                        }
+                        if archive.is_some() {
+                            let (_x, _y) = write_string_to_grid(
+                                "list-archive, ",
+                                grid,
+                                headers.fg,
+                                headers.bg,
+                                headers.attrs,
+                                ((x, y), bottom_right),
+                                Some(get_x(upper_left)),
+                            );
+                            x = _x;
+                            y = _y;
+                        }
+                        if post.is_some() {
+                            let (_x, _y) = write_string_to_grid(
+                                "list-post, ",
+                                grid,
+                                headers.fg,
+                                headers.bg,
+                                headers.attrs,
+                                ((x, y), bottom_right),
+                                Some(get_x(upper_left)),
+                            );
+                            x = _x;
+                            y = _y;
+                        }
+                        if unsubscribe.is_some() {
+                            let (_x, _y) = write_string_to_grid(
+                                "list-unsubscribe, ",
+                                grid,
+                                headers.fg,
+                                headers.bg,
+                                headers.attrs,
+                                ((x, y), bottom_right),
+                                Some(get_x(upper_left)),
+                            );
+                            x = _x;
+                            y = _y;
+                        }
+                        if archive.is_some() || post.is_some() || unsubscribe.is_some() {
+                            if x >= 2 {
+                                grid[(x - 2, y)].set_ch(' ');
+                            }
+                            if x > 0 {
+                                grid[(x - 1, y)]
+                                    .set_ch(']')
+                                    .set_fg(headers_names.fg)
+                                    .set_bg(headers_names.bg)
+                                    .set_attrs(headers_names.attrs);
+                            }
+                        }
+                        for x in x..=get_x(bottom_right) {
+                            grid[(x, y)]
+                                .set_ch(' ')
+                                .set_fg(headers_area.fg)
+                                .set_bg(headers_area.bg);
+                        }
+                        y += 1;
+                    }
                 }
+
+                self.force_draw_headers = false;
                 clear_area(
                     grid,
-                    (set_y(upper_left, y + 1), set_y(bottom_right, y + 2)),
-                    crate::conf::value(context, "theme_default"),
+                    (set_y(upper_left, y), set_y(bottom_right, y)),
+                    headers_area,
                 );
                 context
                     .dirty_areas
-                    .push_back((upper_left, set_y(bottom_right, y + 1)));
-                y + 1
+                    .push_back((upper_left, set_y(bottom_right, y + 3)));
+                if !self.view_settings.sticky_headers {
+                    let height_p = self.pager.size().1;
+
+                    let height = height!(area).saturating_sub(y).saturating_sub(1);
+                    if self.pager.cursor_pos() >= self.headers_no {
+                        get_y(upper_left)
+                    } else if (height_p > height && self.headers_cursor < self.headers_no + 1)
+                        || self.headers_cursor == 0
+                        || height_p < height
+                    {
+                        y + 1
+                    } else {
+                        get_y(upper_left)
+                    }
+                } else {
+                    y + 1
+                }
             }
         };
 
-        if self.dirty {
+        if !self.initialised {
+            self.initialised = true;
             let body = self.mail.body();
             match self.mode {
                 ViewMode::Attachment(aidx) if body.attachments()[aidx].is_html() => {
                     let attachment = &body.attachments()[aidx];
                     self.subview = Some(Box::new(HtmlView::new(attachment, context)));
                 }
+                ViewMode::Attachment(aidx) => {
+                    let mut text = "Viewing attachment. Press `r` to return \n".to_string();
+                    let attachment = &body.attachments()[aidx];
+                    text.push_str(&attachment.text());
+                    self.pager = Pager::from_string(
+                        text,
+                        Some(context),
+                        Some(0),
+                        None,
+                        self.view_settings.theme_default,
+                    );
+                    if let Some(ref filter) = self.view_settings.pager_filter {
+                        self.pager.filter(filter);
+                    }
+                    self.subview = None;
+                }
                 ViewMode::Normal if body.is_html() => {
                     self.subview = Some(Box::new(HtmlView::new(&body, context)));
                     self.mode = ViewMode::Subview;
                 }
-                _ => {
-                    let text = { self.attachment_to_text(&body, context) };
-                    let cursor_pos = if self.mode.is_attachment() {
-                        Some(0)
-                    } else {
-                        self.pager.as_ref().map(Pager::cursor_pos)
-                    };
-                    let colors = crate::conf::value(context, "mail.view.body");
-                    self.pager = Some(Pager::from_string(
+                ViewMode::Normal
+                    if self.view_settings.auto_choose_multipart_alternative
+                        && match body.content_type {
+                            ContentType::Multipart {
+                                kind: MultipartType::Alternative,
+                                ref parts,
+                                ..
+                            } => parts.iter().all(|p| {
+                                p.is_html() || (p.is_text() && p.body().trim().is_empty())
+                            }),
+                            _ => false,
+                        } =>
+                {
+                    let subview = Box::new(HtmlView::new(
+                        body.content_type
+                            .parts()
+                            .unwrap()
+                            .iter()
+                            .find(|a| a.is_html())
+                            .unwrap_or(&body),
+                        context,
+                    ));
+                    self.subview = Some(subview);
+                    self.mode = ViewMode::Subview;
+                }
+                ViewMode::Subview => {}
+                ViewMode::Source(Source::Raw) => {
+                    let text = { String::from_utf8_lossy(body.body()).into_owned() };
+                    self.view_settings.body_theme = crate::conf::value(context, "mail.view.body");
+                    self.pager = Pager::from_string(
                         text,
                         Some(context),
-                        cursor_pos,
                         None,
-                        colors,
-                    ));
+                        None,
+                        self.view_settings.body_theme,
+                    );
+                    if let Some(ref filter) = self.view_settings.pager_filter {
+                        self.pager.filter(filter);
+                    }
+                }
+                ViewMode::Source(Source::Decoded) => {
+                    let text = {
+                        /* Decode each header value */
+                        let mut ret = melib::email::parser::headers::headers(body.body())
+                            .map(|(_, v)| v)
+                            .map_err(|err| err.into())
+                            .and_then(|headers| {
+                                Ok(headers
+                                    .into_iter()
+                                    .map(|(h, v)| {
+                                        melib::email::parser::encodings::phrase(v, true)
+                                            .map(|(_, v)| {
+                                                let mut h = h.to_vec();
+                                                h.push(b':');
+                                                h.push(b' ');
+                                                h.extend(v.into_iter());
+                                                h
+                                            })
+                                            .map_err(|err| err.into())
+                                    })
+                                    .collect::<Result<Vec<Vec<u8>>>>()?
+                                    .join(&b"\n"[..]))
+                            })
+                            .map(|v| String::from_utf8_lossy(&v).into_owned())
+                            .unwrap_or_else(|err: Error| err.to_string());
+                        if !ret.ends_with("\n\n") {
+                            ret.push_str("\n\n");
+                        }
+                        ret.push_str(&self.body_text);
+                        if !ret.ends_with("\n\n") {
+                            ret.push_str("\n\n");
+                        }
+                        // ret.push_str(&self.attachment_tree);
+                        ret
+                    };
+                    self.view_settings.body_theme = crate::conf::value(context, "mail.view.body");
+                    self.pager = Pager::from_string(
+                        text,
+                        Some(context),
+                        None,
+                        None,
+                        self.view_settings.body_theme,
+                    );
+                    if let Some(ref filter) = self.view_settings.pager_filter {
+                        self.pager.filter(filter);
+                    }
+                }
+                ViewMode::Url => {
+                    let mut text = self.body_text.clone();
+                    if self.links.is_empty() {
+                        let finder = LinkFinder::new();
+                        self.links = finder
+                            .links(&text)
+                            .filter_map(|l| {
+                                if *l.kind() == linkify::LinkKind::Url {
+                                    Some(Link {
+                                        start: l.start(),
+                                        end: l.end(),
+                                        kind: LinkKind::Url,
+                                    })
+                                } else if *l.kind() == linkify::LinkKind::Email {
+                                    Some(Link {
+                                        start: l.start(),
+                                        end: l.end(),
+                                        kind: LinkKind::Email,
+                                    })
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect::<Vec<Link>>();
+                    }
+                    for (lidx, l) in self.links.iter().enumerate().rev() {
+                        text.insert_str(l.start, &format!("[{}]", lidx));
+                    }
+                    if !text.ends_with("\n\n") {
+                        text.push_str("\n\n");
+                    }
+                    text.push_str(&self.attachment_tree);
+
+                    let cursor_pos = self.pager.cursor_pos();
+                    self.view_settings.body_theme = crate::conf::value(context, "mail.view.body");
+                    self.pager = Pager::from_string(
+                        text,
+                        Some(context),
+                        Some(cursor_pos),
+                        None,
+                        self.view_settings.body_theme,
+                    );
+                    if let Some(ref filter) = self.view_settings.pager_filter {
+                        self.pager.filter(filter);
+                    }
+                    self.subview = None;
+                }
+                _ => {
+                    let mut text = self.body_text.clone();
+                    if !text.ends_with("\n\n") {
+                        text.push_str("\n\n");
+                    }
+                    text.push_str(&self.attachment_tree);
+                    let cursor_pos = if self.mode.is_attachment() {
+                        0
+                    } else {
+                        self.pager.cursor_pos()
+                    };
+                    self.view_settings.body_theme = crate::conf::value(context, "mail.view.body");
+                    self.pager = Pager::from_string(
+                        text,
+                        Some(context),
+                        Some(cursor_pos),
+                        None,
+                        self.view_settings.body_theme,
+                    );
+                    if let Some(ref filter) = self.view_settings.pager_filter {
+                        self.pager.filter(filter);
+                    }
+                    self.subview = None;
                 }
             };
             self.dirty = false;
         }
-        if let Some(s) = self.subview.as_mut() {
-            s.draw(grid, (set_y(upper_left, y + 1), bottom_right), context);
-        } else if let Some(p) = self.pager.as_mut() {
-            p.draw(grid, (set_y(upper_left, y + 1), bottom_right), context);
-        }
 
+        match self.mode {
+            ViewMode::Subview if self.subview.is_some() => {
+                if let Some(s) = self.subview.as_mut() {
+                    if !s.is_dirty() {
+                        s.set_dirty(true);
+                    }
+                    s.draw(grid, (set_y(upper_left, y), bottom_right), context);
+                }
+            }
+            _ => {
+                self.pager
+                    .draw(grid, (set_y(upper_left, y), bottom_right), context);
+            }
+        }
         if let ForceCharset::Dialog(ref mut s) = self.force_charset {
             s.draw(grid, area, context);
         }
+
+        self.dirty = false;
     }
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
@@ -360,13 +1389,16 @@ impl Component for EnvelopeView {
             if sub.process_event(event, context) {
                 return true;
             }
-        } else if let Some(ref mut p) = self.pager {
-            if p.process_event(event, context) {
-                return true;
-            }
+        } else if self.pager.process_event(event, context) {
+            return true;
         }
 
+        let shortcuts = &self.shortcuts(context);
+
         match *event {
+            UIEvent::Resize | UIEvent::VisibilityChange(true) => {
+                self.set_dirty(true);
+            }
             UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Alt('')) if !self.cmd_buf.is_empty() => {
                 self.cmd_buf.clear();
                 context
@@ -378,53 +1410,197 @@ impl Component for EnvelopeView {
                 self.cmd_buf.push(c);
                 return true;
             }
-            UIEvent::Input(Key::Char('r'))
-                if self.mode == ViewMode::Normal || self.mode == ViewMode::Raw =>
-            {
-                self.mode = if self.mode == ViewMode::Raw {
+            UIEvent::Input(ref key)
+                if matches!(
+                    self.mode,
                     ViewMode::Normal
-                } else {
-                    ViewMode::Raw
+                        | ViewMode::Subview
+                        | ViewMode::Source(Source::Decoded)
+                        | ViewMode::Source(Source::Raw)
+                ) && shortcut!(
+                    key == shortcuts[Shortcuts::ENVELOPE_VIEW]["view_raw_source"]
+                ) =>
+            {
+                self.mode = match self.mode {
+                    ViewMode::Source(Source::Decoded) => ViewMode::Source(Source::Raw),
+                    _ => ViewMode::Source(Source::Decoded),
                 };
-                self.dirty = true;
+                self.set_dirty(true);
+                self.initialised = false;
                 return true;
             }
-            UIEvent::Input(Key::Char('r'))
-                if self.mode.is_attachment() || self.mode == ViewMode::Subview =>
+            UIEvent::Input(ref key)
+                if matches!(
+                    self.mode,
+                    ViewMode::Attachment(_)
+                        | ViewMode::Subview
+                        | ViewMode::Url
+                        | ViewMode::Source(Source::Decoded)
+                        | ViewMode::Source(Source::Raw)
+                ) && shortcut!(
+                    key == shortcuts[Shortcuts::ENVELOPE_VIEW]["return_to_normal_view"]
+                ) =>
             {
                 self.mode = ViewMode::Normal;
-                self.subview.take();
-                self.dirty = true;
+                self.set_dirty(true);
+                self.initialised = false;
                 return true;
             }
-            UIEvent::Input(Key::Char('a'))
-                if !self.cmd_buf.is_empty() && self.mode == ViewMode::Normal =>
+            UIEvent::Input(ref key)
+                if (self.mode == ViewMode::Normal || self.mode == ViewMode::Subview)
+                    && !self.cmd_buf.is_empty()
+                    && shortcut!(key == shortcuts[Shortcuts::ENVELOPE_VIEW]["open_mailcap"]) =>
             {
                 let lidx = self.cmd_buf.parse::<usize>().unwrap();
                 self.cmd_buf.clear();
                 context
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                if let Some(attachment) = self.open_attachment(lidx, context) {
+                    if let Ok(()) = crate::mailcap::MailcapEntry::execute(attachment, context) {
+                        self.set_dirty(true);
+                    } else {
+                        context.replies.push_back(UIEvent::StatusEvent(
+                            StatusEvent::DisplayMessage(format!(
+                                "no mailcap entry found for {}",
+                                attachment.content_type()
+                            )),
+                        ));
+                    }
+                }
+                return true;
+            }
+            UIEvent::Action(View(ViewAction::ExportMail(ref path))) => {
+                // Save entire message as eml
+                let mut path = std::path::Path::new(path).to_path_buf();
 
-                if let Some(u) = self.mail.body().attachments().get(lidx) {
-                    match u.content_type() {
-                        ContentType::MessageRfc822 => {
-                            self.mode = ViewMode::Subview;
-                            let colors = crate::conf::value(context, "mail.view.body");
-                            self.subview = Some(Box::new(Pager::from_string(
-                                String::from_utf8_lossy(&u.decode_rec(Default::default()))
-                                    .to_string(),
-                                Some(context),
-                                None,
-                                None,
-                                colors,
-                            )));
+                if path.is_dir() {
+                    path.push(format!("{}.eml", self.mail.message_id_raw()));
+                }
+                match save_attachment(&path, &self.mail.bytes) {
+                    Err(err) => {
+                        context.replies.push_back(UIEvent::Notification(
+                            Some(format!("Failed to create file at {}", path.display())),
+                            err.to_string(),
+                            Some(NotificationType::Error(melib::ErrorKind::External)),
+                        ));
+                        log::error!("Failed to create file at {}: {err}", path.display());
+                        return true;
+                    }
+                    Ok(()) => {
+                        context.replies.push_back(UIEvent::Notification(
+                            None,
+                            format!("Saved at {}", &path.display()),
+                            Some(NotificationType::Info),
+                        ));
+                    }
+                }
+
+                return true;
+            }
+            UIEvent::Action(View(ViewAction::SaveAttachment(a_i, ref path))) => {
+                let mut path = std::path::Path::new(path).to_path_buf();
+
+                if let Some(u) = self.open_attachment(a_i, context) {
+                    if path.is_dir() {
+                        if let Some(filename) = u.filename() {
+                            path.push(filename);
+                        } else {
+                            path.push(format!(
+                                "meli_attachment_{a_i}_{}",
+                                Uuid::new_v4().as_simple()
+                            ));
                         }
+                    }
+                    match save_attachment(&path, &u.decode(Default::default())) {
+                        Err(err) => {
+                            context.replies.push_back(UIEvent::Notification(
+                                Some(format!("Failed to create file at {}", path.display())),
+                                err.to_string(),
+                                Some(NotificationType::Error(melib::ErrorKind::External)),
+                            ));
+                            log::error!("Failed to create file at {}: {err}", path.display());
+                        }
+                        Ok(()) => {
+                            context.replies.push_back(UIEvent::Notification(
+                                None,
+                                format!("Saved at {}", path.display()),
+                                Some(NotificationType::Info),
+                            ));
+                        }
+                    }
+                } else if a_i == 0 {
+                    // Save entire message as eml
+                    if path.is_dir() {
+                        path.push(format!("{}.eml", self.mail.message_id_raw()));
+                    }
+                    match save_attachment(&path, &self.mail.bytes) {
+                        Err(err) => {
+                            context.replies.push_back(UIEvent::Notification(
+                                Some(format!("Failed to create file at {}", path.display())),
+                                err.to_string(),
+                                Some(NotificationType::Error(melib::ErrorKind::External)),
+                            ));
+                            log::error!("Failed to create file at {}: {err}", path.display());
+                            return true;
+                        }
+                        Ok(()) => {
+                            context.replies.push_back(UIEvent::Notification(
+                                None,
+                                format!("Saved at {}", &path.display()),
+                                Some(NotificationType::Info),
+                            ));
+                        }
+                    }
 
+                    return true;
+                } else {
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(format!(
+                            "Attachment `{}` not found.",
+                            a_i
+                        ))));
+                }
+                return true;
+            }
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::ENVELOPE_VIEW]["open_attachment"])
+                    && !self.cmd_buf.is_empty()
+                    && (self.mode == ViewMode::Normal || self.mode == ViewMode::Subview) =>
+            {
+                let lidx = self.cmd_buf.parse::<usize>().unwrap();
+                self.cmd_buf.clear();
+                context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                if let Some(attachment) = self.open_attachment(lidx, context) {
+                    match attachment.content_type() {
+                        ContentType::MessageRfc822 => {
+                            match Mail::new(attachment.body().to_vec(), Some(Flag::SEEN)) {
+                                Ok(wrapper) => {
+                                    context.replies.push_back(UIEvent::Action(Tab(New(Some(
+                                        Box::new(EnvelopeView::new(
+                                            wrapper,
+                                            None,
+                                            None,
+                                            Some(self.view_settings.clone()),
+                                            context.main_loop_handler.clone(),
+                                        )),
+                                    )))));
+                                }
+                                Err(e) => {
+                                    context.replies.push_back(UIEvent::StatusEvent(
+                                        StatusEvent::DisplayMessage(format!("{}", e)),
+                                    ));
+                                }
+                            }
+                        }
                         ContentType::Text { .. }
                         | ContentType::PGPSignature
                         | ContentType::CMSSignature => {
                             self.mode = ViewMode::Attachment(lidx);
+                            self.initialised = false;
                             self.dirty = true;
                         }
                         ContentType::Multipart { .. } => {
@@ -433,20 +1609,19 @@ impl Component for EnvelopeView {
                                     "Multipart attachments are not supported yet.".to_string(),
                                 ),
                             ));
-                            return true;
                         }
                         ContentType::Other { .. } => {
-                            let attachment_type = u.mime_type();
-                            let filename = u.filename();
+                            let attachment_type = attachment.mime_type();
+                            let filename = attachment.filename();
                             if let Ok(command) = query_default_app(&attachment_type) {
                                 let p = create_temp_file(
-                                    &u.decode(Default::default()),
+                                    &attachment.decode(Default::default()),
                                     filename.as_deref(),
                                     None,
                                     None,
                                     true,
                                 );
-                                let exec_cmd = super::desktop_exec_to_command(
+                                let exec_cmd = desktop_exec_to_command(
                                     &command,
                                     p.path.display().to_string(),
                                     false,
@@ -487,43 +1662,52 @@ impl Component for EnvelopeView {
                                         },
                                     ),
                                 ));
-                                return true;
                             }
                         }
-                        ContentType::OctetStream { .. } => {
+                        ContentType::OctetStream {
+                            ref name,
+                            parameters: _,
+                        } => {
                             context.replies.push_back(UIEvent::StatusEvent(
-                                StatusEvent::DisplayMessage(
-                                    "application/octet-stream isn't supported yet".to_string(),
-                                ),
+                                StatusEvent::DisplayMessage(format!(
+                                    "Failed to open {}. application/octet-stream isn't supported \
+                                     yet",
+                                    name.as_ref().map(|n| n.as_str()).unwrap_or("file")
+                                )),
                             ));
-                            return true;
                         }
                     }
-                } else {
-                    context
-                        .replies
-                        .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(format!(
-                            "Attachment `{}` not found.",
-                            lidx
-                        ))));
-                    return true;
                 }
                 return true;
             }
-            UIEvent::Input(Key::Char('g'))
-                if !self.cmd_buf.is_empty() && self.mode == ViewMode::Url =>
+            UIEvent::Input(ref key)
+                if (self.mode == ViewMode::Normal || self.mode == ViewMode::Url)
+                    && shortcut!(
+                        key == shortcuts[Shortcuts::ENVELOPE_VIEW]["toggle_expand_headers"]
+                    ) =>
+            {
+                self.view_settings.expand_headers = !self.view_settings.expand_headers;
+                self.set_dirty(true);
+                return true;
+            }
+            UIEvent::Input(ref key)
+                if !self.cmd_buf.is_empty()
+                    && self.mode == ViewMode::Url
+                    && shortcut!(key == shortcuts[Shortcuts::ENVELOPE_VIEW]["go_to_url"]) =>
             {
                 let lidx = self.cmd_buf.parse::<usize>().unwrap();
                 self.cmd_buf.clear();
                 context
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                let url = {
-                    let finder = LinkFinder::new();
-                    let t = self.mail.body().text();
-                    let links: Vec<Link> = finder.links(&t).collect();
-                    if let Some(u) = links.get(lidx) {
-                        u.as_str().to_string()
+                let body_text = &self.body_text;
+                let links = &self.links;
+                let (_kind, url) = {
+                    if let Some(l) = links
+                        .get(lidx)
+                        .and_then(|l| Some((l.kind, body_text.get(l.start..l.end)?)))
+                    {
+                        l
                     } else {
                         context.replies.push_back(UIEvent::StatusEvent(
                             StatusEvent::DisplayMessage(format!("Link `{}` not found.", lidx)),
@@ -532,7 +1716,7 @@ impl Component for EnvelopeView {
                     }
                 };
 
-                let url_launcher = context.settings.pager.url_launcher.as_deref().unwrap_or(
+                let url_launcher = self.view_settings.url_launcher.as_deref().unwrap_or(
                     #[cfg(target_os = "macos")]
                     {
                         "open"
@@ -548,25 +1732,35 @@ impl Component for EnvelopeView {
                     .stdout(Stdio::piped())
                     .spawn()
                 {
-                    Ok(child) => context.children.push(child),
-                    Err(err) => context.replies.push_back(UIEvent::Notification(
-                        Some(format!("Failed to launch {:?}", url_launcher)),
-                        err.to_string(),
-                        Some(NotificationType::Error(melib::ErrorKind::External)),
-                    )),
+                    Ok(child) => {
+                        context.children.push(child);
+                    }
+                    Err(err) => {
+                        context.replies.push_back(UIEvent::Notification(
+                            Some(format!("Failed to launch {:?}", url_launcher)),
+                            err.to_string(),
+                            Some(NotificationType::Error(melib::ErrorKind::External)),
+                        ));
+                    }
                 }
                 return true;
             }
-            UIEvent::Input(Key::Char('u')) => {
+            UIEvent::Input(ref key)
+                if (self.mode == ViewMode::Normal || self.mode == ViewMode::Url)
+                    && shortcut!(key == shortcuts[Shortcuts::ENVELOPE_VIEW]["toggle_url_mode"]) =>
+            {
                 match self.mode {
                     ViewMode::Normal => self.mode = ViewMode::Url,
                     ViewMode::Url => self.mode = ViewMode::Normal,
                     _ => {}
                 }
+                self.initialised = false;
                 self.dirty = true;
                 return true;
             }
-            UIEvent::Input(Key::Char('d')) => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::ENVELOPE_VIEW]["change_charset"]) =>
+            {
                 let entries = vec![
                     (None, "default".to_string()),
                     (Some(Charset::Ascii), Charset::Ascii.to_string()),
@@ -612,20 +1806,151 @@ impl Component for EnvelopeView {
                 self.dirty = true;
                 return true;
             }
+            UIEvent::StatusEvent(StatusEvent::JobFinished(ref job_id))
+                if self.active_jobs.contains(job_id) =>
+            {
+                let mut caught = false;
+                for d in self.display.iter_mut() {
+                    match d {
+                        AttachmentDisplay::SignedPending {
+                            ref mut inner,
+                            handle,
+                            display,
+                            job_id: our_job_id,
+                        } if *our_job_id == *job_id => {
+                            caught = true;
+                            match handle.chan.try_recv() {
+                                Err(_) => { /* Job was canceled */ }
+                                Ok(None) => { /* something happened,
+                                      * perhaps a worker thread
+                                      * panicked */
+                                }
+                                Ok(Some(Ok(()))) => {
+                                    *d = AttachmentDisplay::SignedVerified {
+                                        inner: std::mem::replace(
+                                            inner,
+                                            Box::new(AttachmentBuilder::new(&[]).build()),
+                                        ),
+                                        display: std::mem::take(display),
+                                        description: String::new(),
+                                    };
+                                }
+                                Ok(Some(Err(error))) => {
+                                    *d = AttachmentDisplay::SignedFailed {
+                                        inner: std::mem::replace(
+                                            inner,
+                                            Box::new(AttachmentBuilder::new(&[]).build()),
+                                        ),
+                                        display: std::mem::take(display),
+                                        error,
+                                    };
+                                }
+                            }
+                        }
+                        AttachmentDisplay::EncryptedPending {
+                            ref mut inner,
+                            handle,
+                        } if handle.job_id == *job_id => {
+                            caught = true;
+                            match handle.chan.try_recv() {
+                                Err(_) => { /* Job was canceled */ }
+                                Ok(None) => { /* something happened,
+                                      * perhaps a worker thread
+                                      * panicked */
+                                }
+                                Ok(Some(Ok((metadata, decrypted_bytes)))) => {
+                                    let plaintext =
+                                        Box::new(AttachmentBuilder::new(&decrypted_bytes).build());
+                                    let mut plaintext_display = vec![];
+                                    Self::attachment_to_display_helper(
+                                        &plaintext,
+                                        &self.main_loop_handler,
+                                        &mut self.active_jobs,
+                                        &mut plaintext_display,
+                                        &self.view_settings,
+                                        (&self.force_charset).into(),
+                                    );
+                                    *d = AttachmentDisplay::EncryptedSuccess {
+                                        inner: std::mem::replace(
+                                            inner,
+                                            Box::new(AttachmentBuilder::new(&[]).build()),
+                                        ),
+                                        plaintext,
+                                        plaintext_display,
+                                        description: format!("{:?}", metadata),
+                                    };
+                                }
+                                Ok(Some(Err(error))) => {
+                                    *d = AttachmentDisplay::EncryptedFailed {
+                                        inner: std::mem::replace(
+                                            inner,
+                                            Box::new(AttachmentBuilder::new(&[]).build()),
+                                        ),
+                                        error,
+                                    };
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                if caught {
+                    self.links.clear();
+                    self.parse_attachments();
+                }
+
+                self.active_jobs.remove(job_id);
+                self.set_dirty(true);
+            }
             _ => {}
         }
         false
     }
 
+    fn shortcuts(&self, context: &Context) -> ShortcutMaps {
+        let mut map = if let Some(ref sbv) = self.subview {
+            sbv.shortcuts(context)
+        } else {
+            self.pager.shortcuts(context)
+        };
+
+        let mut our_map = self.view_settings.env_view_shortcuts.clone();
+
+        if !(self.mode.is_attachment()
+            || self.mode == ViewMode::Subview
+            || self.mode == ViewMode::Source(Source::Decoded)
+            || self.mode == ViewMode::Source(Source::Raw)
+            || self.mode == ViewMode::Url)
+        {
+            our_map.remove("return_to_normal_view");
+        }
+        if self.mode != ViewMode::Url {
+            our_map.remove("go_to_url");
+        }
+        if !(self.mode == ViewMode::Normal || self.mode == ViewMode::Url) {
+            our_map.remove("toggle_url_mode");
+        }
+        map.insert(Shortcuts::ENVELOPE_VIEW, our_map);
+
+        map
+    }
+
     fn is_dirty(&self) -> bool {
         self.dirty
-            || self.pager.as_ref().map(|p| p.is_dirty()).unwrap_or(false)
+            || self.pager.is_dirty()
             || self.subview.as_ref().map(|p| p.is_dirty()).unwrap_or(false)
             || matches!(self.force_charset, ForceCharset::Dialog(ref s) if s.is_dirty())
     }
 
     fn set_dirty(&mut self, value: bool) {
         self.dirty = value;
+        self.pager.set_dirty(value);
+        if let Some(ref mut s) = self.subview {
+            s.set_dirty(value);
+        }
+        if let ForceCharset::Dialog(ref mut s) = self.force_charset {
+            s.set_dirty(value);
+        }
     }
 
     fn id(&self) -> ComponentId {
