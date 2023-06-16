@@ -782,12 +782,7 @@ impl ThreadListing {
     }
 
     fn get_env_under_cursor(&self, cursor: usize) -> Option<EnvelopeHash> {
-        self.rows
-            .env_order
-            .iter()
-            .find(|(_, &r)| r == cursor)
-            .map(|v| v.0)
-            .cloned()
+        self.rows.entries.get(cursor).map(|v| (v.0).1)
     }
 
     fn make_entry_string(&self, e: &Envelope, context: &Context) -> EntryStrings {

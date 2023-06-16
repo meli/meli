@@ -231,7 +231,7 @@ impl ThreadView {
             };
             match expanded_hash {
                 Some(expanded_hash) if expanded_hash == entry.msg_hash => {
-                    self.new_expanded_pos = self.entries.len().saturating_sub(1);
+                    self.new_expanded_pos = self.entries.len();
                     self.expanded_pos = self.new_expanded_pos + 1;
                 }
                 _ => {}

@@ -103,16 +103,27 @@ impl<T> RowsState<T> {
         entry_strings: EntryStrings,
     ) {
         env_hashes.dedup();
+        env_hashes.retain(|h| !self.all_envelopes.contains(h));
+        if env_hashes.is_empty() {
+            return;
+        }
         let index = self.entries.len();
-        self.thread_order.insert(thread, index);
-        self.all_threads.insert(thread);
         for &env_hash in &env_hashes {
             self.selection.insert(env_hash, false);
             self.env_to_thread.insert(env_hash, thread);
             self.env_order.insert(env_hash, index);
             self.all_envelopes.insert(env_hash);
         }
-        self.thread_to_env.insert(thread, env_hashes);
+        if !self.all_threads.contains(&thread) {
+            self.thread_order.insert(thread, index);
+            self.all_threads.insert(thread);
+            self.thread_to_env.insert(thread, env_hashes);
+        } else {
+            self.thread_to_env
+                .entry(thread)
+                .or_default()
+                .extend_from_slice(&env_hashes);
+        }
         self.entries.push((metadata, entry_strings));
     }
 
