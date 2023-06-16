@@ -41,11 +41,13 @@ pub struct Pager {
     colors: ThemeAttribute,
     initialised: bool,
     show_scrollbar: bool,
-    /// At the last draw, were the visible columns plus horizontal cursor less than total width?
-    /// Used to decide whether to accept `scroll_right` key events.
+    /// At the last draw, were the visible columns plus horizontal cursor less
+    /// than total width? Used to decide whether to accept `scroll_right`
+    /// key events.
     cols_lt_width: bool,
-    /// At the last draw, were the visible rows plus vertical cursor less than total height?
-    /// Used to decide whether to accept `scroll_down` key events.
+    /// At the last draw, were the visible rows plus vertical cursor less than
+    /// total height? Used to decide whether to accept `scroll_down` key
+    /// events.
     rows_lt_height: bool,
     filtered_content: Option<(String, Result<CellBuffer>)>,
     text_lines: Vec<String>,
@@ -64,9 +66,9 @@ impl Pager {
     const PAGES_AHEAD_TO_RENDER_NO: usize = 16;
 
     pub fn new(context: &Context) -> Self {
-        let mut ret = Pager {
+        let mut ret = Self {
             minimum_width: context.settings.pager.minimum_width,
-            ..Pager::default()
+            ..Self::default()
         };
         ret.set_colors(crate::conf::value(context, "theme_default"))
             .set_reflow(if context.settings.pager.split_long_lines {
@@ -154,7 +156,7 @@ impl Pager {
             }
         }
 
-        let mut ret = Pager {
+        let mut ret = Self {
             text,
             text_lines: vec![],
             reflow,

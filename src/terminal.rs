@@ -19,14 +19,12 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*! Terminal grid cells, keys, colors, etc.
- */
-extern crate serde;
-use self::serde::{de, de::Visitor, Deserialize, Deserializer};
-extern crate unicode_segmentation;
+//! Terminal grid cells, keys, colors, etc.
+use melib::log;
+use serde::{de, de::Visitor, Deserialize, Deserializer};
 
 mod color;
-pub use self::color::*;
+pub use color::*;
 #[macro_use]
 mod position;
 #[macro_use]
@@ -568,9 +566,12 @@ pub mod screen {
             if termcols.unwrap_or(72) as usize != self.cols
                 || termrows.unwrap_or(120) as usize != self.rows
             {
-                debug!(
+                log::trace!(
                     "Size updated, from ({}, {}) -> ({:?}, {:?})",
-                    self.cols, self.rows, termcols, termrows
+                    self.cols,
+                    self.rows,
+                    termcols,
+                    termrows
                 );
             }
             self.cols = termcols.unwrap_or(72) as usize;

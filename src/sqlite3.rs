@@ -166,14 +166,6 @@ pub async fn insert(
     let body = match op.await.map(|bytes| envelope.body_bytes(&bytes)) {
         Ok(body) => body.text(),
         Err(err) => {
-            debug!(
-                "{}",
-                format!(
-                    "Failed to open envelope {}: {}",
-                    envelope.message_id_display(),
-                    err
-                )
-            );
             log::error!(
                 "Failed to open envelope {}: {err}",
                 envelope.message_id_display(),
@@ -186,11 +178,6 @@ pub async fn insert(
         "INSERT OR IGNORE INTO accounts (name) VALUES (?1)",
         params![acc_name,],
     ) {
-        debug!(
-            "Failed to insert envelope {}: {}",
-            envelope.message_id_display(),
-            err
-        );
         log::error!(
             "Failed to insert envelope {}: {err}",
             envelope.message_id_display(),
@@ -238,10 +225,6 @@ pub async fn insert(
         )
         .map_err(|e| Error::new(e.to_string()))
     {
-        log::debug!(
-            "Failed to insert envelope {}: {err}",
-            envelope.message_id_display(),
-        );
         log::error!(
             "Failed to insert envelope {}: {err}",
             envelope.message_id_display(),
@@ -266,7 +249,6 @@ pub fn remove(env_hash: EnvelopeHash) -> Result<()> {
         )
         .map_err(|e| Error::new(e.to_string()))
     {
-        log::debug!("Failed to remove envelope {env_hash}: {err}");
         log::error!("Failed to remove envelope {env_hash}: {err}");
         return Err(err);
     }
@@ -308,14 +290,11 @@ pub fn index(context: &mut crate::state::Context, account_index: usize) -> Resul
             x
         };
         let mut ctr = 0;
-        debug!(
-            "{}",
-            format!(
-                "Rebuilding {} index. {}/{}",
-                acc_name,
-                ctr,
-                env_hashes.len()
-            )
+        log::trace!(
+            "Rebuilding {} index. {}/{}",
+            acc_name,
+            ctr,
+            env_hashes.len()
         );
         for chunk in env_hashes.chunks(200) {
             ctr += chunk.len();
@@ -378,26 +357,23 @@ pub fn search(
 
     let conn = melib_sqlite3::open_db(db_path)?;
 
-    let sort_field = match debug!(sort_field) {
+    let sort_field = match sort_field {
         SortField::Subject => "subject",
         SortField::Date => "timestamp",
     };
 
-    let sort_order = match debug!(sort_order) {
+    let sort_order = match sort_order {
         SortOrder::Asc => "ASC",
         SortOrder::Desc => "DESC",
     };
 
     let mut stmt = conn
-        .prepare(
-            debug!(format!(
-                "SELECT hash FROM envelopes WHERE {} ORDER BY {} {};",
-                query_to_sql(query),
-                sort_field,
-                sort_order
-            ))
-            .as_str(),
-        )
+        .prepare(&format!(
+            "SELECT hash FROM envelopes WHERE {} ORDER BY {} {};",
+            query_to_sql(query),
+            sort_field,
+            sort_order
+        ))
         .map_err(|e| Error::new(e.to_string()))?;
 
     let results = stmt

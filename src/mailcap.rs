@@ -107,7 +107,7 @@ impl MailcapEntry {
                         if flag.trim() == "copiousoutput" {
                             copiousoutput = true;
                         } else {
-                            debug!("unknown mailcap flag: {}", flag);
+                            log::trace!("unknown mailcap flag: {}", flag);
                         }
                     }
 
@@ -130,7 +130,7 @@ impl MailcapEntry {
                         if flag.trim() == "copiousoutput" {
                             copiousoutput = true;
                         } else {
-                            debug!("unknown mailcap flag: {}", flag);
+                            log::trace!("unknown mailcap flag: {}", flag);
                         }
                     }
 
@@ -191,7 +191,7 @@ impl MailcapEntry {
                     })
                     .collect::<Vec<String>>();
                 let cmd_string = format!("{} {}", cmd, args.join(" "));
-                log::debug!("Executing: sh -c \"{}\"", cmd_string.replace('"', "\\\""));
+                log::trace!("Executing: sh -c \"{}\"", cmd_string.replace('"', "\\\""));
                 if copiousoutput {
                     let out = if needs_stdin {
                         let mut child = Command::new("sh")
@@ -227,7 +227,8 @@ impl MailcapEntry {
                         .stdout(Stdio::inherit())
                         .spawn()?;
                     pager.stdin.as_mut().unwrap().write_all(&out)?;
-                    debug!(pager.wait_with_output()?.stdout);
+                    let _output = pager.wait_with_output()?;
+                    log::trace!("stdout = {}", String::from_utf8_lossy(&_output.stdout));
                 } else if needs_stdin {
                     let mut child = Command::new("sh")
                         .args(["-c", &cmd_string])
@@ -240,7 +241,8 @@ impl MailcapEntry {
                         .as_mut()
                         .unwrap()
                         .write_all(&a.decode(Default::default()))?;
-                    debug!(child.wait_with_output()?.stdout);
+                    let _output = child.wait_with_output()?;
+                    log::trace!("stdout = {}", String::from_utf8_lossy(&_output.stdout));
                 } else {
                     let child = Command::new("sh")
                         .args(["-c", &cmd_string])
@@ -248,7 +250,8 @@ impl MailcapEntry {
                         .stdout(Stdio::inherit())
                         .spawn()?;
 
-                    debug!(child.wait_with_output()?.stdout);
+                    let _output = child.wait_with_output()?;
+                    log::trace!("stdout = {}", String::from_utf8_lossy(&_output.stdout));
                 }
                 context.replies.push_back(UIEvent::Fork(ForkType::Finished));
                 Ok(())

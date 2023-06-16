@@ -56,11 +56,6 @@ impl KeySelection {
         context: &mut Context,
     ) -> Result<Self> {
         use melib::gpgme::*;
-        debug!("KeySelection::new");
-        debug!(&secret);
-        debug!(&local);
-        debug!(&pattern);
-        debug!(&allow_remote_lookup);
         let mut ctx = Context::new()?;
         if local {
             ctx.set_auto_key_locate(LocateKey::LOCAL)?;
@@ -109,8 +104,6 @@ impl Component for KeySelection {
     }
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
-        debug!(&self);
-        debug!(&event);
         match self {
             KeySelection::LoadingKeys {
                 ref mut progress_spinner,

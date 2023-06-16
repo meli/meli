@@ -19,9 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*!
-Notification handling components.
-*/
+//! Notification handling components
 use std::process::{Command, Stdio};
 
 #[cfg(all(target_os = "linux", feature = "dbus-notifications"))]
@@ -123,7 +121,6 @@ mod dbus {
                 }
 
                 if let Err(err) = notification.show() {
-                    log::debug!("Could not show dbus notification: {:?}", &err);
                     log::error!("Could not show dbus notification: {err}");
                 }
             }
@@ -197,7 +194,6 @@ impl Component for NotificationCommand {
                 if *kind == Some(NotificationType::NewMail) {
                     if let Some(ref path) = context.settings.notifications.xbiff_file_path {
                         if let Err(err) = update_xbiff(path) {
-                            log::debug!("Could not update xbiff file: {:?}", &err);
                             log::error!("Could not update xbiff file: {err}.");
                         }
                     }
@@ -224,7 +220,6 @@ impl Component for NotificationCommand {
                         }
                         Err(err) => {
                             log::error!("Could not run notification script: {err}.");
-                            log::debug!("Could not run notification script: {:?}", err);
                         }
                     }
                 } else {
@@ -257,7 +252,6 @@ impl Component for NotificationCommand {
                             }
                             Err(err) => {
                                 log::error!("Could not run notification script: {err}.");
-                                log::debug!("Could not run notification script: {:?}", err);
                             }
                         }
                     }

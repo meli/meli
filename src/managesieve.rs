@@ -19,7 +19,6 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#[macro_use]
 extern crate melib;
 use std::collections::VecDeque;
 

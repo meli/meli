@@ -936,7 +936,7 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> UIDialog<T> {
             ..
         } = self;
         done_fn.take().and_then(|done_fn| {
-            debug!(done_fn(
+            done_fn(
                 *id,
                 entries
                     .iter()
@@ -945,7 +945,7 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> UIDialog<T> {
                     .cloned()
                     .collect::<Vec<_>>()
                     .as_slice(),
-            ))
+            )
         })
     }
 }

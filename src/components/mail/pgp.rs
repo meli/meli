@@ -109,10 +109,10 @@ pub fn encrypt_filter(
                 Err("libgpgme functions are temporarily disabled due to an unsolved bug <https://git.meli.delivery/meli/meli/issues/176>.".into())
                 /*
                 let a: Attachment = a.into();
-                debug!("main attachment is {:?}", &a);
+                log::trace!("main attachment is {:?}", &a);
                 let mut ctx = Context::new()?;
                 let data = ctx.new_data_mem(
-                                a.into_raw().as_bytes()
+                    a.into_raw().as_bytes()
                 )?;
 
                 let sig_attachment = {

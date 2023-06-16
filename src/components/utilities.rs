@@ -353,7 +353,7 @@ impl Component for StatusBar {
                     .map(std::path::Path::new)
                 {
                     suggestions.extend(
-                        debug!(debug!(p).complete(true))
+                        p.complete(true)
                             .into_iter()
                             .map(|m| format!("{}{}", self.ex_buffer.as_str(), m).into()),
                     );
@@ -814,33 +814,12 @@ impl Component for StatusBar {
 
     fn realize(&self, parent: Option<ComponentId>, context: &mut Context) {
         context.realized.insert(self.id(), parent);
-        log::debug!(
-            "Realizing statusbar id {} w/ parent {:?}",
-            self.id(),
-            &parent
-        );
-        log::debug!(
-            "Realizing statusbar container id {} w/ parent {:?}",
-            self.container.id(),
-            &self.id
-        );
         self.container.realize(self.id().into(), context);
-        log::debug!(
-            "Realizing progress_spinner container id {} w/ parent {:?}",
-            self.progress_spinner.id(),
-            &self.id
-        );
-        log::debug!(
-            "Realizing ex_buffer container id {} w/ parent {:?}",
-            self.ex_buffer.id(),
-            &self.id
-        );
         self.progress_spinner.realize(self.id().into(), context);
         self.ex_buffer.realize(self.id().into(), context);
     }
 
     fn unrealize(&self, context: &mut Context) {
-        log::debug!("Unrealizing id {}", self.id());
         context.unrealized.insert(self.id());
         self.container.unrealize(context);
         self.progress_spinner.unrealize(context);
@@ -1477,9 +1456,10 @@ impl Component for Tabbed {
                     self.help_curr_views = children_maps;
                     return true;
                 } else {
-                    debug!(
-                        "DEBUG: Child component with id {:?} not found.\nList: {:?}",
-                        id, self.children
+                    log::debug!(
+                        "Child component with id {:?} not found.\nList: {:?}",
+                        id,
+                        self.children
                     );
                 }
             }
@@ -1627,16 +1607,13 @@ impl Component for Tabbed {
     }
 
     fn realize(&self, parent: Option<ComponentId>, context: &mut Context) {
-        log::debug!("Realizing Tabbed id {} w/ parent {:?}", self.id(), &parent);
         context.realized.insert(self.id(), parent);
         for c in &self.children {
-            log::debug!("Realizing child id {} w/ parent {:?}", c.id(), &self.id);
             c.realize(self.id().into(), context);
         }
     }
 
     fn unrealize(&self, context: &mut Context) {
-        log::debug!("Unrealizing id {}", self.id());
         context
             .replies
             .push_back(UIEvent::ComponentUnrealize(self.id()));

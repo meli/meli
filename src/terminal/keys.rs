@@ -246,7 +246,6 @@ pub fn get_events(
     let mut paste_buf = String::with_capacity(256);
     let mut stdin_iter = stdin.events_and_raw();
     'poll_while: while let Ok(_n_raw) = poll(&mut [new_command_pollfd, stdin_fd], -1) {
-        //debug!(_n_raw);
         select! {
             default => {
                 if stdin_fd.revents().is_some() {
@@ -292,7 +291,6 @@ pub fn get_events(
             recv(rx) -> cmd => {
                 use nix::sys::time::TimeValLike;
                 let mut buf = [0;2];
-                //debug!("get_events_raw will nix::unistd::read");
                 let mut read_fd_set = nix::sys::select::FdSet::new();
                 read_fd_set.insert(new_command_fd);
                 let mut error_fd_set = nix::sys::select::FdSet::new();

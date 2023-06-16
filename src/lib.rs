@@ -47,7 +47,6 @@ pub use structopt::StructOpt;
 #[global_allocator]
 static GLOBAL: System = System;
 
-#[macro_use]
 pub extern crate melib;
 pub use melib::{
     error::*, log, AccountHash, Envelope, EnvelopeHash, EnvelopeRef, Flag, LogLevel, Mail, Mailbox,

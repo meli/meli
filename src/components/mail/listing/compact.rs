@@ -371,13 +371,13 @@ impl MailListingTrait for CompactListing {
                 continue 'items_for_loop;
             };
             if !context.accounts[&self.cursor_pos.0].contains_key(root_env_hash) {
-                debug!("key = {}", root_env_hash);
-                debug!(
+                log::debug!("key = {}", root_env_hash);
+                log::debug!(
                     "name = {} {}",
                     account[&self.cursor_pos.1].name(),
                     context.accounts[&self.cursor_pos.0].name()
                 );
-                debug!("{:#?}", context.accounts);
+                log::debug!("{:#?}", context.accounts);
 
                 panic!();
             }
@@ -1260,10 +1260,8 @@ impl CompactListing {
         }
         debug_assert!(end >= start);
         if self.rows_drawn.get_max(start, end) == 0 {
-            //debug!("not drawing {}-{}", start, end);
             return;
         }
-        //debug!("drawing {}-{}", start, end);
         for i in start..=end {
             self.rows_drawn.update(i, 0);
         }
@@ -1425,7 +1423,6 @@ impl CompactListing {
                     if !account.collection.contains_key(&env_hash) {
                         continue;
                     }
-                    debug!(account.collection.get_env(env_hash).subject());
                     let env_thread_node_hash = account.collection.get_env(env_hash).thread();
                     if !threads.thread_nodes.contains_key(&env_thread_node_hash) {
                         continue;
@@ -1807,7 +1804,6 @@ impl Component for CompactListing {
                 UIEvent::Action(ref action) => {
                     match action {
                         Action::Sort(field, order) if !self.unfocused() => {
-                            debug!("Sort {:?} , {:?}", field, order);
                             self.sort = (*field, *order);
                             self.sortcmd = true;
                             if !self.filtered_selection.is_empty() {
@@ -1819,7 +1815,6 @@ impl Component for CompactListing {
                             return true;
                         }
                         Action::SubSort(field, order) if !self.unfocused() => {
-                            debug!("SubSort {:?} , {:?}", field, order);
                             self.subsort = (*field, *order);
                             // FIXME: perform subsort.
                             return true;

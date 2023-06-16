@@ -102,8 +102,8 @@ macro_rules! row_attr {
     }};
 }
 
-/// A list of all mail ([`Envelope`](melib::Envelope)s) in a `Mailbox`. On `\n` it opens the
-/// [`Envelope`](melib::Envelope) content in a [`MailView`].
+/// A list of all mail ([`Envelope`](melib::Envelope)s) in a `Mailbox`. On `\n`
+/// it opens the [`Envelope`](melib::Envelope) content in a [`MailView`].
 #[derive(Debug)]
 pub struct ThreadListing {
     /// (x, y, z): x is accounts, y is mailboxes, z is index inside a mailbox.
@@ -844,7 +844,6 @@ impl ThreadListing {
             return;
         }
         debug_assert!(end >= start);
-        //debug!("drawing {}-{}", start, end);
         let min_width = (
             self.data_columns.columns[0].size().0,
             self.data_columns.columns[1].size().0,
@@ -1453,14 +1452,12 @@ impl Component for ThreadListing {
             }
             UIEvent::Action(ref action) => match action {
                 Action::SubSort(field, order) => {
-                    debug!("SubSort {:?} , {:?}", field, order);
                     self.subsort = (*field, *order);
                     self.set_dirty(true);
                     self.refresh_mailbox(context, false);
                     return true;
                 }
                 Action::Sort(field, order) => {
-                    debug!("Sort {:?} , {:?}", field, order);
                     self.sort = (*field, *order);
                     self.set_dirty(true);
                     self.refresh_mailbox(context, false);

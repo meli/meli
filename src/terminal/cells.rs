@@ -31,7 +31,10 @@ use std::{
     ops::{Deref, DerefMut, Index, IndexMut},
 };
 
-use melib::text_processing::wcwidth;
+use melib::{
+    log,
+    text_processing::{search::KMP, wcwidth},
+};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use smallvec::SmallVec;
 
@@ -275,10 +278,6 @@ impl CellBuffer {
     ///  | 666666666666 |            |              |
     ///  ```
     pub fn scroll_up(&mut self, scroll_region: &ScrollRegion, top: usize, offset: usize) {
-        //debug!(
-        //    "scroll_up scroll_region {:?}, top: {} offset {}",
-        //    scroll_region, top, offset
-        //);
         let l = scroll_region.left;
         let r = if scroll_region.right == 0 {
             self.size().0
@@ -337,10 +336,6 @@ impl CellBuffer {
     ///  | 666666666666 |            | 555555555555 |
     ///  ```
     pub fn scroll_down(&mut self, scroll_region: &ScrollRegion, top: usize, offset: usize) {
-        //debug!(
-        //    "scroll_down scroll_region {:?}, top: {} offset {}",
-        //    scroll_region, top, offset
-        //);
         for y in (scroll_region.bottom - offset + 1)..=scroll_region.bottom {
             for x in 0..self.size().0 {
                 self[(x, y)] = Cell::default();
@@ -953,9 +948,10 @@ pub fn copy_area_with_break(
     src: Area,
 ) -> Pos {
     if !is_valid_area!(dest) || !is_valid_area!(src) {
-        debug!(
+        log::debug!(
             "BUG: Invalid areas in copy_area:\n src: {:?}\n dest: {:?}",
-            src, dest
+            src,
+            dest
         );
         return upper_left!(dest);
     }
@@ -1000,9 +996,10 @@ pub fn copy_area_with_break(
 /// Copy a source `Area` to a destination.
 pub fn copy_area(grid_dest: &mut CellBuffer, grid_src: &CellBuffer, dest: Area, src: Area) -> Pos {
     if !is_valid_area!(dest) || !is_valid_area!(src) {
-        debug!(
+        log::debug!(
             "BUG: Invalid areas in copy_area:\n src: {:?}\n dest: {:?}",
-            src, dest
+            src,
+            dest
         );
         return upper_left!(dest);
     }
@@ -1016,7 +1013,7 @@ pub fn copy_area(grid_dest: &mut CellBuffer, grid_src: &CellBuffer, dest: Area, 
     let mut src_y = get_y(upper_left!(src));
     let (cols, rows) = grid_src.size();
     if src_x >= cols || src_y >= rows {
-        debug!("BUG: src area outside of grid_src in copy_area",);
+        log::debug!("BUG: src area outside of grid_src in copy_area",);
         return upper_left!(dest);
     }
 
@@ -1084,11 +1081,11 @@ pub fn change_colors(grid: &mut CellBuffer, area: Area, fg_color: Color, bg_colo
             || y >= get_y(bounds)
             || x >= get_x(bounds)
         {
-            debug!("BUG: Invalid area in change_colors:\n area: {:?}", area);
+            log::debug!("BUG: Invalid area in change_colors:\n area: {:?}", area);
             return;
         }
         if !is_valid_area!(area) {
-            debug!("BUG: Invalid area in change_colors:\n area: {:?}", area);
+            log::debug!("BUG: Invalid area in change_colors:\n area: {:?}", area);
             return;
         }
     }
@@ -1175,7 +1172,7 @@ pub fn write_string_to_grid(
                 return (x, y);
             }
         } else {
-            debug!(" Invalid area with string {} and area {:?}", s, area);
+            log::debug!(" Invalid area with string {} and area {:?}", s, area);
             return (x, y);
         }
     }
@@ -1713,8 +1710,6 @@ pub mod boundaries {
     }
 }
 
-use melib::text_processing::search::KMP;
-
 impl KMP for CellBuffer {
     fn kmp_search(&self, pattern: &str) -> smallvec::SmallVec<[usize; 256]> {
         let (mut w, prev_ind) =
@@ -1752,35 +1747,6 @@ impl KMP for CellBuffer {
             }
         }
         ret
-    }
-}
-
-#[test]
-fn test_cellbuffer_search() {
-    use melib::text_processing::{Reflow, TextProcessing, _ALICE_CHAPTER_1};
-    let lines: Vec<String> = _ALICE_CHAPTER_1.split_lines_reflow(Reflow::All, Some(78));
-    let mut buf = CellBuffer::new(
-        lines.iter().map(String::len).max().unwrap(),
-        lines.len(),
-        Cell::with_char(' '),
-    );
-    let width = buf.size().0;
-    for (i, l) in lines.iter().enumerate() {
-        write_string_to_grid(
-            l,
-            &mut buf,
-            Color::Default,
-            Color::Default,
-            Attr::DEFAULT,
-            ((0, i), (width.saturating_sub(1), i)),
-            None,
-        );
-    }
-    for ind in buf.kmp_search("Alice") {
-        for c in &buf.cellvec()[ind..std::cmp::min(buf.cellvec().len(), ind + 25)] {
-            print!("{}", c.ch());
-        }
-        println!();
     }
 }
 
@@ -1829,4 +1795,39 @@ pub enum WidgetWidth {
     Unset,
     Hold(usize),
     Set(usize),
+}
+
+#[cfg(test)]
+mod tests {
+    use melib::text_processing::{Reflow, TextProcessing, _ALICE_CHAPTER_1};
+
+    use super::*;
+
+    #[test]
+    fn test_cellbuffer_search() {
+        let lines: Vec<String> = _ALICE_CHAPTER_1.split_lines_reflow(Reflow::All, Some(78));
+        let mut buf = CellBuffer::new(
+            lines.iter().map(String::len).max().unwrap(),
+            lines.len(),
+            Cell::with_char(' '),
+        );
+        let width = buf.size().0;
+        for (i, l) in lines.iter().enumerate() {
+            write_string_to_grid(
+                l,
+                &mut buf,
+                Color::Default,
+                Color::Default,
+                Attr::DEFAULT,
+                ((0, i), (width.saturating_sub(1), i)),
+                None,
+            );
+        }
+        for ind in buf.kmp_search("Alice") {
+            for c in &buf.cellvec()[ind..std::cmp::min(buf.cellvec().len(), ind + 25)] {
+                print!("{}", c.ch());
+            }
+            println!();
+        }
+    }
 }

@@ -276,13 +276,13 @@ impl MailListingTrait for ConversationsListing {
                 continue 'items_for_loop;
             };
             if !context.accounts[&self.cursor_pos.0].contains_key(root_env_hash) {
-                debug!("key = {}", root_env_hash);
-                debug!(
+                log::debug!("key = {}", root_env_hash);
+                log::debug!(
                     "name = {} {}",
                     account[&self.cursor_pos.1].name(),
                     context.accounts[&self.cursor_pos.0].name()
                 );
-                debug!("{:#?}", context.accounts);
+                log::debug!("{:#?}", context.accounts);
 
                 panic!();
             }
@@ -1392,36 +1392,11 @@ impl Component for ConversationsListing {
                 }
                 UIEvent::Action(ref action) => match action {
                     Action::SubSort(field, order) if !self.unfocused() => {
-                        debug!("SubSort {:?} , {:?}", field, order);
                         self.subsort = (*field, *order);
-                        // FIXME subsort
-                        //if !self.filtered_selection.is_empty() {
-                        //    let threads = &account.collection.threads[&self.cursor_pos.1];
-                        //    threads.vec_inner_sort_by(&mut self.filtered_selection, self.sort,
-                        // &account.collection);
-                        //} else {
-                        //    self.refresh_mailbox(context, false);
-                        //}
                         return true;
                     }
                     Action::Sort(field, order) if !self.unfocused() => {
-                        debug!("Sort {:?} , {:?}", field, order);
-                        // FIXME sort
-                        /*
                         self.sort = (*field, *order);
-                        if !self.filtered_selection.is_empty() {
-                            let threads = &context.accounts[&self.cursor_pos.0].collection.threads
-                                [&self.cursor_pos.1];
-                            threads.vec_inner_sort_by(
-                                &mut self.filtered_selection,
-                                self.sort,
-                                &context.accounts[&self.cursor_pos.0].collection.envelopes,
-                            );
-                            self.set_dirty(true);
-                        } else {
-                            self.refresh_mailbox(context, false);
-                        }
-                            */
                         return true;
                     }
                     Action::Listing(ToggleThreadSnooze) if !self.unfocused() => {

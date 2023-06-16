@@ -31,8 +31,8 @@ use crate::ThreadEvent;
 /// subviews for more menus.
 ///
 /// Doesn't have a concept of accounts, mailboxes or mail backends.
-/// Therefore all settings it needs need to be provided through the `view_settings` field of type
-/// [`ViewSettings`].
+/// Therefore all settings it needs need to be provided through the
+/// `view_settings` field of type [`ViewSettings`].
 #[derive(Debug)]
 pub struct EnvelopeView {
     pub pager: Pager,

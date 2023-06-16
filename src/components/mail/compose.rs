@@ -1355,9 +1355,7 @@ impl Component for Composer {
                 ViewMode::SelectEncryptKey(is_encrypt, ref mut selector),
                 UIEvent::FinishedUIDialog(id, result),
             ) if *id == selector.id() => {
-                debug!(&result);
                 if let Some(key) = result.downcast_mut::<Option<melib::gpgme::Key>>() {
-                    debug!("got key {:?}", key);
                     if let Some(key) = key {
                         if *is_encrypt {
                             self.gpg_state.encrypt_keys.clear();
@@ -1815,7 +1813,7 @@ impl Component for Composer {
                 }
 
                 let editor_command = format!("{} {}", editor, f.path().display());
-                log::debug!(
+                log::trace!(
                     "Executing: sh -c \"{}\"",
                     editor_command.replace('"', "\\\"")
                 );
@@ -1957,7 +1955,7 @@ impl Component for Composer {
                         context.input_kill();
                     }
 
-                    log::debug!("Executing: sh -c \"{}\"", command.replace('"', "\\\""));
+                    log::trace!("Executing: sh -c \"{}\"", command.replace('"', "\\\""));
                     match Command::new("sh")
                         .args(["-c", command])
                         .stdin(Stdio::inherit())
@@ -1967,7 +1965,7 @@ impl Component for Composer {
                         .and_then(|child| Ok(child.wait_with_output()?.stderr))
                     {
                         Ok(stderr) => {
-                            debug!(&String::from_utf8_lossy(&stderr));
+                            log::trace!("stderr: {}", &String::from_utf8_lossy(&stderr));
                             for path in stderr.split(|c| [b'\0', b'\t', b'\n'].contains(c)) {
                                 match melib::email::compose::attachment_from_file(
                                     &String::from_utf8_lossy(path).as_ref(),
@@ -2227,7 +2225,6 @@ pub fn send_draft(
     );
     match output {
         Err(err) => {
-            debug!("{:?} could not sign draft msg", err);
             log::error!(
                     "Could not sign draft in account `{}`: {err}.",
                     context.accounts[&account_hash].name(),

@@ -185,9 +185,9 @@ pub fn create_pty(
 
 fn forward_pty_translate_escape_codes(pty_fd: std::fs::File, grid: Arc<Mutex<EmbedTerminal>>) {
     let mut bytes_iter = pty_fd.bytes();
-    //debug!("waiting for bytes");
+    //log::trace!("waiting for bytes");
     while let Some(Ok(byte)) = bytes_iter.next() {
-        //debug!("got a byte? {:?}", byte as char);
+        //log::trace!("got a byte? {:?}", byte as char);
         /* Drink deep, and descend. */
         grid.lock().unwrap().process_byte(byte);
     }

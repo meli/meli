@@ -95,7 +95,7 @@ impl InputHandler {
         match self.control.upgrade() {
             Some(_) => {}
             None => {
-                debug!("restarting input_thread");
+                log::trace!("restarting input_thread");
                 self.restore();
             }
         }
@@ -159,9 +159,9 @@ impl Context {
         let was_online = accounts[account_pos].is_online.is_ok();
         let ret = accounts[account_pos].is_online();
         if ret.is_ok() && !was_online {
-            debug!("inserting mailbox hashes:");
+            log::trace!("inserting mailbox hashes:");
             for mailbox_node in accounts[account_pos].list_mailboxes() {
-                debug!(
+                log::trace!(
                     "hash & mailbox: {:?} {}",
                     mailbox_node.hash,
                     accounts[account_pos][&mailbox_node.hash].name()
@@ -297,13 +297,13 @@ impl Drop for State {
                 nix::unistd::Pid::from_raw(child.id() as i32),
                 Some(WaitPidFlag::WNOHANG),
             ) {
-                debug!("Failed to wait on subprocess {}: {}", child.id(), err);
+                log::warn!("Failed to wait on subprocess {}: {}", child.id(), err);
             }
         }
         if let Some(ForkType::Embed(child_pid)) = self.child.take() {
             /* Try wait, we don't want to block */
             if let Err(e) = waitpid(child_pid, Some(WaitPidFlag::WNOHANG)) {
-                debug!("Failed to wait on subprocess {}: {}", child_pid, e);
+                log::warn!("Failed to wait on subprocess {}: {}", child_pid, e);
             }
         }
     }
@@ -501,7 +501,7 @@ impl State {
                 self.rcv_event(notification);
             }
         } else if let melib::backends::RefreshEventKind::Failure(err) = event.kind {
-            debug!(err);
+            log::warn!("Backend could not refresh: {}", err);
         }
     }
 

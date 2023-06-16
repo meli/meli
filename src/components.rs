@@ -27,12 +27,13 @@
  * See also the [`Component`] trait for more details.
  */
 
+use smallvec::SmallVec;
+
 use super::*;
 use crate::{
     melib::text_processing::{TextProcessing, Truncate},
     terminal::boundaries::*,
 };
-use smallvec::SmallVec;
 
 pub mod mail;
 pub use crate::mail::*;
@@ -178,12 +179,12 @@ pub trait Component: Display + Debug + Send + Sync {
     }
 
     fn realize(&self, parent: Option<ComponentId>, context: &mut Context) {
-        log::debug!("Realizing id {} w/ parent {:?}", self.id(), &parent);
+        // log::trace!("Realizing id {} w/ parent {:?}", self.id(), &parent);
         context.realized.insert(self.id(), parent);
     }
 
     fn unrealize(&self, context: &mut Context) {
-        log::debug!("Unrealizing id {}", self.id());
+        // log::trace!("Unrealizing id {}", self.id());
         context.unrealized.insert(self.id());
         context
             .replies
@@ -297,9 +298,9 @@ impl ComponentPath {
     pub fn resolve<'c>(&self, root: &'c dyn Component) -> Option<&'c dyn Component> {
         let mut cursor = root;
         for id in self.tail.iter().rev().chain(std::iter::once(&self.id)) {
-            log::trace!("resolve cursor = {} next id is {}", cursor.id(), &id);
+            // log::trace!("resolve cursor = {} next id is {}", cursor.id(), &id);
             if *id == cursor.id() {
-                log::trace!("continue;");
+                // log::trace!("continue;");
                 continue;
             }
             cursor = cursor.children().remove(id)?;

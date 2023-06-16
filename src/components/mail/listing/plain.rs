@@ -765,13 +765,13 @@ impl PlainListing {
 
         for i in iter {
             if !context.accounts[&self.cursor_pos.0].contains_key(i) {
-                debug!("key = {}", i);
-                debug!(
+                log::debug!("key = {}", i);
+                log::debug!(
                     "name = {} {}",
                     mailbox.name(),
                     context.accounts[&self.cursor_pos.0].name()
                 );
-                debug!("{:#?}", context.accounts);
+                log::debug!("{:#?}", context.accounts);
 
                 panic!();
             }
@@ -858,13 +858,13 @@ impl PlainListing {
         let columns = &mut self.data_columns.columns;
         for ((idx, i), (_, strings)) in iter.enumerate().zip(self.rows.entries.iter()) {
             if !context.accounts[&self.cursor_pos.0].contains_key(i) {
-                //debug!("key = {}", i);
-                //debug!(
+                //log::debug!("key = {}", i);
+                //log::debug!(
                 //    "name = {} {}",
                 //    mailbox.name(),
                 //    context.accounts[&self.cursor_pos.0].name()
                 //);
-                //debug!("{:#?}", context.accounts);
+                //log::debug!("{:#?}", context.accounts);
 
                 panic!();
             }
@@ -1446,7 +1446,6 @@ impl Component for PlainListing {
                 }
                 UIEvent::Action(ref action) => match action {
                     Action::SubSort(field, order) if !self.unfocused() => {
-                        debug!("SubSort {:?} , {:?}", field, order);
                         self.subsort = (*field, *order);
                         //if !self.filtered_selection.is_empty() {
                         //    let threads = &account.collection.threads[&self.cursor_pos.1];
@@ -1458,7 +1457,6 @@ impl Component for PlainListing {
                         return true;
                     }
                     Action::Sort(field, order) if !self.unfocused() => {
-                        debug!("Sort {:?} , {:?}", field, order);
                         self.sort = (*field, *order);
                         return true;
                     }

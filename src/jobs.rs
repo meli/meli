@@ -37,7 +37,7 @@ use crossbeam::{
     sync::{Parker, Unparker},
 };
 pub use futures::channel::oneshot;
-use melib::{smol, uuid::Uuid};
+use melib::{log, smol, uuid::Uuid};
 
 use crate::types::{ThreadEvent, UIEvent};
 
@@ -196,11 +196,11 @@ impl JobExecutor {
                     if let Some(meli_task) = task {
                         let MeliTask { task, id, timer } = meli_task;
                         if !timer {
-                            debug!("Worker {} got task {:?}", i, id);
+                            log::trace!("Worker {} got task {:?}", i, id);
                         }
                         let _ = catch_unwind(|| task.run());
                         if !timer {
-                            debug!("Worker {} returned after {:?}", i, id);
+                            log::trace!("Worker {} returned after {:?}", i, id);
                         }
                     }
                 })
@@ -360,8 +360,8 @@ impl JobExecutor {
 
 pub type JobChannel<T> = oneshot::Receiver<T>;
 
-#[derive(Debug)]
 /// JoinHandle for the future that allows us to cancel the task.
+#[derive(Debug)]
 pub struct JoinHandle<T> {
     pub task: Arc<Mutex<Option<async_task::Task<()>>>>,
     pub chan: JobChannel<T>,

@@ -256,7 +256,7 @@ impl ContactList {
         context: &mut Context,
     ) {
         if !is_valid_area!(area) {
-            debug!("BUG: invalid area in print_account");
+            log::debug!("BUG: invalid area in print_account");
         }
 
         let width = width!(area);

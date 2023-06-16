@@ -388,7 +388,11 @@ impl Component for MailView {
                             self.init_futures(context);
                         }
                         MailViewState::Loaded { .. } => {
-                            log::debug!("MailView.active_jobs contains job id {:?} but MailViewState is already loaded; what job was this and why was it in active_jobs?", job_id);
+                            log::debug!(
+                                "MailView.active_jobs contains job id {:?} but MailViewState is \
+                                 already loaded; what job was this and why was it in active_jobs?",
+                                job_id
+                            );
                         }
                         _ => {}
                     }

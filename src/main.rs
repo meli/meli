@@ -327,7 +327,7 @@ fn run_app(opt: Opt) -> Result<()> {
                     match r {
                          Ok(ThreadEvent::Pulse) | Ok(ThreadEvent::UIEvent(UIEvent::Timer(_))) => {},
                         _ => {
-                            log::debug!("{:?}", &r);
+                            log::trace!("{:?}", &r);
                         }
                     }
                     match r.unwrap() {
@@ -428,13 +428,12 @@ fn run_app(opt: Opt) -> Result<()> {
                             state.redraw();
                         },
                         ThreadEvent::JobFinished(id) => {
-                            log::debug!("Job finished {}", id);
+                            log::trace!("Job finished {}", id);
                             for account in state.context.accounts.values_mut() {
                                 if account.process_event(&id) {
                                     break;
                                 }
                             }
-                            //state.new_thread(id, name);
                         },
                     }
                 },
@@ -453,7 +452,7 @@ fn run_app(opt: Opt) -> Result<()> {
 
                         }
                         other => {
-                            log::debug!("got other signal: {:?}", other);
+                            log::trace!("got other signal: {:?}", other);
                         }
                     }
                 },

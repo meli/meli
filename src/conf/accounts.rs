@@ -510,8 +510,7 @@ impl Account {
                 Err(err) => {
                     main_loop_handler.send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
                         StatusEvent::DisplayMessage(format!(
-                            "Error with setting up an sqlite3 search database for account \
-                                 `{}`: {}",
+                            "Error with setting up an sqlite3 search database for account `{}`: {}",
                             name, err
                         )),
                     )));
@@ -843,7 +842,7 @@ impl Account {
                     return Some(EnvelopeUpdate(env_hash));
                 }
                 RefreshEventKind::Rename(old_hash, new_hash) => {
-                    debug!("rename {} to {}", old_hash, new_hash);
+                    log::trace!("rename {} to {}", old_hash, new_hash);
                     if !self.collection.rename(old_hash, new_hash, mailbox_hash) {
                         return Some(EnvelopeRename(old_hash, new_hash));
                     }
@@ -1012,7 +1011,7 @@ impl Account {
                     self.watch();
                 }
                 RefreshEventKind::Failure(err) => {
-                    debug!("RefreshEvent Failure: {}", err.to_string());
+                    log::trace!("RefreshEvent Failure: {}", err.to_string());
                     while let Some((job_id, _)) =
                         self.active_jobs.iter().find(|(_, j)| j.is_watch())
                     {
@@ -1222,7 +1221,6 @@ impl Account {
         ] {
             if let Some(mailbox_hash) = mailbox {
                 if let Err(err) = self.save(bytes, *mailbox_hash, Some(flags)) {
-                    debug!("{:?} could not save msg", err);
                     log::error!("Could not save in '{}' mailbox: {}.", *mailbox_hash, err);
                 } else {
                     saved_at = Some(*mailbox_hash);
@@ -1237,7 +1235,7 @@ impl Account {
             Ok(mailbox_hash)
         } else {
             let file = crate::types::create_temp_file(bytes, None, None, Some("eml"), false);
-            debug!("message saved in {}", file.path.display());
+            log::trace!("message saved in {}", file.path.display());
             log::info!(
                 "Message was stored in {} so that you can restore it manually.",
                 file.path.display()
@@ -1296,7 +1294,6 @@ impl Account {
         };
 
         use crate::conf::composing::SendMail;
-        debug!(&send_mail);
         match send_mail {
             SendMail::ShellCommand(ref command) => {
                 if command.is_empty() {
@@ -1702,7 +1699,7 @@ impl Account {
                     ref mut handle,
                     ..
                 } => {
-                    debug!("got payload in status for {}", mailbox_hash);
+                    log::trace!("got payload in status for {}", mailbox_hash);
                     match handle.chan.try_recv() {
                         Err(_) => {
                             /* canceled */
@@ -1712,7 +1709,7 @@ impl Account {
                             return true;
                         }
                         Ok(Some((None, _))) => {
-                            debug!("finished in status for {}", mailbox_hash);
+                            log::trace!("finished in status for {}", mailbox_hash);
                             self.mailbox_entries
                                 .entry(mailbox_hash)
                                 .and_modify(|entry| {
@@ -2154,7 +2151,7 @@ impl Account {
                     }
                 }
                 JobRequest::Watch { ref mut handle } => {
-                    debug!("JobRequest::Watch finished??? ");
+                    log::trace!("JobRequest::Watch finished??? ");
                     if let Ok(Some(Err(err))) = handle.chan.try_recv() {
                         if err.kind.is_timeout() {
                             self.watch();
