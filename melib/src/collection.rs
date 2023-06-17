@@ -49,30 +49,6 @@ impl Default for Collection {
     }
 }
 
-/*
-impl Drop for Collection {
-    fn drop(&mut self) {
-            let cache_dir: xdg::BaseDirectories =
-                xdg::BaseDirectories::with_profile("meli", "threads".to_string()).unwrap();
-            if let Ok(cached) = cache_dir.place_cache_file("threads") {
-                /* place result in cache directory */
-                let f = match fs::File::create(cached) {
-                    Ok(f) => f,
-                    Err(e) => {
-                        panic!("{}", e);
-                    }
-                };
-                let writer = io::BufWriter::new(f);
-                let _ = bincode::Options::serialize_into(
-                    bincode::config::DefaultOptions::new(),
-                    writer,
-                    &self.thread,
-                );
-            }
-    }
-}
-*/
-
 impl Collection {
     pub fn new() -> Collection {
         let message_id_index = Arc::new(RwLock::new(HashMap::with_capacity_and_hasher(

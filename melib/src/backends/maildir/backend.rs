@@ -211,29 +211,17 @@ impl MailBackend for MaildirType {
         let unseen = mailbox.unseen.clone();
         let total = mailbox.total.clone();
         let path: PathBuf = mailbox.fs_path().into();
-        let root_mailbox = self.path.to_path_buf();
         let map = self.hash_indexes.clone();
         let mailbox_index = self.mailbox_index.clone();
-        super::stream::MaildirStream::new(
-            &self.name,
-            mailbox_hash,
-            unseen,
-            total,
-            path,
-            root_mailbox,
-            map,
-            mailbox_index,
-        )
+        super::stream::MaildirStream::new(mailbox_hash, unseen, total, path, map, mailbox_index)
     }
 
     fn refresh(&mut self, mailbox_hash: MailboxHash) -> ResultFuture<()> {
-        let cache_dir = xdg::BaseDirectories::with_profile("meli", &self.name).unwrap();
         let account_hash = AccountHash::from_bytes(self.name.as_bytes());
         let sender = self.event_consumer.clone();
 
         let mailbox: &MaildirMailbox = &self.mailboxes[&mailbox_hash];
         let path: PathBuf = mailbox.fs_path().into();
-        let root_mailbox = self.path.to_path_buf();
         let map = self.hash_indexes.clone();
         let mailbox_index = self.mailbox_index.clone();
 
@@ -268,23 +256,6 @@ impl MailBackend for MaildirType {
                             .lock()
                             .unwrap()
                             .insert(env.hash(), mailbox_hash);
-                        let file_name = file.strip_prefix(&root_mailbox).unwrap().to_path_buf();
-                        if let Ok(cached) = cache_dir.place_cache_file(file_name) {
-                            /* place result in cache directory */
-                            let f = fs::File::create(cached)?;
-                            let metadata = f.metadata()?;
-                            let mut permissions = metadata.permissions();
-
-                            permissions.set_mode(0o600); // Read/write for owner only.
-                            f.set_permissions(permissions)?;
-
-                            let writer = io::BufWriter::new(f);
-                            bincode::Options::serialize_into(
-                                bincode::config::DefaultOptions::new(),
-                                writer,
-                                &env,
-                            )?;
-                        }
                         (sender)(
                             account_hash,
                             BackendEvent::Refresh(RefreshEvent {
@@ -336,7 +307,6 @@ impl MailBackend for MaildirType {
         watcher
             .watch(&root_mailbox, RecursiveMode::Recursive)
             .unwrap();
-        let cache_dir = xdg::BaseDirectories::with_profile("meli", &self.name).unwrap();
         debug!("watching {:?}", root_mailbox);
         let hash_indexes = self.hash_indexes.clone();
         let mailbox_index = self.mailbox_index.clone();
@@ -392,7 +362,6 @@ impl MailBackend for MaildirType {
                                 &hash_indexes,
                                 mailbox_hash,
                                 pathbuf.as_path(),
-                                &cache_dir,
                                 file_name,
                                 &mut buf,
                             ) {
@@ -447,7 +416,6 @@ impl MailBackend for MaildirType {
                                         &hash_indexes,
                                         mailbox_hash,
                                         pathbuf.as_path(),
-                                        &cache_dir,
                                         file_name,
                                         &mut buf,
                                     ) {
@@ -599,7 +567,6 @@ impl MailBackend for MaildirType {
                                         &hash_indexes,
                                         dest_mailbox,
                                         dest.as_path(),
-                                        &cache_dir,
                                         file_name,
                                         &mut buf,
                                     ) {
@@ -693,7 +660,6 @@ impl MailBackend for MaildirType {
                                     &hash_indexes,
                                     dest_mailbox.unwrap_or(mailbox_hash),
                                     dest.as_path(),
-                                    &cache_dir,
                                     file_name,
                                     &mut buf,
                                 ) {
@@ -740,7 +706,6 @@ impl MailBackend for MaildirType {
                                     &hash_indexes,
                                     dest_mailbox,
                                     dest.as_path(),
-                                    &cache_dir,
                                     file_name,
                                     &mut buf,
                                 ) {
@@ -1376,7 +1341,6 @@ fn add_path_to_index(
     hash_index: &HashIndexes,
     mailbox_hash: MailboxHash,
     path: &Path,
-    cache_dir: &xdg::BaseDirectories,
     file_name: PathBuf,
     buf: &mut Vec<u8>,
 ) -> Result<Envelope> {
@@ -1403,17 +1367,5 @@ fn add_path_to_index(
         env_hash,
         file_name.display()
     );
-    if let Ok(cached) = cache_dir.place_cache_file(file_name) {
-        debug!("putting in cache");
-        /* place result in cache directory */
-        let f = fs::File::create(cached)?;
-        let metadata = f.metadata()?;
-        let mut permissions = metadata.permissions();
-
-        permissions.set_mode(0o600); // Read/write for owner only.
-        f.set_permissions(permissions)?;
-        let writer = io::BufWriter::new(f);
-        bincode::Options::serialize_into(bincode::config::DefaultOptions::new(), writer, &env)?;
-    }
     Ok(env)
 }

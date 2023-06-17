@@ -22,9 +22,7 @@
 use core::{future::Future, pin::Pin};
 use std::{
     io::{self, Read},
-    os::unix::fs::PermissionsExt,
     path::PathBuf,
-    result,
     sync::{Arc, Mutex},
 };
 
@@ -46,12 +44,10 @@ pub struct MaildirStream {
 
 impl MaildirStream {
     pub fn new(
-        name: &str,
         mailbox_hash: MailboxHash,
         unseen: Arc<Mutex<usize>>,
         total: Arc<Mutex<usize>>,
         mut path: PathBuf,
-        root_mailbox: PathBuf,
         map: HashIndexes,
         mailbox_index: Arc<Mutex<HashMap<EnvelopeHash, MailboxHash>>>,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<Vec<Envelope>>> + Send + 'static>>> {
@@ -71,14 +67,11 @@ impl MaildirStream {
             files
                 .chunks(chunk_size)
                 .map(|chunk| {
-                    let cache_dir = xdg::BaseDirectories::with_profile("meli", name).unwrap();
                     Box::pin(Self::chunk(
                         SmallVec::from(chunk),
-                        cache_dir,
                         mailbox_hash,
                         unseen.clone(),
                         total.clone(),
-                        root_mailbox.clone(),
                         map.clone(),
                         mailbox_index.clone(),
                     )) as Pin<Box<dyn Future<Output = _> + Send + 'static>>
@@ -92,11 +85,9 @@ impl MaildirStream {
 
     async fn chunk(
         chunk: SmallVec<[std::path::PathBuf; 2048]>,
-        cache_dir: xdg::BaseDirectories,
         mailbox_hash: MailboxHash,
         unseen: Arc<Mutex<usize>>,
         total: Arc<Mutex<usize>>,
-        root_mailbox: PathBuf,
         map: HashIndexes,
         mailbox_index: Arc<Mutex<HashMap<EnvelopeHash, MailboxHash>>>,
     ) -> Result<Vec<Envelope>> {
@@ -104,39 +95,6 @@ impl MaildirStream {
         let mut unseen_total: usize = 0;
         let mut buf = Vec::with_capacity(4096);
         for file in chunk {
-            /* Check if we have a cache file with this email's
-             * filename */
-            let file_name = PathBuf::from(&file)
-                .strip_prefix(&root_mailbox)
-                .unwrap()
-                .to_path_buf();
-            if let Some(cached) = cache_dir.find_cache_file(&file_name) {
-                /* Cached struct exists, try to load it */
-                let cached_file = fs::File::open(&cached)?;
-                let filesize = cached_file.metadata()?.len();
-                let reader = io::BufReader::new(cached_file);
-                let result: result::Result<Envelope, _> = bincode::Options::deserialize_from(
-                    bincode::Options::with_limit(
-                        bincode::config::DefaultOptions::new(),
-                        2 * filesize,
-                    ),
-                    reader,
-                );
-                if let Ok(env) = result {
-                    let mut map = map.lock().unwrap();
-                    let map = map.entry(mailbox_hash).or_default();
-                    let hash = env.hash();
-                    map.insert(hash, file.clone().into());
-                    mailbox_index.lock().unwrap().insert(hash, mailbox_hash);
-                    if !env.is_seen() {
-                        unseen_total += 1;
-                    }
-                    local_r.push(env);
-                    continue;
-                }
-                /* Try delete invalid file */
-                let _ = fs::remove_file(&cached);
-            };
             let env_hash = get_file_hash(&file);
             {
                 let mut map = map.lock().unwrap();
@@ -150,22 +108,6 @@ impl MaildirStream {
                 Ok(mut env) => {
                     env.set_hash(env_hash);
                     mailbox_index.lock().unwrap().insert(env_hash, mailbox_hash);
-                    if let Ok(cached) = cache_dir.place_cache_file(file_name) {
-                        /* place result in cache directory */
-                        let f = fs::File::create(cached)?;
-                        let metadata = f.metadata()?;
-                        let mut permissions = metadata.permissions();
-
-                        permissions.set_mode(0o600); // Read/write for owner only.
-                        f.set_permissions(permissions)?;
-
-                        let writer = io::BufWriter::new(f);
-                        bincode::Options::serialize_into(
-                            bincode::config::DefaultOptions::new(),
-                            writer,
-                            &env,
-                        )?;
-                    }
                     if !env.is_seen() {
                         unseen_total += 1;
                     }

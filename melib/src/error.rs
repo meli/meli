@@ -637,13 +637,6 @@ impl From<std::ffi::NulError> for Error {
     }
 }
 
-impl From<Box<bincode::ErrorKind>> for Error {
-    #[inline]
-    fn from(kind: Box<bincode::ErrorKind>) -> Error {
-        Error::new(kind.to_string()).set_source(Some(Arc::new(kind)))
-    }
-}
-
 impl From<nix::Error> for Error {
     #[inline]
     fn from(kind: nix::Error) -> Error {

@@ -29,7 +29,6 @@ required-features = ["melib/imap_backend"]
 
 [dependencies]
 async-task = "^4.2.0"
-bincode = { version = "^1.3.0", default-features = false }
 bitflags = "1.0"
 crossbeam = { version = "^0.8" }
 flate2 = { version = "1.0.16", optional = true }

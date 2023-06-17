@@ -21,7 +21,6 @@
 
 /*! Configuration logic and `config.toml` interfaces. */
 
-extern crate bincode;
 extern crate serde;
 extern crate toml;
 extern crate xdg;

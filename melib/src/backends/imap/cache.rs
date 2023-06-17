@@ -148,7 +148,7 @@ mod sqlite3_m {
     CREATE INDEX IF NOT EXISTS envelope_idx ON envelopes(hash);
     CREATE INDEX IF NOT EXISTS mailbox_idx ON mailbox(mailbox_hash);",
         ),
-        version: 2,
+        version: 3,
     };
 
     impl ToSql for ModSequence {
@@ -405,19 +405,30 @@ mod sqlite3_m {
                 return Ok(None);
             }
 
-            let mut stmt = self.connection.prepare(
-                "SELECT uid, envelope, modsequence FROM envelopes WHERE mailbox_hash = ?1;",
-            )?;
+            let ret: Vec<(UID, Envelope, Option<ModSequence>)> = match {
+                let mut stmt = self.connection.prepare(
+                    "SELECT uid, envelope, modsequence FROM envelopes WHERE mailbox_hash = ?1;",
+                )?;
 
-            let ret: Vec<(UID, Envelope, Option<ModSequence>)> = stmt
-                .query_map(sqlite3::params![mailbox_hash], |row| {
-                    Ok((
-                        row.get(0).map(|i: Sqlite3UID| i as UID)?,
-                        row.get(1)?,
-                        row.get(2)?,
-                    ))
-                })?
-                .collect::<std::result::Result<_, _>>()?;
+                let x = stmt
+                    .query_map(sqlite3::params![mailbox_hash], |row| {
+                        Ok((
+                            row.get(0).map(|i: Sqlite3UID| i as UID)?,
+                            row.get(1)?,
+                            row.get(2)?,
+                        ))
+                    })?
+                    .collect::<std::result::Result<_, _>>();
+                x
+            } {
+                Err(err) if matches!(&err, rusqlite::Error::FromSqlConversionFailure(_, _, _)) => {
+                    drop(err);
+                    self.reset()?;
+                    return Ok(None);
+                }
+                Err(err) => return Err(err.into()),
+                Ok(v) => v,
+            };
             let mut max_uid = 0;
             let mut env_lck = self.uid_store.envelopes.lock().unwrap();
             let mut hash_index_lck = self.uid_store.hash_index.lock().unwrap();

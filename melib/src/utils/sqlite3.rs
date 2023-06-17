@@ -81,7 +81,8 @@ pub fn open_or_create_db(
         let version: i32 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
         if version != 0_i32 && version as u32 != description.version {
             log::info!(
-                "Database version mismatch, is {} but expected {}",
+                "Database version mismatch, is {} but expected {}. Attempting to recreate \
+                 database.",
                 version,
                 description.version
             );
@@ -130,27 +131,17 @@ pub fn reset_db(description: &DatabaseDescription, identifier: Option<&str>) -> 
 
 impl ToSql for Envelope {
     fn to_sql(&self) -> rusqlite::Result<ToSqlOutput> {
-        let v: Vec<u8> = bincode::Options::serialize(bincode::config::DefaultOptions::new(), self)
-            .map_err(|e| {
-                rusqlite::Error::ToSqlConversionFailure(Box::new(Error::new(e.to_string())))
-            })?;
+        let v: Vec<u8> = serde_json::to_vec(self).map_err(|e| {
+            rusqlite::Error::ToSqlConversionFailure(Box::new(Error::new(e.to_string())))
+        })?;
         Ok(ToSqlOutput::from(v))
     }
 }
 
 impl FromSql for Envelope {
     fn column_result(value: rusqlite::types::ValueRef) -> FromSqlResult<Self> {
-        use std::convert::TryFrom;
-
         let b: Vec<u8> = FromSql::column_result(value)?;
 
-        bincode::Options::deserialize(
-            bincode::Options::with_limit(
-                bincode::config::DefaultOptions::new(),
-                2 * u64::try_from(b.len()).map_err(|e| FromSqlError::Other(Box::new(e)))?,
-            ),
-            &b,
-        )
-        .map_err(|e| FromSqlError::Other(Box::new(e)))
+        serde_json::from_slice(&b).map_err(|e| FromSqlError::Other(Box::new(e)))
     }
 }
