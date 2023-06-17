@@ -27,7 +27,7 @@
 //! - Version 4 [RFC 6350: vCard Format Specification](https://datatracker.ietf.org/doc/rfc6350/)
 //! - Parameter escaping [RFC 6868 Parameter Value Encoding in iCalendar and vCard](https://datatracker.ietf.org/doc/rfc6868/)
 
-use std::{collections::HashMap, convert::TryInto};
+use std::{collections::HashMap, convert::TryInto, fmt::Write};
 
 use super::*;
 use crate::{
@@ -53,6 +53,7 @@ pub struct VCardVersion3;
 impl VCardVersion for VCardVersion3 {}
 
 pub struct CardDeserializer;
+pub struct CardSerializer;
 
 const HEADER_CRLF: &str = "BEGIN:VCARD\r\n"; //VERSION:4.0\r\n";
 const FOOTER_CRLF: &str = "END:VCARD\r\n";
@@ -171,6 +172,53 @@ impl CardDeserializer {
     }
 }
 
+impl CardSerializer {
+    pub fn to_string(card: &Card) -> std::result::Result<String, VCardSerializeError> {
+        let mut ret = HEADER_CRLF.to_string();
+        write!(&mut ret, "VERSION:4.0\r\n")?;
+        macro_rules! line {
+            ($hdr:literal, $field: expr) => {{
+                let f = { $field };
+                if !f.is_empty() {
+                    write!(&mut ret, concat!($hdr, ":{}\r\n"), f)?;
+                }
+            }};
+        }
+        line!("FN", &card.name);
+        line!("TITLE", &card.title);
+        line!("EMAIL", &card.email);
+        line!("URL", &card.url);
+        line!(
+            "BDAY;VALUE=text",
+            card.birthday
+                .as_ref()
+                .map(|t| t.to_string())
+                .unwrap_or_default()
+        );
+        // https://datatracker.ietf.org/doc/html/rfc6350#section-6.8.1
+        // line!("KEY", card.key);
+        write!(&mut ret, "END:VCARD\r\n")?;
+
+        Ok(ret)
+    }
+}
+
+#[derive(Debug, Clone)]
+#[repr(transparent)]
+pub struct VCardSerializeError(std::fmt::Error);
+
+impl std::fmt::Display for VCardSerializeError {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(fmt, "{}", self.0)
+    }
+}
+
+impl From<std::fmt::Error> for VCardSerializeError {
+    fn from(err: std::fmt::Error) -> Self {
+        Self(err)
+    }
+}
+
 impl<V: VCardVersion> TryInto<Card> for VCard<V> {
     type Error = crate::error::Error;
 
@@ -255,26 +303,6 @@ fn parse_card<'a>() -> impl Parser<'a, Vec<&'a str>> {
     }
 }
 
-#[test]
-fn test_load_cards() {
-    /*
-    let mut contents = String::with_capacity(256);
-    let p = &std::path::Path::new("/tmp/contacts.vcf");
-    use std::io::Read;
-    contents.clear();
-    std::fs::File::open(&p)
-        .unwrap()
-        .read_to_string(&mut contents)
-        .unwrap();
-    for s in parse_card().parse(contents.as_str()).unwrap().1 {
-        println!("");
-        println!("{}", s);
-        println!("{:?}", CardDeserializer::from_str(s));
-        println!("");
-    }
-    */
-}
-
 pub fn load_cards(p: &std::path::Path) -> Result<Vec<Card>> {
     let vcf_dir = std::fs::read_dir(p);
     let mut ret: Vec<Result<_>> = Vec::new();
@@ -322,10 +350,28 @@ pub fn load_cards(p: &std::path::Path) -> Result<Vec<Card>> {
     ret.into_iter().collect::<Result<Vec<Card>>>()
 }
 
-#[test]
-fn test_card() {
-    let j = "BEGIN:VCARD\r\nVERSION:4.0\r\nN:Gump;Forrest;;Mr.;\r\nFN:Forrest Gump\r\nORG:Bubba Gump Shrimp Co.\r\nTITLE:Shrimp Man\r\nPHOTO;MEDIATYPE=image/gif:http://www.example.com/dir_photos/my_photo.gif\r\nTEL;TYPE=work,voice;VALUE=uri:tel:+1-111-555-1212\r\nTEL;TYPE=home,voice;VALUE=uri:tel:+1-404-555-1212\r\nADR;TYPE=WORK;PREF=1;LABEL=\"100 Waters Edge\\nBaytown\\, LA 30314\\nUnited States of America\":;;100 Waters Edge;Baytown;LA;30314;United States of America\r\nADR;TYPE=HOME;LABEL=\"42 Plantation St.\\nBaytown\\, LA 30314\\nUnited States of America\":;;42 Plantation St.;Baytown;LA;30314;United States of America\r\nEMAIL:forrestgump@example.com\r\nREV:20080424T195243Z\r\nx-qq:21588891\r\nEND:VCARD\r\n";
-    println!("results = {:#?}", CardDeserializer::from_str(j).unwrap());
-    let j = "BEGIN:VCARD\nVERSION:4.0\nN:Gump;Forrest;;Mr.;\nFN:Forrest Gump\nORG:Bubba Gump Shrimp Co.\nTITLE:Shrimp Man\nPHOTO;MEDIATYPE=image/gif:http://www.example.com/dir_photos/my_photo.gif\nTEL;TYPE=work,voice;VALUE=uri:tel:+1-111-555-1212\nTEL;TYPE=home,voice;VALUE=uri:tel:+1-404-555-1212\nADR;TYPE=WORK;PREF=1;LABEL=\"100 Waters Edge\\nBaytown\\, LA 30314\\nUnited States of America\":;;100 Waters Edge;Baytown;LA;30314;United States of America\nADR;TYPE=HOME;LABEL=\"42 Plantation St.\\nBaytown\\, LA 30314\\nUnited States of America\":;;42 Plantation St.;Baytown;LA;30314;United States of America\nEMAIL:forrestgump@example.com\nREV:20080424T195243Z\nx-qq:21588891\nEND:VCARD\n";
-    println!("results = {:#?}", CardDeserializer::from_str(j).unwrap());
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_vcard_parse_card() {
+        let j = "BEGIN:VCARD\r\nVERSION:4.0\r\nN:Gump;Forrest;;Mr.;\r\nFN:Forrest Gump\r\nORG:Bubba Gump Shrimp Co.\r\nTITLE:Shrimp Man\r\nPHOTO;MEDIATYPE=image/gif:http://www.example.com/dir_photos/my_photo.gif\r\nTEL;TYPE=work,voice;VALUE=uri:tel:+1-111-555-1212\r\nTEL;TYPE=home,voice;VALUE=uri:tel:+1-404-555-1212\r\nADR;TYPE=WORK;PREF=1;LABEL=\"100 Waters Edge\\nBaytown\\, LA 30314\\nUnited States of America\":;;100 Waters Edge;Baytown;LA;30314;United States of America\r\nADR;TYPE=HOME;LABEL=\"42 Plantation St.\\nBaytown\\, LA 30314\\nUnited States of America\":;;42 Plantation St.;Baytown;LA;30314;United States of America\r\nEMAIL:forrestgump@example.com\r\nREV:20080424T195243Z\r\nx-qq:21588891\r\nEND:VCARD\r\n";
+        println!("results = {:#?}", CardDeserializer::from_str(j).unwrap());
+        let j = "BEGIN:VCARD\nVERSION:4.0\nN:Gump;Forrest;;Mr.;\nFN:Forrest Gump\nORG:Bubba Gump Shrimp Co.\nTITLE:Shrimp Man\nPHOTO;MEDIATYPE=image/gif:http://www.example.com/dir_photos/my_photo.gif\nTEL;TYPE=work,voice;VALUE=uri:tel:+1-111-555-1212\nTEL;TYPE=home,voice;VALUE=uri:tel:+1-404-555-1212\nADR;TYPE=WORK;PREF=1;LABEL=\"100 Waters Edge\\nBaytown\\, LA 30314\\nUnited States of America\":;;100 Waters Edge;Baytown;LA;30314;United States of America\nADR;TYPE=HOME;LABEL=\"42 Plantation St.\\nBaytown\\, LA 30314\\nUnited States of America\":;;42 Plantation St.;Baytown;LA;30314;United States of America\nEMAIL:forrestgump@example.com\nREV:20080424T195243Z\nx-qq:21588891\nEND:VCARD\n";
+        println!("results = {:#?}", CardDeserializer::from_str(j).unwrap());
+    }
+
+    #[test]
+    fn test_vcard_export_card() {
+        let mut card = Card::new();
+        card.set_title("Shrimp Man".into())
+            .set_name("Forrest Gump".into())
+            .set_email("forrestgump@example.com".into());
+        assert_eq!(
+            &CardSerializer::to_string(&card).unwrap(),
+            "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Forrest Gump\r\nTITLE:Shrimp \
+             Man\r\nEMAIL:forrestgump@example.com\r\nEND:VCARD\r\n"
+        );
+    }
 }
