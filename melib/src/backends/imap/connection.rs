@@ -28,6 +28,8 @@ use crate::{
     LogLevel,
 };
 extern crate native_tls;
+#[cfg(debug_assertions)]
+use std::borrow::Cow;
 use std::{
     collections::HashSet,
     convert::TryFrom,
@@ -58,14 +60,25 @@ pub use smol::Async as AsyncWrapper;
 
 const IMAP_PROTOCOL_TIMEOUT: Duration = Duration::from_secs(60 * 28);
 
+macro_rules! imap_trace {
+    ($conn:expr, $fmt:literal, $($t:tt)*) => {
+        #[cfg(debug_assertions)]
+        log::trace!(std::concat!("{} ", $fmt), $conn.id, $($t)*);
+    };
+    ($conn:expr, $fmt:literal) => {
+        #[cfg(debug_assertions)]
+        log::trace!(std::concat!("{} ", $fmt), $conn.id);
+    };
+}
+
 use super::{protocol_parser, Capabilities, ImapServerConf, UIDStore};
 
 #[derive(Debug, Clone, Copy)]
 pub enum SyncPolicy {
     None,
-    ///rfc4549 `Synch Ops for Disconnected IMAP4 Clients` <https://tools.ietf.org/html/rfc4549>
+    /// RFC4549 `Synch Ops for Disconnected IMAP4 Clients` <https://tools.ietf.org/html/rfc4549>
     Basic,
-    ///rfc7162 `IMAP Extensions: Quick Flag Changes Resynchronization
+    /// RFC7162 `IMAP Extensions: Quick Flag Changes Resynchronization
     /// (CONDSTORE) and Quick Mailbox Resynchronization (QRESYNC)`
     Condstore,
     CondstoreQresync,
@@ -101,6 +114,8 @@ impl Default for ImapExtensionUse {
 #[derive(Debug)]
 pub struct ImapStream {
     pub cmd_id: usize,
+    #[cfg(debug_assertions)]
+    pub id: Cow<'static, str>,
     pub stream: AsyncWrapper<Connection>,
     pub protocol: ImapProtocol,
     pub current_mailbox: MailboxSelection,
@@ -126,6 +141,8 @@ async fn try_await(cl: impl Future<Output = Result<()>> + Send) -> Result<()> {
 
 #[derive(Debug)]
 pub struct ImapConnection {
+    #[cfg(debug_assertions)]
+    pub id: Cow<'static, str>,
     pub stream: Result<ImapStream>,
     pub server_conf: ImapServerConf,
     pub sync_policy: SyncPolicy,
@@ -135,6 +152,7 @@ pub struct ImapConnection {
 impl ImapStream {
     pub async fn new_connection(
         server_conf: &ImapServerConf,
+        #[cfg(debug_assertions)] id: Cow<'static, str>,
         uid_store: &UIDStore,
     ) -> Result<(Capabilities, ImapStream)> {
         use std::net::TcpStream;
@@ -280,6 +298,8 @@ impl ImapStream {
         let mut res = Vec::with_capacity(8 * 1024);
         let mut ret = ImapStream {
             cmd_id,
+            #[cfg(debug_assertions)]
+            id,
             stream,
             protocol: server_conf.protocol,
             current_mailbox: MailboxSelection::None,
@@ -493,7 +513,7 @@ impl ImapStream {
                 }
             }
         }
-        //debug!("returning IMAP response:\n{:?}", &ret);
+        //imap_trace!(self, "returning IMAP response:\n{:?}", &ret);
         Ok(())
     }
 
@@ -511,6 +531,16 @@ impl ImapStream {
 
                 Command { tag, body }
             };
+            match self.protocol {
+                ImapProtocol::IMAP { .. } => {
+                    if matches!(command.body, CommandBody::Login { .. }) {
+                        imap_trace!(self, "sent: M{} LOGIN ..", self.cmd_id - 1);
+                    } else {
+                        imap_trace!(self, "sent: M{} {:?}", self.cmd_id - 1, command.body);
+                    }
+                }
+                ImapProtocol::ManageSieve => {}
+            }
 
             for action in command.encode() {
                 match action {
@@ -560,11 +590,11 @@ impl ImapStream {
                 match self.protocol {
                     ImapProtocol::IMAP { .. } => {
                         if !command.starts_with(b"LOGIN") {
-                            debug!("sent: M{} {}", self.cmd_id - 1, unsafe {
+                            imap_trace!(self, "sent: M{} {}", self.cmd_id - 1, unsafe {
                                 std::str::from_utf8_unchecked(command)
                             });
                         } else {
-                            debug!("sent: M{} LOGIN ..", self.cmd_id - 1);
+                            imap_trace!(self, "sent: M{} LOGIN ..", self.cmd_id - 1);
                         }
                     }
                     ImapProtocol::ManageSieve => {}
@@ -594,10 +624,13 @@ impl ImapStream {
 impl ImapConnection {
     pub fn new_connection(
         server_conf: &ImapServerConf,
+        #[cfg(debug_assertions)] id: Cow<'static, str>,
         uid_store: Arc<UIDStore>,
     ) -> ImapConnection {
         ImapConnection {
             stream: Err(Error::new("Offline".to_string())),
+            #[cfg(debug_assertions)]
+            id,
             server_conf: server_conf.clone(),
             sync_policy: if uid_store.keep_offline_cache {
                 SyncPolicy::Basic
@@ -625,23 +658,30 @@ impl ImapConnection {
             }
             if self.stream.is_ok() {
                 let mut ret = Vec::new();
-                if let Err(err) = try_await(async {
+                if let Err(_err) = try_await(async {
                     self.send_command(CommandBody::Noop).await?;
                     self.read_response(&mut ret, RequiredResponses::empty())
                         .await
                 })
                 .await
                 {
-                    debug!("connect(): connection is probably dead: {:?}", &err);
+                    imap_trace!(self, "connect(): connection is probably dead: {:?}", &_err);
                 } else {
-                    debug!(
+                    imap_trace!(
+                        self,
                         "connect(): connection is probably alive, NOOP returned {:?}",
                         &String::from_utf8_lossy(&ret)
                     );
                     return Ok(());
                 }
             }
-            let new_stream = ImapStream::new_connection(&self.server_conf, &self.uid_store).await;
+            let new_stream = ImapStream::new_connection(
+                &self.server_conf,
+                #[cfg(debug_assertions)]
+                self.id.clone(),
+                &self.uid_store,
+            )
+            .await;
             if let Err(err) = new_stream.as_ref() {
                 self.uid_store.is_online.lock().unwrap().1 = Err(err.clone());
             } else {
@@ -717,6 +757,8 @@ impl ImapConnection {
                             ImapResponse::Ok(_) => {
                                 let ImapStream {
                                     cmd_id,
+                                    #[cfg(debug_assertions)]
+                                    id,
                                     stream,
                                     protocol,
                                     current_mailbox,
@@ -725,6 +767,8 @@ impl ImapConnection {
                                 let stream = stream.into_inner()?;
                                 self.stream = Ok(ImapStream {
                                     cmd_id,
+                                    #[cfg(debug_assertions)]
+                                    id,
                                     stream: AsyncWrapper::new(stream.deflate())?,
                                     protocol,
                                     current_mailbox,
@@ -764,17 +808,19 @@ impl ImapConnection {
                             ret.extend_from_slice(&response);
                             return r.into();
                         }
-                        ImapResponse::No(ref response_code)
+                        ImapResponse::No(ref _response_code)
                             if required_responses.intersects(RequiredResponses::NO_REQUIRED) =>
                         {
-                            debug!(
+                            imap_trace!(
+                                self,
                                 "Received expected NO response: {:?} {:?}",
-                                response_code,
+                                _response_code,
                                 String::from_utf8_lossy(&response)
                             );
                         }
                         ImapResponse::No(ref response_code) => {
-                            debug!(
+                            imap_trace!(
+                                self,
                                 "Received NO response: {:?} {:?}",
                                 response_code,
                                 String::from_utf8_lossy(&response)
@@ -791,7 +837,8 @@ impl ImapConnection {
                             return r.into();
                         }
                         ImapResponse::Bad(ref response_code) => {
-                            debug!(
+                            imap_trace!(
+                                self,
                                 "Received BAD response: {:?} {:?}",
                                 response_code,
                                 String::from_utf8_lossy(&response)
@@ -809,12 +856,12 @@ impl ImapConnection {
                         }
                         _ => {}
                     }
-                    /*debug!(
+                    /* imap_trace!(self,
                         "check every line for required_responses: {:#?}",
                         &required_responses
                     );*/
                     for l in response.split_rn() {
-                        /* debug!("check line: {}", &l); */
+                        /* imap_trace!(self, "check line: {}", &l); */
                         if required_responses.check(l) || !self.process_untagged(l).await? {
                             ret.extend_from_slice(l);
                         }
@@ -933,8 +980,9 @@ impl ImapConnection {
             .await?;
         self.read_response(ret, RequiredResponses::SELECT_REQUIRED)
             .await?;
-        debug!(
-            "{} select response {}",
+        imap_trace!(
+            self,
+            "{} SELECT response {}",
             imap_path,
             String::from_utf8_lossy(ret)
         );
@@ -1019,7 +1067,8 @@ impl ImapConnection {
             .await?;
         self.read_response(ret, RequiredResponses::EXAMINE_REQUIRED)
             .await?;
-        debug!("examine response {}", String::from_utf8_lossy(ret));
+
+        imap_trace!(self, "EXAMINE response {}", String::from_utf8_lossy(ret));
         let select_response = protocol_parser::select_response(ret).chain_err_summary(|| {
             format!("Could not parse select response for mailbox {}", imap_path)
         })?;

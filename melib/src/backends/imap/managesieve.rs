@@ -334,7 +334,12 @@ impl ManageSieveConnection {
             )
         });
         Ok(Self {
-            inner: ImapConnection::new_connection(&server_conf, uid_store),
+            inner: ImapConnection::new_connection(
+                &server_conf,
+                #[cfg(debug_assertions)]
+                "ManageSieveConnection::new()".into(),
+                uid_store,
+            ),
         })
     }
 
