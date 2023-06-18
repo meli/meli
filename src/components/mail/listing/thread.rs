@@ -823,8 +823,7 @@ impl ThreadListing {
                 tags.pop();
             }
         }
-        let mut subject = e.subject().to_string();
-        subject.truncate_at_boundary(150);
+        let subject = e.subject().trim().to_string();
         EntryStrings {
             date: DateString(ConversationsListing::format_date(context, e.date())),
             subject: SubjectString(subject),

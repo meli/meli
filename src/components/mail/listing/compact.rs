@@ -966,7 +966,7 @@ impl CompactListing {
                 tags_string.pop();
             }
         }
-        let mut subject = if *mailbox_settings!(
+        let subject = if *mailbox_settings!(
             context[self.cursor_pos.0][&self.cursor_pos.1]
                 .listing
                 .thread_subject_pack
@@ -974,16 +974,18 @@ impl CompactListing {
             other_subjects
                 .into_iter()
                 .fold(String::new(), |mut acc, s| {
+                    if s.trim().is_empty() {
+                        return acc;
+                    }
                     if !acc.is_empty() {
                         acc.push_str(", ");
                     }
-                    acc.push_str(s);
+                    acc.push_str(s.trim());
                     acc
                 })
         } else {
-            root_envelope.subject().to_string()
+            root_envelope.subject().trim().to_string()
         };
-        subject.truncate_at_boundary(150);
         EntryStrings {
             date: DateString(ConversationsListing::format_date(context, thread.date())),
             subject: if thread.len() > 1 {

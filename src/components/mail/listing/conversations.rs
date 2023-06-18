@@ -706,7 +706,7 @@ impl ConversationsListing {
                 tags_string.pop();
             }
         }
-        let mut subject = if *mailbox_settings!(
+        let subject = if *mailbox_settings!(
             context[self.cursor_pos.0][&self.cursor_pos.1]
                 .listing
                 .thread_subject_pack
@@ -714,16 +714,18 @@ impl ConversationsListing {
             other_subjects
                 .into_iter()
                 .fold(String::new(), |mut acc, s| {
+                    if s.trim().is_empty() {
+                        return acc;
+                    }
                     if !acc.is_empty() {
                         acc.push_str(", ");
                     }
-                    acc.push_str(s);
+                    acc.push_str(s.trim());
                     acc
                 })
         } else {
-            root_envelope.subject().to_string()
+            root_envelope.subject().trim().to_string()
         };
-        subject.truncate_at_boundary(100);
         EntryStrings {
             date: DateString(ConversationsListing::format_date(context, thread.date())),
             subject: SubjectString(if thread.len() > 1 {
@@ -888,7 +890,7 @@ impl ConversationsListing {
                 self.rows.is_thread_selected(*thread_hash)
             );
             /* draw subject */
-            let (mut x, _) = write_string_to_grid(
+            let (mut x, subject_overflowed) = write_string_to_grid(
                 &strings.subject,
                 grid,
                 subject_attr.fg,
@@ -897,9 +899,13 @@ impl ConversationsListing {
                 (set_x(upper_left, x), bottom_right),
                 None,
             );
+            let mut subject_overflowed = subject_overflowed > get_y(upper_left);
             for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
+                if subject_overflowed {
+                    break;
+                };
                 let color = color.unwrap_or(self.color_cache.tag_default.bg);
-                let (_x, _) = write_string_to_grid(
+                let (_x, _y) = write_string_to_grid(
                     t,
                     grid,
                     self.color_cache.tag_default.fg,
@@ -908,6 +914,10 @@ impl ConversationsListing {
                     (set_x(upper_left, x + 1), bottom_right),
                     None,
                 );
+                if _y > get_y(upper_left) {
+                    subject_overflowed = true;
+                    break;
+                }
                 grid[set_x(upper_left, x)].set_bg(color);
                 if _x <= get_x(bottom_right) {
                     grid[set_x(upper_left, _x)].set_bg(color).set_keep_bg(true);
@@ -920,11 +930,13 @@ impl ConversationsListing {
                 grid[set_x(upper_left, x)].set_keep_bg(true);
                 x = _x + 1;
             }
-            for x in x..get_x(bottom_right) {
-                grid[set_x(upper_left, x)]
-                    .set_ch(' ')
-                    .set_fg(row_attr.fg)
-                    .set_bg(row_attr.bg);
+            if !subject_overflowed {
+                for x in x..get_x(bottom_right) {
+                    grid[set_x(upper_left, x)]
+                        .set_ch(' ')
+                        .set_fg(row_attr.fg)
+                        .set_bg(row_attr.bg);
+                }
             }
             let date_attr = row_attr!(
                 date,
