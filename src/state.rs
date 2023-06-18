@@ -157,7 +157,7 @@ impl Context {
             ref mut replies,
             ..
         } = self;
-        let was_online = accounts[account_pos].is_online.is_ok();
+        let was_online = accounts[account_pos].is_online.is_true();
         let ret = accounts[account_pos].is_online();
         if ret.is_ok() && !was_online {
             log::trace!("inserting mailbox hashes:");
