@@ -25,9 +25,8 @@ use melib::Card;
 
 use super::*;
 
-mod contact_list;
-
-pub use self::contact_list::*;
+mod list;
+pub use list::*;
 
 #[derive(Debug)]
 enum ViewMode {

@@ -21,7 +21,7 @@
 
 use std::cmp;
 
-use melib::{backends::AccountHash, text_processing::TextProcessing, CardId, Draft};
+use melib::{backends::AccountHash, text_processing::TextProcessing, CardId, Draft, HeaderName};
 
 use super::*;
 
@@ -50,8 +50,10 @@ pub struct ContactList {
     initialized: bool,
     theme_default: ThemeAttribute,
     highlight_theme: ThemeAttribute,
+    selected_theme: ThemeAttribute,
 
-    id_positions: Vec<CardId>,
+    cards: IndexMap<CardId, Card>,
+    selection: IndexMap<CardId, bool>,
 
     mode: ViewMode,
     dirty: bool,
@@ -62,6 +64,8 @@ pub struct ContactList {
     menu_visibility: bool,
     movement: Option<PageMovement>,
     cmd_buf: String,
+    modifier_active: bool,
+    modifier_command: Option<Modifier>,
     view: Option<ContactManager>,
     ratio: usize, // right/(container width) * 100
     id: ComponentId,
@@ -91,14 +95,18 @@ impl ContactList {
             new_cursor_pos: 0,
             length: 0,
             account_pos: 0,
-            id_positions: Vec::new(),
+            cards: IndexMap::default(),
+            selection: IndexMap::default(),
             mode: ViewMode::List,
             data_columns: DataColumns::default(),
             theme_default: crate::conf::value(context, "theme_default"),
             highlight_theme: crate::conf::value(context, "highlight"),
+            selected_theme: crate::conf::value(context, "selected"),
             initialized: false,
             dirty: true,
             movement: None,
+            modifier_active: false,
+            modifier_command: None,
             cmd_buf: String::with_capacity(8),
             view: None,
             ratio: 90,
@@ -121,12 +129,21 @@ impl ContactList {
         let book = &account.address_book;
         self.length = book.len();
 
-        self.id_positions.clear();
-        if self.id_positions.capacity() < book.len() {
-            self.id_positions.reserve(book.len());
+        self.cards.clear();
+        self.selection.clear();
+        if self.cards.capacity() < book.len() {
+            self.cards.reserve(book.len());
+            self.selection.reserve(book.len());
         }
         self.dirty = true;
-        let mut min_width = ("Name".len(), "E-mail".len(), 0, "external".len(), 0, 0);
+        let mut min_width = (
+            "Name".len(),
+            "E-mail".len(),
+            "URL".len(),
+            "external".len(),
+            0,
+            0,
+        );
 
         for c in book.values() {
             /* name */
@@ -155,7 +172,8 @@ impl ContactList {
         let mut book_values = book.values().collect::<Vec<&Card>>();
         book_values.sort_unstable_by_key(|c| c.name());
         for (idx, c) in book_values.iter().enumerate() {
-            self.id_positions.push(*c.id());
+            self.cards.insert(*c.id(), (*c).clone());
+            self.selection.insert(*c.id(), false);
 
             write_string_to_grid(
                 c.name(),
@@ -468,12 +486,7 @@ impl ContactList {
         self.data_columns.widths[2] = self.data_columns.columns[2].size().0; /* url */
         self.data_columns.widths[3] = self.data_columns.columns[3].size().0; /* source */
 
-        let min_col_width = std::cmp::min(
-            15,
-            std::cmp::min(self.data_columns.widths[0], self.data_columns.widths[1]),
-        );
-        if self.data_columns.widths[0] + self.data_columns.widths[1] + 3 * min_col_width + 8 > width
-        {
+        if self.data_columns.widths[0] + self.data_columns.widths[1] > width {
             let remainder =
                 width.saturating_sub(self.data_columns.widths[0] + self.data_columns.widths[1] + 4);
             self.data_columns.widths[2] = remainder / 6;
@@ -656,9 +669,7 @@ impl Component for ContactList {
                     if shortcut!(key == shortcuts[Shortcuts::CONTACT_LIST]["edit_contact"])
                         && self.length > 0 =>
                 {
-                    let account = &mut context.accounts[self.account_pos];
-                    let book = &mut account.address_book;
-                    let card = book[&self.id_positions[self.cursor_pos]].clone();
+                    let card = self.cards[self.cursor_pos].clone();
                     let mut manager = ContactManager::new(context);
                     manager.set_parent_id(self.id);
                     manager.card = card;
@@ -680,10 +691,9 @@ impl Component for ContactList {
                 {
                     let account = &context.accounts[self.account_pos];
                     let account_hash = account.hash();
-                    let book = &account.address_book;
-                    let card = &book[&self.id_positions[self.cursor_pos]];
+                    let card = self.cards[self.cursor_pos].clone();
                     let mut draft: Draft = Draft::default();
-                    *draft.headers_mut().get_mut("To").unwrap() =
+                    *draft.headers_mut().get_mut(HeaderName::TO).unwrap() =
                         format!("{} <{}>", &card.name(), &card.email());
                     let mut composer = Composer::with_account(account_hash, context);
                     composer.set_draft(draft);
@@ -691,6 +701,17 @@ impl Component for ContactList {
                         .replies
                         .push_back(UIEvent::Action(Tab(New(Some(Box::new(composer))))));
 
+                    return true;
+                }
+                UIEvent::Input(ref key)
+                    if shortcut!(key == shortcuts[Shortcuts::LISTING]["select_entry"]) =>
+                {
+                    if self.modifier_active && self.modifier_command.is_none() {
+                        self.modifier_command = Some(Modifier::default());
+                    } else if let Some(c) = self.cards.get_index(self.cursor_pos) {
+                        self.selection.entry(*c.0).and_modify(|e| *e = !*e);
+                        self.set_dirty(true);
+                    }
                     return true;
                 }
                 UIEvent::Input(ref key)
@@ -781,6 +802,15 @@ impl Component for ContactList {
                     context
                         .replies
                         .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                    return true;
+                }
+                UIEvent::Input(Key::Esc)
+                    if self.selection.values().cloned().any(std::convert::identity) =>
+                {
+                    for c in self.selection.values_mut() {
+                        *c = false;
+                    }
+                    self.set_dirty(true);
                     return true;
                 }
                 UIEvent::Input(Key::Char(c)) if c.is_ascii_digit() => {

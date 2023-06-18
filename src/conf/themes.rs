@@ -251,6 +251,7 @@ const DEFAULT_KEYS: &[&str] = &[
     "text.error",
     "text.highlight",
     "error_message",
+    "selected",
     "highlight",
     "status.bar",
     "status.command_bar",
@@ -1316,6 +1317,7 @@ impl Default for Themes {
 
         /* rest */
         add!("highlight", dark = { fg: Color::Byte(240), bg: Color::Byte(237), attrs: Attr::BOLD }, light = { fg: Color::Byte(240), bg: Color::Byte(237), attrs: Attr::BOLD });
+        add!("selected", dark = { fg: "theme_default", bg: Color::Byte(237), attrs: "theme_default" }, light = { fg: "theme_default", bg: Color::Byte(237), attrs: "theme_default" });
 
         add!("status.bar", dark = { fg: Color::Byte(123), bg: Color::Byte(26) }, light = { fg: Color::Byte(123), bg: Color::Byte(26) });
         add!("status.command_bar", dark = { fg: Color::Byte(219), bg: Color::Byte(88) }, light = { fg: Color::Byte(219), bg: Color::Byte(88) });

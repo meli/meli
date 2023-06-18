@@ -60,7 +60,6 @@ pub struct RowsState<T> {
     pub env_to_thread: HashMap<EnvelopeHash, ThreadHash>,
     pub thread_order: HashMap<ThreadHash, usize>,
     pub env_order: HashMap<EnvelopeHash, usize>,
-    #[allow(clippy::type_complexity)]
     pub entries: Vec<(T, EntryStrings)>,
     pub all_threads: HashSet<ThreadHash>,
     pub all_envelopes: HashSet<EnvelopeHash>,
