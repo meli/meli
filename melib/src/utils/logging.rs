@@ -220,7 +220,7 @@ impl StderrLogger {
 
     #[cfg(not(test))]
     pub fn change_log_dest(&mut self, path: PathBuf) {
-        use crate::shellexpand::ShellExpandTrait;
+        use crate::utils::shellexpand::ShellExpandTrait;
 
         let path = path.expand(); // expand shell stuff
         let mut dest = self.dest.lock().unwrap();
@@ -254,7 +254,7 @@ impl Log for StderrLogger {
         ) -> Option<()> {
             writer
                 .write_all(
-                    crate::datetime::timestamp_to_string(crate::datetime::now(), None, false)
+                    super::datetime::timestamp_to_string(super::datetime::now(), None, false)
                         .as_bytes(),
                 )
                 .ok()?;

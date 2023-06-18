@@ -22,6 +22,8 @@
 //! Pre-submission hooks for draft validation and/or transformations.
 pub use std::borrow::Cow;
 
+use melib::email::headers::HeaderName;
+
 use super::*;
 
 pub enum HookFn {
@@ -153,10 +155,10 @@ impl std::ops::DerefMut for Hook {
 }
 
 fn past_date_warn(_ctx: &mut Context, draft: &mut Draft) -> Result<()> {
-    use melib::datetime::*;
+    use melib::utils::datetime::*;
     if let Some(v) = draft
         .headers
-        .get("Date")
+        .get(HeaderName::DATE)
         .map(rfc822_to_timestamp)
         .and_then(Result::ok)
     {
@@ -181,8 +183,8 @@ pub const PASTDATEWARN: Hook = Hook {
 };
 
 fn important_header_warn(_ctx: &mut Context, draft: &mut Draft) -> Result<()> {
-    for hdr in ["From", "To"] {
-        match draft.headers.get(hdr).map(melib::Address::list_try_from) {
+    for hdr in [HeaderName::FROM, HeaderName::TO] {
+        match draft.headers.get(&hdr).map(melib::Address::list_try_from) {
             Some(Ok(_)) => {}
             Some(Err(err)) => return Err(format!("{hdr} header value is invalid ({err}).").into()),
             None => return Err(format!("{hdr} header is missing and should be present.").into()),
@@ -192,8 +194,8 @@ fn important_header_warn(_ctx: &mut Context, draft: &mut Draft) -> Result<()> {
     {
         match draft
             .headers
-            .get("Date")
-            .map(melib::datetime::rfc822_to_timestamp)
+            .get(HeaderName::DATE)
+            .map(melib::utils::datetime::rfc822_to_timestamp)
         {
             Some(Err(err)) => return Err(format!("Date header value is invalid ({err}).").into()),
             Some(Ok(0)) => return Err("Date header value is invalid.".into()),
@@ -201,10 +203,10 @@ fn important_header_warn(_ctx: &mut Context, draft: &mut Draft) -> Result<()> {
         }
     }
 
-    for hdr in ["Cc", "Bcc"] {
+    for hdr in [HeaderName::CC, HeaderName::BCC] {
         if let Some(Err(err)) = draft
             .headers
-            .get(hdr)
+            .get(&hdr)
             .filter(|v| !v.trim().is_empty())
             .map(melib::Address::list_try_from)
         {
@@ -223,7 +225,7 @@ pub const HEADERWARN: Hook = Hook {
 fn missing_attachment_warn(_ctx: &mut Context, draft: &mut Draft) -> Result<()> {
     if draft
         .headers
-        .get("Subject")
+        .get(HeaderName::SUBJECT)
         .map(|s| s.to_lowercase().contains("attach"))
         .unwrap_or(false)
         && draft.attachments.is_empty()
@@ -247,7 +249,7 @@ pub const MISSINGATTACHMENTWARN: Hook = Hook {
 fn empty_draft_warn(_ctx: &mut Context, draft: &mut Draft) -> Result<()> {
     if draft
         .headers
-        .get("Subject")
+        .get(HeaderName::SUBJECT)
         .filter(|v| !v.trim().is_empty())
         .is_none()
         && draft.body.trim().is_empty()

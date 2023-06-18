@@ -106,17 +106,17 @@ pub use sqlite3_m::*;
 #[cfg(feature = "sqlite3")]
 mod sqlite3_m {
     use super::*;
-    use crate::sqlite3::{
+    use crate::utils::sqlite3::{
         self,
         rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput},
-        DatabaseDescription,
+        Connection, DatabaseDescription,
     };
 
     type Sqlite3UID = i32;
 
     #[derive(Debug)]
     pub struct Sqlite3Cache {
-        connection: crate::sqlite3::Connection,
+        connection: Connection,
         loaded_mailboxes: BTreeSet<MailboxHash>,
         uid_store: Arc<UIDStore>,
     }

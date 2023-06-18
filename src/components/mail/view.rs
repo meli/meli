@@ -28,8 +28,8 @@ use std::{
 };
 
 use melib::{
-    datetime, email::attachment_types::ContentType, list_management, mailto::Mailto,
-    parser::BytesExt, Card, Draft, HeaderName, SpecialUsageMailbox,
+    email::attachment_types::ContentType, list_management, mailto::Mailto, parser::BytesExt,
+    utils::datetime, Card, Draft, HeaderName, SpecialUsageMailbox,
 };
 use smallvec::SmallVec;
 

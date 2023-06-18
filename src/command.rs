@@ -1005,107 +1005,6 @@ pub fn parse_command(input: &[u8]) -> Result<Action, Error> {
     .map_err(|err| err.into())
 }
 
-#[test]
-fn test_parser() {
-    let mut input = "sort".to_string();
-    macro_rules! match_input {
-        ($input:expr) => {{
-            let mut sugg = Default::default();
-            let mut vec = vec![];
-            //print!("{}", $input);
-            for (_tags, _desc, tokens) in COMMAND_COMPLETION.iter() {
-                //println!("{:?}, {:?}, {:?}", _tags, _desc, tokens);
-                let m = tokens.matches(&mut $input.as_str(), &mut sugg);
-                if !m.is_empty() {
-                    vec.push(tokens);
-                    //print!("{:?} ", desc);
-                    //println!(" result = {:#?}\n\n", m);
-                }
-            }
-            //println!("suggestions = {:#?}", sugg);
-            sugg.into_iter()
-                .map(|s| format!("{}{}", $input.as_str(), s.as_str()))
-                .collect::<HashSet<String>>()
-        }};
-    }
-    assert_eq!(
-        &match_input!(input),
-        &IntoIterator::into_iter(["sort date".to_string(), "sort subject".to_string()]).collect(),
-    );
-    input = "so".to_string();
-    assert_eq!(
-        &match_input!(input),
-        &IntoIterator::into_iter(["sort".to_string()]).collect(),
-    );
-    input = "so ".to_string();
-    assert_eq!(&match_input!(input), &HashSet::default(),);
-    input = "to".to_string();
-    assert_eq!(
-        &match_input!(input),
-        &IntoIterator::into_iter(["toggle".to_string()]).collect(),
-    );
-    input = "toggle ".to_string();
-    assert_eq!(
-        &match_input!(input),
-        &IntoIterator::into_iter([
-            "toggle mouse".to_string(),
-            "toggle sign".to_string(),
-            "toggle encrypt".to_string(),
-            "toggle thread_snooze".to_string()
-        ])
-        .collect(),
-    );
-}
-
-#[test]
-#[ignore]
-fn test_parser_interactive() {
-    use std::io;
-    let mut input = String::new();
-    loop {
-        input.clear();
-        print!("> ");
-        match io::stdin().read_line(&mut input) {
-            Ok(_n) => {
-                println!("Input is {:?}", input.as_str().trim());
-                let mut sugg = Default::default();
-                let mut vec = vec![];
-                //print!("{}", input);
-                for (_tags, _desc, tokens) in COMMAND_COMPLETION.iter() {
-                    //println!("{:?}, {:?}, {:?}", _tags, _desc, tokens);
-                    let m = tokens.matches(&mut input.as_str().trim(), &mut sugg);
-                    if !m.is_empty() {
-                        vec.push(tokens);
-                        //print!("{:?} ", desc);
-                        //println!(" result = {:#?}\n\n", m);
-                    }
-                }
-                println!(
-                    "suggestions = {:#?}",
-                    sugg.into_iter()
-                        .zip(vec.into_iter())
-                        .map(|(s, v)| format!(
-                            "{}{} {:?}",
-                            input.as_str().trim(),
-                            if input.trim().is_empty() {
-                                s.trim()
-                            } else {
-                                s.as_str()
-                            },
-                            v
-                        ))
-                        .collect::<Vec<String>>()
-                );
-                if input.trim() == "quit" {
-                    break;
-                }
-            }
-            Err(error) => println!("error: {}", error),
-        }
-    }
-    println!("alright");
-}
-
 /// Get command suggestions for input
 pub fn command_completion_suggestions(input: &str) -> Vec<String> {
     use crate::melib::ShellExpandTrait;
@@ -1123,4 +1022,111 @@ pub fn command_completion_suggestions(input: &str) -> Vec<String> {
     sugg.into_iter()
         .map(|s| format!("{}{}", input, s.as_str()))
         .collect::<Vec<String>>()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_command_parser() {
+        let mut input = "sort".to_string();
+        macro_rules! match_input {
+            ($input:expr) => {{
+                let mut sugg = Default::default();
+                let mut vec = vec![];
+                //print!("{}", $input);
+                for (_tags, _desc, tokens) in COMMAND_COMPLETION.iter() {
+                    //println!("{:?}, {:?}, {:?}", _tags, _desc, tokens);
+                    let m = tokens.matches(&mut $input.as_str(), &mut sugg);
+                    if !m.is_empty() {
+                        vec.push(tokens);
+                        //print!("{:?} ", desc);
+                        //println!(" result = {:#?}\n\n", m);
+                    }
+                }
+                //println!("suggestions = {:#?}", sugg);
+                sugg.into_iter()
+                    .map(|s| format!("{}{}", $input.as_str(), s.as_str()))
+                    .collect::<HashSet<String>>()
+            }};
+        }
+        assert_eq!(
+            &match_input!(input),
+            &IntoIterator::into_iter(["sort date".to_string(), "sort subject".to_string()])
+                .collect(),
+        );
+        input = "so".to_string();
+        assert_eq!(
+            &match_input!(input),
+            &IntoIterator::into_iter(["sort".to_string()]).collect(),
+        );
+        input = "so ".to_string();
+        assert_eq!(&match_input!(input), &HashSet::default(),);
+        input = "to".to_string();
+        assert_eq!(
+            &match_input!(input),
+            &IntoIterator::into_iter(["toggle".to_string()]).collect(),
+        );
+        input = "toggle ".to_string();
+        assert_eq!(
+            &match_input!(input),
+            &IntoIterator::into_iter([
+                "toggle mouse".to_string(),
+                "toggle sign".to_string(),
+                "toggle encrypt".to_string(),
+                "toggle thread_snooze".to_string()
+            ])
+            .collect(),
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn test_parser_interactive() {
+        use std::io;
+        let mut input = String::new();
+        loop {
+            input.clear();
+            print!("> ");
+            match io::stdin().read_line(&mut input) {
+                Ok(_n) => {
+                    println!("Input is {:?}", input.as_str().trim());
+                    let mut sugg = Default::default();
+                    let mut vec = vec![];
+                    //print!("{}", input);
+                    for (_tags, _desc, tokens) in COMMAND_COMPLETION.iter() {
+                        //println!("{:?}, {:?}, {:?}", _tags, _desc, tokens);
+                        let m = tokens.matches(&mut input.as_str().trim(), &mut sugg);
+                        if !m.is_empty() {
+                            vec.push(tokens);
+                            //print!("{:?} ", desc);
+                            //println!(" result = {:#?}\n\n", m);
+                        }
+                    }
+                    println!(
+                        "suggestions = {:#?}",
+                        sugg.into_iter()
+                            .zip(vec.into_iter())
+                            .map(|(s, v)| format!(
+                                "{}{} {:?}",
+                                input.as_str().trim(),
+                                if input.trim().is_empty() {
+                                    s.trim()
+                                } else {
+                                    s.as_str()
+                                },
+                                v
+                            ))
+                            .collect::<Vec<String>>()
+                    );
+                    if input.trim() == "quit" {
+                        break;
+                    }
+                }
+                Err(error) => println!("error: {}", error),
+            }
+        }
+        println!("alright");
+    }
 }

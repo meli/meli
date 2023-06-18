@@ -24,7 +24,7 @@ use std::{borrow::Cow, convert::TryFrom};
 pub use query_parser::query;
 use Query::*;
 
-use crate::{
+use crate::utils::{
     datetime::{formats, UnixTimestamp},
     parsec::*,
 };
@@ -152,9 +152,10 @@ pub mod query_parser {
     fn date<'a>() -> impl Parser<'a, UnixTimestamp> {
         move |input| {
             literal().parse(input).and_then(|(next_input, result)| {
-                if let Ok((_, t)) =
-                    crate::datetime::parse_timestamp_from_string(result, formats::RFC3339_DATE)
-                {
+                if let Ok((_, t)) = crate::utils::datetime::parse_timestamp_from_string(
+                    result,
+                    formats::RFC3339_DATE,
+                ) {
                     Ok((next_input, t))
                 } else {
                     Err(next_input)
@@ -368,8 +369,8 @@ pub mod query_parser {
     /// # Invocation
     /// ```
     /// use melib::{
-    ///     parsec::Parser,
     ///     search::{query, Query},
+    ///     utils::parsec::Parser,
     /// };
     ///
     /// let input = "test";

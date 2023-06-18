@@ -34,9 +34,9 @@ use serde_json::Value;
 use crate::{
     backends::*,
     conf::AccountSettings,
-    connections::timeout,
     email::*,
     error::{Error, Result},
+    utils::futures::{sleep, timeout},
     Collection,
 };
 
@@ -344,7 +344,7 @@ impl MailBackend for JmapType {
                         conn.email_changes(mailbox_hash).await?;
                     }
                 }
-                crate::connections::sleep(Duration::from_secs(60)).await;
+                sleep(Duration::from_secs(60)).await;
             }
         }))
     }

@@ -40,7 +40,7 @@ use crate::{
     backends::*,
     email::Flag,
     error::{Error, Result},
-    shellexpand::ShellExpandTrait,
+    utils::shellexpand::ShellExpandTrait,
 };
 
 /// `BackendOp` implementor for Maildir

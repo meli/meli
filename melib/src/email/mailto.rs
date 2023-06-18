@@ -29,7 +29,7 @@ use std::convert::TryFrom;
 use super::*;
 use crate::{
     email::headers::HeaderMap,
-    percent_encoding::{AsciiSet, CONTROLS},
+    utils::percent_encoding::{AsciiSet, CONTROLS},
 };
 
 #[derive(Debug, Clone, Eq, PartialEq)]

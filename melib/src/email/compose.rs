@@ -33,12 +33,11 @@ use xdg_utils::query_mime_info;
 
 use super::*;
 use crate::{
-    datetime,
     email::{
         attachment_types::{Charset, ContentTransferEncoding, ContentType, MultipartType},
         attachments::AttachmentBuilder,
     },
-    shellexpand::ShellExpandTrait,
+    utils::{datetime, shellexpand::ShellExpandTrait},
 };
 
 pub mod mime;

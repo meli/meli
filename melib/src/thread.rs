@@ -34,8 +34,8 @@
  */
 
 use crate::{
-    datetime::UnixTimestamp,
     email::{address::StrBuild, parser::BytesExt, *},
+    UnixTimestamp,
 };
 
 mod iterators;
@@ -1674,7 +1674,7 @@ fn save_graph(
 
         let mut file = File::create(format!(
             "/tmp/meli/threads/threads_{}.json",
-            crate::datetime::now()
+            crate::utils::datetime::now()
         ))
         .unwrap();
         file.write_all(s.as_bytes()).unwrap();

@@ -40,6 +40,7 @@ use crossbeam::channel::{unbounded, Receiver, Sender};
 use indexmap::{IndexMap, IndexSet};
 use melib::{
     backends::{AccountHash, BackendEvent, BackendEventConsumer, Backends, RefreshEvent},
+    utils::datetime,
     UnixTimestamp,
 };
 use smallvec::SmallVec;
@@ -542,7 +543,7 @@ impl State {
         let mut areas: smallvec::SmallVec<[Area; 8]> =
             self.context.dirty_areas.drain(0..).collect();
         if self.display_messages_active {
-            let now = melib::datetime::now();
+            let now = datetime::now();
             if self
                 .display_messages_expiration_start
                 .map(|t| t + 5 < now)
@@ -687,9 +688,11 @@ impl State {
                         }
                     }
                     let ((x, mut y), box_displ_area_bottom_right) = box_displ_area;
-                    for line in msg_lines.into_iter().chain(Some(String::new())).chain(Some(
-                        melib::datetime::timestamp_to_string(*timestamp, None, false),
-                    )) {
+                    for line in msg_lines
+                        .into_iter()
+                        .chain(Some(String::new()))
+                        .chain(Some(datetime::timestamp_to_string(*timestamp, None, false)))
+                    {
                         write_string_to_grid(
                             &line,
                             &mut self.screen.overlay_grid,
@@ -1016,7 +1019,7 @@ impl State {
     pub fn rcv_event(&mut self, mut event: UIEvent) {
         if let UIEvent::Input(_) = event {
             if self.display_messages_expiration_start.is_none() {
-                self.display_messages_expiration_start = Some(melib::datetime::now());
+                self.display_messages_expiration_start = Some(datetime::now());
             }
         }
 
@@ -1171,7 +1174,7 @@ impl State {
                         .general
                         .info_message_previous =>
             {
-                self.display_messages_expiration_start = Some(melib::datetime::now());
+                self.display_messages_expiration_start = Some(datetime::now());
                 self.display_messages_active = true;
                 self.display_messages_initialised = false;
                 self.display_messages_dirty = true;
@@ -1181,7 +1184,7 @@ impl State {
             UIEvent::Input(ref key)
                 if *key == self.context.settings.shortcuts.general.info_message_next =>
             {
-                self.display_messages_expiration_start = Some(melib::datetime::now());
+                self.display_messages_expiration_start = Some(datetime::now());
                 self.display_messages_active = true;
                 self.display_messages_initialised = false;
                 self.display_messages_dirty = true;
@@ -1193,7 +1196,7 @@ impl State {
             }
             UIEvent::StatusEvent(StatusEvent::DisplayMessage(ref msg)) => {
                 self.display_messages.push(DisplayMessage {
-                    timestamp: melib::datetime::now(),
+                    timestamp: datetime::now(),
                     msg: msg.clone(),
                 });
                 self.display_messages_active = true;

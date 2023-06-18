@@ -146,7 +146,7 @@ use crate::{
     email::{parser::BytesExt, *},
     error::{Error, ErrorKind, Result},
     get_path_hash,
-    shellexpand::ShellExpandTrait,
+    utils::shellexpand::ShellExpandTrait,
 };
 
 extern crate notify;

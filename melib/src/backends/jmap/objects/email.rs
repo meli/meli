@@ -29,6 +29,7 @@ use super::*;
 use crate::{
     backends::jmap::rfc8620::bool_false,
     email::address::{Address, MailboxAddress},
+    utils::datetime,
 };
 
 mod import;
@@ -265,8 +266,7 @@ impl std::convert::From<EmailObject> for crate::Envelope {
             env.set_datetime(d);
         }
         if let Some(ref mut sent_at) = t.sent_at {
-            let unix =
-                crate::datetime::rfc3339_to_timestamp(sent_at.as_bytes().to_vec()).unwrap_or(0);
+            let unix = datetime::rfc3339_to_timestamp(sent_at.as_bytes().to_vec()).unwrap_or(0);
             env.set_datetime(unix);
             env.set_date(std::mem::replace(sent_at, String::new()).as_bytes());
         }
@@ -588,10 +588,10 @@ impl From<crate::search::Query> for Filter<EmailFilterCondition, EmailObject> {
     fn from(val: crate::search::Query) -> Self {
         let mut ret = Filter::Condition(EmailFilterCondition::new().into());
         fn rec(q: &crate::search::Query, f: &mut Filter<EmailFilterCondition, EmailObject>) {
-            use crate::{
-                datetime::{formats::RFC3339_DATE, timestamp_to_string},
-                search::Query::*,
-            };
+            use datetime::{formats::RFC3339_DATE, timestamp_to_string};
+
+            use crate::search::Query::*;
+
             match q {
                 Subject(t) => {
                     *f = Filter::Condition(EmailFilterCondition::new().subject(t.clone()).into());

@@ -2448,7 +2448,7 @@ fn attribution_string(
             .map(|addr| addr.get_email())
             .unwrap_or_else(|| "\"\"".to_string()),
     );
-    melib::datetime::timestamp_to_string(date, Some(fmt.as_str()), posix)
+    melib::utils::datetime::timestamp_to_string(date, Some(fmt.as_str()), posix)
 }
 
 #[cfg(test)]

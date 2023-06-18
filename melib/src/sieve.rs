@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use crate::parsec::*;
+use crate::utils::parsec::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuleBlock(pub Vec<Rule>);
@@ -683,7 +683,7 @@ mod test {
         parser::*, ActionCommand::*, AddressOperator::*, CharacterOperator::*, ConditionRule::*,
         ControlCommand::*, IntegerOperator::*, MatchOperator::*, Rule::*, RuleBlock,
     };
-    use crate::parsec::Parser;
+    use crate::utils::parsec::Parser;
 
     #[test]
     fn test_sieve_parse_strings() {

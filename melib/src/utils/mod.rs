@@ -23,6 +23,8 @@
 
 pub mod connections;
 pub mod datetime;
+pub mod futures;
+pub mod random;
 #[macro_use]
 pub mod logging;
 pub mod parsec;

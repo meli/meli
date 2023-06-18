@@ -32,7 +32,7 @@ use crate::{
     conf::AccountSettings,
     email::{Envelope, EnvelopeHash, Flag},
     error::{Error, ErrorKind, Result},
-    shellexpand::ShellExpandTrait,
+    utils::shellexpand::ShellExpandTrait,
     Collection,
 };
 

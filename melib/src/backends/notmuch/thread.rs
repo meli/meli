@@ -34,7 +34,7 @@ impl<'q> Thread<'q> {
         ThreadHash::from(c_str.to_bytes())
     }
 
-    pub fn date(&self) -> crate::datetime::UnixTimestamp {
+    pub fn date(&self) -> crate::UnixTimestamp {
         (unsafe { call!(self.lib, notmuch_thread_get_newest_date)(self.ptr) }) as u64
     }
 

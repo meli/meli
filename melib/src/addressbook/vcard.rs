@@ -32,7 +32,7 @@ use std::{collections::HashMap, convert::TryInto};
 use super::*;
 use crate::{
     error::{Error, Result},
-    parsec::{match_literal_anycase, one_or_more, peek, prefix, take_until, Parser},
+    utils::parsec::{match_literal_anycase, one_or_more, peek, prefix, take_until, Parser},
 };
 
 /* Supported vcard versions */
@@ -222,8 +222,9 @@ impl<V: VCardVersion> TryInto<Card> for VCard<V> {
                       T102200Z
                       T102200-0800
                       */
-            card.birthday = crate::datetime::timestamp_from_string(val.value.as_str(), "%Y%m%d\0")
-                .unwrap_or_default();
+            card.birthday =
+                crate::utils::datetime::timestamp_from_string(val.value.as_str(), "%Y%m%d\0")
+                    .unwrap_or_default();
         }
         if let Some(val) = self.0.remove("EMAIL") {
             card.set_email(val.value);

@@ -764,7 +764,7 @@ impl ConversationsListing {
                 n / (24 * 60 * 60),
                 if n / (24 * 60 * 60) == 1 { "" } else { "s" }
             ),
-            _ => melib::datetime::timestamp_to_string(
+            _ => melib::utils::datetime::timestamp_to_string(
                 epoch,
                 context
                     .settings

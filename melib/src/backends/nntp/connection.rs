@@ -21,10 +21,10 @@
 
 use crate::{
     backends::{BackendMailbox, MailboxHash},
-    connections::{lookup_ipv4, Connection},
     email::parser::BytesExt,
     error::*,
     log,
+    utils::connections::{lookup_ipv4, Connection},
 };
 extern crate native_tls;
 use std::{collections::HashSet, future::Future, pin::Pin, sync::Arc, time::Instant};

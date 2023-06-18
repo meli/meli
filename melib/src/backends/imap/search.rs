@@ -24,8 +24,8 @@
 use std::collections::VecDeque;
 
 use crate::{
-    datetime::{formats::IMAP_DATE, timestamp_to_string},
     search::*,
+    utils::datetime::{formats::IMAP_DATE, timestamp_to_string},
 };
 
 mod private {
@@ -256,7 +256,7 @@ impl ToImapSearch for Query {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parsec::Parser;
+    use crate::utils::parsec::Parser;
 
     #[test]
     fn test_imap_query_search() {

@@ -906,7 +906,7 @@ mod pp {
 
     use melib::{
         error::{Error, Result},
-        parsec::*,
+        utils::parsec::*,
         ShellExpandTrait,
     };
 

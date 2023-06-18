@@ -34,8 +34,8 @@ use melib::{
         escape_double_quote,
         Query::{self, *},
     },
-    sqlite3::{self as melib_sqlite3, rusqlite::params, DatabaseDescription},
     thread::{SortField, SortOrder},
+    utils::sqlite3::{self as melib_sqlite3, rusqlite::params, DatabaseDescription},
     Error, Result,
 };
 use smallvec::SmallVec;
@@ -497,7 +497,7 @@ mod tests {
 
     #[test]
     fn test_query_to_sql() {
-        use melib::{parsec::Parser, search::query};
+        use melib::{search::query, utils::parsec::Parser};
         assert_eq!(
             "(subject LIKE \"%test%\" ) AND (body_text LIKE \"%i%\" ) ",
             &query_to_sql(&query().parse_complete("subject:test and i").unwrap().1)

@@ -82,9 +82,10 @@ pub mod dbg {
 #[cfg(feature = "unicode_algorithms")]
 pub mod text_processing;
 
-pub use utils::{datetime::UnixTimestamp, *};
-
-pub use self::logging::{LogLevel, StderrLogger};
+pub use utils::{
+    datetime::UnixTimestamp,
+    logging::{LogLevel, StderrLogger},
+};
 
 pub mod addressbook;
 pub use addressbook::*;
@@ -98,13 +99,13 @@ pub use conf::*;
 pub mod email;
 pub use email::*;
 pub mod error;
-pub use crate::error::*;
+pub use error::*;
 pub mod thread;
 pub use thread::*;
 pub mod search;
 
 #[macro_use]
-mod utils;
+pub mod utils;
 
 #[cfg(feature = "gpgme")]
 pub mod gpgme;
@@ -158,4 +159,4 @@ impl core::fmt::Display for Bytes {
     }
 }
 
-pub use shellexpand::ShellExpandTrait;
+pub use utils::shellexpand::ShellExpandTrait;

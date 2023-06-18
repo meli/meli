@@ -52,9 +52,9 @@ use futures::{lock::Mutex as FutureMutex, stream::Stream};
 use crate::{
     backends::*,
     conf::AccountSettings,
-    connections::timeout,
     email::*,
     error::{Error, Result, ResultIntoError},
+    utils::futures::timeout,
     Collection,
 };
 pub type UID = usize;
@@ -286,8 +286,11 @@ impl MailBackend for NntpType {
             let mut conn = timeout(Some(Duration::from_secs(60 * 16)), connection.lock()).await?;
             if let Some(mut latest_article) = latest_article {
                 let timestamp = latest_article - 10 * 60;
-                let datetime_str =
-                    crate::datetime::timestamp_to_string(timestamp, Some("%Y%m%d %H%M%S"), true);
+                let datetime_str = crate::utils::datetime::timestamp_to_string(
+                    timestamp,
+                    Some("%Y%m%d %H%M%S"),
+                    true,
+                );
 
                 if newnews_support {
                     conn.send_command(

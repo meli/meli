@@ -401,8 +401,8 @@ impl Component for SVGScreenshotFilter {
             }
             res.push(b);
         }
-        let mut filename = melib::datetime::timestamp_to_string(
-            melib::datetime::now(),
+        let mut filename = melib::utils::datetime::timestamp_to_string(
+            melib::utils::datetime::now(),
             Some("meli Screenshot - %e %h %Y %H:%M:%S.svg"),
             true,
         );

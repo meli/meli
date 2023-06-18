@@ -275,24 +275,3 @@ pub fn lookup_ipv4(host: &str, port: u16) -> crate::Result<std::net::SocketAddr>
         ),
     )
 }
-
-use futures::future::{self, Either, Future};
-
-pub async fn timeout<O>(dur: Option<Duration>, f: impl Future<Output = O>) -> crate::Result<O> {
-    futures::pin_mut!(f);
-    if let Some(dur) = dur {
-        match future::select(f, smol::Timer::after(dur)).await {
-            Either::Left((out, _)) => Ok(out),
-            Either::Right(_) => {
-                Err(crate::error::Error::new("Timed out.")
-                    .set_kind(crate::error::ErrorKind::Timeout))
-            }
-        }
-    } else {
-        Ok(f.await)
-    }
-}
-
-pub async fn sleep(dur: Duration) {
-    smol::Timer::after(dur).await;
-}

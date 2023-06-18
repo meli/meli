@@ -65,9 +65,9 @@ use crate::{
     },
     collection::Collection,
     conf::AccountSettings,
-    connections::timeout,
     email::{parser::BytesExt, *},
     error::{Error, Result, ResultIntoError},
+    utils::futures::timeout,
 };
 
 pub type ImapNum = usize;

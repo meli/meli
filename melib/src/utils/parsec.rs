@@ -23,7 +23,7 @@
 
 use std::borrow::Cow;
 
-use crate::datetime::{parse_timestamp_from_string, UnixTimestamp};
+use crate::utils::datetime::{parse_timestamp_from_string, UnixTimestamp};
 
 pub type Result<'a, Output> = std::result::Result<(&'a str, Output), &'a str>;
 
@@ -445,8 +445,8 @@ pub fn is_not<'a>(slice: &'static [u8]) -> impl Parser<'a, &'a str> {
 /// Try alternative parsers in order until one succeeds.
 ///
 /// ```rust
-/// # use melib::parsec::{Parser, quoted_slice, match_literal, alt, delimited, prefix};
-///
+/// # use melib::utils::parsec::{Parser, quoted_slice, match_literal, alt, delimited, prefix};
+/// #
 /// let parser = |input| {
 ///     alt([
 ///         delimited(match_literal("{"), quoted_slice(), match_literal("}")),
@@ -456,9 +456,8 @@ pub fn is_not<'a>(slice: &'static [u8]) -> impl Parser<'a, &'a str> {
 /// };
 ///
 /// let input1: &str = "{\"quoted\"}";
-/// let input2: &str = "[\"quoted\"]";
 /// assert_eq!(Ok(("", "quoted")), parser.parse(input1));
-///
+/// let input2: &str = "[\"quoted\"]";
 /// assert_eq!(Ok(("", "quoted")), parser.parse(input2));
 /// ```
 pub fn alt<'a, P, A, const N: usize>(parsers: [P; N]) -> impl Parser<'a, A>
@@ -584,7 +583,7 @@ pub fn take<'a>(count: usize) -> impl Parser<'a, &'a str> {
 ///
 ///```rust
 ///  # use std::str::FromStr;
-///  # use melib::parsec::{Parser, delimited, match_literal, map_res, is_a, take_literal};
+///  # use melib::utils::parsec::{Parser, delimited, match_literal, map_res, is_a, take_literal};
 /// let lit: &str = "{31}\r\nThere is no script by that name\r\n";
 /// assert_eq!(
 ///     take_literal(delimited(

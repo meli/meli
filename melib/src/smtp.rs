@@ -80,9 +80,9 @@ use smallvec::SmallVec;
 use smol::{unblock, Async as AsyncWrapper};
 
 use crate::{
-    connections::{lookup_ipv4, Connection},
     email::{parser::BytesExt, Address, Envelope},
     error::{Error, Result, ResultIntoError},
+    utils::connections::{lookup_ipv4, Connection},
 };
 
 /// Kind of server security (StartTLS/TLS/None) the client should attempt

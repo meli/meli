@@ -20,7 +20,7 @@
  */
 
 use super::*;
-use crate::datetime;
+use crate::utils::datetime;
 
 impl MboxFormat {
     pub fn append(

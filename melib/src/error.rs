@@ -183,7 +183,7 @@ pub enum NetworkErrorKind {
 }
 
 impl NetworkErrorKind {
-    pub fn as_str(&self) -> &'static str {
+    pub const fn as_str(&self) -> &'static str {
         use NetworkErrorKind::*;
         match self {
             None => "Network",
@@ -241,6 +241,19 @@ impl NetworkErrorKind {
             NotExtended => "Not Extended",
             NetworkAuthenticationRequired => "Network Authentication Required",
         }
+    }
+
+    /// Error kind means network is certainly down.
+    pub const fn is_network_down(&self) -> bool {
+        use NetworkErrorKind::*;
+        matches!(
+            self,
+            BadGateway
+                | ServiceUnavailable
+                | GatewayTimeout
+                | NetworkAuthenticationRequired
+                | ConnectionFailed
+        )
     }
 }
 
@@ -312,6 +325,13 @@ pub enum ErrorKind {
     External,
     Authentication,
     Configuration,
+    /// Protocol error.
+    ///
+    /// `EPROTO 71 Protocol error`
+    ProtocolError,
+    /// Protocol is not supported.
+    /// It could be the wrong type or version.
+    ProtocolNotSupported,
     Bug,
     Network(NetworkErrorKind),
     Timeout,
@@ -332,6 +352,9 @@ impl fmt::Display for ErrorKind {
                 Self::Authentication => "Authentication",
                 Self::Bug => "Bug, please report this!",
                 Self::Network(ref inner) => inner.as_str(),
+                Self::ProtocolError => "Protocol error",
+                Self::ProtocolNotSupported =>
+                    "Protocol is not supported. It could be the wrong type or version.",
                 Self::Timeout => "Timeout",
                 Self::OSError => "OS Error",
                 Self::Configuration => "Configuration",
@@ -343,18 +366,29 @@ impl fmt::Display for ErrorKind {
     }
 }
 
+macro_rules! is_variant {
+    ($n:ident, $($var:tt)+) => {
+        #[inline]
+        pub fn $n(&self) -> bool {
+            matches!(self, Self::$($var)*)
+        }
+    };
+}
+
 impl ErrorKind {
-    pub fn is_network(&self) -> bool {
-        matches!(self, Self::Network(_))
-    }
-
-    pub fn is_timeout(&self) -> bool {
-        matches!(self, Self::Timeout)
-    }
-
-    pub fn is_authentication(&self) -> bool {
-        matches!(self, Self::Authentication)
-    }
+    is_variant! { is_authentication, Authentication }
+    is_variant! { is_bug, Bug }
+    is_variant! { is_configuration, Configuration }
+    is_variant! { is_external, External }
+    is_variant! { is_network, Network(_) }
+    is_variant! { is_network_down, Network(ref k) if k.is_network_down() }
+    is_variant! { is_not_implemented, NotImplemented }
+    is_variant! { is_not_supported, NotSupported }
+    is_variant! { is_oserror, OSError }
+    is_variant! { is_protocol_error, ProtocolError }
+    is_variant! { is_protocol_not_supported, ProtocolNotSupported }
+    is_variant! { is_timeout, Timeout }
+    is_variant! { is_value_error, ValueError }
 }
 
 #[derive(Debug, Clone)]
@@ -707,5 +741,14 @@ impl<'a> From<&'a Error> for Error {
     #[inline]
     fn from(kind: &'a Error) -> Error {
         kind.clone()
+    }
+}
+
+impl From<base64::DecodeError> for Error {
+    #[inline]
+    fn from(kind: base64::DecodeError) -> Error {
+        Error::new("base64 decoding failed")
+            .set_source(Some(Arc::new(kind)))
+            .set_kind(ErrorKind::ValueError)
     }
 }

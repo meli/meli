@@ -81,7 +81,7 @@ impl<'m> Message<'m> {
         unsafe { CStr::from_ptr(msg_id) }
     }
 
-    pub fn date(&self) -> crate::datetime::UnixTimestamp {
+    pub fn date(&self) -> crate::UnixTimestamp {
         (unsafe { call!(self.lib, notmuch_message_get_date)(self.message) }) as u64
     }
 

@@ -21,10 +21,13 @@
 
 use super::protocol_parser::{ImapLineSplit, ImapResponse, RequiredResponses, SelectResponse};
 use crate::{
-    backends::{MailboxHash, RefreshEvent},
-    connections::{lookup_ipv4, timeout, Connection},
+    backends::{BackendEvent, MailboxHash, RefreshEvent},
     email::parser::BytesExt,
     error::*,
+    utils::{
+        connections::{lookup_ipv4, Connection},
+        futures::timeout,
+    },
     LogLevel,
 };
 extern crate native_tls;
@@ -162,7 +165,7 @@ impl ImapStream {
         let stream = if server_conf.use_tls {
             (uid_store.event_consumer)(
                 uid_store.account_hash,
-                crate::backends::BackendEvent::AccountStateChange {
+                BackendEvent::AccountStateChange {
                     message: "Establishing TLS connection.".into(),
                 },
             );
@@ -172,9 +175,7 @@ impl ImapStream {
             }
             let connector = connector
                 .build()
-                .chain_err_kind(crate::error::ErrorKind::Network(
-                    crate::error::NetworkErrorKind::InvalidTLSConnection,
-                ))?;
+                .chain_err_kind(ErrorKind::Network(NetworkErrorKind::InvalidTLSConnection))?;
 
             let addr = lookup_ipv4(path, server_conf.server_port)?;
 
@@ -263,8 +264,8 @@ impl ImapStream {
                                 midhandshake_stream = Some(stream);
                             }
                             p => {
-                                p.chain_err_kind(crate::error::ErrorKind::Network(
-                                    crate::error::NetworkErrorKind::InvalidTLSConnection,
+                                p.chain_err_kind(ErrorKind::Network(
+                                    NetworkErrorKind::InvalidTLSConnection,
                                 ))?;
                             }
                         }
@@ -276,11 +277,7 @@ impl ImapStream {
                 .chain_err_summary(|| format!("Could not initiate TLS negotiation to {}.", path))?
             }
         } else {
-            let addr = if let Ok(a) = lookup_ipv4(path, server_conf.server_port) {
-                a
-            } else {
-                return Err(Error::new(format!("Could not lookup address {}", &path)));
-            };
+            let addr = lookup_ipv4(path, server_conf.server_port)?;
             AsyncWrapper::new(Connection::Tcp(
                 if let Some(timeout) = server_conf.timeout {
                     TcpStream::connect_timeout(&addr, timeout)?
@@ -322,7 +319,7 @@ impl ImapStream {
 
         (uid_store.event_consumer)(
             uid_store.account_hash,
-            crate::backends::BackendEvent::AccountStateChange {
+            BackendEvent::AccountStateChange {
                 message: "Negotiating server capabilities.".into(),
             },
         );
@@ -344,7 +341,7 @@ impl ImapStream {
                 &server_conf.server_hostname,
                 String::from_utf8_lossy(&res)
             ))
-            .set_kind(ErrorKind::Bug));
+            .set_kind(ErrorKind::ProtocolError));
         }
 
         let capabilities = capabilities.unwrap();
@@ -355,7 +352,8 @@ impl ImapStream {
             return Err(Error::new(format!(
                 "Could not connect to {}: server is not IMAP4rev1 compliant",
                 &server_conf.server_hostname
-            )));
+            ))
+            .set_kind(ErrorKind::ProtocolNotSupported));
         } else if capabilities
             .iter()
             .any(|cap| cap.eq_ignore_ascii_case(b"LOGINDISABLED"))
@@ -364,12 +362,12 @@ impl ImapStream {
                 "Could not connect to {}: server does not accept logins [LOGINDISABLED]",
                 &server_conf.server_hostname
             ))
-            .set_err_kind(crate::error::ErrorKind::Authentication));
+            .set_err_kind(ErrorKind::Authentication));
         }
 
         (uid_store.event_consumer)(
             uid_store.account_hash,
-            crate::backends::BackendEvent::AccountStateChange {
+            BackendEvent::AccountStateChange {
                 message: "Attempting authentication.".into(),
             },
         );
@@ -390,10 +388,14 @@ impl ImapStream {
                             .map(|capability| String::from_utf8_lossy(capability).to_string())
                             .collect::<Vec<String>>()
                             .join(" ")
-                    )));
+                    ))
+                    .set_err_kind(ErrorKind::Authentication));
                 }
                 let xoauth2 = base64::decode(&server_conf.server_password)
-                    .map_err(|_| Error::new("Bad XOAUTH2 in config"))?;
+                    .chain_err_summary(|| {
+                        "Could not decode `server_password` from base64. Is the value correct?"
+                    })
+                    .chain_err_kind(ErrorKind::Configuration)?;
                 // TODO(#222): Improve this as soon as imap-codec supports XOAUTH2.
                 ret.send_command(CommandBody::authenticate(
                     AuthMechanism::Other(
@@ -404,8 +406,10 @@ impl ImapStream {
                 .await?;
             }
             _ => {
-                let username = AString::try_from(server_conf.server_username.as_str())?;
-                let password = AString::try_from(server_conf.server_password.as_str())?;
+                let username = AString::try_from(server_conf.server_username.as_str())
+                    .chain_err_kind(ErrorKind::Bug)?;
+                let password = AString::try_from(server_conf.server_password.as_str())
+                    .chain_err_kind(ErrorKind::Bug)?;
 
                 ret.send_command(CommandBody::Login {
                     username,
@@ -435,7 +439,7 @@ impl ImapStream {
                             "Could not connect. Server replied with '{}'",
                             String::from_utf8_lossy(l[tag_start.len()..].trim())
                         ))
-                        .set_err_kind(crate::error::ErrorKind::Authentication));
+                        .set_err_kind(ErrorKind::Authentication));
                     }
                     should_break = true;
                 }
@@ -448,7 +452,6 @@ impl ImapStream {
         if capabilities.is_none() {
             /* sending CAPABILITY after LOGIN automatically is an RFC recommendation, so
              * check for lazy servers */
-            drop(capabilities);
             ret.send_command(CommandBody::Capability).await?;
             ret.read_response(&mut res).await.unwrap();
             let capabilities = protocol_parser::capabilities(&res)?.1;
@@ -827,7 +830,7 @@ impl ImapConnection {
                             );
                             (self.uid_store.event_consumer)(
                                 self.uid_store.account_hash,
-                                crate::backends::BackendEvent::Notice {
+                                BackendEvent::Notice {
                                     description: response_code.to_string(),
                                     content: None,
                                     level: LogLevel::ERROR,
@@ -845,7 +848,7 @@ impl ImapConnection {
                             );
                             (self.uid_store.event_consumer)(
                                 self.uid_store.account_hash,
-                                crate::backends::BackendEvent::Notice {
+                                BackendEvent::Notice {
                                     description: response_code.to_string(),
                                     content: None,
                                     level: LogLevel::ERROR,
@@ -974,7 +977,7 @@ impl ImapConnection {
                 "Trying to select a \\NoSelect mailbox: {}",
                 &imap_path
             ))
-            .set_kind(crate::error::ErrorKind::Bug));
+            .set_kind(ErrorKind::Bug));
         }
         self.send_command(CommandBody::select(imap_path.as_str())?)
             .await?;
@@ -1004,7 +1007,7 @@ impl ImapConnection {
                 }) {
                     (self.uid_store.event_consumer)(
                         self.uid_store.account_hash,
-                        crate::backends::BackendEvent::from(err),
+                        BackendEvent::from(err),
                     );
                 }
             }
@@ -1061,7 +1064,7 @@ impl ImapConnection {
                 "Trying to examine a \\NoSelect mailbox: {}",
                 &imap_path
             ))
-            .set_kind(crate::error::ErrorKind::Bug));
+            .set_kind(ErrorKind::Bug));
         }
         self.send_command(CommandBody::examine(imap_path.as_str())?)
             .await?;
@@ -1126,10 +1129,7 @@ impl ImapConnection {
     }
 
     pub fn add_refresh_event(&mut self, ev: RefreshEvent) {
-        (self.uid_store.event_consumer)(
-            self.uid_store.account_hash,
-            crate::backends::BackendEvent::Refresh(ev),
-        );
+        (self.uid_store.event_consumer)(self.uid_store.account_hash, BackendEvent::Refresh(ev));
     }
 
     async fn create_uid_msn_cache(

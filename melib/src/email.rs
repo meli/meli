@@ -122,11 +122,10 @@ use imap_codec::{
 use smallvec::SmallVec;
 
 use crate::{
-    datetime::UnixTimestamp,
     error::{Error, Result},
     parser::BytesExt,
     thread::ThreadNodeHash,
-    TagHash,
+    TagHash, UnixTimestamp,
 };
 
 #[cfg(feature = "imap_backend")]

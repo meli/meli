@@ -77,6 +77,15 @@ macro_rules! try_recv_timeout {
     }};
 }
 
+macro_rules! is_variant {
+    ($n:ident, $($var:tt)+) => {
+        #[inline]
+        pub fn $n(&self) -> bool {
+            matches!(self, Self::$($var)*)
+        }
+    };
+}
+
 #[derive(Debug, Clone, Default)]
 pub enum MailboxStatus {
     Available,
@@ -88,13 +97,8 @@ pub enum MailboxStatus {
 }
 
 impl MailboxStatus {
-    pub fn is_available(&self) -> bool {
-        matches!(self, MailboxStatus::Available)
-    }
-
-    pub fn is_parsing(&self) -> bool {
-        matches!(self, MailboxStatus::Parsing(_, _))
-    }
+    is_variant! { is_available, Available }
+    is_variant! { is_parsing, Parsing(_, _) }
 }
 
 #[derive(Debug, Clone)]

@@ -42,8 +42,7 @@ use crate::{
         mailto::Mailto,
     },
     error::{Error, Result, ResultIntoError},
-    html_escape::HtmlEntity,
-    percent_encoding::percent_decode,
+    utils::{html_escape::HtmlEntity, percent_encoding::percent_decode},
 };
 
 macro_rules! to_str {
@@ -330,7 +329,7 @@ pub fn mail(input: &[u8]) -> Result<(Vec<(&[u8], &[u8])>, &[u8])> {
 pub mod dates {
     /*! Date values in headers */
     use super::{generic::*, *};
-    use crate::datetime::UnixTimestamp;
+    use crate::utils::datetime::UnixTimestamp;
 
     fn take_n_digits(n: usize) -> impl Fn(&[u8]) -> IResult<&[u8], &[u8]> {
         move |input: &[u8]| {
@@ -451,7 +450,7 @@ pub mod dates {
         accum.extend_from_slice(b" ");
         accum.extend_from_slice(sign);
         accum.extend_from_slice(zone);
-        match crate::datetime::rfc822_to_timestamp(accum.to_vec()) {
+        match crate::utils::datetime::rfc822_to_timestamp(accum.to_vec()) {
             Ok(t) => Ok((input, t)),
             Err(_err) => Err(nom::Err::Error(
                 (
@@ -513,7 +512,7 @@ pub mod dates {
             accum.extend_from_slice(sign);
             accum.extend_from_slice(zone);
         }
-        match crate::datetime::rfc822_to_timestamp(accum.to_vec()) {
+        match crate::utils::datetime::rfc822_to_timestamp(accum.to_vec()) {
             Ok(t) => Ok((input, t)),
             Err(_err) => Err(nom::Err::Error(
                 (
@@ -582,7 +581,7 @@ pub mod dates {
         Ok((input, ret))
     }
 
-    pub fn rfc5322_date(input: &[u8]) -> Result<crate::datetime::UnixTimestamp> {
+    pub fn rfc5322_date(input: &[u8]) -> Result<crate::UnixTimestamp> {
         date_time(input)
             .or_else(|_| {
                 //let (_, mut parsed_result) = encodings::phrase(&eat_comments(input), false)?;
@@ -616,7 +615,7 @@ pub mod dates {
             parsed_result[pos] = b'+';
         }
 
-        crate::datetime::rfc822_to_timestamp(parsed_result.trim())
+        crate::utils::datetime::rfc822_to_timestamp(parsed_result.trim())
             */
     }
 
