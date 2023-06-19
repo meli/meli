@@ -1267,6 +1267,11 @@ Flag to show if thread entry contains attachments.
 Should threads with differentiating Subjects show a list of those subjects on the entry title?
 .\" default value
 .Pq Em "true"
+.It Ic threaded_repeat_identical_from_values Ar bool
+In threaded listing style, repeat identical From column values within a thread.
+Not repeating adds empty space in the From column which might result in less visual clutter.
+.\" default value
+.Pq Em "false"
 .El
 .Ss Examples of sidebar mailbox tree customization
 The default values

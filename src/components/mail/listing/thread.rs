@@ -271,6 +271,12 @@ impl MailListingTrait for ThreadListing {
         /* This is just a desugared for loop so that we can use .peek() */
         let mut idx: usize = 0;
         let mut prev_group = ThreadHash::null();
+        let mut hide_from: bool = false;
+        let threaded_repeat_identical_from_values: bool = *mailbox_settings!(
+            context[self.cursor_pos.0][&self.cursor_pos.1]
+                .listing
+                .threaded_repeat_identical_from_values
+        );
         while let Some((indentation, thread_node_hash, has_sibling)) = iter.next() {
             let thread_node = &thread_nodes[&thread_node_hash];
 
@@ -301,6 +307,11 @@ impl MailListingTrait for ThreadListing {
                     has_sibling,
                     is_root,
                 ));
+                if hide_from {
+                    entry_strings.from.clear();
+                }
+                hide_from = !threaded_repeat_identical_from_values
+                    && matches!(iter.peek(), Some((_, tnh, _)) if thread_nodes[tnh].message().map(|next| account.collection.get_env(next).from() == envelope.from() && threads.find_group(thread_nodes[tnh].group) == prev_group).unwrap_or(false));
                 row_widths.1.push(
                     entry_strings
                         .date

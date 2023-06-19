@@ -63,8 +63,8 @@ pub struct ListingSettings {
     #[serde(default = "zero_val", alias = "context-lines")]
     pub context_lines: usize,
 
-    ///Show auto-hiding scrollbar in accounts sidebar menu.
-    ///Default: True
+    /// Show auto-hiding scrollbar in accounts sidebar menu.
+    /// Default: True
     #[serde(default = "true_val")]
     pub show_menu_scrollbar: bool,
 
@@ -86,27 +86,27 @@ pub struct ListingSettings {
     #[serde(default, alias = "index-style")]
     pub index_style: IndexStyle,
 
-    ///Default: " "
+    /// Default: " "
     #[serde(default = "none")]
     pub sidebar_mailbox_tree_has_sibling: Option<String>,
 
-    ///Default: " "
+    /// Default: " "
     #[serde(default)]
     pub sidebar_mailbox_tree_no_sibling: Option<String>,
 
-    ///Default: " "
+    /// Default: " "
     #[serde(default)]
     pub sidebar_mailbox_tree_has_sibling_leaf: Option<String>,
 
-    ///Default: " "
+    /// Default: " "
     #[serde(default)]
     pub sidebar_mailbox_tree_no_sibling_leaf: Option<String>,
 
-    ///Default: ' '
+    /// Default: ' '
     #[serde(default = "default_divider")]
     pub sidebar_divider: char,
 
-    ///Default: 90
+    /// Default: 90
     #[serde(default = "default_ratio")]
     pub sidebar_ratio: usize,
 
@@ -130,11 +130,18 @@ pub struct ListingSettings {
     #[serde(default)]
     pub attachment_flag: Option<String>,
 
-    /// Should threads with differentiating Subjects show a list of those
+    /// Should threads with different Subjects show a list of those
     /// subjects on the entry title?
     /// Default: "true"
     #[serde(default = "true_val")]
     pub thread_subject_pack: bool,
+
+    /// In threaded listing style, repeat identical From column values within a
+    /// thread. Not repeating adds empty space in the From column which
+    /// might result in less visual clutter.
+    /// Default: "false"
+    #[serde(default = "false_val")]
+    pub threaded_repeat_identical_from_values: bool,
 }
 
 const fn default_divider() -> char {
@@ -165,6 +172,7 @@ impl Default for ListingSettings {
             selected_flag: None,
             attachment_flag: None,
             thread_subject_pack: true,
+            threaded_repeat_identical_from_values: false,
         }
     }
 }
@@ -200,6 +208,9 @@ impl DotAddressable for ListingSettings {
                     "selected_flag" => self.selected_flag.lookup(field, tail),
                     "attachment_flag" => self.attachment_flag.lookup(field, tail),
                     "thread_subject_pack" => self.thread_subject_pack.lookup(field, tail),
+                    "threaded_repeat_identical_from_values" => self
+                        .threaded_repeat_identical_from_values
+                        .lookup(field, tail),
                     other => Err(Error::new(format!(
                         "{} has no field named {}",
                         parent_field, other

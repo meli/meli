@@ -53,8 +53,8 @@ pub struct ComposingSettings {
     /// Default: true
     #[serde(default = "true_val", alias = "format-flowed")]
     pub format_flowed: bool,
-    ///Set User-Agent
-    ///Default: empty
+    /// Set User-Agent
+    /// Default: empty
     #[serde(default = "true_val", alias = "insert_user_agent")]
     pub insert_user_agent: bool,
     /// Set default header values for new drafts
