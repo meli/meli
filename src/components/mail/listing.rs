@@ -780,6 +780,8 @@ pub trait MailListingTrait: ListingTrait {
 pub trait ListingTrait: Component {
     fn coordinates(&self) -> (AccountHash, MailboxHash);
     fn set_coordinates(&mut self, _: (AccountHash, MailboxHash));
+    fn next_entry(&mut self, context: &mut Context);
+    fn prev_entry(&mut self, context: &mut Context);
     fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context);
     fn highlight_line(&mut self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context);
     fn filter(
@@ -1678,6 +1680,20 @@ impl Component for Listing {
                     {
                         self.component
                             .set_modifier_command(Some(Modifier::Intersection));
+                    }
+                    UIEvent::Input(ref key)
+                        if self.component.unfocused()
+                            && shortcut!(key == shortcuts[Shortcuts::LISTING]["next_entry"]) =>
+                    {
+                        self.component.next_entry(context);
+                    }
+                    UIEvent::Input(ref key)
+                        if self.component.unfocused()
+                            && shortcut!(
+                                key == shortcuts[Shortcuts::LISTING]["previous_entry"]
+                            ) =>
+                    {
+                        self.component.prev_entry(context);
                     }
                     _ => {}
                 }

@@ -71,6 +71,10 @@ impl ListingTrait for OfflineListing {
         self.cursor_pos = coordinates;
     }
 
+    fn next_entry(&mut self, _: &mut Context) {}
+
+    fn prev_entry(&mut self, _: &mut Context) {}
+
     fn highlight_line(
         &mut self,
         _grid: &mut CellBuffer,

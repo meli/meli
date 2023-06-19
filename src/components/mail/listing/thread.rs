@@ -435,6 +435,33 @@ impl ListingTrait for ThreadListing {
         (self.new_cursor_pos.0, self.new_cursor_pos.1)
     }
 
+    fn next_entry(&mut self, context: &mut Context) {
+        if self.get_env_under_cursor(self.cursor_pos.2 + 1).is_some() {
+            // TODO: makes this less ugly.
+            self.movement = Some(PageMovement::Down(1));
+            self.force_draw = true;
+            self.dirty = true;
+            self.cursor_pos.2 += 1;
+            self.set_focus(Focus::Entry, context);
+            self.cursor_pos.2 -= 1;
+        }
+    }
+
+    fn prev_entry(&mut self, context: &mut Context) {
+        if self.cursor_pos.2 == 0 {
+            return;
+        }
+        if self.get_env_under_cursor(self.cursor_pos.2 - 1).is_some() {
+            // TODO: makes this less ugly.
+            self.movement = Some(PageMovement::Up(1));
+            self.force_draw = true;
+            self.dirty = true;
+            self.cursor_pos.2 -= 1;
+            self.set_focus(Focus::Entry, context);
+            self.cursor_pos.2 += 1;
+        }
+    }
+
     fn set_coordinates(&mut self, coordinates: (AccountHash, MailboxHash)) {
         self.new_cursor_pos = (coordinates.0, coordinates.1, 0);
         self.focus = Focus::None;
@@ -674,6 +701,8 @@ impl ListingTrait for ThreadListing {
                         },
                         context,
                     );
+                } else {
+                    return;
                 }
             }
             Focus::EntryFullscreen => {

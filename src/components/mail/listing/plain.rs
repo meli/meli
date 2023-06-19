@@ -321,6 +321,37 @@ impl ListingTrait for PlainListing {
         self.rows.row_updates.clear();
     }
 
+    fn next_entry(&mut self, context: &mut Context) {
+        if self.get_env_under_cursor(self.cursor_pos.2 + 1).is_some() {
+            // TODO: makes this less ugly.
+            self.movement = Some(PageMovement::Down(1));
+            self.force_draw = true;
+            self.dirty = true;
+            self.cursor_pos.2 += 1;
+            self.new_cursor_pos.2 += 1;
+            self.set_focus(Focus::Entry, context);
+            self.cursor_pos.2 -= 1;
+            self.new_cursor_pos.2 -= 1;
+        }
+    }
+
+    fn prev_entry(&mut self, context: &mut Context) {
+        if self.cursor_pos.2 == 0 {
+            return;
+        }
+        if self.get_env_under_cursor(self.cursor_pos.2 - 1).is_some() {
+            // TODO: makes this less ugly.
+            self.movement = Some(PageMovement::Up(1));
+            self.force_draw = true;
+            self.dirty = true;
+            self.cursor_pos.2 -= 1;
+            self.new_cursor_pos.2 -= 1;
+            self.set_focus(Focus::Entry, context);
+            self.cursor_pos.2 += 1;
+            self.new_cursor_pos.2 += 1;
+        }
+    }
+
     fn highlight_line(&mut self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context) {
         let i = if let Some(i) = self.get_env_under_cursor(idx) {
             i
@@ -606,6 +637,8 @@ impl ListingTrait for PlainListing {
                         },
                         context,
                     );
+                } else {
+                    return;
                 }
             }
             Focus::EntryFullscreen => {

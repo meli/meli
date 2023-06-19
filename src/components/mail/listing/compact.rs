@@ -584,6 +584,43 @@ impl ListingTrait for CompactListing {
         self.rows.row_updates.clear();
     }
 
+    fn next_entry(&mut self, context: &mut Context) {
+        if self
+            .get_thread_under_cursor(self.cursor_pos.2 + 1)
+            .is_some()
+        {
+            // TODO: makes this less ugly.
+            self.movement = Some(PageMovement::Down(1));
+            self.force_draw = true;
+            self.dirty = true;
+            self.cursor_pos.2 += 1;
+            self.new_cursor_pos.2 += 1;
+            self.set_focus(Focus::Entry, context);
+            self.cursor_pos.2 -= 1;
+            self.new_cursor_pos.2 -= 1;
+        }
+    }
+
+    fn prev_entry(&mut self, context: &mut Context) {
+        if self.cursor_pos.2 == 0 {
+            return;
+        }
+        if self
+            .get_thread_under_cursor(self.cursor_pos.2 - 1)
+            .is_some()
+        {
+            // TODO: makes this less ugly.
+            self.movement = Some(PageMovement::Up(1));
+            self.force_draw = true;
+            self.dirty = true;
+            self.cursor_pos.2 -= 1;
+            self.new_cursor_pos.2 -= 1;
+            self.set_focus(Focus::Entry, context);
+            self.cursor_pos.2 += 1;
+            self.new_cursor_pos.2 += 1;
+        }
+    }
+
     fn highlight_line(&mut self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context) {
         let thread_hash = if let Some(h) = self.get_thread_under_cursor(idx) {
             h
@@ -861,8 +898,24 @@ impl ListingTrait for CompactListing {
                 self.force_draw = true;
             }
             Focus::Entry => {
-                self.force_draw = true;
-                self.dirty = true;
+                if let Some((thread_hash, env_hash)) = self
+                    .get_thread_under_cursor(self.cursor_pos.2)
+                    .and_then(|thread| self.rows.thread_to_env.get(&thread).map(|e| (thread, e[0])))
+                {
+                    self.force_draw = true;
+                    self.dirty = true;
+                    self.kick_parent(
+                        self.parent,
+                        ListingMessage::OpenEntryUnderCursor {
+                            thread_hash,
+                            env_hash,
+                            show_thread: true,
+                        },
+                        context,
+                    );
+                } else {
+                    return;
+                }
             }
             Focus::EntryFullscreen => {
                 self.dirty = true;
@@ -1738,23 +1791,8 @@ impl Component for CompactListing {
                         && (shortcut!(k == shortcuts[Shortcuts::LISTING]["open_entry"])
                             || shortcut!(k == shortcuts[Shortcuts::LISTING]["focus_right"])) =>
                 {
-                    if let Some((thread_hash, env_hash)) = self
-                        .get_thread_under_cursor(self.cursor_pos.2)
-                        .and_then(|thread| {
-                            self.rows.thread_to_env.get(&thread).map(|e| (thread, e[0]))
-                        })
-                    {
-                        self.kick_parent(
-                            self.parent,
-                            ListingMessage::OpenEntryUnderCursor {
-                                thread_hash,
-                                env_hash,
-                                show_thread: true,
-                            },
-                            context,
-                        );
-                        self.set_focus(Focus::Entry, context);
-                    }
+                    self.set_focus(Focus::Entry, context);
+
                     return true;
                 }
                 UIEvent::Input(ref k)
