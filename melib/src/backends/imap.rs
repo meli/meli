@@ -793,12 +793,13 @@ impl MailBackend for ImapType {
                 conn.read_response(&mut response, RequiredResponses::empty())
                     .await?;
                 if set_seen {
-                    let f = &uid_store.mailboxes.lock().await[&mailbox_hash];
-                    if let Ok(mut unseen) = f.unseen.lock() {
-                        for env_hash in env_hashes.iter() {
-                            unseen.remove(env_hash);
-                        }
-                    };
+                    for f in uid_store.mailboxes.lock().await.values() {
+                        if let Ok(mut unseen) = f.unseen.lock() {
+                            for env_hash in env_hashes.iter() {
+                                unseen.remove(env_hash);
+                            }
+                        };
+                    }
                 }
             }
             if flags.iter().any(|(_, b)| !*b) {
@@ -858,12 +859,13 @@ impl MailBackend for ImapType {
                 conn.read_response(&mut response, RequiredResponses::empty())
                     .await?;
                 if set_unseen {
-                    let f = &uid_store.mailboxes.lock().await[&mailbox_hash];
-                    if let Ok(mut unseen) = f.unseen.lock() {
-                        for env_hash in env_hashes.iter() {
-                            unseen.insert_new(env_hash);
-                        }
-                    };
+                    for f in uid_store.mailboxes.lock().await.values() {
+                        if let Ok(mut unseen) = f.unseen.lock() {
+                            for env_hash in env_hashes.iter() {
+                                unseen.insert_new(env_hash);
+                            }
+                        };
+                    }
                 }
             }
             Ok(())
