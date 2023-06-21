@@ -1283,6 +1283,7 @@ impl State {
             self.context.unrealized.extend(to_delete.into_iter());
             self.component_tree.remove(&id);
             self.components.remove(&id);
+            self.overlay.remove(&id);
         }
 
         if !self.context.replies.is_empty() {
