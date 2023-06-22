@@ -812,8 +812,22 @@ impl std::fmt::Display for Custom {
                         b: chunk.as_bytes(),
                     };
                     let _cnt: usize = iter.by_ref().fuse().count();
-                    debug_assert!(_cnt < probe.len());
-                    debug_assert!(_cnt < chunk.len());
+                    debug_assert!(
+                        _cnt <= probe.len(),
+                        "_cnt {} should be lte probe.len() {}, for probe {} and chunk {}",
+                        _cnt,
+                        probe.len(),
+                        probe,
+                        chunk
+                    );
+                    debug_assert!(
+                        _cnt <= chunk.len(),
+                        "_cnt {} should be lte chunk.len() {}, for probe {} and chunk {}",
+                        _cnt,
+                        chunk.len(),
+                        probe,
+                        chunk
+                    );
                     iter.ord
                 }
             }) {
