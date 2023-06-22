@@ -686,7 +686,7 @@ impl Component for ContactList {
                     *draft.headers_mut().get_mut("To").unwrap() =
                         format!("{} <{}>", &card.name(), &card.email());
                     let mut composer = Composer::with_account(account_hash, context);
-                    composer.set_draft(draft);
+                    composer.set_draft(draft, context);
                     context
                         .replies
                         .push_back(UIEvent::Action(Tab(New(Some(Box::new(composer))))));

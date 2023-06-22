@@ -535,13 +535,13 @@ To: {}
             draft.attachments.push(preamble);
             draft.attachments.push(env.body_bytes(bytes).into());
         }
-        composer.set_draft(draft);
+        composer.set_draft(draft, context);
         composer
     }
 
-    pub fn set_draft(&mut self, draft: Draft) {
+    pub fn set_draft(&mut self, draft: Draft, context: &Context) {
         self.draft = draft;
-        self.update_form();
+        self.update_form(context);
     }
 
     fn update_draft(&mut self) {
@@ -554,9 +554,22 @@ To: {}
         }
     }
 
-    fn update_form(&mut self) {
+    fn update_form(&mut self, context: &Context) {
         let old_cursor = self.form.cursor();
-        self.form = FormWidget::new(("Save".into(), true));
+        let shortcuts = self.shortcuts(context);
+        self.form = FormWidget::new(
+            ("Save".into(), true),
+            /* cursor_up_shortcut */
+            shortcuts
+                .get(Shortcuts::COMPOSING)
+                .and_then(|c| c.get("scroll_up").cloned())
+                .unwrap_or_else(|| context.settings.shortcuts.composing.scroll_up.clone()),
+            /* cursor_down_shortcut */
+            shortcuts
+                .get(Shortcuts::COMPOSING)
+                .and_then(|c| c.get("scroll_down").cloned())
+                .unwrap_or_else(|| context.settings.shortcuts.composing.scroll_down.clone()),
+        );
         self.form.hide_buttons();
         self.form.set_cursor(old_cursor);
         let headers = self.draft.headers();
@@ -814,8 +827,6 @@ impl Component for Composer {
             return;
         }
 
-        let width = width!(area);
-
         if !self.initialized {
             #[cfg(feature = "gpgme")]
             if self.gpg_state.sign_mail.is_unset() {
@@ -835,12 +846,14 @@ impl Component for Composer {
                 );
             }
             self.pager.update_from_str(self.draft.body(), Some(77));
-            self.update_form();
+            self.update_form(context);
             self.initialized = true;
         }
         let header_height = self.form.len();
         let theme_default = crate::conf::value(context, "theme_default");
 
+        let mid = 0;
+        /*
         let mid = if width > 80 {
             let width = width - 80;
             let mid = width / 2;
@@ -861,6 +874,7 @@ impl Component for Composer {
         } else {
             0
         };
+        */
 
         let header_area = (
             set_x(upper_left, mid + 1),
@@ -971,8 +985,8 @@ impl Component for Composer {
                     let stopped_message: String =
                         format!("Process with PID {} has stopped.", guard.child_pid);
                     let stopped_message_2: String = format!(
-                        "-press '{}' (edit_mail shortcut) to re-activate.",
-                        shortcuts[Shortcuts::COMPOSING]["edit_mail"]
+                        "-press '{}' (edit shortcut) to re-activate.",
+                        shortcuts[Shortcuts::COMPOSING]["edit"]
                     );
                     const STOPPED_MESSAGE_3: &str =
                         "-press Ctrl-C to forcefully kill it and return to editor.";
@@ -1024,13 +1038,14 @@ impl Component for Composer {
             self.embed_area = (upper_left!(header_area), bottom_right!(body_area));
         }
 
-        if !self.mode.is_edit_attachments() {
-            self.pager.set_dirty(true);
-            if self.pager.size().0 > width!(body_area) {
-                self.pager.set_initialised(false);
-            }
-            self.pager.draw(grid, body_area, context);
+        if self.pager.size().0 > width!(body_area) {
+            self.pager.set_initialised(false);
         }
+        // Force clean pager area, because if body height is less than body_area it will
+        // might leave draw artifacts in the remaining area.
+        clear_area(grid, body_area, theme_default);
+        self.set_dirty(true);
+        self.pager.draw(grid, body_area, context);
 
         match self.cursor {
             Cursor::Headers => {
@@ -1123,6 +1138,58 @@ impl Component for Composer {
             self.pager.process_event(event, context);
         }
         let shortcuts = self.shortcuts(context);
+        // Process scrolling first, since in my infinite wisdom I made this so
+        // unnecessarily complex
+        match &event {
+            UIEvent::Input(ref key)
+                if self.mode.is_edit()
+                    && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["scroll_up"]) =>
+            {
+                self.set_dirty(true);
+                self.cursor = match self.cursor {
+                    // match order is evaluation order, so it matters here because of the if guard
+                    // process_event side effects
+                    Cursor::Attachments => Cursor::Encrypt,
+                    Cursor::Encrypt => Cursor::Sign,
+                    Cursor::Sign => Cursor::Body,
+                    Cursor::Body if !self.pager.process_event(event, context) => {
+                        self.form.process_event(event, context);
+                        Cursor::Headers
+                    }
+                    Cursor::Body => Cursor::Body,
+                    Cursor::Headers if self.form.process_event(event, context) => Cursor::Headers,
+                    Cursor::Headers => Cursor::Headers,
+                };
+                return true;
+            }
+            UIEvent::Input(ref key)
+                if self.mode.is_edit()
+                    && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["scroll_down"]) =>
+            {
+                self.set_dirty(true);
+                self.cursor = match self.cursor {
+                    Cursor::Headers if self.form.process_event(event, context) => Cursor::Headers,
+                    Cursor::Headers => Cursor::Body,
+                    Cursor::Body if self.pager.process_event(event, context) => Cursor::Body,
+                    Cursor::Body => Cursor::Sign,
+                    Cursor::Sign => Cursor::Encrypt,
+                    Cursor::Encrypt => Cursor::Attachments,
+                    Cursor::Attachments => Cursor::Attachments,
+                };
+                return true;
+            }
+            _ => {}
+        }
+        if self.cursor == Cursor::Headers
+            && self.mode.is_edit()
+            && self.form.process_event(event, context)
+        {
+            if let UIEvent::InsertInput(_) = event {
+                self.has_changes = true;
+            }
+            self.set_dirty(true);
+            return true;
+        }
         match (&mut self.mode, &mut event) {
             (ViewMode::Edit, _) => {
                 if self.pager.process_event(event, context) {
@@ -1136,10 +1203,13 @@ impl Component for Composer {
                 })
                 .process_event(event, context)
                 {
-                    if widget.buttons.result() == Some(FormButtonActions::Cancel) {
+                    if matches!(
+                        widget.buttons.result(),
+                        Some(FormButtonActions::Cancel | FormButtonActions::Accept)
+                    ) {
                         self.mode = ViewMode::Edit;
-                        self.set_dirty(true);
                     }
+                    self.set_dirty(true);
                     return true;
                 }
             }
@@ -1237,6 +1307,7 @@ impl Component for Composer {
             }
             (ViewMode::Send(ref mut selector), _) => {
                 if selector.process_event(event, context) {
+                    self.set_dirty(true);
                     return true;
                 }
             }
@@ -1247,13 +1318,15 @@ impl Component for Composer {
                 if let Some(to_val) = result.downcast_mut::<String>() {
                     self.draft
                         .set_header(HeaderName::TO, std::mem::take(to_val));
-                    self.update_form();
+                    self.update_form(context);
                 }
                 self.mode = ViewMode::Edit;
+                self.set_dirty(true);
                 return true;
             }
             (ViewMode::SelectRecipients(ref mut selector), _) => {
                 if selector.process_event(event, context) {
+                    self.set_dirty(true);
                     return true;
                 }
             }
@@ -1281,12 +1354,13 @@ impl Component for Composer {
                         _ => {}
                     }
                 }
-                self.set_dirty(true);
                 self.mode = ViewMode::Edit;
+                self.set_dirty(true);
                 return true;
             }
             (ViewMode::Discard(_, ref mut selector), _) => {
                 if selector.process_event(event, context) {
+                    self.set_dirty(true);
                     return true;
                 }
             }
@@ -1300,6 +1374,7 @@ impl Component for Composer {
                             context
                                 .replies
                                 .push_back(UIEvent::Action(Tab(Kill(self.id))));
+                            self.set_dirty(true);
                             return true;
                         }
                         'n' => {
@@ -1347,6 +1422,7 @@ impl Component for Composer {
             }
             (ViewMode::WaitingForSendResult(ref mut selector, _), _) => {
                 if selector.process_event(event, context) {
+                    self.set_dirty(true);
                     return true;
                 }
             }
@@ -1373,19 +1449,11 @@ impl Component for Composer {
             #[cfg(feature = "gpgme")]
             (ViewMode::SelectEncryptKey(_, ref mut selector), _) => {
                 if selector.process_event(event, context) {
+                    self.set_dirty(true);
                     return true;
                 }
             }
             _ => {}
-        }
-        if self.cursor == Cursor::Headers
-            && self.mode.is_edit()
-            && self.form.process_event(event, context)
-        {
-            if let UIEvent::InsertInput(_) = event {
-                self.has_changes = true;
-            }
-            return true;
         }
 
         match *event {
@@ -1399,6 +1467,7 @@ impl Component for Composer {
                 if self.mode.is_edit()
                     && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["scroll_up"]) =>
             {
+                self.set_dirty(true);
                 self.cursor = match self.cursor {
                     Cursor::Headers => return true,
                     Cursor::Body => {
@@ -1409,12 +1478,12 @@ impl Component for Composer {
                     Cursor::Encrypt => Cursor::Sign,
                     Cursor::Attachments => Cursor::Encrypt,
                 };
-                self.dirty = true;
             }
             UIEvent::Input(ref key)
                 if self.mode.is_edit()
                     && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["scroll_down"]) =>
             {
+                self.set_dirty(true);
                 self.cursor = match self.cursor {
                     Cursor::Headers => Cursor::Body,
                     Cursor::Body => Cursor::Sign,
@@ -1422,7 +1491,6 @@ impl Component for Composer {
                     Cursor::Encrypt => Cursor::Attachments,
                     Cursor::Attachments => return true,
                 };
-                self.dirty = true;
             }
             UIEvent::Input(Key::Char('\n'))
                 if self.mode.is_edit()
@@ -1440,7 +1508,7 @@ impl Component for Composer {
                     }
                     _ => {}
                 };
-                self.dirty = true;
+                self.set_dirty(true);
             }
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Shortcuts::COMPOSING]["send_mail"])
@@ -1565,6 +1633,8 @@ impl Component for Composer {
                                 context
                                     .replies
                                     .push_back(UIEvent::EmbedInput((k.clone(), b.to_vec())));
+                                drop(embed_guard);
+                                self.set_dirty(true);
                                 return true;
                             }
                             Ok(WaitStatus::Signaled(_, signal, _)) => {
@@ -1608,7 +1678,7 @@ impl Component for Composer {
             UIEvent::Input(ref key)
                 if self.mode.is_edit()
                     && self.cursor == Cursor::Sign
-                    && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["edit_mail"]) =>
+                    && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["edit"]) =>
             {
                 #[cfg(feature = "gpgme")]
                 match melib::email::parser::address::rfc2822address_list(
@@ -1648,7 +1718,7 @@ impl Component for Composer {
             UIEvent::Input(ref key)
                 if self.mode.is_edit()
                     && self.cursor == Cursor::Encrypt
-                    && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["edit_mail"]) =>
+                    && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["edit"]) =>
             {
                 #[cfg(feature = "gpgme")]
                 match melib::email::parser::address::rfc2822address_list(
@@ -1688,10 +1758,10 @@ impl Component for Composer {
             UIEvent::Input(ref key)
                 if self.mode.is_edit()
                     && self.cursor == Cursor::Attachments
-                    && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["edit_mail"]) =>
+                    && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["edit"]) =>
             {
                 self.mode = ViewMode::EditAttachments {
-                    widget: EditAttachments::new(),
+                    widget: EditAttachments::new(Some(self.account_hash)),
                 };
                 self.set_dirty(true);
 
@@ -1699,7 +1769,7 @@ impl Component for Composer {
             }
             UIEvent::Input(ref key)
                 if self.embed.is_some()
-                    && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["edit_mail"]) =>
+                    && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["edit"]) =>
             {
                 self.embed.as_ref().unwrap().lock().unwrap().wake_up();
                 match self.embed.take() {
@@ -1743,7 +1813,7 @@ impl Component for Composer {
             }
             UIEvent::Input(ref key)
                 if self.mode.is_edit()
-                    && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["edit_mail"]) =>
+                    && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["edit"]) =>
             {
                 /* Edit draft in $EDITOR */
                 let editor = if let Some(editor_command) =
@@ -1760,6 +1830,7 @@ impl Component for Composer {
                                     .to_string(),
                                 Some(NotificationType::Error(melib::error::ErrorKind::None)),
                             ));
+                            self.set_dirty(true);
                             return true;
                         }
                         Ok(v) => v,
@@ -1805,6 +1876,7 @@ impl Component for Composer {
                             ));
                         }
                     }
+                    self.set_dirty(true);
                     return true;
                 }
                 /* Kill input thread so that spawned command can be sole receiver of stdin */
@@ -1834,6 +1906,7 @@ impl Component for Composer {
                         ));
                         context.replies.push_back(UIEvent::Fork(ForkType::Finished));
                         context.restore_input();
+                        self.set_dirty(true);
                         return true;
                     }
                 }
@@ -1913,6 +1986,7 @@ impl Component for Composer {
                                 format!("could not execute pipe command {}: {}", command, &err),
                                 Some(NotificationType::Error(melib::error::ErrorKind::External)),
                             ));
+                            self.set_dirty(true);
                             return true;
                         }
                     }
@@ -1945,9 +2019,12 @@ impl Component for Composer {
                     } else {
                         context.replies.push_back(UIEvent::Notification(
                             None,
-                            "You haven't defined any command to launch.".into(),
+                            "You haven't defined any command to launch in \
+                             [terminal.file_picker_command]."
+                                .into(),
                             Some(NotificationType::Error(melib::error::ErrorKind::None)),
                         ));
+                        self.set_dirty(true);
                         return true;
                     };
                     /* Kill input thread so that spawned command can be sole receiver of stdin */
@@ -1997,6 +2074,7 @@ impl Component for Composer {
                                 Some(NotificationType::Error(melib::error::ErrorKind::External)),
                             ));
                             context.restore_input();
+                            self.set_dirty(true);
                             return true;
                         }
                     }
@@ -2031,6 +2109,7 @@ impl Component for Composer {
                         Flag::SEEN | Flag::DRAFT,
                         self.account_hash,
                     );
+                    self.set_dirty(true);
                     return true;
                 }
                 #[cfg(feature = "gpgme")]
@@ -2057,7 +2136,13 @@ impl Component for Composer {
     fn is_dirty(&self) -> bool {
         match self.mode {
             ViewMode::Embed => true,
-            ViewMode::EditAttachments { ref widget } => widget.dirty || widget.buttons.is_dirty(),
+            ViewMode::EditAttachments { ref widget } => {
+                widget.dirty
+                    || widget.buttons.is_dirty()
+                    || self.dirty
+                    || self.pager.is_dirty()
+                    || self.form.is_dirty()
+            }
             ViewMode::Edit => self.dirty || self.pager.is_dirty() || self.form.is_dirty(),
             ViewMode::Discard(_, ref widget) => {
                 widget.is_dirty() || self.pager.is_dirty() || self.form.is_dirty()

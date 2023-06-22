@@ -154,7 +154,10 @@ pub enum UIEvent {
         content: UIMessage,
     },
     Callback(CallbackFn),
-    GlobalUIDialog(Box<dyn Component>),
+    GlobalUIDialog {
+        value: Box<dyn Component>,
+        parent: Option<ComponentId>,
+    },
     Timer(TimerId),
     ConfigReload {
         old_settings: Box<crate::conf::Settings>,

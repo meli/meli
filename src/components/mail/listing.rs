@@ -2030,7 +2030,7 @@ impl Component for Listing {
             UIEvent::Action(Action::Compose(ComposeAction::Mailto(ref mailto))) => {
                 let account_hash = context.accounts[self.cursor_pos.0].hash();
                 let mut composer = Composer::with_account(account_hash, context);
-                composer.set_draft(mailto.into());
+                composer.set_draft(mailto.into(), context);
                 context
                     .replies
                     .push_back(UIEvent::Action(Tab(New(Some(Box::new(composer))))));

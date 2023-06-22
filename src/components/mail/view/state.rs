@@ -24,7 +24,7 @@ use melib::{Envelope, Error, Mail, Result};
 use super::{EnvelopeView, MailView, ViewSettings};
 use crate::{jobs::JoinHandle, mailbox_settings, Component, Context, ShortcutMaps, UIEvent};
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum PendingReplyAction {
     Reply,
     ReplyToAuthor,

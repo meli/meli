@@ -77,7 +77,7 @@ impl ContactManager {
         }
     }
 
-    fn initialize(&mut self) {
+    fn initialize(&mut self, context: &Context) {
         let (width, _) = self.content.size();
 
         let (x, _) = write_string_to_grid(
@@ -113,7 +113,12 @@ impl ContactManager {
             );
         }
 
-        self.form = FormWidget::new(("Save".into(), true));
+        self.form = FormWidget::new(
+            ("Save".into(), true),
+            /* cursor_up_shortcut */ context.settings.shortcuts.general.scroll_up.clone(),
+            /* cursor_down_shortcut */
+            context.settings.shortcuts.general.scroll_down.clone(),
+        );
         self.form.add_button(("Cancel(Esc)".into(), false));
         self.form
             .push(("NAME".into(), self.card.name().to_string()));
@@ -142,7 +147,7 @@ impl ContactManager {
 impl Component for ContactManager {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if !self.initialized {
-            self.initialize();
+            self.initialize(context);
             self.initialized = true;
         }
 

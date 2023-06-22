@@ -1217,12 +1217,17 @@ impl State {
                 (callback_fn.0)(&mut self.context);
                 return;
             }
-            UIEvent::GlobalUIDialog(dialog) => {
-                self.overlay.insert(dialog.id(), dialog);
+            UIEvent::GlobalUIDialog { value, parent } => {
+                self.context.realized.insert(value.id(), parent);
+                self.overlay.insert(value.id(), value);
+                self.process_realizations();
                 return;
             }
             _ => {}
         }
+
+        self.process_realizations();
+
         let Self {
             ref mut components,
             ref mut context,
@@ -1237,6 +1242,15 @@ impl State {
             }
         }
 
+        if !self.context.replies.is_empty() {
+            let replies: smallvec::SmallVec<[UIEvent; 8]> =
+                self.context.replies.drain(0..).collect();
+            // Pass replies to self and call count on the map iterator to force evaluation
+            replies.into_iter().map(|r| self.rcv_event(r)).count();
+        }
+    }
+
+    fn process_realizations(&mut self) {
         while let Some((id, parent)) = self.context.realized.pop() {
             match parent {
                 None => {
@@ -1271,6 +1285,7 @@ impl State {
                 }
             }
         }
+
         while let Some(id) = self.context.unrealized.pop() {
             let mut to_delete = BTreeSet::new();
             for (desc, _) in self.component_tree.iter().filter(|(_, path)| {
@@ -1284,13 +1299,6 @@ impl State {
             self.component_tree.remove(&id);
             self.components.remove(&id);
             self.overlay.remove(&id);
-        }
-
-        if !self.context.replies.is_empty() {
-            let replies: smallvec::SmallVec<[UIEvent; 8]> =
-                self.context.replies.drain(0..).collect();
-            // Pass replies to self and call count on the map iterator to force evaluation
-            replies.into_iter().map(|r| self.rcv_event(r)).count();
         }
     }
 

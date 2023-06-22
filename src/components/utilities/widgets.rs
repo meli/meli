@@ -203,7 +203,7 @@ pub enum FormButtonActions {
     Other(&'static str),
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct FormWidget<T>
 where
     T: 'static + std::fmt::Debug + Copy + Default + Send + Sync,
@@ -217,21 +217,47 @@ where
     focus: FormFocus,
     hide_buttons: bool,
     dirty: bool,
+    cursor_up_shortcut: Key,
+    cursor_down_shortcut: Key,
     id: ComponentId,
+}
+
+impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> Default for FormWidget<T> {
+    fn default() -> Self {
+        Self {
+            fields: Default::default(),
+            layout: Default::default(),
+            buttons: Default::default(),
+            focus: FormFocus::Fields,
+            hide_buttons: false,
+            field_name_max_length: 10,
+            cursor: 0,
+            dirty: true,
+            cursor_up_shortcut: Key::Up,
+            cursor_down_shortcut: Key::Down,
+            id: ComponentId::default(),
+        }
+    }
 }
 
 impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> fmt::Display for FormWidget<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Display::fmt("", f)
+        write!(f, "form")
     }
 }
 
 impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> FormWidget<T> {
-    pub fn new(action: (Cow<'static, str>, T)) -> FormWidget<T> {
+    pub fn new(
+        action: (Cow<'static, str>, T),
+        cursor_up_shortcut: Key,
+        cursor_down_shortcut: Key,
+    ) -> FormWidget<T> {
         FormWidget {
             buttons: ButtonWidget::new(action),
             focus: FormFocus::Fields,
             hide_buttons: false,
+            cursor_up_shortcut,
+            cursor_down_shortcut,
             id: ComponentId::default(),
             dirty: true,
             ..Default::default()
@@ -269,6 +295,7 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> FormWidget<T> 
         self.fields
             .insert(value.0, Field::Choice(value.1, 0, ComponentId::default()));
     }
+
     pub fn push_cl(&mut self, value: (Cow<'static, str>, String, AutoCompleteFn)) {
         self.field_name_max_length = std::cmp::max(self.field_name_max_length, value.0.len());
         self.layout.push(value.0.clone());
@@ -280,6 +307,7 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> FormWidget<T> 
             )),
         );
     }
+
     pub fn push(&mut self, value: (Cow<'static, str>, String)) {
         self.field_name_max_length = std::cmp::max(self.field_name_max_length, value.0.len());
         self.layout.push(value.0.clone());
@@ -309,6 +337,7 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> FormWidget<T> 
             None
         }
     }
+
     pub fn buttons_result(&self) -> Option<T> {
         self.buttons.result
     }
@@ -423,13 +452,19 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> Component for 
             context.dirty_areas.push_back(area);
         }
     }
+
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
-        if self.focus == FormFocus::Buttons && self.buttons.process_event(event, context) {
+        if !self.hide_buttons
+            && self.focus == FormFocus::Buttons
+            && self.buttons.process_event(event, context)
+        {
             return true;
         }
 
         match *event {
-            UIEvent::Input(Key::Up) if self.focus == FormFocus::Buttons => {
+            UIEvent::Input(ref k)
+                if *k == self.cursor_up_shortcut && self.focus == FormFocus::Buttons =>
+            {
                 self.focus = FormFocus::Fields;
                 self.buttons.set_focus(false);
                 self.set_dirty(true);
@@ -441,7 +476,7 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> Component for 
                 self.set_dirty(true);
                 return true;
             }
-            UIEvent::Input(Key::Up) => {
+            UIEvent::Input(ref k) if *k == self.cursor_up_shortcut => {
                 self.cursor = self.cursor.saturating_sub(1);
                 self.set_dirty(true);
                 return true;
@@ -452,12 +487,17 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> Component for 
                 self.set_dirty(true);
                 return true;
             }
-            UIEvent::Input(Key::Down) if self.cursor < self.layout.len().saturating_sub(1) => {
+            UIEvent::Input(ref k)
+                if *k == self.cursor_down_shortcut
+                    && self.cursor < self.layout.len().saturating_sub(1) =>
+            {
                 self.cursor += 1;
                 self.set_dirty(true);
                 return true;
             }
-            UIEvent::Input(Key::Down) if self.focus == FormFocus::Fields => {
+            UIEvent::Input(ref k)
+                if *k == self.cursor_down_shortcut && self.focus == FormFocus::Fields =>
+            {
                 self.focus = FormFocus::Buttons;
                 self.buttons.set_focus(true);
                 self.set_dirty(true);
@@ -517,9 +557,11 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> Component for 
         }
         false
     }
+
     fn is_dirty(&self) -> bool {
         self.dirty || self.buttons.is_dirty()
     }
+
     fn set_dirty(&mut self, value: bool) {
         self.dirty = value;
         self.buttons.set_dirty(value);
@@ -630,6 +672,7 @@ where
             self.dirty = false;
         }
     }
+
     fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {
         match *event {
             UIEvent::Input(Key::Char('\n')) => {
@@ -655,9 +698,11 @@ where
         }
         false
     }
+
     fn is_dirty(&self) -> bool {
         self.dirty
     }
+
     fn set_dirty(&mut self, value: bool) {
         self.dirty = value;
     }

@@ -39,6 +39,8 @@ pub enum EditAttachmentMode {
 
 #[derive(Debug)]
 pub struct EditAttachments {
+    /// For shortcut setting retrieval.
+    pub account_hash: Option<AccountHash>,
     pub mode: EditAttachmentMode,
     pub buttons: ButtonWidget<FormButtonActions>,
     pub cursor: EditAttachmentCursor,
@@ -47,12 +49,13 @@ pub struct EditAttachments {
 }
 
 impl EditAttachments {
-    pub fn new() -> Self {
-        let mut buttons = ButtonWidget::new(("Add".into(), FormButtonActions::Other("add")));
-        buttons.push(("Go Back".into(), FormButtonActions::Cancel));
+    pub fn new(account_hash: Option<AccountHash>) -> Self {
+        //ButtonWidget::new(("Add".into(), FormButtonActions::Other("add")));
+        let mut buttons = ButtonWidget::new(("Go Back".into(), FormButtonActions::Cancel));
         buttons.set_focus(true);
         buttons.set_cursor(1);
         EditAttachments {
+            account_hash,
             mode: EditAttachmentMode::Overview,
             buttons,
             cursor: EditAttachmentCursor::Buttons,
@@ -63,13 +66,31 @@ impl EditAttachments {
 }
 
 impl EditAttachmentsRefMut<'_, '_> {
-    fn new_edit_widget(&self, no: usize) -> Option<Box<FormWidget<FormButtonActions>>> {
+    fn new_edit_widget(
+        &self,
+        no: usize,
+        context: &Context,
+    ) -> Option<Box<FormWidget<FormButtonActions>>> {
         if no >= self.draft.attachments().len() {
             return None;
         }
         let filename = self.draft.attachments()[no].content_type().name();
         let mime_type = self.draft.attachments()[no].content_type();
-        let mut ret = FormWidget::new(("Save".into(), FormButtonActions::Accept));
+        let shortcuts = self.shortcuts(context);
+
+        let mut ret = FormWidget::new(
+            ("Save".into(), FormButtonActions::Accept),
+            /* cursor_up_shortcut */
+            shortcuts
+                .get(Shortcuts::COMPOSING)
+                .and_then(|c| c.get("scroll_up").cloned())
+                .unwrap_or_else(|| context.settings.shortcuts.composing.scroll_up.clone()),
+            /* cursor_down_shortcut */
+            shortcuts
+                .get(Shortcuts::COMPOSING)
+                .and_then(|c| c.get("scroll_down").cloned())
+                .unwrap_or_else(|| context.settings.shortcuts.composing.scroll_down.clone()),
+        );
 
         ret.add_button(("Reset".into(), FormButtonActions::Reset));
         ret.add_button(("Cancel".into(), FormButtonActions::Cancel));
@@ -188,7 +209,7 @@ impl Component for EditAttachmentsRefMut<'_, '_> {
                     }
                     Some(FormButtonActions::Reset) => {
                         let no = *no;
-                        if let Some(inner) = self.new_edit_widget(no) {
+                        if let Some(inner) = self.new_edit_widget(no, context) {
                             self.inner.mode = EditAttachmentMode::Edit { inner, no };
                         }
                     }
@@ -197,8 +218,12 @@ impl Component for EditAttachmentsRefMut<'_, '_> {
                 return true;
             }
         } else {
+            let shortcuts = self.shortcuts(context);
+
             match event {
-                UIEvent::Input(Key::Up) => {
+                UIEvent::Input(ref key)
+                    if shortcut!(key == shortcuts[Shortcuts::COMPOSING]["scroll_up"]) =>
+                {
                     self.set_dirty(true);
                     match self.inner.cursor {
                         EditAttachmentCursor::AttachmentNo(ref mut n) => {
@@ -224,7 +249,9 @@ impl Component for EditAttachmentsRefMut<'_, '_> {
                     }
                     return true;
                 }
-                UIEvent::Input(Key::Down) => {
+                UIEvent::Input(ref key)
+                    if shortcut!(key == shortcuts[Shortcuts::COMPOSING]["scroll_down"]) =>
+                {
                     self.set_dirty(true);
                     match self.inner.cursor {
                         EditAttachmentCursor::AttachmentNo(ref mut n) => {
@@ -246,7 +273,7 @@ impl Component for EditAttachmentsRefMut<'_, '_> {
                 UIEvent::Input(Key::Char('\n')) => {
                     match self.inner.cursor {
                         EditAttachmentCursor::AttachmentNo(ref no) => {
-                            if let Some(inner) = self.new_edit_widget(*no) {
+                            if let Some(inner) = self.new_edit_widget(*no, context) {
                                 self.inner.mode = EditAttachmentMode::Edit { inner, no: *no };
                             }
                             self.set_dirty(true);
@@ -293,8 +320,17 @@ impl Component for EditAttachmentsRefMut<'_, '_> {
 
     fn kill(&mut self, _uuid: ComponentId, _context: &mut Context) {}
 
-    fn shortcuts(&self, _context: &Context) -> ShortcutMaps {
-        ShortcutMaps::default()
+    fn shortcuts(&self, context: &Context) -> ShortcutMaps {
+        let mut map = ShortcutMaps::default();
+
+        let our_map: ShortcutMap = self
+            .inner
+            .account_hash
+            .map(|acc| account_settings!(context[acc].shortcuts.composing).key_values())
+            .unwrap_or_else(|| context.settings.shortcuts.composing.key_values());
+        map.insert(Shortcuts::COMPOSING, our_map);
+
+        map
     }
 
     fn id(&self) -> ComponentId {

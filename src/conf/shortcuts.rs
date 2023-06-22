@@ -228,7 +228,7 @@ shortcut_key_values! { "general",
 
 shortcut_key_values! { "composing",
     pub struct ComposingShortcuts {
-        edit_mail |> "Edit mail." |> Key::Char('e'),
+        edit |> "Edit." |> Key::Char('e'),
         send_mail |> "Deliver draft to mailer" |> Key::Char('s'),
         scroll_up |> "Change field focus." |> Key::Char('k'),
         scroll_down |> "Change field focus." |> Key::Char('j')

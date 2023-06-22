@@ -101,7 +101,7 @@
 #
 ###shortcuts
 #[shortcuts.composing]
-#edit_mail = 'e'
+#edit = 'e'
 #
 #[shortcuts.contact-list]
 #create_contact = 'c'

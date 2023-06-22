@@ -693,7 +693,7 @@ impl Component for Pager {
             }
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_right"])
-                    && dbg!(self.cols_lt_width) =>
+                    && self.cols_lt_width =>
             {
                 self.movement = Some(PageMovement::Right(1));
                 self.dirty = true;

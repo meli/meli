@@ -58,6 +58,7 @@ pub struct MailView {
     coordinates: Option<(AccountHash, MailboxHash, EnvelopeHash)>,
     dirty: bool,
     contact_selector: Option<Box<UIDialog<Card>>>,
+    forward_dialog: Option<Box<UIDialog<Option<PendingReplyAction>>>>,
     theme_default: ThemeAttribute,
     active_jobs: HashSet<JobId>,
     state: MailViewState,
@@ -68,6 +69,7 @@ impl Clone for MailView {
     fn clone(&self) -> Self {
         MailView {
             contact_selector: None,
+            forward_dialog: None,
             state: MailViewState::default(),
             active_jobs: self.active_jobs.clone(),
             ..*self
@@ -90,6 +92,7 @@ impl MailView {
             coordinates,
             dirty: true,
             contact_selector: None,
+            forward_dialog: None,
             theme_default: crate::conf::value(context, "mail.view.body"),
             active_jobs: Default::default(),
             state: MailViewState::default(),
@@ -328,6 +331,8 @@ impl Component for MailView {
         };
         if let Some(ref mut s) = self.contact_selector.as_mut() {
             s.draw(grid, area, context);
+        } else if let Some(ref mut s) = self.forward_dialog.as_mut() {
+            s.draw(grid, area, context);
         }
 
         self.dirty = false;
@@ -339,13 +344,29 @@ impl Component for MailView {
             return false;
         }
 
+        if let Some(ref mut s) = self.contact_selector {
+            if s.process_event(event, context) {
+                return true;
+            }
+        }
+
+        if let Some(ref mut s) = self.forward_dialog {
+            if s.process_event(event, context) {
+                return true;
+            }
+        }
+
         /* If envelope data is loaded, pass it to envelope views */
         if self.state.process_event(event, context) {
             return true;
         }
 
-        match (&mut self.contact_selector, &mut event) {
-            (Some(ref s), UIEvent::FinishedUIDialog(id, results)) if *id == s.id() => {
+        match (
+            &mut self.contact_selector,
+            &mut self.forward_dialog,
+            &mut event,
+        ) {
+            (Some(ref s), _, UIEvent::FinishedUIDialog(id, results)) if *id == s.id() => {
                 if let Some(results) = results.downcast_ref::<Vec<Card>>() {
                     let account = &mut context.accounts[&coordinates.0];
                     {
@@ -353,54 +374,61 @@ impl Component for MailView {
                             account.address_book.add_card(card.clone());
                         }
                     }
+                    self.contact_selector = None;
                 }
                 self.set_dirty(true);
                 return true;
             }
-            (Some(ref mut s), _) => {
-                if s.process_event(event, context) {
-                    return true;
+            (_, Some(ref s), UIEvent::FinishedUIDialog(id, result)) if *id == s.id() => {
+                if let Some(result) = result.downcast_ref::<Option<PendingReplyAction>>() {
+                    self.forward_dialog = None;
+                    if let Some(result) = *result {
+                        self.perform_action(result, context);
+                    }
                 }
+                self.set_dirty(true);
+                return true;
             }
-            _ => match event {
-                UIEvent::StatusEvent(StatusEvent::JobFinished(ref job_id))
-                    if self.active_jobs.contains(job_id) =>
-                {
-                    match self.state {
-                        MailViewState::LoadingBody {
-                            ref mut handle,
-                            pending_action: _,
-                        } if handle.job_id == *job_id => {
-                            match handle.chan.try_recv() {
-                                Err(_) => { /* Job was canceled */ }
-                                Ok(None) => { /* something happened, perhaps a worker
-                                      * thread panicked */
-                                }
-                                Ok(Some(Ok(bytes))) => {
-                                    MailViewState::load_bytes(self, bytes, context);
-                                }
-                                Ok(Some(Err(err))) => {
-                                    self.state = MailViewState::Error { err };
-                                }
+            _ => {}
+        }
+        match &event {
+            UIEvent::StatusEvent(StatusEvent::JobFinished(ref job_id))
+                if self.active_jobs.contains(job_id) =>
+            {
+                match self.state {
+                    MailViewState::LoadingBody {
+                        ref mut handle,
+                        pending_action: _,
+                    } if handle.job_id == *job_id => {
+                        match handle.chan.try_recv() {
+                            Err(_) => { /* Job was canceled */ }
+                            Ok(None) => { /* something happened, perhaps a worker
+                                  * thread panicked */
+                            }
+                            Ok(Some(Ok(bytes))) => {
+                                MailViewState::load_bytes(self, bytes, context);
+                            }
+                            Ok(Some(Err(err))) => {
+                                self.state = MailViewState::Error { err };
                             }
                         }
-                        MailViewState::Init { .. } => {
-                            self.init_futures(context);
-                        }
-                        MailViewState::Loaded { .. } => {
-                            log::debug!(
-                                "MailView.active_jobs contains job id {:?} but MailViewState is \
-                                 already loaded; what job was this and why was it in active_jobs?",
-                                job_id
-                            );
-                        }
-                        _ => {}
                     }
-                    self.active_jobs.remove(job_id);
-                    self.set_dirty(true);
+                    MailViewState::Init { .. } => {
+                        self.init_futures(context);
+                    }
+                    MailViewState::Loaded { .. } => {
+                        log::debug!(
+                            "MailView.active_jobs contains job id {:?} but MailViewState is \
+                             already loaded; what job was this and why was it in active_jobs?",
+                            job_id
+                        );
+                    }
+                    _ => {}
                 }
-                _ => {}
-            },
+                self.active_jobs.remove(job_id);
+                self.set_dirty(true);
+            }
+            _ => {}
         }
 
         let shortcuts = &self.shortcuts(context);
@@ -436,27 +464,28 @@ impl Component for MailView {
                         .forward_as_attachment
                 ) {
                     f if f.is_ask() => {
-                        let id = self.id;
-                        context.replies.push_back(UIEvent::GlobalUIDialog(Box::new(
-                            UIConfirmationDialog::new(
-                                "How do you want the email to be forwarded?",
-                                vec![
-                                    (true, "inline".to_string()),
-                                    (false, "as attachment".to_string()),
-                                ],
-                                true,
-                                Some(Box::new(move |_: ComponentId, result: bool| {
+                        self.forward_dialog = Some(Box::new(UIDialog::new(
+                            "How do you want the email to be forwarded?",
+                            vec![
+                                (
+                                    Some(PendingReplyAction::ForwardInline),
+                                    "inline".to_string(),
+                                ),
+                                (
+                                    Some(PendingReplyAction::ForwardAttachment),
+                                    "as attachment".to_string(),
+                                ),
+                            ],
+                            true,
+                            Some(Box::new(
+                                move |id: ComponentId, result: &[Option<PendingReplyAction>]| {
                                     Some(UIEvent::FinishedUIDialog(
                                         id,
-                                        Box::new(if result {
-                                            PendingReplyAction::ForwardInline
-                                        } else {
-                                            PendingReplyAction::ForwardAttachment
-                                        }),
+                                        Box::new(result.get(0).cloned()),
                                     ))
-                                })),
-                                context,
-                            ),
+                                },
+                            )),
+                            context,
                         )));
                     }
                     f if f.is_true() => {
@@ -562,9 +591,10 @@ impl Component for MailView {
                 return true;
             }
             UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Alt(''))
-                if self.contact_selector.is_some() =>
+                if self.contact_selector.is_some() || self.forward_dialog.is_some() =>
             {
                 self.contact_selector = None;
+                self.forward_dialog = None;
                 self.set_dirty(true);
                 return true;
             }
@@ -592,7 +622,7 @@ impl Component for MailView {
                                     let draft: Draft = mailto.into();
                                     let mut composer =
                                         Composer::with_account(coordinates.0, context);
-                                    composer.set_draft(draft);
+                                    composer.set_draft(draft, context);
                                     context.replies.push_back(UIEvent::Action(Tab(New(Some(
                                         Box::new(composer),
                                     )))));
@@ -747,11 +777,18 @@ impl Component for MailView {
                 .as_ref()
                 .map(|s| s.is_dirty())
                 .unwrap_or(false)
+            || self
+                .forward_dialog
+                .as_ref()
+                .map(|s| s.is_dirty())
+                .unwrap_or(false)
     }
 
     fn set_dirty(&mut self, value: bool) {
         self.dirty = value;
         if let Some(ref mut s) = self.contact_selector {
+            s.set_dirty(value);
+        } else if let Some(ref mut s) = self.forward_dialog {
             s.set_dirty(value);
         }
         self.state.set_dirty(value);
