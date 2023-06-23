@@ -53,6 +53,9 @@ pub use melib::{
     MailboxHash, ThreadHash, ToggleFlag,
 };
 
+pub mod args;
+pub mod subcommands;
+
 #[macro_use]
 pub mod types;
 pub use crate::types::*;

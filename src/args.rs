@@ -21,7 +21,7 @@
 
 //! Command line arguments.
 
-use meli::*;
+use super::*;
 
 #[cfg(feature = "cli-docs")]
 fn parse_manpage(src: &str) -> Result<ManPages> {

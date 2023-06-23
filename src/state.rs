@@ -1367,4 +1367,9 @@ impl State {
         }
         self.context.input_thread.check();
     }
+
+    pub fn pulse(&mut self) {
+        self.check_accounts();
+        self.redraw();
+    }
 }

@@ -27,10 +27,12 @@ use std::{
 
 thread_local!(static CMD_HISTORY_FILE: Arc<Mutex<std::fs::File>> = Arc::new(Mutex::new({
     let data_dir = xdg::BaseDirectories::with_prefix("meli").unwrap();
-OpenOptions::new().append(true) /* writes will append to a file instead of overwriting previous contents */
-                         .create(true) /* a new file will be created if the file does not yet already exist.*/
-                         .read(true)
-                         .open(data_dir.place_data_file("cmd_history").unwrap()).unwrap()
+    OpenOptions::new()
+        .append(true) /* writes will append to a file instead of overwriting previous contents */
+        .create(true) /* a new file will be created if the file does not yet already exist. */
+        .read(true)
+        .open(data_dir.place_data_file("cmd_history").unwrap())
+        .unwrap()
 })));
 
 pub fn log_cmd(mut cmd: String) {

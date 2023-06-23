@@ -29,11 +29,10 @@
 //! backend needs. The split is done to theoretically be able to create
 //! different frontends with the same innards.
 
-use meli::*;
-mod args;
 use std::os::raw::c_int;
 
 use args::*;
+use meli::*;
 
 fn notify(
     signals: &[c_int],
@@ -94,127 +93,19 @@ fn run_app(opt: Opt) -> Result<()> {
 
     match opt.subcommand {
         Some(SubCommand::TestConfig { path }) => {
-            let config_path = if let Some(path) = path {
-                path
-            } else {
-                crate::conf::get_config_file()?
-            };
-            conf::FileSettings::validate(config_path, true, false)?; // TODO: test for tty/interaction
-            return Ok(());
+            return subcommands::test_config(path);
         }
         Some(SubCommand::CreateConfig { path }) => {
-            let config_path = if let Some(path) = path {
-                path
-            } else {
-                crate::conf::get_config_file()?
-            };
-            if config_path.exists() {
-                return Err(Error::new(format!(
-                    "File `{}` already exists.\nMaybe you meant to specify another path?",
-                    config_path.display()
-                )));
-            }
-            conf::create_config_file(&config_path)?;
-            return Ok(());
+            return subcommands::create_config(path);
         }
         Some(SubCommand::EditConfig) => {
-            use std::process::{Command, Stdio};
-            let editor = std::env::var("EDITOR")
-                .or_else(|_| std::env::var("VISUAL"))
-                .map_err(|err| {
-                    format!(
-                        "Could not find any value in environment variables EDITOR and VISUAL. \
-                         {err}"
-                    )
-                })?;
-            let config_path = crate::conf::get_config_file()?;
-
-            let mut cmd = Command::new(&editor);
-
-            let mut handle = &mut cmd;
-            for c in crate::conf::get_included_configs(config_path)? {
-                handle = handle.arg(&c);
-            }
-            let mut handle = handle
-                .stdin(Stdio::inherit())
-                .stdout(Stdio::inherit())
-                .stderr(Stdio::inherit())
-                .spawn()?;
-            handle.wait()?;
-            return Ok(());
+            return subcommands::edit_config();
         }
-        #[cfg(feature = "cli-docs")]
         Some(SubCommand::Man(manopt)) => {
-            let ManOpt { page, no_raw } = manopt;
-            const MANPAGES: [&[u8]; 4] = [
-                include_bytes!(concat!(env!("OUT_DIR"), "/meli.txt.gz")),
-                include_bytes!(concat!(env!("OUT_DIR"), "/meli.conf.txt.gz")),
-                include_bytes!(concat!(env!("OUT_DIR"), "/meli-themes.txt.gz")),
-                include_bytes!(concat!(env!("OUT_DIR"), "/meli.7.txt.gz")),
-            ];
-            use std::io::prelude::*;
-
-            use flate2::bufread::GzDecoder;
-            let mut gz = GzDecoder::new(MANPAGES[page as usize]);
-            let mut v = String::with_capacity(
-                str::parse::<usize>(unsafe {
-                    std::str::from_utf8_unchecked(gz.header().unwrap().comment().unwrap())
-                })
-                .unwrap_or_else(|_| {
-                    panic!("{:?} was not compressed with size comment header", page)
-                }),
-            );
-            gz.read_to_string(&mut v)?;
-
-            if let Some(no_raw) = no_raw {
-                match no_raw {
-                    Some(true) => {}
-                    None if (unsafe { libc::isatty(libc::STDOUT_FILENO) == 1 }) => {}
-                    Some(false) | None => {
-                        println!("{}", &v);
-                        return Ok(());
-                    }
-                }
-            } else if unsafe { libc::isatty(libc::STDOUT_FILENO) != 1 } {
-                println!("{}", &v);
-                return Ok(());
-            }
-
-            use std::process::{Command, Stdio};
-            let mut handle = Command::new("sh")
-                .arg("-c")
-                .arg(std::env::var("PAGER").unwrap_or_else(|_| "more".to_string()))
-                .stdin(Stdio::piped())
-                .stdout(Stdio::inherit())
-                .stderr(Stdio::inherit())
-                .spawn()?;
-            handle.stdin.take().unwrap().write_all(v.as_bytes())?;
-            handle.wait()?;
-
-            return Ok(());
-        }
-        #[cfg(not(feature = "cli-docs"))]
-        Some(SubCommand::Man(_manopt)) => {
-            return Err(Error::new("error: this version of meli was not build with embedded documentation (cargo feature `cli-docs`). You might have it installed as manpages (eg `man meli`), otherwise check https://meli.delivery"));
+            return subcommands::man(manopt);
         }
         Some(SubCommand::CompiledWith) => {
-            #[cfg(feature = "notmuch")]
-            println!("notmuch");
-            #[cfg(feature = "jmap")]
-            println!("jmap");
-            #[cfg(feature = "sqlite3")]
-            println!("sqlite3");
-            #[cfg(feature = "smtp")]
-            println!("smtp");
-            #[cfg(feature = "regexp")]
-            println!("regexp");
-            #[cfg(feature = "dbus-notifications")]
-            println!("dbus-notifications");
-            #[cfg(feature = "cli-docs")]
-            println!("cli-docs");
-            #[cfg(feature = "gpgme")]
-            println!("gpgme");
-            return Ok(());
+            return subcommands::compiled_with();
         }
         Some(SubCommand::PrintLoadedThemes) => {
             let s = conf::FileSettings::new()?;
@@ -225,16 +116,7 @@ fn run_app(opt: Opt) -> Result<()> {
             print!("{}", conf::Themes::default().key_to_string("dark", false));
             return Ok(());
         }
-        Some(SubCommand::View { ref path }) => {
-            if !path.exists() {
-                return Err(Error::new(format!(
-                    "`{}` is not a valid path",
-                    path.display()
-                )));
-            } else if !path.is_file() {
-                return Err(Error::new(format!("`{}` is a directory", path.display())));
-            }
-        }
+        Some(SubCommand::View { .. }) => {}
         None => {}
     }
 
@@ -256,23 +138,7 @@ fn run_app(opt: Opt) -> Result<()> {
     let mut state;
 
     if let Some(SubCommand::View { path }) = opt.subcommand {
-        let bytes = std::fs::read(&path)
-            .chain_err_summary(|| format!("Could not read from `{}`", path.display()))?;
-        let wrapper = Mail::new(bytes, Some(Flag::SEEN))
-            .chain_err_summary(|| format!("Could not parse `{}`", path.display()))?;
-        state = State::new(
-            Some(Settings::without_accounts().unwrap_or_default()),
-            sender,
-            receiver.clone(),
-        )?;
-        let main_loop_handler = state.context.main_loop_handler.clone();
-        state.register_component(Box::new(EnvelopeView::new(
-            wrapper,
-            None,
-            None,
-            None,
-            main_loop_handler,
-        )));
+        state = subcommands::view(path, sender, receiver.clone())?;
     } else {
         state = State::new(None, sender, receiver.clone())?;
         #[cfg(feature = "svgscreenshot")]
@@ -424,8 +290,7 @@ fn run_app(opt: Opt) -> Result<()> {
                             state.redraw();
                         },
                         ThreadEvent::Pulse => {
-                            state.check_accounts();
-                            state.redraw();
+                            state.pulse();
                         },
                         ThreadEvent::JobFinished(id) => {
                             log::trace!("Job finished {}", id);
