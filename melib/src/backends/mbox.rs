@@ -317,10 +317,10 @@ impl BackendOp for MboxOp {
             buf_reader.read_to_end(&mut contents)?;
             *self.slice.get_mut() = Some(contents);
         }
-        let ret = Ok(self.slice.get_mut().as_ref().unwrap().as_slice()
+        let ret = self.slice.get_mut().as_ref().unwrap().as_slice()
             [self.offset..self.offset + self.length]
-            .to_vec());
-        Ok(Box::pin(async move { ret }))
+            .to_vec();
+        Ok(Box::pin(async move { Ok(ret) }))
     }
 
     fn fetch_flags(&self) -> ResultFuture<Flag> {
@@ -784,8 +784,18 @@ pub fn mbox_parse(
             }
         };
         let start: Offset = input[offset + file_offset..]
-            .find(b"\n")
-            .map(|v| v + 1)
+            .find(b"From ")
+            .map(|from_offset| {
+                input[offset + file_offset + from_offset..]
+                    .find(b"\n")
+                    .map(|v| v + 1)
+                    .unwrap_or_else(|| {
+                        input[offset + file_offset + from_offset..]
+                            .len()
+                            .saturating_sub(2)
+                    })
+            })
+            .map(|v| v + 2)
             .unwrap_or(0);
         let len = input.len() - next_input.len() - offset - file_offset - start;
         index.insert(env.hash(), (offset + file_offset + start, len));
@@ -838,7 +848,17 @@ impl<'a> Iterator for MessageIterator<'a> {
                     }
                 };
             let start: Offset = self.input[self.offset + self.file_offset..]
-                .find(b"\n")
+                .find(b"From ")
+                .map(|from_offset| {
+                    self.input[self.offset + self.file_offset + from_offset..]
+                        .find(b"\n")
+                        .map(|v| v + 1)
+                        .unwrap_or_else(|| {
+                            self.input[self.offset + self.file_offset + from_offset..]
+                                .len()
+                                .saturating_sub(2)
+                        })
+                })
                 .map(|v| v + 1)
                 .unwrap_or(0);
             let len = self.input.len() - next_input.len() - self.offset - self.file_offset - start;
@@ -1133,7 +1153,12 @@ impl MailBackend for MboxType {
                         }
                         _ => {}
                     },
-                    Err(e) => debug!("watch error: {:?}", e),
+                    Err(e) => {
+                        log::debug!("watch error: {:?}", e);
+                        return Err(Error::new(format!(
+                            "Mbox watching thread exited with error: {e}"
+                        )));
+                    }
                 }
             }
         }))
@@ -1185,7 +1210,7 @@ impl MailBackend for MboxType {
         _flags: SmallVec<[(std::result::Result<Flag, String>, bool); 8]>,
     ) -> ResultFuture<()> {
         Err(Error::new(
-            "Settings flags is currently unimplemented for mbox backend",
+            "Setting flags is currently unimplemented for mbox backend",
         ))
     }
 
