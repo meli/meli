@@ -19,14 +19,12 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*! Components visual and logical separations of application interfaces.
- *
- * They can draw on the terminal and receive events, but also do other stuff
- * as well.
- * For an example, see the [`notifications`] module.
- * See also the [`Component`] trait for more details.
- */
-
+//! Components visual and logical separations of application interfaces.
+///
+/// They can draw on the terminal and receive events, but also do other stuff
+/// as well.
+/// For an example, see the [`notifications`] module.
+/// See also the [`Component`] trait for more details.
 use smallvec::SmallVec;
 
 use super::*;

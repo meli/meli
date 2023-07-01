@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*! Configuration logic and `config.toml` interfaces. */
+//! Configuration logic and `config.toml` interfaces.
 
 extern crate serde;
 extern crate toml;

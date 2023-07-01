@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*! E-mail header names. Also referred to as Fields in [RFC5322] */
+//! E-mail header names. Also referred to as `Fields` in `RFC5322`.
 #![allow(non_upper_case_globals)]
 
 use std::{

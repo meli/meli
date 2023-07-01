@@ -19,9 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*!
- * Account management from user configuration.
- */
+//! Account management from user configuration.
 
 use std::{
     borrow::Cow,

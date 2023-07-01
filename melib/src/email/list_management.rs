@@ -19,7 +19,8 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*! Parsing of rfc2369/rfc2919 `List-*` headers */
+//! Parsing of `RFC2369` and `RFC2919` `List-*` headers.
+
 use std::convert::From;
 
 use smallvec::SmallVec;

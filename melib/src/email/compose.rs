@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*! Compose a `Draft`, with MIME and attachment support */
+//! Compose a [``Draft`], with `MIME` and attachment support.
 use std::{
     convert::TryFrom,
     ffi::OsStr,
@@ -42,8 +42,6 @@ use crate::{
 
 pub mod mime;
 pub mod random;
-
-//use self::mime::*;
 
 use super::parser;
 

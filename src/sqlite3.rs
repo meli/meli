@@ -19,8 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*! Use an sqlite3 database for fast searching.
- */
+//! Use an sqlite3 database for fast searching.
 use std::{
     path::PathBuf,
     sync::{Arc, RwLock},

@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*! Wrapper type `HeaderName` for case-insensitive comparisons */
+//! Wrapper type [`HeaderName`] for case-insensitive comparisons.
 
 pub mod names;
 use std::{

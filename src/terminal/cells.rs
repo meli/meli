@@ -19,10 +19,8 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*!
- Define a (x, y) point in the terminal display as a holder of a character, foreground/background
- colors and attributes.
-*/
+//! Define a `(x, y)` point in the terminal display as a holder of a character,
+//! foreground/background colors and attributes.
 
 use std::{
     collections::HashMap,

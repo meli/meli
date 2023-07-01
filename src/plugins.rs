@@ -19,8 +19,8 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*! Plugins are executed by meli and communication is done by `messagepack` IPC.
- */
+//! Plugins are executed by meli and communication is done by `messagepack` IPC.
+
 use melib::error::{Error, Result};
 use std::collections::HashMap;
 use std::io::Write;

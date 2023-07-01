@@ -19,8 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*! Various useful components that can be used in a generic fashion.
- */
+//! Various useful utilities.
 
 use melib::{text_processing::Reflow, ShellExpandTrait};
 

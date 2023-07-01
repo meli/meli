@@ -19,19 +19,19 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*!
- * e-mail threading (conversations)
- *
- * This module implements Jamie Zawinski's [threading algorithm](https://www.jwz.org/doc/threading.html). Quoted comments (/* " .. " */) are
- * taken almost verbatim from the algorithm.
- *
- * The entry point of this module is the `Threads` struct and its `new`
- * method. It contains `ThreadNodes` which are the nodes in the thread trees
- * that might have messages associated with them. The root nodes (first
- * messages in each thread) are stored in `root_set` and `tree`
- * vectors. `Threads` has inner mutability since we need to sort without the
- * user having mutable ownership.
- */
+//! e-mail threading (conversations)
+//!
+//! This module implements Jamie Zawinski's [threading
+//! algorithm](https://www.jwz.org/doc/threading.html). Quoted comments (/* " .. " */) are taken
+//! almost verbatim from the algorithm.
+//!
+//! The entry point of this module is the [`Threads`] struct and its
+//! [`new`](Threads::new) method. It contains [`ThreadNode`s](ThreadNode) which
+//! are the nodes in the thread trees that might have messages associated with
+//! them. The root nodes (first messages in each thread) are stored in
+//! [`root_set`](Threads::root_set) and [`thread_nodes`](Threads::thread_nodes)
+//! vectors. [`Threads`] has inner mutability since we need to sort without the
+//! user having mutable ownership.
 
 use crate::{
     email::{address::StrBuild, parser::BytesExt, *},

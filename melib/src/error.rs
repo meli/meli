@@ -19,9 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*!
- * An error object for `melib`
- */
+//! Library error type.
 
 use std::{borrow::Cow, fmt, io, result, str, string, sync::Arc};
 

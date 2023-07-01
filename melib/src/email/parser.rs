@@ -327,7 +327,7 @@ pub fn mail(input: &[u8]) -> Result<(Vec<(&[u8], &[u8])>, &[u8])> {
 }
 
 pub mod dates {
-    /*! Date values in headers */
+    //! Date values in headers.
     use super::{generic::*, *};
     use crate::utils::datetime::UnixTimestamp;
 
@@ -634,7 +634,7 @@ pub mod dates {
 }
 
 pub mod generic {
-    /*! Generally useful parser combinators */
+    //! Generally useful parser combinators.
     use super::*;
     #[inline(always)]
     pub fn byte_in_slice<'a>(slice: &'static [u8]) -> impl Fn(&'a [u8]) -> IResult<&'a [u8], u8> {
@@ -664,9 +664,9 @@ pub mod generic {
         }
     }
 
-    ///UTF-8 characters can be defined in terms of octets using the
-    ///following ABNF [RFC5234], taken from [RFC3629]:
-    ///UTF8-non-ascii  =   UTF8-2 / UTF8-3 / UTF8-4
+    /// UTF-8 characters can be defined in terms of octets using the
+    /// following ABNF `[RFC5234]`, taken from `[RFC3629]`:
+    /// UTF8-non-ascii  =   UTF8-2 / UTF8-3 / UTF8-4
     fn utf8_non_ascii(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
         /// UTF8-2      = %xC2-DF UTF8-tail
         fn utf8_2(input: &[u8]) -> IResult<&[u8], &[u8]> {
@@ -1414,7 +1414,7 @@ List-Archive: <http://www.host.com/list/archive/> (Web Archive)
 }
 
 pub mod headers {
-    /*! Email headers */
+    //! Email headers.
     use super::*;
 
     pub fn headers(input: &[u8]) -> IResult<&[u8], Vec<(&[u8], &[u8])>> {
@@ -1675,7 +1675,7 @@ pub mod headers {
 }
 
 pub mod attachments {
-    /*! Email attachments */
+    //! Email attachments.
     use super::*;
     use crate::email::{
         address::*,
@@ -1945,7 +1945,7 @@ pub mod attachments {
 }
 
 pub mod encodings {
-    /*! Email encodings (quoted printable, MIME) */
+    //! Email encodings (quoted printable, `MIME`).
     use data_encoding::BASE64_MIME;
     use encoding::{all::*, DecoderTrap, Encoding};
 

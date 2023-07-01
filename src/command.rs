@@ -19,8 +19,9 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*! A parser module for user commands passed through Command mode.
- */
+//! A parser module for user commands passed through
+//! [`Command`](crate::types::UIMode::Command) mode.
+
 pub use melib::thread::{SortField, SortOrder};
 use melib::{
     nom::{

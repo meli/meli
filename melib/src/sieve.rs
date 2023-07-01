@@ -142,7 +142,7 @@ pub enum ZoneRule {
     /// "iso8601"   => the date and time in restricted ISO 8601 format.
     Iso8601,
     /// "std11"     => the date and time in a format appropriate
-    /// for use in a Date: header field [RFC2822].
+    /// for use in a Date: header field (`RFC2822`).
     Std11,
     /// "zone"      => the time zone in use.  If the user specified a
     ///time zone with ":zone", "zone" will

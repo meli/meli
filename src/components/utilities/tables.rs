@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*! UI components to display tabular lists. */
+//! UI components to display tabular lists.
 use std::mem::MaybeUninit;
 
 use super::*;

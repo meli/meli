@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*! Verification of OpenPGP signatures */
+//! Verification of OpenPGP signatures.
 use crate::{
     email::{
         attachment_types::{ContentType, MultipartType},
@@ -28,9 +28,10 @@ use crate::{
     Error, Result,
 };
 
-/// Convert raw attachment to the form needed for signature verification ([rfc3156](https://tools.ietf.org/html/rfc3156))
+/// Convert raw attachment to the form needed for signature verification ([RFC3156](https://tools.ietf.org/html/rfc3156))
 ///
-/// ## rfc3156
+/// ## RFC3156
+///
 /// ```text
 /// Upon receipt of a signed message, an application MUST:
 ///
