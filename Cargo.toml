@@ -49,7 +49,7 @@ signal-hook = { version = "^0.3", default-features = false }
 signal-hook-registry = { version = "1.2.0", default-features = false }
 smallvec = { version = "^1.5.0", features = ["serde", ] }
 structopt = { version = "0.3.14", default-features = false }
-svg_crate = { version = "^0.10", optional = true, package = "svg" }
+svg_crate = { version = "^0.13", optional = true, package = "svg" }
 termion = { version = "1.5.1", default-features = false }
 toml = { version = "0.5.6", default-features = false, features = ["preserve_order", ] }
 unicode-segmentation = "1.2.1" # >:c

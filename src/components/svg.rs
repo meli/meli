@@ -43,6 +43,12 @@ impl SVGScreenshotFilter {
     }
 }
 
+impl Default for SVGScreenshotFilter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Component for SVGScreenshotFilter {
     fn draw(&mut self, _grid: &mut CellBuffer, _area: Area, context: &mut Context) {
         if !self.save_screenshot {

@@ -171,7 +171,7 @@ pub fn view(
     let mut state = State::new(
         Some(Settings::without_accounts().unwrap_or_default()),
         sender,
-        receiver.clone(),
+        receiver,
     )?;
     let main_loop_handler = state.context.main_loop_handler.clone();
     state.register_component(Box::new(EnvelopeView::new(

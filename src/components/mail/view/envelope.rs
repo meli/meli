@@ -361,7 +361,7 @@ impl EnvelopeView {
             (&self.force_charset).into(),
         );
         let (attachment_paths, attachment_tree) = self.attachment_displays_to_tree(&display);
-        let body_text = self.attachment_displays_to_text(&display, true);
+        let body_text = Self::attachment_displays_to_text(&display, true);
         self.display = display;
         self.body_text = body_text;
         self.attachment_tree = attachment_tree;
@@ -369,7 +369,6 @@ impl EnvelopeView {
     }
 
     pub fn attachment_displays_to_text(
-        &self,
         displays: &[AttachmentDisplay],
         show_comments: bool,
     ) -> String {
@@ -382,7 +381,7 @@ impl EnvelopeView {
                     shown_display,
                     display,
                 } => {
-                    acc.push_str(&self.attachment_displays_to_text(
+                    acc.push_str(&Self::attachment_displays_to_text(
                         &display[*shown_display..(*shown_display + 1)],
                         show_comments,
                     ));
@@ -422,13 +421,13 @@ impl EnvelopeView {
                     if show_comments {
                         acc.push_str("Waiting for signature verification.\n\n");
                     }
-                    acc.push_str(&self.attachment_displays_to_text(display, show_comments));
+                    acc.push_str(&Self::attachment_displays_to_text(display, show_comments));
                 }
                 SignedUnverified { inner: _, display } => {
                     if show_comments {
                         acc.push_str("Unverified signature.\n\n");
                     }
-                    acc.push_str(&self.attachment_displays_to_text(display, show_comments))
+                    acc.push_str(&Self::attachment_displays_to_text(display, show_comments))
                 }
                 SignedFailed {
                     inner: _,
@@ -438,7 +437,7 @@ impl EnvelopeView {
                     if show_comments {
                         let _ = writeln!(acc, "Failed to verify signature: {}.\n", error);
                     }
-                    acc.push_str(&self.attachment_displays_to_text(display, show_comments));
+                    acc.push_str(&Self::attachment_displays_to_text(display, show_comments));
                 }
                 SignedVerified {
                     inner: _,
@@ -453,7 +452,7 @@ impl EnvelopeView {
                             acc.push_str("\n\n");
                         }
                     }
-                    acc.push_str(&self.attachment_displays_to_text(display, show_comments));
+                    acc.push_str(&Self::attachment_displays_to_text(display, show_comments));
                 }
                 EncryptedPending { .. } => acc.push_str("Waiting for decryption result."),
                 EncryptedFailed { inner: _, error } => {
@@ -473,9 +472,10 @@ impl EnvelopeView {
                             acc.push_str("\n\n");
                         }
                     }
-                    acc.push_str(
-                        &self.attachment_displays_to_text(plaintext_display, show_comments),
-                    );
+                    acc.push_str(&Self::attachment_displays_to_text(
+                        plaintext_display,
+                        show_comments,
+                    ));
                 }
             }
         }
@@ -1004,7 +1004,7 @@ impl Component for EnvelopeView {
                     ref archive,
                     ref post,
                     ref unsubscribe,
-                }) = list_management::ListActions::detect(&envelope)
+                }) = list_management::ListActions::detect(envelope)
                 {
                     let mut x = get_x(upper_left);
                     if let Some(id) = id {

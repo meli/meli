@@ -94,7 +94,7 @@ struct EmbedContainer {
 }
 
 impl EmbedContainer {
-    fn new(command: String) -> Box<dyn Component> {
+    fn new(command: String) -> Box<Self> {
         Box::new(Self {
             command,
             embed: None,

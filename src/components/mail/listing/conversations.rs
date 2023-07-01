@@ -711,6 +711,7 @@ impl ConversationsListing {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn make_entry_string(
         &self,
         root_envelope: &Envelope,

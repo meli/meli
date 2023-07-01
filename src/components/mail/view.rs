@@ -107,7 +107,9 @@ impl MailView {
         log::trace!("MailView::init_futures");
         self.theme_default = crate::conf::value(context, "mail.view.body");
         let mut pending_action = None;
-        let Some(coordinates) = self.coordinates else { return; };
+        let Some(coordinates) = self.coordinates else {
+            return;
+        };
         let account = &mut context.accounts[&coordinates.0];
         if account.contains_key(coordinates.2) {
             {
@@ -194,7 +196,9 @@ impl MailView {
     }
 
     fn perform_action(&mut self, action: PendingReplyAction, context: &mut Context) {
-        let Some(coordinates) = self.coordinates else { return; };
+        let Some(coordinates) = self.coordinates else {
+            return;
+        };
         let (bytes, reply_body, env) = match self.state {
             MailViewState::Init {
                 ref mut pending_action,
@@ -214,7 +218,7 @@ impl MailView {
                 ..
             } => (
                 bytes,
-                env_view.attachment_displays_to_text(&env_view.display, false),
+                EnvelopeView::attachment_displays_to_text(&env_view.display, false),
                 env,
             ),
             MailViewState::Error { .. } => {
@@ -257,7 +261,9 @@ impl MailView {
     }
 
     fn start_contact_selector(&mut self, context: &mut Context) {
-        let Some(coordinates) = self.coordinates else { return; };
+        let Some(coordinates) = self.coordinates else {
+            return;
+        };
         let account = &context.accounts[&coordinates.0];
         if !account.contains_key(coordinates.2) {
             context
@@ -297,7 +303,9 @@ impl Component for MailView {
         if !self.is_dirty() {
             return;
         }
-        let Some(coordinates) = self.coordinates else { return; };
+        let Some(coordinates) = self.coordinates else {
+            return;
+        };
 
         {
             let account = &context.accounts[&coordinates.0];
@@ -339,7 +347,9 @@ impl Component for MailView {
     }
 
     fn process_event(&mut self, mut event: &mut UIEvent, context: &mut Context) -> bool {
-        let Some(coordinates) = self.coordinates else { return false; };
+        let Some(coordinates) = self.coordinates else {
+            return false;
+        };
         if coordinates.0.is_null() || coordinates.1.is_null() {
             return false;
         }

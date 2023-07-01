@@ -55,7 +55,9 @@ pub enum MailViewState {
 
 impl MailViewState {
     pub fn load_bytes(self_: &mut MailView, bytes: Vec<u8>, context: &mut Context) {
-        let Some(coordinates) = self_.coordinates else { return; };
+        let Some(coordinates) = self_.coordinates else {
+            return;
+        };
         let account = &mut context.accounts[&coordinates.0];
         if account
             .collection

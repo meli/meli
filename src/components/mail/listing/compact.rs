@@ -971,6 +971,7 @@ impl CompactListing {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn make_entry_string(
         &self,
         root_envelope: &Envelope,

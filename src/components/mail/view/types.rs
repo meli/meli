@@ -86,9 +86,9 @@ pub enum ForceCharset {
     Forced(Charset),
 }
 
-impl Into<Option<Charset>> for &ForceCharset {
-    fn into(self) -> Option<Charset> {
-        match self {
+impl From<&ForceCharset> for Option<Charset> {
+    fn from(val: &ForceCharset) -> Self {
+        match val {
             ForceCharset::Forced(val) => Some(*val),
             ForceCharset::None | ForceCharset::Dialog(_) => None,
         }

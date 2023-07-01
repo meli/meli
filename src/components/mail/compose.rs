@@ -1436,15 +1436,13 @@ impl Component for Composer {
                 ViewMode::SelectEncryptKey(is_encrypt, ref mut selector),
                 UIEvent::FinishedUIDialog(id, result),
             ) if *id == selector.id() => {
-                if let Some(key) = result.downcast_mut::<Option<melib::gpgme::Key>>() {
-                    if let Some(key) = key {
-                        if *is_encrypt {
-                            self.gpg_state.encrypt_keys.clear();
-                            self.gpg_state.encrypt_keys.push(key.clone());
-                        } else {
-                            self.gpg_state.sign_keys.clear();
-                            self.gpg_state.sign_keys.push(key.clone());
-                        }
+                if let Some(Some(key)) = result.downcast_mut::<Option<melib::gpgme::Key>>() {
+                    if *is_encrypt {
+                        self.gpg_state.encrypt_keys.clear();
+                        self.gpg_state.encrypt_keys.push(key.clone());
+                    } else {
+                        self.gpg_state.sign_keys.clear();
+                        self.gpg_state.sign_keys.push(key.clone());
                     }
                 }
                 self.mode = ViewMode::Edit;

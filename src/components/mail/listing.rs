@@ -1195,7 +1195,7 @@ impl Component for Listing {
                 to,
                 ref content,
             } if (*from, *to) == (self.component.id(), self.id()) => {
-                match content.downcast_ref::<ListingMessage>().map(|msg| *msg) {
+                match content.downcast_ref::<ListingMessage>().copied() {
                     None => {}
                     Some(ListingMessage::FocusUpdate { new_value }) => {
                         self.view.process_event(
@@ -1241,7 +1241,7 @@ impl Component for Listing {
                     log::debug!(
                         "BUG intracomm event: {:?} downcast content {:?}",
                         event,
-                        content.downcast_ref::<ListingMessage>().map(|msg| *msg)
+                        content.downcast_ref::<ListingMessage>().copied()
                     );
                     log::debug!(
                         "BUG component is {} and self id is {}",
@@ -1264,12 +1264,11 @@ impl Component for Listing {
                 }
             }
         }
-        if self.focus == ListingFocus::Mailbox && self.status.is_none() {
-            if self.component.unfocused() && self.view.process_event(event, context) {
-                return true;
-            } else if self.component.process_event(event, context) {
-                return true;
-            }
+        if (self.focus == ListingFocus::Mailbox && self.status.is_none())
+            && ((self.component.unfocused() && self.view.process_event(event, context))
+                || self.component.process_event(event, context))
+        {
+            return true;
         }
 
         let shortcuts = self.shortcuts(context);
@@ -2239,7 +2238,7 @@ impl Listing {
                 first_account_hash,
                 MailboxHash::default(),
             ))),
-            view: Box::new(ThreadView::default()),
+            view: Box::<ThreadView>::default(),
             accounts: account_entries,
             status: None,
             dirty: true,

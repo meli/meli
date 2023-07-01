@@ -26,6 +26,7 @@ use melib::email::headers::HeaderName;
 
 use super::*;
 
+#[allow(clippy::type_complexity)]
 pub enum HookFn {
     /// Stateful hook.
     Closure(Box<dyn FnMut(&mut Context, &mut Draft) -> Result<()> + Send + Sync>),
