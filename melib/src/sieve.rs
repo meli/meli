@@ -525,7 +525,7 @@ pub mod parser {
                     either(
                         map(
                             right(ws(parse_token("exists")), ws(parse_string_list())),
-                            |l| ConditionRule::Exists(l),
+                            ConditionRule::Exists,
                         ),
                         map(
                             right(ws(parse_token("size")), ws(parse_sieve_integer_operator())),
@@ -540,12 +540,14 @@ pub mod parser {
                             either(parse_sieve_header(), parse_sieve_address()),
                         ),
                         either(
-                            map(right(ws(parse_token("allof")), parse_test_list()), |l| {
-                                ConditionRule::AllOf(l)
-                            }),
-                            map(right(ws(parse_token("anyof")), parse_test_list()), |l| {
-                                ConditionRule::AnyOf(l)
-                            }),
+                            map(
+                                right(ws(parse_token("allof")), parse_test_list()),
+                                ConditionRule::AllOf,
+                            ),
+                            map(
+                                right(ws(parse_token("anyof")), parse_test_list()),
+                                ConditionRule::AnyOf,
+                            ),
                         ),
                     ),
                 ),
@@ -574,14 +576,14 @@ pub mod parser {
                     either(parse_sieve_stop(), parse_sieve_require()),
                     parse_sieve_if(),
                 ),
-                |c| Rule::Control(c),
+                Rule::Control,
             ),
             map(
                 either(
                     either(parse_sieve_keep(), parse_sieve_fileinto()),
                     either(parse_sieve_redirect(), parse_sieve_discard()),
                 ),
-                |ac| Rule::Action(ac),
+                Rule::Action,
             ),
         )
     }
@@ -594,7 +596,7 @@ pub mod parser {
                     ws(zero_or_more(parse_sieve_rule())),
                     parse_token("}"),
                 )),
-                |v| RuleBlock(v),
+                RuleBlock,
             )
             .parse(input)
         }

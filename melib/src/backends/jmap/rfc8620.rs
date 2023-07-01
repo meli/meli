@@ -72,7 +72,7 @@ impl core::fmt::Debug for Id<String> {
 //, Hash, Eq, PartialEq, Default)]
 impl<OBJ> Clone for Id<OBJ> {
     fn clone(&self) -> Self {
-        Id {
+        Self {
             inner: self.inner.clone(),
             _ph: PhantomData,
         }
@@ -101,7 +101,7 @@ impl<OBJ> Default for Id<OBJ> {
 
 impl<OBJ> From<String> for Id<OBJ> {
     fn from(inner: String) -> Self {
-        Id {
+        Self {
             inner,
             _ph: PhantomData,
         }
@@ -146,7 +146,7 @@ pub struct State<OBJ> {
 //, Hash, Eq, PartialEq, Default)]
 impl<OBJ> Clone for State<OBJ> {
     fn clone(&self) -> Self {
-        State {
+        Self {
             inner: self.inner.clone(),
             _ph: PhantomData,
         }
@@ -175,7 +175,7 @@ impl<OBJ> Default for State<OBJ> {
 
 impl<OBJ> From<String> for State<OBJ> {
     fn from(inner: String) -> Self {
-        State {
+        Self {
             inner,
             _ph: PhantomData,
         }
@@ -284,9 +284,9 @@ impl Object for BlobObject {
 ///       The id of the account to use.
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct Get<OBJ: Object>
+pub struct Get<OBJ>
 where
-    OBJ: std::fmt::Debug + Serialize,
+    OBJ: Object + std::fmt::Debug + Serialize,
 {
     pub account_id: Id<Account>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -298,9 +298,9 @@ where
     _ph: PhantomData<fn() -> OBJ>,
 }
 
-impl<OBJ: Object> Get<OBJ>
+impl<OBJ> Get<OBJ>
 where
-    OBJ: std::fmt::Debug + Serialize,
+    OBJ: Object + std::fmt::Debug + Serialize,
 {
     pub fn new() -> Self {
         Self {
@@ -337,6 +337,15 @@ where
         /// "invalid_arguments"      error.
         properties: Option<Vec<String>>
     );
+}
+
+impl<OBJ> Default for Get<OBJ>
+where
+    OBJ: Object + std::fmt::Debug + Serialize,
+{
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<OBJ: Object + Serialize + std::fmt::Debug> Serialize for Get<OBJ> {
@@ -417,17 +426,16 @@ pub struct GetResponse<OBJ: Object> {
 
 impl<OBJ: Object + DeserializeOwned> std::convert::TryFrom<&RawValue> for GetResponse<OBJ> {
     type Error = crate::error::Error;
-    fn try_from(t: &RawValue) -> Result<GetResponse<OBJ>, crate::error::Error> {
-        let res: (String, GetResponse<OBJ>, String) =
-            serde_json::from_str(t.get()).map_err(|err| {
-                crate::error::Error::new(format!(
-                    "BUG: Could not deserialize server JSON response properly, please report \
-                     this!\nReply from server: {}",
-                    &t
-                ))
-                .set_source(Some(Arc::new(err)))
-                .set_kind(crate::error::ErrorKind::Bug)
-            })?;
+    fn try_from(t: &RawValue) -> Result<Self, crate::error::Error> {
+        let res: (String, Self, String) = serde_json::from_str(t.get()).map_err(|err| {
+            crate::error::Error::new(format!(
+                "BUG: Could not deserialize server JSON response properly, please report \
+                 this!\nReply from server: {}",
+                &t
+            ))
+            .set_source(Some(Arc::new(err)))
+            .set_kind(crate::error::ErrorKind::Bug)
+        })?;
         assert_eq!(&res.0, &format!("{}/get", OBJ::NAME));
         Ok(res.1)
     }
@@ -450,9 +458,9 @@ enum JmapError {
 
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct Query<F: FilterTrait<OBJ>, OBJ: Object>
+pub struct Query<F: FilterTrait<OBJ>, OBJ>
 where
-    OBJ: std::fmt::Debug + Serialize,
+    OBJ: Object + std::fmt::Debug + Serialize,
 {
     pub account_id: Id<Account>,
     pub filter: Option<F>,
@@ -472,9 +480,9 @@ where
     _ph: PhantomData<fn() -> OBJ>,
 }
 
-impl<F: FilterTrait<OBJ>, OBJ: Object> Query<F, OBJ>
+impl<F: FilterTrait<OBJ>, OBJ> Query<F, OBJ>
 where
-    OBJ: std::fmt::Debug + Serialize,
+    OBJ: Object + std::fmt::Debug + Serialize,
 {
     pub fn new() -> Self {
         Self {
@@ -498,6 +506,15 @@ where
     _impl!(anchor_offset: u64);
     _impl!(limit: Option<u64>);
     _impl!(calculate_total: bool);
+}
+
+impl<F: FilterTrait<OBJ>, OBJ> Default for Query<F, OBJ>
+where
+    OBJ: Object + std::fmt::Debug + Serialize,
+{
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 pub fn u64_zero(num: &u64) -> bool {
@@ -530,17 +547,16 @@ pub struct QueryResponse<OBJ: Object> {
 
 impl<OBJ: Object + DeserializeOwned> std::convert::TryFrom<&RawValue> for QueryResponse<OBJ> {
     type Error = crate::error::Error;
-    fn try_from(t: &RawValue) -> Result<QueryResponse<OBJ>, crate::error::Error> {
-        let res: (String, QueryResponse<OBJ>, String) =
-            serde_json::from_str(t.get()).map_err(|err| {
-                crate::error::Error::new(format!(
-                    "BUG: Could not deserialize server JSON response properly, please report \
-                     this!\nReply from server: {}",
-                    &t
-                ))
-                .set_source(Some(Arc::new(err)))
-                .set_kind(crate::error::ErrorKind::Bug)
-            })?;
+    fn try_from(t: &RawValue) -> Result<Self, crate::error::Error> {
+        let res: (String, Self, String) = serde_json::from_str(t.get()).map_err(|err| {
+            crate::error::Error::new(format!(
+                "BUG: Could not deserialize server JSON response properly, please report \
+                 this!\nReply from server: {}",
+                &t
+            ))
+            .set_source(Some(Arc::new(err)))
+            .set_kind(crate::error::ErrorKind::Bug)
+        })?;
         assert_eq!(&res.0, &format!("{}/query", OBJ::NAME));
         Ok(res.1)
     }
@@ -557,7 +573,7 @@ pub struct ResultField<M: Method<OBJ>, OBJ: Object> {
 
 impl<M: Method<OBJ>, OBJ: Object> ResultField<M, OBJ> {
     pub fn new(field: &'static str) -> Self {
-        ResultField {
+        Self {
             field,
             _ph: PhantomData,
         }
@@ -604,9 +620,9 @@ impl<M: Method<OBJ>, OBJ: Object> ResultField<M, OBJ> {
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 /* ch-ch-ch-ch-ch-Changes */
-pub struct Changes<OBJ: Object>
+pub struct Changes<OBJ>
 where
-    OBJ: std::fmt::Debug + Serialize,
+    OBJ: Object + std::fmt::Debug + Serialize,
 {
     pub account_id: Id<Account>,
     pub since_state: State<OBJ>,
@@ -616,9 +632,9 @@ where
     _ph: PhantomData<fn() -> OBJ>,
 }
 
-impl<OBJ: Object> Changes<OBJ>
+impl<OBJ> Changes<OBJ>
 where
-    OBJ: std::fmt::Debug + Serialize,
+    OBJ: Object + std::fmt::Debug + Serialize,
 {
     pub fn new() -> Self {
         Self {
@@ -654,6 +670,15 @@ where
     );
 }
 
+impl<OBJ> Default for Changes<OBJ>
+where
+    OBJ: Object + std::fmt::Debug + Serialize,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ChangesResponse<OBJ: Object> {
@@ -670,17 +695,16 @@ pub struct ChangesResponse<OBJ: Object> {
 
 impl<OBJ: Object + DeserializeOwned> std::convert::TryFrom<&RawValue> for ChangesResponse<OBJ> {
     type Error = crate::error::Error;
-    fn try_from(t: &RawValue) -> Result<ChangesResponse<OBJ>, crate::error::Error> {
-        let res: (String, ChangesResponse<OBJ>, String) =
-            serde_json::from_str(t.get()).map_err(|err| {
-                crate::error::Error::new(format!(
-                    "BUG: Could not deserialize server JSON response properly, please report \
-                     this!\nReply from server: {}",
-                    &t
-                ))
-                .set_source(Some(Arc::new(err)))
-                .set_kind(crate::error::ErrorKind::Bug)
-            })?;
+    fn try_from(t: &RawValue) -> Result<Self, crate::error::Error> {
+        let res: (String, Self, String) = serde_json::from_str(t.get()).map_err(|err| {
+            crate::error::Error::new(format!(
+                "BUG: Could not deserialize server JSON response properly, please report \
+                 this!\nReply from server: {}",
+                &t
+            ))
+            .set_source(Some(Arc::new(err)))
+            .set_kind(crate::error::ErrorKind::Bug)
+        })?;
         assert_eq!(&res.0, &format!("{}/changes", OBJ::NAME));
         Ok(res.1)
     }
@@ -706,9 +730,9 @@ impl<OBJ: Object> ChangesResponse<OBJ> {
 ///record type).
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct Set<OBJ: Object>
+pub struct Set<OBJ>
 where
-    OBJ: std::fmt::Debug + Serialize,
+    OBJ: Object + std::fmt::Debug + Serialize,
 {
     ///o  accountId: "Id"
     ///
@@ -785,9 +809,9 @@ where
     pub destroy: Option<Vec<Id<OBJ>>>,
 }
 
-impl<OBJ: Object> Set<OBJ>
+impl<OBJ> Set<OBJ>
 where
-    OBJ: std::fmt::Debug + Serialize,
+    OBJ: Object + std::fmt::Debug + Serialize,
 {
     pub fn new() -> Self {
         Self {
@@ -811,6 +835,15 @@ where
         if_in_state: Option<State<OBJ>>
     );
     _impl!(update: Option<HashMap<Id<OBJ>, Value>>);
+}
+
+impl<OBJ> Default for Set<OBJ>
+where
+    OBJ: Object + std::fmt::Debug + Serialize,
+{
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -876,17 +909,16 @@ pub struct SetResponse<OBJ: Object> {
 
 impl<OBJ: Object + DeserializeOwned> std::convert::TryFrom<&RawValue> for SetResponse<OBJ> {
     type Error = crate::error::Error;
-    fn try_from(t: &RawValue) -> Result<SetResponse<OBJ>, crate::error::Error> {
-        let res: (String, SetResponse<OBJ>, String) =
-            serde_json::from_str(t.get()).map_err(|err| {
-                crate::error::Error::new(format!(
-                    "BUG: Could not deserialize server JSON response properly, please report \
-                     this!\nReply from server: {}",
-                    &t
-                ))
-                .set_source(Some(Arc::new(err)))
-                .set_kind(crate::error::ErrorKind::Bug)
-            })?;
+    fn try_from(t: &RawValue) -> Result<Self, crate::error::Error> {
+        let res: (String, Self, String) = serde_json::from_str(t.get()).map_err(|err| {
+            crate::error::Error::new(format!(
+                "BUG: Could not deserialize server JSON response properly, please report \
+                 this!\nReply from server: {}",
+                &t
+            ))
+            .set_source(Some(Arc::new(err)))
+            .set_kind(crate::error::ErrorKind::Bug)
+        })?;
         assert_eq!(&res.0, &format!("{}/set", OBJ::NAME));
         Ok(res.1)
     }
@@ -1002,7 +1034,7 @@ pub fn download_request_format(
             ret.push_str(blob_id.as_str());
             prev_pos += "{blobId}".len();
         } else if download_url[prev_pos..].starts_with("{name}") {
-            ret.push_str(name.as_ref().map(String::as_str).unwrap_or(""));
+            ret.push_str(name.as_deref().unwrap_or(""));
             prev_pos += "{name}".len();
         }
     }
@@ -1070,9 +1102,9 @@ pub struct UploadResponse {
 ///   takes the following arguments:
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct QueryChanges<F: FilterTrait<OBJ>, OBJ: Object>
+pub struct QueryChanges<F: FilterTrait<OBJ>, OBJ>
 where
-    OBJ: std::fmt::Debug + Serialize,
+    OBJ: Object + std::fmt::Debug + Serialize,
 {
     pub account_id: Id<Account>,
     pub filter: Option<F>,
@@ -1114,9 +1146,9 @@ where
     _ph: PhantomData<fn() -> OBJ>,
 }
 
-impl<F: FilterTrait<OBJ>, OBJ: Object> QueryChanges<F, OBJ>
+impl<F: FilterTrait<OBJ>, OBJ> QueryChanges<F, OBJ>
 where
-    OBJ: std::fmt::Debug + Serialize,
+    OBJ: Object + std::fmt::Debug + Serialize,
 {
     pub fn new(account_id: Id<Account>, since_query_state: String) -> Self {
         Self {

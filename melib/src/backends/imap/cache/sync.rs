@@ -32,7 +32,7 @@ impl ImapConnection {
     pub async fn resync(&mut self, mailbox_hash: MailboxHash) -> Result<Option<Vec<Envelope>>> {
         debug!("resync mailbox_hash {}", mailbox_hash);
         debug!(&self.sync_policy);
-        if let SyncPolicy::None = self.sync_policy {
+        if matches!(self.sync_policy, SyncPolicy::None) {
             return Ok(None);
         }
 
@@ -107,7 +107,7 @@ impl ImapConnection {
             .unwrap()
             .get(&mailbox_hash)
             .cloned();
-        // 3.  tag2 UID FETCH 1:<lastseenuid> FLAGS
+        // 3. tag2 UID FETCH 1:<lastseenuid> FLAGS
         //if cached_uidvalidity.is_none() || cached_max_uid.is_none() {
         //    return Ok(None);
         //}
@@ -134,7 +134,7 @@ impl ImapConnection {
         }
         cache_handle.update_mailbox(mailbox_hash, &select_response)?;
 
-        // 2.  tag1 UID FETCH <lastseenuid+1>:* <descriptors>
+        // 2. tag1 UID FETCH <lastseenuid+1>:* <descriptors>
         self.send_command(CommandBody::fetch(
             max_uid + 1..,
             common_attributes(),
@@ -172,9 +172,7 @@ impl ImapConnection {
                 }
                 for f in keywords {
                     let hash = TagHash::from_bytes(f.as_bytes());
-                    if !tag_lck.contains_key(&hash) {
-                        tag_lck.insert(hash, f.to_string());
-                    }
+                    tag_lck.entry(hash).or_insert_with(|| f.to_string());
                     env.tags_mut().push(hash);
                 }
             }
@@ -232,7 +230,7 @@ impl ImapConnection {
             unseen_lck.insert_set(new_unseen);
         }
         mailbox_exists.lock().unwrap().insert_set(payload_hash_set);
-        // 3.  tag2 UID FETCH 1:<lastseenuid> FLAGS
+        // 3. tag2 UID FETCH 1:<lastseenuid> FLAGS
         let sequence_set = if max_uid == 0 {
             SequenceSet::from(..)
         } else {
@@ -246,9 +244,9 @@ impl ImapConnection {
         .await?;
         self.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)
             .await?;
-        //1) update cached flags for old messages;
-        //2) find out which old messages got expunged; and
-        //3) build a mapping between message numbers and UIDs (for old messages).
+        // 1) update cached flags for old messages;
+        // 2) find out which old messages got expunged; and
+        // 3) build a mapping between message numbers and UIDs (for old messages).
         let mut valid_envs = BTreeSet::default();
         let mut env_lck = self.uid_store.envelopes.lock().unwrap();
         let (_, v, _) = protocol_parser::fetch_responses(&response)?;
@@ -422,7 +420,7 @@ impl ImapConnection {
             //       "FETCH 1:* (FLAGS) (CHANGEDSINCE <cached-value>)" or
             //       "SEARCH MODSEQ <cached-value>".
 
-            // 2.  tag1 UID FETCH <lastseenuid+1>:* <descriptors>
+            // 2. tag1 UID FETCH <lastseenuid+1>:* <descriptors>
             self.send_command_raw(
                 format!(
                     "UID FETCH {}:* (UID FLAGS ENVELOPE BODY.PEEK[HEADER.FIELDS (REFERENCES)] \
@@ -464,9 +462,7 @@ impl ImapConnection {
                     }
                     for f in keywords {
                         let hash = TagHash::from_bytes(f.as_bytes());
-                        if !tag_lck.contains_key(&hash) {
-                            tag_lck.insert(hash, f.to_string());
-                        }
+                        tag_lck.entry(hash).or_insert_with(|| f.to_string());
                         env.tags_mut().push(hash);
                     }
                 }
@@ -518,7 +514,7 @@ impl ImapConnection {
                 unseen_lck.insert_set(new_unseen);
             }
             mailbox_exists.lock().unwrap().insert_set(payload_hash_set);
-            // 3.  tag2 UID FETCH 1:<lastseenuid> FLAGS
+            // 3. tag2 UID FETCH 1:<lastseenuid> FLAGS
             if cached_max_uid == 0 {
                 self.send_command_raw(
                     format!(
@@ -540,7 +536,7 @@ impl ImapConnection {
             }
             self.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)
                 .await?;
-            //1) update cached flags for old messages;
+            // 1) update cached flags for old messages;
             let mut env_lck = self.uid_store.envelopes.lock().unwrap();
             let (_, v, _) = protocol_parser::fetch_responses(&response)?;
             for FetchResponse { uid, flags, .. } in v {
@@ -588,14 +584,14 @@ impl ImapConnection {
             .await?;
         self.read_response(&mut response, RequiredResponses::SEARCH)
             .await?;
-        //1) update cached flags for old messages;
+        // 1) update cached flags for old messages;
         let (_, v) = protocol_parser::search_results(response.as_slice())?;
         for uid in v {
             valid_envs.insert(generate_envelope_hash(&mailbox_path, &uid));
         }
         {
             let mut env_lck = self.uid_store.envelopes.lock().unwrap();
-            for env_hash in env_lck
+            let olds = env_lck
                 .iter()
                 .filter_map(|(h, cenv)| {
                     if cenv.mailbox_hash == mailbox_hash {
@@ -604,9 +600,8 @@ impl ImapConnection {
                         None
                     }
                 })
-                .collect::<BTreeSet<EnvelopeHash>>()
-                .difference(&valid_envs)
-            {
+                .collect::<BTreeSet<EnvelopeHash>>();
+            for env_hash in olds.difference(&valid_envs) {
                 refresh_events.push((
                     env_lck[env_hash].uid,
                     RefreshEvent {

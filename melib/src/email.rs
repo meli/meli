@@ -159,15 +159,15 @@ bitflags! {
 
 impl PartialEq<&str> for Flag {
     fn eq(&self, other: &&str) -> bool {
-        (other.eq_ignore_ascii_case("passed") && self.contains(Flag::PASSED))
-            || (other.eq_ignore_ascii_case("replied") && self.contains(Flag::REPLIED))
-            || (other.eq_ignore_ascii_case("seen") && self.contains(Flag::SEEN))
-            || (other.eq_ignore_ascii_case("read") && self.contains(Flag::SEEN))
-            || (other.eq_ignore_ascii_case("junk") && self.contains(Flag::TRASHED))
-            || (other.eq_ignore_ascii_case("trash") && self.contains(Flag::TRASHED))
-            || (other.eq_ignore_ascii_case("trashed") && self.contains(Flag::TRASHED))
-            || (other.eq_ignore_ascii_case("draft") && self.contains(Flag::DRAFT))
-            || (other.eq_ignore_ascii_case("flagged") && self.contains(Flag::FLAGGED))
+        (other.eq_ignore_ascii_case("passed") && self.contains(Self::PASSED))
+            || (other.eq_ignore_ascii_case("replied") && self.contains(Self::REPLIED))
+            || (other.eq_ignore_ascii_case("seen") && self.contains(Self::SEEN))
+            || (other.eq_ignore_ascii_case("read") && self.contains(Self::SEEN))
+            || (other.eq_ignore_ascii_case("junk") && self.contains(Self::TRASHED))
+            || (other.eq_ignore_ascii_case("trash") && self.contains(Self::TRASHED))
+            || (other.eq_ignore_ascii_case("trashed") && self.contains(Self::TRASHED))
+            || (other.eq_ignore_ascii_case("draft") && self.contains(Self::DRAFT))
+            || (other.eq_ignore_ascii_case("flagged") && self.contains(Self::FLAGGED))
     }
 }
 
@@ -180,12 +180,12 @@ macro_rules! flag_impl {
 }
 
 impl Flag {
-    flag_impl!(fn is_passed, Flag::PASSED);
-    flag_impl!(fn is_replied, Flag::REPLIED);
-    flag_impl!(fn is_seen, Flag::SEEN);
-    flag_impl!(fn is_trashed, Flag::TRASHED);
-    flag_impl!(fn is_draft, Flag::DRAFT);
-    flag_impl!(fn is_flagged, Flag::FLAGGED);
+    flag_impl!(fn is_passed, Self::PASSED);
+    flag_impl!(fn is_replied, Self::REPLIED);
+    flag_impl!(fn is_seen, Self::SEEN);
+    flag_impl!(fn is_trashed, Self::TRASHED);
+    flag_impl!(fn is_draft, Self::DRAFT);
+    flag_impl!(fn is_flagged, Self::FLAGGED);
 
     #[cfg(feature = "imap_backend")]
     pub(crate) fn derive_imap_codec_flags(&self) -> Vec<ImapCodecFlag> {
@@ -239,7 +239,7 @@ impl Deref for Mail {
 
 impl Mail {
     pub fn new(bytes: Vec<u8>, flags: Option<Flag>) -> Result<Self> {
-        Ok(Mail {
+        Ok(Self {
             envelope: Envelope::from_bytes(&bytes, flags)?,
             bytes,
         })
@@ -309,13 +309,13 @@ impl core::fmt::Debug for Envelope {
 
 impl Default for Envelope {
     fn default() -> Self {
-        Envelope::new(EnvelopeHash::default())
+        Self::new(EnvelopeHash::default())
     }
 }
 
 impl Envelope {
     pub fn new(hash: EnvelopeHash) -> Self {
-        Envelope {
+        Self {
             hash,
             date: String::new(),
             timestamp: 0,
@@ -340,8 +340,8 @@ impl Envelope {
         self
     }
 
-    pub fn from_bytes(bytes: &[u8], flags: Option<Flag>) -> Result<Envelope> {
-        let mut e = Envelope::new(EnvelopeHash::from_bytes(bytes));
+    pub fn from_bytes(bytes: &[u8], flags: Option<Flag>) -> Result<Self> {
+        let mut e = Self::new(EnvelopeHash::from_bytes(bytes));
         let res = e.populate_headers(bytes).ok();
         if res.is_some() {
             if let Some(f) = flags {
@@ -855,19 +855,19 @@ impl Envelope {
 impl Eq for Envelope {}
 
 impl Ord for Envelope {
-    fn cmp(&self, other: &Envelope) -> std::cmp::Ordering {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.datetime().cmp(&other.datetime())
     }
 }
 
 impl PartialOrd for Envelope {
-    fn partial_cmp(&self, other: &Envelope) -> Option<std::cmp::Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
     }
 }
 
 impl PartialEq for Envelope {
-    fn eq(&self, other: &Envelope) -> bool {
+    fn eq(&self, other: &Self) -> bool {
         self.hash == other.hash
     }
 }

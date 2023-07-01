@@ -68,7 +68,7 @@ impl Connection {
     pub const IO_BUF_SIZE: usize = 64 * 1024;
     #[cfg(feature = "deflate_compression")]
     pub fn deflate(self) -> Self {
-        Connection::Deflate {
+        Self::Deflate {
             inner: DeflateEncoder::new(
                 DeflateDecoder::new_with_buf(Box::new(self), vec![0; Self::IO_BUF_SIZE]),
                 Compression::default(),
@@ -157,7 +157,7 @@ impl Connection {
     where
         T: Copy,
     {
-        let payload = &payload as *const T as *const c_void;
+        let payload = std::ptr::addr_of!(payload) as *const c_void;
         syscall!(setsockopt(
             self.as_raw_fd(),
             opt,
@@ -175,7 +175,7 @@ impl Connection {
             self.as_raw_fd(),
             opt,
             val,
-            &mut slot as *mut _ as *mut _,
+            std::ptr::addr_of_mut!(slot) as *mut _,
             &mut len,
         ))?;
         assert_eq!(len as usize, std::mem::size_of::<T>());

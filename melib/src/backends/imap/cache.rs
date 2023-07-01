@@ -34,9 +34,9 @@ pub struct ModSequence(pub std::num::NonZeroU64);
 
 impl TryFrom<i64> for ModSequence {
     type Error = ();
-    fn try_from(val: i64) -> std::result::Result<ModSequence, ()> {
+    fn try_from(val: i64) -> std::result::Result<Self, ()> {
         std::num::NonZeroU64::new(val as u64)
-            .map(|u| Ok(ModSequence(u)))
+            .map(|u| Ok(Self(u)))
             .unwrap_or(Err(()))
     }
 }
@@ -163,7 +163,7 @@ mod sqlite3_m {
             if i == 0 {
                 return Err(FromSqlError::OutOfRange(0));
             }
-            Ok(ModSequence::try_from(i).unwrap())
+            Ok(Self::try_from(i).unwrap())
         }
     }
 
@@ -172,7 +172,7 @@ mod sqlite3_m {
             Ok(Box::new(Self {
                 connection: sqlite3::open_or_create_db(
                     &DB_DESCRIPTION,
-                    Some(uid_store.account_name.as_str()),
+                    Some(&uid_store.account_name),
                 )?,
                 loaded_mailboxes: BTreeSet::default(),
                 uid_store,
@@ -195,13 +195,13 @@ mod sqlite3_m {
 
     impl ImapCacheReset for Sqlite3Cache {
         fn reset_db(uid_store: &UIDStore) -> Result<()> {
-            sqlite3::reset_db(&DB_DESCRIPTION, Some(uid_store.account_name.as_str()))
+            sqlite3::reset_db(&DB_DESCRIPTION, Some(&uid_store.account_name))
         }
     }
 
     impl ImapCache for Sqlite3Cache {
         fn reset(&mut self) -> Result<()> {
-            Sqlite3Cache::reset_db(&self.uid_store)
+            Self::reset_db(&self.uid_store)
         }
 
         fn mailbox_state(&mut self, mailbox_hash: MailboxHash) -> Result<Option<()>> {
@@ -256,10 +256,7 @@ mod sqlite3_m {
                 let mut tag_lck = self.uid_store.collection.tag_index.write().unwrap();
                 for f in to_str!(&flags).split('\0') {
                     let hash = TagHash::from_bytes(f.as_bytes());
-                    //debug!("hash {} flag {}", hash, &f);
-                    if !tag_lck.contains_key(&hash) {
-                        tag_lck.insert(hash, f.to_string());
-                    }
+                    tag_lck.entry(hash).or_insert_with(|| f.to_string());
                 }
                 self.loaded_mailboxes.insert(mailbox_hash);
                 Ok(Some(()))
@@ -410,6 +407,8 @@ mod sqlite3_m {
                     "SELECT uid, envelope, modsequence FROM envelopes WHERE mailbox_hash = ?1;",
                 )?;
 
+                #[allow(clippy::let_and_return)] // false positive, the let binding is needed
+                // for the temporary to live long enough
                 let x = stmt
                     .query_map(sqlite3::params![mailbox_hash], |row| {
                         Ok((
@@ -619,6 +618,8 @@ mod sqlite3_m {
                          AND uid = ?2;",
                     )?;
 
+                    #[allow(clippy::let_and_return)] // false positive, the let binding is needed
+                    // for the temporary to live long enough
                     let x = stmt
                         .query_map(sqlite3::params![mailbox_hash, uid as Sqlite3UID], |row| {
                             Ok((
@@ -636,6 +637,8 @@ mod sqlite3_m {
                          AND hash = ?2;",
                     )?;
 
+                    #[allow(clippy::let_and_return)] // false positive, the let binding is needed
+                    // for the temporary to live long enough
                     let x = stmt
                         .query_map(sqlite3::params![mailbox_hash, env_hash], |row| {
                             Ok((
@@ -670,6 +673,8 @@ mod sqlite3_m {
                     let mut stmt = self.connection.prepare(
                         "SELECT rfc822 FROM envelopes WHERE mailbox_hash = ?1 AND uid = ?2;",
                     )?;
+                    #[allow(clippy::let_and_return)] // false positive, the let binding is needed
+                    // for the temporary to live long enough
                     let x = stmt
                         .query_map(sqlite3::params![mailbox_hash, uid as Sqlite3UID], |row| {
                             row.get(0)
@@ -681,6 +686,8 @@ mod sqlite3_m {
                     let mut stmt = self.connection.prepare(
                         "SELECT rfc822 FROM envelopes WHERE mailbox_hash = ?1 AND hash = ?2;",
                     )?;
+                    #[allow(clippy::let_and_return)] // false positive, the let binding is needed
+                    // for the temporary to live long enough
                     let x = stmt
                         .query_map(sqlite3::params![mailbox_hash, env_hash], |row| row.get(0))?
                         .collect::<std::result::Result<_, _>>()?;

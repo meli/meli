@@ -146,7 +146,7 @@ macro_rules! get_conf_val {
 #[derive(Debug)]
 pub struct UIDStore {
     account_hash: AccountHash,
-    account_name: Arc<String>,
+    account_name: Arc<str>,
     keep_offline_cache: bool,
     capabilities: Arc<Mutex<Capabilities>>,
     hash_index: Arc<Mutex<HashMap<EnvelopeHash, (UID, MailboxHash)>>>,
@@ -171,11 +171,11 @@ pub struct UIDStore {
 impl UIDStore {
     fn new(
         account_hash: AccountHash,
-        account_name: Arc<String>,
+        account_name: Arc<str>,
         event_consumer: BackendEventConsumer,
         timeout: Option<Duration>,
     ) -> Self {
-        UIDStore {
+        Self {
             account_hash,
             account_name,
             keep_offline_cache: false,
@@ -422,7 +422,7 @@ impl MailBackend for ImapType {
                         .collect());
                 }
             }
-            let new_mailboxes = ImapType::imap_mailboxes(&connection).await?;
+            let new_mailboxes = Self::imap_mailboxes(&connection).await?;
             let mut mailboxes = uid_store.mailboxes.lock().await;
             *mailboxes = new_mailboxes;
             /*
@@ -776,9 +776,7 @@ impl MailBackend for ImapType {
                             }
                             Err(tag) => {
                                 let hash = TagHash::from_bytes(tag.as_bytes());
-                                if !tag_lck.contains_key(&hash) {
-                                    tag_lck.insert(hash, tag.to_string());
-                                }
+                                tag_lck.entry(hash).or_insert_with(|| tag.to_string());
                                 cmd.push_str(tag);
                                 cmd.push(' ');
                             }
@@ -1242,6 +1240,7 @@ impl MailBackend for ImapType {
 }
 
 impl ImapType {
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(
         s: &AccountSettings,
         is_subscribed: Box<dyn Fn(&str) -> bool + Send + Sync>,
@@ -1302,7 +1301,7 @@ impl ImapType {
             timeout,
         };
         let account_hash = AccountHash::from_bytes(s.name.as_bytes());
-        let account_name = Arc::new(s.name.to_string());
+        let account_name = s.name.to_string().into();
         let uid_store: Arc<UIDStore> = Arc::new(UIDStore {
             keep_offline_cache,
             ..UIDStore::new(
@@ -1319,7 +1318,7 @@ impl ImapType {
             uid_store.clone(),
         );
 
-        Ok(Box::new(ImapType {
+        Ok(Box::new(Self {
             server_conf,
             _is_subscribed: Arc::new(IsSubscribedFn(is_subscribed)),
             connection: Arc::new(FutureMutex::new(connection)),
@@ -1423,29 +1422,27 @@ impl ImapType {
             }
             if let Ok(mut mailbox) = protocol_parser::list_mailbox_result(l).map(|(_, v)| v) {
                 if let Some(parent) = mailbox.parent {
-                    if mailboxes.contains_key(&parent) {
-                        mailboxes
-                            .entry(parent)
-                            .and_modify(|e| e.children.push(mailbox.hash));
-                    } else {
+                    if let std::collections::hash_map::Entry::Vacant(e) = mailboxes.entry(parent) {
                         /* Insert dummy parent entry, populating only the children field. Later
                          * when we encounter the parent entry we will swap its children with
                          * dummy's */
-                        mailboxes.insert(
-                            parent,
-                            ImapMailbox {
-                                children: vec![mailbox.hash],
-                                ..ImapMailbox::default()
-                            },
-                        );
+                        e.insert(ImapMailbox {
+                            children: vec![mailbox.hash],
+                            ..ImapMailbox::default()
+                        });
+                    } else {
+                        mailboxes
+                            .entry(parent)
+                            .and_modify(|e| e.children.push(mailbox.hash));
                     }
                 }
-                if mailboxes.contains_key(&mailbox.hash) {
+                if let std::collections::hash_map::Entry::Vacant(e) = mailboxes.entry(mailbox.hash)
+                {
+                    e.insert(mailbox);
+                } else {
                     let entry = mailboxes.entry(mailbox.hash).or_default();
                     std::mem::swap(&mut entry.children, &mut mailbox.children);
                     *entry = mailbox;
-                } else {
-                    mailboxes.insert(mailbox.hash, mailbox);
                 }
             } else if let Ok(status) = protocol_parser::status_response(l).map(|(_, v)| v) {
                 if let Some(mailbox_hash) = status.mailbox {
@@ -1828,9 +1825,7 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
                             }
                             for f in keywords {
                                 let hash = TagHash::from_bytes(f.as_bytes());
-                                if !tag_lck.contains_key(&hash) {
-                                    tag_lck.insert(hash, f.to_string());
-                                }
+                                tag_lck.entry(hash).or_insert_with(|| f.to_string());
                                 env.tags_mut().push(hash);
                             }
                         }

@@ -55,7 +55,7 @@ pub struct HeaderName {
 
 impl Custom {
     fn as_str(&self) -> &str {
-        unsafe { std::str::from_utf8_unchecked(&*self.0) }
+        unsafe { std::str::from_utf8_unchecked(&self.0) }
     }
 }
 
@@ -85,7 +85,7 @@ impl Error for InvalidHeaderName {}
 
 impl std::fmt::Debug for InvalidHeaderName {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(fmt, "{}", "Invalid header name.")
+        write!(fmt, "Invalid header name.")
     }
 }
 
@@ -159,6 +159,8 @@ macro_rules! standard_headers {
                 }
             }
 
+            // invalid clippy lint match here
+            #[allow(clippy::string_lit_as_bytes)]
             pub fn from_bytes(name_bytes: &[u8]) -> Option<Self> {
                 match name_bytes {
                     $(
@@ -217,6 +219,8 @@ macro_rules! standards {
 
             }
 
+            // invalid clippy lint match here
+            #[allow(clippy::string_lit_as_bytes)]
             pub fn from_bytes(name_bytes: &[u8]) -> Option<Self> {
                 match name_bytes {
                     $(
@@ -565,8 +569,8 @@ impl HeaderName {
 impl FromStr for HeaderName {
     type Err = InvalidHeaderName;
 
-    fn from_str(s: &str) -> Result<HeaderName, InvalidHeaderName> {
-        HeaderName::from_bytes(s.as_bytes()).map_err(|_| InvalidHeaderName::new())
+    fn from_str(s: &str) -> Result<Self, InvalidHeaderName> {
+        Self::from_bytes(s.as_bytes()).map_err(|_| InvalidHeaderName::new())
     }
 }
 
@@ -605,15 +609,15 @@ impl<'de> Deserialize<'de> for HeaderName {
             S(String),
             B(Vec<u8>),
         }
-        if let Ok(s) = <Helper>::deserialize(deserializer) {
-            Self::from_bytes(match &s {
-                Helper::S(v) => v.as_bytes(),
-                Helper::B(v) => v.as_slice(),
-            })
+        <Helper>::deserialize(deserializer)
             .map_err(|_| de::Error::custom("invalid header name value"))
-        } else {
-            Err(de::Error::custom("invalid header name value"))
-        }
+            .and_then(|s| {
+                Self::from_bytes(match &s {
+                    Helper::S(v) => v.as_bytes(),
+                    Helper::B(v) => v.as_slice(),
+                })
+                .map_err(|_| de::Error::custom("invalid header name value"))
+            })
     }
 }
 
@@ -627,13 +631,13 @@ impl Serialize for HeaderName {
 }
 
 impl InvalidHeaderName {
-    const fn new() -> InvalidHeaderName {
-        InvalidHeaderName
+    const fn new() -> Self {
+        Self
     }
 }
 
-impl<'a> From<&'a HeaderName> for HeaderName {
-    fn from(src: &'a HeaderName) -> Self {
+impl<'a> From<&'a Self> for HeaderName {
+    fn from(src: &'a Self) -> Self {
         src.clone()
     }
 }
@@ -691,8 +695,8 @@ impl TryFrom<Vec<u8>> for HeaderName {
 
 #[doc(hidden)]
 impl From<StandardHeader> for HeaderName {
-    fn from(src: StandardHeader) -> HeaderName {
-        HeaderName {
+    fn from(src: StandardHeader) -> Self {
+        Self {
             inner: Repr::Standard(src),
         }
     }
@@ -700,16 +704,16 @@ impl From<StandardHeader> for HeaderName {
 
 #[doc(hidden)]
 impl From<Custom> for HeaderName {
-    fn from(src: Custom) -> HeaderName {
-        HeaderName {
+    fn from(src: Custom) -> Self {
+        Self {
             inner: Repr::Custom(src),
         }
     }
 }
 
-impl<'a> PartialEq<&'a HeaderName> for HeaderName {
+impl<'a> PartialEq<&'a Self> for HeaderName {
     #[inline]
-    fn eq(&self, other: &&'a HeaderName) -> bool {
+    fn eq(&self, other: &&'a Self) -> bool {
         *self == **other
     }
 }
@@ -861,7 +865,7 @@ impl<'a, 'b> Iterator for AsciiIgnoreCaseCmp<'a, 'b> {
     type Item = ();
 
     fn next(&mut self) -> Option<()> {
-        match (self.a.get(0), self.b.get(0)) {
+        match (self.a.first(), self.b.first()) {
             (Some(a_char), Some(b_char)) => {
                 self.ord = a_char
                     .to_ascii_lowercase()

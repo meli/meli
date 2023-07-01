@@ -19,6 +19,8 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#![allow(clippy::needless_range_loop)]
+
 #[cfg(feature = "unicode_algorithms")]
 include!("src/text_processing/types.rs");
 

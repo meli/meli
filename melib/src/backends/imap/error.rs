@@ -32,8 +32,8 @@ use crate::error::{Error, ErrorKind};
 
 impl From<LiteralError> for Error {
     #[inline]
-    fn from(error: LiteralError) -> Error {
-        Error {
+    fn from(error: LiteralError) -> Self {
+        Self {
             summary: error.to_string().into(),
             details: None,
             source: Some(Arc::new(error)),
@@ -44,8 +44,8 @@ impl From<LiteralError> for Error {
 
 impl From<SequenceSetError> for Error {
     #[inline]
-    fn from(error: SequenceSetError) -> Error {
-        Error {
+    fn from(error: SequenceSetError) -> Self {
+        Self {
             summary: error.to_string().into(),
             details: None,
             source: Some(Arc::new(error)),
@@ -59,8 +59,8 @@ where
     AppendError<S, L>: fmt::Debug + fmt::Display + Sync + Send + 'static,
 {
     #[inline]
-    fn from(error: AppendError<S, L>) -> Error {
-        Error {
+    fn from(error: AppendError<S, L>) -> Self {
+        Self {
             summary: error.to_string().into(),
             details: None,
             source: Some(Arc::new(error)),
@@ -74,8 +74,8 @@ where
     CopyError<S, L>: fmt::Debug + fmt::Display + Sync + Send + 'static,
 {
     #[inline]
-    fn from(error: CopyError<S, L>) -> Error {
-        Error {
+    fn from(error: CopyError<S, L>) -> Self {
+        Self {
             summary: error.to_string().into(),
             details: None,
             source: Some(Arc::new(error)),
@@ -89,8 +89,8 @@ where
     MoveError<S, M>: fmt::Debug + fmt::Display + Sync + Send + 'static,
 {
     #[inline]
-    fn from(error: MoveError<S, M>) -> Error {
-        Error {
+    fn from(error: MoveError<S, M>) -> Self {
+        Self {
             summary: error.to_string().into(),
             details: None,
             source: Some(Arc::new(error)),
@@ -104,8 +104,8 @@ where
     ListError<L1, L2>: fmt::Debug + fmt::Display + Sync + Send + 'static,
 {
     #[inline]
-    fn from(error: ListError<L1, L2>) -> Error {
-        Error {
+    fn from(error: ListError<L1, L2>) -> Self {
+        Self {
             summary: error.to_string().into(),
             details: None,
             source: Some(Arc::new(error)),

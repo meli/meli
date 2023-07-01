@@ -82,8 +82,8 @@ impl DerefMut for MaildirPath {
 }
 
 impl From<PathBuf> for MaildirPath {
-    fn from(val: PathBuf) -> MaildirPath {
-        MaildirPath {
+    fn from(val: PathBuf) -> Self {
+        Self {
             buf: val,
             modified: None,
             removed: false,
@@ -800,7 +800,7 @@ impl MailBackend for MaildirType {
     ) -> ResultFuture<()> {
         let path = self.mailboxes[&mailbox_hash].fs_path.clone();
         Ok(Box::pin(async move {
-            MaildirType::save_to_mailbox(path, bytes, flags)
+            Self::save_to_mailbox(path, bytes, flags)
         }))
     }
 
@@ -1073,6 +1073,7 @@ impl MailBackend for MaildirType {
 }
 
 impl MaildirType {
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(
         settings: &AccountSettings,
         is_subscribed: Box<dyn Fn(&str) -> bool>,
@@ -1219,7 +1220,7 @@ impl MaildirType {
                 },
             );
         }
-        Ok(Box::new(MaildirType {
+        Ok(Box::new(Self {
             name: settings.name.to_string(),
             mailboxes,
             hash_indexes: Arc::new(Mutex::new(hash_indexes)),
@@ -1346,17 +1347,12 @@ fn add_path_to_index(
 ) -> Result<Envelope> {
     debug!("add_path_to_index path {:?} filename{:?}", path, file_name);
     let env_hash = get_file_hash(path);
-    {
-        let mut map = hash_index.lock().unwrap();
-        let map = map.entry(mailbox_hash).or_default();
-        map.insert(env_hash, path.to_path_buf().into());
-        debug!(
-            "inserted {} in {} map, len={}",
-            env_hash,
-            mailbox_hash,
-            map.len()
-        );
-    }
+    hash_index
+        .lock()
+        .unwrap()
+        .entry(mailbox_hash)
+        .or_default()
+        .insert(env_hash, path.to_path_buf().into());
     let mut reader = io::BufReader::new(fs::File::open(path)?);
     buf.clear();
     reader.read_to_end(buf)?;

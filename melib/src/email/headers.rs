@@ -186,7 +186,6 @@ mod tests {
     fn test_headers_case_sensitivity() {
         let mut headers = HeaderMap::default();
         headers.insert("from".try_into().unwrap(), "Myself <a@b.c>".into());
-        dbg!(&headers);
         assert_eq!(&headers["From"], "Myself <a@b.c>");
         assert_eq!(&headers["From"], &headers["from"]);
         assert_eq!(&headers["fROm"], &headers["from"]);
@@ -201,7 +200,6 @@ mod tests {
         let mut headers = HeaderMap::default();
         headers.insert(HeaderName::SUBJECT, "foobar".into());
         headers.insert(HeaderName::MESSAGE_ID, "foobar@examplecom".into());
-        dbg!(&headers);
         assert_eq!(&headers[0], "foobar");
         assert_eq!(&headers[HeaderName::SUBJECT], "foobar");
         assert_eq!(&headers[&HeaderName::SUBJECT], "foobar");

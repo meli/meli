@@ -97,10 +97,10 @@ impl AccountSettings {
         } else if let Some(pass) = self.extra.get("server_password") {
             Ok(pass.to_owned())
         } else {
-            Err(Error::new(format!(
+            Err(Error::new(
                 "Configuration error: connection requires either server_password or \
-                 server_password_command"
-            )))
+                 server_password_command",
+            ))
         }
     }
 }
@@ -128,7 +128,7 @@ pub struct MailboxConf {
 
 impl Default for MailboxConf {
     fn default() -> Self {
-        MailboxConf {
+        Self {
             alias: None,
             autoload: false,
             subscribe: ToggleFlag::Unset,
@@ -190,8 +190,9 @@ mod strings {
     named_unit_variant!(ask);
 }
 
-#[derive(Copy, Debug, Clone, PartialEq, Eq)]
+#[derive(Copy, Default, Debug, Clone, PartialEq, Eq)]
 pub enum ToggleFlag {
+    #[default]
     Unset,
     InternalVal(bool),
     False,
@@ -202,37 +203,32 @@ pub enum ToggleFlag {
 impl From<bool> for ToggleFlag {
     fn from(val: bool) -> Self {
         if val {
-            ToggleFlag::True
+            Self::True
         } else {
-            ToggleFlag::False
+            Self::False
         }
-    }
-}
-
-impl Default for ToggleFlag {
-    fn default() -> Self {
-        ToggleFlag::Unset
     }
 }
 
 impl ToggleFlag {
     pub fn is_unset(&self) -> bool {
-        ToggleFlag::Unset == *self
+        Self::Unset == *self
     }
+
     pub fn is_internal(&self) -> bool {
-        matches!(self, ToggleFlag::InternalVal(_))
+        matches!(self, Self::InternalVal(_))
     }
 
     pub fn is_ask(&self) -> bool {
-        matches!(self, ToggleFlag::Ask)
+        matches!(self, Self::Ask)
     }
 
     pub fn is_false(&self) -> bool {
-        matches!(self, ToggleFlag::False | ToggleFlag::InternalVal(false))
+        matches!(self, Self::False | Self::InternalVal(false))
     }
 
     pub fn is_true(&self) -> bool {
-        matches!(self, ToggleFlag::True | ToggleFlag::InternalVal(true))
+        matches!(self, Self::True | Self::InternalVal(true))
     }
 }
 
@@ -242,10 +238,10 @@ impl Serialize for ToggleFlag {
         S: Serializer,
     {
         match self {
-            ToggleFlag::Unset | ToggleFlag::InternalVal(_) => serializer.serialize_none(),
-            ToggleFlag::False => serializer.serialize_bool(false),
-            ToggleFlag::True => serializer.serialize_bool(true),
-            ToggleFlag::Ask => serializer.serialize_str("ask"),
+            Self::Unset | Self::InternalVal(_) => serializer.serialize_none(),
+            Self::False => serializer.serialize_bool(false),
+            Self::True => serializer.serialize_bool(true),
+            Self::Ask => serializer.serialize_str("ask"),
         }
     }
 }
@@ -270,9 +266,9 @@ impl<'de> Deserialize<'de> for ToggleFlag {
                     err
                 ))
             })? {
-                InnerToggleFlag::Bool(true) => ToggleFlag::True,
-                InnerToggleFlag::Bool(false) => ToggleFlag::False,
-                InnerToggleFlag::Ask => ToggleFlag::Ask,
+                InnerToggleFlag::Bool(true) => Self::True,
+                InnerToggleFlag::Bool(false) => Self::False,
+                InnerToggleFlag::Ask => Self::Ask,
             },
         )
     }

@@ -109,19 +109,16 @@ fn bisearch(ucs: WChar, table: &'static [Interval]) -> bool {
 pub fn wcwidth(ucs: WChar) -> Option<usize> {
     if bisearch(ucs, super::tables::ASCII) {
         Some(1)
-    } else if bisearch(ucs, super::tables::PRIVATE) {
-        None
-    } else if bisearch(ucs, super::tables::NONPRINT) {
-        None
-    } else if bisearch(ucs, super::tables::COMBINING) {
+    } else if bisearch(ucs, super::tables::PRIVATE)
+        || bisearch(ucs, super::tables::NONPRINT)
+        || bisearch(ucs, super::tables::COMBINING)
+    {
         None
     } else if bisearch(ucs, super::tables::DOUBLEWIDE) {
         Some(2)
     } else if bisearch(ucs, super::tables::AMBIGUOUS) {
         Some(1)
-    } else if bisearch(ucs, super::tables::UNASSIGNED) {
-        Some(2)
-    } else if bisearch(ucs, super::tables::WIDENEDIN9) {
+    } else if bisearch(ucs, super::tables::UNASSIGNED) || bisearch(ucs, super::tables::WIDENEDIN9) {
         Some(2)
     } else {
         Some(1)

@@ -80,20 +80,20 @@ impl AsciiSet {
         (chunk & mask) != 0
     }
 
-    fn should_percent_encode(&self, byte: u8) -> bool {
+    const fn should_percent_encode(&self, byte: u8) -> bool {
         !byte.is_ascii() || self.contains(byte)
     }
 
     pub const fn add(&self, byte: u8) -> Self {
         let mut mask = self.mask;
         mask[byte as usize / BITS_PER_CHUNK] |= 1 << (byte as usize % BITS_PER_CHUNK);
-        AsciiSet { mask }
+        Self { mask }
     }
 
     pub const fn remove(&self, byte: u8) -> Self {
         let mut mask = self.mask;
         mask[byte as usize / BITS_PER_CHUNK] &= !(1 << (byte as usize % BITS_PER_CHUNK));
-        AsciiSet { mask }
+        Self { mask }
     }
 }
 
@@ -114,7 +114,7 @@ pub const CONTROLS: &AsciiSet = &AsciiSet {
 
 macro_rules! static_assert {
     ($( $bool: expr, )+) => {
-        fn _static_assert() {
+        const fn _static_assert() {
             $(
                 let _ = mem::transmute::<[u8; $bool as usize], u8>;
             )+
@@ -236,7 +236,10 @@ pub fn percent_encode_byte(byte: u8) -> &'static str {
 /// );
 /// ```
 #[inline]
-pub fn percent_encode<'a>(input: &'a [u8], ascii_set: &'static AsciiSet) -> PercentEncode<'a> {
+pub const fn percent_encode<'a>(
+    input: &'a [u8],
+    ascii_set: &'static AsciiSet,
+) -> PercentEncode<'a> {
     PercentEncode {
         bytes: input,
         ascii_set,
@@ -317,18 +320,20 @@ impl<'a> fmt::Display for PercentEncode<'a> {
 
 impl<'a> From<PercentEncode<'a>> for Cow<'a, str> {
     fn from(mut iter: PercentEncode<'a>) -> Self {
-        match iter.next() {
-            None => "".into(),
-            Some(first) => match iter.next() {
-                None => first.into(),
-                Some(second) => {
-                    let mut string = first.to_owned();
-                    string.push_str(second);
-                    string.extend(iter);
-                    string.into()
-                }
+        iter.next().map_or_else(
+            || "".into(),
+            |first| {
+                iter.next().map_or_else(
+                    || first.into(),
+                    |second| {
+                        let mut string = first.to_owned();
+                        string.push_str(second);
+                        string.extend(iter);
+                        string.into()
+                    },
+                )
             },
-        }
+        )
     }
 }
 
@@ -474,7 +479,7 @@ fn decode_utf8_lossy(input: Cow<'_, [u8]>) -> Cow<'_, str> {
 
                     // First we do a debug_assert to confirm our description above.
                     let raw_utf8: *const [u8] = utf8.as_bytes();
-                    debug_assert!(raw_utf8 == &*bytes as *const [u8]);
+                    debug_assert!(raw_utf8 == std::ptr::addr_of!(*bytes));
 
                     // Given we know the original input bytes are valid UTF-8,
                     // and we have ownership of those bytes, we re-use them and

@@ -328,7 +328,7 @@ impl ManageSieveConnection {
             ))),
             ..UIDStore::new(
                 account_hash,
-                Arc::new(account_name),
+                account_name.into(),
                 event_consumer,
                 server_conf.timeout,
             )

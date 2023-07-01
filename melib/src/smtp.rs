@@ -157,7 +157,7 @@ pub struct SmtpAuthType {
 }
 
 impl SmtpAuth {
-    fn require_auth(&self) -> bool {
+    pub const fn require_auth(&self) -> bool {
         use SmtpAuth::*;
         match self {
             None => false,
@@ -274,8 +274,8 @@ impl SmtpConnection {
                 )
                 .await?;
                 drop(pre_ehlo_extensions_reply);
-                //debug!(pre_ehlo_extensions_reply);
-                if let SmtpSecurity::Auto { .. } = server_conf.security {
+
+                if matches!(server_conf.security, SmtpSecurity::Auto { .. }) {
                     if server_conf.port == 465 {
                         server_conf.security = SmtpSecurity::Tls {
                             danger_accept_invalid_certs,
@@ -292,7 +292,7 @@ impl SmtpConnection {
                     }
                 }
                 socket.write_all(b"EHLO meli.delivery\r\n").await?;
-                if let SmtpSecurity::StartTLS { .. } = server_conf.security {
+                if matches!(server_conf.security, SmtpSecurity::StartTLS { .. }) {
                     let pre_tls_extensions_reply = read_lines(
                         &mut socket,
                         &mut res,
@@ -372,7 +372,7 @@ impl SmtpConnection {
                 ret
             }
         };
-        let mut ret = SmtpConnection {
+        let mut ret = Self {
             stream,
             read_buffer: String::new(),
             server_conf: server_conf.clone(),
@@ -852,7 +852,7 @@ pub enum ReplyCode {
 }
 
 impl ReplyCode {
-    fn as_str(&self) -> &'static str {
+    pub const fn as_str(&self) -> &'static str {
         use ReplyCode::*;
         match self {
             _211 => "System status, or system help reply",
@@ -893,7 +893,7 @@ impl ReplyCode {
         }
     }
 
-    fn is_err(&self) -> bool {
+    pub const fn is_err(&self) -> bool {
         use ReplyCode::*;
         matches!(
             self,
@@ -920,7 +920,7 @@ impl ReplyCode {
 
 impl TryFrom<&'_ str> for ReplyCode {
     type Error = Error;
-    fn try_from(val: &'_ str) -> Result<ReplyCode> {
+    fn try_from(val: &'_ str) -> Result<Self> {
         if val.len() != 3 {
             debug!("{}", val);
         }
@@ -981,12 +981,12 @@ impl<'s> Reply<'s> {
     /// code, a space or '-' and end with '\r\n'
     pub fn new(s: &'s str, code: ReplyCode) -> Self {
         let lines: SmallVec<_> = s.lines().map(|l| &l[4..l.len()]).collect();
-        Reply { lines, code }
+        Self { lines, code }
     }
 }
 
 async fn read_lines<'r>(
-    _self: &mut (impl futures::io::AsyncRead + std::marker::Unpin),
+    _self: &mut (impl futures::io::AsyncRead + std::marker::Unpin + Send),
     ret: &'r mut String,
     expected_reply_code: Option<(ReplyCode, &[ReplyCode])>,
     buffer: &mut String,
@@ -1069,7 +1069,10 @@ mod test {
         thread,
     };
 
-    use mailin_embedded::{Handler, Response, Server, SslConfig};
+    use mailin_embedded::{
+        response::{INTERNAL_ERROR, OK},
+        Handler, Response, Server, SslConfig,
+    };
 
     use super::*;
 
@@ -1096,12 +1099,13 @@ mod test {
         },
     }
 
+    type QueuedMail = ((IpAddr, String), Message);
+
     #[derive(Debug, Clone)]
     struct MyHandler {
-        mails: Arc<Mutex<Vec<((IpAddr, String), Message)>>>,
+        mails: Arc<Mutex<Vec<QueuedMail>>>,
         stored: Arc<Mutex<Vec<(String, crate::Envelope)>>>,
     }
-    use mailin_embedded::response::{INTERNAL_ERROR, OK};
 
     impl Handler for MyHandler {
         fn helo(&mut self, ip: IpAddr, domain: &str) -> Response {
@@ -1123,8 +1127,8 @@ mod test {
                 .rev()
                 .find(|((i, d), _)| (i, d.as_str()) == (&ip, domain))
             {
-                std::dbg!(&message);
-                if let Message::Helo = message {
+                eprintln!("mail is {:?}", &message);
+                if matches!(message, Message::Helo) {
                     *message = Message::Mail {
                         from: from.to_string(),
                     };
@@ -1137,7 +1141,7 @@ mod test {
         fn rcpt(&mut self, _to: &str) -> Response {
             eprintln!("rcpt() to {:?}", _to);
             if let Some((_, message)) = self.mails.lock().unwrap().last_mut() {
-                std::dbg!(&message);
+                eprintln!("rcpt mail is {:?}", &message);
                 if let Message::Mail { from } = message {
                     *message = Message::Rcpt {
                         from: from.clone(),
@@ -1167,7 +1171,7 @@ mod test {
                 if d != _domain {
                     return INTERNAL_ERROR;
                 }
-                std::dbg!(&message);
+                eprintln!("data_start mail is {:?}", &message);
                 if let Message::Rcpt { from, to } = message {
                     *message = Message::DataStart {
                         from: from.to_string(),
@@ -1189,7 +1193,7 @@ mod test {
                     };
                     return Ok(());
                 } else if let Message::Data { buf, .. } = message {
-                    buf.extend(_buf.into_iter().copied());
+                    buf.extend(_buf.iter());
                     return Ok(());
                 }
             }
@@ -1202,8 +1206,8 @@ mod test {
                 for to in to {
                     match crate::Envelope::from_bytes(&buf, None) {
                         Ok(env) => {
-                            std::dbg!(&env);
-                            std::dbg!(env.other_headers());
+                            eprintln!("data_end env is {:?}", &env);
+                            eprintln!("data_end env.other_headers is {:?}", env.other_headers());
                             self.stored.lock().unwrap().push((to.clone(), env));
                         }
                         Err(err) => {

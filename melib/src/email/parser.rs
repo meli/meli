@@ -20,6 +20,7 @@
  */
 
 //! Parsers for email. See submodules.
+#![allow(clippy::type_complexity)]
 
 use std::{borrow::Cow, convert::TryFrom, fmt::Write};
 
@@ -143,8 +144,8 @@ impl<I, E> nom::error::FromExternalError<I, E> for ParsingError<I> {
 impl<I> nom::error::ContextError<I> for ParsingError<I> {}
 
 impl<'i> From<ParsingError<&'i [u8]>> for Error {
-    fn from(val: ParsingError<&'i [u8]>) -> Error {
-        Error::new("Parsing error").set_summary(format!(
+    fn from(val: ParsingError<&'i [u8]>) -> Self {
+        Self::new("Parsing error").set_summary(format!(
             r#"In input: "{}...",
 Error: {}"#,
             String::from_utf8_lossy(val.input)
@@ -157,8 +158,8 @@ Error: {}"#,
 }
 
 impl<'i> From<ParsingError<&'i str>> for Error {
-    fn from(val: ParsingError<&'i str>) -> Error {
-        Error::new("Parsing error").set_summary(format!(
+    fn from(val: ParsingError<&'i str>) -> Self {
+        Self::new("Parsing error").set_summary(format!(
             r#"In input: "{}...",
 Error: {}"#,
             val.input.chars().take(30).collect::<String>(),
@@ -168,34 +169,34 @@ Error: {}"#,
 }
 
 impl<'i> From<nom::Err<ParsingError<&'i [u8]>>> for Error {
-    fn from(val: nom::Err<ParsingError<&'i [u8]>>) -> Error {
+    fn from(val: nom::Err<ParsingError<&'i [u8]>>) -> Self {
         match val {
-            nom::Err::Incomplete(_) => Error::new("Parsing Error: Incomplete"),
+            nom::Err::Incomplete(_) => Self::new("Parsing Error: Incomplete"),
             nom::Err::Error(err) | nom::Err::Failure(err) => err.into(),
         }
     }
 }
 
 impl<'i> From<nom::Err<ParsingError<&'i str>>> for Error {
-    fn from(val: nom::Err<ParsingError<&'i str>>) -> Error {
+    fn from(val: nom::Err<ParsingError<&'i str>>) -> Self {
         match val {
-            nom::Err::Incomplete(_) => Error::new("Parsing Error: Incomplete"),
+            nom::Err::Incomplete(_) => Self::new("Parsing Error: Incomplete"),
             nom::Err::Error(err) | nom::Err::Failure(err) => err.into(),
         }
     }
 }
 
 impl From<nom::Err<nom::error::Error<&[u8]>>> for Error {
-    fn from(val: nom::Err<nom::error::Error<&[u8]>>) -> Error {
+    fn from(val: nom::Err<nom::error::Error<&[u8]>>) -> Self {
         match val {
-            nom::Err::Incomplete(_) => Error::new("Parsing Error: Incomplete"),
-            nom::Err::Error(_) | nom::Err::Failure(_) => Error::new("Parsing Error"),
+            nom::Err::Incomplete(_) => Self::new("Parsing Error: Incomplete"),
+            nom::Err::Error(_) | nom::Err::Failure(_) => Self::new("Parsing Error"),
         }
     }
 }
 
 impl<'i> From<ParsingError<&'i [u8]>> for nom::error::Error<&'i [u8]> {
-    fn from(val: ParsingError<&'i [u8]>) -> nom::error::Error<&'i [u8]> {
+    fn from(val: ParsingError<&'i [u8]>) -> Self {
         nom::error::Error::new(val.input, ErrorKind::Satisfy)
     }
 }
@@ -2044,10 +2045,9 @@ pub mod encodings {
         let encoded_text = &input[3 + tag_end_idx..encoded_end_idx];
 
         let s: Vec<u8> = match input[tag_end_idx + 1] {
-            b'b' | b'B' => match BASE64_MIME.decode(encoded_text) {
-                Ok(v) => v,
-                Err(_) => encoded_text.to_vec(),
-            },
+            b'b' | b'B' => BASE64_MIME
+                .decode(encoded_text)
+                .map_or_else(|_| encoded_text.to_vec(), |v| v),
             b'q' | b'Q' => match quoted_printable_bytes_header(encoded_text) {
                 Ok((b"", s)) => s,
                 _ => {
@@ -2065,19 +2065,21 @@ pub mod encodings {
 
         let charset = Charset::from(&input[2..tag_end_idx]);
 
-        if let Charset::UTF8 = charset {
+        if Charset::UTF8 == charset {
             Ok((&input[encoded_end_idx + 2..], s))
         } else {
-            match decode_charset(&s, charset) {
-                Ok(v) => Ok((&input[encoded_end_idx + 2..], v.into_bytes())),
-                _ => Err(nom::Err::Error(
-                    (
-                        input,
-                        format!("encoded_word(): unknown charset {:?}", charset),
-                    )
-                        .into(),
-                )),
-            }
+            decode_charset(&s, charset).map_or_else(
+                |_| {
+                    Err(nom::Err::Error(
+                        (
+                            input,
+                            format!("encoded_word(): unknown charset {:?}", charset),
+                        )
+                            .into(),
+                    ))
+                },
+                |v| Ok((&input[encoded_end_idx + 2..], v.into_bytes())),
+            )
         }
     }
 
@@ -2798,32 +2800,31 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_attachments() {
-        //FIXME: add file
-        return;
-        /*
-                use std::io::Read;
-                let mut buffer: Vec<u8> = Vec::new();
-                let _ = std::fs::File::open("").unwrap().read_to_end(&mut buffer);
-                let boundary = b"b1_4382d284f0c601a737bb32aaeda53160";
-                let (_, body) = match mail(&buffer) {
-                    Ok(v) => v,
-                    Err(_) => panic!(),
-                };
-                let attachments = parts(body, boundary).unwrap().1;
-                assert_eq!(attachments.len(), 4);
-                let v: Vec<&str> = attachments
-                    .iter()
-                    .map(|v| std::str::from_utf8(v).unwrap())
-                    .collect();
-        //println!("attachments {:?}", v);
-                */
-    }
+    //    //FIXME: add file
+    //#[test]
+    //fn test_attachments() {
+    //            use std::io::Read;
+    //            let mut buffer: Vec<u8> = Vec::new();
+    //            let _ = std::fs::File::open("").unwrap().read_to_end(&mut buffer);
+    //            let boundary = b"b1_4382d284f0c601a737bb32aaeda53160";
+    //            let (_, body) = match mail(&buffer) {
+    //                Ok(v) => v,
+    //                Err(_) => panic!(),
+    //            };
+    //            let attachments = parts(body, boundary).unwrap().1;
+    //            assert_eq!(attachments.len(), 4);
+    //            let v: Vec<&str> = attachments
+    //                .iter()
+    //                .map(|v| std::str::from_utf8(v).unwrap())
+    //                .collect();
+    //    //println!("attachments {:?}", v);
+    //}
+
     #[test]
     fn test_addresses() {
         macro_rules! assert_parse {
             ($name:literal, $addr:literal, $raw:literal) => {{
+                #[allow(clippy::string_lit_as_bytes)]
                 let s = $raw.as_bytes();
                 let r = address(s).unwrap().1;
                 match r {

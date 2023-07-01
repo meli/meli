@@ -104,11 +104,7 @@ where
 {
     move |input| {
         parser.parse(input).and_then(|(next_input, result)| {
-            if let Ok(res) = map_fn(result) {
-                Ok((next_input, res))
-            } else {
-                Err(next_input)
-            }
+            map_fn(result).map_or_else(|_| Err(next_input), |res| Ok((next_input, res)))
         })
     }
 }
@@ -387,10 +383,10 @@ where
 }
 
 pub fn any_char(input: &str) -> Result<char> {
-    match input.chars().next() {
-        Some(next) => Ok((&input[next.len_utf8()..], next)),
-        _ => Err(input),
-    }
+    input
+        .chars()
+        .next()
+        .map_or_else(|| Err(input), |next| Ok((&input[next.len_utf8()..], next)))
 }
 
 pub fn string<'a>() -> impl Parser<'a, String> {
@@ -615,7 +611,7 @@ pub fn date<'a, T: Into<Cow<'static, str>>>(fmt: T) -> impl Parser<'a, UnixTimes
 
 pub fn integer<'a>() -> impl Parser<'a, usize> {
     use std::str::FromStr;
-    map_res(is_a(b"0123456789"), |s| usize::from_str(s))
+    map_res(is_a(b"0123456789"), usize::from_str)
 }
 
 #[cfg(test)]
@@ -628,12 +624,12 @@ mod test {
     fn test_parsec() {
         #[derive(Debug, PartialEq)]
         enum JsonValue {
-            JsonString(String),
-            JsonNumber(f64),
-            JsonBool(bool),
-            JsonNull,
-            JsonObject(HashMap<String, JsonValue>),
-            JsonArray(Vec<JsonValue>),
+            String(String),
+            Number(f64),
+            Bool(bool),
+            Null,
+            Object(HashMap<String, JsonValue>),
+            Array(Vec<JsonValue>),
         }
 
         fn parse_value<'a>() -> impl Parser<'a, JsonValue> {
@@ -643,16 +639,16 @@ mod test {
                         either(
                             either(
                                 either(
-                                    map(parse_bool(), JsonValue::JsonBool),
-                                    map(parse_null(), |()| JsonValue::JsonNull),
+                                    map(parse_bool(), JsonValue::Bool),
+                                    map(parse_null(), |()| JsonValue::Null),
                                 ),
-                                map(parse_array(), JsonValue::JsonArray),
+                                map(parse_array(), JsonValue::Array),
                             ),
-                            map(parse_object(), JsonValue::JsonObject),
+                            map(parse_object(), JsonValue::Object),
                         ),
-                        map(parse_number(), JsonValue::JsonNumber),
+                        map(parse_number(), JsonValue::Number),
                     ),
-                    map(quoted_string(), JsonValue::JsonString),
+                    map(quoted_string(), JsonValue::String),
                 )
                 .parse(input)
             }
@@ -714,15 +710,15 @@ mod test {
             }
         }
         assert_eq!(
-            Ok(("", JsonValue::JsonString("a".to_string()))),
+            Ok(("", JsonValue::String("a".to_string()))),
             parse_value().parse(r#""a""#)
         );
         assert_eq!(
-            Ok(("", JsonValue::JsonBool(true))),
+            Ok(("", JsonValue::Bool(true))),
             parse_value().parse(r#"true"#)
         );
         assert_eq!(
-            Ok(("", JsonValue::JsonObject(HashMap::default()))),
+            Ok(("", JsonValue::Object(HashMap::default()))),
             parse_value().parse(r#"{}"#)
         );
         println!("{:?}", parse_value().parse(r#"{"a":true}"#));

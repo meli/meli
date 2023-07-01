@@ -71,8 +71,11 @@ impl ShellExpandTrait for Path {
 
     #[cfg(target_os = "linux")]
     fn complete(&self, force: bool) -> SmallVec<[String; 128]> {
+        use std::convert::TryFrom;
+
         use libc::dirent64;
         use nix::fcntl::OFlag;
+
         const BUF_SIZE: ::libc::size_t = 8 << 10;
 
         let (prefix, _match) = if self.as_os_str().as_bytes().ends_with(b"/.") {
@@ -126,13 +129,13 @@ impl ShellExpandTrait for Path {
                     BUF_SIZE - 256,
                 )
             };
-            if n < 0 {
-                return SmallVec::new();
-            } else if n == 0 {
-                break;
-            }
 
-            let n = n as usize;
+            let Ok(n) = usize::try_from(n) else {
+                if n == 0 {
+                    break;
+                }
+                return SmallVec::new();
+            };
             unsafe {
                 buf.set_len(n);
             }
@@ -140,23 +143,24 @@ impl ShellExpandTrait for Path {
             while pos < n {
                 let dir = unsafe { std::mem::transmute::<&[u8], &[dirent64]>(&buf[pos..]) };
                 let entry = unsafe { std::ffi::CStr::from_ptr(dir[0].d_name.as_ptr()) };
-                if entry.to_bytes() != b"." && entry.to_bytes() != b".." {
-                    if entry.to_bytes().starts_with(_match.as_bytes()) {
-                        if dir[0].d_type == ::libc::DT_DIR && !entry.to_bytes().ends_with(b"/") {
-                            let mut s = unsafe {
-                                String::from_utf8_unchecked(
-                                    entry.to_bytes()[_match.as_bytes().len()..].to_vec(),
-                                )
-                            };
-                            s.push('/');
-                            entries.push(s);
-                        } else {
-                            entries.push(unsafe {
-                                String::from_utf8_unchecked(
-                                    entry.to_bytes()[_match.as_bytes().len()..].to_vec(),
-                                )
-                            });
-                        }
+                if entry.to_bytes() != b"."
+                    && entry.to_bytes() != b".."
+                    && entry.to_bytes().starts_with(_match.as_bytes())
+                {
+                    if dir[0].d_type == ::libc::DT_DIR && !entry.to_bytes().ends_with(b"/") {
+                        let mut s = unsafe {
+                            String::from_utf8_unchecked(
+                                entry.to_bytes()[_match.as_bytes().len()..].to_vec(),
+                            )
+                        };
+                        s.push('/');
+                        entries.push(s);
+                    } else {
+                        entries.push(unsafe {
+                            String::from_utf8_unchecked(
+                                entry.to_bytes()[_match.as_bytes().len()..].to_vec(),
+                            )
+                        });
                     }
                 }
                 pos += dir[0].d_reclen as usize;
@@ -198,7 +202,7 @@ impl ShellExpandTrait for Path {
             entries.push("/".to_string());
         }
 
-        if let Ok(iter) = std::fs::read_dir(&prefix) {
+        if let Ok(iter) = std::fs::read_dir(prefix) {
             for entry in iter.flatten() {
                 if entry.path().as_os_str().as_bytes() != b"."
                     && entry.path().as_os_str().as_bytes() != b".."

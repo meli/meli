@@ -90,6 +90,12 @@ impl ImportCall {
     _impl!(emails: HashMap<Id<EmailObject>, EmailImport>);
 }
 
+impl Default for ImportCall {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Method<EmailObject> for ImportCall {
     const NAME: &'static str = "Email/import";
 }
@@ -108,6 +114,12 @@ impl EmailImport {
     _impl!(mailbox_ids: HashMap<Id<MailboxObject>, bool>);
     _impl!(keywords: HashMap<String, bool>);
     _impl!(received_at: Option<String>);
+}
+
+impl Default for EmailImport {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -184,17 +196,16 @@ pub struct ImportResponse {
 
 impl std::convert::TryFrom<&RawValue> for ImportResponse {
     type Error = crate::error::Error;
-    fn try_from(t: &RawValue) -> Result<ImportResponse> {
-        let res: (String, ImportResponse, String) =
-            serde_json::from_str(t.get()).map_err(|err| {
-                crate::error::Error::new(format!(
-                    "BUG: Could not deserialize server JSON response properly, please report \
-                     this!\nReply from server: {}",
-                    &t
-                ))
-                .set_source(Some(Arc::new(err)))
-                .set_kind(ErrorKind::Bug)
-            })?;
+    fn try_from(t: &RawValue) -> Result<Self> {
+        let res: (String, Self, String) = serde_json::from_str(t.get()).map_err(|err| {
+            crate::error::Error::new(format!(
+                "BUG: Could not deserialize server JSON response properly, please report \
+                 this!\nReply from server: {}",
+                &t
+            ))
+            .set_source(Some(Arc::new(err)))
+            .set_kind(ErrorKind::Bug)
+        })?;
         assert_eq!(&res.0, &ImportCall::NAME);
         Ok(res.1)
     }

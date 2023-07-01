@@ -88,7 +88,7 @@ macro_rules! uuid_hash_type {
                 $n(Uuid::new_v4())
             }
 
-            pub fn null() -> Self {
+            pub const fn null() -> Self {
                 $n(Uuid::nil())
             }
         }
@@ -474,36 +474,26 @@ impl SubjectPrefix for &str {
 
 /* Sorting states. */
 
-#[derive(Debug, Clone, PartialEq, Eq, Copy, Deserialize, Serialize)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Copy, Deserialize, Serialize)]
 pub enum SortOrder {
     Asc,
+    #[default]
     Desc,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Copy, Deserialize, Serialize)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Copy, Deserialize, Serialize)]
 pub enum SortField {
     Subject,
+    #[default]
     Date,
-}
-
-impl Default for SortField {
-    fn default() -> Self {
-        SortField::Date
-    }
-}
-
-impl Default for SortOrder {
-    fn default() -> Self {
-        SortOrder::Desc
-    }
 }
 
 impl FromStr for SortField {
     type Err = ();
     fn from_str(s: &str) -> StdResult<Self, Self::Err> {
         match s.trim() {
-            "subject" | "s" | "sub" | "sbj" | "subj" => Ok(SortField::Subject),
-            "date" | "d" => Ok(SortField::Date),
+            "subject" | "s" | "sub" | "sbj" | "subj" => Ok(Self::Subject),
+            "date" | "d" => Ok(Self::Date),
             _ => Err(()),
         }
     }
@@ -513,8 +503,8 @@ impl FromStr for SortOrder {
     type Err = ();
     fn from_str(s: &str) -> StdResult<Self, Self::Err> {
         match s.trim() {
-            "asc" => Ok(SortOrder::Asc),
-            "desc" => Ok(SortOrder::Desc),
+            "asc" => Ok(Self::Asc),
+            "desc" => Ok(Self::Desc),
             _ => Err(()),
         }
     }
@@ -539,13 +529,13 @@ pub enum ThreadGroup {
 
 impl Default for ThreadGroup {
     fn default() -> Self {
-        ThreadGroup::Root(Thread::default())
+        Self::Root(Thread::default())
     }
 }
 
 impl ThreadGroup {
     pub fn root(&self) -> Option<&Thread> {
-        if let ThreadGroup::Root(ref root) = self {
+        if let Self::Root(ref root) = self {
             Some(root)
         } else {
             None
@@ -594,8 +584,8 @@ pub struct ThreadNode {
 }
 
 impl Default for ThreadNode {
-    fn default() -> ThreadNode {
-        ThreadNode {
+    fn default() -> Self {
+        Self {
             message: None,
             parent: None,
             other_mailbox: false,
@@ -610,7 +600,7 @@ impl Default for ThreadNode {
 
 impl ThreadNode {
     fn new() -> Self {
-        ThreadNode::default()
+        Self::default()
     }
 
     pub fn show_subject(&self) -> bool {
@@ -672,7 +662,7 @@ pub struct Threads {
 }
 
 impl PartialEq for ThreadNode {
-    fn eq(&self, other: &ThreadNode) -> bool {
+    fn eq(&self, other: &Self) -> bool {
         match (self.message, other.message) {
             (Some(s), Some(o)) => s == o,
             _ => false,
@@ -717,7 +707,7 @@ impl Threads {
         parent_group
     }
 
-    pub fn new(length: usize) -> Threads {
+    pub fn new(length: usize) -> Self {
         /* To reconstruct thread information from the mails we need: */
 
         /* a vector to hold thread members */
@@ -739,7 +729,7 @@ impl Threads {
         let envelope_to_thread: HashMap<EnvelopeHash, ThreadHash> =
             HashMap::with_capacity_and_hasher(length, Default::default());
 
-        Threads {
+        Self {
             thread_nodes,
             message_ids,
             message_ids_set,
@@ -775,6 +765,7 @@ impl Threads {
         }
     }
 
+    #[allow(clippy::result_unit_err)]
     pub fn update_envelope(
         &mut self,
         envelopes: &Envelopes,
@@ -992,26 +983,23 @@ impl Threads {
         }
 
         let thread_hash = self.thread_nodes[&new_id].group;
-        if !self.groups.contains_key(&thread_hash) {
-            self.groups.insert(
-                thread_hash,
-                ThreadGroup::Root(Thread {
-                    root: new_id,
-                    date: envelopes_lck[&env_hash].date(),
-                    len: 1,
-                    unseen: if !envelopes_lck[&env_hash].is_seen() {
-                        1
-                    } else {
-                        0
-                    },
-                    attachments: if envelopes_lck[&env_hash].has_attachments() {
-                        1
-                    } else {
-                        0
-                    },
-                    snoozed: false,
-                }),
-            );
+        if let std::collections::hash_map::Entry::Vacant(e) = self.groups.entry(thread_hash) {
+            e.insert(ThreadGroup::Root(Thread {
+                root: new_id,
+                date: envelopes_lck[&env_hash].date(),
+                len: 1,
+                unseen: if !envelopes_lck[&env_hash].is_seen() {
+                    1
+                } else {
+                    0
+                },
+                attachments: if envelopes_lck[&env_hash].has_attachments() {
+                    1
+                } else {
+                    0
+                },
+                snoozed: false,
+            }));
         } else {
             let parent_group = self.thread_ref_mut(thread_hash);
             parent_group.date = std::cmp::max(parent_group.date, envelopes_lck[&env_hash].date());

@@ -25,6 +25,7 @@
 #![allow(unused)]
 #![allow(dead_code)]
 #![allow(clippy::useless_transmute)]
+#![allow(clippy::borrow_as_ptr)]
 #![allow(clippy::too_many_arguments)]
 use libc::{off_t, time_t, FILE};
 
@@ -4993,10 +4994,10 @@ pub type gpgme_set_global_flag = extern "C" fn(
     value: *const ::std::os::raw::c_char,
 ) -> ::std::os::raw::c_int;
 pub type gpgme_check_version = unsafe extern "C" fn(
-    req_version: *const ::std::os::raw::c_char,
+    req_version: *const ::std::os::raw::c_uchar,
 ) -> *const ::std::os::raw::c_char;
 pub type gpgme_check_version_internal = extern "C" fn(
-    req_version: *const ::std::os::raw::c_char,
+    req_version: *const ::std::os::raw::c_uchar,
     offset_sig_validity: usize,
 ) -> *const ::std::os::raw::c_char;
 pub type gpgme_get_dirinfo =
@@ -5379,7 +5380,7 @@ fn bindgen_test_layout___va_list_tag() {
         concat!("Alignment of ", stringify!(__va_list_tag))
     );
     assert_eq!(
-        unsafe { &(*(::std::ptr::null::<__va_list_tag>())).gp_offset as *const _ as usize },
+        unsafe { std::ptr::addr_of!((*(::std::ptr::null::<__va_list_tag>())).gp_offset) as usize },
         0usize,
         concat!(
             "Offset of field: ",
@@ -5389,7 +5390,7 @@ fn bindgen_test_layout___va_list_tag() {
         )
     );
     assert_eq!(
-        unsafe { &(*(::std::ptr::null::<__va_list_tag>())).fp_offset as *const _ as usize },
+        unsafe { std::ptr::addr_of!((*(::std::ptr::null::<__va_list_tag>())).fp_offset) as usize },
         4usize,
         concat!(
             "Offset of field: ",
@@ -5399,7 +5400,9 @@ fn bindgen_test_layout___va_list_tag() {
         )
     );
     assert_eq!(
-        unsafe { &(*(::std::ptr::null::<__va_list_tag>())).overflow_arg_area as *const _ as usize },
+        unsafe {
+            std::ptr::addr_of!((*(::std::ptr::null::<__va_list_tag>())).overflow_arg_area) as usize
+        },
         8usize,
         concat!(
             "Offset of field: ",
@@ -5409,7 +5412,9 @@ fn bindgen_test_layout___va_list_tag() {
         )
     );
     assert_eq!(
-        unsafe { &(*(::std::ptr::null::<__va_list_tag>())).reg_save_area as *const _ as usize },
+        unsafe {
+            std::ptr::addr_of!((*(::std::ptr::null::<__va_list_tag>())).reg_save_area) as usize
+        },
         16usize,
         concat!(
             "Offset of field: ",

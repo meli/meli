@@ -54,19 +54,17 @@ pub fn open_or_create_db(
 ) -> Result<Connection> {
     let mut second_try: bool = false;
     loop {
-        let db_path = if let Some(id) = identifier {
-            db_path(&format!("{}_{}", id, description.name))
-        } else {
-            db_path(description.name)
-        }?;
-        let mut set_mode = false;
-        if !db_path.exists() {
+        let db_path = identifier.map_or_else(
+            || db_path(description.name),
+            |id| db_path(&format!("{}_{}", id, description.name)),
+        )?;
+        let set_mode = !db_path.exists();
+        if set_mode {
             log::info!(
                 "Creating {} database in {}",
                 description.name,
                 db_path.display()
             );
-            set_mode = true;
         }
         let conn = Connection::open(&db_path).map_err(|e| Error::new(e.to_string()))?;
         if set_mode {
@@ -112,11 +110,10 @@ pub fn open_or_create_db(
 
 /// Return database to a clean slate.
 pub fn reset_db(description: &DatabaseDescription, identifier: Option<&str>) -> Result<()> {
-    let db_path = if let Some(id) = identifier {
-        db_path(&format!("{}_{}", id, description.name))
-    } else {
-        db_path(description.name)
-    }?;
+    let db_path = identifier.map_or_else(
+        || db_path(description.name),
+        |id| db_path(&format!("{}_{}", id, description.name)),
+    )?;
     if !db_path.exists() {
         return Ok(());
     }

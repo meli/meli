@@ -50,7 +50,7 @@ impl Default for Collection {
 }
 
 impl Collection {
-    pub fn new() -> Collection {
+    pub fn new() -> Self {
         let message_id_index = Arc::new(RwLock::new(HashMap::with_capacity_and_hasher(
             16,
             Default::default(),
@@ -64,7 +64,7 @@ impl Collection {
             Default::default(),
         )));
 
-        Collection {
+        Self {
             envelopes: Arc::new(RwLock::new(Default::default())),
             tag_index: Arc::new(RwLock::new(BTreeMap::default())),
             message_id_index,
@@ -145,9 +145,7 @@ impl Collection {
             if *h == mailbox_hash {
                 continue;
             }
-            t.update_envelope(&self.envelopes, old_hash, new_hash)
-                .ok()
-                .take();
+            _ = t.update_envelope(&self.envelopes, old_hash, new_hash);
         }
         true
     }
@@ -162,7 +160,7 @@ impl Collection {
     ) -> Option<SmallVec<[MailboxHash; 8]>> {
         *self.sent_mailbox.write().unwrap() = sent_mailbox;
 
-        let Collection {
+        let Self {
             ref threads,
             ref envelopes,
             ref mailboxes,
@@ -172,8 +170,8 @@ impl Collection {
 
         let mut threads_lck = threads.write().unwrap();
         let mut mailboxes_lck = mailboxes.write().unwrap();
-        if !threads_lck.contains_key(&mailbox_hash) {
-            threads_lck.insert(mailbox_hash, Threads::new(new_envelopes.len()));
+        if let std::collections::hash_map::Entry::Vacant(e) = threads_lck.entry(mailbox_hash) {
+            e.insert(Threads::new(new_envelopes.len()));
             mailboxes_lck.insert(mailbox_hash, new_envelopes.keys().cloned().collect());
             for (h, e) in new_envelopes {
                 envelopes.write().unwrap().insert(h, e);
@@ -303,8 +301,7 @@ impl Collection {
             .unwrap_or(false)
         {
             for (_, t) in threads_lck.iter_mut() {
-                t.update_envelope(&self.envelopes, old_hash, new_hash)
-                    .unwrap_or(());
+                _ = t.update_envelope(&self.envelopes, old_hash, new_hash);
             }
         }
         {
@@ -326,9 +323,7 @@ impl Collection {
             if *h == mailbox_hash {
                 continue;
             }
-            t.update_envelope(&self.envelopes, old_hash, new_hash)
-                .ok()
-                .take();
+            _ = t.update_envelope(&self.envelopes, old_hash, new_hash);
         }
     }
 
@@ -342,8 +337,7 @@ impl Collection {
             .unwrap_or(false)
         {
             for (_, t) in threads_lck.iter_mut() {
-                t.update_envelope(&self.envelopes, env_hash, env_hash)
-                    .unwrap_or(());
+                _ = t.update_envelope(&self.envelopes, env_hash, env_hash);
             }
         }
         {
@@ -365,9 +359,7 @@ impl Collection {
             if *h == mailbox_hash {
                 continue;
             }
-            t.update_envelope(&self.envelopes, env_hash, env_hash)
-                .ok()
-                .take();
+            _ = t.update_envelope(&self.envelopes, env_hash, env_hash);
         }
     }
 
@@ -401,7 +393,8 @@ impl Collection {
 
     pub fn insert_reply(&self, env_hash: EnvelopeHash) {
         debug_assert!(self.envelopes.read().unwrap().contains_key(&env_hash));
-        for (_, t) in self.threads.write().unwrap().iter_mut() {
+        let mut iter = self.threads.write().unwrap();
+        for (_, t) in iter.iter_mut() {
             t.insert_reply(&self.envelopes, env_hash);
         }
     }
@@ -435,8 +428,8 @@ impl Collection {
 
     pub fn new_mailbox(&self, mailbox_hash: MailboxHash) {
         let mut mailboxes_lck = self.mailboxes.write().unwrap();
-        if !mailboxes_lck.contains_key(&mailbox_hash) {
-            mailboxes_lck.insert(mailbox_hash, Default::default());
+        if let std::collections::hash_map::Entry::Vacant(e) = mailboxes_lck.entry(mailbox_hash) {
+            e.insert(Default::default());
             self.threads
                 .write()
                 .unwrap()

@@ -134,7 +134,7 @@ pub enum MailboxSelection {
 
 impl MailboxSelection {
     pub fn take(&mut self) -> Self {
-        std::mem::replace(self, MailboxSelection::None)
+        std::mem::replace(self, Self::None)
     }
 }
 
@@ -157,7 +157,7 @@ impl ImapStream {
         server_conf: &ImapServerConf,
         #[cfg(debug_assertions)] id: Cow<'static, str>,
         uid_store: &UIDStore,
-    ) -> Result<(Capabilities, ImapStream)> {
+    ) -> Result<(Capabilities, Self)> {
         use std::net::TcpStream;
         let path = &server_conf.server_hostname;
 
@@ -293,7 +293,7 @@ impl ImapStream {
             log::warn!("Could not set TCP keepalive in IMAP connection: {}", err);
         }
         let mut res = Vec::with_capacity(8 * 1024);
-        let mut ret = ImapStream {
+        let mut ret = Self {
             cmd_id,
             #[cfg(debug_assertions)]
             id,
@@ -302,7 +302,7 @@ impl ImapStream {
             current_mailbox: MailboxSelection::None,
             timeout: server_conf.timeout,
         };
-        if let ImapProtocol::ManageSieve = server_conf.protocol {
+        if matches!(server_conf.protocol, ImapProtocol::ManageSieve) {
             ret.read_response(&mut res).await?;
             let credentials = format!(
                 "\0{}\0{}",
@@ -530,7 +530,7 @@ impl ImapStream {
     pub async fn send_command(&mut self, body: CommandBody<'_>) -> Result<()> {
         timeout(self.timeout, async {
             let command = {
-                let tag = Tag::unchecked(format!("M{}", self.cmd_id.to_string()));
+                let tag = Tag::unchecked(format!("M{}", self.cmd_id));
 
                 Command { tag, body }
             };
@@ -629,8 +629,8 @@ impl ImapConnection {
         server_conf: &ImapServerConf,
         #[cfg(debug_assertions)] id: Cow<'static, str>,
         uid_store: Arc<UIDStore>,
-    ) -> ImapConnection {
-        ImapConnection {
+    ) -> Self {
+        Self {
             stream: Err(Error::new("Offline".to_string())),
             #[cfg(debug_assertions)]
             id,
@@ -1167,7 +1167,7 @@ pub struct ImapBlockingConnection {
 
 impl From<ImapConnection> for ImapBlockingConnection {
     fn from(conn: ImapConnection) -> Self {
-        ImapBlockingConnection {
+        Self {
             buf: vec![0; Connection::IO_BUF_SIZE],
             conn,
             prev_res_length: 0,
@@ -1186,7 +1186,7 @@ impl ImapBlockingConnection {
         self.err.take()
     }
 
-    pub fn as_stream<'a>(&'a mut self) -> impl Future<Output = Option<Vec<u8>>> + 'a {
+    pub fn as_stream(&mut self) -> impl Future<Output = Option<Vec<u8>>> + '_ {
         self.result.drain(0..self.prev_res_length);
         self.prev_res_length = 0;
         let mut break_flag = false;

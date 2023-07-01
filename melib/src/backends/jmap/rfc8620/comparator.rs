@@ -51,3 +51,9 @@ impl<OBJ: Object> Comparator<OBJ> {
     _impl!(collation: Option<String>);
     _impl!(additional_properties: Vec<String>);
 }
+
+impl<OBJ: Object> Default for Comparator<OBJ> {
+    fn default() -> Self {
+        Self::new()
+    }
+}

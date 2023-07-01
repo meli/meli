@@ -233,7 +233,7 @@ impl BackendMailbox for MboxMailbox {
     }
 
     fn clone(&self) -> Mailbox {
-        Box::new(MboxMailbox {
+        Box::new(Self {
             hash: self.hash,
             name: self.name.clone(),
             path: self.path.clone(),
@@ -294,7 +294,7 @@ pub struct MboxOp {
 
 impl MboxOp {
     pub fn new(_hash: EnvelopeHash, path: &Path, offset: Offset, length: Length) -> Self {
-        MboxOp {
+        Self {
             _hash,
             path: path.to_path_buf(),
             slice: std::cell::RefCell::new(None),
@@ -933,9 +933,10 @@ impl MailBackend for MboxType {
                     if payload.is_empty() {
                         Ok(None)
                     } else {
-                        let mut mailbox_lock = self.mailboxes.lock().unwrap();
-                        let contents = std::mem::replace(&mut self.contents, vec![]);
-                        mailbox_lock
+                        let contents = std::mem::take(&mut self.contents);
+                        self.mailboxes
+                            .lock()
+                            .unwrap()
                             .entry(self.mailbox_hash)
                             .and_modify(|f| f.content = contents);
                         Ok(Some(payload))
@@ -990,12 +991,15 @@ impl MailBackend for MboxType {
         let mut watcher = watcher(tx, std::time::Duration::from_secs(10))
             .map_err(|e| e.to_string())
             .map_err(Error::new)?;
-        for f in self.mailboxes.lock().unwrap().values() {
-            watcher
-                .watch(&f.fs_path, RecursiveMode::Recursive)
-                .map_err(|e| e.to_string())
-                .map_err(Error::new)?;
-            debug!("watching {:?}", f.fs_path.as_path());
+        {
+            let mailboxes_lck = self.mailboxes.lock().unwrap();
+            for f in mailboxes_lck.values() {
+                watcher
+                    .watch(&f.fs_path, RecursiveMode::Recursive)
+                    .map_err(|e| e.to_string())
+                    .map_err(Error::new)?;
+                log::debug!("watching {:?}", f.fs_path.as_path());
+            }
         }
         let account_hash = AccountHash::from_bytes(self.account_name.as_bytes());
         let mailboxes = self.mailboxes.clone();
@@ -1114,7 +1118,8 @@ impl MailBackend for MboxType {
                         }
                         /* Trigger rescan of mailboxes */
                         DebouncedEvent::Rescan => {
-                            for &mailbox_hash in mailboxes.lock().unwrap().keys() {
+                            let mailboxes_lck = mailboxes.lock().unwrap();
+                            for &mailbox_hash in mailboxes_lck.keys() {
                                 (sender)(
                                     account_hash,
                                     BackendEvent::Refresh(RefreshEvent {
@@ -1305,6 +1310,7 @@ macro_rules! get_conf_val {
 }
 
 impl MboxType {
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(
         s: &AccountSettings,
         _is_subscribed: Box<dyn Fn(&str) -> bool>,
@@ -1319,7 +1325,7 @@ impl MboxType {
             )));
         }
         let prefer_mbox_type: String = get_conf_val!(s["prefer_mbox_type"], "auto".to_string())?;
-        let ret = MboxType {
+        let ret = Self {
             account_name: s.name.to_string(),
             event_consumer,
             path,

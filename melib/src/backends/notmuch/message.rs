@@ -38,7 +38,7 @@ impl<'m> Message<'m> {
             call!(lib, notmuch_database_find_message)(
                 *db.inner.read().unwrap(),
                 msg_id.as_ptr(),
-                &mut message as *mut _,
+                std::ptr::addr_of_mut!(message),
             )
         };
         if message.is_null() {
@@ -100,9 +100,7 @@ impl<'m> Message<'m> {
         let (flags, tags) = TagIterator::new(&self).collect_flags_and_tags();
         for tag in tags {
             let num = TagHash::from_bytes(tag.as_bytes());
-            if !tag_lock.contains_key(&num) {
-                tag_lock.insert(num, tag);
-            }
+            tag_lock.entry(num).or_insert(tag);
             env.tags_mut().push(num);
         }
         unsafe {

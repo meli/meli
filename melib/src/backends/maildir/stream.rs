@@ -34,15 +34,14 @@ use futures::{
 use super::*;
 use crate::backends::maildir::backend::move_to_cur;
 
+type Payload = Pin<Box<dyn Future<Output = Result<Vec<Envelope>>> + Send + 'static>>;
+
 pub struct MaildirStream {
-    payloads: Pin<
-        Box<
-            FuturesUnordered<Pin<Box<dyn Future<Output = Result<Vec<Envelope>>> + Send + 'static>>>,
-        >,
-    >,
+    payloads: Pin<Box<FuturesUnordered<Payload>>>,
 }
 
 impl MaildirStream {
+    #[allow(clippy::type_complexity, clippy::new_ret_no_self)]
     pub fn new(
         mailbox_hash: MailboxHash,
         unseen: Arc<Mutex<usize>>,
@@ -97,9 +96,11 @@ impl MaildirStream {
         for file in chunk {
             let env_hash = get_file_hash(&file);
             {
-                let mut map = map.lock().unwrap();
-                let map = map.entry(mailbox_hash).or_default();
-                map.insert(env_hash, PathBuf::from(&file).into());
+                map.lock()
+                    .unwrap()
+                    .entry(mailbox_hash)
+                    .or_default()
+                    .insert(env_hash, PathBuf::from(&file).into());
             }
             let mut reader = io::BufReader::new(fs::File::open(&file)?);
             buf.clear();

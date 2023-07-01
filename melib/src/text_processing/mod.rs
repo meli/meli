@@ -110,7 +110,7 @@ impl Truncate for String {
             .take(new_len)
             .last()
         {
-            String::truncate(self, last);
+            Self::truncate(self, last);
         }
     }
 
@@ -170,11 +170,11 @@ pub trait GlobMatch {
 
 impl GlobMatch for str {
     fn matches_glob(&self, _pattern: &str) -> bool {
-        let pattern: Vec<&str> = _pattern
+        let pattern: Vec<&Self> = _pattern
             .strip_suffix('/')
             .unwrap_or(_pattern)
             .split_graphemes();
-        let s: Vec<&str> = self.strip_suffix('/').unwrap_or(self).split_graphemes();
+        let s: Vec<&Self> = self.strip_suffix('/').unwrap_or(self).split_graphemes();
 
         // Taken from https://research.swtch.com/glob
 

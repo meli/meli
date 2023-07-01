@@ -76,7 +76,7 @@ impl BackendMailbox for JmapMailbox {
     }
 
     fn special_usage(&self) -> SpecialUsageMailbox {
-        match self.role.as_ref().map(String::as_str) {
+        match self.role.as_deref() {
             Some("inbox") => SpecialUsageMailbox::Inbox,
             Some("archive") => SpecialUsageMailbox::Archive,
             Some("junk") => SpecialUsageMailbox::Junk,

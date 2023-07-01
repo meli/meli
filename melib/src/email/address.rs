@@ -68,7 +68,7 @@ pub struct MailboxAddress {
 impl Eq for MailboxAddress {}
 
 impl PartialEq for MailboxAddress {
-    fn eq(&self, other: &MailboxAddress) -> bool {
+    fn eq(&self, other: &Self) -> bool {
         self.address_spec.display_bytes(&self.raw) == other.address_spec.display_bytes(&other.raw)
     }
 }
@@ -108,7 +108,7 @@ pub enum Address {
 
 impl Address {
     pub fn new(display_name: Option<String>, address: String) -> Self {
-        Address::Mailbox(if let Some(d) = display_name {
+        Self::Mailbox(if let Some(d) = display_name {
             MailboxAddress {
                 raw: format!("{} <{}>", d, address).into_bytes(),
                 display_name: StrBuilder {
@@ -135,8 +135,8 @@ impl Address {
         })
     }
 
-    pub fn new_group(display_name: String, mailbox_list: Vec<Address>) -> Self {
-        Address::Group(GroupAddress {
+    pub fn new_group(display_name: String, mailbox_list: Vec<Self>) -> Self {
+        Self::Group(GroupAddress {
             raw: format!(
                 "{}:{};",
                 display_name,
@@ -157,8 +157,8 @@ impl Address {
 
     pub fn raw(&self) -> &[u8] {
         match self {
-            Address::Mailbox(m) => m.raw.as_slice(),
-            Address::Group(g) => g.raw.as_slice(),
+            Self::Mailbox(m) => m.raw.as_slice(),
+            Self::Group(g) => g.raw.as_slice(),
         }
     }
 
@@ -179,8 +179,8 @@ impl Address {
     /// ```
     pub fn get_display_name(&self) -> Option<String> {
         let ret = match self {
-            Address::Mailbox(m) => m.display_name.display(&m.raw),
-            Address::Group(g) => g.display_name.display(&g.raw),
+            Self::Mailbox(m) => m.display_name.display(&m.raw),
+            Self::Group(g) => g.display_name.display(&g.raw),
         };
         if ret.is_empty() {
             None
@@ -193,26 +193,26 @@ impl Address {
     /// `String`.
     pub fn get_email(&self) -> String {
         match self {
-            Address::Mailbox(m) => m.address_spec.display(&m.raw),
-            Address::Group(_) => String::new(),
+            Self::Mailbox(m) => m.address_spec.display(&m.raw),
+            Self::Group(_) => String::new(),
         }
     }
 
     pub fn address_spec_raw(&self) -> &[u8] {
         match self {
-            Address::Mailbox(m) => m.address_spec.display_bytes(&m.raw),
-            Address::Group(g) => &g.raw,
+            Self::Mailbox(m) => m.address_spec.display_bytes(&m.raw),
+            Self::Group(g) => &g.raw,
         }
     }
 
     pub fn get_fqdn(&self) -> Option<String> {
         match self {
-            Address::Mailbox(m) => {
+            Self::Mailbox(m) => {
                 let raw_address = m.address_spec.display_bytes(&m.raw);
                 let fqdn_pos = raw_address.iter().position(|&b| b == b'@')? + 1;
                 Some(String::from_utf8_lossy(&raw_address[fqdn_pos..]).into())
             }
-            Address::Group(_) => None,
+            Self::Group(_) => None,
         }
     }
 
@@ -231,16 +231,16 @@ impl Address {
             .collect::<_>()
     }
 
-    pub fn list_try_from<T: AsRef<[u8]>>(val: T) -> Result<Vec<Address>> {
+    pub fn list_try_from<T: AsRef<[u8]>>(val: T) -> Result<Vec<Self>> {
         Ok(parser::address::rfc2822address_list(val.as_ref())?
             .1
             .to_vec())
     }
 
-    pub fn contains_address(&self, other: &Address) -> bool {
+    pub fn contains_address(&self, other: &Self) -> bool {
         match self {
-            Address::Mailbox(_) => self == other,
-            Address::Group(g) => g
+            Self::Mailbox(_) => self == other,
+            Self::Group(g) => g
                 .mailbox_list
                 .iter()
                 .any(|addr| addr.contains_address(other)),
@@ -269,7 +269,7 @@ impl Address {
     /// ```
     pub fn subaddress(&self, separator: &str) -> Option<(Self, String)> {
         match self {
-            Address::Mailbox(_) => {
+            Self::Mailbox(_) => {
                 let email = self.get_email();
                 let (local_part, domain) =
                     match super::parser::address::addr_spec_raw(email.as_bytes())
@@ -292,7 +292,18 @@ impl Address {
                     subaddress.to_string(),
                 ))
             }
-            Address::Group(_) => None,
+            Self::Group(_) => None,
+        }
+    }
+
+    /// Get the display name of this address in bytes.
+    ///
+    /// For a string, see the [`display_name`](fn@Self::get_display_name)
+    /// method.
+    pub fn display_name_bytes(&self) -> &[u8] {
+        match self {
+            Self::Mailbox(m) => m.display_name.display_bytes(&m.raw),
+            Self::Group(g) => g.display_name.display_bytes(&g.raw),
         }
     }
 }
@@ -300,14 +311,12 @@ impl Address {
 impl Eq for Address {}
 
 impl PartialEq for Address {
-    fn eq(&self, other: &Address) -> bool {
+    fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Address::Mailbox(_), Address::Group(_)) | (Address::Group(_), Address::Mailbox(_)) => {
-                false
-            }
-            (Address::Mailbox(s), Address::Mailbox(o)) => s == o,
-            (Address::Group(s), Address::Group(o)) => {
-                s.display_name.display_bytes(&s.raw) == o.display_name.display_bytes(&o.raw)
+            (Self::Mailbox(_), Self::Group(_)) | (Self::Group(_), Self::Mailbox(_)) => false,
+            (Self::Mailbox(s), Self::Mailbox(o)) => s == o,
+            (Self::Group(s), Self::Group(o)) => {
+                self.display_name_bytes() == other.display_name_bytes()
                     && s.mailbox_list.iter().collect::<HashSet<_>>()
                         == o.mailbox_list.iter().collect::<HashSet<_>>()
             }
@@ -318,10 +327,10 @@ impl PartialEq for Address {
 impl Hash for Address {
     fn hash<H: Hasher>(&self, state: &mut H) {
         match self {
-            Address::Mailbox(s) => {
+            Self::Mailbox(s) => {
                 s.address_spec.display_bytes(&s.raw).hash(state);
             }
-            Address::Group(s) => {
+            Self::Group(s) => {
                 s.display_name.display_bytes(&s.raw).hash(state);
                 for sub in &s.mailbox_list {
                     sub.hash(state);
@@ -334,15 +343,13 @@ impl Hash for Address {
 impl core::fmt::Display for Address {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         match self {
-            Address::Mailbox(m) if m.display_name.length > 0 => {
-                match m.display_name.display(&m.raw) {
-                    d if d.contains('.') || d.contains(',') => {
-                        write!(f, "\"{}\" <{}>", d, m.address_spec.display(&m.raw))
-                    }
-                    d => write!(f, "{} <{}>", d, m.address_spec.display(&m.raw)),
+            Self::Mailbox(m) if m.display_name.length > 0 => match m.display_name.display(&m.raw) {
+                d if d.contains('.') || d.contains(',') => {
+                    write!(f, "\"{}\" <{}>", d, m.address_spec.display(&m.raw))
                 }
-            }
-            Address::Group(g) => {
+                d => write!(f, "{} <{}>", d, m.address_spec.display(&m.raw)),
+            },
+            Self::Group(g) => {
                 let attachment_strings: Vec<String> =
                     g.mailbox_list.iter().map(|a| format!("{}", a)).collect();
                 write!(
@@ -352,7 +359,7 @@ impl core::fmt::Display for Address {
                     attachment_strings.join(", ")
                 )
             }
-            Address::Mailbox(m) => write!(f, "{}", m.address_spec.display(&m.raw)),
+            Self::Mailbox(m) => write!(f, "{}", m.address_spec.display(&m.raw)),
         }
     }
 }
@@ -360,12 +367,12 @@ impl core::fmt::Display for Address {
 impl core::fmt::Debug for Address {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         match self {
-            Address::Mailbox(m) => f
+            Self::Mailbox(m) => f
                 .debug_struct("Address::Mailbox")
                 .field("display_name", &m.display_name.display(&m.raw))
                 .field("address_spec", &m.address_spec.display(&m.raw))
                 .finish(),
-            Address::Group(g) => {
+            Self::Group(g) => {
                 let attachment_strings: Vec<String> =
                     g.mailbox_list.iter().map(|a| format!("{}", a)).collect();
 
@@ -381,7 +388,7 @@ impl core::fmt::Debug for Address {
 impl TryFrom<&str> for Address {
     type Error = Error;
 
-    fn try_from(val: &str) -> Result<Address> {
+    fn try_from(val: &str) -> Result<Self> {
         Ok(parser::address::address(val.as_bytes())?.1)
     }
 }
@@ -422,7 +429,7 @@ pub struct MessageID(pub Vec<u8>, pub StrBuilder);
 impl StrBuild for MessageID {
     fn new(string: &[u8], slice: &[u8]) -> Self {
         let offset = string.find(slice).unwrap_or(0);
-        MessageID(
+        Self(
             string.to_owned(),
             StrBuilder {
                 offset,
@@ -430,11 +437,13 @@ impl StrBuild for MessageID {
             },
         )
     }
+
     fn raw(&self) -> &[u8] {
         let offset = self.1.offset;
         let length = self.1.length;
         &self.0[offset..offset + length.saturating_sub(1)]
     }
+
     fn val(&self) -> &[u8] {
         &self.0
     }
@@ -469,10 +478,11 @@ impl core::fmt::Display for MessageID {
 }
 
 impl PartialEq for MessageID {
-    fn eq(&self, other: &MessageID) -> bool {
+    fn eq(&self, other: &Self) -> bool {
         self.raw() == other.raw()
     }
 }
+
 impl core::fmt::Debug for MessageID {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(f, "{}", String::from_utf8(self.raw().to_vec()).unwrap())

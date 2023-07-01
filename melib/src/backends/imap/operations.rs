@@ -42,7 +42,7 @@ impl ImapOp {
         connection: Arc<FutureMutex<ImapConnection>>,
         uid_store: Arc<UIDStore>,
     ) -> Self {
-        ImapOp {
+        Self {
             uid,
             connection,
             mailbox_hash,

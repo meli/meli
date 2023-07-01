@@ -59,7 +59,7 @@ impl JmapConnection {
         };
         let client = client.build()?;
         let server_conf = server_conf.clone();
-        Ok(JmapConnection {
+        Ok(Self {
             session: Arc::new(Mutex::new(Default::default())),
             request_no: Arc::new(Mutex::new(0)),
             client: Arc::new(client),
@@ -80,16 +80,15 @@ impl JmapConnection {
             .get_async(&jmap_session_resource_url)
             .await
             .map_err(|err| {
-                let err = Error::new(format!(
+                //*self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
+                Error::new(format!(
                     "Could not connect to JMAP server endpoint for {}. Is your server url setting \
                      correct? (i.e. \"jmap.mailserver.org\") (Note: only session resource \
                      discovery via /.well-known/jmap is supported. DNS SRV records are not \
                      suppported.)\nError connecting to server: {}",
                     &self.server_conf.server_url, &err
                 ))
-                .set_source(Some(Arc::new(err)));
-                //*self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
-                err
+                .set_source(Some(Arc::new(err)))
             })?;
 
         if !req.status().is_success() {

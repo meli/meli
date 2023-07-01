@@ -68,7 +68,7 @@ pub struct MailboxGet {
 }
 impl MailboxGet {
     pub fn new(get_call: Get<MailboxObject>) -> Self {
-        MailboxGet { get_call }
+        Self { get_call }
     }
 }
 

@@ -54,7 +54,7 @@ pub struct MaildirOp {
 
 impl Clone for MaildirOp {
     fn clone(&self) -> Self {
-        MaildirOp {
+        Self {
             hash_index: self.hash_index.clone(),
             mailbox_hash: self.mailbox_hash,
             hash: self.hash,
@@ -65,7 +65,7 @@ impl Clone for MaildirOp {
 
 impl MaildirOp {
     pub fn new(hash: EnvelopeHash, hash_index: HashIndexes, mailbox_hash: MailboxHash) -> Self {
-        MaildirOp {
+        Self {
             hash_index,
             mailbox_hash,
             hash,
@@ -95,7 +95,7 @@ impl MaildirOp {
     }
 }
 
-impl<'a> BackendOp for MaildirOp {
+impl BackendOp for MaildirOp {
     fn as_bytes(&mut self) -> ResultFuture<Vec<u8>> {
         if self.slice.is_none() {
             let file = std::fs::OpenOptions::new()
@@ -163,7 +163,7 @@ impl MaildirMailbox {
             true
         };
 
-        let ret = MaildirMailbox {
+        let ret = Self {
             hash: MailboxHash(h.finish()),
             name: file_name,
             path: fname.unwrap().to_path_buf(),

@@ -460,11 +460,11 @@ impl<T, I: Into<Error>> ResultIntoError<T> for std::result::Result<T, I> {
 }
 
 impl Error {
-    pub fn new<M>(msg: M) -> Error
+    pub fn new<M>(msg: M) -> Self
     where
         M: Into<Cow<'static, str>>,
     {
-        Error {
+        Self {
             summary: msg.into(),
             details: None,
             source: None,
@@ -472,7 +472,7 @@ impl Error {
         }
     }
 
-    pub fn set_details<M>(mut self, details: M) -> Error
+    pub fn set_details<M>(mut self, details: M) -> Self
     where
         M: Into<Cow<'static, str>>,
     {
@@ -484,7 +484,7 @@ impl Error {
         self
     }
 
-    pub fn set_summary<M>(mut self, summary: M) -> Error
+    pub fn set_summary<M>(mut self, summary: M) -> Self
     where
         M: Into<Cow<'static, str>>,
     {
@@ -499,12 +499,12 @@ impl Error {
     pub fn set_source(
         mut self,
         new_val: Option<std::sync::Arc<dyn std::error::Error + Send + Sync + 'static>>,
-    ) -> Error {
+    ) -> Self {
         self.source = new_val;
         self
     }
 
-    pub fn set_kind(mut self, new_val: ErrorKind) -> Error {
+    pub fn set_kind(mut self, new_val: ErrorKind) -> Self {
         self.kind = new_val;
         self
     }
@@ -528,14 +528,16 @@ impl fmt::Display for Error {
 
 impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        self.source.as_ref().map(|s| &(*(*s)) as _)
+        self.source
+            .as_ref()
+            .map(|s| &(*(*s)) as &(dyn std::error::Error + 'static))
     }
 }
 
 impl From<io::Error> for Error {
     #[inline]
-    fn from(kind: io::Error) -> Error {
-        Error::new(kind.to_string())
+    fn from(kind: io::Error) -> Self {
+        Self::new(kind.to_string())
             .set_details(kind.kind().to_string())
             .set_source(Some(Arc::new(kind)))
             .set_kind(ErrorKind::OSError)
@@ -544,22 +546,22 @@ impl From<io::Error> for Error {
 
 impl<'a> From<Cow<'a, str>> for Error {
     #[inline]
-    fn from(kind: Cow<'_, str>) -> Error {
-        Error::new(kind.to_string())
+    fn from(kind: Cow<'_, str>) -> Self {
+        Self::new(kind.to_string())
     }
 }
 
 impl From<string::FromUtf8Error> for Error {
     #[inline]
-    fn from(kind: string::FromUtf8Error) -> Error {
-        Error::new(kind.to_string()).set_source(Some(Arc::new(kind)))
+    fn from(kind: string::FromUtf8Error) -> Self {
+        Self::new(kind.to_string()).set_source(Some(Arc::new(kind)))
     }
 }
 
 impl From<str::Utf8Error> for Error {
     #[inline]
-    fn from(kind: str::Utf8Error) -> Error {
-        Error::new(kind.to_string()).set_source(Some(Arc::new(kind)))
+    fn from(kind: str::Utf8Error) -> Self {
+        Self::new(kind.to_string()).set_source(Some(Arc::new(kind)))
     }
 }
 //use std::option;
@@ -572,16 +574,16 @@ impl From<str::Utf8Error> for Error {
 
 impl<T> From<std::sync::PoisonError<T>> for Error {
     #[inline]
-    fn from(kind: std::sync::PoisonError<T>) -> Error {
-        Error::new(kind.to_string()).set_kind(ErrorKind::Bug)
+    fn from(kind: std::sync::PoisonError<T>) -> Self {
+        Self::new(kind.to_string()).set_kind(ErrorKind::Bug)
     }
 }
 
 #[cfg(feature = "tls")]
 impl<T: Sync + Send + 'static + core::fmt::Debug> From<native_tls::HandshakeError<T>> for Error {
     #[inline]
-    fn from(kind: native_tls::HandshakeError<T>) -> Error {
-        Error::new(kind.to_string())
+    fn from(kind: native_tls::HandshakeError<T>) -> Self {
+        Self::new(kind.to_string())
             .set_source(Some(Arc::new(kind)))
             .set_kind(ErrorKind::Network(NetworkErrorKind::InvalidTLSConnection))
     }
@@ -590,8 +592,8 @@ impl<T: Sync + Send + 'static + core::fmt::Debug> From<native_tls::HandshakeErro
 #[cfg(feature = "tls")]
 impl From<native_tls::Error> for Error {
     #[inline]
-    fn from(kind: native_tls::Error) -> Error {
-        Error::new(kind.to_string())
+    fn from(kind: native_tls::Error) -> Self {
+        Self::new(kind.to_string())
             .set_source(Some(Arc::new(kind)))
             .set_kind(ErrorKind::Network(NetworkErrorKind::InvalidTLSConnection))
     }
@@ -599,49 +601,49 @@ impl From<native_tls::Error> for Error {
 
 impl From<std::num::ParseIntError> for Error {
     #[inline]
-    fn from(kind: std::num::ParseIntError) -> Error {
-        Error::new(kind.to_string()).set_source(Some(Arc::new(kind)))
+    fn from(kind: std::num::ParseIntError) -> Self {
+        Self::new(kind.to_string()).set_source(Some(Arc::new(kind)))
     }
 }
 
 #[cfg(feature = "http")]
 impl From<&isahc::error::ErrorKind> for NetworkErrorKind {
     #[inline]
-    fn from(val: &isahc::error::ErrorKind) -> NetworkErrorKind {
+    fn from(val: &isahc::error::ErrorKind) -> Self {
         use isahc::error::ErrorKind::*;
         match val {
-            BadClientCertificate => NetworkErrorKind::BadClientCertificate,
-            BadServerCertificate => NetworkErrorKind::BadServerCertificate,
-            ClientInitialization => NetworkErrorKind::ClientInitialization,
-            ConnectionFailed => NetworkErrorKind::ConnectionFailed,
-            InvalidContentEncoding => NetworkErrorKind::InvalidContentEncoding,
-            InvalidCredentials => NetworkErrorKind::InvalidCredentials,
-            InvalidRequest => NetworkErrorKind::BadRequest,
-            Io => NetworkErrorKind::Io,
-            NameResolution => NetworkErrorKind::HostLookupFailed,
-            ProtocolViolation => NetworkErrorKind::ProtocolViolation,
-            RequestBodyNotRewindable => NetworkErrorKind::RequestBodyNotRewindable,
-            Timeout => NetworkErrorKind::Timeout,
-            TlsEngine => NetworkErrorKind::InvalidTLSConnection,
-            TooManyRedirects => NetworkErrorKind::TooManyRedirects,
-            _ => NetworkErrorKind::None,
+            BadClientCertificate => Self::BadClientCertificate,
+            BadServerCertificate => Self::BadServerCertificate,
+            ClientInitialization => Self::ClientInitialization,
+            ConnectionFailed => Self::ConnectionFailed,
+            InvalidContentEncoding => Self::InvalidContentEncoding,
+            InvalidCredentials => Self::InvalidCredentials,
+            InvalidRequest => Self::BadRequest,
+            Io => Self::Io,
+            NameResolution => Self::HostLookupFailed,
+            ProtocolViolation => Self::ProtocolViolation,
+            RequestBodyNotRewindable => Self::RequestBodyNotRewindable,
+            Timeout => Self::Timeout,
+            TlsEngine => Self::InvalidTLSConnection,
+            TooManyRedirects => Self::TooManyRedirects,
+            _ => Self::None,
         }
     }
 }
 
 impl From<NetworkErrorKind> for ErrorKind {
     #[inline]
-    fn from(kind: NetworkErrorKind) -> ErrorKind {
-        ErrorKind::Network(kind)
+    fn from(kind: NetworkErrorKind) -> Self {
+        Self::Network(kind)
     }
 }
 
 #[cfg(feature = "http")]
 impl From<isahc::Error> for Error {
     #[inline]
-    fn from(val: isahc::Error) -> Error {
+    fn from(val: isahc::Error) -> Self {
         let kind: NetworkErrorKind = val.kind().into();
-        Error::new(val.to_string())
+        Self::new(val.to_string())
             .set_source(Some(Arc::new(val)))
             .set_kind(ErrorKind::Network(kind))
     }
@@ -650,102 +652,102 @@ impl From<isahc::Error> for Error {
 #[cfg(feature = "jmap_backend")]
 impl From<serde_json::error::Error> for Error {
     #[inline]
-    fn from(kind: serde_json::error::Error) -> Error {
-        Error::new(kind.to_string()).set_source(Some(Arc::new(kind)))
+    fn from(kind: serde_json::error::Error) -> Self {
+        Self::new(kind.to_string()).set_source(Some(Arc::new(kind)))
     }
 }
 
 impl From<Box<dyn std::error::Error + Sync + Send + 'static>> for Error {
     #[inline]
-    fn from(kind: Box<dyn std::error::Error + Sync + Send + 'static>) -> Error {
-        Error::new(kind.to_string()).set_source(Some(kind.into()))
+    fn from(kind: Box<dyn std::error::Error + Sync + Send + 'static>) -> Self {
+        Self::new(kind.to_string()).set_source(Some(kind.into()))
     }
 }
 
 impl From<std::ffi::NulError> for Error {
     #[inline]
-    fn from(kind: std::ffi::NulError) -> Error {
-        Error::new(kind.to_string()).set_source(Some(Arc::new(kind)))
+    fn from(kind: std::ffi::NulError) -> Self {
+        Self::new(kind.to_string()).set_source(Some(Arc::new(kind)))
     }
 }
 
 impl From<nix::Error> for Error {
     #[inline]
-    fn from(kind: nix::Error) -> Error {
-        Error::new(kind.to_string()).set_source(Some(Arc::new(kind)))
+    fn from(kind: nix::Error) -> Self {
+        Self::new(kind.to_string()).set_source(Some(Arc::new(kind)))
     }
 }
 
 #[cfg(feature = "sqlite3")]
 impl From<rusqlite::Error> for Error {
     #[inline]
-    fn from(kind: rusqlite::Error) -> Error {
-        Error::new(kind.to_string()).set_source(Some(Arc::new(kind)))
+    fn from(kind: rusqlite::Error) -> Self {
+        Self::new(kind.to_string()).set_source(Some(Arc::new(kind)))
     }
 }
 
 impl From<libloading::Error> for Error {
     #[inline]
-    fn from(kind: libloading::Error) -> Error {
-        Error::new(kind.to_string()).set_source(Some(Arc::new(kind)))
+    fn from(kind: libloading::Error) -> Self {
+        Self::new(kind.to_string()).set_source(Some(Arc::new(kind)))
     }
 }
 
 impl From<&str> for Error {
     #[inline]
-    fn from(kind: &str) -> Error {
-        Error::new(kind.to_string())
+    fn from(kind: &str) -> Self {
+        Self::new(kind.to_string())
     }
 }
 
 impl From<String> for Error {
     #[inline]
-    fn from(kind: String) -> Error {
-        Error::new(kind)
+    fn from(kind: String) -> Self {
+        Self::new(kind)
     }
 }
 
 impl From<nom::Err<(&[u8], nom::error::ErrorKind)>> for Error {
     #[inline]
-    fn from(kind: nom::Err<(&[u8], nom::error::ErrorKind)>) -> Error {
-        Error::new("Parsing error").set_source(Some(Arc::new(Error::new(kind.to_string()))))
+    fn from(kind: nom::Err<(&[u8], nom::error::ErrorKind)>) -> Self {
+        Self::new("Parsing error").set_source(Some(Arc::new(Self::new(kind.to_string()))))
     }
 }
 
 impl From<nom::Err<(&str, nom::error::ErrorKind)>> for Error {
     #[inline]
-    fn from(kind: nom::Err<(&str, nom::error::ErrorKind)>) -> Error {
-        Error::new("Parsing error").set_details(kind.to_string())
+    fn from(kind: nom::Err<(&str, nom::error::ErrorKind)>) -> Self {
+        Self::new("Parsing error").set_details(kind.to_string())
     }
 }
 
 impl From<crate::email::InvalidHeaderName> for Error {
     #[inline]
-    fn from(kind: crate::email::InvalidHeaderName) -> Error {
-        Error::new(kind.to_string())
+    fn from(kind: crate::email::InvalidHeaderName) -> Self {
+        Self::new(kind.to_string())
             .set_source(Some(Arc::new(kind)))
             .set_kind(ErrorKind::Network(NetworkErrorKind::InvalidTLSConnection))
     }
 }
 
-impl<'a> From<&'a mut Error> for Error {
+impl<'a> From<&'a mut Self> for Error {
     #[inline]
-    fn from(kind: &'a mut Error) -> Error {
+    fn from(kind: &'a mut Self) -> Self {
         kind.clone()
     }
 }
 
-impl<'a> From<&'a Error> for Error {
+impl<'a> From<&'a Self> for Error {
     #[inline]
-    fn from(kind: &'a Error) -> Error {
+    fn from(kind: &'a Self) -> Self {
         kind.clone()
     }
 }
 
 impl From<base64::DecodeError> for Error {
     #[inline]
-    fn from(kind: base64::DecodeError) -> Error {
-        Error::new("base64 decoding failed")
+    fn from(kind: base64::DecodeError) -> Self {
+        Self::new("base64 decoding failed")
             .set_source(Some(Arc::new(kind)))
             .set_kind(ErrorKind::ValueError)
     }

@@ -86,6 +86,8 @@ pub type BackendCreator = Box<
     ) -> Result<Box<dyn MailBackend>>,
 >;
 
+pub type BackendValidateConfigFn = Box<dyn Fn(&mut AccountSettings) -> Result<()>>;
+
 /// A hashmap containing all available mail backends.
 /// An abstraction over any available backends.
 pub struct Backends {
@@ -94,12 +96,12 @@ pub struct Backends {
 
 pub struct Backend {
     pub create_fn: Box<dyn Fn() -> BackendCreator>,
-    pub validate_conf_fn: Box<dyn Fn(&mut AccountSettings) -> Result<()>>,
+    pub validate_conf_fn: BackendValidateConfigFn,
 }
 
 impl Default for Backends {
     fn default() -> Self {
-        Backends::new()
+        Self::new()
     }
 }
 
@@ -149,7 +151,7 @@ pub const NOTMUCH_ERROR_DETAILS: &str = r#"If notmuch is installed but the libra
 
 impl Backends {
     pub fn new() -> Self {
-        let mut b = Backends {
+        let mut b = Self {
             map: HashMap::with_capacity_and_hasher(1, Default::default()),
         };
         #[cfg(feature = "maildir_backend")]
@@ -272,8 +274,8 @@ pub enum BackendEvent {
 }
 
 impl From<Error> for BackendEvent {
-    fn from(val: Error) -> BackendEvent {
-        BackendEvent::Notice {
+    fn from(val: Error) -> Self {
+        Self::Notice {
             description: val.summary.to_string(),
             content: Some(val.to_string()),
             level: LogLevel::ERROR,
@@ -310,9 +312,10 @@ pub struct RefreshEvent {
 
 #[derive(Clone)]
 pub struct BackendEventConsumer(Arc<dyn Fn(AccountHash, BackendEvent) + Send + Sync>);
+
 impl BackendEventConsumer {
     pub fn new(b: Arc<dyn Fn(AccountHash, BackendEvent) + Send + Sync>) -> Self {
-        BackendEventConsumer(b)
+        Self(b)
     }
 }
 
@@ -355,6 +358,7 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
         Ok(Box::pin(async { Ok(()) }))
     }
 
+    #[allow(clippy::type_complexity)]
     fn fetch(
         &mut self,
         mailbox_hash: MailboxHash,
@@ -493,8 +497,9 @@ pub struct ReadOnlyOp {
 }
 
 impl ReadOnlyOp {
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(op: Box<dyn BackendOp>) -> Box<dyn BackendOp> {
-        Box::new(ReadOnlyOp { op })
+        Box::new(Self { op })
     }
 }
 
@@ -507,8 +512,9 @@ impl BackendOp for ReadOnlyOp {
     }
 }
 
-#[derive(Debug, Copy, Hash, Eq, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Default, Debug, Copy, Hash, Eq, Clone, Serialize, Deserialize, PartialEq)]
 pub enum SpecialUsageMailbox {
+    #[default]
     Normal,
     Inbox,
     Archive,
@@ -539,28 +545,22 @@ impl std::fmt::Display for SpecialUsageMailbox {
     }
 }
 
-impl Default for SpecialUsageMailbox {
-    fn default() -> Self {
-        SpecialUsageMailbox::Normal
-    }
-}
-
 impl SpecialUsageMailbox {
-    pub fn detect_usage(name: &str) -> Option<SpecialUsageMailbox> {
+    pub fn detect_usage(name: &str) -> Option<Self> {
         if name.eq_ignore_ascii_case("inbox") {
-            Some(SpecialUsageMailbox::Inbox)
+            Some(Self::Inbox)
         } else if name.eq_ignore_ascii_case("archive") {
-            Some(SpecialUsageMailbox::Archive)
+            Some(Self::Archive)
         } else if name.eq_ignore_ascii_case("drafts") {
-            Some(SpecialUsageMailbox::Drafts)
+            Some(Self::Drafts)
         } else if name.eq_ignore_ascii_case("junk") || name.eq_ignore_ascii_case("spam") {
-            Some(SpecialUsageMailbox::Junk)
+            Some(Self::Junk)
         } else if name.eq_ignore_ascii_case("sent") {
-            Some(SpecialUsageMailbox::Sent)
+            Some(Self::Sent)
         } else if name.eq_ignore_ascii_case("trash") {
-            Some(SpecialUsageMailbox::Trash)
+            Some(Self::Trash)
         } else {
-            Some(SpecialUsageMailbox::Normal)
+            Some(Self::Normal)
         }
     }
 }
@@ -608,7 +608,7 @@ pub struct MailboxPermissions {
 
 impl Default for MailboxPermissions {
     fn default() -> Self {
-        MailboxPermissions {
+        Self {
             create_messages: false,
             remove_messages: false,
             set_flags: false,
@@ -635,7 +635,7 @@ pub struct EnvelopeHashBatch {
 
 impl From<EnvelopeHash> for EnvelopeHashBatch {
     fn from(value: EnvelopeHash) -> Self {
-        EnvelopeHashBatch {
+        Self {
             first: value,
             rest: SmallVec::new(),
         }
@@ -649,22 +649,26 @@ impl std::convert::TryFrom<&[EnvelopeHash]> for EnvelopeHashBatch {
         if value.is_empty() {
             return Err(());
         }
-        Ok(EnvelopeHashBatch {
+        Ok(Self {
             first: value[0],
             rest: value[1..].iter().cloned().collect(),
         })
     }
 }
 
-impl Into<BTreeSet<EnvelopeHash>> for &EnvelopeHashBatch {
-    fn into(self) -> BTreeSet<EnvelopeHash> {
-        self.iter().collect::<BTreeSet<EnvelopeHash>>()
+impl From<&EnvelopeHashBatch> for BTreeSet<EnvelopeHash> {
+    fn from(val: &EnvelopeHashBatch) -> Self {
+        val.iter().collect()
     }
 }
 
 impl EnvelopeHashBatch {
     pub fn iter(&self) -> impl std::iter::Iterator<Item = EnvelopeHash> + '_ {
         std::iter::once(self.first).chain(self.rest.iter().cloned())
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 
     pub fn len(&self) -> usize {
@@ -713,6 +717,10 @@ impl LazyCountSet {
         let old_len = self.set.len();
         self.set.extend(set.into_iter());
         self.not_yet_seen = self.not_yet_seen.saturating_sub(self.set.len() - old_len);
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 
     #[inline(always)]

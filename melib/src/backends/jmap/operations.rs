@@ -37,7 +37,7 @@ impl JmapOp {
         connection: Arc<FutureMutex<JmapConnection>>,
         store: Arc<Store>,
     ) -> Self {
-        JmapOp {
+        Self {
             hash,
             connection,
             store,

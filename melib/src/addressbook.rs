@@ -41,22 +41,37 @@ pub enum CardId {
     Hash(u64),
 }
 
-impl Into<String> for CardId {
-    fn into(self) -> String {
+impl std::fmt::Display for CardId {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            CardId::Uuid(u) => u.to_string(),
-            CardId::Hash(u) => u.to_string(),
+            Self::Uuid(u) => u.as_hyphenated().fmt(fmt),
+            Self::Hash(u) => u.fmt(fmt),
         }
     }
 }
 
+impl From<CardId> for String {
+    fn from(val: CardId) -> Self {
+        val.to_string()
+    }
+}
+
 impl From<String> for CardId {
-    fn from(s: String) -> CardId {
-        if let Ok(u) = uuid::Uuid::parse_str(s.as_str()) {
-            CardId::Uuid(u)
+    fn from(s: String) -> Self {
+        use std::{
+            collections::hash_map::DefaultHasher,
+            hash::{Hash, Hasher},
+            str::FromStr,
+        };
+
+        if let Ok(u) = Uuid::parse_str(s.as_str()) {
+            Self::Uuid(u)
+        } else if let Ok(num) = u64::from_str(s.trim()) {
+            Self::Hash(num)
         } else {
-            use std::str::FromStr;
-            CardId::Hash(u64::from_str(&s).unwrap())
+            let mut hasher = DefaultHasher::default();
+            s.hash(&mut hasher);
+            Self::Hash(hasher.finish())
         }
     }
 }
@@ -93,8 +108,8 @@ pub struct Card {
 }
 
 impl AddressBook {
-    pub fn new(display_name: String) -> AddressBook {
-        AddressBook {
+    pub fn new(display_name: String) -> Self {
+        Self {
             display_name,
             created: datetime::now(),
             last_edited: datetime::now(),
@@ -102,8 +117,8 @@ impl AddressBook {
         }
     }
 
-    pub fn with_account(s: &crate::conf::AccountSettings) -> AddressBook {
-        let mut ret = AddressBook::new(s.name.clone());
+    pub fn with_account(s: &crate::conf::AccountSettings) -> Self {
+        let mut ret = Self::new(s.name.clone());
         if let Some(mutt_alias_file) = s.extra.get("mutt_alias_file").map(String::as_str) {
             match std::fs::read_to_string(std::path::Path::new(mutt_alias_file))
                 .map_err(|err| err.to_string())
@@ -171,8 +186,8 @@ impl Deref for AddressBook {
 }
 
 impl Card {
-    pub fn new() -> Card {
-        Card {
+    pub fn new() -> Self {
+        Self {
             id: CardId::Uuid(Uuid::new_v4()),
             title: String::new(),
             name: String::new(),
@@ -293,8 +308,8 @@ impl Card {
 }
 
 impl From<HashMap<String, String>> for Card {
-    fn from(mut map: HashMap<String, String>) -> Card {
-        let mut card = Card::new();
+    fn from(mut map: HashMap<String, String>) -> Self {
+        let mut card = Self::new();
         if let Some(val) = map.remove("TITLE") {
             card.title = val;
         }

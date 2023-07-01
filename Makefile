@@ -18,17 +18,18 @@
 # along with meli. If not, see <http://www.gnu.org/licenses/>.
 .POSIX:
 .SUFFIXES:
+CARGO_TARGET_DIR ?= target
+MIN_RUSTC ?= 1.65.0
+CARGO_BIN ?= cargo
+CARGO_ARGS ?=
+CARGO_SORT_BIN = cargo-sort
+PRINTF       = /usr/bin/printf
 
 # Options
 PREFIX ?= /usr/local
 EXPANDED_PREFIX := `cd ${PREFIX} && pwd -P`
 BINDIR ?= ${EXPANDED_PREFIX}/bin
 MANDIR ?= ${EXPANDED_PREFIX}/share/man
-
-CARGO_TARGET_DIR ?= target
-MIN_RUSTC ?= 1.39.0
-CARGO_BIN ?= cargo
-CARGO_ARGS ?=
 
 # Installation parameters
 DOCS_SUBDIR ?= docs/
@@ -95,6 +96,15 @@ help:
 .PHONY: check
 check:
 	@${CARGO_BIN} check ${CARGO_ARGS} ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" ${FEATURES} --all --tests --examples --benches --bins
+
+.PHONY: fmt
+fmt:
+	@$(CARGO_BIN) +nightly fmt --all || $(CARGO_BIN) fmt --all
+	@OUT=$$($(CARGO_SORT_BIN) -w 2>&1) || $(PRINTF) "WARN: %s cargo-sort failed or binary not found in PATH.\n" "$$OUT"
+
+.PHONY: lint
+lint:
+	@$(CARGO_BIN) clippy --no-deps --all-features --all --tests --examples --benches --bins
 
 .PHONY: test
 test:

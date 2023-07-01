@@ -211,7 +211,7 @@ where
     T: Deserialize<'de> + Default,
 {
     let v = Option::<T>::deserialize(deserializer)?;
-    Ok(v.unwrap_or(T::default()))
+    Ok(v.unwrap_or_default())
 }
 
 impl EmailObject {
@@ -242,9 +242,9 @@ pub struct EmailAddress {
     pub name: Option<String>,
 }
 
-impl Into<crate::email::Address> for EmailAddress {
-    fn into(self) -> crate::email::Address {
-        let Self { email, mut name } = self;
+impl From<EmailAddress> for crate::email::Address {
+    fn from(val: EmailAddress) -> Self {
+        let EmailAddress { email, mut name } = val;
         crate::make_address!((name.take().unwrap_or_default()), email)
     }
 }
@@ -260,15 +260,15 @@ impl std::fmt::Display for EmailAddress {
 }
 
 impl std::convert::From<EmailObject> for crate::Envelope {
-    fn from(mut t: EmailObject) -> crate::Envelope {
-        let mut env = crate::Envelope::new(t.id.into_hash());
+    fn from(mut t: EmailObject) -> Self {
+        let mut env = Self::new(t.id.into_hash());
         if let Ok(d) = crate::email::parser::dates::rfc5322_date(env.date_as_str().as_bytes()) {
             env.set_datetime(d);
         }
         if let Some(ref mut sent_at) = t.sent_at {
             let unix = datetime::rfc3339_to_timestamp(sent_at.as_bytes().to_vec()).unwrap_or(0);
             env.set_datetime(unix);
-            env.set_date(std::mem::replace(sent_at, String::new()).as_bytes());
+            env.set_date(std::mem::take(sent_at).as_bytes());
         }
 
         if let Some(v) = t.message_id.get(0) {
@@ -293,12 +293,12 @@ impl std::convert::From<EmailObject> for crate::Envelope {
         }
         env.set_has_attachments(t.has_attachment);
         if let Some(ref mut subject) = t.subject {
-            env.set_subject(std::mem::replace(subject, String::new()).into_bytes());
+            env.set_subject(std::mem::take(subject).into_bytes());
         }
 
         if let Some(ref mut from) = t.from {
             env.set_from(
-                std::mem::replace(from, SmallVec::new())
+                std::mem::take(from)
                     .into_iter()
                     .map(|addr| addr.into())
                     .collect::<SmallVec<[crate::email::Address; 1]>>(),
@@ -306,7 +306,7 @@ impl std::convert::From<EmailObject> for crate::Envelope {
         }
         if let Some(ref mut to) = t.to {
             env.set_to(
-                std::mem::replace(to, SmallVec::new())
+                std::mem::take(to)
                     .into_iter()
                     .map(|addr| addr.into())
                     .collect::<SmallVec<[crate::email::Address; 1]>>(),
@@ -315,7 +315,7 @@ impl std::convert::From<EmailObject> for crate::Envelope {
 
         if let Some(ref mut cc) = t.cc {
             env.set_cc(
-                std::mem::replace(cc, SmallVec::new())
+                std::mem::take(cc)
                     .into_iter()
                     .map(|addr| addr.into())
                     .collect::<SmallVec<[crate::email::Address; 1]>>(),
@@ -324,17 +324,15 @@ impl std::convert::From<EmailObject> for crate::Envelope {
 
         if let Some(ref mut bcc) = t.bcc {
             env.set_bcc(
-                std::mem::replace(bcc, Vec::new())
+                std::mem::take(bcc)
                     .into_iter()
                     .map(|addr| addr.into())
                     .collect::<Vec<crate::email::Address>>(),
             );
         }
 
-        if let Some(ref r) = env.references {
-            if let Some(pos) = r.refs.iter().position(|r| r == env.message_id()) {
-                env.references.as_mut().unwrap().refs.remove(pos);
-            }
+        if let (Some(ref mut r), message_id) = (&mut env.references, &env.message_id) {
+            r.refs.retain(|r| r != message_id);
         }
 
         env
@@ -413,14 +411,13 @@ impl Method<EmailObject> for EmailQuery {
 }
 
 impl EmailQuery {
-    pub const RESULT_FIELD_IDS: ResultField<EmailQuery, EmailObject> =
-        ResultField::<EmailQuery, EmailObject> {
-            field: "/ids",
-            _ph: PhantomData,
-        };
+    pub const RESULT_FIELD_IDS: ResultField<Self, EmailObject> = ResultField::<Self, EmailObject> {
+        field: "/ids",
+        _ph: PhantomData,
+    };
 
     pub fn new(query_call: Query<Filter<EmailFilterCondition, EmailObject>, EmailObject>) -> Self {
-        EmailQuery {
+        Self {
             query_call,
             collapse_threads: false,
         }
@@ -454,7 +451,7 @@ impl Method<EmailObject> for EmailGet {
 
 impl EmailGet {
     pub fn new(get_call: Get<EmailObject>) -> Self {
-        EmailGet {
+        Self {
             get_call,
             body_properties: Vec::new(),
             fetch_text_body_values: false,
@@ -548,8 +545,8 @@ impl EmailFilterCondition {
 impl FilterTrait<EmailObject> for EmailFilterCondition {}
 
 impl From<EmailFilterCondition> for FilterCondition<EmailFilterCondition, EmailObject> {
-    fn from(val: EmailFilterCondition) -> FilterCondition<EmailFilterCondition, EmailObject> {
-        FilterCondition {
+    fn from(val: EmailFilterCondition) -> Self {
+        Self {
             cond: val,
             _ph: PhantomData,
         }
@@ -586,7 +583,7 @@ pub enum MessageProperty {
 
 impl From<crate::search::Query> for Filter<EmailFilterCondition, EmailObject> {
     fn from(val: crate::search::Query) -> Self {
-        let mut ret = Filter::Condition(EmailFilterCondition::new().into());
+        let mut ret = Self::Condition(EmailFilterCondition::new().into());
         fn rec(q: &crate::search::Query, f: &mut Filter<EmailFilterCondition, EmailObject>) {
             use datetime::{formats::RFC3339_DATE, timestamp_to_string};
 
@@ -813,7 +810,7 @@ impl Method<EmailObject> for EmailSet {
 
 impl EmailSet {
     pub fn new(set_call: Set<EmailObject>) -> Self {
-        EmailSet { set_call }
+        Self { set_call }
     }
 }
 
@@ -830,7 +827,7 @@ impl Method<EmailObject> for EmailChanges {
 
 impl EmailChanges {
     pub fn new(changes_call: Changes<EmailObject>) -> Self {
-        EmailChanges { changes_call }
+        Self { changes_call }
     }
 }
 
@@ -849,7 +846,7 @@ impl EmailQueryChanges {
     pub fn new(
         query_changes_call: QueryChanges<Filter<EmailFilterCondition, EmailObject>, EmailObject>,
     ) -> Self {
-        EmailQueryChanges { query_changes_call }
+        Self { query_changes_call }
     }
 }
 
@@ -864,17 +861,16 @@ pub struct EmailQueryChangesResponse {
 
 impl std::convert::TryFrom<&RawValue> for EmailQueryChangesResponse {
     type Error = crate::error::Error;
-    fn try_from(t: &RawValue) -> Result<EmailQueryChangesResponse> {
-        let res: (String, EmailQueryChangesResponse, String) = serde_json::from_str(t.get())
-            .map_err(|err| {
-                crate::error::Error::new(format!(
-                    "BUG: Could not deserialize server JSON response properly, please report \
-                     this!\nReply from server: {}",
-                    &t
-                ))
-                .set_source(Some(Arc::new(err)))
-                .set_kind(ErrorKind::Bug)
-            })?;
+    fn try_from(t: &RawValue) -> Result<Self> {
+        let res: (String, Self, String) = serde_json::from_str(t.get()).map_err(|err| {
+            crate::error::Error::new(format!(
+                "BUG: Could not deserialize server JSON response properly, please report \
+                 this!\nReply from server: {}",
+                &t
+            ))
+            .set_source(Some(Arc::new(err)))
+            .set_kind(ErrorKind::Bug)
+        })?;
         assert_eq!(&res.0, "Email/queryChanges");
         Ok(res.1)
     }

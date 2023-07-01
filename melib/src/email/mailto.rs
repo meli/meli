@@ -114,7 +114,7 @@ impl Mailto {
 
 impl From<Mailto> for Draft {
     fn from(val: Mailto) -> Self {
-        let mut ret = Draft::default();
+        let mut ret = Self::default();
         let Mailto {
             address: _,
             body,
@@ -130,7 +130,7 @@ impl From<Mailto> for Draft {
 
 impl From<&Mailto> for Draft {
     fn from(val: &Mailto) -> Self {
-        Draft::from(val.clone())
+        Self::from(val.clone())
     }
 }
 
@@ -138,17 +138,16 @@ impl TryFrom<&[u8]> for Mailto {
     type Error = String;
 
     fn try_from(value: &[u8]) -> std::result::Result<Self, Self::Error> {
-        let parse_res = super::parser::generic::mailto(value).map(|(_, v)| v);
-        if let Ok(res) = parse_res {
-            Ok(res)
-        } else {
-            debug!(
-                "parser::mailto returned error while parsing {}:\n{:?}",
-                String::from_utf8_lossy(value),
-                parse_res.as_ref().err().unwrap()
-            );
-            Err(format!("{:?}", parse_res.err().unwrap()))
-        }
+        super::parser::generic::mailto(value)
+            .map(|(_, v)| v)
+            .map_err(|err| {
+                log::debug!(
+                    "parser::mailto returned error while parsing {}:\n{:?}",
+                    String::from_utf8_lossy(value),
+                    &err,
+                );
+                format!("{:?}", err)
+            })
     }
 }
 
@@ -156,17 +155,16 @@ impl TryFrom<&str> for Mailto {
     type Error = String;
 
     fn try_from(value: &str) -> std::result::Result<Self, Self::Error> {
-        let parse_res = super::parser::generic::mailto(value.as_bytes()).map(|(_, v)| v);
-        if let Ok(res) = parse_res {
-            Ok(res)
-        } else {
-            debug!(
-                "parser::mailto returned error while parsing {}:\n{:?}",
-                value,
-                parse_res.as_ref().err().unwrap()
-            );
-            Err(format!("{:?}", parse_res.err().unwrap()))
-        }
+        super::parser::generic::mailto(value.as_bytes())
+            .map(|(_, v)| v)
+            .map_err(|err| {
+                log::debug!(
+                    "parser::mailto returned error while parsing {}:\n{:?}",
+                    value,
+                    &err
+                );
+                format!("{:?}", err)
+            })
     }
 }
 
@@ -331,7 +329,7 @@ mod tests {
         // by using "?" twice, is incorrect: <mailto:joe@example.com?cc=bob@
         // example.com?body=hello>   ; WRONG!
 
-        assert!(Mailto::try_from("mailto:joe@example.com?cc=bob@example.com?body=hello").is_err());
+        Mailto::try_from("mailto:joe@example.com?cc=bob@example.com?body=hello").unwrap_err();
 
         // <a href="mailto:?to=joe@xyz.com&amp;cc=bob@xyz.com&amp;body=hello"> assert
         // these are equal

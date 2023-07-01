@@ -156,7 +156,7 @@ impl Locale {
             unsafe { libc::freelocale(new_locale) };
             return Err(nix::Error::last().into());
         }
-        Ok(Locale {
+        Ok(Self {
             mask,
             category,
             new_locale,
@@ -190,7 +190,7 @@ pub fn timestamp_to_string(timestamp: UnixTimestamp, fmt: Option<&str>, posix: b
     let mut new_tm: libc::tm = unsafe { std::mem::zeroed() };
     unsafe {
         let i: i64 = timestamp.try_into().unwrap_or(0);
-        localtime_r(&i as *const i64, &mut new_tm as *mut libc::tm);
+        localtime_r(std::ptr::addr_of!(i), std::ptr::addr_of_mut!(new_tm));
     }
     let format: Cow<'_, CStr> = if let Some(cs) = fmt
         .map(str::as_bytes)
@@ -230,7 +230,7 @@ pub fn timestamp_to_string(timestamp: UnixTimestamp, fmt: Option<&str>, posix: b
                 vec.as_mut_ptr() as *mut _,
                 256,
                 format.as_ptr(),
-                &new_tm as *const _,
+                std::ptr::addr_of!(new_tm),
             )
         }
     };
@@ -320,7 +320,7 @@ fn year_to_secs(year: i64, is_leap: &mut bool) -> std::result::Result<i64, ()> {
     }
 }
 
-fn month_to_secs(month: usize, is_leap: bool) -> i64 {
+const fn month_to_secs(month: usize, is_leap: bool) -> i64 {
     const SECS_THROUGH_MONTH: [i64; 12] = [
         0,
         31 * 86400,
@@ -359,7 +359,7 @@ where
             )
             .chain_err_summary(|| "Could not set locale for datetime conversion")
             .chain_err_kind(crate::error::ErrorKind::External)?;
-            unsafe { strptime(s.as_ptr(), fmt.as_ptr(), &mut new_tm as *mut _) }
+            unsafe { strptime(s.as_ptr(), fmt.as_ptr(), std::ptr::addr_of_mut!(new_tm)) }
         };
 
         if ret.is_null() {
@@ -390,12 +390,15 @@ where
                 rest.to_bytes()
             };
 
-            if let Ok(idx) = TIMEZONE_ABBR.binary_search_by(|probe| probe.0.cmp(rest)) {
-                let (hr_offset, min_offset) = TIMEZONE_ABBR[idx].1;
-                (hr_offset as i64) * 60 * 60 + (min_offset as i64) * 60
-            } else {
-                0
-            }
+            TIMEZONE_ABBR
+                .binary_search_by(|probe| probe.0.cmp(rest))
+                .map_or_else(
+                    |_| 0,
+                    |idx| {
+                        let (hr_offset, min_offset) = TIMEZONE_ABBR[idx].1;
+                        (hr_offset as i64) * 60 * 60 + (min_offset as i64) * 60
+                    },
+                )
         };
         return Ok(tm_to_secs(new_tm)
             .map(|res| (res - tm_gmtoff) as u64)
@@ -421,7 +424,7 @@ where
             )
             .chain_err_summary(|| "Could not set locale for datetime conversion")
             .chain_err_kind(crate::error::ErrorKind::External)?;
-            unsafe { strptime(s.as_ptr(), fmt.as_ptr(), &mut new_tm as *mut _) }
+            unsafe { strptime(s.as_ptr(), fmt.as_ptr(), std::ptr::addr_of_mut!(new_tm)) }
         };
         if ret.is_null() {
             continue;
@@ -452,12 +455,15 @@ where
                 rest.to_bytes()
             };
 
-            if let Ok(idx) = TIMEZONE_ABBR.binary_search_by(|probe| probe.0.cmp(rest)) {
-                let (hr_offset, min_offset) = TIMEZONE_ABBR[idx].1;
-                (hr_offset as i64) * 60 * 60 + (min_offset as i64) * 60
-            } else {
-                0
-            }
+            TIMEZONE_ABBR
+                .binary_search_by(|probe| probe.0.cmp(rest))
+                .map_or_else(
+                    |_| 0,
+                    |idx| {
+                        let (hr_offset, min_offset) = TIMEZONE_ABBR[idx].1;
+                        (hr_offset as i64) * 60 * 60 + (min_offset as i64) * 60
+                    },
+                )
         };
         return Ok(tm_to_secs(new_tm)
             .map(|res| (res - tm_gmtoff) as u64)
@@ -485,12 +491,15 @@ where
     };
     unsafe {
         let val = CString::new(s)?;
-        let ret = strptime(val.as_ptr(), fmt.as_ptr(), &mut new_tm as *mut _);
+        let ret = strptime(val.as_ptr(), fmt.as_ptr(), std::ptr::addr_of_mut!(new_tm));
         if ret.is_null() {
             return Err("Could not parse time with strptime.".into());
         }
         let rest: isize = val.as_ptr().offset_from(ret);
-        Ok((rest.unsigned_abs(), mktime(&new_tm as *const _) as u64))
+        Ok((
+            rest.unsigned_abs(),
+            mktime(std::ptr::addr_of!(new_tm)) as u64,
+        ))
     }
 }
 
@@ -711,8 +720,8 @@ mod tests {
 
     #[test]
     fn test_datetime_rfcs() {
-        if unsafe { libc::setlocale(libc::LC_ALL, b"\0".as_ptr() as _) }.is_null() {
-            println!("Unable to set locale.");
+        if unsafe { libc::setlocale(libc::LC_ALL, b"\0".as_ptr() as *const i8) }.is_null() {
+            eprintln!("Unable to set locale.");
         }
         /* Some tests were lazily stolen from https://rachelbythebay.com/w/2013/06/11/time/ */
 

@@ -71,7 +71,7 @@ impl Default for Draft {
         headers.insert(HeaderName::BCC, "".into());
         headers.insert(HeaderName::SUBJECT, "".into());
 
-        Draft {
+        Self {
             headers,
             body: String::new(),
             wrap_header_preamble: None,
@@ -89,7 +89,7 @@ impl FromStr for Draft {
         }
 
         let (headers, _) = parser::mail(s.as_bytes())?;
-        let mut ret = Draft::default();
+        let mut ret = Self::default();
 
         for (k, v) in headers {
             ret.headers
@@ -105,7 +105,7 @@ impl FromStr for Draft {
 
 impl Draft {
     pub fn edit(envelope: &Envelope, bytes: &[u8]) -> Result<Self> {
-        let mut ret = Draft::default();
+        let mut ret = Self::default();
         for (k, v) in envelope.headers(bytes).unwrap_or_else(|_| Vec::new()) {
             ret.headers.insert(k.try_into()?, v.into());
         }
@@ -157,7 +157,7 @@ impl Draft {
                 .into();
             }
         }
-        let new = Draft::from_str(value.as_ref())?;
+        let new = Self::from_str(value.as_ref())?;
         let changes: bool = self.headers != new.headers || self.body != new.body;
         self.headers = new.headers;
         self.body = new.body;
@@ -165,7 +165,7 @@ impl Draft {
     }
 
     pub fn new_reply(envelope: &Envelope, bytes: &[u8], reply_to_all: bool) -> Self {
-        let mut ret = Draft::default();
+        let mut ret = Self::default();
         ret.headers_mut().insert(
             HeaderName::REFERENCES,
             format!(
@@ -525,11 +525,7 @@ where
         .set_body_to_raw()
         .set_content_type(ContentType::Other {
             name: path.file_name().map(|s| s.to_string_lossy().into()),
-            tag: if let Ok(mime_type) = query_mime_info(&path) {
-                mime_type
-            } else {
-                b"application/octet-stream".to_vec()
-            },
+            tag: query_mime_info(&path).unwrap_or_else(|_| b"application/octet-stream".to_vec()),
             parameters: vec![],
         });
 

@@ -19,6 +19,41 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#![deny(
+    /* groups */
+    clippy::correctness,
+    clippy::suspicious,
+    clippy::complexity,
+    clippy::perf,
+    clippy::cargo,
+    clippy::nursery,
+    clippy::style,
+    /* restriction */
+    clippy::dbg_macro,
+    clippy::rc_buffer,
+    clippy::as_underscore,
+    clippy::assertions_on_result_states,
+    /* rustdoc */
+    rustdoc::broken_intra_doc_links,
+    /* pedantic */
+    //clippy::cast_lossless,
+    //clippy::cast_possible_wrap,
+    //clippy::ptr_as_ptr,
+    //clippy::bool_to_int_with_if,
+    clippy::borrow_as_ptr,
+    clippy::case_sensitive_file_extension_comparisons,
+    //clippy::cast_lossless,
+    //clippy::cast_ptr_alignment,
+)]
+#![allow(
+    clippy::option_if_let_else,
+    clippy::missing_const_for_fn,
+    clippy::significant_drop_tightening,
+    clippy::multiple_crate_versions,
+    clippy::significant_drop_in_scrutinee,
+    clippy::cognitive_complexity
+)]
+
 //! A crate that performs mail client operations such as
 //! - Hold an [`Envelope`](./email/struct.Envelope.html) with methods convenient
 //!   for mail client use. (see module [`email`](./email/index.html))

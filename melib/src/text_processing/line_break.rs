@@ -32,17 +32,12 @@ use super::{
     types::{LineBreakClass, Reflow},
 };
 
-#[derive(Debug, PartialEq, Copy, Clone)]
+#[derive(Default, Debug, Eq, PartialEq, Copy, Clone)]
 pub enum LineBreakCandidate {
     MandatoryBreak,
     BreakAllowed,
+    #[default]
     NoBreak, // Not used.
-}
-
-impl Default for LineBreakCandidate {
-    fn default() -> Self {
-        LineBreakCandidate::NoBreak
-    }
 }
 
 use LineBreakCandidate::*;
@@ -1202,8 +1197,7 @@ fn reflow_helper(
         let paragraph = paragraph
             .trim_start_matches(&quotes)
             .replace(&format!("\n{}", &quotes), "")
-            .replace('\n', "")
-            .replace('\r', "");
+            .replace(['\n', '\r'], "");
         if in_paragraph {
             if let Some(width) = width {
                 ret.extend(
@@ -1218,7 +1212,7 @@ fn reflow_helper(
             ret.push(format!("{}{}", &quotes, &paragraph));
         }
     } else {
-        let paragraph = paragraph.replace('\n', "").replace('\r', "");
+        let paragraph = paragraph.replace(['\n', '\r'], "");
 
         if in_paragraph {
             if let Some(width) = width {
@@ -1284,9 +1278,9 @@ mod segment_tree {
     }
 
     impl SegmentTree {
-        pub(super) fn new(val: SmallVec<[usize; 1024]>) -> SegmentTree {
+        pub(super) fn new(val: SmallVec<[usize; 1024]>) -> Self {
             if val.is_empty() {
-                return SegmentTree {
+                return Self {
                     array: val.clone(),
                     tree: val,
                 };
@@ -1307,7 +1301,7 @@ mod segment_tree {
                 segment_tree[i] = segment_tree[2 * i] + segment_tree[2 * i + 1];
             }
 
-            SegmentTree {
+            Self {
                 array: val,
                 tree: segment_tree,
             }
@@ -1382,15 +1376,15 @@ enum ReflowState {
 }
 
 impl ReflowState {
-    fn new(reflow: Reflow, width: Option<usize>, cur_index: usize) -> ReflowState {
+    fn new(reflow: Reflow, width: Option<usize>, cur_index: usize) -> Self {
         match reflow {
-            Reflow::All if width.is_some() => ReflowState::AllWidth {
+            Reflow::All if width.is_some() => Self::AllWidth {
                 width: width.unwrap(),
                 state: LineBreakTextState::AtLine { cur_index },
             },
-            Reflow::All => ReflowState::All { cur_index },
-            Reflow::FormatFlowed => ReflowState::FormatFlowed { cur_index },
-            Reflow::No => ReflowState::No { cur_index },
+            Reflow::All => Self::All { cur_index },
+            Reflow::FormatFlowed => Self::FormatFlowed { cur_index },
+            Reflow::No => Self::No { cur_index },
         }
     }
 }
@@ -1418,7 +1412,7 @@ impl Default for LineBreakText {
 
 impl LineBreakText {
     pub fn new(text: String, reflow: Reflow, width: Option<usize>) -> Self {
-        LineBreakText {
+        Self {
             text,
             state: ReflowState::new(reflow, width, 0),
             paragraph: VecDeque::new(),
@@ -1790,8 +1784,7 @@ fn reflow_helper2(
         let paragraph = paragraph
             .trim_start_matches(&quotes)
             .replace(&format!("\n{}", &quotes), "")
-            .replace('\n', "")
-            .replace('\r', "");
+            .replace(['\n', '\r'], "");
         if in_paragraph {
             if let Some(width) = width {
                 ret.extend(
@@ -1806,7 +1799,7 @@ fn reflow_helper2(
             ret.push_back(format!("{}{}", &quotes, &paragraph));
         }
     } else {
-        let paragraph = paragraph.replace('\n', "").replace('\r', "");
+        let paragraph = paragraph.replace(['\n', '\r'], "");
 
         if in_paragraph {
             if let Some(width) = width {

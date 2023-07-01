@@ -115,7 +115,7 @@ impl ImapConnection {
                         );
                     }
                     let mut events = vec![];
-                    for (deleted_uid, deleted_hash) in self
+                    let deleteds = self
                         .uid_store
                         .uid_index
                         .lock()
@@ -125,8 +125,8 @@ impl ImapConnection {
                             *mailbox_hash_ == mailbox_hash && !results.contains(u)
                         })
                         .map(|((_, uid), hash)| (*uid, *hash))
-                        .collect::<Vec<(UID, crate::email::EnvelopeHash)>>()
-                    {
+                        .collect::<Vec<(UID, crate::email::EnvelopeHash)>>();
+                    for (deleted_uid, deleted_hash) in deleteds {
                         mailbox.exists.lock().unwrap().remove(deleted_hash);
                         mailbox.unseen.lock().unwrap().remove(deleted_hash);
                         self.uid_store
@@ -246,9 +246,7 @@ impl ImapConnection {
                         }
                         for f in keywords {
                             let hash = TagHash::from_bytes(f.as_bytes());
-                            if !tag_lck.contains_key(&hash) {
-                                tag_lck.insert(hash, f.to_string());
-                            }
+                            tag_lck.entry(hash).or_insert_with(|| f.to_string());
                             env.tags_mut().push(hash);
                         }
                     }
@@ -381,9 +379,7 @@ impl ImapConnection {
                                 }
                                 for f in keywords {
                                     let hash = TagHash::from_bytes(f.as_bytes());
-                                    if !tag_lck.contains_key(&hash) {
-                                        tag_lck.insert(hash, f.to_string());
-                                    }
+                                    tag_lck.entry(hash).or_insert_with(|| f.to_string());
                                     env.tags_mut().push(hash);
                                 }
                             }

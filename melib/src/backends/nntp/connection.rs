@@ -35,19 +35,10 @@ pub use smol::Async as AsyncWrapper;
 
 use super::{Capabilities, NntpServerConf, UIDStore};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct NntpExtensionUse {
     #[cfg(feature = "deflate_compression")]
     pub deflate: bool,
-}
-
-impl Default for NntpExtensionUse {
-    fn default() -> Self {
-        Self {
-            #[cfg(feature = "deflate_compression")]
-            deflate: false,
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -66,7 +57,7 @@ pub enum MailboxSelection {
 
 impl MailboxSelection {
     pub fn take(&mut self) -> Self {
-        std::mem::replace(self, MailboxSelection::None)
+        std::mem::replace(self, Self::None)
     }
 }
 
@@ -82,9 +73,7 @@ pub struct NntpConnection {
 }
 
 impl NntpStream {
-    pub async fn new_connection(
-        server_conf: &NntpServerConf,
-    ) -> Result<(Capabilities, NntpStream)> {
+    pub async fn new_connection(server_conf: &NntpServerConf) -> Result<(Capabilities, Self)> {
         use std::net::TcpStream;
         let path = &server_conf.server_hostname;
 
@@ -96,7 +85,7 @@ impl NntpStream {
             )?))?
         };
         let mut res = String::with_capacity(8 * 1024);
-        let mut ret = NntpStream {
+        let mut ret = Self {
             stream,
             extension_use: server_conf.extension_use,
             current_mailbox: MailboxSelection::None,
@@ -273,7 +262,7 @@ impl NntpStream {
                         server_conf.server_hostname, res
                     )
                 })?;
-            let NntpStream {
+            let Self {
                 stream,
                 extension_use,
                 current_mailbox,
@@ -282,7 +271,7 @@ impl NntpStream {
             let stream = stream.into_inner()?;
             return Ok((
                 capabilities,
-                NntpStream {
+                Self {
                     stream: AsyncWrapper::new(stream.deflate())?,
                     extension_use,
                     current_mailbox,
@@ -421,11 +410,8 @@ impl NntpStream {
 }
 
 impl NntpConnection {
-    pub fn new_connection(
-        server_conf: &NntpServerConf,
-        uid_store: Arc<UIDStore>,
-    ) -> NntpConnection {
-        NntpConnection {
+    pub fn new_connection(server_conf: &NntpServerConf, uid_store: Arc<UIDStore>) -> Self {
+        Self {
             stream: Err(Error::new("Offline".to_string())),
             server_conf: server_conf.clone(),
             uid_store,

@@ -82,7 +82,7 @@ impl AttachmentBuilder {
                 log::debug!("{}\n", String::from_utf8_lossy(content));
                 log::debug!("-------------------------------\n");
 
-                return AttachmentBuilder {
+                return Self {
                     content_type: Default::default(),
                     content_transfer_encoding: ContentTransferEncoding::_7Bit,
                     content_disposition: ContentDisposition::default(),
@@ -100,7 +100,7 @@ impl AttachmentBuilder {
             offset: content.len() - body.len(),
             length: body.len(),
         };
-        let mut builder = AttachmentBuilder {
+        let mut builder = Self {
             raw,
             body,
             ..Default::default()
@@ -300,7 +300,7 @@ impl AttachmentBuilder {
             Ok((_, attachments)) => {
                 let mut vec = Vec::with_capacity(attachments.len());
                 for a in attachments {
-                    let mut builder = AttachmentBuilder::default();
+                    let mut builder = Self::default();
                     let (headers, body) = match parser::attachments::attachment(a) {
                         Ok((_, v)) => v,
                         Err(err) => {
@@ -355,7 +355,7 @@ impl From<Attachment> for AttachmentBuilder {
             raw,
             body,
         } = val;
-        AttachmentBuilder {
+        Self {
             content_type,
             content_disposition,
             content_transfer_encoding,
@@ -374,7 +374,7 @@ impl From<AttachmentBuilder> for Attachment {
             raw,
             body,
         } = val;
-        Attachment {
+        Self {
             content_type,
             content_transfer_encoding,
             content_disposition,
@@ -486,7 +486,7 @@ impl Attachment {
         content_transfer_encoding: ContentTransferEncoding,
         raw: Vec<u8>,
     ) -> Self {
-        Attachment {
+        Self {
             content_type,
             content_disposition: ContentDisposition::default(),
             content_transfer_encoding,
@@ -575,7 +575,7 @@ impl Attachment {
                             None
                         })
                     {
-                        if Attachment::check_if_has_attachments_quick(body, boundary) {
+                        if Self::check_if_has_attachments_quick(body, boundary) {
                             return true;
                         }
                     }
@@ -663,7 +663,7 @@ impl Attachment {
         self.content_type.to_string()
     }
 
-    pub fn attachments(&self) -> Vec<Attachment> {
+    pub fn attachments(&self) -> Vec<Self> {
         let mut ret = Vec::new();
         fn count_recursive(att: &Attachment, ret: &mut Vec<Attachment>) {
             match att.content_type {
@@ -713,12 +713,12 @@ impl Attachment {
                 kind: MultipartType::Alternative,
                 ref parts,
                 ..
-            } => parts.iter().all(Attachment::is_html),
+            } => parts.iter().all(Self::is_html),
             ContentType::Multipart {
                 kind: MultipartType::Related,
                 ..
             } => false,
-            ContentType::Multipart { ref parts, .. } => parts.iter().any(Attachment::is_html),
+            ContentType::Multipart { ref parts, .. } => parts.iter().any(Self::is_html),
             _ => false,
         }
     }
@@ -893,7 +893,7 @@ impl Attachment {
         .map(|n| n.replace(|c| std::path::is_separator(c) || c.is_ascii_control(), "_"))
     }
 
-    fn decode_rec_helper<'a, 'b>(&'a self, options: &mut DecodeOptions<'b>) -> Vec<u8> {
+    fn decode_rec_helper(&self, options: &mut DecodeOptions<'_>) -> Vec<u8> {
         match self.content_type {
             ContentType::Other { .. } => Vec::new(),
             ContentType::Text { .. } => self.decode_helper(options),
@@ -962,11 +962,11 @@ impl Attachment {
         }
     }
 
-    pub fn decode_rec<'a, 'b>(&'a self, mut options: DecodeOptions<'b>) -> Vec<u8> {
+    pub fn decode_rec(&self, mut options: DecodeOptions<'_>) -> Vec<u8> {
         self.decode_rec_helper(&mut options)
     }
 
-    fn decode_helper<'a, 'b>(&'a self, options: &mut DecodeOptions<'b>) -> Vec<u8> {
+    fn decode_helper(&self, options: &mut DecodeOptions<'_>) -> Vec<u8> {
         let charset = options
             .force_charset
             .unwrap_or_else(|| match self.content_type {
@@ -1006,7 +1006,7 @@ impl Attachment {
         ret
     }
 
-    pub fn decode<'a, 'b>(&'a self, mut options: DecodeOptions<'b>) -> Vec<u8> {
+    pub fn decode(&self, mut options: DecodeOptions<'_>) -> Vec<u8> {
         self.decode_helper(&mut options)
     }
 }

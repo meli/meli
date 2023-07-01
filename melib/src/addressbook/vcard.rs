@@ -84,7 +84,7 @@ pub struct ContentLine {
 }
 
 impl CardDeserializer {
-    pub fn from_str(mut input: &str) -> Result<VCard<impl VCardVersion>> {
+    pub fn try_from_str(mut input: &str) -> Result<VCard<impl VCardVersion>> {
         input = if (!input.starts_with(HEADER_CRLF) || !input.ends_with(FOOTER_CRLF))
             && (!input.starts_with(HEADER_LF) || !input.ends_with(FOOTER_LF))
         {
@@ -270,7 +270,7 @@ fn test_load_cards() {
     for s in parse_card().parse(contents.as_str()).unwrap().1 {
         println!("");
         println!("{}", s);
-        println!("{:?}", CardDeserializer::from_str(s));
+        println!("{:?}", CardDeserializer::try_from_str(s));
         println!("");
     }
     */
@@ -295,7 +295,7 @@ pub fn load_cards(p: &std::path::Path) -> Result<Vec<Card>> {
                     Ok((_, c)) => {
                         for s in c {
                             ret.push(
-                                CardDeserializer::from_str(s)
+                                CardDeserializer::try_from_str(s)
                                     .and_then(TryInto::try_into)
                                     .map(|mut card| {
                                         Card::set_external_resource(&mut card, true);
@@ -326,7 +326,13 @@ pub fn load_cards(p: &std::path::Path) -> Result<Vec<Card>> {
 #[test]
 fn test_card() {
     let j = "BEGIN:VCARD\r\nVERSION:4.0\r\nN:Gump;Forrest;;Mr.;\r\nFN:Forrest Gump\r\nORG:Bubba Gump Shrimp Co.\r\nTITLE:Shrimp Man\r\nPHOTO;MEDIATYPE=image/gif:http://www.example.com/dir_photos/my_photo.gif\r\nTEL;TYPE=work,voice;VALUE=uri:tel:+1-111-555-1212\r\nTEL;TYPE=home,voice;VALUE=uri:tel:+1-404-555-1212\r\nADR;TYPE=WORK;PREF=1;LABEL=\"100 Waters Edge\\nBaytown\\, LA 30314\\nUnited States of America\":;;100 Waters Edge;Baytown;LA;30314;United States of America\r\nADR;TYPE=HOME;LABEL=\"42 Plantation St.\\nBaytown\\, LA 30314\\nUnited States of America\":;;42 Plantation St.;Baytown;LA;30314;United States of America\r\nEMAIL:forrestgump@example.com\r\nREV:20080424T195243Z\r\nx-qq:21588891\r\nEND:VCARD\r\n";
-    println!("results = {:#?}", CardDeserializer::from_str(j).unwrap());
+    println!(
+        "results = {:#?}",
+        CardDeserializer::try_from_str(j).unwrap()
+    );
     let j = "BEGIN:VCARD\nVERSION:4.0\nN:Gump;Forrest;;Mr.;\nFN:Forrest Gump\nORG:Bubba Gump Shrimp Co.\nTITLE:Shrimp Man\nPHOTO;MEDIATYPE=image/gif:http://www.example.com/dir_photos/my_photo.gif\nTEL;TYPE=work,voice;VALUE=uri:tel:+1-111-555-1212\nTEL;TYPE=home,voice;VALUE=uri:tel:+1-404-555-1212\nADR;TYPE=WORK;PREF=1;LABEL=\"100 Waters Edge\\nBaytown\\, LA 30314\\nUnited States of America\":;;100 Waters Edge;Baytown;LA;30314;United States of America\nADR;TYPE=HOME;LABEL=\"42 Plantation St.\\nBaytown\\, LA 30314\\nUnited States of America\":;;42 Plantation St.;Baytown;LA;30314;United States of America\nEMAIL:forrestgump@example.com\nREV:20080424T195243Z\nx-qq:21588891\nEND:VCARD\n";
-    println!("results = {:#?}", CardDeserializer::from_str(j).unwrap());
+    println!(
+        "results = {:#?}",
+        CardDeserializer::try_from_str(j).unwrap()
+    );
 }

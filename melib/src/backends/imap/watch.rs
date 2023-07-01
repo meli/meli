@@ -377,9 +377,7 @@ pub async fn examine_updates(
                 mailbox.exists.lock().unwrap().insert_new(env.hash());
                 for f in keywords {
                     let hash = TagHash::from_bytes(f.as_bytes());
-                    if !tag_lck.contains_key(&hash) {
-                        tag_lck.insert(hash, f.to_string());
-                    }
+                    tag_lck.entry(hash).or_insert_with(|| f.to_string());
                     env.tags_mut().push(hash);
                 }
             }

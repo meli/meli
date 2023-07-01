@@ -37,7 +37,7 @@ pub enum JmapArgument<T> {
 
 impl<T> JmapArgument<T> {
     pub fn value(v: T) -> Self {
-        JmapArgument::Value(v)
+        Self::Value(v)
     }
 
     pub fn reference<M, OBJ>(result_of: usize, path: ResultField<M, OBJ>) -> Self
@@ -45,7 +45,7 @@ impl<T> JmapArgument<T> {
         M: Method<OBJ>,
         OBJ: Object,
     {
-        JmapArgument::ResultReference {
+        Self::ResultReference {
             result_of: format!("m{}", result_of),
             name: M::NAME.to_string(),
             path: path.field.to_string(),

@@ -31,7 +31,7 @@ use std::{
 
 use log::{Level, LevelFilter, Log, Metadata, Record};
 
-#[derive(Copy, Clone, Default, PartialEq, PartialOrd, Hash, Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, Default, Eq, PartialEq, PartialOrd, Hash, Debug, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum LogLevel {
     OFF = 0,
@@ -46,12 +46,12 @@ pub enum LogLevel {
 impl From<u8> for LogLevel {
     fn from(verbosity: u8) -> Self {
         match verbosity {
-            0 => LogLevel::OFF,
-            1 => LogLevel::ERROR,
-            2 => LogLevel::WARN,
-            3 => LogLevel::INFO,
-            4 => LogLevel::DEBUG,
-            _ => LogLevel::TRACE,
+            0 => Self::OFF,
+            1 => Self::ERROR,
+            2 => Self::WARN,
+            3 => Self::INFO,
+            4 => Self::DEBUG,
+            _ => Self::TRACE,
         }
     }
 }
@@ -125,7 +125,7 @@ impl std::fmt::Display for LogLevel {
 
 use LogLevel::*;
 
-#[derive(Copy, Clone, Default, PartialEq, PartialOrd, Hash, Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, Default, Eq, PartialEq, PartialOrd, Hash, Debug, Serialize, Deserialize)]
 pub enum Destination {
     File,
     #[default]
@@ -175,8 +175,8 @@ impl StderrLogger {
             .create(true) /* a new file will be created if the file does not yet already exist.*/
             .read(true)
             .open(data_dir.place_data_file("meli.log").unwrap()).unwrap();
-            StderrLogger {
-                dest: Arc::new(Mutex::new(BufWriter::new(log_file).into())),
+            Self {
+                dest: Arc::new(Mutex::new(BufWriter::new(log_file))),
                 level: Arc::new(AtomicU8::new(level as u8)),
                 print_level: true,
                 print_module_names: true,
@@ -188,8 +188,8 @@ impl StderrLogger {
         };
         #[cfg(test)]
         let logger = {
-            StderrLogger {
-                dest: Arc::new(Mutex::new(BufWriter::new(std::io::stderr()).into())),
+            Self {
+                dest: Arc::new(Mutex::new(BufWriter::new(std::io::stderr()))),
                 level: Arc::new(AtomicU8::new(level as u8)),
                 print_level: true,
                 print_module_names: true,
@@ -227,7 +227,7 @@ impl StderrLogger {
         *dest = BufWriter::new(OpenOptions::new().append(true) /* writes will append to a file instead of overwriting previous contents */
                          .create(true) /* a new file will be created if the file does not yet already exist.*/
                          .read(true)
-                         .open(path).unwrap()).into();
+                         .open(path).unwrap());
     }
 }
 
@@ -279,7 +279,7 @@ impl Log for StderrLogger {
             self.debug_dest,
             record.metadata().level() <= Level::from(self.log_level()),
         ) {
-            (Destination::None, false) => return,
+            (Destination::None, false) => {}
             (Destination::None | Destination::File, _) => {
                 _ = self.dest.lock().ok().and_then(|mut d| {
                     write(

@@ -107,9 +107,10 @@ pub fn list_id(header: Option<&'_ str>) -> Option<&'_ str> {
 
 impl<'a> ListActions<'a> {
     pub fn detect(envelope: &'a Envelope) -> Option<ListActions<'a>> {
-        let mut ret = ListActions::default();
-
-        ret.id = list_id_header(envelope);
+        let mut ret = Self {
+            id: list_id_header(envelope),
+            ..Self::default()
+        };
 
         if let Some(archive) = envelope.other_headers().get("List-Archive") {
             if archive.starts_with('<') {

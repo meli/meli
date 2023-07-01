@@ -119,7 +119,7 @@ type Capabilities = HashSet<String>;
 #[derive(Debug)]
 pub struct UIDStore {
     account_hash: AccountHash,
-    account_name: Arc<String>,
+    account_name: Arc<str>,
     capabilities: Arc<Mutex<Capabilities>>,
     message_id_index: Arc<Mutex<HashMap<String, EnvelopeHash>>>,
     hash_index: Arc<Mutex<HashMap<EnvelopeHash, (UID, MailboxHash)>>>,
@@ -134,10 +134,10 @@ pub struct UIDStore {
 impl UIDStore {
     fn new(
         account_hash: AccountHash,
-        account_name: Arc<String>,
+        account_name: Arc<str>,
         event_consumer: BackendEventConsumer,
     ) -> Self {
-        UIDStore {
+        Self {
             account_hash,
             account_name,
             event_consumer,
@@ -356,7 +356,7 @@ impl MailBackend for NntpType {
         let uid_store = self.uid_store.clone();
         let connection = self.connection.clone();
         Ok(Box::pin(async move {
-            NntpType::nntp_mailboxes(&connection).await?;
+            Self::nntp_mailboxes(&connection).await?;
             let mailboxes_lck = uid_store.mailboxes.lock().await;
             let ret = mailboxes_lck
                 .iter()
@@ -552,6 +552,7 @@ impl MailBackend for NntpType {
 }
 
 impl NntpType {
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(
         s: &AccountSettings,
         is_subscribed: Box<dyn Fn(&str) -> bool + Send + Sync>,
@@ -610,7 +611,7 @@ impl NntpType {
             },
         };
         let account_hash = AccountHash::from_bytes(s.name.as_bytes());
-        let account_name = Arc::new(s.name.to_string());
+        let account_name = s.name.to_string().into();
         let mut mailboxes = HashMap::default();
         for (k, _f) in s.mailboxes.iter() {
             let mailbox_hash = MailboxHash(get_path_hash!(&k));
@@ -639,7 +640,7 @@ impl NntpType {
         });
         let connection = NntpConnection::new_connection(&server_conf, uid_store.clone());
 
-        Ok(Box::new(NntpType {
+        Ok(Box::new(Self {
             server_conf,
             _is_subscribed: Arc::new(IsSubscribedFn(is_subscribed)),
             _can_create_flags: Arc::new(Mutex::new(false)),
@@ -791,7 +792,7 @@ struct FetchState {
 
 impl FetchState {
     async fn fetch_envs(&mut self) -> Result<Option<Vec<Envelope>>> {
-        let FetchState {
+        let Self {
             mailbox_hash,
             ref connection,
             ref uid_store,

@@ -19,6 +19,8 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#![allow(clippy::type_complexity)]
+
 use std::{convert::TryFrom, str::FromStr};
 
 use nom::{
@@ -78,49 +80,49 @@ impl RequiredResponses {
         }
         let line = &line[b"* ".len()..];
         let mut ret = false;
-        if self.intersects(RequiredResponses::CAPABILITY) {
+        if self.intersects(Self::CAPABILITY) {
             ret |= line.starts_with(b"CAPABILITY");
         }
-        if self.intersects(RequiredResponses::BYE) {
+        if self.intersects(Self::BYE) {
             ret |= line.starts_with(b"BYE");
         }
-        if self.intersects(RequiredResponses::FLAGS) {
+        if self.intersects(Self::FLAGS) {
             ret |= line.starts_with(b"FLAGS");
         }
-        if self.intersects(RequiredResponses::EXISTS) {
+        if self.intersects(Self::EXISTS) {
             ret |= line.ends_with(b"EXISTS\r\n");
         }
-        if self.intersects(RequiredResponses::RECENT) {
+        if self.intersects(Self::RECENT) {
             ret |= line.ends_with(b"RECENT\r\n");
         }
-        if self.intersects(RequiredResponses::UNSEEN) {
+        if self.intersects(Self::UNSEEN) {
             ret |= line.starts_with(b"UNSEEN");
         }
-        if self.intersects(RequiredResponses::PERMANENTFLAGS) {
+        if self.intersects(Self::PERMANENTFLAGS) {
             ret |= line.starts_with(b"PERMANENTFLAGS");
         }
-        if self.intersects(RequiredResponses::UIDNEXT) {
+        if self.intersects(Self::UIDNEXT) {
             ret |= line.starts_with(b"UIDNEXT");
         }
-        if self.intersects(RequiredResponses::UIDVALIDITY) {
+        if self.intersects(Self::UIDVALIDITY) {
             ret |= line.starts_with(b"UIDVALIDITY");
         }
-        if self.intersects(RequiredResponses::LIST) {
+        if self.intersects(Self::LIST) {
             ret |= line.starts_with(b"LIST");
         }
-        if self.intersects(RequiredResponses::LSUB) {
+        if self.intersects(Self::LSUB) {
             ret |= line.starts_with(b"LSUB");
         }
-        if self.intersects(RequiredResponses::STATUS) {
+        if self.intersects(Self::STATUS) {
             ret |= line.starts_with(b"STATUS");
         }
-        if self.intersects(RequiredResponses::EXPUNGE) {
+        if self.intersects(Self::EXPUNGE) {
             ret |= line.ends_with(b"EXPUNGE\r\n");
         }
-        if self.intersects(RequiredResponses::SEARCH) {
+        if self.intersects(Self::SEARCH) {
             ret |= line.starts_with(b"SEARCH");
         }
-        if self.intersects(RequiredResponses::FETCH) {
+        if self.intersects(Self::FETCH) {
             let mut ptr = 0;
             for (i, l) in line.iter().enumerate() {
                 if !l.is_ascii_digit() {
@@ -134,7 +136,7 @@ impl RequiredResponses {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct Alert(String);
 
 pub type ImapParseResult<'a, T> = Result<(&'a [u8], T, Option<Alert>)>;
@@ -142,7 +144,7 @@ pub struct ImapLineIterator<'a> {
     slice: &'a [u8],
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum ResponseCode {
     ///The human-readable text contains a special alert that MUST be presented
     /// to the user in a fashion that calls the user's attention to the message.
@@ -229,7 +231,7 @@ impl std::fmt::Display for ResponseCode {
 }
 
 impl ResponseCode {
-    fn from(val: &[u8]) -> ResponseCode {
+    fn from(val: &[u8]) -> Self {
         use ResponseCode::*;
         if !val.starts_with(b"[") {
             let msg = val.trim();
@@ -280,7 +282,7 @@ impl ResponseCode {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum ImapResponse {
     Ok(ResponseCode),
     No(ResponseCode),
@@ -291,7 +293,7 @@ pub enum ImapResponse {
 
 impl TryFrom<&'_ [u8]> for ImapResponse {
     type Error = Error;
-    fn try_from(val: &'_ [u8]) -> Result<ImapResponse> {
+    fn try_from(val: &'_ [u8]) -> Result<Self> {
         let val: &[u8] = val.split_rn().last().unwrap_or(val);
         let mut val = val[val.find(b" ").ok_or_else(|| {
             Error::new(format!(
@@ -330,16 +332,15 @@ impl TryFrom<&'_ [u8]> for ImapResponse {
     }
 }
 
-impl Into<Result<()>> for ImapResponse {
-    fn into(self) -> Result<()> {
-        match self {
-            Self::Ok(_) | Self::Preauth(_) | Self::Bye(_) => Ok(()),
-            Self::No(ResponseCode::Alert(msg)) | Self::Bad(ResponseCode::Alert(msg)) => {
-                Err(Error::new(msg))
-            }
-            Self::No(err) => Err(Error::new(format!("{:?}", err)))
+impl From<ImapResponse> for Result<()> {
+    fn from(resp: ImapResponse) -> Self {
+        match resp {
+            ImapResponse::Ok(_) | ImapResponse::Preauth(_) | ImapResponse::Bye(_) => Ok(()),
+            ImapResponse::No(ResponseCode::Alert(msg))
+            | ImapResponse::Bad(ResponseCode::Alert(msg)) => Err(Error::new(msg)),
+            ImapResponse::No(err) => Err(Error::new(format!("{:?}", err)))
                 .chain_err_summary(|| "IMAP NO Response.".to_string()),
-            Self::Bad(err) => Err(Error::new(format!("{:?}", err)))
+            ImapResponse::Bad(err) => Err(Error::new(format!("{:?}", err)))
                 .chain_err_summary(|| "IMAP BAD Response.".to_string()),
         }
     }
@@ -428,9 +429,11 @@ pub fn list_mailbox_result(input: &[u8]) -> IResult<&[u8], ImapMailbox> {
         input,
         ({
             let separator: u8 = separator[0];
-            let mut f = ImapMailbox::default();
-            f.no_select = false;
-            f.is_subscribed = false;
+            let mut f = ImapMailbox {
+                no_select: false,
+                is_subscribed: false,
+                ..ImapMailbox::default()
+            };
 
             if path.eq_ignore_ascii_case("INBOX") {
                 f.is_subscribed = true;
@@ -478,7 +481,7 @@ pub fn list_mailbox_result(input: &[u8]) -> IResult<&[u8], ImapMailbox> {
     ))
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct FetchResponse<'a> {
     pub uid: Option<UID>,
     pub message_sequence_number: MessageSequenceNumber,
@@ -788,7 +791,7 @@ pub fn capabilities(input: &[u8]) -> IResult<&[u8], Vec<&[u8]>> {
 
 /// This enum represents the server's untagged responses detailed in `7. Server
 /// Responses` of RFC 3501   INTERNET MESSAGE ACCESS PROTOCOL - VERSION 4rev1
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum UntaggedResponse<'s> {
     /// ```text
     ///    7.4.1.  EXPUNGE Response
@@ -926,7 +929,7 @@ pub fn search_results_raw<'a>(input: &'a [u8]) -> IResult<&'a [u8], &'a [u8]> {
     ))(input)
 }
 
-#[derive(Debug, Default, PartialEq, Clone)]
+#[derive(Debug, Default, Eq, PartialEq, Clone)]
 pub struct SelectResponse {
     pub exists: ImapNum,
     pub recent: ImapNum,
@@ -1705,11 +1708,11 @@ mod tests {
         let mut address = SmallVec::new();
         address.push(Address::new(None, "xx@xx.com".to_string()));
         let mut env = Envelope::new(EnvelopeHash::default());
-        env.set_subject("xxxx/xxxx".as_bytes().to_vec());
-        env.set_date("Fri, 24 Jun 2011 10:09:10 +0000".as_bytes());
+        env.set_subject(b"xxxx/xxxx".to_vec());
+        env.set_date(b"Fri, 24 Jun 2011 10:09:10 +0000");
         env.set_from(address.clone());
         env.set_to(address);
-        env.set_message_id("<xx@xx.com>".as_bytes());
+        env.set_message_id(b"<xx@xx.com>");
         assert_eq!(
             fetch_response(input).unwrap(),
             (

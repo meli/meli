@@ -28,9 +28,10 @@ use crate::email::{
     parser::BytesExt,
 };
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Default, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Charset {
     Ascii,
+    #[default]
     UTF8,
     UTF16,
     ISO8859_1,
@@ -60,110 +61,102 @@ pub enum Charset {
     KOI8U,
 }
 
-impl Default for Charset {
-    fn default() -> Self {
-        Charset::UTF8
-    }
-}
-
 impl<'a> From<&'a [u8]> for Charset {
     fn from(b: &'a [u8]) -> Self {
         match b.trim() {
             b if b.eq_ignore_ascii_case(b"us-ascii") || b.eq_ignore_ascii_case(b"ascii") => {
-                Charset::Ascii
+                Self::Ascii
             }
-            b if b.eq_ignore_ascii_case(b"utf-8") || b.eq_ignore_ascii_case(b"utf8") => {
-                Charset::UTF8
-            }
+            b if b.eq_ignore_ascii_case(b"utf-8") || b.eq_ignore_ascii_case(b"utf8") => Self::UTF8,
             b if b.eq_ignore_ascii_case(b"utf-16") || b.eq_ignore_ascii_case(b"utf16") => {
-                Charset::UTF16
+                Self::UTF16
             }
             b if b.eq_ignore_ascii_case(b"iso-8859-1") || b.eq_ignore_ascii_case(b"iso8859-1") => {
-                Charset::ISO8859_1
+                Self::ISO8859_1
             }
             b if b.eq_ignore_ascii_case(b"iso-8859-2") || b.eq_ignore_ascii_case(b"iso8859-2") => {
-                Charset::ISO8859_2
+                Self::ISO8859_2
             }
             b if b.eq_ignore_ascii_case(b"iso-8859-3") || b.eq_ignore_ascii_case(b"iso8859-3") => {
-                Charset::ISO8859_3
+                Self::ISO8859_3
             }
             b if b.eq_ignore_ascii_case(b"iso-8859-4") || b.eq_ignore_ascii_case(b"iso8859-4") => {
-                Charset::ISO8859_4
+                Self::ISO8859_4
             }
             b if b.eq_ignore_ascii_case(b"iso-8859-5") || b.eq_ignore_ascii_case(b"iso8859-5") => {
-                Charset::ISO8859_5
+                Self::ISO8859_5
             }
             b if b.eq_ignore_ascii_case(b"iso-8859-6") || b.eq_ignore_ascii_case(b"iso8859-6") => {
-                Charset::ISO8859_6
+                Self::ISO8859_6
             }
             b if b.eq_ignore_ascii_case(b"iso-8859-7") || b.eq_ignore_ascii_case(b"iso8859-7") => {
-                Charset::ISO8859_7
+                Self::ISO8859_7
             }
             b if b.eq_ignore_ascii_case(b"iso-8859-8") || b.eq_ignore_ascii_case(b"iso8859-8") => {
-                Charset::ISO8859_8
+                Self::ISO8859_8
             }
             b if b.eq_ignore_ascii_case(b"iso-8859-10")
                 || b.eq_ignore_ascii_case(b"iso8859-10") =>
             {
-                Charset::ISO8859_10
+                Self::ISO8859_10
             }
             b if b.eq_ignore_ascii_case(b"iso-8859-13")
                 || b.eq_ignore_ascii_case(b"iso8859-13") =>
             {
-                Charset::ISO8859_13
+                Self::ISO8859_13
             }
             b if b.eq_ignore_ascii_case(b"iso-8859-14")
                 || b.eq_ignore_ascii_case(b"iso8859-14") =>
             {
-                Charset::ISO8859_14
+                Self::ISO8859_14
             }
             b if b.eq_ignore_ascii_case(b"iso-8859-15")
                 || b.eq_ignore_ascii_case(b"iso8859-15") =>
             {
-                Charset::ISO8859_15
+                Self::ISO8859_15
             }
             b if b.eq_ignore_ascii_case(b"iso-8859-16")
                 || b.eq_ignore_ascii_case(b"iso8859-16") =>
             {
-                Charset::ISO8859_16
+                Self::ISO8859_16
             }
             b if b.eq_ignore_ascii_case(b"windows-1250")
                 || b.eq_ignore_ascii_case(b"windows1250") =>
             {
-                Charset::Windows1250
+                Self::Windows1250
             }
             b if b.eq_ignore_ascii_case(b"windows-1251")
                 || b.eq_ignore_ascii_case(b"windows1251") =>
             {
-                Charset::Windows1251
+                Self::Windows1251
             }
             b if b.eq_ignore_ascii_case(b"windows-1252")
                 || b.eq_ignore_ascii_case(b"windows1252") =>
             {
-                Charset::Windows1252
+                Self::Windows1252
             }
             b if b.eq_ignore_ascii_case(b"windows-1253")
                 || b.eq_ignore_ascii_case(b"windows1253")
                 || b.eq_ignore_ascii_case(b"cp1253")
                 || b.eq_ignore_ascii_case(b"cp-1253") =>
             {
-                Charset::Windows1253
+                Self::Windows1253
             }
-            b if b.eq_ignore_ascii_case(b"gbk") => Charset::GBK,
+            b if b.eq_ignore_ascii_case(b"gbk") => Self::GBK,
             b if b.eq_ignore_ascii_case(b"gb18030") || b.eq_ignore_ascii_case(b"gb-18030") => {
-                Charset::GB18030
+                Self::GB18030
             }
             b if b.eq_ignore_ascii_case(b"gb2312") || b.eq_ignore_ascii_case(b"gb-2312") => {
-                Charset::GB2312
+                Self::GB2312
             }
-            b if b.eq_ignore_ascii_case(b"big5") => Charset::BIG5,
-            b if b.eq_ignore_ascii_case(b"iso-2022-jp") => Charset::ISO2022JP,
-            b if b.eq_ignore_ascii_case(b"euc-jp") => Charset::EUCJP,
-            b if b.eq_ignore_ascii_case(b"koi8-r") => Charset::KOI8R,
-            b if b.eq_ignore_ascii_case(b"koi8-u") => Charset::KOI8U,
+            b if b.eq_ignore_ascii_case(b"big5") => Self::BIG5,
+            b if b.eq_ignore_ascii_case(b"iso-2022-jp") => Self::ISO2022JP,
+            b if b.eq_ignore_ascii_case(b"euc-jp") => Self::EUCJP,
+            b if b.eq_ignore_ascii_case(b"koi8-r") => Self::KOI8R,
+            b if b.eq_ignore_ascii_case(b"koi8-u") => Self::KOI8U,
             _ => {
                 debug!("unknown tag is {:?}", str::from_utf8(b));
-                Charset::Ascii
+                Self::Ascii
             }
         }
     }
@@ -172,52 +165,47 @@ impl<'a> From<&'a [u8]> for Charset {
 impl Display for Charset {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match self {
-            Charset::Ascii => write!(f, "us-ascii"),
-            Charset::UTF8 => write!(f, "utf-8"),
-            Charset::UTF16 => write!(f, "utf-16"),
-            Charset::ISO8859_1 => write!(f, "iso-8859-1"),
-            Charset::ISO8859_2 => write!(f, "iso-8859-2"),
-            Charset::ISO8859_3 => write!(f, "iso-8859-3"),
-            Charset::ISO8859_4 => write!(f, "iso-8859-4"),
-            Charset::ISO8859_5 => write!(f, "iso-8859-5"),
-            Charset::ISO8859_6 => write!(f, "iso-8859-6"),
-            Charset::ISO8859_7 => write!(f, "iso-8859-7"),
-            Charset::ISO8859_8 => write!(f, "iso-8859-8"),
-            Charset::ISO8859_10 => write!(f, "iso-8859-10"),
-            Charset::ISO8859_13 => write!(f, "iso-8859-13"),
-            Charset::ISO8859_14 => write!(f, "iso-8859-14"),
-            Charset::ISO8859_15 => write!(f, "iso-8859-15"),
-            Charset::ISO8859_16 => write!(f, "iso-8859-16"),
-            Charset::Windows1250 => write!(f, "windows-1250"),
-            Charset::Windows1251 => write!(f, "windows-1251"),
-            Charset::Windows1252 => write!(f, "windows-1252"),
-            Charset::Windows1253 => write!(f, "windows-1253"),
-            Charset::GBK => write!(f, "gbk"),
-            Charset::GB2312 => write!(f, "gb2312"),
-            Charset::GB18030 => write!(f, "gb18030"),
-            Charset::BIG5 => write!(f, "big5"),
-            Charset::ISO2022JP => write!(f, "iso-2022-jp"),
-            Charset::EUCJP => write!(f, "euc-jp"),
-            Charset::KOI8R => write!(f, "koi8-r"),
-            Charset::KOI8U => write!(f, "koi8-u"),
+            Self::Ascii => write!(f, "us-ascii"),
+            Self::UTF8 => write!(f, "utf-8"),
+            Self::UTF16 => write!(f, "utf-16"),
+            Self::ISO8859_1 => write!(f, "iso-8859-1"),
+            Self::ISO8859_2 => write!(f, "iso-8859-2"),
+            Self::ISO8859_3 => write!(f, "iso-8859-3"),
+            Self::ISO8859_4 => write!(f, "iso-8859-4"),
+            Self::ISO8859_5 => write!(f, "iso-8859-5"),
+            Self::ISO8859_6 => write!(f, "iso-8859-6"),
+            Self::ISO8859_7 => write!(f, "iso-8859-7"),
+            Self::ISO8859_8 => write!(f, "iso-8859-8"),
+            Self::ISO8859_10 => write!(f, "iso-8859-10"),
+            Self::ISO8859_13 => write!(f, "iso-8859-13"),
+            Self::ISO8859_14 => write!(f, "iso-8859-14"),
+            Self::ISO8859_15 => write!(f, "iso-8859-15"),
+            Self::ISO8859_16 => write!(f, "iso-8859-16"),
+            Self::Windows1250 => write!(f, "windows-1250"),
+            Self::Windows1251 => write!(f, "windows-1251"),
+            Self::Windows1252 => write!(f, "windows-1252"),
+            Self::Windows1253 => write!(f, "windows-1253"),
+            Self::GBK => write!(f, "gbk"),
+            Self::GB2312 => write!(f, "gb2312"),
+            Self::GB18030 => write!(f, "gb18030"),
+            Self::BIG5 => write!(f, "big5"),
+            Self::ISO2022JP => write!(f, "iso-2022-jp"),
+            Self::EUCJP => write!(f, "euc-jp"),
+            Self::KOI8R => write!(f, "koi8-r"),
+            Self::KOI8U => write!(f, "koi8-u"),
         }
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MultipartType {
     Alternative,
     Digest,
     Encrypted,
+    #[default]
     Mixed,
     Related,
     Signed,
-}
-
-impl Default for MultipartType {
-    fn default() -> Self {
-        MultipartType::Mixed
-    }
 }
 
 impl Display for MultipartType {
@@ -226,31 +214,31 @@ impl Display for MultipartType {
             f,
             "{}",
             match self {
-                MultipartType::Alternative => "multipart/alternative",
-                MultipartType::Digest => "multipart/digest",
-                MultipartType::Encrypted => "multipart/encrypted",
-                MultipartType::Mixed => "multipart/mixed",
-                MultipartType::Related => "multipart/related",
-                MultipartType::Signed => "multipart/signed",
+                Self::Alternative => "multipart/alternative",
+                Self::Digest => "multipart/digest",
+                Self::Encrypted => "multipart/encrypted",
+                Self::Mixed => "multipart/mixed",
+                Self::Related => "multipart/related",
+                Self::Signed => "multipart/signed",
             }
         )
     }
 }
 
 impl From<&[u8]> for MultipartType {
-    fn from(val: &[u8]) -> MultipartType {
+    fn from(val: &[u8]) -> Self {
         if val.eq_ignore_ascii_case(b"mixed") {
-            MultipartType::Mixed
+            Self::Mixed
         } else if val.eq_ignore_ascii_case(b"alternative") {
-            MultipartType::Alternative
+            Self::Alternative
         } else if val.eq_ignore_ascii_case(b"digest") {
-            MultipartType::Digest
+            Self::Digest
         } else if val.eq_ignore_ascii_case(b"encrypted") {
-            MultipartType::Encrypted
+            Self::Encrypted
         } else if val.eq_ignore_ascii_case(b"signed") {
-            MultipartType::Signed
+            Self::Signed
         } else if val.eq_ignore_ascii_case(b"related") {
-            MultipartType::Related
+            Self::Related
         } else {
             Default::default()
         }
@@ -286,7 +274,7 @@ pub enum ContentType {
 
 impl Default for ContentType {
     fn default() -> Self {
-        ContentType::Text {
+        Self::Text {
             kind: Text::Plain,
             parameters: Vec::new(),
             charset: Charset::UTF8,
@@ -298,64 +286,64 @@ impl PartialEq<&[u8]> for ContentType {
     fn eq(&self, other: &&[u8]) -> bool {
         match (self, *other) {
             (
-                ContentType::Text {
+                Self::Text {
                     kind: Text::Plain, ..
                 },
                 b"text/plain",
             ) => true,
             (
-                ContentType::Text {
+                Self::Text {
                     kind: Text::Html, ..
                 },
                 b"text/html",
             ) => true,
             (
-                ContentType::Multipart {
+                Self::Multipart {
                     kind: MultipartType::Alternative,
                     ..
                 },
                 b"multipart/alternative",
             ) => true,
             (
-                ContentType::Multipart {
+                Self::Multipart {
                     kind: MultipartType::Digest,
                     ..
                 },
                 b"multipart/digest",
             ) => true,
             (
-                ContentType::Multipart {
+                Self::Multipart {
                     kind: MultipartType::Encrypted,
                     ..
                 },
                 b"multipart/encrypted",
             ) => true,
             (
-                ContentType::Multipart {
+                Self::Multipart {
                     kind: MultipartType::Mixed,
                     ..
                 },
                 b"multipart/mixed",
             ) => true,
             (
-                ContentType::Multipart {
+                Self::Multipart {
                     kind: MultipartType::Related,
                     ..
                 },
                 b"multipart/related",
             ) => true,
             (
-                ContentType::Multipart {
+                Self::Multipart {
                     kind: MultipartType::Signed,
                     ..
                 },
                 b"multipart/signed",
             ) => true,
-            (ContentType::PGPSignature, b"application/pgp-signature") => true,
-            (ContentType::CMSSignature, b"application/pkcs7-signature") => true,
-            (ContentType::MessageRfc822, b"message/rfc822") => true,
-            (ContentType::Other { tag, .. }, _) => other.eq_ignore_ascii_case(tag),
-            (ContentType::OctetStream { .. }, b"application/octet-stream") => true,
+            (Self::PGPSignature, b"application/pgp-signature") => true,
+            (Self::CMSSignature, b"application/pkcs7-signature") => true,
+            (Self::MessageRfc822, b"message/rfc822") => true,
+            (Self::Other { tag, .. }, _) => other.eq_ignore_ascii_case(tag),
+            (Self::OctetStream { .. }, b"application/octet-stream") => true,
             _ => false,
         }
     }
@@ -370,26 +358,26 @@ impl PartialEq<&str> for ContentType {
 impl Display for ContentType {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match self {
-            ContentType::Text { kind: t, .. } => t.fmt(f),
-            ContentType::Multipart { kind: k, .. } => k.fmt(f),
-            ContentType::Other { ref tag, .. } => write!(f, "{}", String::from_utf8_lossy(tag)),
-            ContentType::PGPSignature => write!(f, "application/pgp-signature"),
-            ContentType::CMSSignature => write!(f, "application/pkcs7-signature"),
-            ContentType::MessageRfc822 => write!(f, "message/rfc822"),
-            ContentType::OctetStream { .. } => write!(f, "application/octet-stream"),
+            Self::Text { kind: t, .. } => t.fmt(f),
+            Self::Multipart { kind: k, .. } => k.fmt(f),
+            Self::Other { ref tag, .. } => write!(f, "{}", String::from_utf8_lossy(tag)),
+            Self::PGPSignature => write!(f, "application/pgp-signature"),
+            Self::CMSSignature => write!(f, "application/pkcs7-signature"),
+            Self::MessageRfc822 => write!(f, "message/rfc822"),
+            Self::OctetStream { .. } => write!(f, "application/octet-stream"),
         }
     }
 }
 
 impl ContentType {
     pub fn is_text(&self) -> bool {
-        matches!(self, ContentType::Text { .. })
+        matches!(self, Self::Text { .. })
     }
 
     pub fn is_text_html(&self) -> bool {
         matches!(
             self,
-            ContentType::Text {
+            Self::Text {
                 kind: Text::Html,
                 ..
             }
@@ -435,8 +423,8 @@ impl ContentType {
 
     pub fn name(&self) -> Option<&str> {
         match self {
-            ContentType::Other { ref name, .. } => name.as_ref().map(|n| n.as_ref()),
-            ContentType::OctetStream {
+            Self::Other { ref name, .. } => name.as_ref().map(|n| n.as_ref()),
+            Self::OctetStream {
                 ref name,
                 parameters: _,
             } => name.as_ref().map(|n| n.as_ref()),
@@ -445,7 +433,7 @@ impl ContentType {
     }
 
     pub fn parts(&self) -> Option<&[Attachment]> {
-        if let ContentType::Multipart { ref parts, .. } = self {
+        if let Self::Multipart { ref parts, .. } = self {
             Some(parts)
         } else {
             None
@@ -463,61 +451,58 @@ pub enum Text {
 
 impl Text {
     pub fn is_html(&self) -> bool {
-        matches!(self, Text::Html)
+        matches!(self, Self::Html)
     }
 }
 
 impl Display for Text {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match *self {
-            Text::Plain => write!(f, "text/plain"),
-            Text::Html => write!(f, "text/html"),
-            Text::Rfc822 => write!(f, "text/rfc822"),
-            Text::Other { tag: ref t } => write!(f, "text/{}", String::from_utf8_lossy(t)),
+            Self::Plain => write!(f, "text/plain"),
+            Self::Html => write!(f, "text/html"),
+            Self::Rfc822 => write!(f, "text/rfc822"),
+            Self::Other { tag: ref t } => write!(f, "text/{}", String::from_utf8_lossy(t)),
         }
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ContentTransferEncoding {
+    #[default]
     _8Bit,
     _7Bit,
     Base64,
     QuotedPrintable,
-    Other { tag: Vec<u8> },
-}
-
-impl Default for ContentTransferEncoding {
-    fn default() -> Self {
-        ContentTransferEncoding::_8Bit
-    }
+    Other {
+        tag: Vec<u8>,
+    },
 }
 
 impl Display for ContentTransferEncoding {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match *self {
-            ContentTransferEncoding::_7Bit => write!(f, "7bit"),
-            ContentTransferEncoding::_8Bit => write!(f, "8bit"),
-            ContentTransferEncoding::Base64 => write!(f, "base64"),
-            ContentTransferEncoding::QuotedPrintable => write!(f, "quoted-printable"),
-            ContentTransferEncoding::Other { tag: ref t } => {
+            Self::_7Bit => write!(f, "7bit"),
+            Self::_8Bit => write!(f, "8bit"),
+            Self::Base64 => write!(f, "base64"),
+            Self::QuotedPrintable => write!(f, "quoted-printable"),
+            Self::Other { tag: ref t } => {
                 panic!("unknown encoding {:?}", str::from_utf8(t))
             }
         }
     }
 }
 impl From<&[u8]> for ContentTransferEncoding {
-    fn from(val: &[u8]) -> ContentTransferEncoding {
+    fn from(val: &[u8]) -> Self {
         if val.eq_ignore_ascii_case(b"base64") {
-            ContentTransferEncoding::Base64
+            Self::Base64
         } else if val.eq_ignore_ascii_case(b"7bit") {
-            ContentTransferEncoding::_7Bit
+            Self::_7Bit
         } else if val.eq_ignore_ascii_case(b"8bit") {
-            ContentTransferEncoding::_8Bit
+            Self::_8Bit
         } else if val.eq_ignore_ascii_case(b"quoted-printable") {
-            ContentTransferEncoding::QuotedPrintable
+            Self::QuotedPrintable
         } else {
-            ContentTransferEncoding::Other {
+            Self::Other {
                 tag: val.to_ascii_lowercase(),
             }
         }
@@ -535,38 +520,33 @@ pub struct ContentDisposition {
     pub parameter: Vec<String>,
 }
 
-#[derive(Clone, Debug, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Default, Debug, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ContentDispositionKind {
+    #[default]
     Inline,
     Attachment,
 }
 
 impl ContentDispositionKind {
     pub fn is_inline(&self) -> bool {
-        matches!(self, ContentDispositionKind::Inline)
+        matches!(self, Self::Inline)
     }
 
     pub fn is_attachment(&self) -> bool {
-        matches!(self, ContentDispositionKind::Attachment)
-    }
-}
-
-impl Default for ContentDispositionKind {
-    fn default() -> Self {
-        ContentDispositionKind::Inline
+        matches!(self, Self::Attachment)
     }
 }
 
 impl Display for ContentDispositionKind {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match *self {
-            ContentDispositionKind::Inline => write!(f, "inline"),
-            ContentDispositionKind::Attachment => write!(f, "attachment"),
+            Self::Inline => write!(f, "inline"),
+            Self::Attachment => write!(f, "attachment"),
         }
     }
 }
 impl From<&[u8]> for ContentDisposition {
-    fn from(val: &[u8]) -> ContentDisposition {
+    fn from(val: &[u8]) -> Self {
         crate::email::parser::attachments::content_disposition(val)
             .map(|(_, v)| v)
             .unwrap_or_default()
@@ -574,10 +554,10 @@ impl From<&[u8]> for ContentDisposition {
 }
 
 impl From<ContentDispositionKind> for ContentDisposition {
-    fn from(kind: ContentDispositionKind) -> ContentDisposition {
-        ContentDisposition {
+    fn from(kind: ContentDispositionKind) -> Self {
+        Self {
             kind,
-            ..ContentDisposition::default()
+            ..Self::default()
         }
     }
 }

@@ -142,7 +142,7 @@ impl JmapServerConf {
                 s.name,
             )));
         }
-        Ok(JmapServerConf {
+        Ok(Self {
             server_url: get_conf_val!(s["server_url"])?.to_string(),
             server_username: get_conf_val!(s["server_username"])?.to_string(),
             server_password: s.server_password()?,
@@ -199,9 +199,7 @@ impl Store {
                 "$junk" | "$notjunk" => { /* ignore */ }
                 _ => {
                     let tag_hash = TagHash::from_bytes(t.as_bytes());
-                    if !tag_lck.contains_key(&tag_hash) {
-                        tag_lck.insert(tag_hash, t.to_string());
-                    }
+                    tag_lck.entry(tag_hash).or_insert_with(|| t.to_string());
                     labels.push(tag_hash);
                 }
             }
@@ -244,9 +242,12 @@ impl Store {
         self.blob_id_store.lock().unwrap().remove(&env_hash);
         self.byte_cache.lock().unwrap().remove(&env_hash);
         let mut mailbox_hashes = SmallVec::new();
-        for (k, set) in self.mailboxes_index.write().unwrap().iter_mut() {
-            if set.remove(&env_hash) {
-                mailbox_hashes.push(*k);
+        {
+            let mut mailboxes_lck = self.mailboxes_index.write().unwrap();
+            for (k, set) in mailboxes_lck.iter_mut() {
+                if set.remove(&env_hash) {
+                    mailbox_hashes.push(*k);
+                }
             }
         }
         Some((env_hash, mailbox_hashes))
@@ -448,7 +449,7 @@ impl MailBackend for JmapType {
             );
 
             let import_call: ImportCall = ImportCall::new()
-                .account_id(conn.mail_account_id().clone())
+                .account_id(conn.mail_account_id())
                 .emails(email_imports);
 
             req.add_call(&import_call);
@@ -472,13 +473,13 @@ impl MailBackend for JmapType {
                 }
                 Ok(s) => s,
             };
-            let m = ImportResponse::try_from(v.method_responses.remove(0)).or_else(|err| {
+            let m = ImportResponse::try_from(v.method_responses.remove(0)).map_err(|err| {
                 let ierr: Result<ImportError> =
                     serde_json::from_str(&res_text).map_err(|err| err.into());
                 if let Ok(err) = ierr {
-                    Err(Error::new(format!("Could not save message: {:?}", err)))
+                    Error::new(format!("Could not save message: {:?}", err))
                 } else {
-                    Err(err.into())
+                    err
                 }
             })?;
 
@@ -529,7 +530,7 @@ impl MailBackend for JmapType {
             conn.connect().await?;
             let email_call: EmailQuery = EmailQuery::new(
                 Query::new()
-                    .account_id(conn.mail_account_id().clone())
+                    .account_id(conn.mail_account_id())
                     .filter(Some(filter))
                     .position(0),
             )
@@ -646,8 +647,6 @@ impl MailBackend for JmapType {
                 )
             };
             let mut update_map: HashMap<Id<EmailObject>, Value> = HashMap::default();
-            let mut ids: Vec<Id<EmailObject>> = Vec::with_capacity(env_hashes.rest.len() + 1);
-            let mut id_map: HashMap<Id<EmailObject>, EnvelopeHash> = HashMap::default();
             let mut update_keywords: HashMap<String, Value> = HashMap::default();
             update_keywords.insert(
                 format!("mailboxIds/{}", &destination_mailbox_id),
@@ -662,8 +661,8 @@ impl MailBackend for JmapType {
             {
                 for env_hash in env_hashes.iter() {
                     if let Some(id) = store.id_store.lock().unwrap().get(&env_hash) {
-                        ids.push(id.clone());
-                        id_map.insert(id.clone(), env_hash);
+                        // ids.push(id.clone());
+                        // id_map.insert(id.clone(), env_hash);
                         update_map.insert(id.clone(), serde_json::json!(update_keywords.clone()));
                     }
                 }
@@ -673,7 +672,7 @@ impl MailBackend for JmapType {
 
             let email_set_call: EmailSet = EmailSet::new(
                 Set::<EmailObject>::new()
-                    .account_id(conn.mail_account_id().clone())
+                    .account_id(conn.mail_account_id())
                     .update(Some(update_map)),
             );
 
@@ -779,7 +778,7 @@ impl MailBackend for JmapType {
 
             let email_set_call: EmailSet = EmailSet::new(
                 Set::<EmailObject>::new()
-                    .account_id(conn.mail_account_id().clone())
+                    .account_id(conn.mail_account_id())
                     .update(Some(update_map)),
             );
 
@@ -788,7 +787,7 @@ impl MailBackend for JmapType {
             let email_call: EmailGet = EmailGet::new(
                 Get::new()
                     .ids(Some(JmapArgument::Value(ids)))
-                    .account_id(conn.mail_account_id().clone())
+                    .account_id(conn.mail_account_id())
                     .properties(Some(vec!["keywords".to_string()])),
             );
 
@@ -902,6 +901,7 @@ impl MailBackend for JmapType {
 }
 
 impl JmapType {
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(
         s: &AccountSettings,
         is_subscribed: Box<dyn Fn(&str) -> bool + Send + Sync>,
@@ -932,7 +932,7 @@ impl JmapType {
             mailbox_state: Default::default(),
         });
 
-        Ok(Box::new(JmapType {
+        Ok(Box::new(Self {
             connection: Arc::new(FutureMutex::new(JmapConnection::new(
                 &server_conf,
                 store.clone(),
@@ -975,7 +975,8 @@ impl JmapType {
 
         get_conf_val!(s["use_token"], false)?;
         // either of these two needed
-        get_conf_val!(s["server_password"]).or(get_conf_val!(s["server_password_command"]))?;
+        get_conf_val!(s["server_password"])
+            .or_else(|_| get_conf_val!(s["server_password_command"]))?;
 
         get_conf_val!(s["danger_accept_invalid_certs"], false)?;
         Ok(())

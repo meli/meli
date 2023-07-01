@@ -23,6 +23,7 @@ use super::*;
 use crate::utils::datetime;
 
 impl MboxFormat {
+    #[allow(clippy::too_many_arguments)]
     pub fn append(
         &self,
         writer: &mut dyn std::io::Write,
@@ -153,8 +154,8 @@ impl MboxFormat {
         };
 
         match self {
-            MboxFormat::MboxO | MboxFormat::MboxRd => Err(Error::new("Unimplemented.")),
-            MboxFormat::MboxCl => {
+            Self::MboxO | Self::MboxRd => Err(Error::new("Unimplemented.")),
+            Self::MboxCl => {
                 let len = (body_len
                     + body
                         .windows(b"\nFrom ".len())
@@ -216,7 +217,7 @@ impl MboxFormat {
                 }
                 Ok(())
             }
-            MboxFormat::MboxCl2 => {
+            Self::MboxCl2 => {
                 let len = body_len.to_string();
                 for (h, v) in headers
                     .into_iter()

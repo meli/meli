@@ -108,11 +108,10 @@ impl<'de> Deserialize<'de> for LocateKey {
     where
         D: Deserializer<'de>,
     {
-        if let Ok(s) = <String>::deserialize(deserializer) {
-            LocateKey::from_string_de::<'de, D, String>(s)
-        } else {
-            Err(de::Error::custom("LocateKey value must be a string."))
-        }
+        <String>::deserialize(deserializer).map_or_else(
+            |_| Err(de::Error::custom("LocateKey value must be a string.")),
+            |s| Self::from_string_de::<'de, D, String>(s),
+        )
     }
 }
 
@@ -131,16 +130,16 @@ impl LocateKey {
         D: Deserializer<'de>,
     {
         Ok(match s.as_ref().trim() {
-            s if s.eq_ignore_ascii_case("cert") => LocateKey::CERT,
-            s if s.eq_ignore_ascii_case("pka") => LocateKey::PKA,
-            s if s.eq_ignore_ascii_case("dane") => LocateKey::DANE,
-            s if s.eq_ignore_ascii_case("wkd") => LocateKey::WKD,
-            s if s.eq_ignore_ascii_case("ldap") => LocateKey::LDAP,
-            s if s.eq_ignore_ascii_case("keyserver") => LocateKey::KEYSERVER,
-            s if s.eq_ignore_ascii_case("keyserver-url") => LocateKey::KEYSERVER_URL,
-            s if s.eq_ignore_ascii_case("local") => LocateKey::LOCAL,
+            s if s.eq_ignore_ascii_case("cert") => Self::CERT,
+            s if s.eq_ignore_ascii_case("pka") => Self::PKA,
+            s if s.eq_ignore_ascii_case("dane") => Self::DANE,
+            s if s.eq_ignore_ascii_case("wkd") => Self::WKD,
+            s if s.eq_ignore_ascii_case("ldap") => Self::LDAP,
+            s if s.eq_ignore_ascii_case("keyserver") => Self::KEYSERVER,
+            s if s.eq_ignore_ascii_case("keyserver-url") => Self::KEYSERVER_URL,
+            s if s.eq_ignore_ascii_case("local") => Self::LOCAL,
             combination if combination.contains(',') => {
-                let mut ret = LocateKey::NODEFAULT;
+                let mut ret = Self::NODEFAULT;
                 for c in combination.trim().split(',') {
                     ret |= Self::from_string_de::<'de, D, &str>(c.trim())?;
                 }
@@ -157,7 +156,7 @@ impl LocateKey {
 
 impl std::fmt::Display for LocateKey {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        if *self == LocateKey::NODEFAULT {
+        if *self == Self::NODEFAULT {
             write!(fmt, "clear,nodefault")
         } else {
             let mut accum = String::new();
@@ -169,13 +168,13 @@ impl std::fmt::Display for LocateKey {
                     }
                 }};
             }
-            is_set!(LocateKey::CERT, "cert");
-            is_set!(LocateKey::PKA, "pka");
-            is_set!(LocateKey::WKD, "wkd");
-            is_set!(LocateKey::LDAP, "ldap");
-            is_set!(LocateKey::KEYSERVER, "keyserver");
-            is_set!(LocateKey::KEYSERVER_URL, "keyserver-url");
-            is_set!(LocateKey::LOCAL, "local");
+            is_set!(Self::CERT, "cert");
+            is_set!(Self::PKA, "pka");
+            is_set!(Self::WKD, "wkd");
+            is_set!(Self::LDAP, "ldap");
+            is_set!(Self::KEYSERVER, "keyserver");
+            is_set!(Self::KEYSERVER_URL, "keyserver-url");
+            is_set!(Self::LOCAL, "local");
             accum.pop();
             write!(fmt, "{}", accum)
         }
@@ -223,8 +222,7 @@ impl Context {
     pub fn new() -> Result<Self> {
         let lib =
             Arc::new(unsafe { libloading::Library::new(libloading::library_filename("gpgme")) }?);
-        if unsafe { call!(&lib, gpgme_check_version)(GPGME_VERSION.as_bytes().as_ptr() as *mut _) }
-            .is_null()
+        if unsafe { call!(&lib, gpgme_check_version)(GPGME_VERSION.as_bytes().as_ptr()) }.is_null()
         {
             return Err(Error::new(format!(
                 "Could not use libgpgme: requested version compatible with {} but got {}",
@@ -265,7 +263,7 @@ impl Context {
             gpgme_error_try(&lib, call!(&lib, gpgme_new)(&mut ptr))?;
             call!(&lib, gpgme_set_io_cbs)(ptr, &mut io_cbs);
         }
-        let ret = Context {
+        let ret = Self {
             inner: Arc::new(ContextInner {
                 inner: core::ptr::NonNull::new(ptr)
                     .ok_or_else(|| Error::new("Could not use libgpgme").set_kind(ErrorKind::Bug))?,
@@ -586,7 +584,7 @@ impl Context {
                         .map(|cs| cs.as_ptr())
                         .unwrap_or(std::ptr::null_mut())
                         as *const ::std::os::raw::c_char,
-                    if secret { 1 } else { 0 },
+                    secret.into(),
                 ),
             )?;
         }
@@ -663,8 +661,9 @@ impl Context {
                     call!(&ctx.lib, gpgme_op_keylist_end)(ctx.inner.as_ptr()),
                 )?;
             }
-            let io_state_lck = io_state.lock().unwrap();
-            io_state_lck
+            io_state
+                .lock()
+                .unwrap()
                 .done
                 .lock()
                 .unwrap()
@@ -782,13 +781,13 @@ impl Context {
                 }
             }))
             .await;
-            let rcv = {
-                let io_state_lck = io_state.lock().unwrap();
-                io_state_lck.receiver.clone()
-            };
-            let _ = rcv.recv().await;
-            let io_state_lck = io_state.lock().unwrap();
-            io_state_lck
+            {
+                let rcv = io_state.lock().unwrap().receiver.clone();
+                let _ = rcv.recv().await;
+            }
+            io_state
+                .lock()
+                .unwrap()
                 .done
                 .lock()
                 .unwrap()
@@ -887,13 +886,11 @@ impl Context {
                 }
             }))
             .await;
-            let rcv = {
-                let io_state_lck = io_state.lock().unwrap();
-                io_state_lck.receiver.clone()
-            };
+            let rcv = { io_state.lock().unwrap().receiver.clone() };
             let _ = rcv.recv().await;
-            let io_state_lck = io_state.lock().unwrap();
-            io_state_lck
+            io_state
+                .lock()
+                .unwrap()
                 .done
                 .lock()
                 .unwrap()
@@ -1097,13 +1094,11 @@ impl Context {
                 }
             }))
             .await;
-            let rcv = {
-                let io_state_lck = io_state.lock().unwrap();
-                io_state_lck.receiver.clone()
-            };
+            let rcv = { io_state.lock().unwrap().receiver.clone() };
             let _ = rcv.recv().await;
-            let io_state_lck = io_state.lock().unwrap();
-            io_state_lck
+            io_state
+                .lock()
+                .unwrap()
                 .done
                 .lock()
                 .unwrap()
@@ -1230,7 +1225,7 @@ impl Clone for Key {
         unsafe {
             call!(&self.lib, gpgme_key_ref)(self.inner.inner.as_ptr());
         }
-        Key {
+        Self {
             inner: self.inner.clone(),
             lib,
         }
@@ -1240,7 +1235,7 @@ impl Clone for Key {
 impl Key {
     #[inline(always)]
     fn new(inner: KeyInner, lib: Arc<libloading::Library>) -> Self {
-        Key { inner, lib }
+        Self { inner, lib }
     }
 
     pub fn primary_uid(&self) -> Option<Address> {
@@ -1319,7 +1314,7 @@ impl std::fmt::Debug for Key {
 }
 
 impl PartialEq for Key {
-    fn eq(&self, other: &Key) -> bool {
+    fn eq(&self, other: &Self) -> bool {
         self.fingerprint() == other.fingerprint()
     }
 }

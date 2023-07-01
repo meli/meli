@@ -63,7 +63,7 @@ pub struct Request {
 
 impl Request {
     pub fn new(request_no: Arc<Mutex<usize>>) -> Self {
-        Request {
+        Self {
             using: USING,
             method_calls: Vec::new(),
             request_no,
@@ -177,7 +177,7 @@ pub async fn get_mailboxes(conn: &JmapConnection) -> Result<HashMap<MailboxHash,
         })
         .collect();
     for key in ret.keys().cloned().collect::<SmallVec<[MailboxHash; 24]>>() {
-        if let Some(parent_hash) = ret[&key].parent_hash.clone() {
+        if let Some(parent_hash) = ret[&key].parent_hash {
             ret.entry(parent_hash).and_modify(|e| e.children.push(key));
         }
     }
@@ -190,7 +190,7 @@ pub async fn get_message_list(
 ) -> Result<Vec<Id<EmailObject>>> {
     let email_call: EmailQuery = EmailQuery::new(
         Query::new()
-            .account_id(conn.mail_account_id().clone())
+            .account_id(conn.mail_account_id())
             .filter(Some(Filter::Condition(
                 EmailFilterCondition::new()
                     .in_mailbox(Some(mailbox.id.clone()))
@@ -264,7 +264,7 @@ pub async fn fetch(
     let mailbox_id = store.mailboxes.read().unwrap()[&mailbox_hash].id.clone();
     let email_query_call: EmailQuery = EmailQuery::new(
         Query::new()
-            .account_id(conn.mail_account_id().clone())
+            .account_id(conn.mail_account_id())
             .filter(Some(Filter::Condition(
                 EmailFilterCondition::new()
                     .in_mailbox(Some(mailbox_id))
@@ -283,7 +283,7 @@ pub async fn fetch(
                 prev_seq,
                 EmailQuery::RESULT_FIELD_IDS,
             )))
-            .account_id(conn.mail_account_id().clone()),
+            .account_id(conn.mail_account_id()),
     );
 
     req.add_call(&email_call);

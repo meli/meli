@@ -88,6 +88,7 @@ impl DbConnection {
         }
     }
 
+    #[allow(clippy::too_many_arguments)] // Don't judge me clippy.
     fn refresh(
         &mut self,
         mailboxes: Arc<RwLock<HashMap<MailboxHash, NotmuchMailbox>>>,
@@ -115,9 +116,7 @@ impl DbConnection {
                 let mut tag_lock = tag_index.write().unwrap();
                 for tag in tags.1.iter() {
                     let num = TagHash::from_bytes(tag.as_bytes());
-                    if !tag_lock.contains_key(&num) {
-                        tag_lock.insert(num, tag.clone());
-                    }
+                    tag_lock.entry(num).or_insert_with(|| tag.clone());
                 }
                 for &mailbox_hash in mailbox_hashes {
                     (event_consumer)(
@@ -224,7 +223,7 @@ pub struct NotmuchDb {
     mailbox_index: Arc<RwLock<HashMap<EnvelopeHash, SmallVec<[MailboxHash; 16]>>>>,
     collection: Collection,
     path: PathBuf,
-    _account_name: Arc<String>,
+    _account_name: Arc<str>,
     account_hash: AccountHash,
     event_consumer: BackendEventConsumer,
     save_messages_to: Option<PathBuf>,
@@ -302,6 +301,7 @@ unsafe impl Send for NotmuchMailbox {}
 unsafe impl Sync for NotmuchMailbox {}
 
 impl NotmuchDb {
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(
         s: &AccountSettings,
         _is_subscribed: Box<dyn Fn(&str) -> bool>,
@@ -422,7 +422,7 @@ impl NotmuchDb {
         }
 
         let account_hash = AccountHash::from_bytes(s.name.as_bytes());
-        Ok(Box::new(NotmuchDb {
+        Ok(Box::new(Self {
             lib,
             revision_uuid: Arc::new(RwLock::new(0)),
             path,
@@ -432,7 +432,7 @@ impl NotmuchDb {
 
             mailboxes: Arc::new(RwLock::new(mailboxes)),
             save_messages_to: None,
-            _account_name: Arc::new(s.name.to_string()),
+            _account_name: s.name.to_string().into(),
             account_hash,
             event_consumer,
         }))
@@ -538,7 +538,7 @@ impl NotmuchDb {
                 } else {
                     notmuch_database_mode_t_NOTMUCH_DATABASE_MODE_READ_ONLY
                 },
-                &mut database as *mut _,
+                std::ptr::addr_of_mut!(database),
             )
         };
         if status != 0 {
@@ -635,7 +635,7 @@ impl MailBackend for NotmuchDb {
                 }
             }
         }
-        let database = Arc::new(NotmuchDb::new_connection(
+        let database = Arc::new(Self::new_connection(
             self.path.as_path(),
             self.revision_uuid.clone(),
             self.lib.clone(),
@@ -659,7 +659,6 @@ impl MailBackend for NotmuchDb {
             let mut index_lck = index.write().unwrap();
             v = query
                 .search()?
-                .into_iter()
                 .map(|m| {
                     index_lck.insert(m.env_hash(), m.msg_id_cstr().into());
                     m.msg_id_cstr().into()
@@ -685,7 +684,7 @@ impl MailBackend for NotmuchDb {
 
     fn refresh(&mut self, _mailbox_hash: MailboxHash) -> ResultFuture<()> {
         let account_hash = self.account_hash;
-        let mut database = NotmuchDb::new_connection(
+        let mut database = Self::new_connection(
             self.path.as_path(),
             self.revision_uuid.clone(),
             self.lib.clone(),
@@ -737,7 +736,7 @@ impl MailBackend for NotmuchDb {
             loop {
                 let _ = rx.recv().map_err(|err| err.to_string())?;
                 {
-                    let mut database = NotmuchDb::new_connection(
+                    let mut database = Self::new_connection(
                         path.as_path(),
                         revision_uuid.clone(),
                         lib.clone(),
@@ -942,7 +941,7 @@ impl MailBackend for NotmuchDb {
         melib_query: crate::search::Query,
         mailbox_hash: Option<MailboxHash>,
     ) -> ResultFuture<SmallVec<[EnvelopeHash; 512]>> {
-        let database = NotmuchDb::new_connection(
+        let database = Self::new_connection(
             self.path.as_path(),
             self.revision_uuid.clone(),
             self.lib.clone(),
@@ -1098,7 +1097,10 @@ impl<'s> Query<'s> {
         unsafe {
             try_call!(
                 self.lib,
-                call!(self.lib, notmuch_query_count_messages)(self.ptr, &mut count as *mut _)
+                call!(self.lib, notmuch_query_count_messages)(
+                    self.ptr,
+                    std::ptr::addr_of_mut!(count)
+                )
             )
             .map_err(|err| err.0)?;
         }
@@ -1108,7 +1110,10 @@ impl<'s> Query<'s> {
     fn search(&'s self) -> Result<MessageIterator<'s>> {
         let mut messages: *mut notmuch_messages_t = std::ptr::null_mut();
         let status = unsafe {
-            call!(self.lib, notmuch_query_search_messages)(self.ptr, &mut messages as *mut _)
+            call!(self.lib, notmuch_query_search_messages)(
+                self.ptr,
+                std::ptr::addr_of_mut!(messages),
+            )
         };
         if status != 0 {
             return Err(Error::new(format!(

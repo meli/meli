@@ -40,7 +40,7 @@ impl NntpOp {
         connection: Arc<FutureMutex<NntpConnection>>,
         uid_store: Arc<UIDStore>,
     ) -> Self {
-        NntpOp {
+        Self {
             uid,
             connection,
             mailbox_hash,
