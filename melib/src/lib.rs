@@ -131,16 +131,16 @@ pub extern crate xdg_utils;
 
 #[derive(Debug, Copy, Clone)]
 #[repr(transparent)]
-pub struct Bytes(pub usize);
+pub struct BytesDisplay(pub usize);
 
-impl Bytes {
+impl BytesDisplay {
     pub const KILOBYTE: f64 = 1024.0;
     pub const MEGABYTE: f64 = Self::KILOBYTE * 1024.0;
     pub const GIGABYTE: f64 = Self::MEGABYTE * 1024.0;
     pub const PETABYTE: f64 = Self::GIGABYTE * 1024.0;
 }
 
-impl core::fmt::Display for Bytes {
+impl core::fmt::Display for BytesDisplay {
     fn fmt(&self, fmt: &mut core::fmt::Formatter) -> core::fmt::Result {
         let bytes: f64 = self.0 as f64;
         if bytes == 0.0 {

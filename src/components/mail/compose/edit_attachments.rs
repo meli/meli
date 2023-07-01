@@ -161,7 +161,7 @@ impl Component for EditAttachmentsRefMut<'_, '_> {
                                 i,
                                 name,
                                 a.content_type(),
-                                melib::Bytes(a.raw.len())
+                                melib::BytesDisplay(a.raw.len())
                             ),
                             grid,
                             theme_default.fg,
@@ -172,7 +172,12 @@ impl Component for EditAttachmentsRefMut<'_, '_> {
                         );
                     } else {
                         write_string_to_grid(
-                            &format!("[{}] {} {}", i, a.content_type(), melib::Bytes(a.raw.len())),
+                            &format!(
+                                "[{}] {} {}",
+                                i,
+                                a.content_type(),
+                                melib::BytesDisplay(a.raw.len())
+                            ),
                             grid,
                             theme_default.fg,
                             bg,

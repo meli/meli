@@ -19,24 +19,34 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*! Encoding/decoding of attachments */
+//! Attachment encoding and decoding.
+
 use core::{fmt, str};
 
 use data_encoding::BASE64_MIME;
 use smallvec::SmallVec;
 
-use crate::email::{
-    address::StrBuilder,
-    attachment_types::*,
-    parser::{self, BytesExt},
-    Mail,
+use crate::{
+    email::{
+        address::StrBuilder,
+        attachment_types::*,
+        parser::{self, BytesExt},
+        Mail,
+    },
+    BytesDisplay,
 };
 
+/// Type alias for function that takes an [`Attachment`] and appends a bytes
+/// representation in its second argument.
 pub type Filter<'a> = Box<dyn FnMut(&Attachment, &mut Vec<u8>) + 'a>;
 
 #[derive(Default)]
+/// Options for decoding an [`Attachment`].
 pub struct DecodeOptions<'att> {
+    /// [`Filter`] to use.
     pub filter: Option<Filter<'att>>,
+    /// Override the attachment's [`Charset`], if any, with a user-provided
+    /// value.
     pub force_charset: Option<Charset>,
 }
 
@@ -50,6 +60,9 @@ impl<'att> From<Option<Charset>> for DecodeOptions<'att> {
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+/// A struct analogous to [`Attachment`] which can have incomplete and partial
+/// content before being turned into an [`Attachment`] with
+/// [`AttachmentBuilder::build`].
 pub struct AttachmentBuilder {
     pub content_type: ContentType,
     pub content_transfer_encoding: ContentTransferEncoding,
@@ -63,11 +76,11 @@ impl AttachmentBuilder {
     pub fn new(content: &[u8]) -> Self {
         let (headers, body) = match parser::attachments::attachment(content) {
             Ok((_, v)) => v,
-            Err(_) => {
-                debug!("error in parsing attachment");
-                debug!("\n-------------------------------");
-                debug!("{}\n", ::std::string::String::from_utf8_lossy(content));
-                debug!("-------------------------------\n");
+            Err(err) => {
+                log::debug!("error in parsing attachment: {}", err);
+                log::debug!("\n-------------------------------");
+                log::debug!("{}\n", String::from_utf8_lossy(content));
+                log::debug!("-------------------------------\n");
 
                 return AttachmentBuilder {
                     content_type: Default::default(),
@@ -257,11 +270,11 @@ impl AttachmentBuilder {
                     };
                 }
             }
-            Err(e) => {
-                debug!(
-                    "parsing error in content_type: {:?} {:?}",
+            Err(err) => {
+                log::debug!(
+                    "parsing error in content_type: {:?} {}",
                     String::from_utf8_lossy(value),
-                    e
+                    err
                 );
             }
         }
@@ -290,11 +303,11 @@ impl AttachmentBuilder {
                     let mut builder = AttachmentBuilder::default();
                     let (headers, body) = match parser::attachments::attachment(a) {
                         Ok((_, v)) => v,
-                        Err(_) => {
-                            debug!("error in parsing attachment");
-                            debug!("\n-------------------------------");
-                            debug!("{}\n", ::std::string::String::from_utf8_lossy(a));
-                            debug!("-------------------------------\n");
+                        Err(err) => {
+                            log::debug!("error in parsing attachment: {}", err);
+                            log::debug!("\n-------------------------------");
+                            log::debug!("{}\n", String::from_utf8_lossy(a));
+                            log::debug!("-------------------------------\n");
 
                             continue;
                         }
@@ -321,7 +334,7 @@ impl AttachmentBuilder {
                 vec
             }
             a => {
-                debug!(
+                log::debug!(
                     "error {:?}\n\traw: {:?}\n\tboundary: {:?}",
                     a,
                     str::from_utf8(raw).unwrap(),
@@ -387,9 +400,9 @@ impl fmt::Debug for Attachment {
         let mut text = Vec::with_capacity(4096);
         self.get_text_recursive(&mut text);
         f.debug_struct("Attachment")
-            .field("content_type", &self.content_type)
-            .field("content_transfer_encoding", &self.content_transfer_encoding)
-            .field("raw bytes length", &self.raw.len())
+            .field("Content-Type", &self.content_type)
+            .field("Content-Transfer-Encoding", &self.content_transfer_encoding)
+            .field("bytes", &self.raw.len())
             .field("body", &String::from_utf8_lossy(&text))
             .finish()
     }
@@ -403,16 +416,16 @@ impl fmt::Display for Attachment {
                     Ok(wrapper) => write!(
                         f,
                         "{} {} {} [message/rfc822] {}",
-                        wrapper.date_as_str(),
-                        wrapper.field_from_to_string(),
                         wrapper.subject(),
-                        crate::Bytes(self.raw.len()),
+                        wrapper.field_from_to_string(),
+                        wrapper.date_as_str(),
+                        BytesDisplay(self.raw.len()),
                     ),
                     Err(err) => write!(
                         f,
                         "could not parse: {} [message/rfc822] {}",
                         err,
-                        crate::Bytes(self.raw.len()),
+                        BytesDisplay(self.raw.len()),
                     ),
                 }
             }
@@ -425,14 +438,14 @@ impl fmt::Display for Attachment {
                         "\"{}\", [{}] {}",
                         name,
                         self.mime_type(),
-                        crate::Bytes(self.raw.len())
+                        BytesDisplay(self.raw.len())
                     )
                 } else {
                     write!(
                         f,
                         "Data attachment [{}] {}",
                         self.mime_type(),
-                        crate::Bytes(self.raw.len())
+                        BytesDisplay(self.raw.len())
                     )
                 }
             }
@@ -443,14 +456,14 @@ impl fmt::Display for Attachment {
                         "\"{}\", [{}] {}",
                         name,
                         self.mime_type(),
-                        crate::Bytes(self.raw.len())
+                        BytesDisplay(self.raw.len())
                     )
                 } else {
                     write!(
                         f,
                         "Text attachment [{}] {}",
                         self.mime_type(),
-                        crate::Bytes(self.raw.len())
+                        BytesDisplay(self.raw.len())
                     )
                 }
             }
@@ -503,11 +516,11 @@ impl Attachment {
                 match parser::attachments::multipart_parts(self.body(), boundary) {
                     Ok((_, v)) => v,
                     Err(e) => {
-                        debug!("error in parsing attachment");
-                        debug!("\n-------------------------------");
-                        debug!("{}\n", ::std::string::String::from_utf8_lossy(&self.raw));
-                        debug!("-------------------------------\n");
-                        debug!("{:?}\n", e);
+                        log::debug!("error in parsing attachment");
+                        log::debug!("\n-------------------------------");
+                        log::debug!("{}\n", String::from_utf8_lossy(&self.raw));
+                        log::debug!("-------------------------------\n");
+                        log::debug!("{:?}\n", e);
                         Vec::new()
                     }
                 }
@@ -569,11 +582,11 @@ impl Attachment {
                 }
             }
             Err(e) => {
-                debug!("error in parsing multipart_parts");
-                debug!("\n-------------------------------");
-                debug!("{}\n", ::std::string::String::from_utf8_lossy(bytes));
-                debug!("-------------------------------\n");
-                debug!("{:?}\n", e);
+                log::debug!("error in parsing multipart_parts");
+                log::debug!("\n-------------------------------");
+                log::debug!("{}\n", String::from_utf8_lossy(bytes));
+                log::debug!("-------------------------------\n");
+                log::debug!("{:?}\n", e);
             }
         }
         false
