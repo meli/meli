@@ -208,7 +208,7 @@ impl ThreadView {
         }
         let (account_hash, mailbox_hash, _) = self.coordinates;
 
-        let thread_iter = threads.thread_group_iter(self.thread_group);
+        let thread_iter = threads.thread_iter(self.thread_group);
         self.entries.clear();
         for (line, (ind, thread_node_hash)) in thread_iter.enumerate() {
             let entry = if let Some(msg_hash) = threads.thread_nodes()[&thread_node_hash].message()
@@ -677,11 +677,7 @@ impl ThreadView {
             clear_area(grid, area, theme_default);
             let account = &context.accounts[&self.coordinates.0];
             let threads = account.collection.get_threads(self.coordinates.1);
-            let thread_root = threads
-                .thread_group_iter(self.thread_group)
-                .next()
-                .unwrap()
-                .1;
+            let thread_root = threads.thread_iter(self.thread_group).next().unwrap().1;
             let thread_node = &threads.thread_nodes()[&thread_root];
             let i = thread_node.message().unwrap_or_else(|| {
                 let mut iter_ptr = thread_node.children()[0];
@@ -791,11 +787,7 @@ impl ThreadView {
             clear_area(grid, area, theme_default);
             let account = &context.accounts[&self.coordinates.0];
             let threads = account.collection.get_threads(self.coordinates.1);
-            let thread_root = threads
-                .thread_group_iter(self.thread_group)
-                .next()
-                .unwrap()
-                .1;
+            let thread_root = threads.thread_iter(self.thread_group).next().unwrap().1;
             let thread_node = &threads.thread_nodes()[&thread_root];
             let i = thread_node.message().unwrap_or_else(|| {
                 let mut iter_ptr = thread_node.children()[0];

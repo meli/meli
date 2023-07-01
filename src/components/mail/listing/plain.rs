@@ -294,12 +294,8 @@ impl MailListingTrait for PlainListing {
         let thread_nodes: &HashMap<ThreadNodeHash, ThreadNode> = threads.thread_nodes();
         let env_hash_iter = Box::new(
             threads
-                .threads_group_iter(roots)
-                .filter_map(|(_, thread_node_hash, _)| {
-                    let thread_node = &thread_nodes[&thread_node_hash];
-
-                    thread_node.message()
-                })
+                .threads_iter(roots)
+                .filter_map(|(_, thread_node_hash, _)| thread_nodes[&thread_node_hash].message())
                 .collect::<SmallVec<[EnvelopeHash; 2048]>>()
                 .into_iter(),
         ) as Box<dyn Iterator<Item = EnvelopeHash>>;

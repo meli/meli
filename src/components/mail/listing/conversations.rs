@@ -306,7 +306,7 @@ impl MailListingTrait for ConversationsListing {
             from_address_list.clear();
             from_address_set.clear();
             for (envelope, show_subject) in threads
-                .thread_group_iter(thread)
+                .thread_iter(thread)
                 .filter_map(|(_, h)| {
                     Some((
                         threads.thread_nodes()[&h].message()?,
@@ -856,7 +856,7 @@ impl ConversationsListing {
         let mut from_address_set: std::collections::HashSet<Vec<u8>> =
             std::collections::HashSet::new();
         for (envelope, show_subject) in threads
-            .thread_group_iter(thread_hash)
+            .thread_iter(thread_hash)
             .filter_map(|(_, h)| {
                 threads.thread_nodes()[&h]
                     .message()

@@ -25,28 +25,28 @@ use smallvec::SmallVec;
 
 use super::{ThreadNode, ThreadNodeHash};
 
-/* `ThreadsIterator` returns messages according to the sorted order. For
- * example, for the following threads:
- *
- *  ```
- *  A_
- *   |_ B
- *   |_C
- *  D
- *  E_
- *   |_F
- *   ```
- *
- *   the iterator returns them as `A, B, C, D, E, F`
- */
-
-pub struct ThreadsGroupIterator<'a> {
+/// [`ThreadsIterator`] returns messages according to the sorted order.
+///
+/// For example, for the following threads:
+///
+/// ```text
+/// A_
+///  |_ B
+///  |_C
+/// D
+/// E_
+///  |_F
+/// ```
+///
+/// the iterator returns them as `A, B, C, D, E, F`.
+pub struct ThreadsIterator<'a> {
     pub(super) root_tree: SmallVec<[ThreadNodeHash; 1024]>,
     pub(super) pos: usize,
     pub(super) stack: SmallVec<[usize; 16]>,
     pub(super) thread_nodes: &'a HashMap<ThreadNodeHash, ThreadNode>,
 }
-impl<'a> Iterator for ThreadsGroupIterator<'a> {
+
+impl<'a> Iterator for ThreadsIterator<'a> {
     type Item = (usize, ThreadNodeHash, bool);
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -70,41 +70,36 @@ impl<'a> Iterator for ThreadsGroupIterator<'a> {
                 if !self.thread_nodes[&tree[self.pos]].children.is_empty() {
                     self.stack.push(self.pos);
                     self.pos = 0;
-                    if self.thread_nodes[&ret.1].message.is_some() {
-                        return Some(ret);
-                    } else {
-                        continue;
-                    }
-                }
-                self.pos += 1;
-                if self.thread_nodes[&ret.1].message.is_some() {
                     return Some(ret);
                 }
+                self.pos += 1;
+                return Some(ret);
             }
         }
     }
 }
-/* `ThreadIterator` returns messages of a specific thread according to the
- * sorted order. For example, for the following thread:
- *
- *  ```
- *  A_
- *   |_ B
- *   |_C
- *   |_D
- *   ```
- *
- *   the iterator returns them as `A, B, C, D`
- */
 
-pub struct ThreadGroupIterator<'a> {
+/// [`ThreadIterator`] returns messages of a specific thread according to the
+/// sorted order.
+///
+/// For example, for the following thread:
+///
+/// ```text
+/// A_
+///  |_ B
+///  |_C
+///  |_D
+/// ```
+///
+/// the iterator returns them as `A, B, C, D`.
+pub struct ThreadIterator<'a> {
     pub(super) group: ThreadNodeHash,
     pub(super) pos: usize,
     pub(super) stack: SmallVec<[usize; 16]>,
     pub(super) thread_nodes: &'a HashMap<ThreadNodeHash, ThreadNode>,
 }
 
-impl<'a> Iterator for ThreadGroupIterator<'a> {
+impl<'a> Iterator for ThreadIterator<'a> {
     type Item = (usize, ThreadNodeHash);
     fn next(&mut self) -> Option<(usize, ThreadNodeHash)> {
         loop {

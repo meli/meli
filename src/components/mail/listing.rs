@@ -450,7 +450,7 @@ pub trait MailListingTrait: ListingTrait {
         /*{
             let threads_lck = account.collection.get_threads(mailbox_hash);
             for thread_hash in thread_hashes {
-                for (_, h) in threads_lck.thread_group_iter(thread_hash) {
+                for (_, h) in threads_lck.thread_iter(thread_hash) {
                     envs_to_set.push(threads_lck.thread_nodes()[&h].message().unwrap());
                 }
                 self.row_updates().push(thread_hash);

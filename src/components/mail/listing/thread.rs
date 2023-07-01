@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::{cmp, convert::TryInto, fmt::Write, iter::FromIterator};
+use std::{cmp, convert::TryInto, iter::FromIterator};
 
 use melib::{ThreadNode, Threads};
 
@@ -262,11 +262,11 @@ impl MailListingTrait for ThreadListing {
             SmallVec::new(),
         );
 
-        let mut indentations: Vec<bool> = Vec::with_capacity(6);
         let roots = items
             .filter_map(|r| threads.groups[&r].root().map(|r| r.root))
-            .collect::<_>();
-        let mut iter = threads.threads_group_iter(roots).peekable();
+            .collect::<SmallVec<[ThreadNodeHash; 1024]>>();
+        let mut indentations: Vec<bool> = Vec::with_capacity(6);
+        let mut iter = threads.threads_iter(roots).peekable();
         let thread_nodes: &HashMap<ThreadNodeHash, ThreadNode> = threads.thread_nodes();
         /* This is just a desugared for loop so that we can use .peek() */
         let mut idx: usize = 0;
@@ -364,8 +364,6 @@ impl MailListingTrait for ThreadListing {
                 );
                 self.rows.row_attr_cache.insert(idx, row_attr);
                 idx += 1;
-            } else {
-                continue;
             }
 
             match iter.peek() {
@@ -782,25 +780,36 @@ impl ThreadListing {
         is_root: bool,
     ) -> String {
         let thread_node = &threads[&node_idx];
-        let has_parent = thread_node.has_parent() && !is_root;
+        let has_parent = thread_node.has_parent();
+        let has_visible_parent = has_parent && !is_root;
         let show_subject = thread_node.show_subject();
 
-        let mut s = String::new(); //format!("{}{}{} ", idx, " ", ThreadListing::format_date(&envelope));
-        for i in 0..indent {
-            if indentations.len() > i && indentations[i] {
-                s.push('│');
-            } else if indentations.len() > i {
-                s.push(' ');
-            }
-            if i > 0 {
-                s.push(' ');
+        let mut s = String::new();
+
+        // Do not print any indentation if entry is a root but it has a parent that is
+        // missing AND it has no siblings; therefore there's no point in
+        // printing anything before the root's level in the thread tree. It
+        // would just be empty space.
+        if !(is_root && has_parent && !has_sibling) {
+            for i in 0..indent {
+                if indentations.len() > i && indentations[i] {
+                    s.push('│');
+                } else if indentations.len() > i {
+                    s.push(' ');
+                }
+                if i > 0 {
+                    s.push(' ');
+                }
             }
         }
-        if indent > 0 && (has_sibling || has_parent) {
-            if has_sibling && has_parent {
+
+        if indent > 0 && ((has_sibling || has_visible_parent) || is_root) {
+            if has_sibling && has_visible_parent {
                 s.push('├');
             } else if has_sibling {
                 s.push('┬');
+            } else if has_parent && is_root {
+                s.push('─');
             } else {
                 s.push('└');
             }
@@ -808,15 +817,8 @@ impl ThreadListing {
             s.push('>');
         }
 
-        /*
-        s.push_str(if envelope.has_attachments() {
-            "📎"
-        } else {
-            ""
-        });
-        */
         if show_subject {
-            let _ = write!(s, "{:.85}", envelope.subject());
+            s.push_str(&envelope.subject());
         }
         s
     }
