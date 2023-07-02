@@ -41,7 +41,7 @@ use crate::{
 mod iterators;
 use std::{
     cmp::Ordering,
-    collections::{HashMap, HashSet},
+    collections::{HashMap, HashSet, VecDeque},
     fmt,
     iter::FromIterator,
     ops::Index,
@@ -332,30 +332,28 @@ impl SubjectPrefix for &[u8] {
                     || slice.starts_with(b"FW: ")
                     || slice.starts_with(b"Fw: ")
                 {
-                    slice = &slice[3..];
+                    slice = &slice[b"RE: ".len()..];
                     continue;
                 }
                 if slice.starts_with(b"FWD: ")
                     || slice.starts_with(b"Fwd: ")
                     || slice.starts_with(b"fwd: ")
                 {
-                    slice = &slice[4..];
+                    slice = &slice[b"FWD: ".len()..];
                     continue;
                 }
                 if slice.starts_with(b" ") || slice.starts_with(b"\t") || slice.starts_with(b"\r") {
                     //FIXME just trim whitespace
-                    slice = &slice[1..];
+                    slice = &slice[b" ".len()..];
                     continue;
                 }
                 if slice.starts_with(b"[")
                     && !(slice.starts_with(b"[PATCH") || slice.starts_with(b"[RFC"))
                 {
                     if let Some(pos) = slice.find(b"]") {
-                        slice = &slice[pos..];
+                        slice = &slice[pos + 1..];
                         continue;
                     }
-                    slice = &slice[1..];
-                    continue;
                 }
                 break;
             }
@@ -409,14 +407,14 @@ impl SubjectPrefix for &str {
                     || slice.starts_with("FW: ")
                     || slice.starts_with("Fw: ")
                 {
-                    slice = &slice[3..];
+                    slice = &slice["RE: ".len()..];
                     continue;
                 }
                 if slice.starts_with("FWD: ")
                     || slice.starts_with("Fwd: ")
                     || slice.starts_with("fwd: ")
                 {
-                    slice = &slice[4..];
+                    slice = &slice["FWD: ".len()..];
                     continue;
                 }
                 if slice.starts_with(' ') || slice.starts_with('\t') || slice.starts_with('\r') {
@@ -428,11 +426,9 @@ impl SubjectPrefix for &str {
                     && !(slice.starts_with("[PATCH") || slice.starts_with("[RFC"))
                 {
                     if let Some(pos) = slice.find(']') {
-                        slice = &slice[pos..];
+                        slice = &slice[pos + 1..];
                         continue;
                     }
-                    slice = &slice[1..];
-                    continue;
                 }
                 break;
             }
@@ -866,38 +862,62 @@ impl Threads {
         env_hash: EnvelopeHash,
         envelopes: &Envelopes,
     ) {
+        let mut stack = VecDeque::new();
+        stack.push_back((id, Some(env_hash)));
         let envelopes = envelopes.read().unwrap();
-        let mut subject = envelopes[&env_hash].subject();
-        let mut subject = subject.to_mut().as_bytes();
-        let stripped_subject = subject.strip_prefixes();
-        if let Some(parent_id) = self.thread_nodes[&id].parent {
-            if let Some(parent_hash) = self.thread_nodes[&parent_id].message {
-                debug_assert!(envelopes.contains_key(&parent_hash));
-                /* decide if the subject should be shown in the UI.
-                 * If parent subject is Foobar and reply is `Re: Foobar`
-                 * then showing the reply's subject is reduntant
-                 */
-                let mut parent_subject = envelopes[&parent_hash].subject();
-                let mut parent_subject = parent_subject.to_mut().as_bytes();
-                parent_subject.strip_prefixes();
-                if stripped_subject == &parent_subject {
-                    self.thread_nodes.entry(id).and_modify(|e| {
-                        e.show_subject = false;
-                    });
+        while let Some((id, env_hash)) = stack.pop_front() {
+            if let Some(env_hash) = env_hash {
+                let mut subject = envelopes[&env_hash].subject();
+                let mut subject = subject.to_mut().as_bytes();
+                let stripped_subject = subject.strip_prefixes();
+                {
+                    // check immediate parent envelope, skipping thread nodes that have no
+                    // corresponding envelope
+                    let mut parent_cursor = self.thread_nodes[&id].parent;
+                    while let Some(parent_id) = parent_cursor {
+                        if let Some(parent_hash) = self.thread_nodes[&parent_id].message {
+                            debug_assert!(envelopes.contains_key(&parent_hash));
+                            /* decide if the subject should be shown in the UI.
+                             * If parent subject is Foobar and reply is `Re: Foobar`
+                             * then showing the reply's subject is redundant
+                             */
+                            let mut parent_subject = envelopes[&parent_hash].subject();
+                            let mut parent_subject = parent_subject.to_mut().as_bytes();
+                            parent_subject.strip_prefixes();
+                            if stripped_subject == &parent_subject
+                                || stripped_subject.ends_with(parent_subject)
+                            {
+                                self.thread_nodes.entry(id).and_modify(|e| {
+                                    e.show_subject = false;
+                                });
+                            }
+                            break;
+                        } else {
+                            parent_cursor = self.thread_nodes[&parent_id].parent;
+                        }
+                    }
                 }
-            }
-        }
 
-        for i in 0..self.thread_nodes[&id].children.len() {
-            let child_hash = self.thread_nodes[&id].children[i];
-            if let Some(child_env_hash) = self.thread_nodes[&child_hash].message() {
-                let mut child_subject = envelopes[&child_env_hash].subject();
-                let mut child_subject = child_subject.to_mut().as_bytes();
-                child_subject.strip_prefixes();
-                if stripped_subject == &child_subject {
-                    self.thread_nodes.entry(child_hash).and_modify(|e| {
-                        e.show_subject = false;
-                    });
+                for i in 0..self.thread_nodes[&id].children.len() {
+                    let child_hash = self.thread_nodes[&id].children[i];
+                    stack.push_back((child_hash, self.thread_nodes[&child_hash].message()));
+                    if let Some(child_env_hash) = self.thread_nodes[&child_hash].message() {
+                        let mut child_subject = envelopes[&child_env_hash].subject();
+                        let mut child_subject = child_subject.to_mut().as_bytes();
+                        child_subject.strip_prefixes();
+                        if stripped_subject == &child_subject
+                            || child_subject.ends_with(stripped_subject)
+                        {
+                            self.thread_nodes.entry(child_hash).and_modify(|e| {
+                                e.show_subject = false;
+                            });
+                        }
+                    }
+                }
+            } else {
+                for i in 0..self.thread_nodes[&id].children.len() {
+                    let child_hash = self.thread_nodes[&id].children[i];
+                    stack.push_back((child_hash, self.thread_nodes[&child_hash].message()));
                 }
             }
         }
