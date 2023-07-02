@@ -158,37 +158,6 @@ impl MailView {
                     }
                 }
             }
-            let account = &mut context.accounts[&coordinates.0];
-            if !account.collection.get_env(coordinates.2).is_seen() {
-                let job = account.backend.write().unwrap().set_flags(
-                    coordinates.2.into(),
-                    coordinates.1,
-                    smallvec::smallvec![(Ok(Flag::SEEN), true)],
-                );
-                match job {
-                    Ok(fut) => {
-                        let handle = account
-                            .main_loop_handler
-                            .job_executor
-                            .spawn_specialized(fut);
-                        account.insert_job(
-                            handle.job_id,
-                            JobRequest::SetFlags {
-                                env_hashes: coordinates.2.into(),
-                                handle,
-                            },
-                        );
-                    }
-                    Err(e) => {
-                        context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(format!(
-                                "Could not set message as seen: {}",
-                                e
-                            )),
-                        ));
-                    }
-                };
-            }
         }
         if let Some(p) = pending_action {
             self.perform_action(p, context);
@@ -320,6 +289,38 @@ impl Component for MailView {
             ref mut env_view, ..
         } = self.state
         {
+            {
+                let account = &mut context.accounts[&coordinates.0];
+                if !account.collection.get_env(coordinates.2).is_seen() {
+                    let job = account.backend.write().unwrap().set_flags(
+                        coordinates.2.into(),
+                        coordinates.1,
+                        smallvec::smallvec![(Ok(Flag::SEEN), true)],
+                    );
+                    match job {
+                        Ok(fut) => {
+                            let handle = account
+                                .main_loop_handler
+                                .job_executor
+                                .spawn_specialized(fut);
+                            account.insert_job(
+                                handle.job_id,
+                                JobRequest::SetFlags {
+                                    env_hashes: coordinates.2.into(),
+                                    handle,
+                                },
+                            );
+                        }
+                        Err(err) => {
+                            context.replies.push_back(UIEvent::StatusEvent(
+                                StatusEvent::DisplayMessage(format!(
+                                    "Could not set message as seen: {err}",
+                                )),
+                            ));
+                        }
+                    }
+                }
+            }
             env_view.draw(grid, area, context);
         } else if let MailViewState::Error { ref err } = self.state {
             clear_area(grid, area, self.theme_default);
