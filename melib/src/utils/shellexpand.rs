@@ -21,8 +21,6 @@
 
 //! A `ShellExpandTrait` to expand paths like a shell.
 
-#[cfg(not(any(target_os = "netbsd", target_os = "macos")))]
-use std::os::unix::io::AsRawFd;
 use std::{
     ffi::OsStr,
     os::unix::ffi::OsStrExt,
@@ -71,7 +69,7 @@ impl ShellExpandTrait for Path {
 
     #[cfg(target_os = "linux")]
     fn complete(&self, force: bool) -> SmallVec<[String; 128]> {
-        use std::convert::TryFrom;
+        use std::{convert::TryFrom, os::unix::io::AsRawFd};
 
         use libc::dirent64;
         use nix::fcntl::OFlag;
