@@ -579,7 +579,7 @@ mod regexp {
             ucp: bool,
             jit_if_available: bool,
         ) -> std::result::Result<Self, pcre2::Error> {
-            Ok(Self(unsafe {
+            Ok(Self(
                 pcre2::bytes::RegexBuilder::new()
                     .caseless(caseless)
                     .dotall(dotall)
@@ -587,9 +587,8 @@ mod regexp {
                     .multi_line(multi_line)
                     .ucp(ucp)
                     .jit_if_available(jit_if_available)
-                    .disable_utf_check() // We only match on rust strings, which are guaranteed UTF8
-                    .build(pattern)?
-            }))
+                    .build(pattern)?,
+            ))
         }
 
         pub fn find_iter<'w, 's>(&'w self, s: &'s str) -> FindIter<'w, 's> {
