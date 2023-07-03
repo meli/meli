@@ -62,7 +62,8 @@ notify-rust = { version = "^4", default-features = false, features = ["dbus", ],
 flate2 = { version = "1", optional = true }
 proc-macro2 = "1.0.37"
 quote = "^1.0"
-syn = { version = "1.0.92", features = [] }
+regex = "1"
+syn = { version = "1", features = [] }
 
 [dev-dependencies]
 flate2 = { version = "1" }

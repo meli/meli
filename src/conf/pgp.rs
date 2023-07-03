@@ -19,13 +19,10 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#[cfg(feature = "gpgme")]
 use melib::conf::ToggleFlag;
 
-#[cfg(feature = "gpgme")]
 use super::default_vals::*;
 
-#[cfg(feature = "gpgme")]
 /// Settings for digital signing and encryption
 #[derive(Debug, Deserialize, Clone, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -70,11 +67,21 @@ pub struct PGPSettings {
 
     /// Remote lookup mechanisms.
     /// Default: "local,wkd"
-    #[serde(
-        default = "default_lookup_mechanism",
-        alias = "remote-lookup-mechanisms"
+    #[cfg_attr(
+        feature = "gpgme",
+        serde(
+            default = "default_lookup_mechanism",
+            alias = "remote-lookup-mechanisms"
+        )
     )]
+    #[cfg(feature = "gpgme")]
     pub remote_lookup_mechanisms: melib::gpgme::LocateKey,
+    #[cfg(not(feature = "gpgme"))]
+    #[cfg_attr(
+        not(feature = "gpgme"),
+        serde(default, alias = "remote-lookup-mechanisms")
+    )]
+    pub remote_lookup_mechanisms: String,
 }
 
 #[cfg(feature = "gpgme")]
@@ -82,7 +89,6 @@ fn default_lookup_mechanism() -> melib::gpgme::LocateKey {
     melib::gpgme::LocateKey::LOCAL | melib::gpgme::LocateKey::WKD
 }
 
-#[cfg(feature = "gpgme")]
 impl Default for PGPSettings {
     fn default() -> Self {
         PGPSettings {
@@ -94,12 +100,10 @@ impl Default for PGPSettings {
             decrypt_key: None,
             encrypt_key: None,
             allow_remote_lookup: internal_value_false::<ToggleFlag>(),
+            #[cfg(feature = "gpgme")]
             remote_lookup_mechanisms: default_lookup_mechanism(),
+            #[cfg(not(feature = "gpgme"))]
+            remote_lookup_mechanisms: String::new(),
         }
     }
 }
-
-#[cfg(not(feature = "gpgme"))]
-#[derive(Debug, Default, Deserialize, Clone, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct PGPSettings;

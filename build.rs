@@ -26,6 +26,7 @@ mod config_macros;
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-changed=src/conf/.rebuild.overrides.rs");
     config_macros::override_derive(&[
         ("src/conf/pager.rs", "PagerSettings"),
         ("src/conf/listing.rs", "ListingSettings"),

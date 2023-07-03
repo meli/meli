@@ -26,7 +26,7 @@ use std::{
 };
 
 use quote::{format_ident, quote};
-extern crate proc_macro;
+use regex::Regex;
 
 // Write ConfigStructOverride to overrides.rs
 pub fn override_derive(filenames: &[(&str, &str)]) {
@@ -63,6 +63,10 @@ use melib::HeaderName;
 
 "##
     .to_string();
+
+    let cfg_attr_default_attr_regex = Regex::new(r"\s*default\s*[,]").unwrap();
+    let cfg_attr_default_val_attr_regex = Regex::new(r#"\s*default\s*=\s*"[^"]*"\s*,\s*"#).unwrap();
+    let cfg_attr_feature_regex = Regex::new(r"[(](?:not[(]\s*)?feature").unwrap();
 
     'file_loop: for (filename, ident) in filenames {
         println!("cargo:rerun-if-changed={}", filename);
@@ -115,7 +119,20 @@ use melib::HeaderName;
                             if let proc_macro2::TokenTree::Group(g) =
                                 f.tokens.clone().into_iter().next().unwrap()
                             {
-                                let attr_inner_value = f.tokens.to_string();
+                                let mut attr_inner_value = f.tokens.to_string();
+                                if cfg_attr_feature_regex.is_match(&attr_inner_value) {
+                                    attr_inner_value = cfg_attr_default_val_attr_regex
+                                        .replace_all(&attr_inner_value, "")
+                                        .to_string();
+                                    if attr_inner_value.contains("default") {
+                                        attr_inner_value = cfg_attr_default_attr_regex
+                                            .replace_all(&attr_inner_value, "")
+                                            .to_string();
+                                    }
+                                    let new_toks: proc_macro2::TokenStream =
+                                        attr_inner_value.parse().unwrap();
+                                    new_attr.tokens = quote! { #new_toks };
+                                }
                                 if !attr_inner_value.starts_with("( default")
                                     && !attr_inner_value.starts_with("( default =")
                                     && !attr_inner_value.starts_with("(default")
@@ -156,7 +173,9 @@ use melib::HeaderName;
                         #[serde(default)]
                         pub #ident : Option<#ty>
                     };
-                    field_idents.push(ident);
+                    if !field_idents.contains(&ident) {
+                        field_idents.push(ident);
+                    }
                     field_tokentrees.push(t);
                 }
                 //let fields = &s.fields;
