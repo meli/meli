@@ -131,11 +131,11 @@ impl ShellExpandTrait for Path {
             };
 
             let Ok(n) = usize::try_from(n) else {
-                if n == 0 {
-                    break;
-                }
                 return SmallVec::new();
             };
+            if n == 0 {
+                break;
+            }
             unsafe {
                 buf.set_len(n);
             }
