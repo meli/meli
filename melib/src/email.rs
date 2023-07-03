@@ -341,7 +341,7 @@ impl Envelope {
     }
 
     pub fn from_bytes(bytes: &[u8], flags: Option<Flag>) -> Result<Self> {
-        let mut e = Self::new(EnvelopeHash::from_bytes(bytes));
+        let mut e = Self::new(EnvelopeHash::from_bytes(bytes.trim()));
         let res = e.populate_headers(bytes).ok();
         if res.is_some() {
             if let Some(f) = flags {
