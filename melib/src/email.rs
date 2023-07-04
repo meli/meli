@@ -113,7 +113,7 @@ pub use headers::*;
 #[cfg(feature = "imap_backend")]
 use imap_codec::{
     core::{AString, Atom, NonEmptyVec},
-    fetch::{FetchAttribute, MacroOrFetchAttributes},
+    fetch::{MacroOrMessageDataItemNames, MessageDataItemName},
     flag::Flag as ImapCodecFlag,
     section::Section,
 };
@@ -128,20 +128,20 @@ use crate::{
 
 #[cfg(feature = "imap_backend")]
 // TODO(#222): Make this `const` as soon as it is possible.
-pub(crate) fn common_attributes() -> MacroOrFetchAttributes<'static> {
-    MacroOrFetchAttributes::FetchAttributes(vec![
-        FetchAttribute::Uid,
-        FetchAttribute::Flags,
-        FetchAttribute::Envelope,
-        FetchAttribute::BodyExt {
+pub(crate) fn common_attributes() -> MacroOrMessageDataItemNames<'static> {
+    MacroOrMessageDataItemNames::MessageDataItemNames(vec![
+        MessageDataItemName::Uid,
+        MessageDataItemName::Flags,
+        MessageDataItemName::Envelope,
+        MessageDataItemName::BodyExt {
             section: Some(Section::HeaderFields(
                 None,
-                NonEmptyVec::from(AString::from(Atom::unchecked("REFERENCES"))),
+                NonEmptyVec::from(AString::from(Atom::unvalidated("REFERENCES"))),
             )),
             partial: None,
             peek: true,
         },
-        FetchAttribute::BodyStructure,
+        MessageDataItemName::BodyStructure,
     ])
 }
 

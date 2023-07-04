@@ -21,7 +21,7 @@
 
 use std::sync::Arc;
 
-use imap_codec::fetch::FetchAttribute;
+use imap_codec::fetch::MessageDataItemName;
 
 use super::*;
 use crate::{backends::*, email::*, error::Error};
@@ -72,7 +72,7 @@ impl BackendOp for ImapOp {
                         .await?;
                     conn.send_command(CommandBody::fetch(
                         uid,
-                        vec![FetchAttribute::Flags, FetchAttribute::Rfc822],
+                        vec![MessageDataItemName::Flags, MessageDataItemName::Rfc822],
                         true,
                     )?)
                     .await?;
@@ -133,8 +133,12 @@ impl BackendOp for ImapOp {
                 conn.connect().await?;
                 conn.examine_mailbox(mailbox_hash, &mut response, false)
                     .await?;
-                conn.send_command(CommandBody::fetch(uid, vec![FetchAttribute::Flags], true)?)
-                    .await?;
+                conn.send_command(CommandBody::fetch(
+                    uid,
+                    vec![MessageDataItemName::Flags],
+                    true,
+                )?)
+                .await?;
                 conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)
                     .await?;
                 debug!(

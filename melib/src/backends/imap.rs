@@ -1765,7 +1765,7 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
                     };
                     conn.send_command(CommandBody::Fetch {
                         sequence_set,
-                        attributes: common_attributes(),
+                        macro_or_item_names: common_attributes(),
                         uid: true,
                     })
                     .await?;

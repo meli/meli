@@ -47,16 +47,16 @@ use futures::io::{AsyncReadExt, AsyncWriteExt};
 #[cfg(feature = "deflate_compression")]
 use imap_codec::extensions::compress::CompressionAlgorithm;
 use imap_codec::{
-    auth::{AuthMechanism, AuthMechanismOther},
+    auth::AuthMechanism,
     codec::{Encode, Fragment},
     command::{Command, CommandBody},
-    core::{AString, Atom, NonEmptyVec, Tag},
+    core::{AString, LiteralMode, NonEmptyVec, Tag},
     extensions::enable::CapabilityEnable,
     mailbox::Mailbox,
     search::SearchKey,
     secret::Secret,
     sequence::SequenceSet,
-    status::StatusAttribute,
+    status::StatusDataItemName,
 };
 use native_tls::TlsConnector;
 pub use smol::Async as AsyncWrapper;
@@ -308,9 +308,9 @@ impl ImapStream {
                 "\0{}\0{}",
                 &server_conf.server_username, &server_conf.server_password
             );
-            ret.send_command(CommandBody::authenticate(
-                AuthMechanism::Plain,
-                Some(credentials.as_bytes()),
+            ret.send_command(CommandBody::authenticate_with_ir(
+                AuthMechanism::PLAIN,
+                credentials.as_bytes(),
             ))
             .await?;
             ret.read_response(&mut res).await?;
@@ -396,12 +396,9 @@ impl ImapStream {
                         "Could not decode `server_password` from base64. Is the value correct?"
                     })
                     .chain_err_kind(ErrorKind::Configuration)?;
-                // TODO(#222): Improve this as soon as imap-codec supports XOAUTH2.
-                ret.send_command(CommandBody::authenticate(
-                    AuthMechanism::Other(
-                        AuthMechanismOther::try_from(Atom::unchecked("XOAUTH2")).unwrap(),
-                    ),
-                    Some(&xoauth2),
+                ret.send_command(CommandBody::authenticate_with_ir(
+                    AuthMechanism::XOAUTH2,
+                    &xoauth2,
                 ))
                 .await?;
             }
@@ -530,7 +527,7 @@ impl ImapStream {
     pub async fn send_command(&mut self, body: CommandBody<'_>) -> Result<()> {
         timeout(self.timeout, async {
             let command = {
-                let tag = Tag::unchecked(format!("M{}", self.cmd_id));
+                let tag = Tag::unvalidated(format!("M{}", self.cmd_id));
 
                 Command { tag, body }
             };
@@ -550,10 +547,10 @@ impl ImapStream {
                     Fragment::Line { data } => {
                         self.stream.write_all(&data).await?;
                     }
-                    Fragment::Literal { data, sync } => {
+                    Fragment::Literal { data, mode } => {
                         // We only need to wait for a continuation request when we are about to
                         // send a synchronizing literal, i.e., when not using LITERAL+.
-                        if sync {
+                        if mode == LiteralMode::Sync {
                             self.wait_for_continuation_request().await?;
                         }
                         self.stream.write_all(&data).await?;
@@ -721,12 +718,12 @@ impl ImapConnection {
                                 } else {
                                     self.send_command(CommandBody::Status {
                                         mailbox: Mailbox::Inbox,
-                                        attributes: vec![
-                                            StatusAttribute::UidNext,
-                                            StatusAttribute::UidValidity,
-                                            StatusAttribute::Unseen,
-                                            StatusAttribute::Messages,
-                                            StatusAttribute::HighestModSeq,
+                                        item_names: vec![
+                                            StatusDataItemName::UidNext,
+                                            StatusDataItemName::UidValidity,
+                                            StatusDataItemName::Unseen,
+                                            StatusDataItemName::Messages,
+                                            StatusDataItemName::HighestModSeq,
                                         ]
                                         .into(),
                                     })

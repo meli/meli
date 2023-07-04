@@ -20,10 +20,10 @@
  */
 
 use imap_codec::{
-    fetch::{FetchAttribute, MacroOrFetchAttributes},
+    fetch::{MacroOrMessageDataItemNames, MessageDataItemName},
     search::SearchKey,
     sequence::SequenceSet,
-    status::StatusAttribute,
+    status::StatusDataItemName,
 };
 
 use super::*;
@@ -238,7 +238,9 @@ impl ImapConnection {
         };
         self.send_command(CommandBody::Fetch {
             sequence_set,
-            attributes: MacroOrFetchAttributes::FetchAttributes(vec![FetchAttribute::Flags]),
+            macro_or_item_names: MacroOrMessageDataItemNames::MessageDataItemNames(vec![
+                MessageDataItemName::Flags,
+            ]),
             uid: true,
         })
         .await?;
@@ -690,7 +692,7 @@ impl ImapConnection {
             /* UIDNEXT shouldn't be 0, since exists != 0 at this point */
             self.send_command(CommandBody::status(
                 mailbox_path,
-                [StatusAttribute::UidNext].as_slice(),
+                [StatusDataItemName::UidNext].as_slice(),
             )?)
             .await?;
             self.read_response(&mut response, RequiredResponses::STATUS)
