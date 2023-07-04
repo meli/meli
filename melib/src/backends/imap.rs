@@ -1403,6 +1403,7 @@ impl ImapType {
             .iter()
             .any(|cap| cap.eq_ignore_ascii_case(b"LIST-STATUS"));
         if has_list_status {
+            // TODO(#222): imap-codec does not support "LIST Command Extensions" currently.
             conn.send_command_raw(b"LIST \"\" \"*\" RETURN (STATUS (MESSAGES UNSEEN))")
                 .await?;
             conn.read_response(

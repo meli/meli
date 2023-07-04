@@ -261,6 +261,7 @@ pub async fn examine_updates(
                 .iter()
                 .any(|cap| cap.eq_ignore_ascii_case(b"LIST-STATUS"));
             if has_list_status {
+                // TODO(#222): imap-codec does not support "LIST Command Extensions" currently.
                 conn.send_command_raw(
                     format!(
                         "LIST \"{}\" \"\" RETURN (STATUS (MESSAGES UNSEEN))",
