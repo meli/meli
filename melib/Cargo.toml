@@ -53,9 +53,7 @@ xdg = "2.1.0"
 xdg-utils = "^0.4.0"
 
 [dependencies.imap-codec]
-# TODO(#222): Replace `git` and `rev` with `version`.
-git = "https://github.com/duesee/imap-codec"
-rev = "2c5c1cafc3b342714273ea506447157fee2bc8d1"
+version = "0.10.0"
 features = [
     "ext_condstore_qresync",
     "ext_enable",
