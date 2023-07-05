@@ -109,9 +109,9 @@
 //! format.append(
 //!     &mut file,
 //!     mbox_1,
-//!     None,                         // Envelope From
-//!     Some(melib::datetime::now()), // Delivered date
-//!     Default::default(),           // Flags and tags
+//!     None,                                // Envelope From
+//!     Some(melib::utils::datetime::now()), // Delivered date
+//!     Default::default(),                  // Flags and tags
 //!     MboxMetadata::None,
 //!     true,
 //!     false,
@@ -120,7 +120,7 @@
 //!     &mut file,
 //!     mbox_2,
 //!     None,
-//!     Some(melib::datetime::now()),
+//!     Some(melib::utils::datetime::now()),
 //!     Default::default(), // Flags and tags
 //!     MboxMetadata::None,
 //!     false,

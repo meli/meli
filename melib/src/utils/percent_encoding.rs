@@ -30,7 +30,9 @@
 //! # Examples
 //!
 //! ```rust
-//! use melib::percent_encoding::{percent_decode_str, utf8_percent_encode, AsciiSet, CONTROLS};
+//! use melib::utils::percent_encoding::{
+//!     percent_decode_str, utf8_percent_encode, AsciiSet, CONTROLS,
+//! };
 //!
 //! /// https://url.spec.whatwg.org/#fragment-percent-encode-set
 //! const FRAGMENT: &AsciiSet = &CONTROLS.add(b' ').add(b'"').add(b'<').add(b'>').add(b'`');
@@ -55,8 +57,8 @@ use std::{borrow::Cow, fmt, mem, slice, str};
 ///
 /// Use the `add` method of an existing set to define a new set. For example:
 ///
-/// ```
-/// use melib::percent_encoding::{AsciiSet, CONTROLS};
+/// ```rust
+/// use melib::utils::percent_encoding::{AsciiSet, CONTROLS};
 ///
 /// /// https://url.spec.whatwg.org/#fragment-percent-encode-set
 /// const FRAGMENT: &AsciiSet = &CONTROLS.add(b' ').add(b'"').add(b'<').add(b'>').add(b'`');
@@ -175,8 +177,8 @@ pub const NON_ALPHANUMERIC: &AsciiSet = &CONTROLS
 ///
 /// # Examples
 ///
-/// ```
-/// use melib::percent_encoding::percent_encode_byte;
+/// ```rust
+/// use melib::utils::percent_encoding::percent_encode_byte;
 ///
 /// assert_eq!(
 ///     "foo bar"
@@ -227,8 +229,8 @@ pub fn percent_encode_byte(byte: u8) -> &'static str {
 ///
 /// # Examples
 ///
-/// ```
-/// use melib::percent_encoding::{percent_encode, NON_ALPHANUMERIC};
+/// ```rust
+/// use melib::utils::percent_encoding::{percent_encode, NON_ALPHANUMERIC};
 ///
 /// assert_eq!(
 ///     percent_encode(b"foo bar?", NON_ALPHANUMERIC).to_string(),
@@ -252,8 +254,8 @@ pub const fn percent_encode<'a>(
 ///
 /// # Examples
 ///
-/// ```
-/// use melib::percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
+/// ```rust
+/// use melib::utils::percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 ///
 /// assert_eq!(
 ///     utf8_percent_encode("foo bar?", NON_ALPHANUMERIC).to_string(),
@@ -362,8 +364,8 @@ pub fn percent_decode_str(input: &str) -> PercentDecode<'_> {
 ///
 /// # Examples
 ///
-/// ```
-/// use melib::percent_encoding::percent_decode;
+/// ```rust
+/// use melib::utils::percent_encoding::percent_decode;
 ///
 /// assert_eq!(
 ///     percent_decode(b"foo%20bar%3f").decode_utf8().unwrap(),
