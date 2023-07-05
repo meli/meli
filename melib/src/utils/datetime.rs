@@ -24,7 +24,7 @@
 //! # Examples
 //!
 //! ```rust
-//! # use melib::datetime::*;
+//! # use melib::utils::datetime::*;
 //! // Get current UNIX Epoch timestamp.
 //! let now: UnixTimestamp = now();
 //!
