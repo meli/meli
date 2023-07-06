@@ -595,7 +595,10 @@ impl NntpType {
             } else {
                 get_conf_val!(s["server_username"], String::new())?
             },
-            server_password: if require_auth {
+            server_password: if require_auth
+                || s.extra.contains_key("server_password")
+                || s.extra.contains_key("server_password_command")
+            {
                 s.server_password()?
             } else {
                 get_conf_val!(s["server_password"], String::new())?
