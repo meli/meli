@@ -1221,7 +1221,7 @@ dependencies = [
 
 [[package]]
 name = "meli"
-version = "0.7.2"
+version = "0.7.3"
 dependencies = [
  "async-task",
  "bitflags",
@@ -1258,7 +1258,7 @@ dependencies = [
 
 [[package]]
 name = "melib"
-version = "0.7.2"
+version = "0.8.0"
 dependencies = [
  "async-stream",
  "base64 0.13.1",
@@ -1804,9 +1804,9 @@ dependencies = [
 
 [[package]]
 name = "rustix"
-version = "0.37.22"
+version = "0.37.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8818fa822adcc98b18fedbb3632a6a33213c070556b5aa7c4c8cc21cff565c4c"
+checksum = "4d69718bf81c6127a49dc64e44a742e8bb9213c0ff8869a22c308f84c1d4ab06"
 dependencies = [
  "bitflags",
  "errno",
@@ -1981,9 +1981,9 @@ dependencies = [
 
 [[package]]
 name = "smallvec"
-version = "1.10.0"
+version = "1.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a507befe795404456341dfab10cef66ead4c041f62b8b11bbb92bffe5d0953e0"
+checksum = "62bb4feee49fdd9f707ef802e22365a35de4b7b299de4763d44bfea899442ff9"
 dependencies = [
  "serde",
 ]
@@ -2215,18 +2215,6 @@ checksum = "f4f7f0dd8d50a853a531c426359045b1998f04219d88799810762cd4ad314234"
 dependencies = [
  "indexmap",
  "serde",
-]
-
-[[package]]
-name = "tools"
-version = "0.4.1"
-dependencies = [
- "crossbeam",
- "meli",
- "melib",
- "nix",
- "signal-hook",
- "signal-hook-registry",
 ]
 
 [[package]]

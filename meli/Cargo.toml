@@ -1,0 +1,87 @@
+[package]
+name = "meli"
+version = "0.7.3"
+authors = ["Manos Pitsidianakis <manos@pitsidianak.is>"]
+edition = "2018"
+rust-version = "1.65.0"
+
+license = "GPL-3.0-or-later"
+readme = "README.md"
+description = "terminal mail client"
+homepage = "https://meli.delivery"
+repository = "https://git.meli.delivery/meli/meli.git"
+keywords = ["mail", "mua", "maildir", "terminal", "imap"]
+categories = ["command-line-utilities", "email"]
+default-run = "meli"
+
+[[bin]]
+name = "meli"
+path = "src/main.rs"
+
+[lib]
+name = "meli"
+path = "src/lib.rs"
+
+[[bin]]
+name = "managesieve-client"
+path = "src/managesieve.rs"
+required-features = ["melib/imap_backend"]
+
+[dependencies]
+async-task = "^4.2.0"
+bitflags = "1.0"
+crossbeam = { version = "^0.8" }
+flate2 = { version = "1", optional = true }
+futures = "0.3.5"
+indexmap = { version = "^1.6", features = ["serde-1", ] }
+libc = { version = "0.2.125", default-features = false, features = ["extra_traits",] }
+linkify = { version = "^0.8", default-features = false }
+melib = { path = "../melib", version = "0.8.0" }
+nix = { version = "^0.24", default-features = false }
+notify = { version = "4.0.1", default-features = false } # >:c
+num_cpus = "1.12.0"
+pcre2 = { version = "0.2.3", optional = true }
+
+serde = "1.0.71"
+serde_derive = "1.0.71"
+serde_json = "1.0"
+signal-hook = { version = "^0.3", default-features = false }
+signal-hook-registry = { version = "1.2.0", default-features = false }
+smallvec = { version = "^1.5.0", features = ["serde", ] }
+structopt = { version = "0.3.14", default-features = false }
+svg_crate = { version = "^0.13", optional = true, package = "svg" }
+termion = { version = "1.5.1", default-features = false }
+toml = { version = "0.5.6", default-features = false, features = ["preserve_order", ] }
+unicode-segmentation = "1.2.1" # >:c
+xdg = "2.1.0"
+
+[target.'cfg(target_os="linux")'.dependencies]
+notify-rust = { version = "^4", default-features = false, features = ["dbus", ], optional = true }
+
+[build-dependencies]
+flate2 = { version = "1", optional = true }
+proc-macro2 = "1.0.37"
+quote = "^1.0"
+regex = "1"
+syn = { version = "1", features = [] }
+
+[dev-dependencies]
+flate2 = { version = "1" }
+regex = "1"
+tempfile = "3.3"
+
+[features]
+default = ["sqlite3", "notmuch", "regexp", "smtp", "dbus-notifications", "gpgme", "cli-docs"]
+notmuch = ["melib/notmuch_backend", ]
+jmap = ["melib/jmap_backend",]
+sqlite3 = ["melib/sqlite3"]
+smtp = ["melib/smtp"]
+regexp = ["pcre2"]
+dbus-notifications = ["notify-rust",]
+cli-docs = ["flate2"]
+svgscreenshot = ["svg_crate"]
+gpgme = ["melib/gpgme"]
+
+# Print tracing logs as meli runs in stderr
+# enable for debug tracing logs: build with --features=debug-tracing
+debug-tracing = ["melib/debug-tracing", ]
