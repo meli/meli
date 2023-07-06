@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [alpha-0.8.0] - 2023-07-06
+
+### Added
+
 - Added listing configuration setting `thread_subject_pack` (see meli.conf.5)
 - Added shortcuts for focusing to sidebar menu and back to the e-mail view (`focus_left` and `focus_right`)
 - `f76f4ea3` A new manual page, `meli.7` which contains a general tutorial for using meli.
@@ -28,11 +36,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Add optional `parent` property to notmuch mailbox configuration.
 - `d9c07def` Add command to select charset encoding for email
   Open dialog to select charset with `d`.
+- `3adf72ae` Add support for utf-7 encoding in IMAP mailbox names
 - `d679a744` melib/jmap: Implement Bearer token authentication
   Fastmail now uses an API token in a http header for authentication.
   This can be used either as a server_password or provided by a
   `server_password_command` like oauth2.
 - `47e6d5d9` add edit-config CLI subcommand that opens config files on `EDITOR`
+- `58889bca` pager: Add `show_extra_headers` option
+
+  Show custom set headers on pager, if existent.
+
+  Quoting meli.conf(5):
+
+  ```text
+  show_extra_headers [String]   (optional) Extra headers to
+                               display, if present, in the
+                               default header preamble of
+                               the pager.  This setting is
+                               useful especially when used
+                               per-folder or per-account.
+                               For example, if you use
+                               ‘rss2email’ (See r2e(1)) the
+                               e-mail you will receive will
+                               have the ‘X-RSS-Feed’ header
+                               by default.  You can show
+                               them only in the folder
+                               where you keep your feed
+                               items:
+  
+                               [accounts."personal".mailboxes]
+                               INBOX = {}
+                               "INBOX/Sent" = { sort_order=0 }
+                               "INBOX/Feeds" = { pager.show_extra_headers = ["X-RSS-Feed"] }
+                               (empty)
+  ```
 - `8c671935` Add compose (pre-submission) hooks for validation/linting
   compose-hooks run before submitting an e-mail.
   They perform draft validation and/or transformations.
@@ -48,15 +85,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     Warn if draft has no subject and no body.
 
   They can be disabled with `[composing.disabled_compose_hooks]` setting.
+- `363f4930` add {previous,next}_entry shortcuts to quickly open other mail entries
+
+  When reading a mail entry, with Ctrl+n you can switch to the next entry,
+  and with Ctrl+p to the previous one. They can be reconfigured by setting
+  the `[shortcuts.listing.next_entry]` and `[shortcuts.listing.previous_entry]`
+  settings.
 
 ### Changed
 
 - `f76f4ea3` Shortcut `open_thread` and `exit_thread` renamed to `open_entry` and `exit_entry`.
 - `7650805c` Binary size reduced significantly.
+- `d7e6b40b` auto re-index sqlite3 database if it's missing, instead of telling
+  user to do it themselves.
 
 ### Fixed
 
 - `a42a6ca8` show notifications in terminal if there is no other alternative.
+- `7998e1e7` fix compilation on OpenBSD
+- `daf42fd4` config_macros.rs: fix build error with quote 1.0.28
+- Various UI issues.
+- Threaded listing view now works properly and doesn't repeat subjects in replies.
 
 ## [alpha-0.7.2] - 2021-10-15
 
