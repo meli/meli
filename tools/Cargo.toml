@@ -2,7 +2,6 @@
 name = "tools"
 version = "0.4.1"
 authors = ["Manos Pitsidianakis <el13635@mail.ntua.gr>"]
-workspace = ".."
 edition = "2018"
 rust-version = "1.65.0"
 
@@ -10,6 +9,10 @@ license = "GPL-3.0-or-later"
 homepage = "https://meli.delivery"
 repository = "https://git.meli.delivery/meli/meli.git"
 publish = false
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
 
 [[bin]]
 name = "emailparse"
@@ -35,8 +38,8 @@ path = "src/embed.rs"
 
 [dependencies]
 crossbeam = { version = "^0.8" }
-meli = { path = "..", version = "*" }
-melib = { path = "../melib", version = "*", features = ["debug-tracing", "unicode_algorithms"] }
+meli = { version = "0.7" }
+melib = { version = "0.7", features = ["debug-tracing", "unicode_algorithms"] }
 nix = { version = "^0.24", default-features = false }
 signal-hook = { version = "^0.3", default-features = false }
 signal-hook-registry = { version = "1.2.0", default-features = false }

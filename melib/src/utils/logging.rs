@@ -180,9 +180,6 @@ impl StderrLogger {
                 level: Arc::new(AtomicU8::new(level as u8)),
                 print_level: true,
                 print_module_names: true,
-                #[cfg(feature = "debug-tracing")]
-                debug_dest: Destination::Stderr,
-                #[cfg(not(feature = "debug-tracing"))]
                 debug_dest: Destination::None,
             }
         };

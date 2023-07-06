@@ -1,8 +1,7 @@
 [package]
 name = "melib"
-version = "0.7.2"
-authors = ["Manos Pitsidianakis <epilys@nessuent.xyz>"]
-workspace = ".."
+version = "0.8.0"
+authors = ["Manos Pitsidianakis <manos@pitsidianak.is>"]
 edition = "2018"
 build = "build.rs"
 rust-version = "1.65.0"

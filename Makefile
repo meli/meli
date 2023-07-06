@@ -32,7 +32,7 @@ BINDIR ?= ${EXPANDED_PREFIX}/bin
 MANDIR ?= ${EXPANDED_PREFIX}/share/man
 
 # Installation parameters
-DOCS_SUBDIR ?= docs/
+DOCS_SUBDIR ?= meli/docs/
 MANPAGES ?= meli.1 meli.conf.5 meli-themes.5
 FEATURES ?= --features "${MELI_FEATURES}"
 
