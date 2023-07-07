@@ -152,6 +152,7 @@ impl EnvelopeView {
                         err.to_string(),
                         Some(NotificationType::Error(melib::ErrorKind::External)),
                     )));
+                    // FIXME: add `v` configurable shortcut
                     let comment = Some(format!(
                         "Failed to start html filter process: `{}`. Press `v` to open in web \
                          browser. \n\n",
@@ -165,6 +166,7 @@ impl EnvelopeView {
                     });
                 }
                 Ok(text) => {
+                    // FIXME: add `v` configurable shortcut
                     let comment = Some(format!(
                         "Text piped through `{}`. Press `v` to open in web browser. \n\n",
                         filter_invocation
@@ -610,148 +612,6 @@ impl EnvelopeView {
         (paths, acc)
     }
 
-    /// Returns the string to be displayed in the Viewer
-    pub fn attachment_to_text(&mut self, body: &Attachment, context: &mut Context) -> String {
-        let finder = LinkFinder::new();
-        let body_text = String::from_utf8_lossy(&body.decode_rec(DecodeOptions {
-            filter: Some(Box::new(|a: &Attachment, v: &mut Vec<u8>| {
-                if a.content_type().is_text_html() {
-                    let settings = &context.settings;
-                    if let Some(filter_invocation) = settings.pager.html_filter.as_ref() {
-                        let command_obj = Command::new("sh")
-                            .args(["-c", filter_invocation])
-                            .stdin(Stdio::piped())
-                            .stdout(Stdio::piped())
-                            .spawn();
-                        match command_obj {
-                            Err(err) => {
-                                context.replies.push_back(UIEvent::Notification(
-                                    Some(format!(
-                                        "Failed to start html filter process: {}",
-                                        filter_invocation,
-                                    )),
-                                    err.to_string(),
-                                    Some(NotificationType::Error(melib::ErrorKind::External)),
-                                ));
-                            }
-                            Ok(mut html_filter) => {
-                                html_filter
-                                    .stdin
-                                    .as_mut()
-                                    .unwrap()
-                                    .write_all(v)
-                                    .expect("Failed to write to stdin");
-                                *v = format!(
-                                    "Text piped through `{}`. Press `v` to open in web browser. \
-                                     \n\n",
-                                    filter_invocation
-                                )
-                                .into_bytes();
-                                v.extend(html_filter.wait_with_output().unwrap().stdout);
-                            }
-                        }
-                    }
-                }
-            })),
-            force_charset: if let ForceCharset::Forced(val) = self.force_charset {
-                Some(val)
-            } else {
-                None
-            },
-        }))
-        .into_owned();
-        match self.mode {
-            ViewMode::Normal | ViewMode::Subview => {
-                let mut t = body_text;
-                if body.count_attachments() > 1 {
-                    t = body
-                        .attachments()
-                        .iter()
-                        .enumerate()
-                        .fold(t, |mut s, (idx, a)| {
-                            let _ = writeln!(s, "[{}] {}\n", idx, a);
-                            s
-                        });
-                }
-                t
-            }
-            ViewMode::Source(Source::Raw) => {
-                let text = { String::from_utf8_lossy(body.body()).into_owned() };
-                self.view_settings.body_theme = crate::conf::value(context, "mail.view.body");
-                text
-            }
-            ViewMode::Source(Source::Decoded) => {
-                let text = {
-                    /* Decode each header value */
-                    let mut ret = melib::email::parser::headers::headers(body.body())
-                        .map(|(_, v)| v)
-                        .map_err(|err| err.into())
-                        .and_then(|headers| {
-                            Ok(headers
-                                .into_iter()
-                                .map(|(h, v)| {
-                                    melib::email::parser::encodings::phrase(v, true)
-                                        .map(|(_, v)| {
-                                            let mut h = h.to_vec();
-                                            h.push(b':');
-                                            h.push(b' ');
-                                            h.extend(v.into_iter());
-                                            h
-                                        })
-                                        .map_err(|err| err.into())
-                                })
-                                .collect::<Result<Vec<Vec<u8>>>>()?
-                                .join(&b"\n"[..]))
-                        })
-                        .map(|v| String::from_utf8_lossy(&v).into_owned())
-                        .unwrap_or_else(|err: Error| err.to_string());
-                    if !ret.ends_with("\n\n") {
-                        ret.push_str("\n\n");
-                    }
-                    ret.push_str(&body_text);
-                    if !ret.ends_with("\n\n") {
-                        ret.push_str("\n\n");
-                    }
-                    // ret.push_str(&self.attachment_tree);
-                    ret
-                };
-                text
-            }
-            ViewMode::Url => {
-                let mut t = body_text;
-                for (lidx, l) in finder.links(&body.text()).enumerate() {
-                    let offset = if lidx < 10 {
-                        lidx * 3
-                    } else if lidx < 100 {
-                        26 + (lidx - 9) * 4
-                    } else if lidx < 1000 {
-                        385 + (lidx - 99) * 5
-                    } else {
-                        panic!("BUG: Message body with more than 100 urls, fix this");
-                    };
-                    t.insert_str(l.start() + offset, &format!("[{}]", lidx));
-                }
-                if body.count_attachments() > 1 {
-                    t = body
-                        .attachments()
-                        .iter()
-                        .enumerate()
-                        .fold(t, |mut s, (idx, a)| {
-                            let _ = writeln!(s, "[{}] {}\n", idx, a);
-                            s
-                        });
-                }
-                t
-            }
-            ViewMode::Attachment(aidx) => {
-                let attachments = body.attachments();
-                let mut ret = "Viewing attachment. Press `r` to return \n".to_string();
-                ret.push_str(&attachments[aidx].text());
-                ret
-            }
-        }
-    }
-
     fn open_attachment(
         &'_ self,
         lidx: usize,
@@ -1153,7 +1013,19 @@ impl Component for EnvelopeView {
                     self.subview = Some(Box::new(HtmlView::new(attachment, context)));
                 }
                 ViewMode::Attachment(aidx) => {
-                    let mut text = "Viewing attachment. Press `r` to return \n".to_string();
+                    let mut text = format!(
+                        "Viewing attachment. Press {} to return \n",
+                        self.shortcuts(context)
+                            .get(Shortcuts::ENVELOPE_VIEW)
+                            .and_then(|m| m.get("return_to_normal_view"))
+                            .unwrap_or(
+                                &context
+                                    .settings
+                                    .shortcuts
+                                    .envelope_view
+                                    .return_to_normal_view
+                            )
+                    );
                     let attachment = &body.attachments()[aidx];
                     text.push_str(&attachment.text());
                     self.pager = Pager::from_string(
@@ -1199,7 +1071,7 @@ impl Component for EnvelopeView {
                 }
                 ViewMode::Subview => {}
                 ViewMode::Source(Source::Raw) => {
-                    let text = { String::from_utf8_lossy(body.body()).into_owned() };
+                    let text = String::from_utf8_lossy(self.mail.bytes()).into_owned();
                     self.view_settings.body_theme = crate::conf::value(context, "mail.view.body");
                     self.pager = Pager::from_string(
                         text,
@@ -1215,7 +1087,7 @@ impl Component for EnvelopeView {
                 ViewMode::Source(Source::Decoded) => {
                     let text = {
                         /* Decode each header value */
-                        let mut ret = melib::email::parser::headers::headers(body.body())
+                        let mut ret = melib::email::parser::headers::headers(self.mail.bytes())
                             .map(|(_, v)| v)
                             .map_err(|err| err.into())
                             .and_then(|headers| {
