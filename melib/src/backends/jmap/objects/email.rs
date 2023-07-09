@@ -585,7 +585,7 @@ impl From<crate::search::Query> for Filter<EmailFilterCondition, EmailObject> {
     fn from(val: crate::search::Query) -> Self {
         let mut ret = Self::Condition(EmailFilterCondition::new().into());
         fn rec(q: &crate::search::Query, f: &mut Filter<EmailFilterCondition, EmailObject>) {
-            use datetime::{formats::RFC3339_DATE, timestamp_to_string};
+            use datetime::{formats::RFC3339_DATE, timestamp_to_string_utc};
 
             use crate::search::Query::*;
 
@@ -614,26 +614,26 @@ impl From<crate::search::Query> for Filter<EmailFilterCondition, EmailObject> {
                 Before(t) => {
                     *f = Filter::Condition(
                         EmailFilterCondition::new()
-                            .before(timestamp_to_string(*t, Some(RFC3339_DATE), true))
+                            .before(timestamp_to_string_utc(*t, Some(RFC3339_DATE), true))
                             .into(),
                     );
                 }
                 After(t) => {
                     *f = Filter::Condition(
                         EmailFilterCondition::new()
-                            .after(timestamp_to_string(*t, Some(RFC3339_DATE), true))
+                            .after(timestamp_to_string_utc(*t, Some(RFC3339_DATE), true))
                             .into(),
                     );
                 }
                 Between(a, b) => {
                     *f = Filter::Condition(
                         EmailFilterCondition::new()
-                            .after(timestamp_to_string(*a, Some(RFC3339_DATE), true))
+                            .after(timestamp_to_string_utc(*a, Some(RFC3339_DATE), true))
                             .into(),
                     );
                     *f &= Filter::Condition(
                         EmailFilterCondition::new()
-                            .before(timestamp_to_string(*b, Some(RFC3339_DATE), true))
+                            .before(timestamp_to_string_utc(*b, Some(RFC3339_DATE), true))
                             .into(),
                     );
                 }

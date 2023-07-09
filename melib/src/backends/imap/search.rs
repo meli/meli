@@ -25,7 +25,7 @@ use std::collections::VecDeque;
 
 use crate::{
     search::*,
-    utils::datetime::{formats::IMAP_DATE, timestamp_to_string},
+    utils::datetime::{formats::IMAP_DATE, timestamp_to_string_utc},
 };
 
 mod private {
@@ -165,25 +165,25 @@ impl ToImapSearch for Query {
                 Q(Before(t)) => {
                     space_pad!(s);
                     s.push_str("BEFORE ");
-                    s.push_str(&timestamp_to_string(*t, Some(IMAP_DATE), true));
+                    s.push_str(&timestamp_to_string_utc(*t, Some(IMAP_DATE), true));
                 }
                 Q(After(t)) => {
                     space_pad!(s);
                     s.push_str("SINCE ");
-                    s.push_str(&timestamp_to_string(*t, Some(IMAP_DATE), true));
+                    s.push_str(&timestamp_to_string_utc(*t, Some(IMAP_DATE), true));
                 }
                 Q(Between(t1, t2)) => {
                     space_pad!(s);
                     s.push_str("(SINCE ");
-                    s.push_str(&timestamp_to_string(*t1, Some(IMAP_DATE), true));
+                    s.push_str(&timestamp_to_string_utc(*t1, Some(IMAP_DATE), true));
                     s.push_str(" BEFORE ");
-                    s.push_str(&timestamp_to_string(*t2, Some(IMAP_DATE), true));
+                    s.push_str(&timestamp_to_string_utc(*t2, Some(IMAP_DATE), true));
                     s.push(')');
                 }
                 Q(On(t)) => {
                     space_pad!(s);
                     s.push_str("ON ");
-                    s.push_str(&timestamp_to_string(*t, Some(IMAP_DATE), true));
+                    s.push_str(&timestamp_to_string_utc(*t, Some(IMAP_DATE), true));
                 }
                 Q(InReplyTo(t)) => {
                     space_pad!(s);
@@ -281,8 +281,8 @@ mod tests {
         );
 
         assert_eq!(
-            &timestamp_to_string(1685739600, Some(IMAP_DATE), true),
-            "03-Jun-2023"
+            &timestamp_to_string_utc(1685739600, Some(IMAP_DATE), true),
+            "02-Jun-2023"
         );
 
         let (_, q) = query()
@@ -290,7 +290,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             &q.to_imap_search(),
-            r#"BEFORE 04-Jun-2023 FROM "user@example.org""#
+            r#"BEFORE 03-Jun-2023 FROM "user@example.org""#
         );
         let (_, q) = query()
             .parse_complete(r#"subject:"wah ah ah" or (from:Manos and from:Sia)"#)

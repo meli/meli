@@ -34,7 +34,7 @@
 //! assert_eq!(timestamp, 1578509043);
 //!
 //! // Convert timestamp back to string
-//! let s = timestamp_to_string(timestamp, Some("%Y-%m-%d"), true);
+//! let s = timestamp_to_string_utc(timestamp, Some("%Y-%m-%d"), true);
 //! assert_eq!(s, "2020-01-08");
 //! ```
 use std::{
@@ -86,6 +86,8 @@ extern "C" {
     fn mktime(tm: *const libc::tm) -> libc::time_t;
 
     fn localtime_r(timep: *const libc::time_t, tm: *mut libc::tm) -> *mut libc::tm;
+
+    fn gmtime_r(timep: *const libc::time_t, tm: *mut libc::tm) -> *mut libc::tm;
 
     fn gettimeofday(tv: *mut libc::timeval, tz: *mut libc::timezone) -> i32;
 }
@@ -199,11 +201,21 @@ impl Locale {
     }
 }
 
-pub fn timestamp_to_string(timestamp: UnixTimestamp, fmt: Option<&str>, posix: bool) -> String {
+#[inline]
+fn timestamp_to_string_inner(
+    timestamp: UnixTimestamp,
+    fmt: Option<&str>,
+    posix: bool,
+    local: bool,
+) -> String {
     let mut new_tm: libc::tm = unsafe { std::mem::zeroed() };
     unsafe {
         let i: i64 = timestamp.try_into().unwrap_or(0);
-        localtime_r(std::ptr::addr_of!(i), std::ptr::addr_of_mut!(new_tm));
+        if local {
+            localtime_r(std::ptr::addr_of!(i), std::ptr::addr_of_mut!(new_tm));
+        } else {
+            gmtime_r(std::ptr::addr_of!(i), std::ptr::addr_of_mut!(new_tm));
+        }
     }
     let format: Cow<'_, CStr> = if let Some(cs) = fmt
         .map(str::as_bytes)
@@ -249,6 +261,18 @@ pub fn timestamp_to_string(timestamp: UnixTimestamp, fmt: Option<&str>, posix: b
     };
 
     String::from_utf8_lossy(&vec[0..ret]).into_owned()
+}
+
+/// Return a UNIX epoch timestamp as string in the local timezone, using `fmt`
+/// as the format argument passed to `strptime`.
+pub fn timestamp_to_string(timestamp: UnixTimestamp, fmt: Option<&str>, posix: bool) -> String {
+    timestamp_to_string_inner(timestamp, fmt, posix, true)
+}
+
+/// Return a UNIX epoch timestamp as string in the UTC/GMT/+00:00 timezone,
+/// using `fmt` as the format argument passed to `strptime`.
+pub fn timestamp_to_string_utc(timestamp: UnixTimestamp, fmt: Option<&str>, posix: bool) -> String {
+    timestamp_to_string_inner(timestamp, fmt, posix, false)
 }
 
 fn tm_to_secs(tm: libc::tm) -> std::result::Result<i64, ()> {

@@ -286,7 +286,7 @@ impl MailBackend for NntpType {
             let mut conn = timeout(Some(Duration::from_secs(60 * 16)), connection.lock()).await?;
             if let Some(mut latest_article) = latest_article {
                 let timestamp = latest_article - 10 * 60;
-                let datetime_str = crate::utils::datetime::timestamp_to_string(
+                let datetime_str = crate::utils::datetime::timestamp_to_string_utc(
                     timestamp,
                     Some("%Y%m%d %H%M%S"),
                     true,
