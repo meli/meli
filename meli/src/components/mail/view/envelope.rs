@@ -1451,15 +1451,15 @@ impl Component for EnvelopeView {
                         ContentType::MessageRfc822 => {
                             match Mail::new(attachment.body().to_vec(), Some(Flag::SEEN)) {
                                 Ok(wrapper) => {
-                                    context.replies.push_back(UIEvent::Action(Tab(New(Some(
-                                        Box::new(EnvelopeView::new(
-                                            wrapper,
-                                            None,
-                                            None,
-                                            Some(self.view_settings.clone()),
-                                            context.main_loop_handler.clone(),
-                                        )),
-                                    )))));
+                                    self.mode = ViewMode::Subview;
+                                    self.subview = Some(Box::new(EnvelopeView::new(
+                                        wrapper,
+                                        None,
+                                        None,
+                                        Some(self.view_settings.clone()),
+                                        context.main_loop_handler.clone(),
+                                    )));
+                                    self.set_dirty(true);
                                 }
                                 Err(e) => {
                                     context.replies.push_back(UIEvent::StatusEvent(
