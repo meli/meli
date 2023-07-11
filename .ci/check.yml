@@ -1,0 +1,10 @@
+matrix:
+  RUST: [stable]
+
+pipeline:
+  test:
+    image: rust
+    environment: [CARGO_TERM_COLOR=always]
+    commands:
+      - rustup default $RUST
+      - make check
