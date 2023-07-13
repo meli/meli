@@ -19,6 +19,9 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+// [ref:DEBT] segfaults on libgpgme code can crash the entire app; it should be
+// handled.
+
 use std::{
     borrow::Cow,
     collections::HashMap,

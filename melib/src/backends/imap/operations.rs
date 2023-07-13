@@ -152,7 +152,7 @@ impl BackendOp for ImapOp {
                 if v.len() != 1 {
                     debug!("responses len is {}", v.len());
                     debug!(String::from_utf8_lossy(&response));
-                    /* TODO: Trigger cache invalidation here. */
+                    /* [ref:TODO]: Trigger cache invalidation here. */
                     debug!("message with UID {} was not found", uid);
                     return Err(
                         Error::new(format!("Invalid/unexpected response: {:?}", response))

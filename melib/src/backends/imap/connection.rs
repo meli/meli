@@ -247,7 +247,7 @@ impl ImapStream {
             }
 
             {
-                // FIXME: This is blocking
+                // [ref:FIXME]: This is blocking
                 let socket = socket.into_inner()?;
                 let mut conn_result = connector.connect(path, socket);
                 if let Err(native_tls::HandshakeError::WouldBlock(midhandshake_stream)) =

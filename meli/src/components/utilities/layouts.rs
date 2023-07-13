@@ -126,7 +126,7 @@ pub struct VSplit {
 
 impl fmt::Display for VSplit {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // TODO display focused component
+        // [ref:TODO]: display focused component
         Display::fmt(&self.right, f)
     }
 }

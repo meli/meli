@@ -82,7 +82,7 @@ impl Connection {
             #[cfg(feature = "tls")]
             Tls(ref t) => t.get_ref().set_nonblocking(nonblocking),
             Fd(fd) => {
-                //FIXME TODO Review
+                // [ref:VERIFY]
                 nix::fcntl::fcntl(
                     *fd,
                     nix::fcntl::FcntlArg::F_SETFL(if nonblocking {
@@ -146,7 +146,7 @@ impl Connection {
                 keepalive.is_some() as c_int,
             )?;
             if let Some(dur) = keepalive {
-                // TODO: checked cast here
+                // [ref:TODO]: checked cast here
                 self.setsockopt(libc::IPPROTO_TCP, KEEPALIVE_OPTION, dur.as_secs() as c_int)?;
             }
             Ok(())

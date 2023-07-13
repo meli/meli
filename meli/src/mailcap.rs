@@ -155,7 +155,7 @@ impl MailcapEntry {
                 let mut f = None;
                 let mut needs_stdin = true;
                 let params = a.parameters();
-                /* TODO: See mailcap(5)
+                /* [ref:TODO]: See mailcap(5)
                  * - replace "\%" with "%" and unescape other blackslash uses.
                  * - "%n" and "%F".
                  * - test=xxx field.

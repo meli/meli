@@ -53,6 +53,20 @@
     clippy::significant_drop_in_scrutinee,
     clippy::cognitive_complexity
 )]
+/* Source Code Annotation Tags:
+ *
+ * Global tags (in tagref format <https://github.com/stepchowfun/tagref>) for source code
+ * annotation:
+ *
+ * - [tag:hardcoded_color_value] Replace hardcoded color values with user configurable ones.
+ * - [tag:needs_unit_test]
+ * - [tag:needs_user_doc]
+ * - [tag:needs_dev_doc]
+ * - [tag:FIXME]
+ * - [tag:TODO]
+ * - [tag:VERIFY] Verify whether this is the correct way to do something
+ * - [tag:DEBT] Technical debt
+ */
 
 //! A crate that performs mail client operations such as
 //! - Hold an [`Envelope`](./email/struct.Envelope.html) with methods convenient

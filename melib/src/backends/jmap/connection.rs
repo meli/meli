@@ -368,7 +368,7 @@ impl JmapConnection {
                         index: _,
                     } in added
                     {
-                        // FIXME
+                        // [ref:TODO] do something with added items
                     }
                 }
                 Ok(_) => {}

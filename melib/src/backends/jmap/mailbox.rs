@@ -101,7 +101,7 @@ impl BackendMailbox for JmapMailbox {
 
     fn set_is_subscribed(&mut self, new_val: bool) -> Result<()> {
         self.is_subscribed = new_val;
-        // FIXME: jmap subscribe
+        // [ref:FIXME]: jmap subscribe
         Ok(())
     }
 

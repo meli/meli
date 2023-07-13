@@ -201,7 +201,7 @@ impl Draft {
                 ret.headers_mut()
                     .insert(HeaderName::TO, envelope.field_from_to_string());
             }
-            // FIXME: add To/Cc
+            // [ref:FIXME]: add To/Cc
         } else if let Some(reply_to) = envelope.other_headers().get("Mail-Reply-To") {
             ret.headers_mut()
                 .insert(HeaderName::TO, reply_to.to_string());

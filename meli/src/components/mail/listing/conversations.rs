@@ -402,7 +402,7 @@ impl ListingTrait for ConversationsListing {
             .get_thread_under_cursor(self.cursor_pos.2 + 1)
             .is_some()
         {
-            // TODO: makes this less ugly.
+            // [ref:TODO]: makes this less ugly.
             self.movement = Some(PageMovement::Down(1));
             self.force_draw = true;
             self.dirty = true;
@@ -422,7 +422,7 @@ impl ListingTrait for ConversationsListing {
             .get_thread_under_cursor(self.cursor_pos.2 - 1)
             .is_some()
         {
-            // TODO: makes this less ugly.
+            // [ref:TODO]: makes this less ugly.
             self.movement = Some(PageMovement::Up(1));
             self.force_draw = true;
             self.dirty = true;

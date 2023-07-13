@@ -127,7 +127,7 @@ use crate::{
 };
 
 #[cfg(feature = "imap_backend")]
-// TODO(#222): Make this `const` as soon as it is possible.
+// [ref:TODO]: (#222) Make this `const` as soon as it is possible.
 pub(crate) fn common_attributes() -> MacroOrMessageDataItemNames<'static> {
     MacroOrMessageDataItemNames::MessageDataItemNames(vec![
         MessageDataItemName::Uid,
@@ -675,7 +675,7 @@ impl Envelope {
     }
 
     pub fn set_in_reply_to(&mut self, new_val: &[u8]) -> &mut Self {
-        // FIXME msg_id_list
+        // [ref:FIXME]: msg_id_list
         let new_val = new_val.trim();
         if !new_val.is_empty() {
             let val = match parser::address::msg_id(new_val) {

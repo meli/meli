@@ -956,8 +956,9 @@ impl MailBackend for ImapType {
                     }
                 }
 
-                /* FIXME  Do not try to CREATE a sub-mailbox in a mailbox
-                 * that has the \Noinferiors flag set. */
+                /* [ref:FIXME]  Do not try to CREATE a sub-mailbox in a
+                 * mailbox that has the \Noinferiors flag
+                 * set. */
             }
 
             let mut response = Vec::with_capacity(8 * 1024);
@@ -1403,7 +1404,7 @@ impl ImapType {
             .iter()
             .any(|cap| cap.eq_ignore_ascii_case(b"LIST-STATUS"));
         if has_list_status {
-            // TODO(#222): imap-codec does not support "LIST Command Extensions" currently.
+            // [ref:TODO]: (#222) imap-codec does not support "LIST Command Extensions" currently.
             conn.send_command_raw(b"LIST \"\" \"*\" RETURN (STATUS (MESSAGES UNSEEN))")
                 .await?;
             conn.read_response(

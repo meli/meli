@@ -655,7 +655,7 @@ impl From<crate::search::Query> for Filter<EmailFilterCondition, EmailObject> {
                     );
                 }
                 AllAddresses(_) => {
-                    //TODO
+                    // [ref:TODO]: implement AllAddresses query for jmap
                 }
                 Flags(v) => {
                     fn flag_to_filter(f: &str) -> Filter<EmailFilterCondition, EmailObject> {
@@ -736,16 +736,16 @@ impl From<crate::search::Query> for Filter<EmailFilterCondition, EmailObject> {
                     *f = !qhs;
                 }
                 Answered => {
-                    // TODO
+                    // [ref:TODO]: implement Answered query for jmap
                 }
                 AnsweredBy { .. } => {
-                    // TODO
+                    // [ref:TODO]: implement AnsweredBy query for jmap
                 }
                 Larger { .. } => {
-                    // TODO
+                    // [ref:TODO]: implement Larger than query for jmap
                 }
                 Smaller { .. } => {
-                    // TODO
+                    // [ref:TODO]: implement Smaller than query for jmap
                 }
             }
         }

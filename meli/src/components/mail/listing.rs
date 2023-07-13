@@ -31,7 +31,7 @@ use smallvec::SmallVec;
 use super::*;
 use crate::{conf::accounts::JobRequest, types::segment_tree::SegmentTree};
 
-// TODO: emoji_text_presentation_selector should be printed along with the chars
+// [ref:TODO]: emoji_text_presentation_selector should be printed along with the chars
 // before it but not as a separate Cell
 //macro_rules! emoji_text_presentation_selector {
 //    () => {
@@ -55,7 +55,7 @@ pub const DEFAULT_SNOOZED_FLAG: &str = "💤";
 pub struct RowsState<T> {
     pub selection: HashMap<EnvelopeHash, bool>,
     pub row_updates: SmallVec<[EnvelopeHash; 8]>,
-    /// FIXME: env vec should have at least one element guaranteed
+    /// [ref:FIXME]: env vec should have at least one element guaranteed
     pub thread_to_env: HashMap<ThreadHash, SmallVec<[EnvelopeHash; 8]>>,
     pub env_to_thread: HashMap<EnvelopeHash, ThreadHash>,
     pub thread_order: HashMap<ThreadHash, usize>,

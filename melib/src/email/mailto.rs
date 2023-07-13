@@ -373,7 +373,7 @@ mod tests {
         // 'mailto' URI:
 
         // <mailto:%22%5C%5C%5C%22it's%5C%20ugly%5C%5C%5C%22%22@example.org>.
-        // [tag:FIXME]
+        // [ref:FIXME]
         //assert_eq!(
         //    mlt!("mailto:%22%5C%5C%5C%22it's%5C%20ugly%5C%5C%5C%22%22@example.org").
         // address,    vec![addr!(r#"\"it's ugly\"@example.org"#)]
@@ -399,7 +399,6 @@ mod tests {
         // The same subject, this time using an encoded-word (escaping the "="
         // and "?" characters used in the encoded-word syntax, because they are
         // reserved):
-        // [tag:FIXME]
         // <mailto:user@example.org?subject=%3D%3Futf-8%3FQ%3Fcaf%3DC3%3DA9%3F%3D>
         assert_eq!(
             &mlt!("mailto:user@example.org?subject=%3D%3Futf-8%3FQ%3Fcaf%3DC3%3DA9%3F%3D").headers
@@ -410,7 +409,6 @@ mod tests {
         // The same subject, this time encoded as iso-8859-1:
 
         // <mailto:user@example.org?subject=%3D%3Fiso-8859-1%3FQ%3Fcaf%3DE9%3F%3D>
-        // [tag:FIXME]
         assert_eq!(
             &mlt!("mailto:user@example.org?subject=%3D%3Fiso-8859-1%3FQ%3Fcaf%3DE9%3F%3D").headers
                 [HDR::SUBJECT],

@@ -152,7 +152,7 @@ impl EnvelopeView {
                         err.to_string(),
                         Some(NotificationType::Error(melib::ErrorKind::External)),
                     )));
-                    // FIXME: add `v` configurable shortcut
+                    // [ref:FIXME]: add `v` configurable shortcut
                     let comment = Some(format!(
                         "Failed to start html filter process: `{}`. Press `v` to open in web \
                          browser. \n\n",
@@ -166,7 +166,7 @@ impl EnvelopeView {
                     });
                 }
                 Ok(text) => {
-                    // FIXME: add `v` configurable shortcut
+                    // [ref:FIXME]: add `v` configurable shortcut
                     let comment = Some(format!(
                         "Text piped through `{}`. Press `v` to open in web browser. \n\n",
                         filter_invocation

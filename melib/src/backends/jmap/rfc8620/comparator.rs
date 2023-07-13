@@ -27,7 +27,7 @@ pub struct Comparator<OBJ: Object> {
     property: String,
     #[serde(default = "bool_true")]
     is_ascending: bool,
-    //FIXME
+    // [ref:TODO] implement collations
     collation: Option<String>,
     //#[serde(flatten)]
     additional_properties: Vec<String>,

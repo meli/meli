@@ -2102,7 +2102,7 @@ impl Account {
                                 &self.mailbox_entries,
                                 &mut self.mailboxes_order,
                             );
-                            // FIXME remove from settings as well
+                            // [ref:FIXME] remove from settings as well
 
                             self.main_loop_handler.send(ThreadEvent::UIEvent(
                                 UIEvent::Notification(
@@ -2196,7 +2196,7 @@ impl Account {
                         if err.kind.is_timeout() {
                             self.watch();
                         } else {
-                            //TODO: relaunch watch job with ratelimit for failure
+                            // [ref:TODO]: relaunch watch job with ratelimit for failure
                             self.main_loop_handler.send(ThreadEvent::UIEvent(
                                 UIEvent::Notification(
                                     Some(format!("{}: watch thread failed", &self.name)),

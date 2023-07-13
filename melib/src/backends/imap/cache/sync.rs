@@ -423,7 +423,7 @@ impl ImapConnection {
             //       "SEARCH MODSEQ <cached-value>".
 
             // 2. tag1 UID FETCH <lastseenuid+1>:* <descriptors>
-            // TODO(#222): imap-codec does not support "CONDSTORE/QRESYNC" currently.
+            // [ref:TODO]: (#222) imap-codec does not support "CONDSTORE/QRESYNC" currently.
             self.send_command_raw(
                 format!(
                     "UID FETCH {}:* (UID FLAGS ENVELOPE BODY.PEEK[HEADER.FIELDS (REFERENCES)] \
@@ -519,7 +519,7 @@ impl ImapConnection {
             mailbox_exists.lock().unwrap().insert_set(payload_hash_set);
             // 3. tag2 UID FETCH 1:<lastseenuid> FLAGS
             if cached_max_uid == 0 {
-                // TODO(#222): imap-codec does not support "CONDSTORE/QRESYNC" currently.
+                // [ref:TODO]: (#222) imap-codec does not support "CONDSTORE/QRESYNC" currently.
                 self.send_command_raw(
                     format!(
                         "UID FETCH 1:* FLAGS (CHANGEDSINCE {})",
@@ -529,7 +529,7 @@ impl ImapConnection {
                 )
                 .await?;
             } else {
-                // TODO(#222): imap-codec does not support "CONDSTORE/QRESYNC" currently.
+                // [ref:TODO]: (#222) imap-codec does not support "CONDSTORE/QRESYNC" currently.
                 self.send_command_raw(
                     format!(
                         "UID FETCH 1:{} FLAGS (CHANGEDSINCE {})",

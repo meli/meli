@@ -792,7 +792,7 @@ impl MailBackend for NotmuchDb {
         _mailbox_hash: MailboxHash,
         flags: Option<Flag>,
     ) -> ResultFuture<()> {
-        // FIXME call notmuch_database_index_file ?
+        // [ref:FIXME]: call notmuch_database_index_file ?
         let path = self
             .save_messages_to
             .as_ref()

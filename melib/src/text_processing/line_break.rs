@@ -217,7 +217,7 @@ impl<'a> Iterator for LineBreakCandidateIter<'a> {
              * NS       SJ           Any
              */
 
-            // TODO: LB1
+            // [ref:TODO]: LB1
 
             /* Check if next character class allows breaks before it */
             let mut next_char: Option<&(usize, &str)> = iter.peek();

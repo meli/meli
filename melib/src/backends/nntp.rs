@@ -841,7 +841,7 @@ impl FetchState {
         let new_low = std::cmp::max(low, high.saturating_sub(CHUNK_SIZE));
         high_low_total.as_mut().unwrap().0 = new_low;
 
-        // FIXME: server might not implement OVER capability
+        // [ref:FIXME]: server might not implement OVER capability
         conn.send_command(format!("OVER {}-{}", new_low, high).as_bytes())
             .await?;
         conn.read_response(&mut res, true, command_to_replycodes("OVER"))

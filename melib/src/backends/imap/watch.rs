@@ -48,7 +48,7 @@ pub async fn poll_with_examine(kit: ImapWatchKit) -> Result<()> {
         for (_, mailbox) in mailboxes.clone() {
             examine_updates(mailbox, &mut conn, &uid_store).await?;
         }
-        //FIXME: make sleep duration configurable
+        //[ref:FIXME]: make sleep duration configurable
         smol::Timer::after(std::time::Duration::from_secs(3 * 60)).await;
     }
 }
@@ -261,7 +261,7 @@ pub async fn examine_updates(
                 .iter()
                 .any(|cap| cap.eq_ignore_ascii_case(b"LIST-STATUS"));
             if has_list_status {
-                // TODO(#222): imap-codec does not support "LIST Command Extensions" currently.
+                // [ref:TODO]: (#222) imap-codec does not support "LIST Command Extensions" currently.
                 conn.send_command_raw(
                     format!(
                         "LIST \"{}\" \"\" RETURN (STATUS (MESSAGES UNSEEN))",

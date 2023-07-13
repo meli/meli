@@ -300,7 +300,7 @@ impl Component for TextField {
                 /* Ctrl+E End of line */
                 self.inner.set_cursor(self.inner.as_str().len());
             }
-            /* TODO: add rest of readline shortcuts */
+            /* [ref:TODO]: add rest of readline shortcuts */
             _ => {
                 return false;
             }

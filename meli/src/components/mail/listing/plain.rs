@@ -319,7 +319,7 @@ impl ListingTrait for PlainListing {
 
     fn next_entry(&mut self, context: &mut Context) {
         if self.get_env_under_cursor(self.cursor_pos.2 + 1).is_some() {
-            // TODO: makes this less ugly.
+            // [ref:TODO]: makes this less ugly.
             self.movement = Some(PageMovement::Down(1));
             self.force_draw = true;
             self.dirty = true;
@@ -336,7 +336,7 @@ impl ListingTrait for PlainListing {
             return;
         }
         if self.get_env_under_cursor(self.cursor_pos.2 - 1).is_some() {
-            // TODO: makes this less ugly.
+            // [ref:TODO]: makes this less ugly.
             self.movement = Some(PageMovement::Up(1));
             self.force_draw = true;
             self.dirty = true;

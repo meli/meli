@@ -672,7 +672,7 @@ impl Attachment {
                     ..
                 } => {
                     ret.push(att.clone());
-                    // FIXME: Wrong count
+                    // [ref:FIXME]: Wrong count
                     for a in sub_att_vec {
                         count_recursive(a, ret);
                     }

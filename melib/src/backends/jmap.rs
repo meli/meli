@@ -743,7 +743,7 @@ impl MailBackend for JmapType {
                                     Flag::REPLIED => "$answered",
                                     Flag::TRASHED => "$junk",
                                     Flag::PASSED => "$passed",
-                                    _ => continue, //FIXME
+                                    _ => continue, // [ref:VERIFY]
                                 }
                             ),
                             if *value {

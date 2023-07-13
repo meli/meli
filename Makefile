@@ -21,6 +21,7 @@
 CARGO_TARGET_DIR ?= target
 MIN_RUSTC ?= 1.65.0
 CARGO_BIN ?= cargo
+TAGREF_BIN ?= tagref
 CARGO_ARGS ?=
 CARGO_SORT_BIN = cargo-sort
 PRINTF       = /usr/bin/printf
@@ -94,7 +95,7 @@ help:
 	@#@echo "* CARGO_COLOR = ${CARGO_COLOR}"
 
 .PHONY: check
-check:
+check: check-tagrefs
 	@${CARGO_BIN} check ${CARGO_ARGS} ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" ${FEATURES} --all --tests --examples --benches --bins
 
 .PHONY: fmt
@@ -185,3 +186,13 @@ deb-dist:
 .PHONY: build-rustdoc
 build-rustdoc:
 	@RUSTDOCFLAGS="--crate-version ${VERSION}_${GIT_COMMIT}_${DATE}" ${CARGO_BIN} doc ${CARGO_ARGS} ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" --all-features --no-deps --workspace --document-private-items --open
+
+.PHONY: check-tagrefs
+check-tagrefs:
+	@(if ! command -v "$(TAGREF_BIN)" > /dev/null;\
+		then \
+				$(PRINTF) "Warning: tagref binary not in PATH.\n" 1>&2;\
+				exit;\
+		else \
+				$(TAGREF_BIN);\
+		fi)

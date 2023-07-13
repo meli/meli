@@ -941,7 +941,7 @@ impl ThreadView {
                                     && stack.len() > 1
                                     && stack[stack.len() - 2] >= e.indentation =>
                             {
-                                //FIXME pop all until e.indentation
+                                // [ref:FIXME]: pop all until e.indentation
                                 visies.push(vec![idx]);
                                 stack.pop();
                                 (visies, stack, e.hidden)

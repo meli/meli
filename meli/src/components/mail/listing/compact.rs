@@ -589,7 +589,7 @@ impl ListingTrait for CompactListing {
             .get_thread_under_cursor(self.cursor_pos.2 + 1)
             .is_some()
         {
-            // TODO: makes this less ugly.
+            // [ref:TODO]: makes this less ugly.
             self.movement = Some(PageMovement::Down(1));
             self.force_draw = true;
             self.dirty = true;
@@ -609,7 +609,7 @@ impl ListingTrait for CompactListing {
             .get_thread_under_cursor(self.cursor_pos.2 - 1)
             .is_some()
         {
-            // TODO: makes this less ugly.
+            // [ref:TODO]: makes this less ugly.
             self.movement = Some(PageMovement::Up(1));
             self.force_draw = true;
             self.dirty = true;
@@ -1848,7 +1848,7 @@ impl Component for CompactListing {
                             self.sort = (*field, *order);
                             self.sortcmd = true;
                             if !self.filtered_selection.is_empty() {
-                                // FIXME: perform sort
+                                // [ref:FIXME]: perform sort
                                 self.set_dirty(true);
                             } else {
                                 self.refresh_mailbox(context, false);
@@ -1857,10 +1857,11 @@ impl Component for CompactListing {
                         }
                         Action::SubSort(field, order) if !self.unfocused() => {
                             self.subsort = (*field, *order);
-                            // FIXME: perform subsort.
+                            // [ref:FIXME]: perform subsort.
                             return true;
                         }
                         Action::Listing(ToggleThreadSnooze) if !self.unfocused() => {
+                            // [ref:FIXME]: Re-implement toggle thread snooze
                             /*
                             let thread = self.get_thread_under_cursor(self.cursor_pos.2);
                             let account = &mut context.accounts[&self.cursor_pos.0];

@@ -343,7 +343,7 @@ impl SubjectPrefix for &[u8] {
                     continue;
                 }
                 if slice.starts_with(b" ") || slice.starts_with(b"\t") || slice.starts_with(b"\r") {
-                    //FIXME just trim whitespace
+                    // [ref:FIXME]: just trim whitespace
                     slice = &slice[b" ".len()..];
                     continue;
                 }
@@ -418,7 +418,7 @@ impl SubjectPrefix for &str {
                     continue;
                 }
                 if slice.starts_with(' ') || slice.starts_with('\t') || slice.starts_with('\r') {
-                    //FIXME just trim whitespace
+                    // [ref:FIXME]: just trim whitespace
                     slice = &slice[1..];
                     continue;
                 }
@@ -1155,7 +1155,7 @@ impl Threads {
     }
 
     fn inner_subsort_by(&self, _subsort: (SortField, SortOrder), _envelopes: &Envelopes) {
-        //FIXME: self\.thread_nodes needs interior mutability */
+        // [ref:FIXME]: self\.thread_nodes needs interior mutability */
         /*
         let Threads {
             ref tree_index,
@@ -1499,7 +1499,7 @@ impl Threads {
     }
 
     pub fn roots(&self) -> SmallVec<[ThreadHash; 1024]> {
-        //FIXME: refactor filter
+        // [ref:FIXME]: refactor filter
         self.groups
             .iter()
             .filter_map(|(h, g)| g.root().map(|_| *h))

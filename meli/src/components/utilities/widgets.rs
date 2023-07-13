@@ -863,7 +863,7 @@ impl AutoComplete {
             return false;
         }
 
-        // FIXME: remove hardcoded color values
+        // [ref:hardcoded_color_value]
         let mut content = CellBuffer::new(
             entries
                 .iter()

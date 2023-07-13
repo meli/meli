@@ -83,7 +83,7 @@ pub fn encode_header(value: &str) -> String {
     }
     #[cfg(not(feature = "unicode_algorithms"))]
     {
-        /* TODO: test this. If it works as fine as the one above, there's no need to
+        /* [ref:VERIFY] [ref:TODO]: test this. If it works as fine as the one above, there's no need to
          * keep the above implementation. */
         for (i, g) in value.char_indices() {
             match (g.is_ascii(), is_current_window_ascii) {
