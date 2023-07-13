@@ -28,12 +28,22 @@ use melib::xdg_utils::query_default_app;
 
 use super::*;
 
-#[derive(Debug)]
 pub struct HtmlView {
     pager: Pager,
     bytes: Vec<u8>,
     coordinates: Option<(AccountHash, MailboxHash, EnvelopeHash)>,
     id: ComponentId,
+}
+
+impl std::fmt::Debug for HtmlView {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        fmt.debug_struct(stringify!(HtmlView))
+            .field("pager", &self.pager)
+            .field("bytes", &self.bytes.len())
+            .field("coordinates", &self.coordinates)
+            .field("id", &self.id)
+            .finish()
+    }
 }
 
 impl HtmlView {
@@ -140,6 +150,7 @@ impl Component for HtmlView {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         self.pager.draw(grid, area, context);
     }
+
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         if self.pager.process_event(event, context) {
             return true;
@@ -163,8 +174,14 @@ impl Component for HtmlView {
             };
             if let Some(command) = command {
                 let p = create_temp_file(&self.bytes, None, None, Some("html"), true);
+                context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::UpdateSubStatus(
+                        command.to_string(),
+                    )));
                 let exec_cmd =
                     super::desktop_exec_to_command(&command, p.path.display().to_string(), false);
+
                 match Command::new("sh")
                     .args(["-c", &exec_cmd])
                     .stdin(Stdio::piped())
