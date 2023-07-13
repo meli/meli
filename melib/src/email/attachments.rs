@@ -387,7 +387,7 @@ impl From<AttachmentBuilder> for Attachment {
 }
 
 /// Immutable attachment type.
-#[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Hash, Eq)]
 pub struct Attachment {
     pub content_type: ContentType,
     pub content_transfer_encoding: ContentTransferEncoding,

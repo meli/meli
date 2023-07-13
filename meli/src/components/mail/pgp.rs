@@ -19,7 +19,13 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::{future::Future, pin::Pin};
+use std::{
+    collections::{hash_map::DefaultHasher, BTreeMap},
+    future::Future,
+    hash::{Hash, Hasher},
+    pin::Pin,
+    sync::{Arc, Mutex},
+};
 
 use melib::{
     email::{
@@ -38,13 +44,40 @@ pub async fn decrypt(raw: Vec<u8>) -> Result<(melib_pgp::DecryptionMetadata, Vec
     ctx.decrypt(cipher)?.await
 }
 
-pub async fn verify(a: Attachment) -> Result<()> {
+pub fn verify(a: Attachment) -> impl Future<Output = Result<()>> {
+    thread_local! {
+        static CACHE: Arc<Mutex<BTreeMap<u64, Result<()>>>> = Arc::new(Mutex::new(BTreeMap::new()));
+    }
+
+    let hash_mtx = CACHE.with(|cache| cache.clone());
+    verify_inner(a, hash_mtx)
+}
+
+async fn verify_inner(a: Attachment, cache: Arc<Mutex<BTreeMap<u64, Result<()>>>>) -> Result<()> {
+    let mut hasher = DefaultHasher::new();
+    a.hash(&mut hasher);
+    let attachment_hash: u64 = hasher.finish();
+
+    {
+        let lck = cache.lock().unwrap();
+        let in_cache: bool = lck.contains_key(&attachment_hash);
+        if in_cache {
+            return lck[&attachment_hash].clone();
+        }
+    }
+
     let (data, sig) =
         melib_pgp::verify_signature(&a).chain_err_summary(|| "Could not verify signature.")?;
     let mut ctx = Context::new()?;
     let sig = ctx.new_data_mem(sig.body().trim())?;
     let data = ctx.new_data_mem(&data)?;
-    ctx.verify(sig, data)?.await
+
+    let result = ctx.verify(sig, data)?.await;
+    {
+        let mut lck = cache.lock().unwrap();
+        lck.insert(attachment_hash, result.clone());
+    }
+    result
 }
 
 pub fn sign_filter(

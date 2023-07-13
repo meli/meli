@@ -394,7 +394,7 @@ impl TryFrom<&str> for Address {
 }
 
 /// Helper struct to return slices from a struct field on demand.
-#[derive(Clone, Debug, Serialize, Deserialize, Default, PartialEq, Eq, Copy)]
+#[derive(Clone, Debug, Serialize, Deserialize, Default, PartialEq, Eq, Copy, Hash)]
 pub struct StrBuilder {
     pub offset: usize,
     pub length: usize,
