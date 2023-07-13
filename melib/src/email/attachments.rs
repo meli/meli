@@ -77,10 +77,12 @@ impl AttachmentBuilder {
         let (headers, body) = match parser::attachments::attachment(content) {
             Ok((_, v)) => v,
             Err(err) => {
-                log::debug!("error in parsing attachment: {}", err);
-                log::debug!("\n-------------------------------");
-                log::debug!("{}\n", String::from_utf8_lossy(content));
-                log::debug!("-------------------------------\n");
+                if !content.trim().is_empty() {
+                    log::debug!("error in parsing attachment: {}", err);
+                    log::debug!("\n-------------------------------");
+                    log::debug!("{}\n", String::from_utf8_lossy(content));
+                    log::debug!("-------------------------------\n");
+                }
 
                 return Self {
                     content_type: Default::default(),
