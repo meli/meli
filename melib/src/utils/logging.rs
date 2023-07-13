@@ -180,7 +180,11 @@ impl StderrLogger {
                 level: Arc::new(AtomicU8::new(level as u8)),
                 print_level: true,
                 print_module_names: true,
-                debug_dest: Destination::None,
+                debug_dest: if std::env::var("MELI_DEBUG_STDERR").is_ok() {
+                    Destination::Stderr
+                } else {
+                    Destination::None
+                },
             }
         };
         #[cfg(test)]
