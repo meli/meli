@@ -554,7 +554,6 @@ impl Context {
                     )
                     .set_err_kind(ErrorKind::External));
                 }
-                unsafe { call!(&ctx.lib, gpgme_free)(verify_result as *mut ::libc::c_void) };
             }
             let io_state_lck = io_state.lock().unwrap();
             let ret = io_state_lck

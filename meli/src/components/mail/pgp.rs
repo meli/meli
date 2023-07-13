@@ -19,9 +19,6 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-//FIXME
-#![allow(unused_imports, unused_variables)]
-
 use std::{future::Future, pin::Pin};
 
 use melib::{
@@ -31,28 +28,23 @@ use melib::{
     },
     error::*,
     gpgme::*,
+    log,
     parser::BytesExt,
 };
 
 pub async fn decrypt(raw: Vec<u8>) -> Result<(melib_pgp::DecryptionMetadata, Vec<u8>)> {
-    Err("libgpgme functions are temporarily disabled due to an unsolved bug <https://git.meli.delivery/meli/meli/issues/176>.".into())
-    /*
     let mut ctx = Context::new()?;
     let cipher = ctx.new_data_mem(&raw)?;
     ctx.decrypt(cipher)?.await
-    */
 }
 
 pub async fn verify(a: Attachment) -> Result<()> {
-    Err("libgpgme functions are temporarily disabled due to an unsolved bug <https://git.meli.delivery/meli/meli/issues/176>.".into())
-    /*
     let (data, sig) =
         melib_pgp::verify_signature(&a).chain_err_summary(|| "Could not verify signature.")?;
     let mut ctx = Context::new()?;
     let sig = ctx.new_data_mem(sig.body().trim())?;
     let data = ctx.new_data_mem(&data)?;
     ctx.verify(sig, data)?.await
-    */
 }
 
 pub fn sign_filter(
@@ -64,8 +56,6 @@ pub fn sign_filter(
     Ok(
         move |a: AttachmentBuilder| -> Pin<Box<dyn Future<Output = Result<AttachmentBuilder>>+Send>> {
             Box::pin(async move {
-                Err("libgpgme functions are temporarily disabled due to an unsolved bug <https://git.meli.delivery/meli/meli/issues/176>.".into())
-                /*
                 let a: Attachment = a.into();
                 let mut ctx = Context::new()?;
                 let data = ctx.new_data_mem(&melib_pgp::convert_attachment_to_rfc_spec(
@@ -90,7 +80,6 @@ pub fn sign_filter(
                     vec![],
                 )
                 .into())
-                */
             })
         },
     )
@@ -106,8 +95,6 @@ pub fn encrypt_filter(
     Ok(
         move |a: AttachmentBuilder| -> Pin<Box<dyn Future<Output = Result<AttachmentBuilder>>+Send>> {
             Box::pin(async move {
-                Err("libgpgme functions are temporarily disabled due to an unsolved bug <https://git.meli.delivery/meli/meli/issues/176>.".into())
-                /*
                 let a: Attachment = a.into();
                 log::trace!("main attachment is {:?}", &a);
                 let mut ctx = Context::new()?;
@@ -140,7 +127,6 @@ pub fn encrypt_filter(
                     vec![],
                 )
                 .into())
-                */
             })
         },
     )

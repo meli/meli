@@ -363,11 +363,14 @@ impl EnvelopeView {
             (&self.force_charset).into(),
         );
         let (attachment_paths, attachment_tree) = self.attachment_displays_to_tree(&display);
-        let body_text = Self::attachment_displays_to_text(&display, true);
         self.display = display;
-        self.body_text = body_text;
         self.attachment_tree = attachment_tree;
         self.attachment_paths = attachment_paths;
+        self.regenerate_body_text();
+    }
+
+    pub fn regenerate_body_text(&mut self) {
+        self.body_text = Self::attachment_displays_to_text(&self.display, true);
     }
 
     pub fn attachment_displays_to_text(
@@ -1768,11 +1771,12 @@ impl Component for EnvelopeView {
                 }
                 if caught {
                     self.links.clear();
-                    self.parse_attachments();
+                    self.regenerate_body_text();
+                    self.initialised = false;
+                    self.set_dirty(true);
                 }
 
                 self.active_jobs.remove(job_id);
-                self.set_dirty(true);
             }
             _ => {}
         }
