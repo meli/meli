@@ -22,7 +22,7 @@
 //! Async job executor thread pool
 
 use std::{
-    collections::HashMap,
+    borrow::Cow,
     future::Future,
     iter,
     panic::catch_unwind,
@@ -37,7 +37,8 @@ use crossbeam::{
     sync::{Parker, Unparker},
 };
 pub use futures::channel::oneshot;
-use melib::{log, smol, uuid::Uuid};
+use indexmap::IndexMap;
+use melib::{log, smol, utils::datetime, uuid::Uuid, UnixTimestamp};
 
 use crate::types::{ThreadEvent, UIEvent};
 
@@ -101,7 +102,19 @@ uuid_hash_type!(TimerId);
 pub struct MeliTask {
     task: AsyncTask,
     id: JobId,
+    desc: Cow<'static, str>,
     timer: bool,
+}
+
+#[derive(Debug, Clone)]
+/// A spawned future's metadata for book-keeping.
+pub struct JobMetadata {
+    pub id: JobId,
+    pub desc: Cow<'static, str>,
+    pub timer: bool,
+    pub started: UnixTimestamp,
+    pub finished: Option<UnixTimestamp>,
+    pub succeeded: bool,
 }
 
 #[derive(Debug)]
@@ -110,7 +123,8 @@ pub struct JobExecutor {
     workers: Vec<Stealer<MeliTask>>,
     sender: Sender<ThreadEvent>,
     parkers: Vec<Unparker>,
-    timers: Arc<Mutex<HashMap<TimerId, TimerPrivate>>>,
+    timers: Arc<Mutex<IndexMap<TimerId, TimerPrivate>>>,
+    pub jobs: Arc<Mutex<IndexMap<JobId, JobMetadata>>>,
 }
 
 #[derive(Debug, Default)]
@@ -163,7 +177,8 @@ impl JobExecutor {
             workers: vec![],
             parkers: vec![],
             sender,
-            timers: Arc::new(Mutex::new(HashMap::default())),
+            timers: Arc::new(Mutex::new(IndexMap::default())),
+            jobs: Arc::new(Mutex::new(IndexMap::default())),
         };
         let mut workers = vec![];
         for _ in 0..num_cpus::get().max(1) {
@@ -194,13 +209,18 @@ impl JobExecutor {
                     parker.park_timeout(Duration::from_millis(100));
                     let task = find_task(&local, &global, stealers.as_slice());
                     if let Some(meli_task) = task {
-                        let MeliTask { task, id, timer } = meli_task;
+                        let MeliTask {
+                            task,
+                            id,
+                            timer,
+                            desc,
+                        } = meli_task;
                         if !timer {
-                            log::trace!("Worker {} got task {:?}", i, id);
+                            log::trace!("Worker {} got task {:?} {:?}", i, desc, id);
                         }
                         let _ = catch_unwind(|| task.run());
                         if !timer {
-                            log::trace!("Worker {} returned after {:?}", i, id);
+                            log::trace!("Worker {} returned after {:?} {:?}", i, desc, id);
                         }
                     }
                 })
@@ -210,7 +230,7 @@ impl JobExecutor {
     }
 
     /// Spawns a future with a generic return value `R`
-    pub fn spawn_specialized<F, R>(&self, future: F) -> JoinHandle<R>
+    pub fn spawn_specialized<F, R>(&self, desc: Cow<'static, str>, future: F) -> JoinHandle<R>
     where
         F: Future<Output = R> + Send + 'static,
         R: Send + 'static,
@@ -221,6 +241,19 @@ impl JobExecutor {
         let injector = self.global_queue.clone();
         let cancel = Arc::new(Mutex::new(false));
         let cancel2 = cancel.clone();
+
+        self.jobs.lock().unwrap().insert(
+            job_id,
+            JobMetadata {
+                id: job_id,
+                desc: desc.clone(),
+                started: datetime::now(),
+                finished: None,
+                succeeded: true,
+                timer: false,
+            },
+        );
+
         // Create a task and schedule it for execution.
         let (handle, task) = async_task::spawn(
             async move {
@@ -234,9 +267,11 @@ impl JobExecutor {
                 if *cancel.lock().unwrap() {
                     return;
                 }
+                let desc = desc.clone();
                 injector.push(MeliTask {
                     task,
                     id: job_id,
+                    desc,
                     timer: false,
                 })
             },
@@ -256,12 +291,15 @@ impl JobExecutor {
 
     /// Spawns a future with a generic return value `R` that might block on a
     /// new thread
-    pub fn spawn_blocking<F, R>(&self, future: F) -> JoinHandle<R>
+    pub fn spawn_blocking<F, R>(&self, desc: Cow<'static, str>, future: F) -> JoinHandle<R>
     where
         F: Future<Output = R> + Send + 'static,
         R: Send + 'static,
     {
-        self.spawn_specialized(smol::unblock(move || futures::executor::block_on(future)))
+        self.spawn_specialized(
+            desc,
+            smol::unblock(move || futures::executor::block_on(future)),
+        )
     }
 
     pub fn create_timer(self: Arc<JobExecutor>, interval: Duration, value: Duration) -> Timer {
@@ -327,6 +365,7 @@ impl JobExecutor {
                 injector.push(MeliTask {
                     task,
                     id: job_id,
+                    desc: "timer".into(),
                     timer: true,
                 })
             },
@@ -355,6 +394,18 @@ impl JobExecutor {
         if let Some(timer) = timers_lck.get_mut(&id) {
             timer.interval = new_val;
         }
+    }
+
+    pub fn set_job_finished(&self, id: JobId) {
+        self.jobs.lock().unwrap().entry(id).and_modify(|entry| {
+            entry.finished = Some(datetime::now());
+        });
+    }
+
+    pub fn set_job_success(&self, id: JobId, value: bool) {
+        self.jobs.lock().unwrap().entry(id).and_modify(|entry| {
+            entry.succeeded = value;
+        });
     }
 }
 

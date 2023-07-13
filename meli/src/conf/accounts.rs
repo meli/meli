@@ -515,11 +515,11 @@ impl Account {
                 let handle = if backend.capabilities().is_async {
                     main_loop_handler
                         .job_executor
-                        .spawn_specialized(online_job.then(|_| mailboxes_job))
+                        .spawn_specialized("mailboxes".into(), online_job.then(|_| mailboxes_job))
                 } else {
                     main_loop_handler
                         .job_executor
-                        .spawn_blocking(online_job.then(|_| mailboxes_job))
+                        .spawn_blocking("mailboxes".into(), online_job.then(|_| mailboxes_job))
                 };
                 let job_id = handle.job_id;
                 active_jobs.insert(job_id, JobRequest::Mailboxes { handle });
@@ -716,11 +716,11 @@ impl Account {
                         let handle = if self.backend_capabilities.is_async {
                             self.main_loop_handler
                                 .job_executor
-                                .spawn_specialized(mailbox_job)
+                                .spawn_specialized("fetch-mailbox".into(), mailbox_job)
                         } else {
                             self.main_loop_handler
                                 .job_executor
-                                .spawn_blocking(mailbox_job)
+                                .spawn_blocking("fetch-mailbox".into(), mailbox_job)
                         };
                         let job_id = handle.job_id;
                         self.main_loop_handler
@@ -790,8 +790,10 @@ impl Account {
                                 );
                             }
                             Ok(job) => {
-                                let handle =
-                                    self.main_loop_handler.job_executor.spawn_blocking(job);
+                                let handle = self
+                                    .main_loop_handler
+                                    .job_executor
+                                    .spawn_blocking("sqlite3::update".into(), job);
                                 self.insert_job(
                                     handle.job_id,
                                     JobRequest::Generic {
@@ -837,8 +839,10 @@ impl Account {
                             )
                         }) {
                             Ok(job) => {
-                                let handle =
-                                    self.main_loop_handler.job_executor.spawn_blocking(job);
+                                let handle = self
+                                    .main_loop_handler
+                                    .job_executor
+                                    .spawn_blocking("sqlite3::remove".into(), job);
                                 self.insert_job(
                                     handle.job_id,
                                     JobRequest::Generic {
@@ -890,8 +894,10 @@ impl Account {
                                 );
                             }
                             Ok(job) => {
-                                let handle =
-                                    self.main_loop_handler.job_executor.spawn_blocking(job);
+                                let handle = self
+                                    .main_loop_handler
+                                    .job_executor
+                                    .spawn_blocking("sqlite3::rename".into(), job);
                                 self.insert_job(
                                     handle.job_id,
                                     JobRequest::Generic {
@@ -932,6 +938,7 @@ impl Account {
                     #[cfg(feature = "sqlite3")]
                     if self.settings.conf.search_backend == crate::conf::SearchBackend::Sqlite3 {
                         let handle = self.main_loop_handler.job_executor.spawn_blocking(
+                            "sqlite3::insert".into(),
                             crate::sqlite3::insert(
                                 (*envelope).clone(),
                                 self.backend.clone(),
@@ -1096,11 +1103,11 @@ impl Account {
             let handle = if self.backend_capabilities.is_async {
                 self.main_loop_handler
                     .job_executor
-                    .spawn_specialized(refresh_job)
+                    .spawn_specialized("refresh".into(), refresh_job)
             } else {
                 self.main_loop_handler
                     .job_executor
-                    .spawn_blocking(refresh_job)
+                    .spawn_blocking("refresh".into(), refresh_job)
             };
             self.insert_job(
                 handle.job_id,
@@ -1122,9 +1129,13 @@ impl Account {
             match self.backend.read().unwrap().watch() {
                 Ok(fut) => {
                     let handle = if self.backend_capabilities.is_async {
-                        self.main_loop_handler.job_executor.spawn_specialized(fut)
+                        self.main_loop_handler
+                            .job_executor
+                            .spawn_specialized("watch".into(), fut)
                     } else {
-                        self.main_loop_handler.job_executor.spawn_blocking(fut)
+                        self.main_loop_handler
+                            .job_executor
+                            .spawn_blocking("watch".into(), fut)
                     };
                     self.active_jobs
                         .insert(handle.job_id, JobRequest::Watch { handle });
@@ -1202,11 +1213,11 @@ impl Account {
                             let handle = if self.backend_capabilities.is_async {
                                 self.main_loop_handler
                                     .job_executor
-                                    .spawn_specialized(mailbox_job)
+                                    .spawn_specialized("mailbox_fetch".into(), mailbox_job)
                             } else {
                                 self.main_loop_handler
                                     .job_executor
-                                    .spawn_blocking(mailbox_job)
+                                    .spawn_blocking("mailbox_fetch".into(), mailbox_job)
                             };
                             self.insert_job(
                                 handle.job_id,
@@ -1294,9 +1305,13 @@ impl Account {
             .save(bytes.to_vec(), mailbox_hash, flags)?;
 
         let handle = if self.backend_capabilities.is_async {
-            self.main_loop_handler.job_executor.spawn_specialized(job)
+            self.main_loop_handler
+                .job_executor
+                .spawn_specialized("save".into(), job)
         } else {
-            self.main_loop_handler.job_executor.spawn_blocking(job)
+            self.main_loop_handler
+                .job_executor
+                .spawn_blocking("save".into(), job)
         };
         self.insert_job(
             handle.job_id,
@@ -1362,14 +1377,14 @@ impl Account {
             }
             #[cfg(feature = "smtp")]
             SendMail::Smtp(conf) => {
-                let handle = self
-                    .main_loop_handler
-                    .job_executor
-                    .spawn_specialized(async move {
+                let handle = self.main_loop_handler.job_executor.spawn_specialized(
+                    "smtp".into(),
+                    async move {
                         let mut smtp_connection =
                             melib::smtp::SmtpConnection::new_connection(conf).await?;
                         smtp_connection.mail_transaction(&message, None).await
-                    });
+                    },
+                );
                 if complete_in_background {
                     self.insert_job(handle.job_id, JobRequest::SendMessageBackground { handle });
                     return Ok(None);
@@ -1387,9 +1402,13 @@ impl Account {
                             .submit(message.into_bytes(), None, None)?;
 
                     let handle = if self.backend_capabilities.is_async {
-                        self.main_loop_handler.job_executor.spawn_specialized(job)
+                        self.main_loop_handler
+                            .job_executor
+                            .spawn_specialized("server_submission".into(), job)
                     } else {
-                        self.main_loop_handler.job_executor.spawn_blocking(job)
+                        self.main_loop_handler
+                            .job_executor
+                            .spawn_blocking("server_submission".into(), job)
                     };
                     self.insert_job(handle.job_id, JobRequest::SendMessageBackground { handle });
                     return Ok(None);
@@ -1508,9 +1527,13 @@ impl Account {
                     .unwrap()
                     .create_mailbox(path.to_string())?;
                 let handle = if self.backend_capabilities.is_async {
-                    self.main_loop_handler.job_executor.spawn_specialized(job)
+                    self.main_loop_handler
+                        .job_executor
+                        .spawn_specialized("create_mailbox".into(), job)
                 } else {
-                    self.main_loop_handler.job_executor.spawn_blocking(job)
+                    self.main_loop_handler
+                        .job_executor
+                        .spawn_blocking("create_mailbox".into(), job)
                 };
                 self.insert_job(handle.job_id, JobRequest::CreateMailbox { path, handle });
                 Ok(())
@@ -1523,9 +1546,13 @@ impl Account {
                 let mailbox_hash = self.mailbox_by_path(&path)?;
                 let job = self.backend.write().unwrap().delete_mailbox(mailbox_hash)?;
                 let handle = if self.backend_capabilities.is_async {
-                    self.main_loop_handler.job_executor.spawn_specialized(job)
+                    self.main_loop_handler
+                        .job_executor
+                        .spawn_specialized("delete_mailbox".into(), job)
                 } else {
-                    self.main_loop_handler.job_executor.spawn_blocking(job)
+                    self.main_loop_handler
+                        .job_executor
+                        .spawn_blocking("delete_mailbox".into(), job)
                 };
                 self.insert_job(
                     handle.job_id,
@@ -1544,9 +1571,13 @@ impl Account {
                     .unwrap()
                     .set_mailbox_subscription(mailbox_hash, true)?;
                 let handle = if self.backend_capabilities.is_async {
-                    self.main_loop_handler.job_executor.spawn_specialized(job)
+                    self.main_loop_handler
+                        .job_executor
+                        .spawn_specialized("subscribe_mailbox".into(), job)
                 } else {
-                    self.main_loop_handler.job_executor.spawn_blocking(job)
+                    self.main_loop_handler
+                        .job_executor
+                        .spawn_blocking("subscribe_mailbox".into(), job)
                 };
                 self.insert_job(
                     handle.job_id,
@@ -1566,9 +1597,13 @@ impl Account {
                     .unwrap()
                     .set_mailbox_subscription(mailbox_hash, false)?;
                 let handle = if self.backend_capabilities.is_async {
-                    self.main_loop_handler.job_executor.spawn_specialized(job)
+                    self.main_loop_handler
+                        .job_executor
+                        .spawn_specialized("unsubscribe_mailbox".into(), job)
                 } else {
-                    self.main_loop_handler.job_executor.spawn_blocking(job)
+                    self.main_loop_handler
+                        .job_executor
+                        .spawn_blocking("unsubscribe_mailbox".into(), job)
                 };
                 self.insert_job(
                     handle.job_id,
@@ -1641,30 +1676,28 @@ impl Account {
                 use melib::utils::futures::sleep;
 
                 let handle = match (wait, self.backend_capabilities.is_async) {
-                    (Some(wait), true) => {
-                        self.main_loop_handler
-                            .job_executor
-                            .spawn_specialized(async move {
-                                sleep(wait).await;
-                                online_fut.await
-                            })
-                    }
+                    (Some(wait), true) => self.main_loop_handler.job_executor.spawn_specialized(
+                        "is_online".into(),
+                        async move {
+                            sleep(wait).await;
+                            online_fut.await
+                        },
+                    ),
                     (None, true) => self
                         .main_loop_handler
                         .job_executor
-                        .spawn_specialized(online_fut),
-                    (Some(wait), false) => {
-                        self.main_loop_handler
-                            .job_executor
-                            .spawn_blocking(async move {
-                                sleep(wait).await;
-                                online_fut.await
-                            })
-                    }
+                        .spawn_specialized("is_online".into(), online_fut),
+                    (Some(wait), false) => self.main_loop_handler.job_executor.spawn_blocking(
+                        "is_online".into(),
+                        async move {
+                            sleep(wait).await;
+                            online_fut.await
+                        },
+                    ),
                     (None, false) => self
                         .main_loop_handler
                         .job_executor
-                        .spawn_blocking(online_fut),
+                        .spawn_blocking("is_online".into(), online_fut),
                 };
                 self.insert_job(handle.job_id, JobRequest::IsOnline { handle });
             }
@@ -1724,6 +1757,7 @@ impl Account {
             )));
 
         if let Some(mut job) = self.active_jobs.remove(job_id) {
+            let job_id = *job_id;
             match job {
                 JobRequest::Mailboxes { ref mut handle } => {
                     if let Ok(Some(mailboxes)) = handle.chan.try_recv() {
@@ -1740,6 +1774,9 @@ impl Account {
                                 self.main_loop_handler.send(ThreadEvent::UIEvent(
                                     UIEvent::AccountStatusChange(self.hash, None),
                                 ));
+                                self.main_loop_handler
+                                    .job_executor
+                                    .set_job_success(job_id, false);
                                 return true;
                             }
                             let mailboxes_job = self.backend.read().unwrap().mailboxes();
@@ -1747,11 +1784,11 @@ impl Account {
                                 let handle = if self.backend_capabilities.is_async {
                                     self.main_loop_handler
                                         .job_executor
-                                        .spawn_specialized(mailboxes_job)
+                                        .spawn_specialized("mailboxes_list".into(), mailboxes_job)
                                 } else {
                                     self.main_loop_handler
                                         .job_executor
-                                        .spawn_blocking(mailboxes_job)
+                                        .spawn_blocking("mailboxes_list".into(), mailboxes_job)
                                 };
                                 self.insert_job(handle.job_id, JobRequest::Mailboxes { handle });
                             };
@@ -1773,6 +1810,9 @@ impl Account {
                     log::trace!("got payload in status for {}", mailbox_hash);
                     match handle.chan.try_recv() {
                         Err(_) => {
+                            self.main_loop_handler
+                                .job_executor
+                                .set_job_success(job_id, false);
                             /* canceled */
                             return true;
                         }
@@ -1792,6 +1832,9 @@ impl Account {
                             return true;
                         }
                         Ok(Some((Some(Err(err)), _))) => {
+                            self.main_loop_handler
+                                .job_executor
+                                .set_job_success(job_id, false);
                             self.main_loop_handler.send(ThreadEvent::UIEvent(
                                 UIEvent::Notification(
                                     Some(format!("{}: could not fetch mailbox", &self.name)),
@@ -1813,11 +1856,11 @@ impl Account {
                             let handle = if self.backend_capabilities.is_async {
                                 self.main_loop_handler
                                     .job_executor
-                                    .spawn_specialized(rest.into_future())
+                                    .spawn_specialized("rest_fetch".into(), rest.into_future())
                             } else {
                                 self.main_loop_handler
                                     .job_executor
-                                    .spawn_blocking(rest.into_future())
+                                    .spawn_blocking("rest_fetch".into(), rest.into_future())
                             };
                             self.insert_job(
                                 handle.job_id,
@@ -1870,11 +1913,11 @@ impl Account {
                         let handle = if self.backend_capabilities.is_async {
                             self.main_loop_handler
                                 .job_executor
-                                .spawn_specialized(online_job)
+                                .spawn_specialized("is_online".into(), online_job)
                         } else {
                             self.main_loop_handler
                                 .job_executor
-                                .spawn_blocking(online_job)
+                                .spawn_blocking("is_online".into(), online_job)
                         };
                         self.insert_job(handle.job_id, JobRequest::IsOnline { handle });
                     };
@@ -1894,6 +1937,9 @@ impl Account {
                             ));
                         }
                         Ok(Some(Err(err))) => {
+                            self.main_loop_handler
+                                .job_executor
+                                .set_job_success(job_id, false);
                             self.is_online.set_err(err);
                             _ = self.is_online();
                             self.main_loop_handler.send(ThreadEvent::UIEvent(
@@ -1904,6 +1950,9 @@ impl Account {
                 }
                 JobRequest::SetFlags { ref mut handle, .. } => {
                     if let Ok(Some(Err(err))) = handle.chan.try_recv() {
+                        self.main_loop_handler
+                            .job_executor
+                            .set_job_success(job_id, false);
                         self.main_loop_handler
                             .send(ThreadEvent::UIEvent(UIEvent::Notification(
                                 Some(format!("{}: could not set flag", &self.name)),
@@ -1918,6 +1967,9 @@ impl Account {
                     ..
                 } => {
                     if let Ok(Some(Err(err))) = handle.chan.try_recv() {
+                        self.main_loop_handler
+                            .job_executor
+                            .set_job_success(job_id, false);
                         log::error!("Could not save message: {err}");
                         let file =
                             crate::types::create_temp_file(bytes, None, None, Some("eml"), false);
@@ -1941,6 +1993,9 @@ impl Account {
                 JobRequest::SendMessageBackground { ref mut handle, .. } => {
                     if let Ok(Some(Err(err))) = handle.chan.try_recv() {
                         self.main_loop_handler
+                            .job_executor
+                            .set_job_success(job_id, false);
+                        self.main_loop_handler
                             .send(ThreadEvent::UIEvent(UIEvent::Notification(
                                 Some("Could not send message".to_string()),
                                 err.to_string(),
@@ -1950,6 +2005,9 @@ impl Account {
                 }
                 JobRequest::DeleteMessages { ref mut handle, .. } => {
                     if let Ok(Some(Err(err))) = handle.chan.try_recv() {
+                        self.main_loop_handler
+                            .job_executor
+                            .set_job_success(job_id, false);
                         self.main_loop_handler
                             .send(ThreadEvent::UIEvent(UIEvent::Notification(
                                 Some(format!("{}: could not delete message", &self.name)),
@@ -1966,6 +2024,9 @@ impl Account {
                     if let Ok(Some(r)) = handle.chan.try_recv() {
                         match r {
                             Err(err) => {
+                                self.main_loop_handler
+                                    .job_executor
+                                    .set_job_success(job_id, false);
                                 self.main_loop_handler.send(ThreadEvent::UIEvent(
                                     UIEvent::Notification(
                                         Some(format!(
@@ -2051,6 +2112,9 @@ impl Account {
                         Err(_) => { /* canceled */ }
                         Ok(None) => {}
                         Ok(Some(Err(err))) => {
+                            self.main_loop_handler
+                                .job_executor
+                                .set_job_success(job_id, false);
                             self.main_loop_handler.send(ThreadEvent::UIEvent(
                                 UIEvent::Notification(
                                     Some(format!("{}: could not delete mailbox", &self.name)),
@@ -2120,6 +2184,9 @@ impl Account {
                         Err(_) => { /* canceled */ }
                         Ok(None) => {}
                         Ok(Some(Err(err))) => {
+                            self.main_loop_handler
+                                .job_executor
+                                .set_job_success(job_id, false);
                             self.main_loop_handler.send(ThreadEvent::UIEvent(
                                 UIEvent::Notification(
                                     Some(format!(
@@ -2154,6 +2221,9 @@ impl Account {
                         Err(_) => { /* canceled */ }
                         Ok(None) => {}
                         Ok(Some(Err(err))) => {
+                            self.main_loop_handler
+                                .job_executor
+                                .set_job_success(job_id, false);
                             self.main_loop_handler.send(ThreadEvent::UIEvent(
                                 UIEvent::Notification(
                                     Some(format!(
@@ -2196,6 +2266,9 @@ impl Account {
                         if err.kind.is_timeout() {
                             self.watch();
                         } else {
+                            self.main_loop_handler
+                                .job_executor
+                                .set_job_success(job_id, false);
                             // [ref:TODO]: relaunch watch job with ratelimit for failure
                             self.main_loop_handler.send(ThreadEvent::UIEvent(
                                 UIEvent::Notification(
@@ -2215,6 +2288,9 @@ impl Account {
                 } => {
                     match handle.chan.try_recv() {
                         Ok(Some(Err(err))) => {
+                            self.main_loop_handler
+                                .job_executor
+                                .set_job_success(job_id, false);
                             self.main_loop_handler.send(ThreadEvent::UIEvent(
                                 UIEvent::Notification(
                                     Some(format!("{}: {} failed", &self.name, name,)),

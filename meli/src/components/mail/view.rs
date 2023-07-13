@@ -121,7 +121,7 @@ impl MailView {
                         let mut handle = account
                             .main_loop_handler
                             .job_executor
-                            .spawn_specialized(fut);
+                            .spawn_specialized("fetch_envelopes".into(), fut);
                         let job_id = handle.job_id;
                         pending_action = if let MailViewState::Init {
                             ref mut pending_action,
@@ -302,7 +302,7 @@ impl Component for MailView {
                             let handle = account
                                 .main_loop_handler
                                 .job_executor
-                                .spawn_specialized(fut);
+                                .spawn_specialized("set_flags".into(), fut);
                             account.insert_job(
                                 handle.job_id,
                                 JobRequest::SetFlags {
@@ -532,12 +532,12 @@ impl Component for MailView {
                     context
                         .main_loop_handler
                         .job_executor
-                        .spawn_specialized(bytes_job)
+                        .spawn_specialized("fetch_envelope".into(), bytes_job)
                 } else {
                     context
                         .main_loop_handler
                         .job_executor
-                        .spawn_blocking(bytes_job)
+                        .spawn_blocking("fetch_envelope".into(), bytes_job)
                 };
                 context.accounts[&account_hash].insert_job(
                     handle.job_id,

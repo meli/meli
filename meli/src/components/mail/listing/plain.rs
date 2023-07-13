@@ -1581,7 +1581,7 @@ impl Component for PlainListing {
                         let handle = context.accounts[&self.cursor_pos.0]
                             .main_loop_handler
                             .job_executor
-                            .spawn_specialized(job);
+                            .spawn_specialized("search".into(), job);
                         self.search_job = Some((filter_term.to_string(), handle));
                     }
                     Err(err) => {

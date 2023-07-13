@@ -255,8 +255,9 @@ impl EnvelopeView {
                     {
                         if view_settings.auto_verify_signatures {
                             let verify_fut = crate::components::mail::pgp::verify(a.clone());
-                            let handle =
-                                main_loop_handler.job_executor.spawn_specialized(verify_fut);
+                            let handle = main_loop_handler
+                                .job_executor
+                                .spawn_specialized("gpg::verify_sig".into(), verify_fut);
                             active_jobs.insert(handle.job_id);
                             main_loop_handler.send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
                                 StatusEvent::NewJob(handle.job_id),
@@ -317,7 +318,7 @@ impl EnvelopeView {
                                         crate::components::mail::pgp::decrypt(a.raw().to_vec());
                                     let handle = main_loop_handler
                                         .job_executor
-                                        .spawn_specialized(decrypt_fut);
+                                        .spawn_specialized("gpg::decrypt".into(), decrypt_fut);
                                     active_jobs.insert(handle.job_id);
                                     main_loop_handler.send(ThreadEvent::UIEvent(
                                         UIEvent::StatusEvent(StatusEvent::NewJob(handle.job_id)),

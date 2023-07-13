@@ -1233,7 +1233,10 @@ impl Component for Composer {
                         Flag::SEEN,
                     ) {
                         Ok(job) => {
-                            let handle = context.main_loop_handler.job_executor.spawn_blocking(job);
+                            let handle = context
+                                .main_loop_handler
+                                .job_executor
+                                .spawn_blocking("compose::submit".into(), job);
                             context
                                 .replies
                                 .push_back(UIEvent::StatusEvent(StatusEvent::NewJob(

@@ -66,7 +66,7 @@ impl KeySelection {
         let handle = context
             .main_loop_handler
             .job_executor
-            .spawn_specialized(job);
+            .spawn_specialized("gpg::keylist".into(), job);
         let mut progress_spinner = ProgressSpinner::new(8, context);
         progress_spinner.start();
         Ok(KeySelection::LoadingKeys {

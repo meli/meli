@@ -1984,7 +1984,7 @@ impl Component for CompactListing {
                         let handle = context.accounts[&self.cursor_pos.0]
                             .main_loop_handler
                             .job_executor
-                            .spawn_specialized(job);
+                            .spawn_specialized("search".into(), job);
                         self.search_job = Some((filter_term.to_string(), handle));
                     }
                     Err(err) => {
@@ -2007,7 +2007,7 @@ impl Component for CompactListing {
                         let mut handle = context.accounts[&self.cursor_pos.0]
                             .main_loop_handler
                             .job_executor
-                            .spawn_specialized(job);
+                            .spawn_specialized("select_by_search".into(), job);
                         if let Ok(Some(search_result)) = try_recv_timeout!(&mut handle.chan) {
                             self.select(search_term, search_result, context);
                         } else {

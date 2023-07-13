@@ -294,6 +294,7 @@ fn run_app(opt: Opt) -> Result<()> {
                         },
                         ThreadEvent::JobFinished(id) => {
                             log::trace!("Job finished {}", id);
+                            state.context.main_loop_handler.job_executor.set_job_finished(id);
                             for account in state.context.accounts.values_mut() {
                                 if account.process_event(&id) {
                                     break;

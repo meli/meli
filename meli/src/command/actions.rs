@@ -62,6 +62,7 @@ pub enum TabAction {
     Kill(ComponentId),
     New(Option<Box<dyn Component>>),
     ManageMailboxes,
+    ManageJobs,
 }
 
 #[derive(Debug)]

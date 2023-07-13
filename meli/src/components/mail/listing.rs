@@ -479,7 +479,7 @@ pub trait MailListingTrait: ListingTrait {
                         let handle = account
                             .main_loop_handler
                             .job_executor
-                            .spawn_specialized(fut);
+                            .spawn_specialized("set_seen".into(), fut);
                         account
                             .insert_job(handle.job_id, JobRequest::SetFlags { env_hashes, handle });
                     }
@@ -501,7 +501,7 @@ pub trait MailListingTrait: ListingTrait {
                         let handle = account
                             .main_loop_handler
                             .job_executor
-                            .spawn_specialized(fut);
+                            .spawn_specialized("set_unseen".into(), fut);
                         account
                             .insert_job(handle.job_id, JobRequest::SetFlags { env_hashes, handle });
                     }
@@ -523,7 +523,7 @@ pub trait MailListingTrait: ListingTrait {
                         let handle = account
                             .main_loop_handler
                             .job_executor
-                            .spawn_specialized(fut);
+                            .spawn_specialized("remove_tag".into(), fut);
                         account
                             .insert_job(handle.job_id, JobRequest::SetFlags { env_hashes, handle });
                     }
@@ -545,7 +545,7 @@ pub trait MailListingTrait: ListingTrait {
                         let handle = account
                             .main_loop_handler
                             .job_executor
-                            .spawn_specialized(fut);
+                            .spawn_specialized("add_tag".into(), fut);
                         account
                             .insert_job(handle.job_id, JobRequest::SetFlags { env_hashes, handle });
                     }
@@ -567,7 +567,7 @@ pub trait MailListingTrait: ListingTrait {
                         let handle = account
                             .main_loop_handler
                             .job_executor
-                            .spawn_specialized(fut);
+                            .spawn_specialized("delete".into(), fut);
                         account.insert_job(
                             handle.job_id,
                             JobRequest::DeleteMessages { env_hashes, handle },
@@ -595,7 +595,7 @@ pub trait MailListingTrait: ListingTrait {
                         let handle = account
                             .main_loop_handler
                             .job_executor
-                            .spawn_specialized(fut);
+                            .spawn_specialized("copy_to_mailbox".into(), fut);
                         account.insert_job(
                             handle.job_id,
                             JobRequest::Generic {
@@ -635,7 +635,7 @@ pub trait MailListingTrait: ListingTrait {
                         let handle = account
                             .main_loop_handler
                             .job_executor
-                            .spawn_specialized(fut);
+                            .spawn_specialized("move_to_mailbox".into(), fut);
                         account.insert_job(
                             handle.job_id,
                             JobRequest::Generic {
@@ -714,7 +714,10 @@ pub trait MailListingTrait: ListingTrait {
                         let _ = sender.send(r);
                         Ok(())
                     });
-                let handle = account.main_loop_handler.job_executor.spawn_blocking(fut);
+                let handle = account
+                    .main_loop_handler
+                    .job_executor
+                    .spawn_blocking("export_to_mbox".into(), fut);
                 let path = path.to_path_buf();
                 account.insert_job(
                     handle.job_id,
@@ -1230,6 +1233,7 @@ impl Component for Listing {
                         ));
                     }
                 }
+                return true;
             }
             #[cfg(feature = "debug-tracing")]
             UIEvent::IntraComm {
@@ -2021,6 +2025,13 @@ impl Component for Listing {
             UIEvent::Action(Action::Tab(ManageMailboxes)) => {
                 let account_pos = self.cursor_pos.0;
                 let mgr = MailboxManager::new(context, account_pos);
+                context
+                    .replies
+                    .push_back(UIEvent::Action(Tab(New(Some(Box::new(mgr))))));
+                return true;
+            }
+            UIEvent::Action(Action::Tab(ManageJobs)) => {
+                let mgr = JobManager::new(context);
                 context
                     .replies
                     .push_back(UIEvent::Action(Tab(New(Some(Box::new(mgr))))));

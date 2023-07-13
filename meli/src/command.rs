@@ -876,6 +876,17 @@ Alternatives(&[to_stream!(One(Literal("add-attachment")), One(Filepath)), to_str
                       }
                   )
                 },
+                { tags: ["manage-jobs"],
+                  desc: "view and manage jobs",
+                  tokens: &[One(Literal("manage-jobs"))],
+                  parser:(
+                      fn manage_jobs(input: &[u8]) -> IResult<&[u8], Action> {
+                          let (input, _) = tag("manage-jobs")(input.trim())?;
+                          let (input, _) = eof(input)?;
+                          Ok((input, Tab(ManageJobs)))
+                      }
+                  )
+                },
                 { tags: ["quit"],
                   desc: "quit meli",
                   tokens: &[One(Literal("quit"))],
@@ -978,6 +989,10 @@ fn view(input: &[u8]) -> IResult<&[u8], Action> {
     ))(input)
 }
 
+fn new_tab(input: &[u8]) -> IResult<&[u8], Action> {
+    alt((manage_mailboxes, manage_jobs, compose_action))(input)
+}
+
 pub fn parse_command(input: &[u8]) -> Result<Action, Error> {
     alt((
         goto,
@@ -989,13 +1004,12 @@ pub fn parse_command(input: &[u8]) -> Result<Action, Error> {
         setenv,
         printenv,
         view,
-        compose_action,
         create_mailbox,
         sub_mailbox,
         unsub_mailbox,
         delete_mailbox,
         rename_mailbox,
-        manage_mailboxes,
+        new_tab,
         account_action,
         print_setting,
         toggle_mouse,
