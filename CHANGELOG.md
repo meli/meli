@@ -57,6 +57,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `a42a6ca8` show notifications in terminal if there is no other alternative.
+- `6086a3789d` Fix libgpgme segfault error and re-enable gpg features.
 
 ## [alpha-0.7.2] - 2021-10-15
 
