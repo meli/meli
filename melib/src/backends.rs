@@ -21,6 +21,7 @@
 
 pub mod utf7;
 use smallvec::SmallVec;
+use uuid::Uuid;
 
 #[cfg(feature = "imap_backend")]
 pub mod imap;
@@ -62,6 +63,7 @@ use super::email::{Envelope, EnvelopeHash, Flag};
 use crate::{
     conf::AccountSettings,
     error::{Error, ErrorKind, Result},
+    search::Query,
     LogLevel,
 };
 
@@ -351,6 +353,8 @@ pub enum MailBackendExtensionStatus {
 }
 
 pub type ResultFuture<T> = Result<Pin<Box<dyn Future<Output = Result<T>> + Send + 'static>>>;
+#[allow(clippy::type_complexity)]
+pub type EnvelopeStream = Pin<Box<dyn Stream<Item = Result<Vec<Envelope>>> + Send + 'static>>;
 
 pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
     fn capabilities(&self) -> MailBackendCapabilities;
@@ -358,11 +362,10 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
         Ok(Box::pin(async { Ok(()) }))
     }
 
-    #[allow(clippy::type_complexity)]
-    fn fetch(
-        &mut self,
-        mailbox_hash: MailboxHash,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<Vec<Envelope>>> + Send + 'static>>>;
+    fn fetch(&mut self, mailbox_hash: MailboxHash) -> Result<EnvelopeStream>;
+    fn cursor(&mut self, _mailbox_hash: MailboxHash) -> Result<MailCursor> {
+        Err(Error::new("Cursor not supported in this backend.").set_kind(ErrorKind::NotSupported))
+    }
 
     fn refresh(&mut self, mailbox_hash: MailboxHash) -> ResultFuture<()>;
     fn watch(&self) -> ResultFuture<()>;
@@ -747,20 +750,6 @@ impl LazyCountSet {
     }
 }
 
-#[test]
-fn test_lazy_count_set() {
-    let mut new = LazyCountSet::default();
-    assert_eq!(new.len(), 0);
-    new.set_not_yet_seen(10);
-    assert_eq!(new.len(), 10);
-    for i in 0..10 {
-        assert!(new.insert_existing(EnvelopeHash(i)));
-    }
-    assert_eq!(new.len(), 10);
-    assert!(!new.insert_existing(EnvelopeHash(10)));
-    assert_eq!(new.len(), 10);
-}
-
 pub struct IsSubscribedFn(Box<dyn Fn(&str) -> bool + Send + Sync>);
 
 impl std::fmt::Debug for IsSubscribedFn {
@@ -773,5 +762,123 @@ impl std::ops::Deref for IsSubscribedFn {
     type Target = Box<dyn Fn(&str) -> bool + Send + Sync>;
     fn deref(&self) -> &Box<dyn Fn(&str) -> bool + Send + Sync> {
         &self.0
+    }
+}
+
+use cursor::MailCursor;
+pub mod cursor {
+    use super::*;
+    use futures::StreamExt;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    pub trait Cursor: std::fmt::Debug + Send + Sync {
+        fn fetch(&self, start: usize, count: usize) -> Result<EnvelopeStream>;
+        fn total(&self) -> ResultFuture<Option<usize>>;
+        fn unseen(&self) -> ResultFuture<Option<usize>>;
+        fn has_updates(&self) -> ResultFuture<bool>;
+        fn reset(&self) -> ResultFuture<()>;
+        fn query(&self) -> Result<Arc<Query>>;
+    }
+
+    pub struct MailCursor {
+        pub(crate) id: Uuid,
+        pub(crate) inner: Arc<dyn Cursor>,
+        pub(crate) length: Arc<AtomicUsize>,
+        pub(crate) page_size: Arc<AtomicUsize>,
+        pub(crate) position: Arc<AtomicUsize>,
+    }
+
+    impl From<Box<dyn Cursor>> for MailCursor {
+        fn from(c: Box<dyn Cursor>) -> Self {
+            Self {
+                id: Uuid::new_v4(),
+                inner: c.into(),
+                length: Arc::new(0.into()),
+                page_size: Arc::new(0.into()),
+                position: Arc::new(0.into()),
+            }
+        }
+    }
+
+    impl MailCursor {
+        pub fn new(cursor: Box<dyn Cursor>) -> Self {
+            Self::from(cursor)
+        }
+
+        pub fn set_page_size(&self, new_value: usize) -> &Self {
+            self.page_size.store(new_value, Ordering::Relaxed);
+            self
+        }
+
+        pub fn set_position(&self, new_value: usize) -> &Self {
+            let length = self.length();
+            self.position.store(
+                std::cmp::min(length.saturating_sub(1), new_value),
+                Ordering::Relaxed,
+            );
+            self
+        }
+
+        pub fn length(&self) -> usize {
+            self.length.load(Ordering::Relaxed)
+        }
+
+        pub fn position(&self) -> usize {
+            self.position.load(Ordering::Relaxed)
+        }
+
+        pub fn page_size(&self) -> usize {
+            self.page_size.load(Ordering::Relaxed)
+        }
+
+        pub fn id(&self) -> Uuid {
+            self.id
+        }
+
+        pub async fn update(self) -> Result<()> {
+            if !self.inner.has_updates()?.await? {
+                return Ok(());
+            }
+            self.inner.reset()?.await?;
+            if let Some(length) = self.inner.total()?.await? {
+                self.length.store(length, Ordering::Relaxed);
+                self.set_position(self.position());
+            } else {
+                self.length.store(0, Ordering::Relaxed);
+                self.position.store(0, Ordering::Relaxed);
+            }
+
+            Ok(())
+        }
+
+        pub async fn fetch(self) -> Result<Option<EnvelopeStream>> {
+            if self.position() >= self.length().saturating_sub(1) {
+                //return Ok(None);
+            }
+
+            let stream = self.inner.fetch(self.position(), self.page_size())?;
+            self.set_position(self.position() + self.page_size());
+
+            Ok(Some(stream))
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_lazy_count_set() {
+        let mut new = LazyCountSet::default();
+        assert_eq!(new.len(), 0);
+        new.set_not_yet_seen(10);
+        assert_eq!(new.len(), 10);
+        for i in 0..10 {
+            assert!(new.insert_existing(EnvelopeHash(i)));
+        }
+        assert_eq!(new.len(), 10);
+        assert!(!new.insert_existing(EnvelopeHash(10)));
+        assert_eq!(new.len(), 10);
     }
 }

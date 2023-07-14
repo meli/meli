@@ -36,6 +36,7 @@ mod search;
 pub use search::*;
 mod cache;
 use cache::{ImapCacheReset, ModSequence};
+mod cursor;
 pub mod error;
 pub mod managesieve;
 mod untagged;
@@ -50,7 +51,10 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use futures::{lock::Mutex as FutureMutex, stream::Stream};
+use futures::{
+    lock::Mutex as FutureMutex,
+    stream::{Stream, StreamExt},
+};
 use imap_codec::{
     command::CommandBody,
     core::Literal,
@@ -368,7 +372,11 @@ impl MailBackend for ImapType {
                 unseen.set_not_yet_seen(total);
             }
         };
+        let cursor = self.cursor(mailbox_hash)?;
         Ok(Box::pin(async_stream::try_stream! {
+            if let Ok(Some(c)) = cursor.fetch().await{
+                dbg!(c.into_future().await.0);
+            }
             #[cfg(debug_assertions)]
             let id = state.connection.lock().await.id.clone();
             {
@@ -392,6 +400,18 @@ impl MailBackend for ImapType {
 
             }
         }))
+    }
+
+    fn cursor(&mut self, mailbox_hash: MailboxHash) -> Result<MailCursor> {
+        let imap_cursor = cursor::ImapCursor {
+            connection: self.connection.clone(),
+            mailbox_hash,
+            uid_store: self.uid_store.clone(),
+        };
+
+        Ok(MailCursor::from(
+            Box::new(imap_cursor) as Box<dyn crate::cursor::Cursor>
+        ))
     }
 
     fn refresh(&mut self, mailbox_hash: MailboxHash) -> ResultFuture<()> {

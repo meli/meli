@@ -466,6 +466,7 @@ impl ImapStream {
             ImapProtocol::ManageSieve => Vec::new(),
         };
         self.read_lines(ret, &id, true).await?;
+        log::trace!("response {}", String::from_utf8_lossy(&ret));
         Ok(())
     }
 
@@ -584,6 +585,7 @@ impl ImapStream {
                     ImapProtocol::ManageSieve => {}
                 }
 
+                log::trace!("sending {}", String::from_utf8_lossy(command));
                 self.stream.write_all(command).await?;
                 self.stream.write_all(b"\r\n").await?;
                 self.stream.flush().await?;
