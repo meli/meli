@@ -878,6 +878,18 @@ enum MenuEntryCursor {
     Mailbox(usize),
 }
 
+impl std::ops::Sub<MenuEntryCursor> for isize {
+    type Output = isize;
+
+    fn sub(self, other: MenuEntryCursor) -> isize {
+        if let MenuEntryCursor::Mailbox(v) = other {
+            v as isize - self
+        } else {
+            self - 1
+        }
+    }
+}
+
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 enum ShowMenuScrollbar {
     Never,
@@ -2394,7 +2406,7 @@ impl Listing {
         struct Line {
             collapsed: bool,
             depth: usize,
-            inc: usize,
+            inc: isize,
             indentation: u32,
             has_sibling: bool,
             mailbox_idx: MailboxHash,
@@ -2438,7 +2450,7 @@ impl Listing {
                         lines.push(Line {
                             collapsed,
                             depth,
-                            inc: i,
+                            inc: i as isize,
                             indentation,
                             has_sibling,
                             mailbox_idx: mailbox_hash,
@@ -2450,7 +2462,7 @@ impl Listing {
                         lines.push(Line {
                             collapsed,
                             depth,
-                            inc: i,
+                            inc: i as isize,
                             indentation,
                             has_sibling,
                             mailbox_idx: mailbox_hash,
@@ -2631,7 +2643,20 @@ impl Listing {
             .unwrap_or(" ");
 
             let (x, _) = write_string_to_grid(
-                &format!("{:>width$}", l.inc, width = total_mailbox_no_digits),
+                &if *account_settings!(
+                    context[self.accounts[aidx].hash]
+                        .listing
+                        .relative_menu_indices
+                ) && must_highlight_account
+                {
+                    format!(
+                        "{:>width$}",
+                        (l.inc - cursor.1).abs(),
+                        width = total_mailbox_no_digits
+                    )
+                } else {
+                    format!("{:>width$}", l.inc, width = total_mailbox_no_digits)
+                },
                 &mut self.menu_content,
                 index_att.fg,
                 index_att.bg,
