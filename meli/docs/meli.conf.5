@@ -256,37 +256,30 @@ Use instead of
 .It Ic server_port Ar number
 .Pq Em optional
 The port to connect to
-.\" default value
-.Pq Em 143
+.Pq Em 143 \" default value
 .It Ic use_starttls Ar boolean
 .Pq Em optional
 If port is 993 and use_starttls is unspecified, it becomes false by default.
-.\" default value
-.Pq Em true
+.Pq Em true \" default value
 .It Ic use_tls Ar boolean
 .Pq Em optional
 Connect with TLS (or upgrade from plain connection to TLS if STARTTLS is set).
-.\" default value
-.Pq Em true
+.Pq Em true \" default value
 .It Ic danger_accept_invalid_certs Ar boolean
 .Pq Em optional
 Do not validate TLS certificates.
-.\" default value
-.Pq Em false
+.Pq Em false \" default value
 .It Ic use_idle Ar boolean
 .Pq Em optional
-Use IDLE extension.
-.\" default value
+Use IDLE extension \" default value
 .Pq Em true
 .It Ic use_condstore Ar boolean
 .Pq Em optional
-Use CONDSTORE extension.
-.\" default value
+Use CONDSTORE extension \" default value
 .Pq Em true
 .It Ic use_deflate Ar boolean
 .Pq Em optional
-Use COMPRESS=DEFLATE extension (if built with DEFLATE support).
-.\" default value
+Use COMPRESS=DEFLATE extension (if built with DEFLATE support) \" default value
 .Pq Em true
 .It Ic use_oauth2 Ar boolean
 .Pq Em optional
@@ -295,14 +288,12 @@ Can only be used with
 .Ic server_password_command
 which should return a base64-encoded OAUTH2 token ready to be passed to IMAP.
 For help on setup with Gmail, see Gmail section below.
-.\" default value
-.Pq Em false
+.Pq Em false \" default value
 .It Ic timeout Ar integer
 .Pq Em optional
 Timeout to use for server connections in seconds.
 A timeout of 0 seconds means there's no timeout.
-.\" default value
-.Pq Em 16
+.Pq Em 16 \" default value
 .El
 .Ss Gmail
 Gmail has non-standard IMAP behaviors that need to be worked around.
@@ -348,8 +339,7 @@ Server password
 .It Ic danger_accept_invalid_certs Ar boolean
 .Pq Em optional
 Do not validate TLS certificates.
-.\" default value
-.Pq Em false
+.Pq Em false \" default value
 .El
 .Ss mbox only
 mbox specific options
@@ -372,8 +362,7 @@ Valid values
 .It
 .Ar mboxcl2
 .El
-.\" default value
-.Pq Em auto
+.Pq Em auto \" default value
 .El
 To set multiple mailboxes, you have to explicitly state the mailboxes you want in the
 .Ic mailboxes
@@ -398,24 +387,20 @@ Server username
 Server password
 .It Ic require_auth Ar bool
 .Pq Em optional
-require authentication in every case
-.\" default value
+require authentication in every case \" default value
 .Pq Em true
 .It Ic use_tls Ar boolean
 .Pq Em optional
 Connect with TLS.
-.\" default value
-.Pq Em false
+.Pq Em false \" default value
 .It Ic server_port Ar number
 .Pq Em optional
 The port to connect to
-.\" default value
-.Pq Em 119
+.Pq Em 119 \" default value
 .It Ic danger_accept_invalid_certs Ar boolean
 .Pq Em optional
 Do not validate TLS certificates.
-.\" default value
-.Pq Em false
+.Pq Em false \" default value
 .El
 .Pp
 You have to explicitly state the groups you want to see in the
@@ -444,23 +429,19 @@ Show a different name for this mailbox in the UI
 .It Ic autoload Ar boolean
 .Pq Em optional
 Load this mailbox on startup
-.\" default value
-.Pq Em true
+.Pq Em true \" default value
 .It Ic collapsed Ar boolean
 .Pq Em optional
 Collapse this mailbox subtree in menu.
-.\" default value
-.Pq Em false
+.Pq Em false \" default value
 .It Ic subscribe Ar boolean
 .Pq Em optional
 Watch this mailbox for updates
-.\" default value
-.Pq Em true
+.Pq Em true \" default value
 .It Ic ignore Ar boolean
 .Pq Em optional
 Silently insert updates for this mailbox, if any
-.\" default value
-.Pq Em false
+.Pq Em false \" default value
 .It Ic usage Ar boolean
 .Pq Em optional
 special usage of this mailbox.
@@ -515,8 +496,7 @@ Example:
 .Pq Em optional
 Override the default utf-8 charset for the mailbox name.
 Useful only for mUTF-7 mailboxes.
-.\" default value
-.Pq Em "utf7", "utf-7", "utf8", "utf-8"
+.Pq Em "utf7", "utf-7", "utf8", "utf-8" \" default value
 .El
 .Sh COMPOSING
 Composing specific options.
@@ -536,23 +516,19 @@ If it's missing, the environment variable $EDITOR is looked up.
 .Pq Em optional
 Embed editor within meli.
 Editor must be xterm compliant.
-.\" default value
-.Pq Em false
+.Pq Em false \" default value
 .It Ic format_flowed Ar boolean
 .Pq Em optional
 Set format=flowed [RFC3676] in text/plain attachments.
-.\" default value
-.Pq Em true
+.Pq Em true \" default value
 .It Ic insert_user_agent Ar boolean
 .Pq Em optional
 Add meli User-Agent header in new drafts
-.\" default value
-.Pq Em true
+.Pq Em true \" default value
 .It Ic default_header_values Ar hash table String[String]
 .Pq Em optional
 Default header values used when creating a new draft.
-.\" default value
-.Pq Em []
+.Pq Em [] \" default value
 .It Ic wrap_header_preamble Ar Option<(String, String)>
 .Pq Em optional
 Wrap header preample when editing a draft in an editor.
@@ -562,14 +538,12 @@ The values should be a two element array of strings, a prefix and suffix.
 This can be useful when for example you're writing Markdown; you can set the value to
 .Em ["<!--",\ "-->"]
 which wraps the headers in an HTML comment.
-.\" default value
-.Pq Em None
+.Pq Em None \" default value
 .It Ic store_sent_mail Ar boolean
 .Pq Em optional
 Store sent mail after successful submission.
 This setting is meant to be disabled for non-standard behaviour in gmail, which auto-saves sent mail on its own.
-.\" default value
-.Pq Em true
+.Pq Em true \" default value
 .It Ic attribution_format_string Ar String
 .Pq Em optional
 The attribution line appears above the quoted reply text.
@@ -588,29 +562,24 @@ The format specifiers for the replied address are:
 The format string is passed to
 .Xr strftime 3
 with the replied envelope's date.
-.\" default value
-.Pq Em "On %a, %0e %b %Y %H:%M, %+f wrote:%n"
+.Pq Em "On %a, %0e %b %Y %H:%M, %+f wrote:%n" \" default value
 .It Ic attribution_use_posix_locale Ar boolean
 .Pq Em optional
 Whether the strftime call for the attribution string uses the POSIX locale instead of the user's active locale.
-.\" default value
-.Pq Em true
+.Pq Em true \" default value
 .It Ic forward_as_attachment Ar boolean or "ask"
 .Pq Em optional
 Forward emails as attachment? (Alternative is inline).
-.\" default value
-.Pq Em ask
+.Pq Em ask \" default value
 .It Ic reply_prefix_list_to_strip Ar [String]
 .Pq Em optional
 Alternative lists of reply prefixes (etc. ["Re:", "RE:", ...]) to strip.
-.\" default value
-.Dl Em [Re:, RE:, Fwd:, Fw:, 回复:, 回覆:, SV:, Sv:, VS:, Antw:, Doorst:, VS:, VL:, REF:, TR:, TR:, AW:, WG:, ΑΠ:, Απ:, απ:, ΠΡΘ:, Πρθ:, πρθ:, ΣΧΕΤ:, Σχετ:, σχετ:, ΠΡΘ:, Πρθ:, πρθ:, Vá:, Továbbítás:, R:, I:, RIF:, FS:, BLS:, TRS:, VS:, VB:, RV:, RES:, Res, ENC:, Odp:, PD:, YNT:, İLT:, ATB:, YML:]
+.Dl Em [Re:, RE:, Fwd:, Fw:, 回复:, 回覆:, SV:, Sv:, VS:, Antw:, Doorst:, VS:, VL:, REF:, TR:, TR:, AW:, WG:, ΑΠ:, Απ:, απ:, ΠΡΘ:, Πρθ:, πρθ:, ΣΧΕΤ:, Σχετ:, σχετ:, ΠΡΘ:, Πρθ:, πρθ:, Vá:, Továbbítás:, R:, I:, RIF:, FS:, BLS:, TRS:, VS:, VB:, RV:, RES:, Res, ENC:, Odp:, PD:, YNT:, İLT:, ATB:, YML:] \" default value
 .It Ic reply_prefix Ar String
 .Pq Em optional
 The prefix to use in reply subjects.
 The de facto prefix is "Re:".
-.\" default value
-.Pq Em `Re:`
+.Pq Em `Re:` \" default value
 .Pp
 RFC 2822, "Internet Message Format" has this to say on the matter:
 .Bd -literal -offset indent -compact
@@ -721,22 +690,18 @@ exit_entry = 'i'
 .Bl -tag -width 36n
 .It Ic toggle_help
 Toggle help and shortcuts view.
-.\" default value
-.Pq Em \&?
+.Pq Em \&? \" default value
 .It Ic quit
 Quit meli.
-.\" default value
-.Pq Ql Em q
+.Pq Ql Em q \" default value
 .It Ic enter_command_mode
 Enter
 .Em COMMAND
 mode.
-.\" default value
-.Pq Ql Em \&:
+.Pq Ql Em \&: \" default value
 .It Ic next_tab
 Go to next tab.
-.\" default value
-.Pq Em T
+.Pq Em T \" default value
 .It Ic go_to_tab
 Go to the
 .Em n Ns
@@ -744,221 +709,171 @@ th tab
 .Pq Em M-n
 .It Ic scroll_right
 Generic scroll right (catch-all setting)
-.\" default value
-.Pq Em Right
+.Pq Em Right \" default value
 .It Ic scroll_left
 Generic scroll left (catch-all setting)
-.\" default value
-.Pq Em Left
+.Pq Em Left \" default value
 .It Ic scroll_up
 Generic scroll up (catch-all setting)
-.\" default value
-.Pq Em k
+.Pq Em k \" default value
 .It Ic scroll_down
 Generic scroll down (catch-all setting)
-.\" default value
-.Pq Em j
+.Pq Em j \" default value
 .It Ic next_page
 Go to next page.
 (catch-all setting)
-.\" default value
-.Pq Em PageDown
+.Pq Em PageDown \" default value
 .It Ic prev_page
 Go to previous page.
 (catch-all setting)
-.\" default value
-.Pq Em PageUp
+.Pq Em PageUp \" default value
 .It Ic home_page
 Go to first page.
 (catch-all setting)
-.\" default value
-.Pq Em Home
+.Pq Em Home \" default value
 .It Ic end_page
 Go to last page.
 (catch-all setting)
-.\" default value
-.Pq Em End
+.Pq Em End \" default value
 .It Ic open_entry
 Open list entry.
 (catch-all setting)
-.\" default value
-.Pq Em Enter
+.Pq Em Enter \" default value
 .It Ic info_message_next
 Show next info message, if any
-.\" default value
-.Pq Ql Em M->
+.Pq Ql Em M-> \" default value
 .It Ic info_message_previous
 Show previous info message, if any
-.\" default value
-.Pq Ql Em M-<
+.Pq Ql Em M-< \" default value
 .El
 .sp
 .Em listing
 .Bl -tag -width 36n
 .It Ic scroll_up
 Scroll up list.
-.\" default value
-.Pq Em k
+.Pq Em k \" default value
 .It Ic scroll_down
 Scroll down list.
-.\" default value
-.Pq Em j
+.Pq Em j \" default value
 .It Ic next_page
 Go to next page.
-.\" default value
-.Pq Em PageDown
+.Pq Em PageDown \" default value
 .It Ic prev_page
 Go to previous page.
-.\" default value
-.Pq Em PageUp
+.Pq Em PageUp \" default value
 .It Ic new_mail
 Start new mail draft in new tab.
-.\" default value
-.Pq Em m
+.Pq Em m \" default value
 .It Ic next_account
 Go to next account.
-.\" default value
-.Pq Em h
+.Pq Em h \" default value
 .It Ic prev_account
 Go to previous account.
-.\" default value
-.Pq Em l
+.Pq Em l \" default value
 .It Ic next_mailbox
 Go to next mailbox.
-.\" default value
-.Pq Em J
+.Pq Em J \" default value
 .It Ic prev_mailbox
 Go to previous mailbox.
-.\" default value
-.Pq Em K
+.Pq Em K \" default value
 .It Ic open_mailbox
 Open selected mailbox
-.\" default value
-.Pq Em Enter
+.Pq Em Enter \" default value
 .It Ic toggle_mailbox_collapse
 Toggle mailbox visibility in menu.
-.\" default value
-.Pq Em Space
+.Pq Em Space \" default value
 .It Ic search
 Search within list of e-mails.
-.\" default value
-.Pq Em /
+.Pq Em / \" default value
 .It Ic refresh
 Manually request a mailbox refresh.
-.\" default value
-.Pq Em F5
+.Pq Em F5 \" default value
 .It Ic set_seen
 Set thread as seen.
-.\" default value
-.Pq Em n
+.Pq Em n \" default value
 .It Ic union_modifier
 Union modifier.
-.\" default value
-.Pq Em C-u
+.Pq Em C-u \" default value
 .It Ic diff_modifier
 Difference modifier.
-.\" default value
-.Pq Em C-d
+.Pq Em C-d \" default value
 .It Ic intersection_modifier
 Intersection modifier.
-.\" default value
-.Pq Em i
+.Pq Em i \" default value
 .It Ic select_entry
 Select thread entry.
-.\" default value
-.Pq Em v
+.Pq Em v \" default value
 .It Ic increase_sidebar
 Increase sidebar width.
-.\" default value
-.Pq Em C-f
+.Pq Em C-f \" default value
 .It Ic decrease_sidebar
 Decrease sidebar width.
-.\" default value
-.Pq Em C-d
+.Pq Em C-d \" default value
 .It Ic next_entry
 When reading a mail item, change focus on next entry according to the current sorting.
-.\" default value
-.Pq Em C-n
+.Pq Em C-n \" default value
 .It Ic previous_entry
 When reading a mail item, change focus on previous entry according to the current sorting.
-.\" default value
-.Pq Em C-p
+.Pq Em C-p \" default value
 .It Ic toggle_menu_visibility
 Toggle visibility of side menu in mail list.
-.\" default value
-.Pq Em `
+.Pq Em ` \" default value
 .It Ic focus_left
 Switch focus on the left.
-.\" default value
-.Pq Em Left
+.Pq Em Left \" default value
 .It Ic focus_right
 Switch focus on the right.
-.\" default value
-.Pq Em Right
+.Pq Em Right \" default value
 .It Ic exit_entry
 Exit e-mail entry.
-.\" default value
-.Pq Em i
+.Pq Em i \" default value
 .It Ic open_entry
 Open e-mail entry.
-.\" default value
-.Pq Em Enter
+.Pq Em Enter \" default value
 .El
 .sp
 .Em pager
 .Bl -tag -width 36n
 .It Ic scroll_up
 Scroll up pager.
-.\" default value
-.Pq Em k
+.Pq Em k \" default value
 .It Ic scroll_down
 Scroll down pager.
-.\" default value
-.Pq Em j
+.Pq Em j \" default value
 .It Ic page_up
 Go to previous pager page
-.\" default value
-.Pq Em PageUp
+.Pq Em PageUp \" default value
 .It Ic page_down
 Go to next pager pag
-.\" default value
-.Pq Em PageDown
+.Pq Em PageDown \" default value
 .El
 .sp
 .Em contact-list
 .Bl -tag -width 36n
 .It Ic scroll_up
 Scroll up list.
-.\" default value
-.Pq Em k
+.Pq Em k \" default value
 .It Ic scroll_down
 Scroll down list.
-.\" default value
-.Pq Em j
+.Pq Em j \" default value
 .It Ic create_contact
 Create new contact.
-.\" default value
-.Pq Em c
+.Pq Em c \" default value
 .It Ic edit_contact
 Edit contact under cursor.
-.\" default value
-.Pq Em e
+.Pq Em e \" default value
 .It Ic mail_contact
 Mail contact under cursor.
-.\" default value
-.Pq Em m
+.Pq Em m \" default value
 .It Ic next_account
 Go to next account.
-.\" default value
-.Pq Em h
+.Pq Em h \" default value
 .It Ic prev_account
 Go to previous account.
-.\" default value
-.Pq Em l
+.Pq Em l \" default value
 .It Ic toggle_menu_visibility
 Toggle visibility of side menu in mail list.
-.\" default value
-.Pq Em `
+.Pq Em ` \" default value
 .El
 .sp
 .sp
@@ -966,20 +881,16 @@ Toggle visibility of side menu in mail list.
 .Bl -tag -width 36n
 .It Ic edit
 Edit mail.
-.\" default value
-.Pq Em e
+.Pq Em e \" default value
 .It Ic send_mail
 Deliver draft to mailer
-.\" default value
-.Pq Em s
+.Pq Em s \" default value
 .It Ic scroll_up
 Change field focus.
-.\" default value
-.Pq Em k
+.Pq Em k \" default value
 .It Ic scroll_down
 Change field focus.
-.\" default value
-.Pq Em j
+.Pq Em j \" default value
 .El
 .sp
 .Em envelope-view
@@ -988,106 +899,84 @@ To select an attachment, type its index (you will see the typed result in the co
 .Bl -tag -width 36n
 .It Ic add_addresses_to_contacts Ns
 Select addresses from envelope to add to contacts.
-.\" default value
-.Pq Em c
+.Pq Em c \" default value
 .It Ic edit
 Open envelope in composer.
-.\" default value
-.Pq Em e
+.Pq Em e \" default value
 .It Ic go_to_url
 Go to url of given index (with the command
 .Ic url_launcher
 setting in
 .Sx PAGER
 section)
-.\" default value
-.Pq Em g
+.Pq Em g \" default value
 .It Ic open_attachment
 Opens selected attachment with
 .Cm xdg-open
-.\" default value
-.Pq Em a
+.Pq Em a \" default value
 .It Ic open_mailcap
 Opens selected attachment according to its mailcap entry.
 See
 .Xr meli 1 FILES
 for the mailcap file locations.
-.\" default value
-.Pq Em m
+.Pq Em m \" default value
 .It Ic reply
 Reply to envelope.
-.\" default value
-.Pq Em R
+.Pq Em R \" default value
 .It Ic reply_to_author
 Reply to author.
-.\" default value
-.Pq Em C-r
+.Pq Em C-r \" default value
 .It Ic reply_to_all
 Reply to all/Reply to list/Follow up.
-.\" default value
-.Pq Em C-g
+.Pq Em C-g \" default value
 .It Ic forward
 Forward email.
-.\" default value
-.Pq Em C-f
+.Pq Em C-f \" default value
 .It Ic return_to_normal_view
 Return to envelope if viewing raw source or attachment.
-.\" default value
-.Pq Em r
+.Pq Em r \" default value
 .It Ic toggle_expand_headers
 Expand extra headers (References and others)
-.\" default value
-.Pq Em h
+.Pq Em h \" default value
 .It Ic toggle_url_mode
 Toggles url open mode.
 When active, it prepends an index next to each url that you can select by typing the index and open by issuing
 .Ic go_to_url
-.\" default value
-.Pq Em u
+.Pq Em u \" default value
 .It Ic view_raw_source
 View raw envelope source in a pager.
-.\" default value
-.Pq Em M-r
+.Pq Em M-r \" default value
 .It Ic change_charset
 Force attachment charset for decoding.
-.\" default value
-.Pq Em d
+.Pq Em d \" default value
 .El
 .sp
 .Em thread-view
 .Bl -tag -width 36n
 .It Ic scroll_up
 Scroll up list.
-.\" default value
-.Pq Em k
+.Pq Em k \" default value
 .It Ic scroll_down
 Scroll down list.
-.\" default value
-.Pq Em j
+.Pq Em j \" default value
 .It Ic collapse_subtree
 collapse thread branches
-.\" default value
-.Pq Em h
+.Pq Em h \" default value
 .It Ic next_page
 Go to next page.
-.\" default value
-.Pq Em PageDown
+.Pq Em PageDown \" default value
 .It Ic prev_page
 Go to previous page.
-.\" default value
-.Pq Em PageUp
+.Pq Em PageUp \" default value
 .It Ic reverse_thread_order
 reverse thread order
-.\" default value
-.Pq Em C-r
+.Pq Em C-r \" default value
 .It Ic toggle_mailview
 toggle mail view visibility
-.\" default value
-.Pq Em p
+.Pq Em p \" default value
 .It Ic toggle_threadview
 toggle thread view visibility
-.\" default value
-.Pq Em t
+.Pq Em t \" default value
 .El
 .sp
 .Sh NOTIFICATIONS
@@ -1095,35 +984,29 @@ Default values are shown in parentheses.
 .Bl -tag -width 36n
 .It Ic enable Ar boolean
 Enable notifications.
-.\" default value
-.Pq Em true
+.Pq Em true \" default value
 .It Ic script Ar String
 .Pq Em optional
 Script to pass notifications to, with title as 1st arg and body as 2nd
-.\" default value
-.Pq Em none
+.Pq Em none \" default value
 .It Ic new_mail_script Ar String
 .Pq Em optional
 A command to pipe new mail notifications through (preferred over
 .Ic script Ns
 ), with title as 1st arg and body as 2nd.
-.\" default value
-.Pq Em none
+.Pq Em none \" default value
 .It Ic xbiff_file_path Ar String
 .Pq Em optional
 File that gets its size updated when new mail arrives.
 .Pq Em none
-.\" default value
-.It Ic play_sound Ar boolean
+.It Ic play_sound Ar boolean \" default value
 .Pq Em optional
 Play theme sound in notifications if possible.
 .Pq Em false
-.\" default value
-.It Ic sound_file Ar String
+.It Ic sound_file Ar String \" default value
 .Pq Em optional
 Play sound file in notifications if possible.
-.\" default value
-.Pq Em none
+.Pq Em none \" default value
 .El
 .Sh PAGER
 Default values are shown in parentheses.
@@ -1131,54 +1014,44 @@ Default values are shown in parentheses.
 .It Ic sticky_headers Ar boolean
 .Pq Em optional
 Always show headers when scrolling.
-.\" default value
-.Pq Em true
+.Pq Em true \" default value
 .It Ic html_filter Ar String
 .Pq Em optional
 Pipe html attachments through this filter before display
-.\" default value
-.Pq Em none
+.Pq Em none \" default value
 .It Ic html_open Ar String
 .Pq Em optional
 A command to open html files.
-.\" default value
-.Pq Em none
+.Pq Em none \" default value
 .It Ic filter Ar String
 .Pq Em optional
 A command to pipe mail output through for viewing in pager.
-.\" default value
-.Pq Em none
+.Pq Em none \" default value
 .It Ic format_flowed Ar bool
 .Pq Em optional
 Respect format=flowed
-.\" default value
-.Pq Em true
+.Pq Em true \" default value
 .It Ic split_long_lines Ar bool
 .Pq Em optional
 Split long lines that would overflow on the x axis.
-.\" default value
-.Pq Em true
+.Pq Em true \" default value
 .It Ic minimum_width Ar num
 .Pq Em optional
 Minimum text width in columns.
-.\" default value
-.Pq Em 80
+.Pq Em 80 \" default value
 .It Ic auto_choose_multipart_alternative Ar boolean
 .Pq Em optional
 Choose `text/html` alternative if `text/plain` is empty in `multipart/alternative` attachments.
-.\" default value
-.Pq Em true
+.Pq Em true \" default value
 .It Ic show_date_in_my_timezone Ar boolean
 .Pq Em optional
 Show Date: in local timezone
-.\" default value
-.Pq Em true
+.Pq Em true \" default value
 .It Ic url_launcher Ar String
 .Pq Em optional
 A command to launch URLs with.
 The URL will be given as the first argument of the command.
-.\" default value
-.Pq Em xdg-open
+.Pq Em xdg-open \" default value
 .It Ic show_extra_headers Ar [String]
 .Pq Em optional
 Extra headers to display, if present, in the default header preamble of the pager.
@@ -1197,8 +1070,7 @@ INBOX = {}
 "INBOX/Sent" = { sort_order=0 }
 "INBOX/Feeds" = { pager.show_extra_headers = ["X-RSS-Feed"] }
 .Ed
-.\" default value
-.Pq Em empty
+.Pq Em empty \" default value
 .El
 .Sh LISTING
 Default values are shown in parentheses.
@@ -1206,18 +1078,15 @@ Default values are shown in parentheses.
 .It Ic show_menu_scrollbar Ar boolean
 .Pq Em optional
  Show auto-hiding scrollbar in accounts sidebar menu.
-.\" default value
-.Pq Em true
+.Pq Em true \" default value
 .It Ic datetime_fmt Ar String
 .Pq Em optional
 Datetime formatting passed verbatim to strftime(3).
-.\" default value
-.Pq Em \&%Y-\&%m-\&%d \&%T
+.Pq Em \&%Y-\&%m-\&%d \&%T \" default value
 .It Ic recent_dates Ar Boolean
 .Pq Em optional
 Show recent dates as `X {minutes,hours,days} ago`, up to 7 days.
-.\" default value
-.Pq Em true
+.Pq Em true \" default value
 .It Ic filter Ar Query
 .Pq Em optional
 Show only envelopes matching this query.
@@ -1225,8 +1094,7 @@ Show only envelopes matching this query.
 For query syntax see
 .Xr meli 1 QUERY ABNF SYNTAX
 .Pc
-.\" default value
-.Pq Em None
+.Pq Em None \" default value
 .Pp
 Example:
 .Bd -literal
@@ -1253,33 +1121,26 @@ Sets the character to print as the divider between the accounts list and the mes
 .It Ic sidebar_ratio Ar Integer
 .Pq Em optional
 This is the width of the right container to the entire screen width.
-.\" default value
-.Pq Em 90
+.Pq Em 90 \" default value
 .It Ic unseen_flag Ar Option<String>
 Flag to show if thread entry contains unseen mail.
-.\" default value
-.Pq Em "●"
+.Pq Em "●" \" default value
 .It Ic thread_snoozed_flag Ar Option<String>
 Flag to show if thread has been snoozed.
-.\" default value
-.Pq Em "💤"
+.Pq Em "💤" \" default value
 .It Ic selected_flag Ar Option<String>
 Flag to show if thread entry has been selected.
-.\" default value
-.Pq Em "☑️"
+.Pq Em "☑️" \" default value
 .It Ic attachment_flag Ar Option<String>
 Flag to show if thread entry contains attachments.
-.\" default value
-.Pq Em "📎"
+.Pq Em "📎" \" default value
 .It Ic thread_subject_pack Ar bool
 Should threads with differentiating Subjects show a list of those subjects on the entry title?
-.\" default value
-.Pq Em "true"
+.Pq Em "true" \" default value
 .It Ic threaded_repeat_identical_from_values Ar bool
 In threaded listing style, repeat identical From column values within a thread.
 Not repeating adds empty space in the From column which might result in less visual clutter.
-.\" default value
-.Pq Em "false"
+.Pq Em "false" \" default value
 .El
 .Ss Examples of sidebar mailbox tree customization
 The default values
@@ -1373,20 +1234,79 @@ colors = { signed="#Ff6600", replied="DeepSkyBlue4", draft="#f00", replied="8" }
 .Sh PGP
 Default values are shown in parentheses.
 .Bl -tag -width 36n
+.\" #[serde(default = "true_val", alias = "auto-verify-signatures")]
+.\" pub auto_verify_signatures: bool,
 .It Ic auto_verify_signatures Ar boolean
 Auto verify signed e-mail according to RFC3156
-.\" default value
-.Pq Em true
+.Pq Em true \" default value
+.\" #[serde(default = "true_val", alias = "auto-decrypt")]
+.\" pub auto_decrypt: bool,
+.It Ic auto_decrypt Ar boolean
+.Pq Em optional
+Always decrypt encrypted e-mail
+.Pq Em true \" default value
+.\" #[serde(default = "false_val", alias = "auto-sign")]
+.\" pub auto_sign: bool,
 .It Ic auto_sign Ar boolean
 .Pq Em optional
 Always sign sent messages
-.\" default value
-.Pq Em false
-.It Ic key Ar String
+.Pq Em false \" default value
+.\" #[serde(default = "false_val", alias = "auto-encrypt")]
+.\" pub auto_encrypt: bool,
+.It Ic auto_encrypt Ar boolean
 .Pq Em optional
-Key to be used when signing/encrypting (not functional yet)
-.\" default value
-.Pq Em none
+Always encrypt sent messages
+.Pq Em false \" default value
+.\" #[serde(default = "none", alias = "sign-key")]
+.\" pub sign_key: Option<String>,
+.It Ic sign_key Ar String
+.Pq Em optional
+ID of key to be used for signatures
+.Pq Em none \" default value
+.\" #[serde(default = "none", alias = "decrypt-key")]
+.\" pub decrypt_key: Option<String>,
+.It Ic decrypt_key Ar String
+.Pq Em optional
+ID of key to be used for decryption
+.Pq Em none \" default value
+.\" #[serde(default = "none", alias = "encrypt-key")]
+.\" pub encrypt_key: Option<String>,
+.It Ic encrypt_key Ar String
+.Pq Em optional
+ID of key to be used for encryption
+.Pq Em none \" default value
+.\" #[serde(default = "internal_value_false", alias = "allow-remote-lookups")]
+.\" pub allow_remote_lookup: ToggleFlag,
+.It Ic auto_remote_lookup Ar boolean
+.Pq Em optional
+Allow remote lookups
+.Pq Em false \" default value
+.\" pub remote_lookup_mechanisms: melib::gpgme::LocateKey,
+.It Ic remote_lookup_mechanisms Ar LocateKey
+.Pq Em optional
+Remote lookup mechanisms.
+Use comma to separate values.
+.Pq Em Local,WKD \" default value
+.Pp
+Possible mechanisms:
+.Bl -bullet -compact
+.It
+.Em cert
+.It
+.Em pka
+.It
+.Em dane
+.It
+.Em wkd
+.It
+.Em ldap
+.It
+.Em keyserver
+.It
+.Em keyserver-url
+.It
+.Em local
+.El
 .El
 .Sh TERMINAL
 Default values are shown in parentheses.
@@ -1394,31 +1314,26 @@ Default values are shown in parentheses.
 .It Ic theme Ar String
 .Pq Em optional
 Theme name to use.
-.\" default value
-.Pq Em dark
+.Pq Em dark \" default value
 .It Ic ascii_drawing Ar boolean
 .Pq Em optional
 If true, box drawing will be done with ascii characters.
-.\" default value
-.Pq Em false
+.Pq Em false \" default value
 .It Ic use_color Ar boolean
 .Pq Em optional
 If false, no ANSI colors are used.
-.\" default value
-.Pq Em true
+.Pq Em true \" default value
 .It Ic window_title Ar String
 .Pq Em optional
 Set window title in xterm compatible terminals An empty string means no window title is set.
-.\" default value
-.Pq Em "meli"
+.Pq Em "meli" \" default value
 .It Ic file_picker_command Ar String
 .Pq Em optional
 Set command that prints file paths in stderr, separated by NULL bytes.
 Used with
 .Ic add-attachment-file-picker
 when composing new mail.
-.\" default value
-.Pq Em None
+.Pq Em None \" default value
 .It Ic themes Ar hash table String[String[Attribute]]
 Define UI themes.
 See
@@ -1443,17 +1358,14 @@ This will disable text selection, but you will be able to resize some widgets.
 This setting can be toggled with
 .Cm toggle mouse Ns
 \&.
-.\" default value
-.Pq Em false
+.Pq Em false \" default value
 .It Ic mouse_flag Ar String
 String to show in status bar if mouse is active.
-.\" default value
-.Pq Em 🖱️
+.Pq Em 🖱️ \" default value
 .It Ic progress_spinner_sequence Ar Either \&< Integer, ProgressSpinner \&>
 Choose between 37 built in sequences (integers between 0-36) or define your own list of strings for the progress spinner animation.
 Set to an empty array to disable the progress spinner.
-.\" default value
-.Pq Em 20
+.Pq Em 20 \" default value
 .Pp
 Builtin sequences are:
 .Bd -literal
@@ -1501,8 +1413,7 @@ Or, define an array of strings each consisting of a frame in the progress sequen
 .It Ic interval_ms Ar u64
 .Pq Em optional
 Frame interval.
-.\" default value
-.Pq 50
+.Pq 50 \" default value
 .It Ic frames Ar [String]
 The animation frames.
 .El
@@ -1518,8 +1429,7 @@ Default values are shown in parentheses.
 .It Ic log_file Ar String
 .Pq Em optional
 path of the log file
-.\" default value
-.Pq Pa $XDG_DATA_HOME/meli/meli.log
+.Pq Pa $XDG_DATA_HOME/meli/meli.log \" default value
 .It Ic maximum_level Ar String
 .Pq Em optional
 maximum level of messages to log.
@@ -1546,8 +1456,7 @@ This means that to turn logging off, set
 to
 .Em OFF Ns
 \&.
-.\" default value
-.Pq Em INFO
+.Pq Em INFO \" default value
 .El
 .Sh SMTP Connections
 Default values are shown in parentheses.
@@ -1559,8 +1468,7 @@ server port
 .It Ic envelope_from Ar String
 .Pq Em optional
 address to set as sender in SMTP transactions
-.\" default value
-.Pq Em none
+.Pq Em none \" default value
 .It Ic auth Ar SmtpAuth
 SMTP server authentication.
 See
@@ -1569,16 +1477,14 @@ subsection.
 .It Ic security Ar SmtpSecurity
 .Pq Em optional
 gpg binary name or file location to use
-.\" default value
-.Po see
+.Po see \" default value
 .Sx SmtpSecurity
 subsection
 .Pc
 .It Ic extensions Ar SmtpExtensions
 .Pq Em optional
 set support for SMTP extensions if they are advertised by the server
-.\" default value
-.Po see
+.Po see \" default value
 .Sx SmtpExtensions
 subsection
 .Pc
@@ -1595,8 +1501,7 @@ For type "auto":
 .It Ic require_auth Ar bool
 .Pq Em optional
 require authentication in every case
-.\" default value
-.Pq Em true
+.Pq Em true \" default value
 .El
 .sp
 For type "xoauth2":
@@ -1606,8 +1511,7 @@ Command to evaluate that returns an XOAUTH2 token.
 .It Ic require_auth Ar bool
 .Pq Em optional
 require authentication in every case
-.\" default value
-.Pq Em true
+.Pq Em true \" default value
 .El
 .sp
 Examples:
@@ -1649,27 +1553,22 @@ Default security type is
 .It Ic type Ar "none" | "auto" | "starttls" | "tls"
 .It Ic danger_accept_invalid_certs Ar bool
 Accept invalid SSL/TLS certificates
-.\" default value
-.Pq Em false
+.Pq Em false \" default value
 .El
 .Ss SmtpExtensions
 .Bl -tag -width 36n
 .It Ic pipelining Ar bool
 rfc2920
-.\" default value
-.Pq Em true
+.Pq Em true \" default value
 .It Ic chunking Ar bool
 rfc3030
-.\" default value
-.Pq Em true
+.Pq Em true \" default value
 .It Ic prdr Ar bool
 draft-hall-prdr-00
-.\" default value
-.Pq Em true
+.Pq Em true \" default value
 .It Ic dsn_notify Ar String
 RFC3461
-.\" default value
-.Pq Em FAILURE
+.Pq Em FAILURE \" default value
 .El
 .Sh SEE ALSO
 .Xr meli 1 ,

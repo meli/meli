@@ -33,6 +33,7 @@ use std::{
         io::{AsRawFd, RawFd},
     },
     path::Path,
+    pin::Pin,
     sync::{Arc, Mutex},
 };
 
@@ -412,6 +413,7 @@ impl Context {
 
     pub fn new_data_mem(&self, bytes: &[u8]) -> Result<Data> {
         let mut ptr = core::ptr::null_mut();
+        let bytes: Pin<Vec<u8>> = Pin::new(bytes.to_vec());
         unsafe {
             gpgme_error_try(
                 &self.inner.lib,
@@ -427,6 +429,7 @@ impl Context {
         Ok(Data {
             lib: self.inner.lib.clone(),
             kind: DataKind::Memory,
+            bytes,
             inner: core::ptr::NonNull::new(ptr).ok_or_else(|| {
                 Error::new("Could not create libgpgme data").set_kind(ErrorKind::Bug)
             })?,
@@ -442,12 +445,12 @@ impl Context {
             )));
         }
         let os_str: &OsStr = path.as_ref();
-        let b = CString::new(os_str.as_bytes())?;
+        let bytes = Pin::new(os_str.as_bytes().to_vec());
         let mut ptr = core::ptr::null_mut();
         unsafe {
             let ret: GpgmeError = call!(&self.inner.lib, gpgme_data_new_from_file)(
                 &mut ptr,
-                b.as_ptr() as *const ::std::os::raw::c_char,
+                bytes.as_ptr() as *const ::std::os::raw::c_char,
                 1,
             );
             gpgme_error_try(&self.inner.lib, ret)?;
@@ -456,6 +459,7 @@ impl Context {
         Ok(Data {
             lib: self.inner.lib.clone(),
             kind: DataKind::Memory,
+            bytes,
             inner: core::ptr::NonNull::new(ptr).ok_or_else(|| {
                 Error::new("Could not create libgpgme data").set_kind(ErrorKind::Bug)
             })?,
@@ -722,6 +726,7 @@ impl Context {
         let mut sig = Data {
             lib: self.inner.lib.clone(),
             kind: DataKind::Memory,
+            bytes: Pin::new(vec![]),
             inner: core::ptr::NonNull::new(sig)
                 .ok_or_else(|| Error::new("internal libgpgme error").set_kind(ErrorKind::Bug))?,
         };
@@ -799,6 +804,7 @@ impl Context {
                 .chain_err_summary(|| {
                     "libgpgme error: could not perform seek on signature data object"
                 })?;
+            _ = text;
             sig.into_bytes()
         })
     }
@@ -825,6 +831,7 @@ impl Context {
         let mut plain = Data {
             lib: self.inner.lib.clone(),
             kind: DataKind::Memory,
+            bytes: Pin::new(vec![]),
             inner: core::ptr::NonNull::new(plain)
                 .ok_or_else(|| Error::new("internal libgpgme error").set_kind(ErrorKind::Bug))?,
         };
@@ -1034,6 +1041,7 @@ impl Context {
         let mut cipher = Data {
             lib: self.inner.lib.clone(),
             kind: DataKind::Memory,
+            bytes: Pin::new(vec![]),
             inner: core::ptr::NonNull::new(cipher)
                 .ok_or_else(|| Error::new("internal libgpgme error").set_kind(ErrorKind::Bug))?,
         };
@@ -1119,6 +1127,7 @@ impl Context {
             cipher
                 .seek(std::io::SeekFrom::Start(0))
                 .chain_err_summary(|| "libgpgme error: could not perform seek on plain text")?;
+            _ = plain;
             cipher.into_bytes()
         })
     }
@@ -1156,6 +1165,8 @@ enum DataKind {
 pub struct Data {
     inner: core::ptr::NonNull<bindings::gpgme_data>,
     kind: DataKind,
+    #[allow(dead_code)]
+    bytes: std::pin::Pin<Vec<u8>>,
     lib: Arc<libloading::Library>,
 }
 

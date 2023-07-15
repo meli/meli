@@ -904,7 +904,7 @@ impl Component for Composer {
             ),
             (
                 get_x(bottom_right!(header_area)),
-                get_y(upper_left!(attachment_area)) - 1,
+                get_y(upper_left!(attachment_area)).saturating_sub(1),
             ),
         );
 
@@ -947,7 +947,7 @@ impl Component for Composer {
             (
                 (
                     get_x(bottom_right).saturating_sub(mid),
-                    get_y(upper_left) - 1,
+                    get_y(upper_left).saturating_sub(1),
                 ),
                 bottom_right,
             ),
