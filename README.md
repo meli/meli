@@ -7,7 +7,7 @@ Community links:
 
 | | | |
 :---:|:---:|:---:
-![Main view screenshot](./docs/screenshots/main.webp "mail meli view screenshot")  |  ![Compact main view screenshot](./docs/screenshots/compact.webp "compact main view screenshot") | ![Compose with embed terminal editor screenshot](./docs/screenshots/compose.webp "composing view screenshot")
+![Main view screenshot](./meli/docs/screenshots/main.webp "mail meli view screenshot")  |  ![Compact main view screenshot](./meli/docs/screenshots/compact.webp "compact main view screenshot") | ![Compose with embed terminal editor screenshot](./meli/docs/screenshots/compose.webp "composing view screenshot")
 Main view             |  Compact main view | Compose with embed terminal editor
 
 Main repository:
@@ -24,16 +24,17 @@ Official mirrors:
 
 ## Documentation
 
-See a comprehensive tour of `meli` in the manual page [`meli(7)`](./docs/meli.7).
+See a comprehensive tour of `meli` in the manual page [`meli(7)`](./meli/docs/meli.7).
 
 See also the [Quickstart tutorial](https://meli.delivery/documentation.html#quick-start) online.
 
-After installing `meli`, see `meli(1)`, `meli.conf(5)`, `meli(7)` and `meli-themes(5)` for documentation. Sample configuration and theme files can be found in the `docs/samples/` subdirectory. Manual pages are also [hosted online](https://meli.delivery/documentation.html "meli documentation").
+After installing `meli`, see `meli(1)`, `meli.conf(5)`, `meli(7)` and `meli-themes(5)` for documentation.
+Sample configuration and theme files can be found in the `meli/docs/samples/` subdirectory.
+Manual pages are also [hosted online](https://meli.delivery/documentation.html "meli documentation").
 
 `meli` by default looks for a configuration file in this location: `$XDG_CONFIG_HOME/meli/config.toml`
 
-You can run meli with arbitrary configuration files by setting the `$MELI_CONFIG`
-environment variable to their locations, i.e.:
+You can run meli with arbitrary configuration files by setting the `$MELI_CONFIG` environment variable to their locations, i.e.:
 
 ```sh
 MELI_CONFIG=./test_config cargo run
@@ -46,12 +47,15 @@ For a quick start, build and install locally:
  PREFIX=~/.local make install
 ```
 
-Available subcommands for `make` are listed with `make help`. The Makefile *should* be POSIX portable and not require a specific `make` version.
+Available subcommands for `make` are listed with `make help`.
+The Makefile *should* be POSIX portable and not require a specific `make` version.
 
-`meli` requires rust 1.65 and rust's package manager, Cargo. Information on how
-to get it on your system can be found here: <https://doc.rust-lang.org/cargo/getting-started/installation.html>
+`meli` requires rust 1.65 and rust's package manager, Cargo.
+Information on how to get it on your system can be found here: <https://doc.rust-lang.org/cargo/getting-started/installation.html>
 
-With Cargo available, the project can be built with `make` and the resulting binary will then be found under `target/release/meli`. Run `make install` to install the binary and man pages. This requires root, so I suggest you override the default paths and install it in your `$HOME`: `make PREFIX=$HOME/.local install`.
+With Cargo available, the project can be built with `make` and the resulting binary will then be found under `target/release/meli`.
+Run `make install` to install the binary and man pages.
+This requires root, so I suggest you override the default paths and install it in your `$HOME`: `make PREFIX=$HOME/.local install`.
 
 You can build and run `meli` with one command: `cargo run --release`.
 
@@ -70,18 +74,21 @@ Some functionality is held behind "feature gates", or compile-time flags. The fo
 
 ### Build Debian package (*deb*)
 
-Building with Debian's packaged cargo might require the installation of these
-two packages: `librust-openssl-sys-dev librust-libdbus-sys-dev`
+Building with Debian's packaged cargo might require the installation of these two packages: `librust-openssl-sys-dev librust-libdbus-sys-dev`
 
 A `*.deb` package can be built with `make deb-dist`
 
 ### Using notmuch
 
-To use the optional notmuch backend feature, you must have `libnotmuch5` installed in your system. In Debian-like systems, install the `libnotmuch5` packages. `meli` detects the library's presence on runtime.
+To use the optional notmuch backend feature, you must have `libnotmuch5` installed in your system.
+In Debian-like systems, install the `libnotmuch5` packages.
+`meli` detects the library's presence on runtime.
 
 ### Using GPG
 
-To use the optional gpg feature, you must have `libgpgme` installed in your system. In Debian-like systems, install the `libgpgme11` package. `meli` detects the library's presence on runtime.
+To use the optional gpg feature, you must have `libgpgme` installed in your system.
+In Debian-like systems, install the `libgpgme11` package.
+`meli` detects the library's presence on runtime.
 
 ### Building with JMAP
 
@@ -96,7 +103,7 @@ or if building directly with cargo, use the flag `--features="jmap"'.
 ### HTML Rendering
 
 HTML rendering is achieved using [w3m](https://github.com/tats/w3m) by default.
-You can use the `pager.html_filter` setting to override this (for more details you can consult [`meli.conf(5)`](./docs/meli.conf.5)).
+You can use the `pager.html_filter` setting to override this (for more details you can consult [`meli.conf(5)`](./meli/docs/meli.conf.5)).
 
 # Development
 
@@ -107,31 +114,7 @@ cargo build
 cargo run
 ```
 
-There is a debug/tracing log feature that can be enabled by using the flag
-`--feature debug-tracing` after uncommenting the features in `Cargo.toml`. The logs
-are printed in stderr, thus you can run `meli` with a redirection (i.e `2> log`)
+There is a debug/tracing log feature that can be enabled by using the flag `--feature debug-tracing` after uncommenting the features in `Cargo.toml`.
+The logs are printed in stderr when the env var `MELI_DEBUG_STDERR` is defined, thus you can run `meli` with a redirection (i.e `2> log`).
 
-Code style follows the default rustfmt profile.
-
-## Testing
-
-How to run specific tests:
-
-```sh
-cargo test -p {melib, meli} (-- --nocapture) (--test test_name)
-```
-
-## Profiling
-
-```sh
-perf record -g target/debug/bin
-perf script | stackcollapse-perf | rust-unmangle | flamegraph > perf.svg
-```
-
-## Running fuzz targets
-
-Note: `cargo-fuzz` requires the nightly toolchain.
-
-```sh
-cargo +nightly fuzz run envelope_parse -- -dict=fuzz/envelope_tokens.dict
-```
+Code style follows the `rustfmt.toml` file.
