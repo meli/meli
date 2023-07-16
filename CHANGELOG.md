@@ -48,6 +48,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     Warn if draft has no subject and no body.
 
   They can be disabled with `[composing.disabled_compose_hooks]` setting.
+- `e9cd800f` Added support for storing flags locally for NNTP accounts.
+- Added options to show relative row numbers in menus and listings to make jumping easier.
+  `[listing.relative_menu_indices]` and `[listing.relative_list_indices]`.
 
 ### Changed
 

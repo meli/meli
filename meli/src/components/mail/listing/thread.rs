@@ -529,6 +529,9 @@ impl ListingTrait for ThreadListing {
         if self.cursor_pos.2 != self.new_cursor_pos.2 && prev_page_no == page_no {
             let old_cursor_pos = self.cursor_pos;
             self.cursor_pos = self.new_cursor_pos;
+            if *account_settings!(context[self.cursor_pos.0].listing.relative_list_indices) {
+                self.draw_relative_numbers(grid, area, top_idx);
+            }
             for &(idx, highlight) in &[(old_cursor_pos.2, false), (self.new_cursor_pos.2, true)] {
                 if idx >= self.length {
                     continue; //bounds check
@@ -543,6 +546,9 @@ impl ListingTrait for ThreadListing {
                     change_colors(grid, new_area, row_attr.fg, row_attr.bg);
                 }
                 context.dirty_areas.push_back(new_area);
+            }
+            if *account_settings!(context[self.cursor_pos.0].listing.relative_list_indices) {
+                context.dirty_areas.push_back(area);
             }
             if !self.force_draw {
                 return;
@@ -569,6 +575,9 @@ impl ListingTrait for ThreadListing {
         /* copy table columns */
         self.data_columns
             .draw(grid, top_idx, self.cursor_pos.2, grid.bounds_iter(area));
+        if *account_settings!(context[self.cursor_pos.0].listing.relative_list_indices) {
+            self.draw_relative_numbers(grid, area, top_idx);
+        }
         /* apply each row colors separately */
         for i in top_idx..(top_idx + height!(area)) {
             if let Some(row_attr) = self.rows.row_attr_cache.get(&i) {
@@ -907,19 +916,21 @@ impl ThreadListing {
                 panic!();
             }
             let row_attr = self.rows.row_attr_cache[&idx];
-            let (x, _) = write_string_to_grid(
-                &idx.to_string(),
-                &mut self.data_columns.columns[0],
-                row_attr.fg,
-                row_attr.bg,
-                row_attr.attrs,
-                ((0, idx), (min_width.0, idx)),
-                None,
-            );
-            for x in x..min_width.0 {
-                self.data_columns.columns[0][(x, idx)]
-                    .set_bg(row_attr.bg)
-                    .set_attrs(row_attr.attrs);
+            if !*account_settings!(context[self.cursor_pos.0].listing.relative_list_indices) {
+                let (x, _) = write_string_to_grid(
+                    &idx.to_string(),
+                    &mut self.data_columns.columns[0],
+                    row_attr.fg,
+                    row_attr.bg,
+                    row_attr.attrs,
+                    ((0, idx), (min_width.0, idx)),
+                    None,
+                );
+                for x in x..min_width.0 {
+                    self.data_columns.columns[0][(x, idx)]
+                        .set_bg(row_attr.bg)
+                        .set_attrs(row_attr.attrs);
+                }
             }
             let (x, _) = write_string_to_grid(
                 &strings.date,
@@ -1071,6 +1082,67 @@ impl ThreadListing {
         clear_area(&mut columns[4], ((0, idx), (min_width.4, idx)), row_attr);
 
         *self.rows.entries.get_mut(idx).unwrap() = ((thread_hash, env_hash), strings);
+    }
+
+    fn draw_relative_numbers(&mut self, grid: &mut CellBuffer, area: Area, top_idx: usize) {
+        let width = self.data_columns.columns[0].size().0;
+        let upper_left = upper_left!(area);
+        for i in 0..height!(area) {
+            let row_attr = row_attr!(self.color_cache, (top_idx + i) % 2 == 0, false, true, false);
+
+            clear_area(
+                &mut self.data_columns.columns[0],
+                ((0, i), (width - 1, i + 1)),
+                row_attr,
+            );
+            clear_area(
+                grid,
+                (
+                    pos_inc(upper_left, (0, i)),
+                    pos_inc(upper_left, (width - 1, i + 1)),
+                ),
+                row_attr,
+            );
+            let (x, _) = write_string_to_grid(
+                &if self.new_cursor_pos.2.saturating_sub(top_idx) == i {
+                    self.new_cursor_pos.2.to_string()
+                } else {
+                    (i as isize - (self.new_cursor_pos.2 - top_idx) as isize)
+                        .abs()
+                        .to_string()
+                },
+                &mut self.data_columns.columns[0],
+                row_attr.fg,
+                row_attr.bg,
+                row_attr.attrs,
+                ((0, i), (width, i + 1)),
+                None,
+            );
+            for x in x..width {
+                self.data_columns.columns[0][(x, i)]
+                    .set_ch(' ')
+                    .set_bg(row_attr.bg)
+                    .set_attrs(row_attr.attrs);
+            }
+            _ = write_string_to_grid(
+                &if self.new_cursor_pos.2.saturating_sub(top_idx) == i {
+                    self.new_cursor_pos.2.to_string()
+                } else {
+                    (i as isize - (self.new_cursor_pos.2 - top_idx) as isize)
+                        .abs()
+                        .to_string()
+                },
+                grid,
+                row_attr.fg,
+                row_attr.bg,
+                row_attr.attrs,
+                (
+                    pos_inc(upper_left, (0, i)),
+                    pos_inc(upper_left, (width, i + 1)),
+                ),
+                None,
+            );
+        }
     }
 }
 

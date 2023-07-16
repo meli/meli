@@ -147,6 +147,11 @@ pub struct ListingSettings {
     /// them. Default: "true"
     #[serde(default = "true_val", alias = "relative-menu-indices")]
     pub relative_menu_indices: bool,
+
+    /// Show relative indices in listings to quickly help with jumping to
+    /// them. Default: "true"
+    #[serde(default = "true_val", alias = "relative-list-indices")]
+    pub relative_list_indices: bool,
 }
 
 const fn default_divider() -> char {
@@ -179,6 +184,7 @@ impl Default for ListingSettings {
             thread_subject_pack: true,
             threaded_repeat_identical_from_values: false,
             relative_menu_indices: true,
+            relative_list_indices: true,
         }
     }
 }
@@ -218,6 +224,7 @@ impl DotAddressable for ListingSettings {
                         .threaded_repeat_identical_from_values
                         .lookup(field, tail),
                     "relative_menu_indices" => self.relative_menu_indices.lookup(field, tail),
+                    "relative_list_indices" => self.relative_list_indices.lookup(field, tail),
                     other => Err(Error::new(format!(
                         "{} has no field named {}",
                         parent_field, other
