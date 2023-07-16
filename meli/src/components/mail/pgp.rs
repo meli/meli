@@ -144,7 +144,8 @@ pub fn encrypt_filter(
                         a.content_disposition = ContentDisposition::from(r#"attachment; filename="msg.asc""#.as_bytes());
                         a
                 };
-                let mut a: AttachmentBuilder = AttachmentBuilder::new("Version: 1".as_bytes());
+                let mut a: AttachmentBuilder = AttachmentBuilder::new("Version: 1\n".as_bytes());
+
                 a.set_content_type_from_bytes("application/pgp-encrypted".as_bytes());
                 a.set_content_disposition(ContentDisposition::from("attachment".as_bytes()));
                 let parts = vec![a, sig_attachment.into()];
