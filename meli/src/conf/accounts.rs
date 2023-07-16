@@ -53,8 +53,9 @@ use melib::{
 use smallvec::SmallVec;
 
 use super::{AccountConf, FileMailboxConf};
+#[cfg(feature = "sqlite3")]
+use crate::command::actions::AccountAction;
 use crate::{
-    command::actions::AccountAction,
     jobs::{JobId, JoinHandle},
     types::UIEvent::{self, EnvelopeRemove, EnvelopeRename, EnvelopeUpdate, Notification},
     MainLoopHandler, StatusEvent, ThreadEvent,
@@ -1328,7 +1329,7 @@ impl Account {
         &mut self,
         message: String,
         send_mail: crate::conf::composing::SendMail,
-        complete_in_background: bool,
+        #[allow(unused_variables)] complete_in_background: bool,
     ) -> Result<Option<JoinHandle<Result<()>>>> {
         use std::{
             io::Write,

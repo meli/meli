@@ -751,14 +751,14 @@ mod default_m {
     }
 
     impl ImapCacheReset for DefaultCache {
-        fn reset_db(uid_store: &UIDStore) -> Result<()> {
+        fn reset_db(_: &UIDStore) -> Result<()> {
             Err(Error::new("melib is not built with any imap cache").set_kind(ErrorKind::Bug))
         }
     }
 
     impl ImapCache for DefaultCache {
         fn reset(&mut self) -> Result<()> {
-            DefaultCache::reset_db(&self.uid_store)
+            Ok(())
         }
 
         fn mailbox_state(&mut self, _mailbox_hash: MailboxHash) -> Result<Option<()>> {

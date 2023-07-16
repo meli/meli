@@ -124,7 +124,6 @@ pub fn over_article(input: &str) -> IResult<&str, (UID, Envelope)> {
                 EnvelopeHash(hasher.finish())
             };
             let mut env = Envelope::new(env_hash);
-            env.set_seen();
             if let Some(date) = date {
                 env.set_date(date.as_bytes());
                 if let Ok(d) =

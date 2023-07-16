@@ -35,7 +35,6 @@ pub use watch::*;
 mod search;
 pub use search::*;
 mod cache;
-use cache::{ImapCacheReset, ModSequence};
 pub mod error;
 pub mod managesieve;
 mod untagged;
@@ -50,6 +49,9 @@ use std::{
     time::{Duration, SystemTime},
 };
 
+#[cfg(feature = "sqlite3")]
+use cache::ImapCacheReset;
+use cache::ModSequence;
 use futures::{lock::Mutex as FutureMutex, stream::Stream};
 use imap_codec::{
     command::CommandBody,

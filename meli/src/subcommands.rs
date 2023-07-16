@@ -19,8 +19,9 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#[cfg(feature = "cli-docs")]
+use std::io::prelude::*;
 use std::{
-    io::prelude::*,
     path::PathBuf,
     process::{Command, Stdio},
 };

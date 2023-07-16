@@ -69,7 +69,7 @@ mailin-embedded = { version = "0.7", features = ["rtls"] }
 stderrlog = "^0.5"
 
 [features]
-default = ["unicode_algorithms", "imap_backend", "maildir_backend", "mbox_backend", "vcard", "sqlite3", "smtp", "deflate_compression"]
+default = ["unicode_algorithms", "imap_backend", "maildir_backend", "mbox_backend", "vcard", "smtp", "deflate_compression"]
 
 debug-tracing = []
 deflate_compression = ["flate2", "imap-codec/ext_compress"]

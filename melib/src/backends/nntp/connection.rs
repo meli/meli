@@ -420,21 +420,21 @@ impl NntpConnection {
 
     pub fn connect<'a>(&'a mut self) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>> {
         Box::pin(async move {
-            if let (instant, ref mut status @ Ok(())) = *self.uid_store.is_online.lock().unwrap() {
+            if let (instant, ref mut status @ Ok(())) = *self.uid_store.is_online.lock().await {
                 if Instant::now().duration_since(instant) >= std::time::Duration::new(60 * 30, 0) {
                     *status = Err(Error::new("Connection timed out"));
                     self.stream = Err(Error::new("Connection timed out"));
                 }
             }
             if self.stream.is_ok() {
-                self.uid_store.is_online.lock().unwrap().0 = Instant::now();
+                self.uid_store.is_online.lock().await.0 = Instant::now();
                 return Ok(());
             }
             let new_stream = NntpStream::new_connection(&self.server_conf).await;
             if let Err(err) = new_stream.as_ref() {
-                *self.uid_store.is_online.lock().unwrap() = (Instant::now(), Err(err.clone()));
+                *self.uid_store.is_online.lock().await = (Instant::now(), Err(err.clone()));
             } else {
-                *self.uid_store.is_online.lock().unwrap() = (Instant::now(), Ok(()));
+                *self.uid_store.is_online.lock().await = (Instant::now(), Ok(()));
             }
             let (capabilities, stream) = new_stream?;
             self.stream = Ok(stream);

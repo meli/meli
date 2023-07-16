@@ -29,6 +29,7 @@
 use smallvec::SmallVec;
 
 use crate::{get_conf_val, get_path_hash};
+mod store;
 #[macro_use]
 mod protocol_parser;
 pub use protocol_parser::*;
@@ -56,6 +57,7 @@ use crate::{
     error::{Error, Result, ResultIntoError},
     utils::futures::timeout,
     Collection,
+    RefreshEventKind::NewFlags,
 };
 pub type UID = usize;
 
@@ -121,13 +123,14 @@ pub struct UIDStore {
     account_hash: AccountHash,
     account_name: Arc<str>,
     capabilities: Arc<Mutex<Capabilities>>,
-    message_id_index: Arc<Mutex<HashMap<String, EnvelopeHash>>>,
+    message_id_index: Arc<FutureMutex<HashMap<String, EnvelopeHash>>>,
     hash_index: Arc<Mutex<HashMap<EnvelopeHash, (UID, MailboxHash)>>>,
-    uid_index: Arc<Mutex<HashMap<(MailboxHash, UID), EnvelopeHash>>>,
+    uid_index: Arc<FutureMutex<HashMap<(MailboxHash, UID), EnvelopeHash>>>,
 
     collection: Collection,
+    store: Arc<FutureMutex<Option<store::Store>>>,
     mailboxes: Arc<FutureMutex<HashMap<MailboxHash, NntpMailbox>>>,
-    is_online: Arc<Mutex<(Instant, Result<()>)>>,
+    is_online: Arc<FutureMutex<(Instant, Result<()>)>>,
     event_consumer: BackendEventConsumer,
 }
 
@@ -141,13 +144,14 @@ impl UIDStore {
             account_hash,
             account_name,
             event_consumer,
+            store: Default::default(),
             capabilities: Default::default(),
             message_id_index: Default::default(),
             hash_index: Default::default(),
             uid_index: Default::default(),
             mailboxes: Arc::new(FutureMutex::new(Default::default())),
             collection: Collection::new(),
-            is_online: Arc::new(Mutex::new((
+            is_online: Arc::new(FutureMutex::new((
                 Instant::now(),
                 Err(Error::new("Account is uninitialised.")),
             ))),
@@ -285,6 +289,7 @@ impl MailBackend for NntpType {
             let mut res = String::with_capacity(8 * 1024);
             let mut conn = timeout(Some(Duration::from_secs(60 * 16)), connection.lock()).await?;
             if let Some(mut latest_article) = latest_article {
+                let mut unseen = LazyCountSet::new();
                 let timestamp = latest_article - 10 * 60;
                 let datetime_str = crate::utils::datetime::timestamp_to_string_utc(
                     timestamp,
@@ -299,7 +304,7 @@ impl MailBackend for NntpType {
                     .await?;
                     conn.read_response(&mut res, true, &["230 "]).await?;
                     let message_ids = {
-                        let message_id_lck = uid_store.message_id_index.lock().unwrap();
+                        let message_id_lck = uid_store.message_id_index.lock().await;
                         res.split_rn()
                             .skip(1)
                             .map(|s| s.trim())
@@ -315,11 +320,21 @@ impl MailBackend for NntpType {
                         conn.send_command(format!("OVER {}", msg_id).as_bytes())
                             .await?;
                         conn.read_response(&mut res, true, &["224 "]).await?;
-                        let mut message_id_lck = uid_store.message_id_index.lock().unwrap();
+                        let mut message_id_lck = uid_store.message_id_index.lock().await;
+                        let mut uid_index_lck = uid_store.uid_index.lock().await;
+                        let store_lck = uid_store.store.lock().await;
                         let mut hash_index_lck = uid_store.hash_index.lock().unwrap();
-                        let mut uid_index_lck = uid_store.uid_index.lock().unwrap();
                         for l in res.split_rn().skip(1) {
-                            let (_, (num, env)) = protocol_parser::over_article(l)?;
+                            let (_, (num, mut env)) = protocol_parser::over_article(l)?;
+
+                            if let Some(s) = store_lck.as_ref() {
+                                env.set_flags(s.flags(env.hash(), mailbox_hash, num)?);
+                                if !env.is_seen() {
+                                    unseen.insert_new(env.hash());
+                                }
+                            } else {
+                                unseen.insert_new(env.hash());
+                            }
                             env_hash_set.insert(env.hash());
                             message_id_lck.insert(env.message_id_display().to_string(), env.hash());
                             hash_index_lck.insert(env.hash(), (num, mailbox_hash));
@@ -342,7 +357,7 @@ impl MailBackend for NntpType {
                             .lock()
                             .unwrap()
                             .insert_existing_set(env_hash_set.clone());
-                        f.unseen.lock().unwrap().insert_existing_set(env_hash_set);
+                        f.unseen.lock().unwrap().insert_set(unseen.set);
                     }
                     return Ok(());
                 }
@@ -432,11 +447,56 @@ impl MailBackend for NntpType {
 
     fn set_flags(
         &mut self,
-        _env_hashes: EnvelopeHashBatch,
-        _mailbox_hash: MailboxHash,
-        _flags: SmallVec<[(std::result::Result<Flag, String>, bool); 8]>,
+        env_hashes: EnvelopeHashBatch,
+        mailbox_hash: MailboxHash,
+        flags: SmallVec<[(std::result::Result<Flag, String>, bool); 8]>,
     ) -> ResultFuture<()> {
-        Err(Error::new("NNTP doesn't support flags."))
+        let uid_store = self.uid_store.clone();
+        Ok(Box::pin(async move {
+            let uids: SmallVec<[(EnvelopeHash, UID); 64]> = {
+                let hash_index_lck = uid_store.hash_index.lock().unwrap();
+                env_hashes
+                    .iter()
+                    .filter_map(|env_hash| {
+                        hash_index_lck
+                            .get(&env_hash)
+                            .cloned()
+                            .map(|(uid, _)| (env_hash, uid))
+                    })
+                    .collect()
+            };
+
+            if uids.is_empty() {
+                return Ok(());
+            }
+            let fsets = &uid_store.mailboxes.lock().await[&mailbox_hash];
+            let store_lck = uid_store.store.lock().await;
+            if let Some(s) = store_lck.as_ref() {
+                for (flag, on) in flags {
+                    if let Ok(f) = flag {
+                        for (env_hash, uid) in &uids {
+                            let mut current_val = s.flags(*env_hash, mailbox_hash, *uid)?;
+                            current_val.set(f, on);
+                            if !current_val.intersects(Flag::SEEN) {
+                                fsets.unseen.lock().unwrap().insert_new(*env_hash);
+                            } else {
+                                fsets.unseen.lock().unwrap().remove(*env_hash);
+                            }
+                            s.set_flags(*env_hash, mailbox_hash, *uid, current_val)?;
+                            (uid_store.event_consumer)(
+                                uid_store.account_hash,
+                                BackendEvent::Refresh(RefreshEvent {
+                                    account_hash: uid_store.account_hash,
+                                    mailbox_hash,
+                                    kind: NewFlags(*env_hash, (current_val, vec![])),
+                                }),
+                            );
+                        }
+                    }
+                }
+            }
+            Ok(())
+        }))
     }
 
     fn delete_messages(
@@ -588,6 +648,16 @@ impl NntpType {
         let danger_accept_invalid_certs: bool =
             get_conf_val!(s["danger_accept_invalid_certs"], false)?;
         let require_auth = get_conf_val!(s["require_auth"], false)?;
+        let store_flags_locally = get_conf_val!(s["store_flags_locally"], true)?;
+        #[cfg(not(feature = "sqlite3"))]
+        if store_flags_locally {
+            return Err(Error::new(format!(
+                "{}: store_flags_locally is on but this copy of melib isn't built with sqlite3 \
+                 support.",
+                &s.name
+            )));
+        }
+
         let server_conf = NntpServerConf {
             server_hostname: server_hostname.to_string(),
             server_username: if require_auth {
@@ -639,6 +709,11 @@ impl NntpType {
         }
         let uid_store: Arc<UIDStore> = Arc::new(UIDStore {
             mailboxes: Arc::new(FutureMutex::new(mailboxes)),
+            store: if store_flags_locally {
+                Arc::new(FutureMutex::new(Some(store::Store::new(&s.name)?)))
+            } else {
+                Default::default()
+            },
             ..UIDStore::new(account_hash, account_name, event_consumer)
         });
         let connection = NntpConnection::new_connection(&server_conf, uid_store.clone());
@@ -724,6 +799,16 @@ impl NntpType {
                     .unwrap_or_else(|| Ok($default))
             }};
         }
+        #[cfg(feature = "sqlite3")]
+        get_conf_val!(s["store_flags_locally"], true)?;
+        #[cfg(not(feature = "sqlite3"))]
+        if get_conf_val!(s["store_flags_locally"], false)? {
+            return Err(Error::new(format!(
+                "{}: store_flags_locally is on but this copy of melib isn't built with sqlite3 \
+                 support.",
+                &s.name
+            )));
+        }
         get_conf_val!(s["require_auth"], false)?;
         get_conf_val!(s["server_hostname"])?;
         get_conf_val!(s["server_username"], String::new())?;
@@ -804,6 +889,7 @@ impl FetchState {
         let mailbox_hash = *mailbox_hash;
         let mut res = String::with_capacity(8 * 1024);
         let mut conn = connection.lock().await;
+        let mut unseen = LazyCountSet::new();
         if high_low_total.is_none() {
             conn.select_group(mailbox_hash, true, &mut res).await?;
             /*
@@ -830,7 +916,6 @@ impl FetchState {
             {
                 let f = &uid_store.mailboxes.lock().await[&mailbox_hash];
                 f.exists.lock().unwrap().set_not_yet_seen(total);
-                f.unseen.lock().unwrap().set_not_yet_seen(total);
             };
         }
         let (high, low, _) = high_low_total.unwrap();
@@ -857,11 +942,20 @@ impl FetchState {
         //uid_index: Arc<Mutex<HashMap<(MailboxHash, UID), EnvelopeHash>>>,
         let mut latest_article: Option<crate::UnixTimestamp> = None;
         {
-            let mut message_id_lck = uid_store.message_id_index.lock().unwrap();
+            let mut message_id_lck = uid_store.message_id_index.lock().await;
+            let mut uid_index_lck = uid_store.uid_index.lock().await;
+            let store_lck = uid_store.store.lock().await;
             let mut hash_index_lck = uid_store.hash_index.lock().unwrap();
-            let mut uid_index_lck = uid_store.uid_index.lock().unwrap();
             for l in res.split_rn().skip(1) {
-                let (_, (num, env)) = protocol_parser::over_article(l)?;
+                let (_, (num, mut env)) = protocol_parser::over_article(l)?;
+                if let Some(s) = store_lck.as_ref() {
+                    env.set_flags(s.flags(env.hash(), mailbox_hash, num)?);
+                    if !env.is_seen() {
+                        unseen.insert_new(env.hash());
+                    }
+                } else {
+                    unseen.insert_new(env.hash());
+                }
                 message_id_lck.insert(env.message_id_display().to_string(), env.hash());
                 hash_index_lck.insert(env.hash(), (num, mailbox_hash));
                 uid_index_lck.insert((mailbox_hash, num), env.hash());
@@ -881,7 +975,7 @@ impl FetchState {
                 .lock()
                 .unwrap()
                 .insert_existing_set(hash_set.clone());
-            f.unseen.lock().unwrap().insert_existing_set(hash_set);
+            *f.unseen.lock().unwrap() = unseen;
         };
         Ok(Some(ret))
     }

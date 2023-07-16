@@ -697,6 +697,10 @@ impl fmt::Debug for LazyCountSet {
 }
 
 impl LazyCountSet {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
     pub fn set_not_yet_seen(&mut self, new_val: usize) {
         self.not_yet_seen = new_val;
     }

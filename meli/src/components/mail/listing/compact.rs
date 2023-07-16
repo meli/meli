@@ -479,9 +479,10 @@ impl MailListingTrait for CompactListing {
                     + 1
                     + entry_strings.subject.grapheme_width()
                     + 1
-                    + entry_strings.tags.grapheme_width())
-                .try_into()
-                .unwrap_or(255),
+                    + entry_strings.tags.grapheme_width()
+                    + 16)
+                    .try_into()
+                    .unwrap_or(255),
             );
             min_width.1 = cmp::max(min_width.1, entry_strings.date.grapheme_width()); /* date */
             min_width.2 = cmp::max(min_width.2, entry_strings.from.grapheme_width()); /* from */
@@ -491,7 +492,8 @@ impl MailListingTrait for CompactListing {
                     + 1
                     + entry_strings.subject.grapheme_width()
                     + 1
-                    + entry_strings.tags.grapheme_width(),
+                    + entry_strings.tags.grapheme_width()
+                    + 16,
             ); /* subject */
             self.rows.insert_thread(
                 thread,
@@ -1269,7 +1271,9 @@ impl CompactListing {
             ((x, idx), (min_width.3, idx)),
             None,
         );
-        columns[3][(x, idx)].set_bg(row_attr.bg).set_ch(' ');
+        if let Some(c) = columns[3].get_mut(x, idx) {
+            c.set_bg(row_attr.bg).set_ch(' ');
+        }
         let x = {
             let mut x = x + 1;
             for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {

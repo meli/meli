@@ -949,7 +949,7 @@ impl State {
                 }
             }
             #[cfg(not(feature = "sqlite3"))]
-            AccountAction(ref account_name, ReIndex) => {
+            AccountAction(_, ReIndex) => {
                 self.context.replies.push_back(UIEvent::Notification(
                     None,
                     "Message index rebuild failed: meli is not built with sqlite3 support."
