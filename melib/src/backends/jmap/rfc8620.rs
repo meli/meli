@@ -42,7 +42,7 @@ use std::collections::HashMap;
 
 pub use argument::*;
 
-use super::protocol::Method;
+use super::{deserialize_from_str, protocol::Method};
 pub trait Object {
     const NAME: &'static str;
 }
@@ -282,7 +282,6 @@ impl Object for BlobObject {
 ///    - `account_id`: `Id`
 ///
 ///       The id of the account to use.
-///
 #[derive(Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Get<OBJ>
@@ -427,16 +426,9 @@ pub struct GetResponse<OBJ: Object> {
 
 impl<OBJ: Object + DeserializeOwned> std::convert::TryFrom<&RawValue> for GetResponse<OBJ> {
     type Error = crate::error::Error;
+
     fn try_from(t: &RawValue) -> Result<Self, crate::error::Error> {
-        let res: (String, Self, String) = serde_json::from_str(t.get()).map_err(|err| {
-            crate::error::Error::new(format!(
-                "BUG: Could not deserialize server JSON response properly, please report \
-                 this!\nReply from server: {}",
-                &t
-            ))
-            .set_source(Some(Arc::new(err)))
-            .set_kind(crate::error::ErrorKind::Bug)
-        })?;
+        let res: (String, Self, String) = deserialize_from_str(t.get())?;
         assert_eq!(&res.0, &format!("{}/get", OBJ::NAME));
         Ok(res.1)
     }
@@ -548,16 +540,9 @@ pub struct QueryResponse<OBJ: Object> {
 
 impl<OBJ: Object + DeserializeOwned> std::convert::TryFrom<&RawValue> for QueryResponse<OBJ> {
     type Error = crate::error::Error;
-    fn try_from(t: &RawValue) -> Result<Self, crate::error::Error> {
-        let res: (String, Self, String) = serde_json::from_str(t.get()).map_err(|err| {
-            crate::error::Error::new(format!(
-                "BUG: Could not deserialize server JSON response properly, please report \
-                 this!\nReply from server: {}",
-                &t
-            ))
-            .set_source(Some(Arc::new(err)))
-            .set_kind(crate::error::ErrorKind::Bug)
-        })?;
+
+    fn try_from(t: &RawValue) -> std::result::Result<Self, Self::Error> {
+        let res: (String, Self, String) = deserialize_from_str(t.get())?;
         assert_eq!(&res.0, &format!("{}/query", OBJ::NAME));
         Ok(res.1)
     }
@@ -618,7 +603,6 @@ impl<M: Method<OBJ>, OBJ: Object> ResultField<M, OBJ> {
 ///     to return. If supplied by the client, the value MUST be a
 ///     positive integer greater than 0. If a value outside of this range
 ///     is given, the server MUST re
-///
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 /* ch-ch-ch-ch-ch-Changes */
@@ -697,16 +681,9 @@ pub struct ChangesResponse<OBJ: Object> {
 
 impl<OBJ: Object + DeserializeOwned> std::convert::TryFrom<&RawValue> for ChangesResponse<OBJ> {
     type Error = crate::error::Error;
-    fn try_from(t: &RawValue) -> Result<Self, crate::error::Error> {
-        let res: (String, Self, String) = serde_json::from_str(t.get()).map_err(|err| {
-            crate::error::Error::new(format!(
-                "BUG: Could not deserialize server JSON response properly, please report \
-                 this!\nReply from server: {}",
-                &t
-            ))
-            .set_source(Some(Arc::new(err)))
-            .set_kind(crate::error::ErrorKind::Bug)
-        })?;
+
+    fn try_from(t: &RawValue) -> std::result::Result<Self, Self::Error> {
+        let res: (String, Self, String) = deserialize_from_str(t.get())?;
         assert_eq!(&res.0, &format!("{}/changes", OBJ::NAME));
         Ok(res.1)
     }
@@ -911,16 +888,9 @@ pub struct SetResponse<OBJ: Object> {
 
 impl<OBJ: Object + DeserializeOwned> std::convert::TryFrom<&RawValue> for SetResponse<OBJ> {
     type Error = crate::error::Error;
+
     fn try_from(t: &RawValue) -> Result<Self, crate::error::Error> {
-        let res: (String, Self, String) = serde_json::from_str(t.get()).map_err(|err| {
-            crate::error::Error::new(format!(
-                "BUG: Could not deserialize server JSON response properly, please report \
-                 this!\nReply from server: {}",
-                &t
-            ))
-            .set_source(Some(Arc::new(err)))
-            .set_kind(crate::error::ErrorKind::Bug)
-        })?;
+        let res: (String, Self, String) = deserialize_from_str(t.get())?;
         assert_eq!(&res.0, &format!("{}/set", OBJ::NAME));
         Ok(res.1)
     }
@@ -1038,6 +1008,16 @@ pub fn download_request_format(
         } else if download_url[prev_pos..].starts_with("{name}") {
             ret.push_str(name.as_deref().unwrap_or(""));
             prev_pos += "{name}".len();
+        } else if download_url[prev_pos..].starts_with("{type}") {
+            ret.push_str("application/octet-stream");
+            prev_pos += "{name}".len();
+        } else {
+            // [ref:FIXME]: return protocol error here
+            log::error!(
+                "BUG: unknown parameter in download url: {}",
+                &download_url[prev_pos..]
+            );
+            break;
         }
     }
     if prev_pos != download_url.len() {

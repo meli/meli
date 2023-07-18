@@ -90,7 +90,7 @@ pub async fn get_mailboxes(conn: &JmapConnection) -> Result<HashMap<MailboxHash,
         }))?)
         .await?;
 
-    let mut v: MethodResponse = serde_json::from_str(&res_text).unwrap();
+    let mut v: MethodResponse = deserialize_from_str(&res_text)?;
     *conn.store.online_status.lock().await = (std::time::Instant::now(), Ok(()));
     let m = GetResponse::<MailboxObject>::try_from(v.method_responses.remove(0))?;
     let GetResponse::<MailboxObject> {
@@ -191,15 +191,8 @@ pub async fn get_message_list(
         .await?;
 
     let res_text = res.text().await?;
-    let mut v: MethodResponse = match serde_json::from_str(&res_text) {
+    let mut v: MethodResponse = match deserialize_from_str(&res_text) {
         Err(err) => {
-            let err = Error::new(format!(
-                "BUG: Could not deserialize {} server JSON response properly, please report \
-                 this!\nReply from server: {}",
-                &conn.server_conf.server_url, &res_text
-            ))
-            .set_source(Some(Arc::new(err)))
-            .set_kind(ErrorKind::Bug);
             *conn.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
             return Err(err);
         }
@@ -259,7 +252,7 @@ impl EmailFetchState {
                         let current_state_lck = mbox.email_state.lock().unwrap();
                         (
                             current_state_lck.is_none(),
-                            current_state_lck.as_ref() != Some(&state),
+                            current_state_lck.as_ref() == Some(&state),
                         )
                     })
                     .unwrap_or((true, true))
@@ -324,15 +317,8 @@ impl EmailFetchState {
 
                     let _prev_seq = req.add_call(&email_call);
                     let res_text = conn.send_request(serde_json::to_string(&req)?).await?;
-                    let mut v: MethodResponse = match serde_json::from_str(&res_text) {
+                    let mut v: MethodResponse = match deserialize_from_str(&res_text) {
                         Err(err) => {
-                            let err = Error::new(format!(
-                                    "BUG: Could not deserialize {} server JSON response properly, please report \
-                 this!\nReply from server: {}",
-                 &conn.server_conf.server_url, &res_text
-                            ))
-                                .set_source(Some(Arc::new(err)))
-                                .set_kind(ErrorKind::Bug);
                             *conn.store.online_status.lock().await =
                                 (Instant::now(), Err(err.clone()));
                             return Err(err);

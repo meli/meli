@@ -49,8 +49,7 @@ impl BackendOp for JmapOp {
     fn as_bytes(&mut self) -> ResultFuture<Vec<u8>> {
         {
             let byte_lck = self.store.byte_cache.lock().unwrap();
-            if byte_lck.contains_key(&self.hash) && byte_lck[&self.hash].bytes.is_some() {
-                let ret = byte_lck[&self.hash].bytes.clone().unwrap();
+            if let Some(Some(ret)) = byte_lck.get(&self.hash).map(|c| c.bytes.clone()) {
                 return Ok(Box::pin(async move { Ok(ret.into_bytes()) }));
             }
         }

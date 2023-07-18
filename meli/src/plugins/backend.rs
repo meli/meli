@@ -207,7 +207,9 @@ impl MailBackend for PluginBackend {
         &mut self,
         _name: String,
     ) -> ResultFuture<(MailboxHash, HashMap<MailboxHash, Mailbox>)> {
-        Err(Error::new("Creating a mailbox is currently unimplemented for plugins"))
+        Err(Error::new(
+            "Creating a mailbox is currently unimplemented for plugins",
+        ))
     }
     fn collection(&self) -> melib::Collection {
         self.collection.clone()

@@ -337,7 +337,7 @@ impl std::convert::From<EmailObject> for crate::Envelope {
 pub struct HtmlBody {
     pub blob_id: Id<BlobObject>,
     #[serde(default)]
-    pub charset: String,
+    pub charset: Option<String>,
     #[serde(default)]
     pub cid: Option<String>,
     #[serde(default)]
@@ -364,7 +364,7 @@ pub struct HtmlBody {
 pub struct TextBody {
     pub blob_id: Id<BlobObject>,
     #[serde(default)]
-    pub charset: String,
+    pub charset: Option<String>,
     #[serde(default)]
     pub cid: Option<String>,
     #[serde(default)]
@@ -854,16 +854,9 @@ pub struct EmailQueryChangesResponse {
 
 impl std::convert::TryFrom<&RawValue> for EmailQueryChangesResponse {
     type Error = crate::error::Error;
-    fn try_from(t: &RawValue) -> Result<Self> {
-        let res: (String, Self, String) = serde_json::from_str(t.get()).map_err(|err| {
-            crate::error::Error::new(format!(
-                "BUG: Could not deserialize server JSON response properly, please report \
-                 this!\nReply from server: {}",
-                &t
-            ))
-            .set_source(Some(Arc::new(err)))
-            .set_kind(ErrorKind::Bug)
-        })?;
+
+    fn try_from(t: &RawValue) -> std::result::Result<Self, Self::Error> {
+        let res: (String, Self, String) = deserialize_from_str(t.get())?;
         assert_eq!(&res.0, "Email/queryChanges");
         Ok(res.1)
     }

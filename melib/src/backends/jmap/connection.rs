@@ -100,8 +100,8 @@ impl JmapConnection {
                     jmap_session_resource_url = to_well_known(&self.server_conf.server_url);
                     if let Ok(s) = self.client.get_async(&jmap_session_resource_url).await {
                         log::error!(
-                            "Account {} server URL should start with `https`. Please correct \
-                                 your configuration value. Its current value is `{}`.",
+                            "Account {} server URL should start with `https`. Please correct your \
+                             configuration value. Its current value is `{}`.",
                             self.store.account_name,
                             self.server_conf.server_url
                         );
@@ -151,7 +151,7 @@ impl JmapConnection {
             Ok(s) => s,
         };
 
-        let session: JmapSession = match serde_json::from_str(&res_text) {
+        let session: JmapSession = match deserialize_from_str(&res_text) {
             Err(err) => {
                 let err = Error::new(format!(
                     "Could not connect to JMAP server endpoint for {}. Is your server url setting \
@@ -167,14 +167,36 @@ impl JmapConnection {
             Ok(s) => s,
         };
         if !session.capabilities.contains_key(JMAP_CORE_CAPABILITY) {
-            let err = Error::new(format!("Server {} did not return JMAP Core capability ({core_capability}). Returned capabilities were: {}", &self.server_conf.server_url, session.capabilities.keys().map(String::as_str).collect::<Vec<&str>>().join(", "), core_capability=JMAP_CORE_CAPABILITY));
+            let err = Error::new(format!(
+                "Server {} did not return JMAP Core capability ({core_capability}). Returned \
+                 capabilities were: {}",
+                &self.server_conf.server_url,
+                session
+                    .capabilities
+                    .keys()
+                    .map(String::as_str)
+                    .collect::<Vec<&str>>()
+                    .join(", "),
+                core_capability = JMAP_CORE_CAPABILITY
+            ));
             *self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
             return Err(err);
         }
         *self.store.core_capabilities.lock().unwrap() =
             session.capabilities[JMAP_CORE_CAPABILITY].clone();
         if !session.capabilities.contains_key(JMAP_MAIL_CAPABILITY) {
-            let err = Error::new(format!("Server {} does not support JMAP Mail capability ({mail_capability}). Returned capabilities were: {}", &self.server_conf.server_url, session.capabilities.keys().map(String::as_str).collect::<Vec<&str>>().join(", "), mail_capability=JMAP_MAIL_CAPABILITY));
+            let err = Error::new(format!(
+                "Server {} does not support JMAP Mail capability ({mail_capability}). Returned \
+                 capabilities were: {}",
+                &self.server_conf.server_url,
+                session
+                    .capabilities
+                    .keys()
+                    .map(String::as_str)
+                    .collect::<Vec<&str>>()
+                    .join(", "),
+                mail_capability = JMAP_MAIL_CAPABILITY
+            ));
             *self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
             return Err(err);
         }
@@ -266,15 +288,8 @@ impl JmapConnection {
 
             let res_text = res.text().await?;
             debug!(&res_text);
-            let mut v: MethodResponse = match serde_json::from_str(&res_text) {
+            let mut v: MethodResponse = match deserialize_from_str(&res_text) {
                 Err(err) => {
-                    let err = Error::new(format!(
-                        "BUG: Could not deserialize {} server JSON response properly, please \
-                         report this!\nReply from server: {}",
-                        &self.server_conf.server_url, &res_text
-                    ))
-                    .set_source(Some(Arc::new(err)))
-                    .set_kind(ErrorKind::Bug);
                     *self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
                     return Err(err);
                 }
@@ -446,11 +461,10 @@ impl JmapConnection {
 
         let res_text = res.text().await?;
         debug!(&res_text);
-        let _: MethodResponse = match serde_json::from_str(&res_text) {
+        let _: MethodResponse = match deserialize_from_str(&res_text) {
             Err(err) => {
-                let err = Error::new(format!("BUG: Could not deserialize {} server JSON response properly, please report this!\nReply from server: {}", &self.server_conf.server_url, &res_text)).set_source(Some(Arc::new(err))).set_kind(ErrorKind::Bug);
-                *self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
                 log::error!("{}", &err);
+                *self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
                 return Err(err);
             }
             Ok(s) => s,

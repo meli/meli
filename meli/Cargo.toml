@@ -71,7 +71,7 @@ regex = "1"
 tempfile = "3.3"
 
 [features]
-default = ["sqlite3", "notmuch", "regexp", "smtp", "dbus-notifications", "gpgme", "cli-docs"]
+default = ["sqlite3", "notmuch", "regexp", "smtp", "dbus-notifications", "gpgme", "cli-docs", "jmap"]
 notmuch = ["melib/notmuch_backend", ]
 jmap = ["melib/jmap_backend",]
 sqlite3 = ["melib/sqlite3"]
