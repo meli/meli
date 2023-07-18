@@ -28,7 +28,7 @@ use super::{mailbox::JmapMailbox, *};
 
 pub type UtcDate = String;
 
-use super::rfc8620::Object;
+use super::rfc8620::{Object, State};
 
 macro_rules! get_request_no {
     ($lock:expr) => {{
@@ -47,7 +47,7 @@ pub trait Method<OBJ: Object>: Serialize {
     const NAME: &'static str;
 }
 
-static USING: &[&str] = &["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"];
+static USING: &[&str] = &[JMAP_CORE_CAPABILITY, JMAP_MAIL_CAPABILITY];
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -80,36 +80,17 @@ impl Request {
 
 pub async fn get_mailboxes(conn: &JmapConnection) -> Result<HashMap<MailboxHash, JmapMailbox>> {
     let seq = get_request_no!(conn.request_no);
-    let api_url = conn.session.lock().unwrap().api_url.clone();
-    let mut res = conn
-        .client
-        .post_async(
-            api_url.as_str(),
-            serde_json::to_string(&json!({
-                "using": ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"],
-                "methodCalls": [["Mailbox/get", {
-                "accountId": conn.mail_account_id()
-                },
-                 format!("#m{}",seq).as_str()]],
-            }))?,
-        )
+    let res_text = conn
+        .send_request(serde_json::to_string(&json!({
+            "using": [JMAP_CORE_CAPABILITY, JMAP_MAIL_CAPABILITY],
+            "methodCalls": [["Mailbox/get", {
+            "accountId": conn.mail_account_id()
+            },
+             format!("#m{}",seq).as_str()]],
+        }))?)
         .await?;
 
-    let res_text = res.text().await?;
-    let mut v: MethodResponse = match serde_json::from_str(&res_text) {
-        Err(err) => {
-            let err = Error::new(format!(
-                "BUG: Could not deserialize {} server JSON response properly, please report \
-                 this!\nReply from server: {}",
-                &conn.server_conf.server_url, &res_text
-            ))
-            .set_source(Some(Arc::new(err)))
-            .set_kind(ErrorKind::Bug);
-            *conn.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
-            return Err(err);
-        }
-        Ok(s) => s,
-    };
+    let mut v: MethodResponse = serde_json::from_str(&res_text).unwrap();
     *conn.store.online_status.lock().await = (std::time::Instant::now(), Ok(()));
     let m = GetResponse::<MailboxObject>::try_from(v.method_responses.remove(0))?;
     let GetResponse::<MailboxObject> {
@@ -256,115 +237,146 @@ pub async fn get_message(conn: &JmapConnection, ids: &[String]) -> Result<Vec<En
 }
 */
 
-pub async fn fetch(
-    conn: &JmapConnection,
-    store: &Store,
-    mailbox_hash: MailboxHash,
-) -> Result<Vec<Envelope>> {
-    let mailbox_id = store.mailboxes.read().unwrap()[&mailbox_hash].id.clone();
-    let email_query_call: EmailQuery = EmailQuery::new(
-        Query::new()
-            .account_id(conn.mail_account_id())
-            .filter(Some(Filter::Condition(
-                EmailFilterCondition::new()
-                    .in_mailbox(Some(mailbox_id))
-                    .into(),
-            )))
-            .position(0),
-    )
-    .collapse_threads(false);
+#[derive(Copy, Clone)]
+pub enum EmailFetchState {
+    Start { batch_size: u64 },
+    Ongoing { position: u64, batch_size: u64 },
+}
 
-    let mut req = Request::new(conn.request_no.clone());
-    let prev_seq = req.add_call(&email_query_call);
-
-    let email_call: EmailGet = EmailGet::new(
-        Get::new()
-            .ids(Some(JmapArgument::reference(
-                prev_seq,
-                EmailQuery::RESULT_FIELD_IDS,
-            )))
-            .account_id(conn.mail_account_id()),
-    );
-
-    req.add_call(&email_call);
-
-    let api_url = conn.session.lock().unwrap().api_url.clone();
-    let mut res = conn
-        .client
-        .post_async(api_url.as_str(), serde_json::to_string(&req)?)
-        .await?;
-
-    let res_text = res.text().await?;
-
-    let mut v: MethodResponse = match serde_json::from_str(&res_text) {
-        Err(err) => {
-            let err = Error::new(format!(
-                "BUG: Could not deserialize {} server JSON response properly, please report \
-                 this!\nReply from server: {}",
-                &conn.server_conf.server_url, &res_text
-            ))
-            .set_source(Some(Arc::new(err)))
-            .set_kind(ErrorKind::Bug);
-            *conn.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
-            return Err(err);
+impl EmailFetchState {
+    pub async fn must_update_state(
+        &mut self,
+        conn: &JmapConnection,
+        mailbox_hash: MailboxHash,
+        state: State<EmailObject>,
+    ) -> Result<bool> {
+        {
+            let (is_empty, is_equal) = {
+                let mailboxes_lck = conn.store.mailboxes.read().unwrap();
+                mailboxes_lck
+                    .get(&mailbox_hash)
+                    .map(|mbox| {
+                        let current_state_lck = mbox.email_state.lock().unwrap();
+                        (
+                            current_state_lck.is_none(),
+                            current_state_lck.as_ref() != Some(&state),
+                        )
+                    })
+                    .unwrap_or((true, true))
+            };
+            if is_empty {
+                let mut mailboxes_lck = conn.store.mailboxes.write().unwrap();
+                debug!("{:?}: inserting state {}", EmailObject::NAME, &state);
+                mailboxes_lck.entry(mailbox_hash).and_modify(|mbox| {
+                    *mbox.email_state.lock().unwrap() = Some(state);
+                });
+            } else if !is_equal {
+                conn.email_changes(mailbox_hash).await?;
+            }
+            Ok(is_empty || !is_equal)
         }
-        Ok(s) => s,
-    };
-    let e = GetResponse::<EmailObject>::try_from(v.method_responses.pop().unwrap())?;
-    let query_response = QueryResponse::<EmailObject>::try_from(v.method_responses.pop().unwrap())?;
-    store
-        .mailboxes
-        .write()
-        .unwrap()
-        .entry(mailbox_hash)
-        .and_modify(|mbox| {
-            *mbox.email_query_state.lock().unwrap() = Some(query_response.query_state);
-        });
-    let GetResponse::<EmailObject> { list, state, .. } = e;
-    {
-        let (is_empty, is_equal) = {
-            let mailboxes_lck = conn.store.mailboxes.read().unwrap();
-            mailboxes_lck
-                .get(&mailbox_hash)
-                .map(|mbox| {
-                    let current_state_lck = mbox.email_state.lock().unwrap();
-                    (
-                        current_state_lck.is_none(),
-                        current_state_lck.as_ref() != Some(&state),
+    }
+
+    pub async fn fetch(
+        &mut self,
+        conn: &JmapConnection,
+        store: &Store,
+        mailbox_hash: MailboxHash,
+    ) -> Result<Vec<Envelope>> {
+        loop {
+            match *self {
+                Self::Start { batch_size } => {
+                    *self = Self::Ongoing {
+                        position: 0,
+                        batch_size,
+                    };
+                    continue;
+                }
+                Self::Ongoing {
+                    mut position,
+                    batch_size,
+                } => {
+                    let mailbox_id = store.mailboxes.read().unwrap()[&mailbox_hash].id.clone();
+                    let email_query_call: EmailQuery = EmailQuery::new(
+                        Query::new()
+                            .account_id(conn.mail_account_id().clone())
+                            .filter(Some(Filter::Condition(
+                                EmailFilterCondition::new()
+                                    .in_mailbox(Some(mailbox_id))
+                                    .into(),
+                            )))
+                            .position(position)
+                            .limit(Some(batch_size)),
                     )
-                })
-                .unwrap_or((true, true))
-        };
-        if is_empty {
-            let mut mailboxes_lck = conn.store.mailboxes.write().unwrap();
-            debug!("{:?}: inserting state {}", EmailObject::NAME, &state);
-            mailboxes_lck.entry(mailbox_hash).and_modify(|mbox| {
-                *mbox.email_state.lock().unwrap() = Some(state);
-            });
-        } else if !is_equal {
-            conn.email_changes(mailbox_hash).await?;
+                    .collapse_threads(false);
+
+                    let mut req = Request::new(conn.request_no.clone());
+                    let prev_seq = req.add_call(&email_query_call);
+
+                    let email_call: EmailGet = EmailGet::new(
+                        Get::new()
+                            .ids(Some(JmapArgument::reference(
+                                prev_seq,
+                                EmailQuery::RESULT_FIELD_IDS,
+                            )))
+                            .account_id(conn.mail_account_id().clone()),
+                    );
+
+                    let _prev_seq = req.add_call(&email_call);
+                    let res_text = conn.send_request(serde_json::to_string(&req)?).await?;
+                    let mut v: MethodResponse = match serde_json::from_str(&res_text) {
+                        Err(err) => {
+                            let err = Error::new(format!(
+                                    "BUG: Could not deserialize {} server JSON response properly, please report \
+                 this!\nReply from server: {}",
+                 &conn.server_conf.server_url, &res_text
+                            ))
+                                .set_source(Some(Arc::new(err)))
+                                .set_kind(ErrorKind::Bug);
+                            *conn.store.online_status.lock().await =
+                                (Instant::now(), Err(err.clone()));
+                            return Err(err);
+                        }
+                        Ok(v) => v,
+                    };
+
+                    let e =
+                        GetResponse::<EmailObject>::try_from(v.method_responses.pop().unwrap())?;
+                    let GetResponse::<EmailObject> { list, state, .. } = e;
+
+                    if self.must_update_state(conn, mailbox_hash, state).await? {
+                        *self = Self::Start { batch_size };
+                        continue;
+                    }
+                    let mut total = BTreeSet::default();
+                    let mut unread = BTreeSet::default();
+                    let mut ret = Vec::with_capacity(list.len());
+                    for obj in list {
+                        let env = store.add_envelope(obj);
+                        total.insert(env.hash());
+                        if !env.is_seen() {
+                            unread.insert(env.hash());
+                        }
+                        ret.push(env);
+                    }
+                    let mut mailboxes_lck = store.mailboxes.write().unwrap();
+                    mailboxes_lck.entry(mailbox_hash).and_modify(|mbox| {
+                        mbox.total_emails.lock().unwrap().insert_existing_set(total);
+                        mbox.unread_emails
+                            .lock()
+                            .unwrap()
+                            .insert_existing_set(unread);
+                    });
+                    position += batch_size;
+                    *self = Self::Ongoing {
+                        position,
+                        batch_size,
+                    };
+                    return Ok(ret);
+                }
+            }
         }
     }
-    let mut total = BTreeSet::default();
-    let mut unread = BTreeSet::default();
-    let mut ret = Vec::with_capacity(list.len());
-    for obj in list {
-        let env = store.add_envelope(obj);
-        total.insert(env.hash());
-        if !env.is_seen() {
-            unread.insert(env.hash());
-        }
-        ret.push(env);
-    }
-    let mut mailboxes_lck = store.mailboxes.write().unwrap();
-    mailboxes_lck.entry(mailbox_hash).and_modify(|mbox| {
-        mbox.total_emails.lock().unwrap().insert_existing_set(total);
-        mbox.unread_emails
-            .lock()
-            .unwrap()
-            .insert_existing_set(unread);
-    });
-    Ok(ret)
 }
 
 pub fn keywords_to_flags(keywords: Vec<String>) -> (Flag, Vec<String>) {

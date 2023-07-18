@@ -21,7 +21,7 @@
 
 use super::*;
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Comparator<OBJ: Object> {
     property: String,

@@ -63,6 +63,9 @@ macro_rules! _impl {
         }
     }
 
+pub const JMAP_CORE_CAPABILITY: &str = "urn:ietf:params:jmap:core";
+pub const JMAP_MAIL_CAPABILITY: &str = "urn:ietf:params:jmap:mail";
+
 pub mod operations;
 use operations::*;
 
@@ -174,6 +177,7 @@ pub struct Store {
     pub mailbox_state: Arc<Mutex<State<MailboxObject>>>,
     pub online_status: Arc<FutureMutex<(Instant, Result<()>)>>,
     pub is_subscribed: Arc<IsSubscribedFn>,
+    pub core_capabilities: Arc<Mutex<rfc8620::CapabilitiesObject>>,
     pub event_consumer: BackendEventConsumer,
 }
 
@@ -299,15 +303,19 @@ impl MailBackend for JmapType {
         Ok(Box::pin(async_stream::try_stream! {
             let mut conn = connection.lock().await;
             conn.connect().await?;
-            let res = protocol::fetch(
-                &conn,
-                &store,
-                mailbox_hash,
-            ).await?;
-            if res.is_empty() {
-                return;
+            let batch_size: u64 = conn.store.core_capabilities.lock().unwrap().max_objects_in_get;
+            let mut fetch_state = protocol::EmailFetchState::Start { batch_size };
+            loop {
+                let res = fetch_state.fetch(
+                    &conn,
+                    &store,
+                    mailbox_hash,
+                ).await?;
+                if res.is_empty() {
+                    return;
+                }
+                yield res;
             }
-            yield res;
         }))
     }
 
@@ -922,7 +930,7 @@ impl JmapType {
             event_consumer,
             is_subscribed: Arc::new(IsSubscribedFn(is_subscribed)),
             collection: Collection::default(),
-
+            core_capabilities: Arc::new(Mutex::new(rfc8620::CapabilitiesObject::default())),
             byte_cache: Default::default(),
             id_store: Default::default(),
             reverse_id_store: Default::default(),

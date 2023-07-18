@@ -35,13 +35,6 @@ use crate::{
 mod import;
 pub use import::*;
 
-#[derive(Debug)]
-pub struct ThreadObject;
-
-impl Object for ThreadObject {
-    const NAME: &'static str = "Thread";
-}
-
 impl Id<EmailObject> {
     pub fn into_hash(&self) -> EnvelopeHash {
         EnvelopeHash::from_bytes(self.inner.as_bytes())
