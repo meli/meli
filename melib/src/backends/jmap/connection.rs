@@ -24,6 +24,7 @@ use std::sync::MutexGuard;
 use isahc::config::Configurable;
 
 use super::*;
+use crate::error::NetworkErrorKind;
 
 #[derive(Debug)]
 pub struct JmapConnection {
@@ -41,6 +42,13 @@ impl JmapConnection {
             .connection_cache_size(8)
             .connection_cache_ttl(std::time::Duration::from_secs(30 * 60))
             .default_header("Content-Type", "application/json")
+            .ssl_options(if server_conf.danger_accept_invalid_certs {
+                isahc::config::SslOption::DANGER_ACCEPT_INVALID_CERTS
+                    | isahc::config::SslOption::DANGER_ACCEPT_INVALID_HOSTS
+                    | isahc::config::SslOption::DANGER_ACCEPT_REVOKED_CERTS
+            } else {
+                isahc::config::SslOption::NONE
+            })
             .redirect_policy(RedirectPolicy::Limit(10));
         let client = if server_conf.use_token {
             client
@@ -72,24 +80,48 @@ impl JmapConnection {
         if self.store.online_status.lock().await.1.is_ok() {
             return Ok(());
         }
-        let mut jmap_session_resource_url = self.server_conf.server_url.to_string();
-        jmap_session_resource_url.push_str("/.well-known/jmap");
 
-        let mut req = self
-            .client
-            .get_async(&jmap_session_resource_url)
-            .await
-            .map_err(|err| {
-                //*self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
-                Error::new(format!(
+        fn to_well_known(uri: &str) -> String {
+            let uri = uri.trim_start_matches('/');
+            format!("{uri}/.well-known/jmap")
+        }
+
+        let mut jmap_session_resource_url = to_well_known(&self.server_conf.server_url);
+
+        let mut req = match self.client.get_async(&jmap_session_resource_url).await {
+            Err(err) => 'block: {
+                if matches!(NetworkErrorKind::from(err.kind()), NetworkErrorKind::ProtocolViolation if self.server_conf.server_url.starts_with("http://"))
+                {
+                    // attempt recovery by trying https://
+                    self.server_conf.server_url = format!(
+                        "https{}",
+                        self.server_conf.server_url.trim_start_matches("http")
+                    );
+                    jmap_session_resource_url = to_well_known(&self.server_conf.server_url);
+                    if let Ok(s) = self.client.get_async(&jmap_session_resource_url).await {
+                        log::error!(
+                            "Account {} server URL should start with `https`. Please correct \
+                                 your configuration value. Its current value is `{}`.",
+                            self.store.account_name,
+                            self.server_conf.server_url
+                        );
+                        break 'block s;
+                    }
+                }
+
+                let err = Error::new(format!(
                     "Could not connect to JMAP server endpoint for {}. Is your server url setting \
                      correct? (i.e. \"jmap.mailserver.org\") (Note: only session resource \
                      discovery via /.well-known/jmap is supported. DNS SRV records are not \
-                     suppported.)\nError connecting to server: {}",
+                     suppported.)\n\nError connecting to server: {}",
                     &self.server_conf.server_url, &err
                 ))
-                .set_source(Some(Arc::new(err)))
-            })?;
+                .set_source(Some(Arc::new(err)));
+                *self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
+                return Err(err);
+            }
+            Ok(s) => s,
+        };
 
         if !req.status().is_success() {
             let kind: crate::error::NetworkErrorKind = req.status().into();
@@ -103,7 +135,21 @@ impl JmapConnection {
             return Err(err);
         }
 
-        let res_text = req.text().await?;
+        let res_text = match req.text().await {
+            Err(err) => {
+                let err = Error::new(format!(
+                    "Could not connect to JMAP server endpoint for {}. Is your server url setting \
+                     correct? (i.e. \"jmap.mailserver.org\") (Note: only session resource \
+                     discovery via /.well-known/jmap is supported. DNS SRV records are not \
+                     suppported.)\n\nReply from server: {}",
+                    &self.server_conf.server_url, &err
+                ))
+                .set_source(Some(Arc::new(err)));
+                *self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
+                return Err(err);
+            }
+            Ok(s) => s,
+        };
 
         let session: JmapSession = match serde_json::from_str(&res_text) {
             Err(err) => {
@@ -111,7 +157,7 @@ impl JmapConnection {
                     "Could not connect to JMAP server endpoint for {}. Is your server url setting \
                      correct? (i.e. \"jmap.mailserver.org\") (Note: only session resource \
                      discovery via /.well-known/jmap is supported. DNS SRV records are not \
-                     suppported.)\nReply from server: {}",
+                     suppported.)\n\nReply from server: {}",
                     &self.server_conf.server_url, &res_text
                 ))
                 .set_source(Some(Arc::new(err)));
