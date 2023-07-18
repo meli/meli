@@ -84,8 +84,4 @@ impl BackendOp for JmapOp {
             Ok(res_text.into_bytes())
         }))
     }
-
-    fn fetch_flags(&self) -> ResultFuture<Flag> {
-        Ok(Box::pin(async { Ok(Flag::default()) }))
-    }
 }

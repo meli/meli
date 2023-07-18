@@ -322,66 +322,6 @@ impl BackendOp for MboxOp {
             .to_vec();
         Ok(Box::pin(async move { Ok(ret) }))
     }
-
-    fn fetch_flags(&self) -> ResultFuture<Flag> {
-        let mut flags = Flag::empty();
-        if self.slice.borrow().is_none() {
-            let file = std::fs::OpenOptions::new()
-                .read(true)
-                .write(true)
-                .open(&self.path)?;
-            get_rw_lock_blocking(&file, &self.path)?;
-            let mut buf_reader = BufReader::new(file);
-            let mut contents = Vec::new();
-            buf_reader.read_to_end(&mut contents)?;
-            *self.slice.borrow_mut() = Some(contents);
-        }
-        let slice_ref = self.slice.borrow();
-        let (_, headers) = parser::headers::headers_raw(slice_ref.as_ref().unwrap().as_slice())?;
-        if let Some(start) = headers.find(b"Status:") {
-            if let Some(end) = headers[start..].find(b"\n") {
-                let start = start + b"Status:".len();
-                let status = headers[start..start + end].trim();
-                if status.contains(&b'F') {
-                    flags.set(Flag::FLAGGED, true);
-                }
-                if status.contains(&b'A') {
-                    flags.set(Flag::REPLIED, true);
-                }
-                if status.contains(&b'R') {
-                    flags.set(Flag::SEEN, true);
-                }
-                if status.contains(&b'D') {
-                    flags.set(Flag::TRASHED, true);
-                }
-                if status.contains(&b'T') {
-                    flags.set(Flag::DRAFT, true);
-                }
-            }
-        }
-        if let Some(start) = headers.find(b"X-Status:") {
-            let start = start + b"X-Status:".len();
-            if let Some(end) = headers[start..].find(b"\n") {
-                let status = headers[start..start + end].trim();
-                if status.contains(&b'F') {
-                    flags.set(Flag::FLAGGED, true);
-                }
-                if status.contains(&b'A') {
-                    flags.set(Flag::REPLIED, true);
-                }
-                if status.contains(&b'R') {
-                    flags.set(Flag::SEEN, true);
-                }
-                if status.contains(&b'D') {
-                    flags.set(Flag::TRASHED, true);
-                }
-                if status.contains(&b'T') {
-                    flags.set(Flag::DRAFT, true);
-                }
-            }
-        }
-        Ok(Box::pin(async move { Ok(flags) }))
-    }
 }
 
 #[derive(Debug, Clone, Copy)]

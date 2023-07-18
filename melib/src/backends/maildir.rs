@@ -110,12 +110,6 @@ impl BackendOp for MaildirOp {
         let ret = Ok(self.slice.as_ref().unwrap().as_slice().to_vec());
         Ok(Box::pin(async move { ret }))
     }
-
-    fn fetch_flags(&self) -> ResultFuture<Flag> {
-        let path = self.path()?;
-        let ret = Ok(path.flags());
-        Ok(Box::pin(async move { ret }))
-    }
 }
 
 #[derive(Debug, Default, Clone)]

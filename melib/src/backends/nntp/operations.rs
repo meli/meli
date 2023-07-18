@@ -22,7 +22,7 @@
 use std::sync::Arc;
 
 use super::*;
-use crate::{backends::*, email::*, error::Error};
+use crate::{backends::*, error::Error};
 
 /// `BackendOp` implementor for Nntp
 #[derive(Debug, Clone)]
@@ -83,9 +83,5 @@ impl BackendOp for NntpOp {
 
             Ok(res.as_bytes()[pos..].to_vec())
         }))
-    }
-
-    fn fetch_flags(&self) -> ResultFuture<Flag> {
-        Ok(Box::pin(async move { Ok(Flag::default()) }))
     }
 }

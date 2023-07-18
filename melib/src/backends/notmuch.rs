@@ -1059,13 +1059,6 @@ impl BackendOp for NotmuchOp {
         let ret = Ok(self.bytes.as_ref().unwrap().to_vec());
         Ok(Box::pin(async move { ret }))
     }
-
-    fn fetch_flags(&self) -> ResultFuture<Flag> {
-        let index_lck = self.index.write().unwrap();
-        let message = Message::find_message(&self.database, &index_lck[&self.hash])?;
-        let (flags, _tags) = message.tags().collect_flags_and_tags();
-        Ok(Box::pin(async move { Ok(flags) }))
-    }
 }
 
 pub struct Query<'s> {

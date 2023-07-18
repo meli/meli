@@ -24,7 +24,7 @@ use std::sync::Arc;
 use imap_codec::fetch::MessageDataItemName;
 
 use super::*;
-use crate::{backends::*, email::*, error::Error};
+use crate::{backends::*, error::Error};
 
 /// `BackendOp` implementor for Imap
 #[derive(Debug, Clone)]
@@ -112,67 +112,6 @@ impl BackendOp for ImapOp {
             let cache = bytes_cache.entry(uid).or_default();
             let ret = cache.bytes.clone().unwrap();
             Ok(ret)
-        }))
-    }
-
-    fn fetch_flags(&self) -> ResultFuture<Flag> {
-        let mut response = Vec::with_capacity(8 * 1024);
-        let connection = self.connection.clone();
-        let mailbox_hash = self.mailbox_hash;
-        let uid = self.uid;
-        let uid_store = self.uid_store.clone();
-
-        Ok(Box::pin(async move {
-            let exists_in_cache = {
-                let mut bytes_cache = uid_store.byte_cache.lock()?;
-                let cache = bytes_cache.entry(uid).or_default();
-                cache.flags.is_some()
-            };
-            if !exists_in_cache {
-                let mut conn = connection.lock().await;
-                conn.connect().await?;
-                conn.examine_mailbox(mailbox_hash, &mut response, false)
-                    .await?;
-                conn.send_command(CommandBody::fetch(
-                    uid,
-                    vec![MessageDataItemName::Flags],
-                    true,
-                )?)
-                .await?;
-                conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)
-                    .await?;
-                debug!(
-                    "fetch response is {} bytes and {} lines",
-                    response.len(),
-                    String::from_utf8_lossy(&response).lines().count()
-                );
-                let v = protocol_parser::uid_fetch_flags_responses(&response)
-                    .map(|(_, v)| v)
-                    .map_err(Error::from)?;
-                if v.len() != 1 {
-                    debug!("responses len is {}", v.len());
-                    debug!(String::from_utf8_lossy(&response));
-                    /* [ref:TODO]: Trigger cache invalidation here. */
-                    debug!("message with UID {} was not found", uid);
-                    return Err(
-                        Error::new(format!("Invalid/unexpected response: {:?}", response))
-                            .set_summary(format!("message with UID {} was not found?", uid)),
-                    );
-                }
-                let (_uid, (_flags, _)) = v[0];
-                assert_eq!(_uid, uid);
-                let mut bytes_cache = uid_store.byte_cache.lock()?;
-                let cache = bytes_cache.entry(uid).or_default();
-                cache.flags = Some(_flags);
-            }
-            {
-                let val = {
-                    let mut bytes_cache = uid_store.byte_cache.lock()?;
-                    let cache = bytes_cache.entry(uid).or_default();
-                    cache.flags
-                };
-                Ok(val.unwrap())
-            }
         }))
     }
 }

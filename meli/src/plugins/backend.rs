@@ -298,8 +298,4 @@ impl BackendOp for PluginOp {
             }
         }))
     }
-
-    fn fetch_flags(&self) -> ResultFuture<Flag> {
-        Err(Error::new("Unimplemented."))
-    }
 }
