@@ -466,6 +466,8 @@ impl Account {
         let backend = map.get(&settings.account().format)(
             settings.account(),
             Box::new(move |path: &str| {
+                // disjoint-capture-in-closures
+                let _ = &s;
                 s.account.subscribed_mailboxes.is_empty()
                     || (s.mailbox_confs.contains_key(path)
                         && s.mailbox_confs[path].mailbox_conf().subscribe.is_true())

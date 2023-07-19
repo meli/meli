@@ -171,7 +171,7 @@ macro_rules! named_unit_variant {
     };
 }
 
-mod strings {
+pub mod strings {
     named_unit_variant!(server_submission);
 }
 

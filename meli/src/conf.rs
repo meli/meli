@@ -1010,7 +1010,7 @@ mod pp {
 
     /// Expands `include` macros in configuration file and other configuration
     /// files (eg. themes) in the filesystem.
-    pub fn pp<P: AsRef<Path>>(path: P) -> Result<String> {
+    pub(super) fn pp<P: AsRef<Path>>(path: P) -> Result<String> {
         let p_buf: PathBuf = if path.as_ref().is_relative() {
             path.as_ref().expand().canonicalize()?
         } else {

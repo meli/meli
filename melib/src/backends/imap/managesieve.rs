@@ -25,11 +25,6 @@ use std::{
     time::SystemTime,
 };
 
-use nom::{
-    branch::alt, bytes::complete::tag, combinator::map, multi::separated_list1,
-    sequence::separated_pair,
-};
-
 use super::{ImapConnection, ImapProtocol, ImapServerConf, UIDStore};
 use crate::{
     conf::AccountSettings,
@@ -43,17 +38,6 @@ pub struct ManageSieveConnection {
     pub inner: ImapConnection,
 }
 
-pub fn managesieve_capabilities(input: &[u8]) -> Result<Vec<(&[u8], &[u8])>> {
-    let (_, ret) = separated_list1(
-        tag(b"\r\n"),
-        alt((
-            separated_pair(quoted_raw, tag(b" "), quoted_raw),
-            map(quoted_raw, |q| (q, &b""[..])),
-        )),
-    )(input)?;
-    Ok(ret)
-}
-
 #[derive(PartialEq, Eq, Debug, Copy, Clone)]
 pub enum ManageSieveResponse<'a> {
     Ok {
@@ -64,231 +48,6 @@ pub enum ManageSieveResponse<'a> {
         code: Option<&'a [u8]>,
         message: Option<&'a [u8]>,
     },
-}
-
-mod parser {
-    use nom::{
-        bytes::complete::tag,
-        character::complete::crlf,
-        combinator::{iterator, map, opt},
-    };
-    pub use nom::{
-        bytes::complete::{is_not, tag_no_case},
-        sequence::{delimited, pair, preceded, terminated},
-    };
-
-    use super::*;
-
-    pub fn sieve_name(input: &[u8]) -> IResult<&[u8], &[u8]> {
-        crate::backends::imap::protocol_parser::string_token(input)
-    }
-
-    // *(sieve-name [SP "ACTIVE"] CRLF)
-    // response-oknobye
-    pub fn listscripts(input: &[u8]) -> IResult<&[u8], Vec<(&[u8], bool)>> {
-        let mut it = iterator(
-            input,
-            alt((
-                terminated(
-                    map(terminated(sieve_name, tag_no_case(b" ACTIVE")), |r| {
-                        (r, true)
-                    }),
-                    crlf,
-                ),
-                terminated(map(sieve_name, |r| (r, false)), crlf),
-            )),
-        );
-
-        let parsed = (&mut it).collect::<Vec<(&[u8], bool)>>();
-        let res: IResult<_, _> = it.finish();
-        let (rest, _) = res?;
-        Ok((rest, parsed))
-    }
-
-    // response-getscript    = (sieve-script CRLF response-ok) /
-    //                      response-nobye
-    pub fn getscript(input: &[u8]) -> IResult<&[u8], &[u8]> {
-        sieve_name(input)
-    }
-
-    pub fn response_oknobye(input: &[u8]) -> IResult<&[u8], ManageSieveResponse> {
-        alt((
-            map(
-                terminated(
-                    pair(
-                        preceded(
-                            tag_no_case(b"ok"),
-                            opt(preceded(
-                                tag(b" "),
-                                delimited(tag(b"("), is_not(")"), tag(b")")),
-                            )),
-                        ),
-                        opt(preceded(tag(b" "), sieve_name)),
-                    ),
-                    crlf,
-                ),
-                |(code, message)| ManageSieveResponse::Ok { code, message },
-            ),
-            map(
-                terminated(
-                    pair(
-                        preceded(
-                            alt((tag_no_case(b"no"), tag_no_case(b"bye"))),
-                            opt(preceded(
-                                tag(b" "),
-                                delimited(tag(b"("), is_not(")"), tag(b")")),
-                            )),
-                        ),
-                        opt(preceded(tag(b" "), sieve_name)),
-                    ),
-                    crlf,
-                ),
-                |(code, message)| ManageSieveResponse::NoBye { code, message },
-            ),
-        ))(input)
-    }
-
-    #[test]
-    fn test_managesieve_listscripts() {
-        let input_1 = b"\"summer_script\"\r\n\"vacation_script\"\r\n{13}\r\nclever\"script\r\n\"main_script\" ACTIVE\r\nOK";
-        assert_eq!(
-            terminated(listscripts, tag_no_case(b"OK"))(input_1),
-            Ok((
-                &b""[..],
-                vec![
-                    (&b"summer_script"[..], false),
-                    (&b"vacation_script"[..], false),
-                    (&b"clever\"script"[..], false),
-                    (&b"main_script"[..], true)
-                ]
-            ))
-        );
-
-        let input_2 = b"\"summer_script\"\r\n\"main_script\" active\r\nok";
-        assert_eq!(
-            terminated(listscripts, tag_no_case(b"OK"))(input_2),
-            Ok((
-                &b""[..],
-                vec![(&b"summer_script"[..], false), (&b"main_script"[..], true)]
-            ))
-        );
-        let input_3 = b"ok";
-        assert_eq!(
-            terminated(listscripts, tag_no_case(b"OK"))(input_3),
-            Ok((&b""[..], vec![]))
-        );
-    }
-
-    #[test]
-    fn test_managesieve_general() {
-        assert_eq!(managesieve_capabilities(b"\"IMPLEMENTATION\" \"Dovecot Pigeonhole\"\r\n\"SIEVE\" \"fileinto reject envelope encoded-character vacation subaddress comparator-i;ascii-numeric relational regex imap4flags copy include variables body enotify environment mailbox date index ihave duplicate mime foreverypart extracttext\"\r\n\"NOTIFY\" \"mailto\"\r\n\"SASL\" \"PLAIN\"\r\n\"STARTTLS\"\r\n\"VERSION\" \"1.0\"\r\n").unwrap(), vec![
-            (&b"IMPLEMENTATION"[..],&b"Dovecot Pigeonhole"[..]),
-            (&b"SIEVE"[..],&b"fileinto reject envelope encoded-character vacation subaddress comparator-i;ascii-numeric relational regex imap4flags copy include variables body enotify environment mailbox date index ihave duplicate mime foreverypart extracttext"[..]),
-            (&b"NOTIFY"[..],&b"mailto"[..]),
-            (&b"SASL"[..],&b"PLAIN"[..]),
-            (&b"STARTTLS"[..], &b""[..]),
-            (&b"VERSION"[..],&b"1.0"[..])]
-
-        );
-
-        let response_ok = b"OK (WARNINGS) \"line 8: server redirect action limit is 2, this redirect might be ignored\"\r\n";
-        assert_eq!(
-                response_oknobye(response_ok),
-                Ok((
-                    &b""[..],
-                    ManageSieveResponse::Ok {
-                        code: Some(&b"WARNINGS"[..]),
-                        message: Some(&b"line 8: server redirect action limit is 2, this redirect might be ignored"[..]),
-                    }
-                ))
-            );
-        let response_ok = b"OK (WARNINGS)\r\n";
-        assert_eq!(
-            response_oknobye(response_ok),
-            Ok((
-                &b""[..],
-                ManageSieveResponse::Ok {
-                    code: Some(&b"WARNINGS"[..]),
-                    message: None,
-                }
-            ))
-        );
-        let response_ok =
-            b"OK \"line 8: server redirect action limit is 2, this redirect might be ignored\"\r\n";
-        assert_eq!(
-                response_oknobye(response_ok),
-                Ok((
-                    &b""[..],
-                    ManageSieveResponse::Ok {
-                        code: None,
-                        message: Some(&b"line 8: server redirect action limit is 2, this redirect might be ignored"[..]),
-                    }
-                ))
-            );
-        let response_ok = b"Ok\r\n";
-        assert_eq!(
-            response_oknobye(response_ok),
-            Ok((
-                &b""[..],
-                ManageSieveResponse::Ok {
-                    code: None,
-                    message: None,
-                }
-            ))
-        );
-
-        let response_nobye = b"No (NONEXISTENT) \"There is no script by that name\"\r\n";
-        assert_eq!(
-            response_oknobye(response_nobye),
-            Ok((
-                &b""[..],
-                ManageSieveResponse::NoBye {
-                    code: Some(&b"NONEXISTENT"[..]),
-                    message: Some(&b"There is no script by that name"[..]),
-                }
-            ))
-        );
-        let response_nobye = b"No (NONEXISTENT) {31}\r\nThere is no script by that name\r\n";
-        assert_eq!(
-            response_oknobye(response_nobye),
-            Ok((
-                &b""[..],
-                ManageSieveResponse::NoBye {
-                    code: Some(&b"NONEXISTENT"[..]),
-                    message: Some(&b"There is no script by that name"[..]),
-                }
-            ))
-        );
-
-        let response_nobye = b"No\r\n";
-        assert_eq!(
-            response_oknobye(response_nobye),
-            Ok((
-                &b""[..],
-                ManageSieveResponse::NoBye {
-                    code: None,
-                    message: None,
-                }
-            ))
-        );
-    }
-}
-
-// Return a byte sequence surrounded by "s and decoded if necessary
-pub fn quoted_raw(input: &[u8]) -> IResult<&[u8], &[u8]> {
-    if input.is_empty() || input[0] != b'"' {
-        return Err(nom::Err::Error((input, "empty").into()));
-    }
-
-    let mut i = 1;
-    while i < input.len() {
-        if input[i] == b'\"' && input[i - 1] != b'\\' {
-            return Ok((&input[i + 1..], &input[1..i]));
-        }
-        i += 1;
-    }
-
-    Err(nom::Err::Error((input, "no quotes").into()))
 }
 
 impl ManageSieveConnection {
@@ -477,5 +236,249 @@ impl ManageSieveConnection {
 
     pub async fn renamescript(&mut self) -> Result<()> {
         Ok(())
+    }
+}
+
+pub mod parser {
+    use nom::{
+        branch::alt,
+        bytes::complete::tag,
+        character::complete::crlf,
+        combinator::{iterator, map, opt},
+        multi::separated_list1,
+        sequence::separated_pair,
+    };
+    pub use nom::{
+        bytes::complete::{is_not, tag_no_case},
+        sequence::{delimited, pair, preceded, terminated},
+    };
+
+    use super::*;
+
+    /// Return a byte sequence surrounded by "s and decoded if necessary
+    pub fn quoted_raw(input: &[u8]) -> IResult<&[u8], &[u8]> {
+        if input.is_empty() || input[0] != b'"' {
+            return Err(nom::Err::Error((input, "empty").into()));
+        }
+
+        let mut i = 1;
+        while i < input.len() {
+            if input[i] == b'\"' && input[i - 1] != b'\\' {
+                return Ok((&input[i + 1..], &input[1..i]));
+            }
+            i += 1;
+        }
+
+        Err(nom::Err::Error((input, "no quotes").into()))
+    }
+
+    pub fn managesieve_capabilities(input: &[u8]) -> Result<Vec<(&[u8], &[u8])>> {
+        let (_, ret) = separated_list1(
+            tag(b"\r\n"),
+            alt((
+                separated_pair(quoted_raw, tag(b" "), quoted_raw),
+                map(quoted_raw, |q| (q, &b""[..])),
+            )),
+        )(input)?;
+        Ok(ret)
+    }
+
+    pub fn sieve_name(input: &[u8]) -> IResult<&[u8], &[u8]> {
+        crate::backends::imap::protocol_parser::string_token(input)
+    }
+
+    // *(sieve-name [SP "ACTIVE"] CRLF)
+    // response-oknobye
+    pub fn listscripts(input: &[u8]) -> IResult<&[u8], Vec<(&[u8], bool)>> {
+        let mut it = iterator(
+            input,
+            alt((
+                terminated(
+                    map(terminated(sieve_name, tag_no_case(b" ACTIVE")), |r| {
+                        (r, true)
+                    }),
+                    crlf,
+                ),
+                terminated(map(sieve_name, |r| (r, false)), crlf),
+            )),
+        );
+
+        let parsed = (&mut it).collect::<Vec<(&[u8], bool)>>();
+        let res: IResult<_, _> = it.finish();
+        let (rest, _) = res?;
+        Ok((rest, parsed))
+    }
+
+    // response-getscript    = (sieve-script CRLF response-ok) /
+    //                      response-nobye
+    pub fn getscript(input: &[u8]) -> IResult<&[u8], &[u8]> {
+        sieve_name(input)
+    }
+
+    pub fn response_oknobye(input: &[u8]) -> IResult<&[u8], ManageSieveResponse> {
+        alt((
+            map(
+                terminated(
+                    pair(
+                        preceded(
+                            tag_no_case(b"ok"),
+                            opt(preceded(
+                                tag(b" "),
+                                delimited(tag(b"("), is_not(")"), tag(b")")),
+                            )),
+                        ),
+                        opt(preceded(tag(b" "), sieve_name)),
+                    ),
+                    crlf,
+                ),
+                |(code, message)| ManageSieveResponse::Ok { code, message },
+            ),
+            map(
+                terminated(
+                    pair(
+                        preceded(
+                            alt((tag_no_case(b"no"), tag_no_case(b"bye"))),
+                            opt(preceded(
+                                tag(b" "),
+                                delimited(tag(b"("), is_not(")"), tag(b")")),
+                            )),
+                        ),
+                        opt(preceded(tag(b" "), sieve_name)),
+                    ),
+                    crlf,
+                ),
+                |(code, message)| ManageSieveResponse::NoBye { code, message },
+            ),
+        ))(input)
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn test_managesieve_listscripts() {
+            let input_1 = b"\"summer_script\"\r\n\"vacation_script\"\r\n{13}\r\nclever\"script\r\n\"main_script\" ACTIVE\r\nOK";
+            assert_eq!(
+                terminated(listscripts, tag_no_case(b"OK"))(input_1),
+                Ok((
+                    &b""[..],
+                    vec![
+                        (&b"summer_script"[..], false),
+                        (&b"vacation_script"[..], false),
+                        (&b"clever\"script"[..], false),
+                        (&b"main_script"[..], true)
+                    ]
+                ))
+            );
+
+            let input_2 = b"\"summer_script\"\r\n\"main_script\" active\r\nok";
+            assert_eq!(
+                terminated(listscripts, tag_no_case(b"OK"))(input_2),
+                Ok((
+                    &b""[..],
+                    vec![(&b"summer_script"[..], false), (&b"main_script"[..], true)]
+                ))
+            );
+            let input_3 = b"ok";
+            assert_eq!(
+                terminated(listscripts, tag_no_case(b"OK"))(input_3),
+                Ok((&b""[..], vec![]))
+            );
+        }
+
+        #[test]
+        fn test_managesieve_general() {
+            assert_eq!(managesieve_capabilities(b"\"IMPLEMENTATION\" \"Dovecot Pigeonhole\"\r\n\"SIEVE\" \"fileinto reject envelope encoded-character vacation subaddress comparator-i;ascii-numeric relational regex imap4flags copy include variables body enotify environment mailbox date index ihave duplicate mime foreverypart extracttext\"\r\n\"NOTIFY\" \"mailto\"\r\n\"SASL\" \"PLAIN\"\r\n\"STARTTLS\"\r\n\"VERSION\" \"1.0\"\r\n").unwrap(), vec![
+            (&b"IMPLEMENTATION"[..],&b"Dovecot Pigeonhole"[..]),
+            (&b"SIEVE"[..],&b"fileinto reject envelope encoded-character vacation subaddress comparator-i;ascii-numeric relational regex imap4flags copy include variables body enotify environment mailbox date index ihave duplicate mime foreverypart extracttext"[..]),
+            (&b"NOTIFY"[..],&b"mailto"[..]),
+            (&b"SASL"[..],&b"PLAIN"[..]),
+            (&b"STARTTLS"[..], &b""[..]),
+            (&b"VERSION"[..],&b"1.0"[..])]
+
+        );
+
+            let response_ok = b"OK (WARNINGS) \"line 8: server redirect action limit is 2, this redirect might be ignored\"\r\n";
+            assert_eq!(
+                response_oknobye(response_ok),
+                Ok((
+                    &b""[..],
+                    ManageSieveResponse::Ok {
+                        code: Some(&b"WARNINGS"[..]),
+                        message: Some(&b"line 8: server redirect action limit is 2, this redirect might be ignored"[..]),
+                    }
+                ))
+            );
+            let response_ok = b"OK (WARNINGS)\r\n";
+            assert_eq!(
+                response_oknobye(response_ok),
+                Ok((
+                    &b""[..],
+                    ManageSieveResponse::Ok {
+                        code: Some(&b"WARNINGS"[..]),
+                        message: None,
+                    }
+                ))
+            );
+            let response_ok =
+            b"OK \"line 8: server redirect action limit is 2, this redirect might be ignored\"\r\n";
+            assert_eq!(
+                response_oknobye(response_ok),
+                Ok((
+                    &b""[..],
+                    ManageSieveResponse::Ok {
+                        code: None,
+                        message: Some(&b"line 8: server redirect action limit is 2, this redirect might be ignored"[..]),
+                    }
+                ))
+            );
+            let response_ok = b"Ok\r\n";
+            assert_eq!(
+                response_oknobye(response_ok),
+                Ok((
+                    &b""[..],
+                    ManageSieveResponse::Ok {
+                        code: None,
+                        message: None,
+                    }
+                ))
+            );
+
+            let response_nobye = b"No (NONEXISTENT) \"There is no script by that name\"\r\n";
+            assert_eq!(
+                response_oknobye(response_nobye),
+                Ok((
+                    &b""[..],
+                    ManageSieveResponse::NoBye {
+                        code: Some(&b"NONEXISTENT"[..]),
+                        message: Some(&b"There is no script by that name"[..]),
+                    }
+                ))
+            );
+            let response_nobye = b"No (NONEXISTENT) {31}\r\nThere is no script by that name\r\n";
+            assert_eq!(
+                response_oknobye(response_nobye),
+                Ok((
+                    &b""[..],
+                    ManageSieveResponse::NoBye {
+                        code: Some(&b"NONEXISTENT"[..]),
+                        message: Some(&b"There is no script by that name"[..]),
+                    }
+                ))
+            );
+
+            let response_nobye = b"No\r\n";
+            assert_eq!(
+                response_oknobye(response_nobye),
+                Ok((
+                    &b""[..],
+                    ManageSieveResponse::NoBye {
+                        code: None,
+                        message: None,
+                    }
+                ))
+            );
+        }
     }
 }

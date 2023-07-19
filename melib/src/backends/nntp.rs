@@ -30,6 +30,7 @@ use smallvec::SmallVec;
 
 use crate::{get_conf_val, get_path_hash};
 mod store;
+pub use store::*;
 #[macro_use]
 mod protocol_parser;
 pub use protocol_parser::*;

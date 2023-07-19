@@ -45,7 +45,7 @@ mod thread;
 pub use thread::*;
 mod types;
 pub use types::*;
-mod state;
+pub mod state;
 use state::*;
 
 pub mod envelope;

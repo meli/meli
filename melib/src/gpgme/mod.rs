@@ -72,9 +72,9 @@ macro_rules! c_string_literal {
         }
     }};
 }
-mod bindings;
+pub mod bindings;
 use bindings::*;
-mod io;
+pub mod io;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GpgmeFlag {
@@ -804,7 +804,8 @@ impl Context {
                 .chain_err_summary(|| {
                     "libgpgme error: could not perform seek on signature data object"
                 })?;
-            _ = text;
+            // disjoint-capture-in-closures
+            let _ = &text;
             sig.into_bytes()
         })
     }
@@ -1127,7 +1128,8 @@ impl Context {
             cipher
                 .seek(std::io::SeekFrom::Start(0))
                 .chain_err_summary(|| "libgpgme error: could not perform seek on plain text")?;
-            _ = plain;
+            // disjoint-capture-in-closures
+            let _ = &plain;
             cipher.into_bytes()
         })
     }

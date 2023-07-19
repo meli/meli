@@ -34,10 +34,10 @@ mod watch;
 pub use watch::*;
 mod search;
 pub use search::*;
-mod cache;
+pub mod cache;
 pub mod error;
 pub mod managesieve;
-mod untagged;
+pub mod untagged;
 
 use std::{
     collections::{hash_map::DefaultHasher, BTreeSet, HashMap, HashSet},

@@ -444,8 +444,327 @@ pub trait MailListingTrait: ListingTrait {
         envs_to_set: SmallVec<[EnvelopeHash; 8]>,
         a: &ListingAction,
     ) {
+        fn inner(
+            context: &mut Context,
+            envs_to_set: SmallVec<[EnvelopeHash; 8]>,
+            account_hash: AccountHash,
+            mailbox_hash: MailboxHash,
+            a: &ListingAction,
+        ) {
+            let env_hashes = if let Ok(batch) = EnvelopeHashBatch::try_from(envs_to_set.as_slice())
+            {
+                batch
+            } else {
+                return;
+            };
+            let account = &mut context.accounts[&account_hash];
+            match a {
+                ListingAction::SetSeen => {
+                    let job = account.backend.write().unwrap().set_flags(
+                        env_hashes.clone(),
+                        mailbox_hash,
+                        smallvec::smallvec![(Ok(Flag::SEEN), true)],
+                    );
+                    match job {
+                        Err(err) => {
+                            context.replies.push_back(UIEvent::StatusEvent(
+                                StatusEvent::DisplayMessage(err.to_string()),
+                            ));
+                        }
+                        Ok(fut) => {
+                            let handle = account
+                                .main_loop_handler
+                                .job_executor
+                                .spawn_specialized("set_seen".into(), fut);
+                            account.insert_job(
+                                handle.job_id,
+                                JobRequest::SetFlags { env_hashes, handle },
+                            );
+                        }
+                    }
+                }
+                ListingAction::SetUnseen => {
+                    let job = account.backend.write().unwrap().set_flags(
+                        env_hashes.clone(),
+                        mailbox_hash,
+                        smallvec::smallvec![(Ok(Flag::SEEN), false)],
+                    );
+                    match job {
+                        Err(err) => {
+                            context.replies.push_back(UIEvent::StatusEvent(
+                                StatusEvent::DisplayMessage(err.to_string()),
+                            ));
+                        }
+                        Ok(fut) => {
+                            let handle = account
+                                .main_loop_handler
+                                .job_executor
+                                .spawn_specialized("set_unseen".into(), fut);
+                            account.insert_job(
+                                handle.job_id,
+                                JobRequest::SetFlags { env_hashes, handle },
+                            );
+                        }
+                    }
+                }
+                ListingAction::Tag(Remove(ref tag_str)) => {
+                    let job = account.backend.write().unwrap().set_flags(
+                        env_hashes.clone(),
+                        mailbox_hash,
+                        smallvec::smallvec![(Err(tag_str.to_string()), false)],
+                    );
+                    match job {
+                        Err(err) => {
+                            context.replies.push_back(UIEvent::StatusEvent(
+                                StatusEvent::DisplayMessage(err.to_string()),
+                            ));
+                        }
+                        Ok(fut) => {
+                            let handle = account
+                                .main_loop_handler
+                                .job_executor
+                                .spawn_specialized("remove_tag".into(), fut);
+                            account.insert_job(
+                                handle.job_id,
+                                JobRequest::SetFlags { env_hashes, handle },
+                            );
+                        }
+                    }
+                }
+                ListingAction::Tag(Add(ref tag_str)) => {
+                    let job = account.backend.write().unwrap().set_flags(
+                        env_hashes.clone(),
+                        mailbox_hash,
+                        smallvec::smallvec![(Err(tag_str.to_string()), true)],
+                    );
+                    match job {
+                        Err(err) => {
+                            context.replies.push_back(UIEvent::StatusEvent(
+                                StatusEvent::DisplayMessage(err.to_string()),
+                            ));
+                        }
+                        Ok(fut) => {
+                            let handle = account
+                                .main_loop_handler
+                                .job_executor
+                                .spawn_specialized("add_tag".into(), fut);
+                            account.insert_job(
+                                handle.job_id,
+                                JobRequest::SetFlags { env_hashes, handle },
+                            );
+                        }
+                    }
+                }
+                ListingAction::Delete => {
+                    let job = account
+                        .backend
+                        .write()
+                        .unwrap()
+                        .delete_messages(env_hashes.clone(), mailbox_hash);
+                    match job {
+                        Err(err) => {
+                            context.replies.push_back(UIEvent::StatusEvent(
+                                StatusEvent::DisplayMessage(err.to_string()),
+                            ));
+                        }
+                        Ok(fut) => {
+                            let handle = account
+                                .main_loop_handler
+                                .job_executor
+                                .spawn_specialized("delete".into(), fut);
+                            account.insert_job(
+                                handle.job_id,
+                                JobRequest::DeleteMessages { env_hashes, handle },
+                            );
+                        }
+                    }
+                }
+                ListingAction::CopyTo(ref mailbox_path) => {
+                    match account.mailbox_by_path(mailbox_path).and_then(
+                        |destination_mailbox_hash| {
+                            account.backend.write().unwrap().copy_messages(
+                                env_hashes,
+                                mailbox_hash,
+                                destination_mailbox_hash,
+                                /* move? */ false,
+                            )
+                        },
+                    ) {
+                        Err(err) => {
+                            context.replies.push_back(UIEvent::StatusEvent(
+                                StatusEvent::DisplayMessage(err.to_string()),
+                            ));
+                        }
+                        Ok(fut) => {
+                            let handle = account
+                                .main_loop_handler
+                                .job_executor
+                                .spawn_specialized("copy_to_mailbox".into(), fut);
+                            account.insert_job(
+                                handle.job_id,
+                                JobRequest::Generic {
+                                    name: "message copying".into(),
+                                    handle,
+                                    on_finish: None,
+                                    log_level: LogLevel::INFO,
+                                },
+                            );
+                        }
+                    }
+                }
+                ListingAction::CopyToOtherAccount(ref _account_name, ref _mailbox_path) => {
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
+                            "Copying to another account is currently unimplemented".into(),
+                        )));
+                }
+                ListingAction::MoveTo(ref mailbox_path) => {
+                    match account.mailbox_by_path(mailbox_path).and_then(
+                        |destination_mailbox_hash| {
+                            account.backend.write().unwrap().copy_messages(
+                                env_hashes,
+                                mailbox_hash,
+                                destination_mailbox_hash,
+                                /* move? */ true,
+                            )
+                        },
+                    ) {
+                        Err(err) => {
+                            context.replies.push_back(UIEvent::StatusEvent(
+                                StatusEvent::DisplayMessage(err.to_string()),
+                            ));
+                        }
+                        Ok(fut) => {
+                            let handle = account
+                                .main_loop_handler
+                                .job_executor
+                                .spawn_specialized("move_to_mailbox".into(), fut);
+                            account.insert_job(
+                                handle.job_id,
+                                JobRequest::Generic {
+                                    name: "message moving".into(),
+                                    handle,
+                                    on_finish: None,
+                                    log_level: LogLevel::INFO,
+                                },
+                            );
+                        }
+                    }
+                }
+                ListingAction::ExportMbox(format, ref path) => {
+                    use std::{future::Future, io::Write, pin::Pin};
+
+                    use futures::future::try_join_all;
+
+                    let futures: Result<Vec<_>> = envs_to_set
+                        .iter()
+                        .map(|&env_hash| {
+                            account.operation(env_hash).and_then(|mut op| op.as_bytes())
+                        })
+                        .collect::<Result<Vec<_>>>();
+                    let path_ = path.to_path_buf();
+                    let format = (*format).unwrap_or_default();
+                    let collection = account.collection.clone();
+                    let (sender, mut receiver) = crate::jobs::oneshot::channel();
+                    let fut: Pin<Box<dyn Future<Output = Result<()>> + Send + 'static>> =
+                        Box::pin(async move {
+                            let cl = async move {
+                                use melib::backends::mbox::MboxMetadata;
+                                let bytes: Vec<Vec<u8>> = try_join_all(futures?).await?;
+                                let envs: Vec<_> = envs_to_set
+                                    .iter()
+                                    .map(|&env_hash| collection.get_env(env_hash))
+                                    .collect();
+                                let mut file =
+                                    std::io::BufWriter::new(std::fs::File::create(&path_)?);
+                                let mut iter = envs.iter().zip(bytes.into_iter());
+                                let tags_lck = collection.tag_index.read().unwrap();
+                                if let Some((env, ref bytes)) = iter.next() {
+                                    let tags: Vec<&str> = env
+                                        .tags()
+                                        .iter()
+                                        .filter_map(|h| tags_lck.get(h).map(|s| s.as_str()))
+                                        .collect();
+                                    format.append(
+                                        &mut file,
+                                        bytes.as_slice(),
+                                        env.from().get(0),
+                                        Some(env.date()),
+                                        (env.flags(), tags),
+                                        MboxMetadata::CClient,
+                                        true,
+                                        false,
+                                    )?;
+                                }
+                                for (env, bytes) in iter {
+                                    let tags: Vec<&str> = env
+                                        .tags()
+                                        .iter()
+                                        .filter_map(|h| tags_lck.get(h).map(|s| s.as_str()))
+                                        .collect();
+                                    format.append(
+                                        &mut file,
+                                        bytes.as_slice(),
+                                        env.from().get(0),
+                                        Some(env.date()),
+                                        (env.flags(), tags),
+                                        MboxMetadata::CClient,
+                                        false,
+                                        false,
+                                    )?;
+                                }
+                                file.flush()?;
+                                Ok(())
+                            };
+                            let r: Result<()> = cl.await;
+                            let _ = sender.send(r);
+                            Ok(())
+                        });
+                    let handle = account
+                        .main_loop_handler
+                        .job_executor
+                        .spawn_blocking("export_to_mbox".into(), fut);
+                    let path = path.to_path_buf();
+                    account.insert_job(
+                        handle.job_id,
+                        JobRequest::Generic {
+                            name: "exporting mbox".into(),
+                            handle,
+                            on_finish: Some(CallbackFn(Box::new(move |context: &mut Context| {
+                                context.replies.push_back(match receiver.try_recv() {
+                                    Err(_) | Ok(None) => UIEvent::Notification(
+                                        Some("Could not export mbox".to_string()),
+                                        "Job was canceled.".to_string(),
+                                        Some(NotificationType::Info),
+                                    ),
+                                    Ok(Some(Err(err))) => UIEvent::Notification(
+                                        Some("Could not export mbox".to_string()),
+                                        err.to_string(),
+                                        Some(NotificationType::Error(err.kind)),
+                                    ),
+                                    Ok(Some(Ok(()))) => UIEvent::Notification(
+                                        Some("Succesfully exported mbox".to_string()),
+                                        format!("Wrote to file {}", path.display()),
+                                        Some(NotificationType::Info),
+                                    ),
+                                });
+                            }))),
+                            log_level: LogLevel::INFO,
+                        },
+                    );
+                }
+                ListingAction::MoveToOtherAccount(ref _account_name, ref _mailbox_path) => {
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
+                            "Moving to another account is currently unimplemented".into(),
+                        )));
+                }
+                _ => unreachable!(),
+            }
+        }
         let account_hash = self.coordinates().0;
-        let account = &mut context.accounts[&account_hash];
         let mailbox_hash = self.coordinates().1;
         /*{
             let threads_lck = account.collection.get_threads(mailbox_hash);
@@ -457,305 +776,7 @@ pub trait MailListingTrait: ListingTrait {
             }
         }
         */
-        let env_hashes = if let Ok(batch) = EnvelopeHashBatch::try_from(envs_to_set.as_slice()) {
-            batch
-        } else {
-            return;
-        };
-        match a {
-            ListingAction::SetSeen => {
-                let job = account.backend.write().unwrap().set_flags(
-                    env_hashes.clone(),
-                    mailbox_hash,
-                    smallvec::smallvec![(Ok(Flag::SEEN), true)],
-                );
-                match job {
-                    Err(err) => {
-                        context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(err.to_string()),
-                        ));
-                    }
-                    Ok(fut) => {
-                        let handle = account
-                            .main_loop_handler
-                            .job_executor
-                            .spawn_specialized("set_seen".into(), fut);
-                        account
-                            .insert_job(handle.job_id, JobRequest::SetFlags { env_hashes, handle });
-                    }
-                }
-            }
-            ListingAction::SetUnseen => {
-                let job = account.backend.write().unwrap().set_flags(
-                    env_hashes.clone(),
-                    mailbox_hash,
-                    smallvec::smallvec![(Ok(Flag::SEEN), false)],
-                );
-                match job {
-                    Err(err) => {
-                        context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(err.to_string()),
-                        ));
-                    }
-                    Ok(fut) => {
-                        let handle = account
-                            .main_loop_handler
-                            .job_executor
-                            .spawn_specialized("set_unseen".into(), fut);
-                        account
-                            .insert_job(handle.job_id, JobRequest::SetFlags { env_hashes, handle });
-                    }
-                }
-            }
-            ListingAction::Tag(Remove(ref tag_str)) => {
-                let job = account.backend.write().unwrap().set_flags(
-                    env_hashes.clone(),
-                    mailbox_hash,
-                    smallvec::smallvec![(Err(tag_str.to_string()), false)],
-                );
-                match job {
-                    Err(err) => {
-                        context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(err.to_string()),
-                        ));
-                    }
-                    Ok(fut) => {
-                        let handle = account
-                            .main_loop_handler
-                            .job_executor
-                            .spawn_specialized("remove_tag".into(), fut);
-                        account
-                            .insert_job(handle.job_id, JobRequest::SetFlags { env_hashes, handle });
-                    }
-                }
-            }
-            ListingAction::Tag(Add(ref tag_str)) => {
-                let job = account.backend.write().unwrap().set_flags(
-                    env_hashes.clone(),
-                    mailbox_hash,
-                    smallvec::smallvec![(Err(tag_str.to_string()), true)],
-                );
-                match job {
-                    Err(err) => {
-                        context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(err.to_string()),
-                        ));
-                    }
-                    Ok(fut) => {
-                        let handle = account
-                            .main_loop_handler
-                            .job_executor
-                            .spawn_specialized("add_tag".into(), fut);
-                        account
-                            .insert_job(handle.job_id, JobRequest::SetFlags { env_hashes, handle });
-                    }
-                }
-            }
-            ListingAction::Delete => {
-                let job = account
-                    .backend
-                    .write()
-                    .unwrap()
-                    .delete_messages(env_hashes.clone(), mailbox_hash);
-                match job {
-                    Err(err) => {
-                        context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(err.to_string()),
-                        ));
-                    }
-                    Ok(fut) => {
-                        let handle = account
-                            .main_loop_handler
-                            .job_executor
-                            .spawn_specialized("delete".into(), fut);
-                        account.insert_job(
-                            handle.job_id,
-                            JobRequest::DeleteMessages { env_hashes, handle },
-                        );
-                    }
-                }
-            }
-            ListingAction::CopyTo(ref mailbox_path) => {
-                match account
-                    .mailbox_by_path(mailbox_path)
-                    .and_then(|destination_mailbox_hash| {
-                        account.backend.write().unwrap().copy_messages(
-                            env_hashes,
-                            mailbox_hash,
-                            destination_mailbox_hash,
-                            /* move? */ false,
-                        )
-                    }) {
-                    Err(err) => {
-                        context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(err.to_string()),
-                        ));
-                    }
-                    Ok(fut) => {
-                        let handle = account
-                            .main_loop_handler
-                            .job_executor
-                            .spawn_specialized("copy_to_mailbox".into(), fut);
-                        account.insert_job(
-                            handle.job_id,
-                            JobRequest::Generic {
-                                name: "message copying".into(),
-                                handle,
-                                on_finish: None,
-                                log_level: LogLevel::INFO,
-                            },
-                        );
-                    }
-                }
-            }
-            ListingAction::CopyToOtherAccount(ref _account_name, ref _mailbox_path) => {
-                context
-                    .replies
-                    .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
-                        "Copying to another account is currently unimplemented".into(),
-                    )));
-            }
-            ListingAction::MoveTo(ref mailbox_path) => {
-                match account
-                    .mailbox_by_path(mailbox_path)
-                    .and_then(|destination_mailbox_hash| {
-                        account.backend.write().unwrap().copy_messages(
-                            env_hashes,
-                            mailbox_hash,
-                            destination_mailbox_hash,
-                            /* move? */ true,
-                        )
-                    }) {
-                    Err(err) => {
-                        context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(err.to_string()),
-                        ));
-                    }
-                    Ok(fut) => {
-                        let handle = account
-                            .main_loop_handler
-                            .job_executor
-                            .spawn_specialized("move_to_mailbox".into(), fut);
-                        account.insert_job(
-                            handle.job_id,
-                            JobRequest::Generic {
-                                name: "message moving".into(),
-                                handle,
-                                on_finish: None,
-                                log_level: LogLevel::INFO,
-                            },
-                        );
-                    }
-                }
-            }
-            ListingAction::ExportMbox(format, ref path) => {
-                use std::{future::Future, io::Write, pin::Pin};
-
-                use futures::future::try_join_all;
-
-                let futures: Result<Vec<_>> = envs_to_set
-                    .iter()
-                    .map(|&env_hash| account.operation(env_hash).and_then(|mut op| op.as_bytes()))
-                    .collect::<Result<Vec<_>>>();
-                let path_ = path.to_path_buf();
-                let format = (*format).unwrap_or_default();
-                let collection = account.collection.clone();
-                let (sender, mut receiver) = crate::jobs::oneshot::channel();
-                let fut: Pin<Box<dyn Future<Output = Result<()>> + Send + 'static>> =
-                    Box::pin(async move {
-                        let cl = async move {
-                            use melib::backends::mbox::MboxMetadata;
-                            let bytes: Vec<Vec<u8>> = try_join_all(futures?).await?;
-                            let envs: Vec<_> = envs_to_set
-                                .iter()
-                                .map(|&env_hash| collection.get_env(env_hash))
-                                .collect();
-                            let mut file = std::io::BufWriter::new(std::fs::File::create(&path_)?);
-                            let mut iter = envs.iter().zip(bytes.into_iter());
-                            let tags_lck = collection.tag_index.read().unwrap();
-                            if let Some((env, ref bytes)) = iter.next() {
-                                let tags: Vec<&str> = env
-                                    .tags()
-                                    .iter()
-                                    .filter_map(|h| tags_lck.get(h).map(|s| s.as_str()))
-                                    .collect();
-                                format.append(
-                                    &mut file,
-                                    bytes.as_slice(),
-                                    env.from().get(0),
-                                    Some(env.date()),
-                                    (env.flags(), tags),
-                                    MboxMetadata::CClient,
-                                    true,
-                                    false,
-                                )?;
-                            }
-                            for (env, bytes) in iter {
-                                let tags: Vec<&str> = env
-                                    .tags()
-                                    .iter()
-                                    .filter_map(|h| tags_lck.get(h).map(|s| s.as_str()))
-                                    .collect();
-                                format.append(
-                                    &mut file,
-                                    bytes.as_slice(),
-                                    env.from().get(0),
-                                    Some(env.date()),
-                                    (env.flags(), tags),
-                                    MboxMetadata::CClient,
-                                    false,
-                                    false,
-                                )?;
-                            }
-                            file.flush()?;
-                            Ok(())
-                        };
-                        let r: Result<()> = cl.await;
-                        let _ = sender.send(r);
-                        Ok(())
-                    });
-                let handle = account
-                    .main_loop_handler
-                    .job_executor
-                    .spawn_blocking("export_to_mbox".into(), fut);
-                let path = path.to_path_buf();
-                account.insert_job(
-                    handle.job_id,
-                    JobRequest::Generic {
-                        name: "exporting mbox".into(),
-                        handle,
-                        on_finish: Some(CallbackFn(Box::new(move |context: &mut Context| {
-                            context.replies.push_back(match receiver.try_recv() {
-                                Err(_) | Ok(None) => UIEvent::Notification(
-                                    Some("Could not export mbox".to_string()),
-                                    "Job was canceled.".to_string(),
-                                    Some(NotificationType::Info),
-                                ),
-                                Ok(Some(Err(err))) => UIEvent::Notification(
-                                    Some("Could not export mbox".to_string()),
-                                    err.to_string(),
-                                    Some(NotificationType::Error(err.kind)),
-                                ),
-                                Ok(Some(Ok(()))) => UIEvent::Notification(
-                                    Some("Succesfully exported mbox".to_string()),
-                                    format!("Wrote to file {}", path.display()),
-                                    Some(NotificationType::Info),
-                                ),
-                            });
-                        }))),
-                        log_level: LogLevel::INFO,
-                    },
-                );
-            }
-            ListingAction::MoveToOtherAccount(ref _account_name, ref _mailbox_path) => {
-                context
-                    .replies
-                    .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
-                        "Moving to another account is currently unimplemented".into(),
-                    )));
-            }
-            _ => unreachable!(),
-        }
+        inner(context, envs_to_set, account_hash, mailbox_hash, a);
         self.set_dirty(true);
     }
 

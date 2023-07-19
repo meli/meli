@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS article (
 
     #[derive(Debug)]
     pub struct Store {
-        connection: Connection,
+        pub connection: Connection,
     }
 
     impl Store {

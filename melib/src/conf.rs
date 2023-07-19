@@ -186,7 +186,7 @@ macro_rules! named_unit_variant {
     };
 }
 
-mod strings {
+pub mod strings {
     named_unit_variant!(ask);
 }
 
@@ -253,7 +253,7 @@ impl<'de> Deserialize<'de> for ToggleFlag {
     {
         #[derive(Deserialize)]
         #[serde(untagged)]
-        pub enum InnerToggleFlag {
+        enum InnerToggleFlag {
             Bool(bool),
             #[serde(with = "strings::ask")]
             Ask,

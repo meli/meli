@@ -29,7 +29,7 @@ use quote::{format_ident, quote};
 use regex::Regex;
 
 // Write ConfigStructOverride to overrides.rs
-pub fn override_derive(filenames: &[(&str, &str)]) {
+pub(crate) fn override_derive(filenames: &[(&str, &str)]) {
     let mut output_file =
         File::create("src/conf/overrides.rs").expect("Unable to open output file");
     let mut output_string = r##"// @generated

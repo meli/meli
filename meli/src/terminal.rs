@@ -26,13 +26,13 @@ use serde::{de, de::Visitor, Deserialize, Deserializer};
 mod color;
 pub use color::*;
 #[macro_use]
-mod position;
+pub mod position;
 #[macro_use]
-mod cells;
+pub mod cells;
 #[macro_use]
-mod keys;
+pub mod keys;
 pub mod embed;
-mod text_editing;
+pub mod text_editing;
 use std::fmt;
 
 pub use self::{cells::*, keys::*, position::*, text_editing::*};

@@ -202,20 +202,20 @@ fn get_rw_lock_blocking(f: &File, path: &Path) -> Result<()> {
 }
 
 #[derive(Debug)]
-struct MboxMailbox {
-    hash: MailboxHash,
-    name: String,
-    path: PathBuf,
-    fs_path: PathBuf,
-    content: Vec<u8>,
-    children: Vec<MailboxHash>,
-    parent: Option<MailboxHash>,
-    usage: Arc<RwLock<SpecialUsageMailbox>>,
-    is_subscribed: bool,
-    permissions: MailboxPermissions,
+pub struct MboxMailbox {
+    pub hash: MailboxHash,
+    pub name: String,
+    pub path: PathBuf,
+    pub fs_path: PathBuf,
+    pub content: Vec<u8>,
+    pub children: Vec<MailboxHash>,
+    pub parent: Option<MailboxHash>,
+    pub usage: Arc<RwLock<SpecialUsageMailbox>>,
+    pub is_subscribed: bool,
+    pub permissions: MailboxPermissions,
     pub total: Arc<Mutex<usize>>,
     pub unseen: Arc<Mutex<usize>>,
-    index: Arc<Mutex<HashMap<EnvelopeHash, (Offset, Length)>>>,
+    pub index: Arc<Mutex<HashMap<EnvelopeHash, (Offset, Length)>>>,
 }
 
 impl BackendMailbox for MboxMailbox {
@@ -285,11 +285,11 @@ impl BackendMailbox for MboxMailbox {
 /// `BackendOp` implementor for Mbox
 #[derive(Debug, Default)]
 pub struct MboxOp {
-    _hash: EnvelopeHash,
-    path: PathBuf,
-    offset: Offset,
-    length: Length,
-    slice: std::cell::RefCell<Option<Vec<u8>>>,
+    pub _hash: EnvelopeHash,
+    pub path: PathBuf,
+    pub offset: Offset,
+    pub length: Length,
+    pub slice: std::cell::RefCell<Option<Vec<u8>>>,
 }
 
 impl MboxOp {

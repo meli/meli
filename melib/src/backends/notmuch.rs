@@ -718,7 +718,7 @@ impl MailBackend for NotmuchDb {
         use notify::{watcher, RecursiveMode, Watcher};
 
         let account_hash = self.account_hash;
-        let collection = self.collection.clone();
+        let tag_index = self.collection.tag_index.clone();
         let lib = self.lib.clone();
         let path = self.path.clone();
         let revision_uuid = self.revision_uuid.clone();
@@ -748,7 +748,7 @@ impl MailBackend for NotmuchDb {
                             mailboxes.clone(),
                             index.clone(),
                             mailbox_index.clone(),
-                            collection.tag_index.clone(),
+                            tag_index.clone(),
                             account_hash,
                             event_consumer.clone(),
                             new_revision_uuid,
@@ -826,7 +826,7 @@ impl MailBackend for NotmuchDb {
             self.lib.clone(),
             true,
         )?;
-        let collection = self.collection.clone();
+        let tag_index = self.collection.clone().tag_index;
         let index = self.index.clone();
 
         Ok(Box::pin(async move {
@@ -914,11 +914,7 @@ impl MailBackend for NotmuchDb {
             for (f, v) in flags.iter() {
                 if let (Err(tag), true) = (f, v) {
                     let hash = TagHash::from_bytes(tag.as_bytes());
-                    collection
-                        .tag_index
-                        .write()
-                        .unwrap()
-                        .insert(hash, tag.to_string());
+                    tag_index.write().unwrap().insert(hash, tag.to_string());
                 }
             }
 

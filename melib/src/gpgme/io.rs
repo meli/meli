@@ -30,6 +30,9 @@ struct TagData {
     io_state: Arc<Mutex<IoState>>,
 }
 
+///
+/// # Safety
+/// .
 pub unsafe extern "C" fn gpgme_register_io_cb(
     data: *mut ::std::os::raw::c_void,
     fd: ::std::os::raw::c_int,
@@ -66,6 +69,9 @@ pub unsafe extern "C" fn gpgme_register_io_cb(
     0
 }
 
+///
+/// # Safety
+/// .
 pub unsafe extern "C" fn gpgme_remove_io_cb(tag: *mut ::std::os::raw::c_void) {
     let tag_data: Arc<TagData> = Arc::from_raw(tag as *const _);
     let mut io_state_lck = tag_data.io_state.lock().unwrap();
@@ -75,6 +81,9 @@ pub unsafe extern "C" fn gpgme_remove_io_cb(tag: *mut ::std::os::raw::c_void) {
     let _ = Arc::into_raw(tag_data);
 }
 
+///
+/// # Safety
+/// .
 pub unsafe extern "C" fn gpgme_event_io_cb(
     data: *mut ::std::os::raw::c_void,
     type_: gpgme_event_io_t,

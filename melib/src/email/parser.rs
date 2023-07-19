@@ -2595,25 +2595,26 @@ pub mod address {
         ))
     }
 
+    ///`no-fold-literal =   "[" *dtext "]"`
+    pub fn no_fold_literal(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
+        let orig_input = input;
+        let (input, _) = tag("[")(input)?;
+        let (input, ret) = many0(dtext)(input)?;
+        let (input, _) = tag("]")(input)?;
+        Ok((input, Cow::Borrowed(&orig_input[0..ret.len() + 1])))
+    }
+
+    ///`id-left         =   dot-atom-text / obs-id-left`
+    pub fn id_left(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
+        dot_atom_text(input)
+    }
+    ///`id-right        =   dot-atom-text / no-fold-literal / obs-id-right`
+    pub fn id_right(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
+        alt((dot_atom_text, no_fold_literal))(input)
+    }
+
     ///`msg-id =   [CFWS] "<" id-left "@" id-right ">" [CFWS]`
     pub fn msg_id(input: &[u8]) -> IResult<&[u8], MessageID> {
-        ///`no-fold-literal =   "[" *dtext "]"`
-        pub fn no_fold_literal(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
-            let orig_input = input;
-            let (input, _) = tag("[")(input)?;
-            let (input, ret) = many0(dtext)(input)?;
-            let (input, _) = tag("]")(input)?;
-            Ok((input, Cow::Borrowed(&orig_input[0..ret.len() + 1])))
-        }
-
-        ///`id-left         =   dot-atom-text / obs-id-left`
-        pub fn id_left(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
-            dot_atom_text(input)
-        }
-        ///`id-right        =   dot-atom-text / no-fold-literal / obs-id-right`
-        pub fn id_right(input: &[u8]) -> IResult<&[u8], Cow<'_, [u8]>> {
-            alt((dot_atom_text, no_fold_literal))(input)
-        }
         let (input, _) = opt(cfws)(input)?;
         let orig_input = input;
         let (input, _) = tag("<")(input)?;

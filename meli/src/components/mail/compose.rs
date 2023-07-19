@@ -40,7 +40,7 @@ use super::*;
 use crate::{conf::accounts::JobRequest, jobs::JoinHandle, terminal::embed::EmbedTerminal};
 
 #[cfg(feature = "gpgme")]
-mod gpg;
+pub mod gpg;
 
 pub mod edit_attachments;
 use edit_attachments::*;

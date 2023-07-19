@@ -746,7 +746,6 @@ impl Serialize for Color {
     }
 }
 
-pub use aliases::*;
 pub mod aliases {
     use super::Color;
 

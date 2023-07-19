@@ -741,7 +741,7 @@ const TIMEZONE_ABBR: &[(&[u8], (i8, i8))] = &[
     (b"YEKT", (05, 0)),
 ];
 
-mod lib {
+pub mod lib {
     use std::convert::TryFrom;
 
     use libc::tm;

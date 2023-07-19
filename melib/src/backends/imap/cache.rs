@@ -20,7 +20,7 @@
  */
 
 use super::*;
-mod sync;
+pub mod sync;
 use std::convert::TryFrom;
 
 use crate::{
@@ -104,7 +104,7 @@ pub trait ImapCacheReset: Send + core::fmt::Debug {
 pub use sqlite3_m::*;
 
 #[cfg(feature = "sqlite3")]
-mod sqlite3_m {
+pub mod sqlite3_m {
     use super::*;
     use crate::utils::sqlite3::{
         self,
@@ -739,7 +739,7 @@ pub(super) async fn fetch_cached_envs(state: &mut FetchState) -> Result<Option<V
 pub use default_m::*;
 
 #[cfg(not(feature = "sqlite3"))]
-mod default_m {
+pub mod default_m {
     use super::*;
     #[derive(Debug)]
     pub struct DefaultCache;

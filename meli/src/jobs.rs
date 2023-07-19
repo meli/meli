@@ -44,7 +44,11 @@ use crate::types::{ThreadEvent, UIEvent};
 
 type AsyncTask = async_task::Runnable;
 
-fn find_task<T>(local: &Worker<T>, global: &Injector<T>, stealers: &[Stealer<T>]) -> Option<T> {
+fn find_task(
+    local: &Worker<MeliTask>,
+    global: &Injector<MeliTask>,
+    stealers: &[Stealer<MeliTask>],
+) -> Option<MeliTask> {
     // Pop a task from the local queue, if not empty.
     local.pop().or_else(|| {
         // Otherwise, we need to look for a task elsewhere.

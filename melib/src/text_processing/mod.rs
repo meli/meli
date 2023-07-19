@@ -22,8 +22,8 @@
 pub mod grapheme_clusters;
 pub mod line_break;
 pub mod search;
-mod tables;
-mod types;
+pub mod tables;
+pub mod types;
 pub use types::Reflow;
 pub mod wcwidth;
 pub use grapheme_clusters::*;
