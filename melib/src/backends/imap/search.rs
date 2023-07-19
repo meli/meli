@@ -290,7 +290,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             &q.to_imap_search(),
-            r#"BEFORE 03-Jun-2023 FROM "user@example.org""#
+            r#"BEFORE 04-Jun-2023 FROM "user@example.org""#
         );
         let (_, q) = query()
             .parse_complete(r#"subject:"wah ah ah" or (from:Manos and from:Sia)"#)

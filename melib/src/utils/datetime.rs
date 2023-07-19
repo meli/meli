@@ -83,8 +83,6 @@ extern "C" {
         tm: *const libc::tm,
     ) -> libc::size_t;
 
-    fn mktime(tm: *const libc::tm) -> libc::time_t;
-
     fn localtime_r(timep: *const libc::time_t, tm: *mut libc::tm) -> *mut libc::tm;
 
     fn gmtime_r(timep: *const libc::time_t, tm: *mut libc::tm) -> *mut libc::tm;
@@ -533,10 +531,7 @@ where
             return Err("Could not parse time with strptime.".into());
         }
         let rest: isize = val.as_ptr().offset_from(ret);
-        Ok((
-            rest.unsigned_abs(),
-            mktime(std::ptr::addr_of!(new_tm)) as u64,
-        ))
+        Ok((rest.unsigned_abs(), lib::timegm(new_tm)))
     }
 }
 
@@ -745,6 +740,44 @@ const TIMEZONE_ABBR: &[(&[u8], (i8, i8))] = &[
     (b"YAKT", (09, 0)),
     (b"YEKT", (05, 0)),
 ];
+
+mod lib {
+    use std::convert::TryFrom;
+
+    use libc::tm;
+
+    use super::*;
+
+    // Algorithm: http://howardhinnant.github.io/date_algorithms.html
+    pub fn days_from_epoch(mut y: i32, m: i32, d: i32) -> i32 {
+        y -= i32::from(m <= 2);
+        let era = y / 400;
+        let yoe = y - era * 400; // [0, 399]
+        let doy = (153 * (m + (if m > 2 { -3 } else { 9 })) + 2) / 5 + d - 1; // [0, 365]
+        let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy; // [0, 146096]
+        era * 146097 + doe - 719468
+    }
+
+    // It  does not modify broken-down time
+    pub fn timegm(t: tm) -> UnixTimestamp {
+        let mut year = t.tm_year + 1900;
+        let mut month = t.tm_mon; // 0-11
+        if month > 11 {
+            year += month / 12;
+            month %= 12;
+        } else if month < 0 {
+            let years_diff = (11 - month) / 12;
+            year -= years_diff;
+            month += 12 * years_diff;
+        }
+        let days_since_epoch =
+            u64::try_from(days_from_epoch(year, month + 1, t.tm_mday)).unwrap_or(0);
+
+        60 * (60 * (24 * days_since_epoch + u64::try_from(t.tm_hour).unwrap_or(0))
+            + u64::try_from(t.tm_min).unwrap_or(0))
+            + u64::try_from(t.tm_sec).unwrap_or(0)
+    }
+}
 
 #[cfg(test)]
 mod tests {
