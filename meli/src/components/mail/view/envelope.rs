@@ -730,7 +730,9 @@ impl Component for EnvelopeView {
                 let envelope = &self.mail;
                 let height_p = self.pager.size().1;
 
-                let height = height!(area) - self.headers_no - 1;
+                let height = height!(area)
+                    .saturating_sub(self.headers_no)
+                    .saturating_sub(1);
 
                 self.headers_no = 0;
                 let mut skip_header_ctr = self.headers_cursor;

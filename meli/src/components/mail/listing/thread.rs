@@ -1103,7 +1103,7 @@ impl ThreadListing {
                 ),
                 row_attr,
             );
-            let (x, _) = write_string_to_grid(
+            write_string_to_grid(
                 &if self.new_cursor_pos.2.saturating_sub(top_idx) == i {
                     self.new_cursor_pos.2.to_string()
                 } else {
@@ -1118,13 +1118,7 @@ impl ThreadListing {
                 ((0, i), (width, i + 1)),
                 None,
             );
-            for x in x..width {
-                self.data_columns.columns[0][(x, i)]
-                    .set_ch(' ')
-                    .set_bg(row_attr.bg)
-                    .set_attrs(row_attr.attrs);
-            }
-            _ = write_string_to_grid(
+            write_string_to_grid(
                 &if self.new_cursor_pos.2.saturating_sub(top_idx) == i {
                     self.new_cursor_pos.2.to_string()
                 } else {
