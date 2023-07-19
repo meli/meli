@@ -989,7 +989,7 @@ impl Threads {
             )
             .unwrap_or_else(|| ThreadNodeHash::from(message_id));
         {
-            let mut node = self.thread_nodes.entry(new_id).or_default();
+            let node = self.thread_nodes.entry(new_id).or_default();
             node.message = Some(env_hash);
             if node.parent.is_none() {
                 node.parent = reply_to_id;

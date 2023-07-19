@@ -157,7 +157,8 @@ pub async fn get_mailboxes(conn: &JmapConnection) -> Result<HashMap<MailboxHash,
             )
         })
         .collect();
-    for key in ret.keys().cloned().collect::<SmallVec<[MailboxHash; 24]>>() {
+    let cloned_keys = ret.keys().cloned().collect::<SmallVec<[MailboxHash; 24]>>();
+    for key in cloned_keys {
         if let Some(parent_hash) = ret[&key].parent_hash {
             ret.entry(parent_hash).and_modify(|e| e.children.push(key));
         }
