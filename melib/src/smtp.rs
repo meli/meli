@@ -1266,7 +1266,7 @@ mod test {
         });
 
         let smtp_server_conf = get_smtp_conf();
-        let input_str = include_str!("../tests/test_sample_longmessage.eml");
+        let input_str = include_str!("../tests/data/test_sample_longmessage.eml");
         match crate::Envelope::from_bytes(input_str.as_bytes(), None) {
             Ok(_envelope) => {}
             Err(err) => {

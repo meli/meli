@@ -39,9 +39,9 @@ fn test_mbox_parse() {
 
     {
         let sha1dc_diet_op =
-            gz_to_string(include_bytes!("PATCH-Put-sha1dc-on-a-diet_op.mbox.gz").as_slice());
+            gz_to_string(include_bytes!("./data/PATCH-Put-sha1dc-on-a-diet_op.mbox.gz").as_slice());
         let sha1dc_diet_thread =
-            gz_to_string(include_bytes!("PATCH-Put-sha1dc-on-a-diet.mbox.gz").as_slice());
+            gz_to_string(include_bytes!("./data/PATCH-Put-sha1dc-on-a-diet.mbox.gz").as_slice());
 
         let message_iter = MessageIterator {
             index: Arc::new(Mutex::new(HashMap::default())),
@@ -70,10 +70,11 @@ fn test_mbox_parse() {
 
     {
         let git_am_op = gz_to_string(
-            include_bytes!("git-am-breakage-with-MIME-decoding_op.mbox.gz").as_slice(),
+            include_bytes!("./data/git-am-breakage-with-MIME-decoding_op.mbox.gz").as_slice(),
         );
-        let git_am_thread =
-            gz_to_string(include_bytes!("git-am-breakage-with-MIME-decoding.mbox.gz").as_slice());
+        let git_am_thread = gz_to_string(
+            include_bytes!("./data/git-am-breakage-with-MIME-decoding.mbox.gz").as_slice(),
+        );
 
         let message_iter = MessageIterator {
             index: Arc::new(Mutex::new(HashMap::default())),

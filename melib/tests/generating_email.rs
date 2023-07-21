@@ -27,7 +27,7 @@ use melib::email::Draft;
 #[test]
 fn test_build_draft() {
     let mut new_draft = Draft::default();
-    let attachment = melib::email::attachment_from_file(&"./tests/test_image.gif")
+    let attachment = melib::email::attachment_from_file(&"./tests/data/test_image.gif")
         .expect("Could not open test_image.gif.");
     new_draft.headers_mut().remove("User-Agent");
     new_draft.headers_mut().remove("Date");
@@ -42,7 +42,7 @@ fn test_build_draft() {
 
     let raw = raw.replace(boundary_str, "");
 
-    let mut gz = GzDecoder::new(include_bytes!("generated_email.eml.gz").as_slice());
+    let mut gz = GzDecoder::new(include_bytes!("./data/generated_email.eml.gz").as_slice());
     let mut s = String::new();
     gz.read_to_string(&mut s).unwrap();
 
