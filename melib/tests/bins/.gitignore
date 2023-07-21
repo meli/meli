@@ -1,0 +1,9 @@
+Cargo.lock
+target
+.idea
+stunnel
+stunnel-5.70
+stunnel.conf
+# Coverage
+**/*.profraw
+coveralls.lcov
