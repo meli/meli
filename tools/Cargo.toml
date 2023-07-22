@@ -25,7 +25,7 @@ path = "src/mboxparse.rs"
 [[bin]]
 name = "imapshell"
 path = "src/imapshell.rs"
-required-features = ["melib/imap_backend"]
+required-features = ["melib/imap"]
 
 [[bin]]
 name = "smtp_conn"

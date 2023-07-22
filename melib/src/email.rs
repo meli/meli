@@ -110,7 +110,7 @@ pub use address::{Address, MessageID, References, StrBuild, StrBuilder};
 pub use attachments::{Attachment, AttachmentBuilder};
 pub use compose::{attachment_from_file, Draft};
 pub use headers::*;
-#[cfg(feature = "imap_backend")]
+#[cfg(feature = "imap")]
 use imap_codec::{
     core::{AString, Atom, NonEmptyVec},
     fetch::{MacroOrMessageDataItemNames, MessageDataItemName},
@@ -126,7 +126,7 @@ use crate::{
     TagHash, UnixTimestamp,
 };
 
-#[cfg(feature = "imap_backend")]
+#[cfg(feature = "imap")]
 // [ref:TODO]: (#222) Make this `const` as soon as it is possible.
 pub(crate) fn common_attributes() -> MacroOrMessageDataItemNames<'static> {
     MacroOrMessageDataItemNames::MessageDataItemNames(vec![
@@ -187,7 +187,7 @@ impl Flag {
     flag_impl!(fn is_draft, Self::DRAFT);
     flag_impl!(fn is_flagged, Self::FLAGGED);
 
-    #[cfg(feature = "imap_backend")]
+    #[cfg(feature = "imap")]
     pub(crate) fn derive_imap_codec_flags(&self) -> Vec<ImapCodecFlag> {
         let mut flags = Vec::new();
 

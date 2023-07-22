@@ -8,7 +8,7 @@ Library for handling mail.
 
 | feature flag           | dependencies                        | notes                    |
 | ---------------------- | ----------------------------------- | ------------------------ |
-| `imap_backend`         | `native-tls`                        |                          |
+| `imap`                 | `native-tls`                        |                          |
 | `deflate_compression`  | `flate2`                            | for use with IMAP        |
 | `jmap_backend`         | `isahc`, `native-tls`, `serde_json` |                          |
 | `maildir_backend`      | `notify`                            |                          |

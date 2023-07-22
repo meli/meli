@@ -25,7 +25,7 @@ path = "src/lib.rs"
 [[bin]]
 name = "managesieve-client"
 path = "src/managesieve.rs"
-required-features = ["melib/imap_backend"]
+required-features = ["melib/imap"]
 
 [dependencies]
 async-task = "^4.2.0"

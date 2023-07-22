@@ -22,9 +22,9 @@
 pub mod utf7;
 use smallvec::SmallVec;
 
-#[cfg(feature = "imap_backend")]
+#[cfg(feature = "imap")]
 pub mod imap;
-#[cfg(feature = "imap_backend")]
+#[cfg(feature = "imap")]
 pub mod nntp;
 #[cfg(feature = "notmuch_backend")]
 pub mod notmuch;
@@ -50,13 +50,13 @@ use std::{
 
 use futures::stream::Stream;
 
-#[cfg(feature = "imap_backend")]
+#[cfg(feature = "imap")]
 pub use self::imap::ImapType;
 #[cfg(feature = "maildir_backend")]
 use self::maildir::MaildirType;
 #[cfg(feature = "mbox_backend")]
 use self::mbox::MboxType;
-#[cfg(feature = "imap_backend")]
+#[cfg(feature = "imap")]
 pub use self::nntp::NntpType;
 use super::email::{Envelope, EnvelopeHash, Flag};
 use crate::{
@@ -174,7 +174,7 @@ impl Backends {
                 },
             );
         }
-        #[cfg(feature = "imap_backend")]
+        #[cfg(feature = "imap")]
         {
             b.register(
                 "imap".to_string(),
