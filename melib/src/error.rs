@@ -649,7 +649,7 @@ impl From<isahc::Error> for Error {
     }
 }
 
-#[cfg(feature = "jmap_backend")]
+#[cfg(feature = "jmap")]
 impl From<serde_json::error::Error> for Error {
     #[inline]
     fn from(kind: serde_json::error::Error) -> Self {

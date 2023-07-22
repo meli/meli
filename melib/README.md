@@ -10,7 +10,7 @@ Library for handling mail.
 | ---------------------- | ----------------------------------- | ------------------------ |
 | `imap`                 | `native-tls`                        |                          |
 | `deflate_compression`  | `flate2`                            | for use with IMAP        |
-| `jmap_backend`         | `isahc`, `native-tls`, `serde_json` |                          |
+| `jmap`                 | `isahc`, `native-tls`, `serde_json` |                          |
 | `maildir`              | `notify`                            |                          |
 | `mbox`                 | `notify`                            |                          |
 | `notmuch`              | `notify`                            |                          |

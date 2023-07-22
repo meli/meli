@@ -30,7 +30,7 @@ pub mod nntp;
 pub mod notmuch;
 #[cfg(feature = "notmuch")]
 pub use self::notmuch::NotmuchDb;
-#[cfg(feature = "jmap_backend")]
+#[cfg(feature = "jmap")]
 pub mod jmap;
 #[cfg(feature = "maildir")]
 pub mod maildir;
@@ -198,7 +198,7 @@ impl Backends {
                 },
             );
         }
-        #[cfg(feature = "jmap_backend")]
+        #[cfg(feature = "jmap")]
         {
             b.register(
                 "jmap".to_string(),
