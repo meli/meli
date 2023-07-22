@@ -26,9 +26,9 @@ use smallvec::SmallVec;
 pub mod imap;
 #[cfg(feature = "imap")]
 pub mod nntp;
-#[cfg(feature = "notmuch_backend")]
+#[cfg(feature = "notmuch")]
 pub mod notmuch;
-#[cfg(feature = "notmuch_backend")]
+#[cfg(feature = "notmuch")]
 pub use self::notmuch::NotmuchDb;
 #[cfg(feature = "jmap_backend")]
 pub mod jmap;
@@ -105,19 +105,19 @@ impl Default for Backends {
     }
 }
 
-#[cfg(feature = "notmuch_backend")]
+#[cfg(feature = "notmuch")]
 pub const NOTMUCH_ERROR_MSG: &str = "libnotmuch5 was not found in your system. Make sure it is \
                                      installed and in the library paths. For a custom file path, \
                                      use `library_file_path` setting in your notmuch account.\n";
-#[cfg(not(feature = "notmuch_backend"))]
+#[cfg(not(feature = "notmuch"))]
 pub const NOTMUCH_ERROR_MSG: &str = "this version of meli is not compiled with notmuch support. \
                                      Use an appropriate version and make sure libnotmuch5 is \
                                      installed and in the library paths.\n";
 
-#[cfg(not(feature = "notmuch_backend"))]
+#[cfg(not(feature = "notmuch"))]
 pub const NOTMUCH_ERROR_DETAILS: &str = "";
 
-#[cfg(all(feature = "notmuch_backend", target_os = "unix"))]
+#[cfg(all(feature = "notmuch", target_os = "unix"))]
 pub const NOTMUCH_ERROR_DETAILS: &str = r#"If you have installed the library manually, try setting the `LD_LIBRARY_PATH` environment variable to its `lib` directory. Otherwise, set it to the location of libnotmuch.5.so. Example:
 
 LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/path/to/notmuch/lib" meli
@@ -128,7 +128,7 @@ export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/path/to/notmuch/lib"
 
 You can also set any location by specifying the library file path with the configuration flag `library_file_path`."#;
 
-#[cfg(all(feature = "notmuch_backend", target_os = "macos"))]
+#[cfg(all(feature = "notmuch", target_os = "macos"))]
 pub const NOTMUCH_ERROR_DETAILS: &str = r#"If you have installed the library via homebrew, try setting the `DYLD_LIBRARY_PATH` environment variable to its `lib` directory. Otherwise, set it to the location of libnotmuch.5.dylib. Example:
 
 DYLD_LIBRARY_PATH="$(brew --prefix)/lib" meli
@@ -143,10 +143,7 @@ export DYLD_LIBRARY_PATH="$DYLD_LIBRARY_PATH:$(brew --prefix)/lib"
 
 You can also set any location by specifying the library file path with the configuration flag `library_file_path`."#;
 
-#[cfg(all(
-    feature = "notmuch_backend",
-    not(any(target_os = "unix", target_os = "macos"))
-))]
+#[cfg(all(feature = "notmuch", not(any(target_os = "unix", target_os = "macos"))))]
 pub const NOTMUCH_ERROR_DETAILS: &str = r#"If notmuch is installed but the library isn't found, consult your system's documentation on how to make dynamic libraries discoverable."#;
 
 impl Backends {
@@ -191,7 +188,7 @@ impl Backends {
                 },
             );
         }
-        #[cfg(feature = "notmuch_backend")]
+        #[cfg(feature = "notmuch")]
         {
             b.register(
                 "notmuch".to_string(),
@@ -218,7 +215,7 @@ impl Backends {
         if !self.map.contains_key(key) {
             if key == "notmuch" {
                 eprint!("{}", NOTMUCH_ERROR_MSG);
-                #[cfg(feature = "notmuch_backend")]
+                #[cfg(feature = "notmuch")]
                 {
                     eprint!("{}", NOTMUCH_ERROR_DETAILS);
                 }
@@ -248,7 +245,7 @@ impl Backends {
                         ""
                     },
                     key,
-                    if cfg!(feature = "notmuch_backend") && key == "notmuch" {
+                    if cfg!(feature = "notmuch") && key == "notmuch" {
                         NOTMUCH_ERROR_DETAILS
                     } else {
                         ""

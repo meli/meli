@@ -72,7 +72,7 @@ tempfile = "3.3"
 
 [features]
 default = ["sqlite3", "notmuch", "regexp", "smtp", "dbus-notifications", "gpgme", "cli-docs", "jmap"]
-notmuch = ["melib/notmuch_backend", ]
+notmuch = ["melib/notmuch", ]
 jmap = ["melib/jmap_backend",]
 sqlite3 = ["melib/sqlite3"]
 smtp = ["melib/smtp"]

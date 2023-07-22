@@ -13,7 +13,7 @@ Library for handling mail.
 | `jmap_backend`         | `isahc`, `native-tls`, `serde_json` |                          |
 | `maildir`              | `notify`                            |                          |
 | `mbox_backend`         | `notify`                            |                          |
-| `notmuch_backend`      | `notify`                            |                          |
+| `notmuch`              | `notify`                            |                          |
 | `sqlite`               | `rusqlite`                          | used in IMAP cache       |
 | `unicode_algorithms`   | `unicode-segmentation`              | linebreaking algo etc    |
 | `vcard`                |                                     | vcard parsing            |
