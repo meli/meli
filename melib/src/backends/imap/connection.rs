@@ -186,7 +186,7 @@ impl ImapStream {
                     TcpStream::connect(addr)?
                 });
                 #[cfg(feature = "imap-trace")]
-                let conn = conn.trace(true);
+                let conn = conn.trace(true).with_id("imap");
                 conn
             })?;
             if server_conf.use_starttls {
@@ -288,7 +288,7 @@ impl ImapStream {
                     TcpStream::connect(addr)?
                 });
                 #[cfg(feature = "imap-trace")]
-                let conn = conn.trace(true);
+                let conn = conn.trace(true).with_id("imap");
                 conn
             })?
         };

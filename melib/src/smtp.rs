@@ -268,7 +268,7 @@ impl SmtpConnection {
                         std::time::Duration::new(4, 0),
                     )?);
                     #[cfg(feature = "smtp-trace")]
-                    let conn = conn.trace(true);
+                    let conn = conn.trace(true).with_id("smtp");
 
                     AsyncWrapper::new(conn)?
                 };
@@ -351,7 +351,7 @@ impl SmtpConnection {
                     AsyncWrapper::new({
                         let conn = Connection::new_tls(conn);
                         #[cfg(feature = "smtp-trace")]
-                        let conn = conn.trace(true);
+                        let conn = conn.trace(true).with_id("smtp");
                         conn
                     })?
                 };
@@ -366,7 +366,7 @@ impl SmtpConnection {
                         std::time::Duration::new(4, 0),
                     )?);
                     #[cfg(feature = "smtp-trace")]
-                    let conn = conn.trace(true);
+                    let conn = conn.trace(true).with_id("smtp");
                     conn
                 })?;
                 res.clear();

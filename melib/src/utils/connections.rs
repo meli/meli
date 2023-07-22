@@ -38,26 +38,82 @@ use libc::TCP_KEEPALIVE as KEEPALIVE_OPTION;
 use libc::TCP_KEEPIDLE as KEEPALIVE_OPTION;
 use libc::{self, c_int, c_void};
 
-#[derive(Debug)]
 pub enum Connection {
     Tcp {
         inner: std::net::TcpStream,
+        id: Option<&'static str>,
         trace: bool,
     },
     Fd {
         inner: std::os::unix::io::RawFd,
+        id: Option<&'static str>,
         trace: bool,
     },
     #[cfg(feature = "tls")]
     Tls {
         inner: native_tls::TlsStream<Self>,
+        id: Option<&'static str>,
         trace: bool,
     },
     #[cfg(feature = "deflate_compression")]
     Deflate {
         inner: DeflateEncoder<DeflateDecoder<Box<Self>>>,
+        id: Option<&'static str>,
         trace: bool,
     },
+}
+
+impl std::fmt::Debug for Connection {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Tcp {
+                ref trace,
+                ref inner,
+                ref id,
+            } => fmt
+                .debug_struct(stringify!(Connection))
+                .field("variant", &stringify!(Tcp))
+                .field(stringify!(trace), trace)
+                .field(stringify!(id), id)
+                .field(stringify!(inner), inner)
+                .finish(),
+            #[cfg(feature = "tls")]
+            Tls {
+                ref trace,
+                ref inner,
+                ref id,
+            } => fmt
+                .debug_struct(stringify!(Connection))
+                .field("variant", &stringify!(Tls))
+                .field(stringify!(trace), trace)
+                .field(stringify!(id), id)
+                .field(stringify!(inner), inner.get_ref())
+                .finish(),
+            Fd {
+                ref trace,
+                ref inner,
+                ref id,
+            } => fmt
+                .debug_struct(stringify!(Connection))
+                .field("variant", &stringify!(Fd))
+                .field(stringify!(trace), trace)
+                .field(stringify!(id), id)
+                .field(stringify!(inner), inner)
+                .finish(),
+            #[cfg(feature = "deflate_compression")]
+            Deflate {
+                ref trace,
+                ref inner,
+                ref id,
+            } => fmt
+                .debug_struct(stringify!(Connection))
+                .field("variant", &stringify!(Deflate))
+                .field(stringify!(trace), trace)
+                .field(stringify!(id), id)
+                .field(stringify!(inner), inner)
+                .finish(),
+        }
+    }
 }
 
 use Connection::*;
@@ -81,12 +137,14 @@ impl Connection {
     #[cfg(feature = "deflate_compression")]
     pub fn deflate(mut self) -> Self {
         let trace = self.is_trace_enabled();
+        let id = self.id();
         self.set_trace(false);
         Self::Deflate {
             inner: DeflateEncoder::new(
                 DeflateDecoder::new_with_buf(Box::new(self), vec![0; Self::IO_BUF_SIZE]),
                 Compression::default(),
             ),
+            id,
             trace,
         }
     }
@@ -94,15 +152,17 @@ impl Connection {
     #[cfg(feature = "tls")]
     pub fn new_tls(mut inner: native_tls::TlsStream<Self>) -> Self {
         let trace = inner.get_ref().is_trace_enabled();
+        let id = inner.get_ref().id();
         if trace {
             inner.get_mut().set_trace(false);
         }
-        Self::Tls { inner, trace }
+        Self::Tls { inner, id, trace }
     }
 
     pub fn new_tcp(inner: std::net::TcpStream) -> Self {
         Self::Tcp {
             inner,
+            id: None,
             trace: false,
         }
     }
@@ -117,6 +177,20 @@ impl Connection {
             }
             #[cfg(feature = "deflate_compression")]
             Deflate { ref mut trace, .. } => *trace = val,
+        }
+        self
+    }
+
+    pub fn with_id(mut self, val: &'static str) -> Self {
+        match self {
+            Tcp { ref mut id, .. } => *id = Some(val),
+            #[cfg(feature = "tls")]
+            Tls { ref mut id, .. } => *id = Some(val),
+            Fd { ref mut id, .. } => {
+                *id = Some(val);
+            }
+            #[cfg(feature = "deflate_compression")]
+            Deflate { ref mut id, .. } => *id = Some(val),
         }
         self
     }
@@ -136,7 +210,15 @@ impl Connection {
 
     pub fn set_nonblocking(&self, nonblocking: bool) -> std::io::Result<()> {
         if self.is_trace_enabled() {
-            log::trace!("{:?} set_nonblocking({:?})", self, nonblocking);
+            let id = self.id();
+            log::trace!(
+                "{}{}{}{:?} set_nonblocking({:?})",
+                if id.is_some() { "[" } else { "" },
+                if let Some(id) = id.as_ref() { id } else { "" },
+                if id.is_some() { "]: " } else { "" },
+                self,
+                nonblocking
+            );
         }
         match self {
             Tcp { ref inner, .. } => inner.set_nonblocking(nonblocking),
@@ -162,7 +244,15 @@ impl Connection {
 
     pub fn set_read_timeout(&self, dur: Option<Duration>) -> std::io::Result<()> {
         if self.is_trace_enabled() {
-            log::trace!("{:?} set_read_timeout({:?})", self, dur);
+            let id = self.id();
+            log::trace!(
+                "{}{}{}{:?} set_read_timeout({:?})",
+                if id.is_some() { "[" } else { "" },
+                if let Some(id) = id.as_ref() { id } else { "" },
+                if id.is_some() { "]: " } else { "" },
+                self,
+                dur
+            );
         }
         match self {
             Tcp { ref inner, .. } => inner.set_read_timeout(dur),
@@ -176,7 +266,15 @@ impl Connection {
 
     pub fn set_write_timeout(&self, dur: Option<Duration>) -> std::io::Result<()> {
         if self.is_trace_enabled() {
-            log::trace!("{:?} set_write_timeout({:?})", self, dur);
+            let id = self.id();
+            log::trace!(
+                "{}{}{}{:?} set_write_timeout({:?})",
+                if id.is_some() { "[" } else { "" },
+                if let Some(id) = id.as_ref() { id } else { "" },
+                if id.is_some() { "]: " } else { "" },
+                self,
+                dur
+            );
         }
         match self {
             Tcp { ref inner, .. } => inner.set_write_timeout(dur),
@@ -207,7 +305,15 @@ impl Connection {
 
     pub fn set_keepalive(&self, keepalive: Option<Duration>) -> std::io::Result<()> {
         if self.is_trace_enabled() {
-            log::trace!("{:?} set_keepalive({:?})", self, keepalive);
+            let id = self.id();
+            log::trace!(
+                "{}{}{}{:?} set_keepalive({:?})",
+                if id.is_some() { "[" } else { "" },
+                if let Some(id) = id.as_ref() { id } else { "" },
+                if id.is_some() { "]: " } else { "" },
+                self,
+                keepalive
+            );
         }
         if matches!(self, Fd { .. }) {
             return Ok(());
@@ -264,6 +370,16 @@ impl Connection {
             Deflate { trace, .. } => *trace,
         }
     }
+
+    fn id(&self) -> Option<&'static str> {
+        match self {
+            Fd { id, .. } | Tcp { id, .. } => *id,
+            #[cfg(feature = "tls")]
+            Tls { id, .. } => *id,
+            #[cfg(feature = "deflate_compression")]
+            Deflate { id, .. } => *id,
+        }
+    }
 }
 
 impl Drop for Connection {
@@ -291,15 +407,26 @@ impl std::io::Read for Connection {
             Deflate { ref mut inner, .. } => inner.read(buf),
         };
         if self.is_trace_enabled() {
+            let id = self.id();
             if let Ok(len) = &res {
                 log::trace!(
-                    "{:?} read {:?} bytes:{:?}",
+                    "{}{}{}{:?} read {:?} bytes:{:?}",
+                    if id.is_some() { "[" } else { "" },
+                    if let Some(id) = id.as_ref() { id } else { "" },
+                    if id.is_some() { "]: " } else { "" },
                     self,
                     len,
                     String::from_utf8_lossy(&buf[..*len])
                 );
             } else {
-                log::trace!("{:?} could not read {:?}", self, &res);
+                log::trace!(
+                    "{}{}{}{:?} could not read {:?}",
+                    if id.is_some() { "[" } else { "" },
+                    if let Some(id) = id.as_ref() { id } else { "" },
+                    if id.is_some() { "]: " } else { "" },
+                    self,
+                    &res
+                );
             }
         }
         res
@@ -309,8 +436,12 @@ impl std::io::Read for Connection {
 impl std::io::Write for Connection {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         if self.is_trace_enabled() {
+            let id = self.id();
             log::trace!(
-                "{:?} writing {} bytes:{:?}",
+                "{}{}{}{:?} writing {} bytes:{:?}",
+                if id.is_some() { "[" } else { "" },
+                if let Some(id) = id.as_ref() { id } else { "" },
+                if id.is_some() { "]: " } else { "" },
                 self,
                 buf.len(),
                 String::from_utf8_lossy(buf)

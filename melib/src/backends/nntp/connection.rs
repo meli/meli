@@ -85,7 +85,7 @@ impl NntpStream {
                     std::time::Duration::new(16, 0),
                 )?);
                 #[cfg(feature = "nntp-trace")]
-                let conn = conn.trace(true);
+                let conn = conn.trace(true).with_id("nntp");
                 conn
             })?
         };
@@ -178,7 +178,7 @@ impl NntpStream {
                 ret.stream = AsyncWrapper::new({
                     let conn = Connection::new_tls(conn_result?);
                     #[cfg(feature = "nntp-trace")]
-                    let conn = conn.trace(true);
+                    let conn = conn.trace(true).with_id("nntp");
                     conn
                 })
                 .chain_err_summary(|| format!("Could not initiate TLS negotiation to {}.", path))?;
