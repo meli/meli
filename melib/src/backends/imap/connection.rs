@@ -179,13 +179,16 @@ impl ImapStream {
 
             let addr = lookup_ipv4(path, server_conf.server_port)?;
 
-            let mut socket = AsyncWrapper::new(Connection::new_tcp(
-                if let Some(timeout) = server_conf.timeout {
+            let mut socket = AsyncWrapper::new({
+                let conn = Connection::new_tcp(if let Some(timeout) = server_conf.timeout {
                     TcpStream::connect_timeout(&addr, timeout)?
                 } else {
                     TcpStream::connect(addr)?
-                },
-            ))?;
+                });
+                #[cfg(feature = "imap-trace")]
+                let conn = conn.trace(true);
+                conn
+            })?;
             if server_conf.use_starttls {
                 let err_fn = || {
                     if server_conf.server_port == 993 {
@@ -278,13 +281,16 @@ impl ImapStream {
             }
         } else {
             let addr = lookup_ipv4(path, server_conf.server_port)?;
-            AsyncWrapper::new(Connection::new_tcp(
-                if let Some(timeout) = server_conf.timeout {
+            AsyncWrapper::new({
+                let conn = Connection::new_tcp(if let Some(timeout) = server_conf.timeout {
                     TcpStream::connect_timeout(&addr, timeout)?
                 } else {
                     TcpStream::connect(addr)?
-                },
-            ))?
+                });
+                #[cfg(feature = "imap-trace")]
+                let conn = conn.trace(true);
+                conn
+            })?
         };
         if let Err(err) = stream
             .get_ref()
