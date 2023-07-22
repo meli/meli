@@ -24,7 +24,7 @@ use smallvec::SmallVec;
 
 #[cfg(feature = "imap")]
 pub mod imap;
-#[cfg(feature = "imap")]
+#[cfg(feature = "nntp")]
 pub mod nntp;
 #[cfg(feature = "notmuch")]
 pub mod notmuch;
@@ -56,7 +56,7 @@ pub use self::imap::ImapType;
 use self::maildir::MaildirType;
 #[cfg(feature = "mbox")]
 use self::mbox::MboxType;
-#[cfg(feature = "imap")]
+#[cfg(feature = "nntp")]
 pub use self::nntp::NntpType;
 use super::email::{Envelope, EnvelopeHash, Flag};
 use crate::{
@@ -180,6 +180,9 @@ impl Backends {
                     validate_conf_fn: Box::new(imap::ImapType::validate_config),
                 },
             );
+        }
+        #[cfg(feature = "nntp")]
+        {
             b.register(
                 "nntp".to_string(),
                 Backend {

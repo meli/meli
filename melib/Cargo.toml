@@ -70,7 +70,7 @@ mailin-embedded = { version = "0.7", features = ["rtls"] }
 stderrlog = "^0.5"
 
 [features]
-default = ["unicode_algorithms", "imap", "maildir", "mbox", "vcard", "smtp", "deflate_compression"]
+default = ["unicode_algorithms", "imap", "nntp", "maildir", "mbox", "vcard", "smtp", "deflate_compression"]
 
 debug-tracing = []
 deflate_compression = ["flate2", "imap-codec/ext_compress"]
@@ -79,6 +79,7 @@ http = ["isahc"]
 http-static = ["isahc", "isahc/static-curl"]
 imap = ["imap-codec", "tls"]
 jmap = ["http"]
+nntp = ["tls"]
 maildir = ["notify"]
 mbox = ["notify"]
 notmuch = []
