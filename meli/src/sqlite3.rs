@@ -261,7 +261,7 @@ pub fn index(context: &mut crate::state::Context, account_index: usize) -> Resul
         account.collection.envelopes.clone(),
         account.backend.clone(),
     );
-    let conn = melib_sqlite3::open_or_create_db(&DB, None)?;
+    let conn = melib_sqlite3::open_or_create_db(&DB, Some(acc_name.as_str()))?;
     let env_hashes = acc_mutex
         .read()
         .unwrap()
