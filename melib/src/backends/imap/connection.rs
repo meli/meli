@@ -179,7 +179,7 @@ impl ImapStream {
 
             let addr = lookup_ipv4(path, server_conf.server_port)?;
 
-            let mut socket = AsyncWrapper::new(Connection::Tcp(
+            let mut socket = AsyncWrapper::new(Connection::new_tcp(
                 if let Some(timeout) = server_conf.timeout {
                     TcpStream::connect_timeout(&addr, timeout)?
                 } else {
@@ -271,14 +271,14 @@ impl ImapStream {
                         }
                     }
                 }
-                AsyncWrapper::new(Connection::Tls(conn_result.chain_err_summary(|| {
-                    format!("Could not initiate TLS negotiation to {}.", path)
-                })?))
+                AsyncWrapper::new(Connection::new_tls(conn_result.chain_err_summary(
+                    || format!("Could not initiate TLS negotiation to {}.", path),
+                )?))
                 .chain_err_summary(|| format!("Could not initiate TLS negotiation to {}.", path))?
             }
         } else {
             let addr = lookup_ipv4(path, server_conf.server_port)?;
-            AsyncWrapper::new(Connection::Tcp(
+            AsyncWrapper::new(Connection::new_tcp(
                 if let Some(timeout) = server_conf.timeout {
                     TcpStream::connect_timeout(&addr, timeout)?
                 } else {

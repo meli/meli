@@ -79,7 +79,7 @@ impl NntpStream {
 
         let stream = {
             let addr = lookup_ipv4(path, server_conf.server_port)?;
-            AsyncWrapper::new(Connection::Tcp(TcpStream::connect_timeout(
+            AsyncWrapper::new(Connection::new_tcp(TcpStream::connect_timeout(
                 &addr,
                 std::time::Duration::new(16, 0),
             )?))?
@@ -170,8 +170,8 @@ impl NntpStream {
                         }
                     }
                 }
-                ret.stream =
-                    AsyncWrapper::new(Connection::Tls(conn_result?)).chain_err_summary(|| {
+                ret.stream = AsyncWrapper::new(Connection::new_tls(conn_result?))
+                    .chain_err_summary(|| {
                         format!("Could not initiate TLS negotiation to {}.", path)
                     })?;
             }

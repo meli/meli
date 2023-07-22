@@ -262,10 +262,16 @@ impl SmtpConnection {
                 let connector = connector.build()?;
 
                 let addr = lookup_ipv4(path, server_conf.port)?;
-                let mut socket = AsyncWrapper::new(Connection::Tcp(TcpStream::connect_timeout(
-                    &addr,
-                    std::time::Duration::new(4, 0),
-                )?))?;
+                let mut socket = {
+                    let conn = Connection::new_tcp(TcpStream::connect_timeout(
+                        &addr,
+                        std::time::Duration::new(4, 0),
+                    )?);
+                    #[cfg(feature = "smtp-trace")]
+                    let conn = conn.trace(true);
+
+                    AsyncWrapper::new(conn)?
+                };
                 let pre_ehlo_extensions_reply = read_lines(
                     &mut socket,
                     &mut res,
@@ -315,6 +321,8 @@ impl SmtpConnection {
 
                 let mut ret = {
                     let socket = socket.into_inner()?;
+                    #[cfg(feature = "smtp-trace")]
+                    let socket = socket.trace(false);
                     let _path = path.clone();
 
                     socket.set_nonblocking(false)?;
@@ -340,17 +348,27 @@ impl SmtpConnection {
                         }
                     }
                         */
-                    AsyncWrapper::new(Connection::Tls(conn))?
+                    AsyncWrapper::new({
+                        let conn = Connection::new_tls(conn);
+                        #[cfg(feature = "smtp-trace")]
+                        let conn = conn.trace(true);
+                        conn
+                    })?
                 };
                 ret.write_all(b"EHLO meli.delivery\r\n").await?;
                 ret
             }
             SmtpSecurity::None => {
                 let addr = lookup_ipv4(path, server_conf.port)?;
-                let mut ret = AsyncWrapper::new(Connection::Tcp(TcpStream::connect_timeout(
-                    &addr,
-                    std::time::Duration::new(4, 0),
-                )?))?;
+                let mut ret = AsyncWrapper::new({
+                    let conn = Connection::new_tcp(TcpStream::connect_timeout(
+                        &addr,
+                        std::time::Duration::new(4, 0),
+                    )?);
+                    #[cfg(feature = "smtp-trace")]
+                    let conn = conn.trace(true);
+                    conn
+                })?;
                 res.clear();
                 let reply = read_lines(
                     &mut ret,
