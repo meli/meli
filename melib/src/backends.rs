@@ -34,7 +34,7 @@ pub use self::notmuch::NotmuchDb;
 pub mod jmap;
 #[cfg(feature = "maildir")]
 pub mod maildir;
-#[cfg(feature = "mbox_backend")]
+#[cfg(feature = "mbox")]
 pub mod mbox;
 use std::{
     any::Any,
@@ -54,7 +54,7 @@ use futures::stream::Stream;
 pub use self::imap::ImapType;
 #[cfg(feature = "maildir")]
 use self::maildir::MaildirType;
-#[cfg(feature = "mbox_backend")]
+#[cfg(feature = "mbox")]
 use self::mbox::MboxType;
 #[cfg(feature = "imap")]
 pub use self::nntp::NntpType;
@@ -161,7 +161,7 @@ impl Backends {
                 },
             );
         }
-        #[cfg(feature = "mbox_backend")]
+        #[cfg(feature = "mbox")]
         {
             b.register(
                 "mbox".to_string(),

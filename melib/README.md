@@ -12,7 +12,7 @@ Library for handling mail.
 | `deflate_compression`  | `flate2`                            | for use with IMAP        |
 | `jmap_backend`         | `isahc`, `native-tls`, `serde_json` |                          |
 | `maildir`              | `notify`                            |                          |
-| `mbox_backend`         | `notify`                            |                          |
+| `mbox`                 | `notify`                            |                          |
 | `notmuch`              | `notify`                            |                          |
 | `sqlite`               | `rusqlite`                          | used in IMAP cache       |
 | `unicode_algorithms`   | `unicode-segmentation`              | linebreaking algo etc    |
