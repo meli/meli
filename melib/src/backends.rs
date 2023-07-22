@@ -32,7 +32,7 @@ pub mod notmuch;
 pub use self::notmuch::NotmuchDb;
 #[cfg(feature = "jmap_backend")]
 pub mod jmap;
-#[cfg(feature = "maildir_backend")]
+#[cfg(feature = "maildir")]
 pub mod maildir;
 #[cfg(feature = "mbox_backend")]
 pub mod mbox;
@@ -52,7 +52,7 @@ use futures::stream::Stream;
 
 #[cfg(feature = "imap")]
 pub use self::imap::ImapType;
-#[cfg(feature = "maildir_backend")]
+#[cfg(feature = "maildir")]
 use self::maildir::MaildirType;
 #[cfg(feature = "mbox_backend")]
 use self::mbox::MboxType;
@@ -154,7 +154,7 @@ impl Backends {
         let mut b = Self {
             map: HashMap::with_capacity_and_hasher(1, Default::default()),
         };
-        #[cfg(feature = "maildir_backend")]
+        #[cfg(feature = "maildir")]
         {
             b.register(
                 "maildir".to_string(),

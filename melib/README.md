@@ -11,7 +11,7 @@ Library for handling mail.
 | `imap`                 | `native-tls`                        |                          |
 | `deflate_compression`  | `flate2`                            | for use with IMAP        |
 | `jmap_backend`         | `isahc`, `native-tls`, `serde_json` |                          |
-| `maildir_backend`      | `notify`                            |                          |
+| `maildir`              | `notify`                            |                          |
 | `mbox_backend`         | `notify`                            |                          |
 | `notmuch_backend`      | `notify`                            |                          |
 | `sqlite`               | `rusqlite`                          | used in IMAP cache       |
