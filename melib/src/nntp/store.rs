@@ -27,8 +27,8 @@ pub use inner::*;
 #[cfg(feature = "sqlite3")]
 mod inner {
     use crate::{
-        backends::nntp::UID,
         email::Flag,
+        nntp::UID,
         utils::sqlite3::{self, Connection, DatabaseDescription},
         EnvelopeHash, MailboxHash, Result,
     };

@@ -49,7 +49,7 @@ pub enum ListingAction {
     MoveTo(MailboxPath),
     MoveToOtherAccount(AccountName, MailboxPath),
     Import(PathBuf, MailboxPath),
-    ExportMbox(Option<melib::backends::mbox::MboxFormat>, PathBuf),
+    ExportMbox(Option<melib::mbox::MboxFormat>, PathBuf),
     Delete,
     OpenInNewTab,
     Tag(TagAction),

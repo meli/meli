@@ -150,12 +150,16 @@ use crate::{
 };
 
 extern crate notify;
+use futures::Stream;
+use smallvec::SmallVec;
+
 use std::{
     collections::hash_map::HashMap,
     fs::File,
     io::{BufReader, Read},
     os::unix::io::AsRawFd,
     path::{Path, PathBuf},
+    pin::Pin,
     str::FromStr,
     sync::{mpsc::channel, Arc, Mutex, RwLock},
 };
@@ -1175,11 +1179,11 @@ impl MailBackend for MboxType {
         ))
     }
 
-    fn as_any(&self) -> &dyn Any {
+    fn as_any(&self) -> &dyn std::any::Any {
         self
     }
 
-    fn as_any_mut(&mut self) -> &mut dyn Any {
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
     }
 

@@ -22,20 +22,6 @@
 pub mod utf7;
 use smallvec::SmallVec;
 
-#[cfg(feature = "imap")]
-pub mod imap;
-#[cfg(feature = "nntp")]
-pub mod nntp;
-#[cfg(feature = "notmuch")]
-pub mod notmuch;
-#[cfg(feature = "notmuch")]
-pub use self::notmuch::NotmuchDb;
-#[cfg(feature = "jmap")]
-pub mod jmap;
-#[cfg(feature = "maildir")]
-pub mod maildir;
-#[cfg(feature = "mbox")]
-pub mod mbox;
 use std::{
     any::Any,
     borrow::Cow,
@@ -45,20 +31,13 @@ use std::{
     future::Future,
     ops::Deref,
     pin::Pin,
-    sync::{Arc, RwLock},
+    sync::Arc,
 };
 
 use futures::stream::Stream;
 
-#[cfg(feature = "imap")]
-pub use self::imap::ImapType;
-#[cfg(feature = "maildir")]
-use self::maildir::MaildirType;
-#[cfg(feature = "mbox")]
-use self::mbox::MboxType;
-#[cfg(feature = "nntp")]
-pub use self::nntp::NntpType;
 use super::email::{Envelope, EnvelopeHash, Flag};
+
 use crate::{
     conf::AccountSettings,
     error::{Error, ErrorKind, Result},
@@ -153,6 +132,8 @@ impl Backends {
         };
         #[cfg(feature = "maildir")]
         {
+            use crate::maildir::MaildirType;
+
             b.register(
                 "maildir".to_string(),
                 Backend {
@@ -163,6 +144,8 @@ impl Backends {
         }
         #[cfg(feature = "mbox")]
         {
+            use crate::mbox::MboxType;
+
             b.register(
                 "mbox".to_string(),
                 Backend {
@@ -173,26 +156,32 @@ impl Backends {
         }
         #[cfg(feature = "imap")]
         {
+            use crate::imap::ImapType;
+
             b.register(
                 "imap".to_string(),
                 Backend {
-                    create_fn: Box::new(|| Box::new(|f, i, ev| imap::ImapType::new(f, i, ev))),
-                    validate_conf_fn: Box::new(imap::ImapType::validate_config),
+                    create_fn: Box::new(|| Box::new(|f, i, ev| ImapType::new(f, i, ev))),
+                    validate_conf_fn: Box::new(ImapType::validate_config),
                 },
             );
         }
         #[cfg(feature = "nntp")]
         {
+            use crate::nntp::NntpType;
+
             b.register(
                 "nntp".to_string(),
                 Backend {
-                    create_fn: Box::new(|| Box::new(|f, i, ev| nntp::NntpType::new(f, i, ev))),
-                    validate_conf_fn: Box::new(nntp::NntpType::validate_config),
+                    create_fn: Box::new(|| Box::new(|f, i, ev| NntpType::new(f, i, ev))),
+                    validate_conf_fn: Box::new(NntpType::validate_config),
                 },
             );
         }
         #[cfg(feature = "notmuch")]
         {
+            use crate::notmuch::NotmuchDb;
+
             b.register(
                 "notmuch".to_string(),
                 Backend {
@@ -203,11 +192,13 @@ impl Backends {
         }
         #[cfg(feature = "jmap")]
         {
+            use crate::jmap::JmapType;
+
             b.register(
                 "jmap".to_string(),
                 Backend {
-                    create_fn: Box::new(|| Box::new(|f, i, ev| jmap::JmapType::new(f, i, ev))),
-                    validate_conf_fn: Box::new(jmap::JmapType::validate_config),
+                    create_fn: Box::new(|| Box::new(|f, i, ev| JmapType::new(f, i, ev))),
+                    validate_conf_fn: Box::new(JmapType::validate_config),
                 },
             );
         }
@@ -675,8 +666,8 @@ impl EnvelopeHashBatch {
 
 #[derive(Default, Clone)]
 pub struct LazyCountSet {
-    not_yet_seen: usize,
-    set: BTreeSet<EnvelopeHash>,
+    pub not_yet_seen: usize,
+    pub set: BTreeSet<EnvelopeHash>,
 }
 
 impl fmt::Debug for LazyCountSet {
@@ -744,21 +735,7 @@ impl LazyCountSet {
     }
 }
 
-#[test]
-fn test_lazy_count_set() {
-    let mut new = LazyCountSet::default();
-    assert_eq!(new.len(), 0);
-    new.set_not_yet_seen(10);
-    assert_eq!(new.len(), 10);
-    for i in 0..10 {
-        assert!(new.insert_existing(EnvelopeHash(i)));
-    }
-    assert_eq!(new.len(), 10);
-    assert!(!new.insert_existing(EnvelopeHash(10)));
-    assert_eq!(new.len(), 10);
-}
-
-pub struct IsSubscribedFn(Box<dyn Fn(&str) -> bool + Send + Sync>);
+pub struct IsSubscribedFn(pub Box<dyn Fn(&str) -> bool + Send + Sync>);
 
 impl std::fmt::Debug for IsSubscribedFn {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -770,5 +747,24 @@ impl std::ops::Deref for IsSubscribedFn {
     type Target = Box<dyn Fn(&str) -> bool + Send + Sync>;
     fn deref(&self) -> &Box<dyn Fn(&str) -> bool + Send + Sync> {
         &self.0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_lazy_count_set() {
+        let mut new = LazyCountSet::default();
+        assert_eq!(new.len(), 0);
+        new.set_not_yet_seen(10);
+        assert_eq!(new.len(), 10);
+        for i in 0..10 {
+            assert!(new.insert_existing(EnvelopeHash(i)));
+        }
+        assert_eq!(new.len(), 10);
+        assert!(!new.insert_existing(EnvelopeHash(10)));
+        assert_eq!(new.len(), 10);
     }
 }

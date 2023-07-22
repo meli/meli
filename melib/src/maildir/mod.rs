@@ -26,14 +26,16 @@ pub use self::backend::*;
 mod stream;
 use std::{
     collections::hash_map::DefaultHasher,
+    collections::HashMap,
     fs,
     hash::{Hash, Hasher},
     io::{BufReader, Read},
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, RwLock},
 };
 
 use futures::stream::Stream;
+use smallvec::SmallVec;
 pub use stream::*;
 
 use crate::{
@@ -41,6 +43,7 @@ use crate::{
     email::Flag,
     error::{Error, Result},
     utils::shellexpand::ShellExpandTrait,
+    AccountSettings, Envelope, EnvelopeHash,
 };
 
 /// `BackendOp` implementor for Maildir

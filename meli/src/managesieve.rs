@@ -31,7 +31,7 @@ extern crate serde_json;
 extern crate smallvec;
 extern crate termion;
 
-use melib::{backends::imap::managesieve::ManageSieveConnection, Result};
+use melib::{imap::managesieve::ManageSieveConnection, Result};
 
 #[macro_use]
 pub mod types;

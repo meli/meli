@@ -158,6 +158,18 @@ pub mod utils;
 
 #[cfg(feature = "gpgme")]
 pub mod gpgme;
+#[cfg(feature = "imap")]
+pub mod imap;
+#[cfg(feature = "jmap")]
+pub mod jmap;
+#[cfg(feature = "maildir")]
+pub mod maildir;
+#[cfg(feature = "mbox")]
+pub mod mbox;
+#[cfg(feature = "nntp")]
+pub mod nntp;
+#[cfg(feature = "notmuch")]
+pub mod notmuch;
 #[cfg(feature = "smtp")]
 pub mod smtp;
 

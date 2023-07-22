@@ -25,9 +25,11 @@ use std::{
     io::Read,
     os::unix::ffi::OsStrExt,
     path::{Path, PathBuf},
+    pin::Pin,
     sync::{Arc, Mutex, RwLock},
 };
 
+use futures::Stream;
 use smallvec::SmallVec;
 
 use crate::{
@@ -36,7 +38,7 @@ use crate::{
     email::{Envelope, EnvelopeHash, Flag},
     error::{Error, Result},
     utils::shellexpand::ShellExpandTrait,
-    Collection,
+    Collection, ErrorKind,
 };
 
 macro_rules! call {
@@ -798,7 +800,7 @@ impl MailBackend for NotmuchDb {
             .as_ref()
             .unwrap_or(&self.path)
             .to_path_buf();
-        MaildirType::save_to_mailbox(path, bytes, flags)?;
+        crate::maildir::MaildirType::save_to_mailbox(path, bytes, flags)?;
         Ok(Box::pin(async { Ok(()) }))
     }
 
@@ -976,11 +978,11 @@ impl MailBackend for NotmuchDb {
         self.collection.clone()
     }
 
-    fn as_any(&self) -> &dyn Any {
+    fn as_any(&self) -> &dyn std::any::Any {
         self
     }
 
-    fn as_any_mut(&mut self) -> &mut dyn Any {
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
     }
 

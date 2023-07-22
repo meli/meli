@@ -670,7 +670,7 @@ pub trait MailListingTrait: ListingTrait {
                     let fut: Pin<Box<dyn Future<Output = Result<()>> + Send + 'static>> =
                         Box::pin(async move {
                             let cl = async move {
-                                use melib::backends::mbox::MboxMetadata;
+                                use melib::mbox::MboxMetadata;
                                 let bytes: Vec<Vec<u8>> = try_join_all(futures?).await?;
                                 let envs: Vec<_> = envs_to_set
                                     .iter()

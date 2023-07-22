@@ -25,6 +25,7 @@
 //! specification. <https://cr.yp.to/proto/maildir.html>
 
 use futures::prelude::Stream;
+use smallvec::SmallVec;
 
 use super::{MaildirMailbox, MaildirOp, MaildirPathTrait};
 use crate::{
@@ -1063,11 +1064,11 @@ impl MailBackend for MaildirType {
         )
     }
 
-    fn as_any(&self) -> &dyn Any {
+    fn as_any(&self) -> &dyn std::any::Any {
         self
     }
 
-    fn as_any_mut(&mut self) -> &mut dyn Any {
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
     }
 }

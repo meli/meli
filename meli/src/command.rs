@@ -460,7 +460,7 @@ define_commands!([
                           let (input, _) = is_a(" ")(input)?;
                           let (input, path) = quoted_argument(input.trim())?;
                           let (input, _) = eof(input)?;
-                          Ok((input, Listing(ExportMbox(Some(melib::backends::mbox::MboxFormat::MboxCl2), path.to_string().into()))))
+                          Ok((input, Listing(ExportMbox(Some(melib::mbox::MboxFormat::MboxCl2), path.to_string().into()))))
                       }
                   )
                 },

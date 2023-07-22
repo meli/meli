@@ -284,7 +284,7 @@ pub mod parser {
     }
 
     pub fn sieve_name(input: &[u8]) -> IResult<&[u8], &[u8]> {
-        crate::backends::imap::protocol_parser::string_token(input)
+        crate::imap::protocol_parser::string_token(input)
     }
 
     // *(sieve-name [SP "ACTIVE"] CRLF)

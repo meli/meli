@@ -32,7 +32,7 @@ use futures::{
 };
 
 use super::*;
-use crate::backends::maildir::backend::move_to_cur;
+use crate::maildir::backend::move_to_cur;
 
 type Payload = Pin<Box<dyn Future<Output = Result<Vec<Envelope>>> + Send + 'static>>;
 

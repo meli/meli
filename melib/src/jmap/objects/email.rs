@@ -27,8 +27,8 @@ use serde_json::{value::RawValue, Value};
 
 use super::*;
 use crate::{
-    backends::jmap::rfc8620::bool_false,
     email::address::{Address, MailboxAddress},
+    jmap::rfc8620::bool_false,
     utils::datetime,
 };
 

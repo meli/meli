@@ -20,22 +20,24 @@
  */
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeSet, HashMap, HashSet},
     convert::TryFrom,
+    pin::Pin,
     str::FromStr,
     sync::{Arc, Mutex, RwLock},
     time::{Duration, Instant},
 };
 
-use futures::lock::Mutex as FutureMutex;
+use futures::{lock::Mutex as FutureMutex, Stream};
 use isahc::{config::RedirectPolicy, AsyncReadResponseExt, HttpClient};
 use serde_json::Value;
+use smallvec::SmallVec;
 
 use crate::{
     backends::*,
     conf::AccountSettings,
     email::*,
-    error::{Error, Result},
+    error::{Error, ErrorKind, Result},
     utils::futures::{sleep, timeout},
     Collection,
 };
@@ -499,11 +501,11 @@ impl MailBackend for JmapType {
         }))
     }
 
-    fn as_any(&self) -> &dyn Any {
+    fn as_any(&self) -> &dyn std::any::Any {
         self
     }
 
-    fn as_any_mut(&mut self) -> &mut dyn Any {
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
     }
 

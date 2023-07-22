@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use crate::backends::jmap::{
+use crate::jmap::{
     protocol::Method,
     rfc8620::{Object, ResultField},
 };

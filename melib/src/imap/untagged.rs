@@ -26,16 +26,15 @@ use imap_codec::{command::CommandBody, search::SearchKey, sequence::SequenceSet}
 use super::{ImapConnection, MailboxSelection, UID};
 use crate::{
     backends::{
-        imap::protocol_parser::{
-            generate_envelope_hash, FetchResponse, ImapLineSplit, RequiredResponses,
-            UntaggedResponse,
-        },
         BackendMailbox, RefreshEvent,
         RefreshEventKind::{self, *},
         TagHash,
     },
     email::common_attributes,
     error::*,
+    imap::protocol_parser::{
+        generate_envelope_hash, FetchResponse, ImapLineSplit, RequiredResponses, UntaggedResponse,
+    },
 };
 
 impl ImapConnection {
