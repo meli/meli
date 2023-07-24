@@ -272,14 +272,16 @@ impl SmtpConnection {
 
                     AsyncWrapper::new(conn)?
                 };
-                let pre_ehlo_extensions_reply = read_lines(
-                    &mut socket,
-                    &mut res,
-                    Some((ReplyCode::_220, &[])),
-                    &mut String::new(),
-                )
-                .await?;
-                drop(pre_ehlo_extensions_reply);
+                if !matches!(server_conf.security, SmtpSecurity::Tls { .. }) {
+                    let pre_ehlo_extensions_reply = read_lines(
+                        &mut socket,
+                        &mut res,
+                        Some((ReplyCode::_220, &[])),
+                        &mut String::new(),
+                    )
+                    .await?;
+                    drop(pre_ehlo_extensions_reply);
+                }
 
                 if matches!(server_conf.security, SmtpSecurity::Auto { .. }) {
                     if server_conf.port == 465 {
@@ -297,7 +299,9 @@ impl SmtpConnection {
                         ));
                     }
                 }
-                socket.write_all(b"EHLO meli.delivery\r\n").await?;
+                if !matches!(server_conf.security, SmtpSecurity::Tls { .. }) {
+                    socket.write_all(b"EHLO meli.delivery\r\n").await?;
+                }
                 if matches!(server_conf.security, SmtpSecurity::StartTLS { .. }) {
                     let pre_tls_extensions_reply = read_lines(
                         &mut socket,
@@ -355,6 +359,16 @@ impl SmtpConnection {
                         conn
                     })?
                 };
+                if matches!(server_conf.security, SmtpSecurity::Tls { .. }) {
+                    let pre_ehlo_extensions_reply = read_lines(
+                        &mut ret,
+                        &mut res,
+                        Some((ReplyCode::_220, &[])),
+                        &mut String::new(),
+                    )
+                    .await?;
+                    drop(pre_ehlo_extensions_reply);
+                }
                 ret.write_all(b"EHLO meli.delivery\r\n").await?;
                 ret
             }
