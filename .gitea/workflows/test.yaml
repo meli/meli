@@ -80,7 +80,8 @@ jobs:
       - if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }} && matrix.target
         name: Add lint dependencies
         run: |
-          cargo install --target "${{ matrix.target }}" cargo-sort
+          cargo install --quiet --version 1.0.9 --target "${{ matrix.target }}" cargo-sort
+          cargo install --quiet --version 0.9.54 --target "${{ matrix.target }}" cargo-nextest
       - name: cargo-check
         run: |
           cargo check --all-features --all --tests --examples --benches --bins
@@ -90,7 +91,8 @@ jobs:
       - name: cargo test
         if: success() || failure() # always run even if other steps fail, except when cancelled <https://stackoverflow.com/questions/58858429/how-to-run-a-github-actions-step-even-if-the-previous-step-fails-while-still-f>
         run: |
-          cargo test --all --no-fail-fast --all-features -- --nocapture --quiet
+          cargo nextest run --all --no-fail-fast --all-features --future-incompat-report
+          #cargo test --all --no-fail-fast --all-features -- --nocapture --quiet
       - name: cargo-sort
         if: success() || failure()
         run: |
