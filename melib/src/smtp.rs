@@ -1108,7 +1108,7 @@ mod test {
 
     use super::*;
 
-    const ADDRESS: &str = "127.0.0.1:8825";
+    const ADDRESS: &str = "localhost:8825";
     #[derive(Debug, Clone)]
     enum Message {
         Helo,
@@ -1260,7 +1260,7 @@ mod test {
 
     fn get_smtp_conf() -> SmtpServerConf {
         SmtpServerConf {
-            hostname: "127.0.0.1".into(),
+            hostname: "localhost".into(),
             port: 8825,
             envelope_from: "foo-chat@example.com".into(),
             auth: SmtpAuth::None,
