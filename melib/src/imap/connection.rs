@@ -25,7 +25,7 @@ use crate::{
     email::parser::BytesExt,
     error::*,
     utils::{
-        connections::{lookup_ipv4, Connection},
+        connections::{lookup_ip, Connection},
         futures::timeout,
     },
     LogLevel,
@@ -177,7 +177,7 @@ impl ImapStream {
                 .build()
                 .chain_err_kind(ErrorKind::Network(NetworkErrorKind::InvalidTLSConnection))?;
 
-            let addr = lookup_ipv4(path, server_conf.server_port)?;
+            let addr = lookup_ip(path, server_conf.server_port)?;
 
             let mut socket = AsyncWrapper::new({
                 let conn = Connection::new_tcp(if let Some(timeout) = server_conf.timeout {
@@ -280,7 +280,7 @@ impl ImapStream {
                 .chain_err_summary(|| format!("Could not initiate TLS negotiation to {}.", path))?
             }
         } else {
-            let addr = lookup_ipv4(path, server_conf.server_port)?;
+            let addr = lookup_ip(path, server_conf.server_port)?;
             AsyncWrapper::new({
                 let conn = Connection::new_tcp(if let Some(timeout) = server_conf.timeout {
                     TcpStream::connect_timeout(&addr, timeout)?

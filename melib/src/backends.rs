@@ -20,8 +20,6 @@
  */
 
 pub mod utf7;
-use smallvec::SmallVec;
-
 use std::{
     any::Any,
     borrow::Cow,
@@ -35,9 +33,9 @@ use std::{
 };
 
 use futures::stream::Stream;
+use smallvec::SmallVec;
 
 use super::email::{Envelope, EnvelopeHash, Flag};
-
 use crate::{
     conf::AccountSettings,
     error::{Error, ErrorKind, Result},

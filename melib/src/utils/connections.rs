@@ -494,19 +494,23 @@ impl std::os::unix::io::AsRawFd for Connection {
     }
 }
 
-pub fn lookup_ipv4(host: &str, port: u16) -> crate::Result<std::net::SocketAddr> {
+pub fn lookup_ip(host: &str, port: u16) -> crate::Result<std::net::SocketAddr> {
     use std::net::ToSocketAddrs;
+
+    use crate::error::{Error, ErrorKind, NetworkErrorKind};
 
     let addrs = (host, port).to_socket_addrs()?;
     for addr in addrs {
-        if let std::net::SocketAddr::V4(_) = addr {
+        if matches!(
+            addr,
+            std::net::SocketAddr::V4(_) | std::net::SocketAddr::V6(_)
+        ) {
             return Ok(addr);
         }
     }
 
     Err(
-        crate::error::Error::new(format!("Could not lookup address {}:{}", host, port)).set_kind(
-            crate::error::ErrorKind::Network(crate::error::NetworkErrorKind::HostLookupFailed),
-        ),
+        Error::new(format!("Could not lookup address {}:{}", host, port))
+            .set_kind(ErrorKind::Network(NetworkErrorKind::HostLookupFailed)),
     )
 }

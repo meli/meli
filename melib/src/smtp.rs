@@ -82,7 +82,7 @@ use smol::{unblock, Async as AsyncWrapper};
 use crate::{
     email::{parser::BytesExt, Address, Envelope},
     error::{Error, Result, ResultIntoError},
-    utils::connections::{lookup_ipv4, Connection},
+    utils::connections::{lookup_ip, Connection},
 };
 
 /// Kind of server security (StartTLS/TLS/None) the client should attempt
@@ -261,7 +261,7 @@ impl SmtpConnection {
                 }
                 let connector = connector.build()?;
 
-                let addr = lookup_ipv4(path, server_conf.port)?;
+                let addr = lookup_ip(path, server_conf.port)?;
                 let mut socket = {
                     let conn = Connection::new_tcp(TcpStream::connect_timeout(
                         &addr,
@@ -373,7 +373,7 @@ impl SmtpConnection {
                 ret
             }
             SmtpSecurity::None => {
-                let addr = lookup_ipv4(path, server_conf.port)?;
+                let addr = lookup_ip(path, server_conf.port)?;
                 let mut ret = AsyncWrapper::new({
                     let conn = Connection::new_tcp(TcpStream::connect_timeout(
                         &addr,
@@ -1108,7 +1108,7 @@ mod test {
 
     use super::*;
 
-    const ADDRESS: &str = "127.0.0.1:8825";
+    const ADDRESS: &str = "localhost:8825";
     #[derive(Debug, Clone)]
     enum Message {
         Helo,
@@ -1260,7 +1260,7 @@ mod test {
 
     fn get_smtp_conf() -> SmtpServerConf {
         SmtpServerConf {
-            hostname: "127.0.0.1".into(),
+            hostname: "localhost".into(),
             port: 8825,
             envelope_from: "foo-chat@example.com".into(),
             auth: SmtpAuth::None,
@@ -1288,7 +1288,7 @@ mod test {
             let mut server = Server::new(handler2);
 
             server
-                .with_name("example.com")
+                .with_name("test")
                 .with_ssl(SslConfig::None)
                 .unwrap()
                 .with_addr(ADDRESS)

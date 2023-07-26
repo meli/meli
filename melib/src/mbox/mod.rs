@@ -150,9 +150,6 @@ use crate::{
 };
 
 extern crate notify;
-use futures::Stream;
-use smallvec::SmallVec;
-
 use std::{
     collections::hash_map::HashMap,
     fs::File,
@@ -163,6 +160,9 @@ use std::{
     str::FromStr,
     sync::{mpsc::channel, Arc, Mutex, RwLock},
 };
+
+use futures::Stream;
+use smallvec::SmallVec;
 
 use self::notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
 

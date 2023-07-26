@@ -110,9 +110,7 @@ CREATE TABLE IF NOT EXISTS article (
 
 #[cfg(not(feature = "sqlite3"))]
 mod inner {
-    use crate::{
-        backends::nntp::UID, email::Flag, EnvelopeHash, Error, ErrorKind, MailboxHash, Result,
-    };
+    use crate::{email::Flag, nntp::UID, EnvelopeHash, Error, ErrorKind, MailboxHash, Result};
 
     #[derive(Debug)]
     pub struct Store;

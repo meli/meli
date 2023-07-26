@@ -24,7 +24,7 @@ use crate::{
     email::parser::BytesExt,
     error::*,
     log,
-    utils::connections::{lookup_ipv4, Connection},
+    utils::connections::{lookup_ip, Connection},
 };
 extern crate native_tls;
 use std::{collections::HashSet, future::Future, pin::Pin, sync::Arc, time::Instant};
@@ -78,7 +78,7 @@ impl NntpStream {
         let path = &server_conf.server_hostname;
 
         let stream = {
-            let addr = lookup_ipv4(path, server_conf.server_port)?;
+            let addr = lookup_ip(path, server_conf.server_port)?;
             AsyncWrapper::new({
                 let conn = Connection::new_tcp(TcpStream::connect_timeout(
                     &addr,

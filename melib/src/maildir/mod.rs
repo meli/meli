@@ -25,8 +25,7 @@ pub use self::backend::*;
 
 mod stream;
 use std::{
-    collections::hash_map::DefaultHasher,
-    collections::HashMap,
+    collections::{hash_map::DefaultHasher, HashMap},
     fs,
     hash::{Hash, Hasher},
     io::{BufReader, Read},
