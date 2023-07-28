@@ -1900,6 +1900,7 @@ impl Account {
                         match is_online {
                             Ok(()) => {
                                 if matches!(self.is_online, IsOnline::Err { ref value, ..} if !value.kind.is_authentication())
+                                    || matches!(self.is_online, IsOnline::Uninit)
                                 {
                                     self.watch();
                                 }
