@@ -781,6 +781,11 @@ pub mod generic {
         ))(input)
     }
 
+    /// Invalid version of [`ctext`] that accepts non-ascii characters.
+    fn ctext_invalid(input: &[u8]) -> IResult<&[u8], ()> {
+        map(is_not("()\\"), |_| ())(input)
+    }
+
     ///```text
     /// ctext           =   %d33-39 /          ; Printable US-ASCII
     ///                    %d42-91 /          ;  characters not including
@@ -804,8 +809,10 @@ pub mod generic {
                 ));
             }
             input = context("comment()", opt(fws))(input)?.0;
-            while let Ok((_input, _)) =
-                context("comment()", alt((ctext, map(quoted_pair, |_| ()))))(input)
+            while let Ok((_input, _)) = context(
+                "comment()",
+                alt((ctext, ctext_invalid, map(quoted_pair, |_| ()))),
+            )(input)
             {
                 input = _input;
             }

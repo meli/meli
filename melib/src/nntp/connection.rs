@@ -296,10 +296,9 @@ impl NntpStream {
         ret: &mut String,
         is_multiline: bool,
         expected_reply_code: &[&str],
-    ) -> Result<()> {
+    ) -> Result<u32> {
         self.read_lines(ret, is_multiline, expected_reply_code)
-            .await?;
-        Ok(())
+            .await
     }
 
     pub async fn read_lines(
@@ -307,7 +306,7 @@ impl NntpStream {
         ret: &mut String,
         is_multiline: bool,
         expected_reply_code: &[&str],
-    ) -> Result<()> {
+    ) -> Result<u32> {
         let mut buf: Vec<u8> = vec![0; Connection::IO_BUF_SIZE];
         ret.clear();
         let mut last_line_idx: usize = 0;
@@ -337,7 +336,14 @@ impl NntpStream {
                     if let Some(mut pos) = ret[last_line_idx..].rfind("\r\n") {
                         if !is_multiline {
                             break;
-                        } else if let Some(pos) = ret.find("\r\n.\r\n") {
+                        }
+                        if !matches!(
+                            expected_reply_code.iter().position(|r| ret.starts_with(r)),
+                            Some(0) | None
+                        ) {
+                            break;
+                        }
+                        if let Some(pos) = ret.find("\r\n.\r\n") {
                             ret.replace_range(pos + "\r\n".len()..pos + "\r\n.\r\n".len(), "");
                             break;
                         }
@@ -355,27 +361,24 @@ impl NntpStream {
                 }
             }
         }
-        //debug!("returning nntp response:\n{:?}", &ret);
-        Ok(())
+        ret.split_whitespace()
+            .next()
+            .map(str::parse)
+            .and_then(std::result::Result::ok)
+            .ok_or_else(|| Error::new(format!("Internal error: {}", ret)))
     }
 
     pub async fn send_command(&mut self, command: &[u8]) -> Result<()> {
-        debug!("sending: {}", unsafe {
-            std::str::from_utf8_unchecked(command)
-        });
         if let Err(err) = try_await(async move {
             let command = command.trim();
             self.stream.write_all(command).await?;
             self.stream.write_all(b"\r\n").await?;
             self.stream.flush().await?;
-            debug!("sent: {}", unsafe {
-                std::str::from_utf8_unchecked(command)
-            });
             Ok(())
         })
         .await
         {
-            debug!("stream send_command err {:?}", err);
+            log::debug!("stream send_command err {:?}", err);
             Err(err)
         } else {
             Ok(())
@@ -404,12 +407,11 @@ impl NntpStream {
             }
             self.stream.write_all(b".\r\n").await?;
             self.stream.flush().await?;
-            debug!("sent data block {} bytes", data.len());
             Ok(())
         })
         .await
         {
-            debug!("stream send_multiline_data_block err {:?}", err);
+            log::debug!("stream send_multiline_data_block err {:?}", err);
             Err(err)
         } else {
             Ok(())
@@ -456,7 +458,7 @@ impl NntpConnection {
         ret: &'a mut String,
         is_multiline: bool,
         expected_reply_code: &'static [&str],
-    ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = Result<u32>> + Send + 'a>> {
         Box::pin(async move {
             ret.clear();
             self.stream
@@ -484,9 +486,9 @@ impl NntpConnection {
             try_await(async { self.stream.as_mut()?.send_command(command).await }).await
         {
             self.stream = Err(err.clone());
-            debug!(err.kind);
+            log::debug!("{:?}", err.kind);
             if err.kind.is_network() {
-                debug!(self.connect().await)?;
+                self.connect().await?;
             }
             Err(err)
         } else {
@@ -540,7 +542,7 @@ impl NntpConnection {
 
 pub fn command_to_replycodes(c: &str) -> &'static [&'static str] {
     if c.starts_with("OVER") {
-        &["224 "]
+        &["224 ", "423 "]
     } else if c.starts_with("LIST") {
         &["215 "]
     } else if c.starts_with("POST") {
