@@ -731,39 +731,65 @@ impl NntpType {
     pub async fn nntp_mailboxes(connection: &Arc<FutureMutex<NntpConnection>>) -> Result<()> {
         let mut res = String::with_capacity(8 * 1024);
         let mut conn = connection.lock().await;
-        let command = {
+        let mut mailboxes = {
             let mailboxes_lck = conn.uid_store.mailboxes.lock().await;
             mailboxes_lck
                 .values()
-                .fold("LIST ACTIVE ".to_string(), |mut acc, x| {
-                    if acc.len() != "LIST ACTIVE ".len() {
-                        acc.push(',');
-                    }
-                    acc.push_str(x.name());
-                    acc
-                })
+                .map(|m| m.name().to_string())
+                .collect::<SmallVec<[String; 16]>>()
         };
-        conn.send_command(command.as_bytes()).await?;
-        conn.read_response(&mut res, true, &["215 "])
-            .await
-            .chain_err_summary(|| {
-                format!(
-                    "Could not get newsgroups {}: expected LIST ACTIVE response but got: {}",
-                    &conn.uid_store.account_name, res
-                )
-            })?;
-        debug!(&res);
-        let mut mailboxes_lck = conn.uid_store.mailboxes.lock().await;
-        for l in res.split_rn().skip(1) {
-            let s = l.split_whitespace().collect::<SmallVec<[&str; 4]>>();
-            if s.len() != 3 {
-                continue;
+        mailboxes.reverse();
+        while !mailboxes.is_empty() {
+            let mut command = "LIST ACTIVE ".to_string();
+            'batch: while let Some(m) = mailboxes.pop() {
+                /* first check if the group name itself is too big for `LIST ACTIVE`. */
+                if "LIST ACTIVE ".len() + m.len() + "\r\n".len() >= 512 {
+                    log::warn!(
+                        "{}: Newsgroup named {} has a name that exceeds RFC 3977 limits of \
+                         maximum command lines (512 octets) with LIST ACTIVE. Skipping it.",
+                        &conn.uid_store.account_name,
+                        m
+                    );
+                    continue 'batch;
+                }
+                if command.len() != "LIST ACTIVE ".len() {
+                    command.push(',');
+                }
+                // RFC 3977
+                // 3.  Basic Concepts
+                // 3.1.  Commands and Responses
+                // Command lines MUST NOT exceed 512 octets, which includes the terminating CRLF
+                // pair.
+                if command.len() + m.len() + "\r\n".len() >= 512 {
+                    mailboxes.push(m);
+                    if command.ends_with(',') {
+                        command.pop();
+                    }
+                    break 'batch;
+                }
+                command.push_str(&m);
             }
-            let mailbox_hash = MailboxHash(get_path_hash!(&s[0]));
-            mailboxes_lck.entry(mailbox_hash).and_modify(|m| {
-                *m.high_watermark.lock().unwrap() = usize::from_str(s[1]).unwrap_or(0);
-                *m.low_watermark.lock().unwrap() = usize::from_str(s[2]).unwrap_or(0);
-            });
+            conn.send_command(command.as_bytes()).await?;
+            conn.read_response(&mut res, true, &["215 "])
+                .await
+                .chain_err_summary(|| {
+                    format!(
+                        "Could not get newsgroups {}: expected LIST ACTIVE response but got: {}",
+                        &conn.uid_store.account_name, res
+                    )
+                })?;
+            let mut mailboxes_lck = conn.uid_store.mailboxes.lock().await;
+            for l in res.split_rn().skip(1) {
+                let s = l.split_whitespace().collect::<SmallVec<[&str; 4]>>();
+                if s.len() != 3 {
+                    continue;
+                }
+                let mailbox_hash = MailboxHash(get_path_hash!(&s[0]));
+                mailboxes_lck.entry(mailbox_hash).and_modify(|m| {
+                    *m.high_watermark.lock().unwrap() = usize::from_str(s[1]).unwrap_or(0);
+                    *m.low_watermark.lock().unwrap() = usize::from_str(s[2]).unwrap_or(0);
+                });
+            }
         }
         Ok(())
     }
