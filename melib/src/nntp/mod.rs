@@ -241,7 +241,7 @@ impl MailBackend for NntpType {
             mailbox_hash,
             uid_store: self.uid_store.clone(),
             connection: self.connection.clone(),
-            high_low_total: None,
+            total_low_high: None,
         };
         Ok(Box::pin(async_stream::try_stream! {
             {
@@ -876,7 +876,7 @@ struct FetchState {
     mailbox_hash: MailboxHash,
     connection: Arc<FutureMutex<NntpConnection>>,
     uid_store: Arc<UIDStore>,
-    high_low_total: Option<(usize, usize, usize)>,
+    total_low_high: Option<(usize, usize, usize)>,
 }
 
 impl FetchState {
@@ -885,13 +885,14 @@ impl FetchState {
             mailbox_hash,
             ref connection,
             ref uid_store,
-            ref mut high_low_total,
+            ref mut total_low_high,
         } = self;
         let mailbox_hash = *mailbox_hash;
         let mut res = String::with_capacity(8 * 1024);
         let mut conn = connection.lock().await;
         let mut unseen = LazyCountSet::new();
-        if high_low_total.is_none() {
+
+        if total_low_high.is_none() {
             conn.select_group(mailbox_hash, true, &mut res).await?;
             /*
              *   Parameters
@@ -911,37 +912,46 @@ impl FetchState {
                 )));
             }
             let total = usize::from_str(s[1]).unwrap_or(0);
-            let _low = usize::from_str(s[2]).unwrap_or(0);
+            let low = usize::from_str(s[2]).unwrap_or(0);
             let high = usize::from_str(s[3]).unwrap_or(0);
-            *high_low_total = Some((high, _low, total));
+            *total_low_high = Some((total, low, high));
             {
                 let f = &uid_store.mailboxes.lock().await[&mailbox_hash];
                 f.exists.lock().unwrap().set_not_yet_seen(total);
             };
         }
-        let (high, low, _) = high_low_total.unwrap();
-        if high <= low {
-            return Ok(None);
-        }
-        const CHUNK_SIZE: usize = 50000;
-        let new_low = std::cmp::max(low, high.saturating_sub(CHUNK_SIZE));
-        high_low_total.as_mut().unwrap().0 = new_low;
 
-        // [ref:FIXME]: server might not implement OVER capability
-        conn.send_command(format!("OVER {}-{}", new_low, high).as_bytes())
-            .await?;
-        conn.read_response(&mut res, true, command_to_replycodes("OVER"))
-            .await
-            .chain_err_summary(|| {
-                format!(
-                    "{} Could not select newsgroup: expected OVER response but got: {}",
-                    &uid_store.account_name, res
-                )
-            })?;
-        let mut ret = Vec::with_capacity(high - new_low);
-        //hash_index: Arc<Mutex<HashMap<EnvelopeHash, (UID, MailboxHash)>>>,
-        //uid_index: Arc<Mutex<HashMap<(MailboxHash, UID), EnvelopeHash>>>,
+        let (low, new_low) = loop {
+            let (_, low, high) = total_low_high.unwrap();
+            if high <= low {
+                return Ok(None);
+            }
+            const CHUNK_SIZE: usize = 50000;
+            let new_low = std::cmp::max(low, std::cmp::min(high, low.saturating_add(CHUNK_SIZE)));
+            total_low_high.as_mut().unwrap().1 = new_low;
+
+            // [ref:FIXME]: server might not implement OVER capability
+            conn.send_command(format!("OVER {}-{}", low, new_low).as_bytes())
+                .await?;
+            let reply_code = conn
+                .read_response(&mut res, true, command_to_replycodes("OVER"))
+                .await
+                .chain_err_summary(|| {
+                    format!(
+                        "{} Could not select newsgroup: expected OVER response but got: {}",
+                        &uid_store.account_name, res
+                    )
+                })?;
+            if reply_code == 423 {
+                // No articles in this range, so move on to next chunk.
+                continue;
+            }
+            break (low, new_low);
+        };
+
+        let mut ret = Vec::with_capacity(new_low - low);
         let mut latest_article: Option<crate::UnixTimestamp> = None;
+
         {
             let mut message_id_lck = uid_store.message_id_index.lock().await;
             let mut uid_index_lck = uid_store.uid_index.lock().await;
