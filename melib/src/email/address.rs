@@ -340,8 +340,8 @@ impl Hash for Address {
     }
 }
 
-impl core::fmt::Display for Address {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+impl std::fmt::Display for Address {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Self::Mailbox(m) if m.display_name.length > 0 => match m.display_name.display(&m.raw) {
                 d if d.contains('.') || d.contains(',') => {
@@ -364,8 +364,8 @@ impl core::fmt::Display for Address {
     }
 }
 
-impl core::fmt::Debug for Address {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+impl std::fmt::Debug for Address {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Self::Mailbox(m) => f
                 .debug_struct("Address::Mailbox")
@@ -449,24 +449,8 @@ impl StrBuild for MessageID {
     }
 }
 
-#[test]
-fn test_strbuilder() {
-    let m_id = b"<20170825132332.6734-1@mail.ntua.gr>";
-    let (_, val) = parser::address::msg_id(m_id).unwrap();
-    assert_eq!(
-        val,
-        MessageID(
-            m_id.to_vec(),
-            StrBuilder {
-                offset: 1,
-                length: 35,
-            }
-        )
-    );
-}
-
-impl core::fmt::Display for MessageID {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+impl std::fmt::Display for MessageID {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         if self.val().is_ascii() {
             write!(f, "{}", unsafe {
                 std::str::from_utf8_unchecked(self.val())
@@ -483,8 +467,25 @@ impl PartialEq for MessageID {
     }
 }
 
-impl core::fmt::Debug for MessageID {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+impl PartialEq<str> for MessageID {
+    fn eq(&self, other: &str) -> bool {
+        self.raw()
+            == other
+                .trim()
+                .trim_start_matches('<')
+                .trim_end_matches('>')
+                .as_bytes()
+    }
+}
+
+impl PartialEq<&str> for MessageID {
+    fn eq(&self, other: &&str) -> bool {
+        self == *other
+    }
+}
+
+impl std::fmt::Debug for MessageID {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{}", String::from_utf8(self.raw().to_vec()).unwrap())
     }
 }
@@ -495,8 +496,8 @@ pub struct References {
     pub refs: Vec<MessageID>,
 }
 
-impl core::fmt::Debug for References {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+impl std::fmt::Debug for References {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{:#?}", self.refs)
     }
 }
@@ -530,4 +531,33 @@ macro_rules! make_address {
             }
         })
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    const M_ID: &str = "<20170825132332.6734-1@mail.ntua.gr>";
+    const M_LEN: usize = M_ID.len();
+
+    #[test]
+    fn test_message_id_strbuilder() {
+        let (_, val) = parser::address::msg_id(M_ID.as_bytes()).unwrap();
+        assert_eq!(
+            val,
+            MessageID(
+                M_ID.as_bytes().to_vec(),
+                StrBuilder {
+                    offset: 1,
+                    length: 35,
+                }
+            )
+        );
+    }
+
+    #[test]
+    fn test_message_id_comparisons() {
+        let (_, val) = parser::address::msg_id(M_ID.as_bytes()).unwrap();
+        assert_eq!(val, M_ID);
+        assert_eq!(val, M_ID[1..][..M_LEN - 2]);
+    }
 }
