@@ -482,11 +482,25 @@ impl NntpConnection {
     }
 
     pub async fn send_command(&mut self, command: &[u8]) -> Result<()> {
+        // RFC 3977
+        // 3.  Basic Concepts
+        // 3.1.
+        // Commands and Responses Command lines MUST NOT exceed 512 octets, which
+        // includes the terminating CRLF pair.
+        if command.len() + b"\r\n".len() >= 512 {
+            log::error!(
+                "{}: Sending a command to the NNTP server that is over 511 bytes: this is invalid \
+                 and should be fixed. Please report this as a bug to the melib bugtracker. The \
+                 command line is `{:?}\\r\\n`",
+                &self.uid_store.account_name,
+                command
+            );
+        }
         if let Err(err) =
             try_await(async { self.stream.as_mut()?.send_command(command).await }).await
         {
             self.stream = Err(err.clone());
-            log::debug!("{:?}", err.kind);
+            log::debug!("NNTP send command error {:?} {}", err.kind, err);
             if err.kind.is_network() {
                 self.connect().await?;
             }
