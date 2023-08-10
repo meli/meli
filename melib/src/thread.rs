@@ -933,6 +933,10 @@ impl Threads {
         env_hash: EnvelopeHash,
         other_mailbox: bool,
     ) -> bool {
+        if self.hash_set.contains(&env_hash) {
+            return true;
+        }
+
         {
             let envelopes_lck = envelopes.read().unwrap();
             let message_id = envelopes_lck[&env_hash].message_id().raw();
