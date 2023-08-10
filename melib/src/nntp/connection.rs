@@ -483,7 +483,7 @@ impl NntpConnection {
 
     pub async fn send_command(&mut self, command: &[u8]) -> Result<()> {
         // RFC 3977
-        // 3.  Basic Concepts
+        // 3. Basic Concepts
         // 3.1.
         // Commands and Responses Command lines MUST NOT exceed 512 octets, which
         // includes the terminating CRLF pair.
