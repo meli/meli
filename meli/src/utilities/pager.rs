@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use melib::text_processing::LineBreakText;
+use melib::text_processing::{LineBreakText, Truncate};
 
 use super::*;
 
@@ -56,8 +56,8 @@ pub struct Pager {
     id: ComponentId,
 }
 
-impl fmt::Display for Pager {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl std::fmt::Display for Pager {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "pager")
     }
 }

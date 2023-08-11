@@ -20,6 +20,7 @@
  */
 
 use super::*;
+use crate::melib::text_processing::Truncate;
 
 pub struct TextField {
     inner: UText,
@@ -27,8 +28,8 @@ pub struct TextField {
     id: ComponentId,
 }
 
-impl Debug for TextField {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+impl std::fmt::Debug for TextField {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         fmt.debug_struct(stringify!(TextField))
             .field("id", &self.id)
             .field("inner", &self.inner)
@@ -320,8 +321,8 @@ impl Component for TextField {
     }
 }
 
-impl fmt::Display for TextField {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl std::fmt::Display for TextField {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{}", self.as_str(),)
     }
 }

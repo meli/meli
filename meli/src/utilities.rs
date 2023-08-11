@@ -45,8 +45,10 @@ pub use self::dialogs::*;
 mod tables;
 use std::collections::HashSet;
 
+use indexmap::IndexMap;
+
 pub use self::tables::*;
-use crate::jobs::JobId;
+use crate::{jobs::JobId, melib::text_processing::TextProcessing};
 
 #[derive(Default, Debug, Clone)]
 pub struct SearchPattern {
@@ -80,8 +82,8 @@ pub struct StatusBar {
     cmd_history: Vec<String>,
 }
 
-impl fmt::Display for StatusBar {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl std::fmt::Display for StatusBar {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "status bar")
     }
 }
@@ -947,8 +949,8 @@ impl Tabbed {
     }
 }
 
-impl fmt::Display for Tabbed {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl std::fmt::Display for Tabbed {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "tabs")
     }
 }
@@ -1631,9 +1633,9 @@ pub struct RawBuffer {
     dirty: bool,
 }
 
-impl fmt::Display for RawBuffer {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Display::fmt("Raw buffer", f)
+impl std::fmt::Display for RawBuffer {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        std::fmt::Display::fmt("Raw buffer", f)
     }
 }
 

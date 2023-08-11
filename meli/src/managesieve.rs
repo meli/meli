@@ -19,50 +19,17 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-extern crate melib;
-use std::collections::VecDeque;
-
-use melib::*;
-#[macro_use]
-extern crate serde_derive;
 extern crate linkify;
-
+extern crate meli;
+extern crate melib;
+extern crate serde_derive;
 extern crate serde_json;
 extern crate smallvec;
 extern crate termion;
 
-use melib::{imap::managesieve::ManageSieveConnection, Result};
-
-#[macro_use]
-pub mod types;
-use crate::types::*;
-
-#[macro_use]
-pub mod terminal;
-use crate::terminal::*;
-
-#[macro_use]
-pub mod command;
-use crate::command::*;
-
-pub mod state;
-use crate::state::*;
-
-pub mod components;
-use crate::components::*;
-
-#[macro_use]
-pub mod conf;
-use crate::conf::*;
-
-#[cfg(feature = "sqlite3")]
-pub mod sqlite3;
-
-pub mod jobs;
-pub mod mailcap;
-//pub mod plugins;
-
 use futures::executor::block_on;
+use meli::*;
+use melib::{imap::managesieve::ManageSieveConnection, Result, *};
 
 /// Opens an interactive shell on a managesieve server. Suggested use is with
 /// rlwrap(1)
@@ -84,7 +51,7 @@ fn main() -> Result<()> {
 
     let (config_path, account_name) = (std::mem::take(&mut args[0]), std::mem::take(&mut args[1]));
     std::env::set_var("MELI_CONFIG", config_path);
-    let settings = conf::Settings::new()?;
+    let settings = meli::conf::Settings::new()?;
     if !settings.accounts.contains_key(&account_name) {
         eprintln!(
             "Account not found. available accounts: {}",

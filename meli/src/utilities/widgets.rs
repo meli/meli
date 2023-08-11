@@ -22,6 +22,7 @@
 use std::{borrow::Cow, collections::HashMap, time::Duration};
 
 use super::*;
+use crate::melib::text_processing::TextProcessing;
 
 #[derive(Debug, PartialEq, Eq, Default)]
 enum FormFocus {
@@ -38,11 +39,11 @@ pub enum Field {
     Choice(Vec<Cow<'static, str>>, Cursor, ComponentId),
 }
 
-impl Debug for Field {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl std::fmt::Debug for Field {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Self::Text(ref t) => fmt::Debug::fmt(t, f),
-            k => fmt::Debug::fmt(k, f),
+            Self::Text(ref t) => std::fmt::Debug::fmt(t, f),
+            k => std::fmt::Debug::fmt(k, f),
         }
     }
 }
@@ -181,8 +182,8 @@ impl Component for Field {
     }
 }
 
-impl fmt::Display for Field {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl std::fmt::Display for Field {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
             f,
             "{}",
@@ -240,8 +241,10 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> Default for Fo
     }
 }
 
-impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> fmt::Display for FormWidget<T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> std::fmt::Display
+    for FormWidget<T>
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "form")
     }
 }
@@ -588,12 +591,12 @@ where
     id: ComponentId,
 }
 
-impl<T> fmt::Display for ButtonWidget<T>
+impl<T> std::fmt::Display for ButtonWidget<T>
 where
     T: 'static + std::fmt::Debug + Copy + Default + Send + Sync,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Display::fmt("", f)
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        std::fmt::Display::fmt("", f)
     }
 }
 
@@ -763,9 +766,9 @@ pub struct AutoComplete {
     id: ComponentId,
 }
 
-impl fmt::Display for AutoComplete {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Display::fmt("AutoComplete", f)
+impl std::fmt::Display for AutoComplete {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        std::fmt::Display::fmt("AutoComplete", f)
     }
 }
 
@@ -1232,8 +1235,8 @@ impl ProgressSpinner {
     }
 }
 
-impl fmt::Display for ProgressSpinner {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl std::fmt::Display for ProgressSpinner {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "progress bar")
     }
 }

@@ -20,6 +20,9 @@
  */
 
 use super::*;
+use crate::terminal::cells::boundaries::{
+    HORZ_BOUNDARY, VERT_BOUNDARY, _LIGHT_DOWN_AND_HORIZONTAL, _LIGHT_UP_AND_HORIZONTAL,
+};
 
 /// A horizontally split in half container.
 #[derive(Debug)]
@@ -31,9 +34,9 @@ pub struct HSplit {
     id: ComponentId,
 }
 
-impl fmt::Display for HSplit {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Display::fmt(&self.top, f)
+impl std::fmt::Display for HSplit {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        std::fmt::Display::fmt(&self.top, f)
     }
 }
 
@@ -124,10 +127,10 @@ pub struct VSplit {
     id: ComponentId,
 }
 
-impl fmt::Display for VSplit {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl std::fmt::Display for VSplit {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         // [ref:TODO]: display focused component
-        Display::fmt(&self.right, f)
+        std::fmt::Display::fmt(&self.right, f)
     }
 }
 

@@ -45,8 +45,10 @@ enum SelectorCursor {
 /// component, check Selector::is_done to see if the user has finalised their
 /// choices. Collect the choices by consuming the Selector with
 /// Selector::collect()
-pub struct Selector<T: 'static + PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send>
-{
+pub struct Selector<
+    T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send,
+    F: 'static + Sync + Send,
+> {
     /// allow only one selection
     single_only: bool,
     entries: Vec<(T, bool)>,
@@ -76,31 +78,31 @@ pub type UIDialog<T> = Selector<
     Option<Box<dyn FnOnce(ComponentId, &[T]) -> Option<UIEvent> + 'static + Sync + Send>>,
 >;
 
-impl<T: 'static + PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> fmt::Debug
-    for Selector<T, F>
+impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + Send>
+    std::fmt::Debug for Selector<T, F>
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Display::fmt("Selector", f)
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        std::fmt::Display::fmt("Selector", f)
     }
 }
 
-impl<T: 'static + PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> fmt::Display
-    for Selector<T, F>
+impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + Send>
+    std::fmt::Display for Selector<T, F>
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Display::fmt("Selector", f)
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        std::fmt::Display::fmt("Selector", f)
     }
 }
 
-impl<T: 'static + PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> PartialEq
-    for Selector<T, F>
+impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + Send>
+    PartialEq for Selector<T, F>
 {
     fn eq(&self, other: &Selector<T, F>) -> bool {
         self.entries == other.entries
     }
 }
 
-impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialog<T> {
+impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> Component for UIDialog<T> {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         Selector::draw(self, grid, area, context);
     }
@@ -752,7 +754,9 @@ impl Component for UIConfirmationDialog {
     }
 }
 
-impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selector<T, F> {
+impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + Send>
+    Selector<T, F>
+{
     pub fn new(
         title: &str,
         mut entries: Vec<(T, String)>,
@@ -927,7 +931,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selec
     }
 }
 
-impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> UIDialog<T> {
+impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> UIDialog<T> {
     fn done(&mut self) -> Option<UIEvent> {
         let Self {
             ref mut done_fn,

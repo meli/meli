@@ -38,9 +38,6 @@ pub use mail::*;
 
 pub mod notifications;
 
-pub mod utilities;
-pub use utilities::*;
-
 pub mod contacts;
 pub use contacts::*;
 
@@ -119,9 +116,9 @@ pub enum PageMovement {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ScrollContext {
-    shown_lines: usize,
-    total_lines: usize,
-    has_more_lines: bool,
+    pub shown_lines: usize,
+    pub total_lines: usize,
+    pub has_more_lines: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -275,8 +272,8 @@ impl Default for ComponentAttr {
 
 #[derive(Eq, PartialEq, Debug, Clone)]
 pub struct ComponentPath {
-    id: ComponentId,
-    tail: SmallVec<[ComponentId; 8]>,
+    pub id: ComponentId,
+    pub tail: SmallVec<[ComponentId; 8]>,
 }
 
 impl ComponentPath {

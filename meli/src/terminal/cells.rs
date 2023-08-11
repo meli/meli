@@ -1370,20 +1370,20 @@ impl RowIterator {
 pub use boundaries::create_box;
 pub mod boundaries {
     use super::*;
-    pub(crate) const HORZ_BOUNDARY: char = '─';
-    pub(crate) const VERT_BOUNDARY: char = '│';
-    pub(crate) const _TOP_LEFT_CORNER: char = '┌';
-    pub(crate) const _TOP_RIGHT_CORNER: char = '┐';
-    pub(crate) const _BOTTOM_LEFT_CORNER: char = '└';
-    pub(crate) const _BOTTOM_RIGHT_CORNER: char = '┘';
-    pub(crate) const LIGHT_VERTICAL_AND_RIGHT: char = '├';
-    pub(crate) const _LIGHT_VERTICAL_AND_LEFT: char = '┤';
-    pub(crate) const _LIGHT_DOWN_AND_HORIZONTAL: char = '┬';
-    pub(crate) const _LIGHT_UP_AND_HORIZONTAL: char = '┴';
-    pub(crate) const _DOUBLE_DOWN_AND_RIGHT: char = '╔';
-    pub(crate) const _DOUBLE_DOWN_AND_LEFT: char = '╗';
-    pub(crate) const _DOUBLE_UP_AND_LEFT: char = '╝';
-    pub(crate) const _DOUBLE_UP_AND_RIGHT: char = '╚';
+    pub const HORZ_BOUNDARY: char = '─';
+    pub const VERT_BOUNDARY: char = '│';
+    pub const _TOP_LEFT_CORNER: char = '┌';
+    pub const _TOP_RIGHT_CORNER: char = '┐';
+    pub const _BOTTOM_LEFT_CORNER: char = '└';
+    pub const _BOTTOM_RIGHT_CORNER: char = '┘';
+    pub const LIGHT_VERTICAL_AND_RIGHT: char = '├';
+    pub const _LIGHT_VERTICAL_AND_LEFT: char = '┤';
+    pub const _LIGHT_DOWN_AND_HORIZONTAL: char = '┬';
+    pub const _LIGHT_UP_AND_HORIZONTAL: char = '┴';
+    pub const _DOUBLE_DOWN_AND_RIGHT: char = '╔';
+    pub const _DOUBLE_DOWN_AND_LEFT: char = '╗';
+    pub const _DOUBLE_UP_AND_LEFT: char = '╝';
+    pub const _DOUBLE_UP_AND_RIGHT: char = '╚';
 
     fn bin_to_ch(b: u32) -> char {
         match b {
@@ -1618,12 +1618,12 @@ pub mod boundaries {
         bin_set
     }
 
-    pub(crate) enum BoxBoundary {
+    pub enum BoxBoundary {
         Horizontal,
         Vertical,
     }
 
-    pub(crate) fn set_and_join_box(grid: &mut CellBuffer, idx: Pos, ch: BoxBoundary) {
+    pub fn set_and_join_box(grid: &mut CellBuffer, idx: Pos, ch: BoxBoundary) {
         /* Connected sides:
          *
          *        1

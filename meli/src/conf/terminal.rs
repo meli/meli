@@ -121,7 +121,7 @@ pub enum ProgressSpinnerSequence {
 }
 
 const fn interval_ms_val() -> u64 {
-    crate::components::utilities::ProgressSpinner::INTERVAL_MS
+    crate::utilities::ProgressSpinner::INTERVAL_MS
 }
 
 impl DotAddressable for ProgressSpinnerSequence {}
