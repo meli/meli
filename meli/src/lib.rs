@@ -77,6 +77,9 @@ pub use crate::components::*;
 pub mod utilities;
 pub use crate::utilities::*;
 
+pub mod contacts;
+pub use crate::contacts::*;
+
 #[macro_use]
 pub mod conf;
 pub use crate::conf::{

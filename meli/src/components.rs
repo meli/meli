@@ -38,9 +38,6 @@ pub use mail::*;
 
 pub mod notifications;
 
-pub mod contacts;
-pub use contacts::*;
-
 pub mod mailbox_management;
 pub use mailbox_management::*;
 

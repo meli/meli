@@ -53,8 +53,8 @@ pub struct ContactManager {
     initialized: bool,
 }
 
-impl fmt::Display for ContactManager {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl std::fmt::Display for ContactManager {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "contacts")
     }
 }

@@ -67,8 +67,8 @@ pub struct ContactList {
     id: ComponentId,
 }
 
-impl fmt::Display for ContactList {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl std::fmt::Display for ContactList {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "contact list")
     }
 }
