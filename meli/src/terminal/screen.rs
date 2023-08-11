@@ -37,7 +37,7 @@ use crate::{
 pub type StateStdout =
     termion::screen::AlternateScreen<termion::raw::RawTerminal<BufWriter<std::io::Stdout>>>;
 
-pub type DrawHorizontalSegmentFn = fn(&mut CellBuffer, &mut StateStdout, usize, usize, usize) -> ();
+type DrawHorizontalSegmentFn = fn(&mut CellBuffer, &mut StateStdout, usize, usize, usize) -> ();
 
 pub struct Screen {
     pub cols: usize,

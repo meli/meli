@@ -23,6 +23,7 @@ MIN_RUSTC ?= 1.65.0
 CARGO_BIN ?= cargo
 TAGREF_BIN ?= tagref
 CARGO_ARGS ?=
+RUSTFLAGS ?= -D warnings -W unreachable-pub -W rust-2021-compatibility
 CARGO_SORT_BIN = cargo-sort
 PRINTF       = /usr/bin/printf
 
@@ -96,7 +97,7 @@ help:
 
 .PHONY: check
 check: check-tagrefs
-	@${CARGO_BIN} check ${CARGO_ARGS} ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" ${FEATURES} --all --tests --examples --benches --bins
+	@RUSTFLAGS='${RUSTFLAGS}' ${CARGO_BIN} check ${CARGO_ARGS} ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" ${FEATURES} --all --tests --examples --benches --bins
 
 .PHONY: fmt
 fmt:
@@ -105,11 +106,11 @@ fmt:
 
 .PHONY: lint
 lint:
-	@$(CARGO_BIN) clippy --no-deps --all-features --all --tests --examples --benches --bins
+	@RUSTFLAGS='${RUSTFLAGS}' $(CARGO_BIN) clippy --no-deps --all-features --all --tests --examples --benches --bins
 
 .PHONY: test
 test:
-	@${CARGO_BIN} test ${CARGO_ARGS} ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" --all --tests --examples --benches --bins
+	@RUSTFLAGS='${RUSTFLAGS}' ${CARGO_BIN} test ${CARGO_ARGS} ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" --all --tests --examples --benches --bins
 
 .PHONY: check-deps
 check-deps:
