@@ -201,8 +201,8 @@ impl BytesDisplay {
     pub const PETABYTE: f64 = Self::GIGABYTE * 1024.0;
 }
 
-impl core::fmt::Display for BytesDisplay {
-    fn fmt(&self, fmt: &mut core::fmt::Formatter) -> core::fmt::Result {
+impl std::fmt::Display for BytesDisplay {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         let bytes: f64 = self.0 as f64;
         if bytes == 0.0 {
             write!(fmt, "0")

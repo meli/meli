@@ -20,6 +20,7 @@
  */
 use std::cmp;
 
+use indexmap::IndexMap;
 use melib::backends::AccountHash;
 
 use super::*;
@@ -61,8 +62,8 @@ pub struct MailboxManager {
     id: ComponentId,
 }
 
-impl fmt::Display for MailboxManager {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl std::fmt::Display for MailboxManager {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "mailboxes")
     }
 }

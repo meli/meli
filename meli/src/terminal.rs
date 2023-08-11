@@ -35,7 +35,6 @@ pub mod cells;
 pub mod keys;
 pub mod embed;
 pub mod text_editing;
-use std::fmt;
 
 pub use braille::BraillePixelIter;
 pub use screen::{Screen, StateStdout};
@@ -63,8 +62,8 @@ macro_rules! derive_csi_sequence {
         #[derive(Copy, Clone)]
         pub struct $name;
 
-        impl fmt::Display for $name {
-            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        impl std::fmt::Display for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
                 write!(f, csi!($value))
             }
         }

@@ -131,8 +131,8 @@ macro_rules! declare_u64_hash {
             }
         }
 
-        impl core::fmt::Display for $type_name {
-            fn fmt(&self, fmt: &mut core::fmt::Formatter) -> core::fmt::Result {
+        impl std::fmt::Display for $type_name {
+            fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
                 write!(fmt, "{}", self.0)
             }
         }

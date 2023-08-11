@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use core::marker::PhantomData;
+use std::marker::PhantomData;
 
 use super::*;
 

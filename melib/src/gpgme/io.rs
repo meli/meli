@@ -62,7 +62,7 @@ pub unsafe extern "C" fn gpgme_register_io_cb(
         fd,
         io_state: io_state_copy,
     }));
-    core::ptr::write(tag, tag_data as *mut _);
+    std::ptr::write(tag, tag_data as *mut _);
     io_state_lck.ops.insert(idx, gpgfd);
     drop(io_state_lck);
     let _ = Arc::into_raw(io_state);
@@ -98,7 +98,7 @@ pub unsafe extern "C" fn gpgme_event_io_cb(
         drop(io_state_lck);
         let _ = Arc::into_raw(io_state);
     } else if type_ == gpgme_event_io_t_GPGME_EVENT_NEXT_KEY {
-        if let Some(inner) = core::ptr::NonNull::new(type_data as gpgme_key_t) {
+        if let Some(inner) = std::ptr::NonNull::new(type_data as gpgme_key_t) {
             let io_state: Arc<Mutex<IoState>> = Arc::from_raw(data as *const _);
             let io_state_lck = io_state.lock().unwrap();
             io_state_lck

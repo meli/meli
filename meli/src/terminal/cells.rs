@@ -25,7 +25,6 @@
 use std::{
     collections::HashMap,
     convert::From,
-    fmt,
     ops::{Deref, DerefMut, Index, IndexMut},
 };
 
@@ -74,8 +73,8 @@ pub struct CellBuffer {
     tag_associations: SmallVec<[(u64, (usize, usize)); 128]>,
 }
 
-impl fmt::Debug for CellBuffer {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl std::fmt::Debug for CellBuffer {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         f.debug_struct("CellBuffer")
             .field("cols", &self.cols)
             .field("rows", &self.rows)
@@ -466,8 +465,8 @@ impl Default for CellBuffer {
     }
 }
 
-impl fmt::Display for CellBuffer {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl std::fmt::Display for CellBuffer {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         '_y: for y in 0..self.rows {
             for x in 0..self.cols {
                 let c: &char = &self[(x, y)].ch();
@@ -766,8 +765,8 @@ impl Default for Attr {
     }
 }
 
-impl fmt::Display for Attr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl std::fmt::Display for Attr {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match *self {
             Attr::DEFAULT => write!(f, "Default"),
             Attr::BOLD => write!(f, "Bold"),
@@ -1756,14 +1755,14 @@ pub struct FormatTag {
     pub priority: u8,
 }
 
-impl core::cmp::Ord for FormatTag {
-    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+impl std::cmp::Ord for FormatTag {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.priority.cmp(&other.priority)
     }
 }
 
-impl core::cmp::PartialOrd for FormatTag {
-    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+impl std::cmp::PartialOrd for FormatTag {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
     }
 }

@@ -206,8 +206,7 @@ impl MailBackend for MaildirType {
     fn fetch(
         &mut self,
         mailbox_hash: MailboxHash,
-    ) -> Result<core::pin::Pin<Box<dyn Stream<Item = Result<Vec<Envelope>>> + Send + 'static>>>
-    {
+    ) -> Result<std::pin::Pin<Box<dyn Stream<Item = Result<Vec<Envelope>>> + Send + 'static>>> {
         let mailbox: &MaildirMailbox = &self.mailboxes[&mailbox_hash];
         let unseen = mailbox.unseen.clone();
         let total = mailbox.total.clone();

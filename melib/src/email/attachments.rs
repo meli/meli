@@ -21,7 +21,7 @@
 
 //! Attachment encoding and decoding.
 
-use core::{fmt, str};
+use std::str;
 
 use data_encoding::BASE64_MIME;
 use smallvec::SmallVec;
@@ -397,8 +397,8 @@ pub struct Attachment {
     pub body: StrBuilder,
 }
 
-impl fmt::Debug for Attachment {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl std::fmt::Debug for Attachment {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let mut text = Vec::with_capacity(4096);
         self.get_text_recursive(&mut text);
         f.debug_struct("Attachment")
@@ -410,8 +410,8 @@ impl fmt::Debug for Attachment {
     }
 }
 
-impl fmt::Display for Attachment {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl std::fmt::Display for Attachment {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self.content_type {
             ContentType::MessageRfc822 => {
                 match Mail::new(self.body.display_bytes(&self.raw).to_vec(), None) {

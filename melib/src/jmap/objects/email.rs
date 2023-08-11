@@ -19,8 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use core::marker::PhantomData;
-use std::collections::HashMap;
+use std::{collections::HashMap, marker::PhantomData};
 
 use serde::de::{Deserialize, Deserializer};
 use serde_json::{value::RawValue, Value};

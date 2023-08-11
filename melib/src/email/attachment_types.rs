@@ -18,10 +18,7 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
-use std::{
-    fmt::{Display, Formatter, Result as FmtResult},
-    str,
-};
+use std::str;
 
 use crate::email::{
     attachments::{Attachment, AttachmentBuilder},
@@ -162,8 +159,8 @@ impl<'a> From<&'a [u8]> for Charset {
     }
 }
 
-impl Display for Charset {
-    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+impl std::fmt::Display for Charset {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Self::Ascii => write!(f, "us-ascii"),
             Self::UTF8 => write!(f, "utf-8"),
@@ -208,8 +205,8 @@ pub enum MultipartType {
     Signed,
 }
 
-impl Display for MultipartType {
-    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+impl std::fmt::Display for MultipartType {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
             f,
             "{}",
@@ -355,8 +352,8 @@ impl PartialEq<&str> for ContentType {
     }
 }
 
-impl Display for ContentType {
-    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+impl std::fmt::Display for ContentType {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Self::Text { kind: t, .. } => t.fmt(f),
             Self::Multipart { kind: k, .. } => k.fmt(f),
@@ -455,8 +452,8 @@ impl Text {
     }
 }
 
-impl Display for Text {
-    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+impl std::fmt::Display for Text {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match *self {
             Self::Plain => write!(f, "text/plain"),
             Self::Html => write!(f, "text/html"),
@@ -478,8 +475,8 @@ pub enum ContentTransferEncoding {
     },
 }
 
-impl Display for ContentTransferEncoding {
-    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+impl std::fmt::Display for ContentTransferEncoding {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match *self {
             Self::_7Bit => write!(f, "7bit"),
             Self::_8Bit => write!(f, "8bit"),
@@ -537,8 +534,8 @@ impl ContentDispositionKind {
     }
 }
 
-impl Display for ContentDispositionKind {
-    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+impl std::fmt::Display for ContentDispositionKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match *self {
             Self::Inline => write!(f, "inline"),
             Self::Attachment => write!(f, "attachment"),

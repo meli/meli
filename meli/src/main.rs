@@ -142,7 +142,7 @@ fn run_app(opt: Opt) -> Result<()> {
     } else {
         state = State::new(None, sender, receiver.clone())?;
         #[cfg(feature = "svgscreenshot")]
-        state.register_component(Box::new(components::svg::SVGScreenshotFilter::new()));
+        state.register_component(Box::new(svg::SVGScreenshotFilter::new()));
         let window = Box::new(Tabbed::new(
             vec![
                 Box::new(listing::Listing::new(&mut state.context)),
@@ -156,14 +156,11 @@ fn run_app(opt: Opt) -> Result<()> {
 
         #[cfg(all(target_os = "linux", feature = "dbus-notifications"))]
         {
-            let dbus_notifications = Box::new(components::notifications::DbusNotifications::new(
-                &state.context,
-            ));
+            let dbus_notifications =
+                Box::new(notifications::DbusNotifications::new(&state.context));
             state.register_component(dbus_notifications);
         }
-        state.register_component(Box::new(
-            components::notifications::NotificationCommand::new(),
-        ));
+        state.register_component(Box::new(notifications::NotificationCommand::new()));
     }
     let enter_command_mode: Key = state
         .context

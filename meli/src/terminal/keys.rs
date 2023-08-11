@@ -141,8 +141,8 @@ impl From<TermionMouseButton> for MouseButton {
     }
 }
 
-impl fmt::Display for Key {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl std::fmt::Display for Key {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         use crate::Key::*;
         match self {
             F(n) => write!(f, "F{}", n),
@@ -319,7 +319,7 @@ impl<'de> Deserialize<'de> for Key {
         impl<'de> Visitor<'de> for KeyVisitor {
             type Value = Key;
 
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
                 formatter
                     .write_str("a valid key value. Please consult the manual for valid key inputs.")
             }

@@ -36,7 +36,7 @@ use crate::{
 };
 
 /* Supported vcard versions */
-pub trait VCardVersion: core::fmt::Debug {}
+pub trait VCardVersion: std::fmt::Debug {}
 
 #[derive(Debug)]
 pub struct VCardVersionUnknown;

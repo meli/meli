@@ -24,8 +24,6 @@ use std::{
     any::Any,
     borrow::Cow,
     collections::{BTreeSet, HashMap},
-    fmt,
-    fmt::Debug,
     future::Future,
     ops::Deref,
     pin::Pin,
@@ -308,8 +306,8 @@ impl BackendEventConsumer {
     }
 }
 
-impl fmt::Debug for BackendEventConsumer {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl std::fmt::Debug for BackendEventConsumer {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "BackendEventConsumer")
     }
 }
@@ -547,7 +545,7 @@ impl SpecialUsageMailbox {
     }
 }
 
-pub trait BackendMailbox: Debug {
+pub trait BackendMailbox: std::fmt::Debug {
     fn hash(&self) -> MailboxHash;
     /// Final component of `path`.
     fn name(&self) -> &str;
@@ -668,8 +666,8 @@ pub struct LazyCountSet {
     pub set: BTreeSet<EnvelopeHash>,
 }
 
-impl fmt::Debug for LazyCountSet {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl std::fmt::Debug for LazyCountSet {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         f.debug_struct("LazyCountSet")
             .field("not_yet_seen", &self.not_yet_seen)
             .field("set", &self.set.len())

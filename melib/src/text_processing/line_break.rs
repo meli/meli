@@ -20,8 +20,7 @@
  */
 
 extern crate unicode_segmentation;
-use core::{cmp::Ordering, iter::Peekable, str::FromStr};
-use std::collections::VecDeque;
+use std::{cmp::Ordering, collections::VecDeque, iter::Peekable, str::FromStr};
 
 use LineBreakClass::*;
 
@@ -1292,7 +1291,7 @@ mod segment_tree {
             let max_size = 2 * (2_usize.pow(height));
 
             let mut segment_tree: SmallVec<[usize; 1024]> =
-                SmallVec::from_iter(core::iter::repeat(0).take(max_size));
+                SmallVec::from_iter(std::iter::repeat(0).take(max_size));
             for i in 0..val.len() {
                 segment_tree[val.len() + i] = val[i];
             }

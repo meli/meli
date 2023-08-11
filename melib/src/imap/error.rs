@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::{fmt, sync::Arc};
+use std::sync::Arc;
 
 use imap_codec::{
     command::{AppendError, CopyError, ListError},
@@ -56,7 +56,7 @@ impl From<SequenceSetError> for Error {
 
 impl<S, L> From<AppendError<S, L>> for Error
 where
-    AppendError<S, L>: fmt::Debug + fmt::Display + Sync + Send + 'static,
+    AppendError<S, L>: std::fmt::Debug + std::fmt::Display + Sync + Send + 'static,
 {
     #[inline]
     fn from(error: AppendError<S, L>) -> Self {
@@ -71,7 +71,7 @@ where
 
 impl<S, L> From<CopyError<S, L>> for Error
 where
-    CopyError<S, L>: fmt::Debug + fmt::Display + Sync + Send + 'static,
+    CopyError<S, L>: std::fmt::Debug + std::fmt::Display + Sync + Send + 'static,
 {
     #[inline]
     fn from(error: CopyError<S, L>) -> Self {
@@ -86,7 +86,7 @@ where
 
 impl<S, M> From<MoveError<S, M>> for Error
 where
-    MoveError<S, M>: fmt::Debug + fmt::Display + Sync + Send + 'static,
+    MoveError<S, M>: std::fmt::Debug + std::fmt::Display + Sync + Send + 'static,
 {
     #[inline]
     fn from(error: MoveError<S, M>) -> Self {
@@ -101,7 +101,7 @@ where
 
 impl<L1, L2> From<ListError<L1, L2>> for Error
 where
-    ListError<L1, L2>: fmt::Debug + fmt::Display + Sync + Send + 'static,
+    ListError<L1, L2>: std::fmt::Debug + std::fmt::Display + Sync + Send + 'static,
 {
     #[inline]
     fn from(error: ListError<L1, L2>) -> Self {

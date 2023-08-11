@@ -41,8 +41,8 @@ impl TryFrom<i64> for ModSequence {
     }
 }
 
-impl core::fmt::Display for ModSequence {
-    fn fmt(&self, fmt: &mut core::fmt::Formatter) -> core::fmt::Result {
+impl std::fmt::Display for ModSequence {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(fmt, "{}", &self.0)
     }
 }
@@ -55,7 +55,7 @@ pub struct CachedEnvelope {
     pub modsequence: Option<ModSequence>,
 }
 
-pub trait ImapCache: Send + core::fmt::Debug {
+pub trait ImapCache: Send + std::fmt::Debug {
     fn reset(&mut self) -> Result<()>;
     fn mailbox_state(&mut self, mailbox_hash: MailboxHash) -> Result<Option<()>>;
 
@@ -94,7 +94,7 @@ pub trait ImapCache: Send + core::fmt::Debug {
     ) -> Result<Option<Vec<u8>>>;
 }
 
-pub trait ImapCacheReset: Send + core::fmt::Debug {
+pub trait ImapCacheReset: Send + std::fmt::Debug {
     fn reset_db(uid_store: &UIDStore) -> Result<()>
     where
         Self: Sized;

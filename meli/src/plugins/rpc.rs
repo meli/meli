@@ -39,9 +39,9 @@ impl RpcChannel {
             stream,
             session: *session,
         };
-        let greeting: PluginGreeting = ret.from_read().map_err(|err| {
-            Error::new(format!("Could not get correct plugin greeting: {}", err))
-        })?;
+        let greeting: PluginGreeting = ret
+            .from_read()
+            .map_err(|err| Error::new(format!("Could not get correct plugin greeting: {}", err)))?;
         debug!(&greeting);
         //if greeting.version != "dev" {
         //    return Err("Plugin is not compatible with our API (dev)".into());
@@ -93,7 +93,7 @@ impl RpcChannel {
 
     pub fn from_read<T>(&mut self) -> Result<T>
     where
-        T: core::fmt::Debug + serde::de::DeserializeOwned,
+        T: std::fmt::Debug + serde::de::DeserializeOwned,
     {
         debug!("from_read()");
         let ret: Result<T> = debug!(rmp_serde::decode::from_read(&mut self.stream))
@@ -125,12 +125,12 @@ impl RpcResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "t", content = "c")]
-pub enum PluginResult<T: core::fmt::Debug + Clone> {
+pub enum PluginResult<T: std::fmt::Debug + Clone> {
     Ok(T),
     Err(String),
 }
 
-impl<T: core::fmt::Debug + Clone + serde::Serialize + serde::de::DeserializeOwned> Into<Result<T>>
+impl<T: std::fmt::Debug + Clone + serde::Serialize + serde::de::DeserializeOwned> Into<Result<T>>
     for PluginResult<T>
 {
     fn into(self) -> Result<T> {

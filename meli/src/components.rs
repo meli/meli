@@ -20,33 +20,16 @@
  */
 
 //! Components visual and logical separations of application interfaces.
+use indexmap::IndexMap;
 ///
 /// They can draw on the terminal and receive events, but also do other stuff
 /// as well.
 /// For an example, see the [`notifications`] module.
 /// See also the [`Component`] trait for more details.
 use smallvec::SmallVec;
+use uuid::Uuid;
 
 use super::*;
-
-pub mod notifications;
-
-pub mod mailbox_management;
-pub use mailbox_management::*;
-
-pub mod jobs_view;
-pub use jobs_view::*;
-
-#[cfg(feature = "svgscreenshot")]
-pub mod svg;
-
-use std::{
-    fmt,
-    fmt::{Debug, Display},
-};
-
-use indexmap::IndexMap;
-use uuid::Uuid;
 
 #[derive(Clone, Copy, Eq, Deserialize, Hash, Ord, PartialOrd, PartialEq, Serialize)]
 #[repr(transparent)]
@@ -124,7 +107,7 @@ pub enum ScrollUpdate {
 /// If a type wants to skip drawing if it has not changed anything, it can hold
 /// some flag in its fields (eg `self.dirty = false`) and act upon that in their
 /// [`draw`](Component::draw) implementation.
-pub trait Component: Display + Debug + Send + Sync {
+pub trait Component: std::fmt::Display + std::fmt::Debug + Send + Sync {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context);
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool;
     fn is_dirty(&self) -> bool;

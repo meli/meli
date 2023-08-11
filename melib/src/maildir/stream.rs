@@ -19,10 +19,11 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use core::{future::Future, pin::Pin};
 use std::{
+    future::Future,
     io::{self, Read},
     path::PathBuf,
+    pin::Pin,
     sync::{Arc, Mutex},
 };
 

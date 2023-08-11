@@ -19,9 +19,9 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use core::marker::PhantomData;
 use std::{
     hash::{Hash, Hasher},
+    marker::PhantomData,
     sync::Arc,
 };
 
@@ -55,7 +55,7 @@ pub struct Id<OBJ> {
     pub _ph: PhantomData<fn() -> OBJ>,
 }
 
-impl<OBJ: Object> core::fmt::Debug for Id<OBJ> {
+impl<OBJ: Object> std::fmt::Debug for Id<OBJ> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         f.debug_tuple(&format!("Id<{}>", OBJ::NAME))
             .field(&self.inner)
@@ -63,7 +63,7 @@ impl<OBJ: Object> core::fmt::Debug for Id<OBJ> {
     }
 }
 
-impl core::fmt::Debug for Id<String> {
+impl std::fmt::Debug for Id<String> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         f.debug_tuple("Id<Any>").field(&self.inner).finish()
     }
@@ -108,9 +108,9 @@ impl<OBJ> From<String> for Id<OBJ> {
     }
 }
 
-impl<OBJ> core::fmt::Display for Id<OBJ> {
-    fn fmt(&self, fmt: &mut core::fmt::Formatter) -> core::fmt::Result {
-        core::fmt::Display::fmt(&self.inner, fmt)
+impl<OBJ> std::fmt::Display for Id<OBJ> {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        std::fmt::Display::fmt(&self.inner, fmt)
     }
 }
 
@@ -182,9 +182,9 @@ impl<OBJ> From<String> for State<OBJ> {
     }
 }
 
-impl<OBJ> core::fmt::Display for State<OBJ> {
-    fn fmt(&self, fmt: &mut core::fmt::Formatter) -> core::fmt::Result {
-        core::fmt::Display::fmt(&self.inner, fmt)
+impl<OBJ> std::fmt::Display for State<OBJ> {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        std::fmt::Display::fmt(&self.inner, fmt)
     }
 }
 
@@ -940,8 +940,8 @@ pub enum SetError {
     StateMismatch(Option<String>),
 }
 
-impl core::fmt::Display for SetError {
-    fn fmt(&self, fmt: &mut core::fmt::Formatter) -> core::fmt::Result {
+impl std::fmt::Display for SetError {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         use SetError::*;
         match self {
             Forbidden(Some(description)) => write!(fmt, "Forbidden: {}", description),

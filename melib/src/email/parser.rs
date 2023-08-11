@@ -57,8 +57,8 @@ pub struct ParsingError<I> {
     pub error: Cow<'static, str>,
 }
 
-impl core::fmt::Debug for ParsingError<&'_ [u8]> {
-    fn fmt(&self, fmt: &mut core::fmt::Formatter) -> core::fmt::Result {
+impl std::fmt::Debug for ParsingError<&'_ [u8]> {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         fmt.debug_struct("ParsingError")
             .field("input", &to_str!(self.input))
             .field("error", &self.error)
@@ -66,8 +66,8 @@ impl core::fmt::Debug for ParsingError<&'_ [u8]> {
     }
 }
 
-impl core::fmt::Debug for ParsingError<&'_ str> {
-    fn fmt(&self, fmt: &mut core::fmt::Formatter) -> core::fmt::Result {
+impl std::fmt::Debug for ParsingError<&'_ str> {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         fmt.debug_struct("ParsingError")
             .field("input", &self.input)
             .field("error", &self.error)
@@ -77,8 +77,8 @@ impl core::fmt::Debug for ParsingError<&'_ str> {
 
 struct DebugOkWrapper<'r, I, R: AsRef<[u8]>>(&'r IResult<I, R>);
 
-impl<R: AsRef<[u8]> + core::fmt::Debug> core::fmt::Debug for DebugOkWrapper<'_, &'_ [u8], R> {
-    fn fmt(&self, fmt: &mut core::fmt::Formatter) -> core::fmt::Result {
+impl<R: AsRef<[u8]> + std::fmt::Debug> std::fmt::Debug for DebugOkWrapper<'_, &'_ [u8], R> {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         if let Ok((a, b)) = self.0 {
             write!(fmt, "Ok({}, {})", &to_str!(a), &to_str!(b.as_ref()))
         } else {

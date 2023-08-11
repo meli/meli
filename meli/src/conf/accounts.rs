@@ -315,8 +315,8 @@ impl Drop for JobRequest {
     }
 }
 
-impl core::fmt::Debug for JobRequest {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+impl std::fmt::Debug for JobRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             JobRequest::Generic { name, .. } => write!(f, "JobRequest::Generic({})", name),
             JobRequest::Mailboxes { .. } => write!(f, "JobRequest::Mailboxes"),
@@ -348,8 +348,8 @@ impl core::fmt::Debug for JobRequest {
     }
 }
 
-impl core::fmt::Display for JobRequest {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+impl std::fmt::Display for JobRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             JobRequest::Generic { name, .. } => write!(f, "{}", name),
             JobRequest::Mailboxes { .. } => write!(f, "Get mailbox list"),

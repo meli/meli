@@ -42,7 +42,6 @@ mod iterators;
 use std::{
     cmp::Ordering,
     collections::{HashMap, HashSet, VecDeque},
-    fmt,
     iter::FromIterator,
     ops::Index,
     result::Result as StdResult,
@@ -65,14 +64,14 @@ macro_rules! uuid_hash_type {
         #[derive(PartialEq, Hash, Eq, Copy, Clone, Serialize, Deserialize, Default)]
         pub struct $n(Uuid);
 
-        impl fmt::Debug for $n {
-            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        impl std::fmt::Debug for $n {
+            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
                 write!(f, "{}", self.0.to_string())
             }
         }
 
-        impl fmt::Display for $n {
-            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        impl std::fmt::Display for $n {
+            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
                 write!(f, "{}", self.0.to_string())
             }
         }

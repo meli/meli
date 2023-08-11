@@ -71,14 +71,14 @@ macro_rules! uuid_hash_type {
         #[derive(PartialEq, Hash, Eq, Copy, Clone, Ord, PartialOrd, Serialize, Deserialize)]
         pub struct $n(Uuid);
 
-        impl core::fmt::Debug for $n {
-            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        impl std::fmt::Debug for $n {
+            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
                 write!(f, "{}", self.0.to_string())
             }
         }
 
-        impl core::fmt::Display for $n {
-            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        impl std::fmt::Display for $n {
+            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
                 write!(f, "{}", self.0.to_string())
             }
         }

@@ -291,8 +291,8 @@ pub struct Envelope {
     pub tags: SmallVec<[TagHash; 8]>,
 }
 
-impl core::fmt::Debug for Envelope {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+impl std::fmt::Debug for Envelope {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         f.debug_struct("Envelope")
             .field("Subject", &self.subject())
             .field("Date", &self.date)

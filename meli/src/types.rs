@@ -36,7 +36,7 @@
 #[macro_use]
 mod helpers;
 
-use std::{borrow::Cow, fmt, sync::Arc};
+use std::{borrow::Cow, sync::Arc};
 
 pub use helpers::*;
 use melib::{
@@ -107,8 +107,8 @@ pub enum NotificationType {
     Saved,
 }
 
-impl core::fmt::Display for NotificationType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl std::fmt::Display for NotificationType {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match *self {
             NotificationType::Info => write!(f, "info"),
             NotificationType::Error(melib::error::ErrorKind::None) => write!(f, "error"),
@@ -167,8 +167,8 @@ pub enum UIEvent {
 
 pub struct CallbackFn(pub Box<dyn FnOnce(&mut crate::Context) + Send + 'static>);
 
-impl core::fmt::Debug for CallbackFn {
-    fn fmt(&self, fmt: &mut core::fmt::Formatter) -> core::fmt::Result {
+impl std::fmt::Debug for CallbackFn {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(fmt, "CallbackFn")
     }
 }
@@ -189,8 +189,8 @@ pub enum UIMode {
     Fork,
 }
 
-impl fmt::Display for UIMode {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl std::fmt::Display for UIMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
             f,
             "{}",
@@ -241,7 +241,7 @@ pub mod segment_tree {
             let max_size = 2 * (2_usize.pow(height));
 
             let mut segment_tree: SmallVec<[u8; 1024]> =
-                SmallVec::from_iter(core::iter::repeat(0).take(max_size));
+                SmallVec::from_iter(std::iter::repeat(0).take(max_size));
             for i in 0..val.len() {
                 segment_tree[val.len() + i] = val[i];
             }

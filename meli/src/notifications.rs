@@ -39,8 +39,8 @@ mod dbus {
         id: ComponentId,
     }
 
-    impl fmt::Display for DbusNotifications {
-        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    impl std::fmt::Display for DbusNotifications {
+        fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
             write!(f, "")
         }
     }
@@ -179,8 +179,8 @@ impl NotificationCommand {
     }
 }
 
-impl fmt::Display for NotificationCommand {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl std::fmt::Display for NotificationCommand {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "")
     }
 }

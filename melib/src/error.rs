@@ -21,7 +21,7 @@
 
 //! Library error type.
 
-use std::{borrow::Cow, fmt, io, result, str, string, sync::Arc};
+use std::{borrow::Cow, io, result, str, string, sync::Arc};
 
 pub type Result<T> = result::Result<T, Error>;
 
@@ -339,8 +339,8 @@ pub enum ErrorKind {
     ValueError,
 }
 
-impl fmt::Display for ErrorKind {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+impl std::fmt::Display for ErrorKind {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
             fmt,
             "{}",
@@ -510,8 +510,8 @@ impl Error {
     }
 }
 
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{}", self.summary)?;
         if let Some(details) = self.details.as_ref() {
             write!(f, "\n{}", details)?;
@@ -580,7 +580,7 @@ impl<T> From<std::sync::PoisonError<T>> for Error {
 }
 
 #[cfg(feature = "tls")]
-impl<T: Sync + Send + 'static + core::fmt::Debug> From<native_tls::HandshakeError<T>> for Error {
+impl<T: Sync + Send + 'static + std::fmt::Debug> From<native_tls::HandshakeError<T>> for Error {
     #[inline]
     fn from(kind: native_tls::HandshakeError<T>) -> Self {
         Self::new(kind.to_string())

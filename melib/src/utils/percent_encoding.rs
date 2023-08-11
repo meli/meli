@@ -48,7 +48,7 @@
 //! );
 //! ```
 
-use std::{borrow::Cow, fmt, mem, slice, str};
+use std::{borrow::Cow, mem, slice, str};
 
 /// Represents a set of characters or bytes in the ASCII range.
 ///
@@ -311,8 +311,8 @@ impl<'a> Iterator for PercentEncode<'a> {
     }
 }
 
-impl<'a> fmt::Display for PercentEncode<'a> {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl<'a> std::fmt::Display for PercentEncode<'a> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for c in (*self).clone() {
             formatter.write_str(c)?
         }

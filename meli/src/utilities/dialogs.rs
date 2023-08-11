@@ -970,7 +970,7 @@ impl UIConfirmationDialog {
                     .filter(|v| v.1)
                     .map(|(id, _)| id)
                     .cloned()
-                    .any(core::convert::identity),
+                    .any(std::convert::identity),
             )
         })
     }

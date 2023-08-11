@@ -21,6 +21,8 @@
 
 use std::{borrow::Cow, cmp};
 
+use indexmap::IndexMap;
+
 use super::*;
 use crate::{
     jobs::{JobId, JobMetadata},
@@ -45,8 +47,8 @@ pub struct JobManager {
     id: ComponentId,
 }
 
-impl fmt::Display for JobManager {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl std::fmt::Display for JobManager {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "jobs")
     }
 }

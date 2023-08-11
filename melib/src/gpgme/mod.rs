@@ -200,7 +200,7 @@ unsafe impl Send for IoState {}
 unsafe impl Sync for IoState {}
 
 pub struct ContextInner {
-    inner: core::ptr::NonNull<gpgme_context>,
+    inner: std::ptr::NonNull<gpgme_context>,
     lib: Arc<libloading::Library>,
 }
 
@@ -241,7 +241,7 @@ impl Context {
         let (sender, receiver) = smol::channel::unbounded();
         let (key_sender, key_receiver) = smol::channel::unbounded();
 
-        let mut ptr = core::ptr::null_mut();
+        let mut ptr = std::ptr::null_mut();
         let io_state = Arc::new(Mutex::new(IoState {
             max_idx: 0,
             ops: HashMap::default(),
@@ -269,7 +269,7 @@ impl Context {
         }
         let ret = Self {
             inner: Arc::new(ContextInner {
-                inner: core::ptr::NonNull::new(ptr)
+                inner: std::ptr::NonNull::new(ptr)
                     .ok_or_else(|| Error::new("Could not use libgpgme").set_kind(ErrorKind::Bug))?,
                 lib,
             }),
@@ -412,7 +412,7 @@ impl Context {
     }
 
     pub fn new_data_mem(&self, bytes: &[u8]) -> Result<Data> {
-        let mut ptr = core::ptr::null_mut();
+        let mut ptr = std::ptr::null_mut();
         let bytes: Pin<Vec<u8>> = Pin::new(bytes.to_vec());
         unsafe {
             gpgme_error_try(
@@ -430,7 +430,7 @@ impl Context {
             lib: self.inner.lib.clone(),
             kind: DataKind::Memory,
             bytes,
-            inner: core::ptr::NonNull::new(ptr).ok_or_else(|| {
+            inner: std::ptr::NonNull::new(ptr).ok_or_else(|| {
                 Error::new("Could not create libgpgme data").set_kind(ErrorKind::Bug)
             })?,
         })
@@ -446,7 +446,7 @@ impl Context {
         }
         let os_str: &OsStr = path.as_ref();
         let bytes = Pin::new(os_str.as_bytes().to_vec());
-        let mut ptr = core::ptr::null_mut();
+        let mut ptr = std::ptr::null_mut();
         unsafe {
             let ret: GpgmeError = call!(&self.inner.lib, gpgme_data_new_from_file)(
                 &mut ptr,
@@ -460,7 +460,7 @@ impl Context {
             lib: self.inner.lib.clone(),
             kind: DataKind::Memory,
             bytes,
-            inner: core::ptr::NonNull::new(ptr).ok_or_else(|| {
+            inner: std::ptr::NonNull::new(ptr).ok_or_else(|| {
                 Error::new("Could not create libgpgme data").set_kind(ErrorKind::Bug)
             })?,
         })
@@ -727,7 +727,7 @@ impl Context {
             lib: self.inner.lib.clone(),
             kind: DataKind::Memory,
             bytes: Pin::new(vec![]),
-            inner: core::ptr::NonNull::new(sig)
+            inner: std::ptr::NonNull::new(sig)
                 .ok_or_else(|| Error::new("internal libgpgme error").set_kind(ErrorKind::Bug))?,
         };
 
@@ -833,7 +833,7 @@ impl Context {
             lib: self.inner.lib.clone(),
             kind: DataKind::Memory,
             bytes: Pin::new(vec![]),
-            inner: core::ptr::NonNull::new(plain)
+            inner: std::ptr::NonNull::new(plain)
                 .ok_or_else(|| Error::new("internal libgpgme error").set_kind(ErrorKind::Bug))?,
         };
 
@@ -1043,7 +1043,7 @@ impl Context {
             lib: self.inner.lib.clone(),
             kind: DataKind::Memory,
             bytes: Pin::new(vec![]),
-            inner: core::ptr::NonNull::new(cipher)
+            inner: std::ptr::NonNull::new(cipher)
                 .ok_or_else(|| Error::new("internal libgpgme error").set_kind(ErrorKind::Bug))?,
         };
 
@@ -1165,7 +1165,7 @@ enum DataKind {
 
 #[derive(Debug)]
 pub struct Data {
-    inner: core::ptr::NonNull<bindings::gpgme_data>,
+    inner: std::ptr::NonNull<bindings::gpgme_data>,
     kind: DataKind,
     #[allow(dead_code)]
     bytes: std::pin::Pin<Vec<u8>>,
@@ -1221,7 +1221,7 @@ impl AsRawFd for GpgmeFd {
 
 #[derive(Clone)]
 struct KeyInner {
-    inner: core::ptr::NonNull<_gpgme_key>,
+    inner: std::ptr::NonNull<_gpgme_key>,
 }
 
 unsafe impl Send for KeyInner {}

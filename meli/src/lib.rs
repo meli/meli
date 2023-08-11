@@ -83,6 +83,17 @@ pub use crate::contacts::*;
 pub mod mail;
 pub use crate::mail::*;
 
+pub mod notifications;
+
+pub mod mailbox_management;
+pub use mailbox_management::*;
+
+pub mod jobs_view;
+pub use jobs_view::*;
+
+#[cfg(feature = "svgscreenshot")]
+pub mod svg;
+
 #[macro_use]
 pub mod conf;
 pub use crate::conf::{
