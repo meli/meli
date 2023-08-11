@@ -38,6 +38,11 @@ use libc::TCP_KEEPALIVE as KEEPALIVE_OPTION;
 use libc::TCP_KEEPIDLE as KEEPALIVE_OPTION;
 use libc::{self, c_int, c_void};
 
+// pub mod smol;
+pub mod std_net;
+
+pub const CONNECTION_ATTEMPT_DELAY: std::time::Duration = std::time::Duration::from_millis(250);
+
 pub enum Connection {
     Tcp {
         inner: std::net::TcpStream,
@@ -494,6 +499,8 @@ impl std::os::unix::io::AsRawFd for Connection {
     }
 }
 
+#[deprecated = "While it supports IPv6, it does not implement the happy eyeballs algorithm. Use \
+                {std_net,smol}::tcp_stream_connect instead."]
 pub fn lookup_ip(host: &str, port: u16) -> crate::Result<std::net::SocketAddr> {
     use std::net::ToSocketAddrs;
 

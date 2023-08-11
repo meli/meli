@@ -25,7 +25,7 @@ use crate::{
     email::parser::BytesExt,
     error::*,
     utils::{
-        connections::{lookup_ip, Connection},
+        connections::{std_net::connect as tcp_stream_connect, Connection},
         futures::timeout,
     },
     LogLevel,
@@ -158,7 +158,6 @@ impl ImapStream {
         #[cfg(debug_assertions)] id: Cow<'static, str>,
         uid_store: &UIDStore,
     ) -> Result<(Capabilities, Self)> {
-        use std::net::TcpStream;
         let path = &server_conf.server_hostname;
 
         let cmd_id = 1;
@@ -177,14 +176,10 @@ impl ImapStream {
                 .build()
                 .chain_err_kind(ErrorKind::Network(NetworkErrorKind::InvalidTLSConnection))?;
 
-            let addr = lookup_ip(path, server_conf.server_port)?;
+            let addr = (path.as_str(), server_conf.server_port);
 
             let mut socket = AsyncWrapper::new({
-                let conn = Connection::new_tcp(if let Some(timeout) = server_conf.timeout {
-                    TcpStream::connect_timeout(&addr, timeout)?
-                } else {
-                    TcpStream::connect(addr)?
-                });
+                let conn = Connection::new_tcp(tcp_stream_connect(addr, server_conf.timeout)?);
                 #[cfg(feature = "imap-trace")]
                 let conn = conn.trace(true).with_id("imap");
                 conn
@@ -280,13 +275,9 @@ impl ImapStream {
                 .chain_err_summary(|| format!("Could not initiate TLS negotiation to {}.", path))?
             }
         } else {
-            let addr = lookup_ip(path, server_conf.server_port)?;
+            let addr = (path.as_str(), server_conf.server_port);
             AsyncWrapper::new({
-                let conn = Connection::new_tcp(if let Some(timeout) = server_conf.timeout {
-                    TcpStream::connect_timeout(&addr, timeout)?
-                } else {
-                    TcpStream::connect(addr)?
-                });
+                let conn = Connection::new_tcp(tcp_stream_connect(addr, server_conf.timeout)?);
                 #[cfg(feature = "imap-trace")]
                 let conn = conn.trace(true).with_id("imap");
                 conn

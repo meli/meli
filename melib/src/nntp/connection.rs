@@ -24,7 +24,7 @@ use crate::{
     email::parser::BytesExt,
     error::*,
     log,
-    utils::connections::{lookup_ip, Connection},
+    utils::connections::{std_net::connect as tcp_stream_connect, Connection},
 };
 extern crate native_tls;
 use std::{collections::HashSet, future::Future, pin::Pin, sync::Arc, time::Instant};
@@ -74,15 +74,14 @@ pub struct NntpConnection {
 
 impl NntpStream {
     pub async fn new_connection(server_conf: &NntpServerConf) -> Result<(Capabilities, Self)> {
-        use std::net::TcpStream;
         let path = &server_conf.server_hostname;
 
         let stream = {
-            let addr = lookup_ip(path, server_conf.server_port)?;
+            let addr = (path.as_str(), server_conf.server_port);
             AsyncWrapper::new({
-                let conn = Connection::new_tcp(TcpStream::connect_timeout(
-                    &addr,
-                    std::time::Duration::new(16, 0),
+                let conn = Connection::new_tcp(tcp_stream_connect(
+                    addr,
+                    Some(std::time::Duration::new(16, 0)),
                 )?);
                 #[cfg(feature = "nntp-trace")]
                 let conn = conn.trace(true).with_id("nntp");

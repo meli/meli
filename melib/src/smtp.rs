@@ -72,7 +72,7 @@
 //! Ok(())
 //! ```
 
-use std::{borrow::Cow, convert::TryFrom, net::TcpStream, process::Command};
+use std::{borrow::Cow, convert::TryFrom, process::Command};
 
 use futures::io::{AsyncReadExt, AsyncWriteExt};
 use native_tls::TlsConnector;
@@ -82,7 +82,7 @@ use smol::{unblock, Async as AsyncWrapper};
 use crate::{
     email::{parser::BytesExt, Address, Envelope},
     error::{Error, Result, ResultIntoError},
-    utils::connections::{lookup_ip, Connection},
+    utils::connections::{std_net::connect as tcp_stream_connect, Connection},
 };
 
 /// Kind of server security (StartTLS/TLS/None) the client should attempt
@@ -261,11 +261,11 @@ impl SmtpConnection {
                 }
                 let connector = connector.build()?;
 
-                let addr = lookup_ip(path, server_conf.port)?;
+                let addr = (path.as_str(), server_conf.port);
                 let mut socket = {
-                    let conn = Connection::new_tcp(TcpStream::connect_timeout(
-                        &addr,
-                        std::time::Duration::new(4, 0),
+                    let conn = Connection::new_tcp(tcp_stream_connect(
+                        addr,
+                        Some(std::time::Duration::new(4, 0)),
                     )?);
                     #[cfg(feature = "smtp-trace")]
                     let conn = conn.trace(true).with_id("smtp");
@@ -373,11 +373,11 @@ impl SmtpConnection {
                 ret
             }
             SmtpSecurity::None => {
-                let addr = lookup_ip(path, server_conf.port)?;
+                let addr = (path.as_str(), server_conf.port);
                 let mut ret = AsyncWrapper::new({
-                    let conn = Connection::new_tcp(TcpStream::connect_timeout(
-                        &addr,
-                        std::time::Duration::new(4, 0),
+                    let conn = Connection::new_tcp(tcp_stream_connect(
+                        addr,
+                        Some(std::time::Duration::new(4, 0)),
                     )?);
                     #[cfg(feature = "smtp-trace")]
                     let conn = conn.trace(true).with_id("smtp");
