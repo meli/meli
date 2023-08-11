@@ -946,8 +946,8 @@ pub struct Listing {
     view: Box<ThreadView>,
 }
 
-impl fmt::Display for Listing {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl std::fmt::Display for Listing {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self.component {
             Compact(ref l) => write!(f, "{}", l),
             Plain(ref l) => write!(f, "{}", l),

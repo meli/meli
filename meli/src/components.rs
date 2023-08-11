@@ -28,13 +28,6 @@
 use smallvec::SmallVec;
 
 use super::*;
-use crate::{
-    melib::text_processing::{TextProcessing, Truncate},
-    terminal::boundaries::*,
-};
-
-pub mod mail;
-pub use mail::*;
 
 pub mod notifications;
 

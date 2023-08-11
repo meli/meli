@@ -70,8 +70,8 @@ impl Clone for EnvelopeView {
     }
 }
 
-impl fmt::Display for EnvelopeView {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl std::fmt::Display for EnvelopeView {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "view mail")
     }
 }
@@ -254,7 +254,7 @@ impl EnvelopeView {
                     #[cfg(feature = "gpgme")]
                     {
                         if view_settings.auto_verify_signatures {
-                            let verify_fut = crate::components::mail::pgp::verify(a.clone());
+                            let verify_fut = crate::mail::pgp::verify(a.clone());
                             let handle = main_loop_handler
                                 .job_executor
                                 .spawn_specialized("gpg::verify_sig".into(), verify_fut);
@@ -314,8 +314,7 @@ impl EnvelopeView {
                             #[cfg(feature = "gpgme")]
                             {
                                 if view_settings.auto_decrypt {
-                                    let decrypt_fut =
-                                        crate::components::mail::pgp::decrypt(a.raw().to_vec());
+                                    let decrypt_fut = crate::mail::pgp::decrypt(a.raw().to_vec());
                                     let handle = main_loop_handler
                                         .job_executor
                                         .spawn_specialized("gpg::decrypt".into(), decrypt_fut);

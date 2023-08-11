@@ -136,8 +136,8 @@ impl ViewMode {
     }
 }
 
-impl fmt::Display for Composer {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl std::fmt::Display for Composer {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         if self.reply_context.is_some() {
             write!(
                 f,
@@ -2305,7 +2305,7 @@ pub fn send_draft(
             .into();
         }
     let output = todo!();
-    crate::components::mail::pgp::sign(
+    crate::mail::pgp::sign(
         body.into(),
         account_settings!(context[account_hash].pgp.gpg_binary)
             .as_ref()
@@ -2420,11 +2420,11 @@ pub fn send_draft_async(
     > = vec![];
     #[cfg(feature = "gpgme")]
     if gpg_state.sign_mail.is_true() && !gpg_state.encrypt_mail.is_true() {
-        filters_stack.push(Box::new(crate::components::mail::pgp::sign_filter(
+        filters_stack.push(Box::new(crate::mail::pgp::sign_filter(
             gpg_state.sign_keys,
         )?));
     } else if gpg_state.encrypt_mail.is_true() {
-        filters_stack.push(Box::new(crate::components::mail::pgp::encrypt_filter(
+        filters_stack.push(Box::new(crate::mail::pgp::encrypt_filter(
             if gpg_state.sign_mail.is_true() {
                 Some(gpg_state.sign_keys.clone())
             } else {

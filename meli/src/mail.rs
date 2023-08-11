@@ -21,6 +21,7 @@
 
 //! Entities that handle Mail specific functions.
 
+use indexmap::IndexMap;
 use melib::{
     backends::{AccountHash, Mailbox, MailboxHash},
     email::{attachment_types::*, attachments::*},
@@ -28,6 +29,11 @@ use melib::{
 };
 
 use super::*;
+use crate::{
+    boundaries::*,
+    melib::text_processing::{TextProcessing, Truncate},
+    uuid::Uuid,
+};
 
 pub mod listing;
 pub use crate::listing::*;

@@ -77,8 +77,8 @@ impl Clone for MailView {
     }
 }
 
-impl fmt::Display for MailView {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl std::fmt::Display for MailView {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "view mail")
     }
 }

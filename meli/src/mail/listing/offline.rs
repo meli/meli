@@ -111,8 +111,8 @@ impl ListingTrait for OfflineListing {
     fn set_focus(&mut self, _new_value: Focus, _context: &mut Context) {}
 }
 
-impl fmt::Display for OfflineListing {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl std::fmt::Display for OfflineListing {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "mail")
     }
 }

@@ -19,74 +19,139 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::{collections::BTreeMap, iter::FromIterator};
+use std::{cmp, collections::BTreeMap, convert::TryInto, iter::FromIterator};
 
 use indexmap::IndexSet;
-use melib::{TagHash, Threads, UnixTimestamp};
+use melib::{TagHash, Threads};
 
 use super::*;
 use crate::{components::PageMovement, jobs::JoinHandle};
 
-macro_rules! row_attr {
-    ($field:ident, $color_cache:expr, $unseen:expr, $highlighted:expr, $selected:expr  $(,)*) => {{
-        ThemeAttribute {
-            fg: if $highlighted {
-                $color_cache.highlighted.fg
-            } else if $selected {
-                $color_cache.selected.fg
-            } else if $unseen {
-                $color_cache.unseen.fg
-            } else {
-                $color_cache.$field.fg
-            },
-            bg: if $highlighted {
-                $color_cache.highlighted.bg
-            } else if $selected {
-                $color_cache.selected.bg
-            } else if $unseen {
-                $color_cache.unseen.bg
-            } else {
-                $color_cache.$field.bg
-            },
-            attrs: if $highlighted {
-                $color_cache.highlighted.attrs
-            } else if $selected {
-                $color_cache.selected.attrs
-            } else if $unseen {
-                $color_cache.unseen.attrs
-            } else {
-                $color_cache.$field.attrs
-            },
-        }
+macro_rules! digits_of_num {
+    ($num:expr) => {{
+        const GUESS: [usize; 65] = [
+            1, 0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 8, 8,
+            8, 9, 9, 9, 9, 10, 10, 10, 11, 11, 11, 12, 12, 12, 12, 13, 13, 13, 14, 14, 14, 15, 15,
+            15, 15, 16, 16, 16, 17, 17, 17, 18, 18, 18, 18, 19,
+        ];
+        const TENS: [usize; 20] = [
+            1,
+            10,
+            100,
+            1000,
+            10000,
+            100000,
+            1000000,
+            10000000,
+            100000000,
+            1000000000,
+            10000000000,
+            100000000000,
+            1000000000000,
+            10000000000000,
+            100000000000000,
+            1000000000000000,
+            10000000000000000,
+            100000000000000000,
+            1000000000000000000,
+            10000000000000000000,
+        ];
+        const SIZE_IN_BITS: usize = std::mem::size_of::<usize>() * 8;
+
+        let leading_zeros = $num.leading_zeros() as usize;
+        let base_two_digits: usize = SIZE_IN_BITS - leading_zeros;
+        let x = GUESS[base_two_digits];
+        x + if $num >= TENS[x] { 1 } else { 0 }
     }};
-    ($color_cache:expr, $unseen:expr, $highlighted:expr, $selected:expr  $(,)*) => {{
+}
+
+macro_rules! address_list {
+    (($name:expr) as comma_sep_list) => {{
+        let mut ret: String =
+            $name
+                .into_iter()
+                .fold(String::new(), |mut s: String, n: &Address| {
+                    s.extend(n.to_string().chars());
+                    s.push_str(", ");
+                    s
+                });
+        ret.pop();
+        ret.pop();
+        ret
+    }};
+}
+
+macro_rules! row_attr {
+    ($color_cache:expr, $even: expr, $unseen:expr, $highlighted:expr, $selected:expr  $(,)*) => {{
         ThemeAttribute {
             fg: if $highlighted {
-                $color_cache.highlighted.fg
+                if $even {
+                    $color_cache.even_highlighted.fg
+                } else {
+                    $color_cache.odd_highlighted.fg
+                }
             } else if $selected {
-                $color_cache.selected.fg
+                if $even {
+                    $color_cache.even_selected.fg
+                } else {
+                    $color_cache.odd_selected.fg
+                }
             } else if $unseen {
-                $color_cache.unseen.fg
+                if $even {
+                    $color_cache.even_unseen.fg
+                } else {
+                    $color_cache.odd_unseen.fg
+                }
+            } else if $even {
+                $color_cache.even.fg
             } else {
-                $color_cache.theme_default.fg
+                $color_cache.odd.fg
             },
             bg: if $highlighted {
-                $color_cache.highlighted.bg
+                if $even {
+                    $color_cache.even_highlighted.bg
+                } else {
+                    $color_cache.odd_highlighted.bg
+                }
             } else if $selected {
-                $color_cache.selected.bg
+                if $even {
+                    $color_cache.even_selected.bg
+                } else {
+                    $color_cache.odd_selected.bg
+                }
             } else if $unseen {
-                $color_cache.unseen.bg
+                if $even {
+                    $color_cache.even_unseen.bg
+                } else {
+                    $color_cache.odd_unseen.bg
+                }
+            } else if $even {
+                $color_cache.even.bg
             } else {
-                $color_cache.theme_default.bg
+                $color_cache.odd.bg
             },
             attrs: if $highlighted {
-                $color_cache.highlighted.attrs
+                if $even {
+                    $color_cache.even_highlighted.attrs
+                } else {
+                    $color_cache.odd_highlighted.attrs
+                }
             } else if $selected {
-                $color_cache.selected.attrs
+                if $even {
+                    $color_cache.even_selected.attrs
+                } else {
+                    $color_cache.odd_selected.attrs
+                }
             } else if $unseen {
-                $color_cache.unseen.attrs
+                if $even {
+                    $color_cache.even_unseen.attrs
+                } else {
+                    $color_cache.odd_unseen.attrs
+                }
+            } else if $even {
+                $color_cache.even.attrs
             } else {
-                $color_cache.theme_default.attrs
+                $color_cache.odd.attrs
             },
         }
     }};
@@ -95,25 +160,30 @@ macro_rules! row_attr {
 /// A list of all mail (`Envelope`s) in a `Mailbox`. On `\n` it opens the
 /// `Envelope` content in a `ThreadView`.
 #[derive(Debug)]
-pub struct ConversationsListing {
+pub struct CompactListing {
     /// (x, y, z): x is accounts, y is mailboxes, z is index inside a mailbox.
     cursor_pos: (AccountHash, MailboxHash, usize),
     new_cursor_pos: (AccountHash, MailboxHash, usize),
     length: usize,
     sort: (SortField, SortOrder),
+    sortcmd: bool,
     subsort: (SortField, SortOrder),
+    /// Cache current view.
+    data_columns: DataColumns<4>,
+    rows_drawn: SegmentTree,
     rows: RowsState<(ThreadHash, EnvelopeHash)>,
-    error: std::result::Result<(), String>,
 
     #[allow(clippy::type_complexity)]
     search_job: Option<(String, JoinHandle<Result<SmallVec<[EnvelopeHash; 512]>>>)>,
+    #[allow(clippy::type_complexity)]
+    select_job: Option<(String, JoinHandle<Result<SmallVec<[EnvelopeHash; 512]>>>)>,
     filter_term: String,
     filtered_selection: Vec<ThreadHash>,
     filtered_order: HashMap<ThreadHash, usize>,
     /// If we must redraw on next redraw event
     dirty: bool,
     force_draw: bool,
-    /// If `self.view` is visible or not.
+    /// If `self.view` exists or not.
     focus: Focus,
     color_cache: ColorCache,
 
@@ -125,7 +195,7 @@ pub struct ConversationsListing {
     id: ComponentId,
 }
 
-impl MailListingTrait for ConversationsListing {
+impl MailListingTrait for CompactListing {
     fn row_updates(&mut self) -> &mut SmallVec<[EnvelopeHash; 8]> {
         &mut self.rows.row_updates
     }
@@ -169,9 +239,11 @@ impl MailListingTrait for ConversationsListing {
         SmallVec::from_iter(iter)
     }
 
+    /// Fill the `self.data_columns` `CellBuffers` with the contents of the
+    /// account mailbox the user has chosen.
     fn refresh_mailbox(&mut self, context: &mut Context, force: bool) {
         self.set_dirty(true);
-        let old_mailbox_hash = self.cursor_pos.1;
+        self.rows.clear();
         let old_cursor_pos = self.cursor_pos;
         if !(self.cursor_pos.0 == self.new_cursor_pos.0
             && self.cursor_pos.1 == self.new_cursor_pos.1)
@@ -182,7 +254,7 @@ impl MailListingTrait for ConversationsListing {
         self.cursor_pos.1 = self.new_cursor_pos.1;
         self.cursor_pos.0 = self.new_cursor_pos.0;
 
-        self.color_cache = ColorCache::new(context, IndexStyle::Conversations);
+        self.color_cache = ColorCache::new(context, IndexStyle::Compact);
 
         // Get mailbox as a reference.
         //
@@ -191,7 +263,18 @@ impl MailListingTrait for ConversationsListing {
             Err(_) => {
                 let message: String =
                     context.accounts[&self.cursor_pos.0][&self.cursor_pos.1].status();
-                self.error = Err(message);
+                self.data_columns.columns[0] =
+                    CellBuffer::new_with_context(message.len(), 1, None, context);
+                self.length = 0;
+                write_string_to_grid(
+                    message.as_str(),
+                    &mut self.data_columns.columns[0],
+                    self.color_cache.theme_default.fg,
+                    self.color_cache.theme_default.bg,
+                    self.color_cache.theme_default.attrs,
+                    ((0, 0), (message.len() - 1, 0)),
+                    None,
+                );
                 return;
             }
         }
@@ -212,8 +295,7 @@ impl MailListingTrait for ConversationsListing {
             Box::new(roots.into_iter()) as Box<dyn Iterator<Item = ThreadHash>>,
         );
 
-        if !force && old_cursor_pos == self.new_cursor_pos && old_mailbox_hash == self.cursor_pos.1
-        {
+        if !force && old_cursor_pos == self.new_cursor_pos {
             self.kick_parent(self.parent, ListingMessage::UpdateView, context);
         } else if self.unfocused() {
             if let Some((thread_hash, env_hash)) = self
@@ -242,14 +324,27 @@ impl MailListingTrait for ConversationsListing {
         let account = &context.accounts[&self.cursor_pos.0];
 
         let threads = account.collection.get_threads(self.cursor_pos.1);
-        let tags_lck = account.collection.tag_index.read().unwrap();
-
         self.rows.clear();
-        self.length = 0;
-        if self.error.is_err() {
-            self.error = Ok(());
+        // Use account settings only if no sortcmd has been used
+        if !self.sortcmd {
+            self.sort = context.accounts[&self.cursor_pos.0].settings.account.order
         }
-        let mut max_entry_columns = 0;
+        self.length = 0;
+        let mut min_width = (0, 0, 0, 0);
+        #[allow(clippy::type_complexity)]
+        let mut row_widths: (
+            SmallVec<[u8; 1024]>,
+            SmallVec<[u8; 1024]>,
+            SmallVec<[u8; 1024]>,
+            SmallVec<[u8; 1024]>,
+        ) = (
+            SmallVec::new(),
+            SmallVec::new(),
+            SmallVec::new(),
+            SmallVec::new(),
+        );
+
+        let tags_lck = account.collection.tag_index.read().unwrap();
 
         let mut other_subjects = IndexSet::new();
         let mut tags = IndexSet::new();
@@ -286,7 +381,7 @@ impl MailListingTrait for ConversationsListing {
 
                 panic!();
             }
-            let root_envelope: &EnvelopeRef = &context.accounts[&self.cursor_pos.0]
+            let root_envelope: EnvelopeRef = context.accounts[&self.cursor_pos.0]
                 .collection
                 .get_env(root_env_hash);
             use melib::search::QueryTrait;
@@ -340,8 +435,17 @@ impl MailListingTrait for ConversationsListing {
                 }
             }
 
-            let strings = self.make_entry_string(
-                root_envelope,
+            let row_attr = row_attr!(
+                self.color_cache,
+                self.length % 2 == 0,
+                threads.thread_ref(thread).unseen() > 0,
+                false,
+                false
+            );
+            self.rows.row_attr_cache.insert(self.length, row_attr);
+
+            let entry_strings = self.make_entry_string(
+                &root_envelope,
                 context,
                 &tags_lck,
                 &from_address_list,
@@ -350,18 +454,47 @@ impl MailListingTrait for ConversationsListing {
                 &tags,
                 thread,
             );
-            max_entry_columns = std::cmp::max(
-                max_entry_columns,
-                strings.flag.len()
-                    + 3
-                    + strings.subject.grapheme_width()
+            row_widths
+                .0
+                .push(digits_of_num!(self.length).try_into().unwrap_or(255));
+            /* date */
+            row_widths.1.push(
+                entry_strings
+                    .date
+                    .grapheme_width()
+                    .try_into()
+                    .unwrap_or(255),
+            );
+            /* from */
+            row_widths.2.push(
+                entry_strings
+                    .from
+                    .grapheme_width()
+                    .try_into()
+                    .unwrap_or(255),
+            );
+            /* subject */
+            row_widths.3.push(
+                (entry_strings.flag.grapheme_width()
                     + 1
-                    + strings.tags.grapheme_width(),
+                    + entry_strings.subject.grapheme_width()
+                    + 1
+                    + entry_strings.tags.grapheme_width()
+                    + 16)
+                    .try_into()
+                    .unwrap_or(255),
             );
-            max_entry_columns = std::cmp::max(
-                max_entry_columns,
-                strings.date.len() + 1 + strings.from.grapheme_width(),
-            );
+            min_width.1 = cmp::max(min_width.1, entry_strings.date.grapheme_width()); /* date */
+            min_width.2 = cmp::max(min_width.2, entry_strings.from.grapheme_width()); /* from */
+            min_width.3 = cmp::max(
+                min_width.3,
+                entry_strings.flag.grapheme_width()
+                    + 1
+                    + entry_strings.subject.grapheme_width()
+                    + 1
+                    + entry_strings.tags.grapheme_width()
+                    + 16,
+            ); /* subject */
             self.rows.insert_thread(
                 thread,
                 (thread, root_env_hash),
@@ -371,19 +504,75 @@ impl MailListingTrait for ConversationsListing {
                     .cloned()
                     .unwrap_or_default()
                     .into(),
-                strings,
+                entry_strings,
             );
             self.length += 1;
         }
 
+        min_width.0 = self.length.saturating_sub(1).to_string().len();
+
+        self.data_columns.elasticities[0].set_rigid();
+        self.data_columns.elasticities[1].set_rigid();
+        self.data_columns.elasticities[2].set_grow(5, Some(35));
+        self.data_columns.elasticities[3].set_rigid();
+        self.data_columns
+            .cursor_config
+            .set_handle(true)
+            .set_even_odd_theme(
+                self.color_cache.even_highlighted,
+                self.color_cache.odd_highlighted,
+            );
+        self.data_columns
+            .theme_config
+            .set_even_odd_theme(self.color_cache.even, self.color_cache.odd);
+
+        /* index column */
+        self.data_columns.columns[0] =
+            CellBuffer::new_with_context(min_width.0, self.rows.len(), None, context);
+        self.data_columns.segment_tree[0] = row_widths.0.into();
+
+        /* date column */
+        self.data_columns.columns[1] =
+            CellBuffer::new_with_context(min_width.1, self.rows.len(), None, context);
+        self.data_columns.segment_tree[1] = row_widths.1.into();
+        /* from column */
+        self.data_columns.columns[2] =
+            CellBuffer::new_with_context(min_width.2, self.rows.len(), None, context);
+        self.data_columns.segment_tree[2] = row_widths.2.into();
+        /* subject column */
+        self.data_columns.columns[3] =
+            CellBuffer::new_with_context(min_width.3, self.rows.len(), None, context);
+        self.data_columns.segment_tree[3] = row_widths.3.into();
+
+        self.rows_drawn = SegmentTree::from(
+            std::iter::repeat(1)
+                .take(self.rows.len())
+                .collect::<SmallVec<_>>(),
+        );
+        debug_assert!(self.rows_drawn.array.len() == self.rows.len());
+        self.draw_rows(
+            context,
+            0,
+            std::cmp::min(80, self.rows.len().saturating_sub(1)),
+        );
         if self.length == 0 && self.filter_term.is_empty() {
             let message: String = account[&self.cursor_pos.1].status();
-            self.error = Err(message);
+            self.data_columns.columns[0] =
+                CellBuffer::new_with_context(message.len(), self.length + 1, None, context);
+            write_string_to_grid(
+                &message,
+                &mut self.data_columns.columns[0],
+                self.color_cache.theme_default.fg,
+                self.color_cache.theme_default.bg,
+                self.color_cache.theme_default.attrs,
+                ((0, 0), (message.len() - 1, 0)),
+                None,
+            );
         }
     }
 }
 
-impl ListingTrait for ConversationsListing {
+impl ListingTrait for CompactListing {
     fn coordinates(&self) -> (AccountHash, MailboxHash) {
         (self.new_cursor_pos.0, self.new_cursor_pos.1)
     }
@@ -394,7 +583,7 @@ impl ListingTrait for ConversationsListing {
         self.filtered_selection.clear();
         self.filtered_order.clear();
         self.filter_term.clear();
-        self.rows.clear();
+        self.rows.row_updates.clear();
     }
 
     fn next_entry(&mut self, context: &mut Context) {
@@ -435,10 +624,58 @@ impl ListingTrait for ConversationsListing {
     }
 
     fn highlight_line(&mut self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context) {
-        if self.length == 0 {
+        let thread_hash = if let Some(h) = self.get_thread_under_cursor(idx) {
+            h
+        } else {
             return;
+        };
+
+        let account = &context.accounts[&self.cursor_pos.0];
+        let threads = account.collection.get_threads(self.cursor_pos.1);
+        let thread = threads.thread_ref(thread_hash);
+
+        let row_attr = row_attr!(
+            self.color_cache,
+            idx % 2 == 0,
+            thread.unseen() > 0,
+            self.cursor_pos.2 == idx,
+            self.rows.is_thread_selected(thread_hash)
+        );
+        let (upper_left, bottom_right) = area;
+        let x = get_x(upper_left)
+            + self.data_columns.widths[0]
+            + self.data_columns.widths[1]
+            + self.data_columns.widths[2]
+            + 3 * 2;
+
+        for c in grid.row_iter(
+            get_x(upper_left)..(get_x(bottom_right) + 1),
+            get_y(upper_left),
+        ) {
+            grid[c]
+                .set_fg(row_attr.fg)
+                .set_bg(row_attr.bg)
+                .set_attrs(row_attr.attrs);
         }
-        self.draw_rows(grid, area, context, idx);
+
+        copy_area(
+            grid,
+            &self.data_columns.columns[3],
+            (set_x(upper_left, x), bottom_right),
+            (
+                (0, idx),
+                pos_dec(
+                    (
+                        self.data_columns.widths[3],
+                        self.data_columns.columns[3].size().1,
+                    ),
+                    (1, 1),
+                ),
+            ),
+        );
+        for c in grid.row_iter(x..(get_x(bottom_right) + 1), get_y(upper_left)) {
+            grid[c].set_bg(row_attr.bg).set_attrs(row_attr.attrs);
+        }
     }
 
     /// Draw the list of `Envelope`s.
@@ -449,24 +686,22 @@ impl ListingTrait for ConversationsListing {
         }
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
-        if let Err(message) = self.error.as_ref() {
+        if self.length == 0 {
             clear_area(grid, area, self.color_cache.theme_default);
-            write_string_to_grid(
-                message,
+            copy_area(
                 grid,
-                self.color_cache.theme_default.fg,
-                self.color_cache.theme_default.bg,
-                self.color_cache.theme_default.attrs,
+                &self.data_columns.columns[0],
                 area,
-                None,
+                ((0, 0), pos_dec(self.data_columns.columns[0].size(), (1, 1))),
             );
             context.dirty_areas.push_back(area);
             return;
         }
-        let rows = (get_y(bottom_right) - get_y(upper_left) + 1) / 3;
+        let rows = get_y(bottom_right) - get_y(upper_left) + 1;
         if rows == 0 {
             return;
         }
+
         if let Some(mvm) = self.movement.take() {
             match mvm {
                 PageMovement::Up(amount) => {
@@ -479,14 +714,14 @@ impl ListingTrait for ConversationsListing {
                     if self.new_cursor_pos.2 + amount + 1 < self.length {
                         self.new_cursor_pos.2 += amount;
                     } else {
-                        self.new_cursor_pos.2 = self.length.saturating_sub(1);
+                        self.new_cursor_pos.2 = self.length - 1;
                     }
                 }
                 PageMovement::PageDown(multiplier) => {
                     if self.new_cursor_pos.2 + rows * multiplier + 1 < self.length {
                         self.new_cursor_pos.2 += rows * multiplier;
                     } else if self.new_cursor_pos.2 + rows * multiplier > self.length {
-                        self.new_cursor_pos.2 = self.length.saturating_sub(1);
+                        self.new_cursor_pos.2 = self.length - 1;
                     } else {
                         self.new_cursor_pos.2 = (self.length.saturating_sub(1) / rows) * rows;
                     }
@@ -496,7 +731,7 @@ impl ListingTrait for ConversationsListing {
                     self.new_cursor_pos.2 = 0;
                 }
                 PageMovement::End => {
-                    self.new_cursor_pos.2 = self.length.saturating_sub(1);
+                    self.new_cursor_pos.2 = self.length - 1;
                 }
             }
         }
@@ -505,21 +740,27 @@ impl ListingTrait for ConversationsListing {
         let page_no = (self.new_cursor_pos.2).wrapping_div(rows);
 
         let top_idx = page_no * rows;
+        let end_idx = cmp::min(self.length.saturating_sub(1), top_idx + rows - 1);
+        self.draw_rows(context, top_idx, end_idx);
 
         /* If cursor position has changed, remove the highlight from the previous
          * position and apply it in the new one. */
         if self.cursor_pos.2 != self.new_cursor_pos.2 && prev_page_no == page_no {
             let old_cursor_pos = self.cursor_pos;
             self.cursor_pos = self.new_cursor_pos;
-            for idx in &[old_cursor_pos.2, self.new_cursor_pos.2] {
-                if *idx >= self.length {
+            for &(idx, highlight) in &[(old_cursor_pos.2, false), (self.new_cursor_pos.2, true)] {
+                if idx >= self.length {
                     continue; //bounds check
                 }
-                let new_area = (
-                    set_y(upper_left, get_y(upper_left) + 3 * (*idx % rows)),
-                    set_y(bottom_right, get_y(upper_left) + 3 * (*idx % rows) + 2),
-                );
-                self.highlight_line(grid, new_area, *idx, context);
+                let new_area = nth_row_area(area, idx % rows);
+                self.data_columns
+                    .draw(grid, idx, self.cursor_pos.2, grid.bounds_iter(new_area));
+                if highlight {
+                    let row_attr = row_attr!(self.color_cache, idx % 2 == 0, false, true, false);
+                    change_colors(grid, new_area, row_attr.fg, row_attr.bg);
+                } else if let Some(row_attr) = self.rows.row_attr_cache.get(&idx) {
+                    change_colors(grid, new_area, row_attr.fg, row_attr.bg);
+                }
                 context.dirty_areas.push_back(new_area);
             }
             if !self.force_draw {
@@ -529,27 +770,48 @@ impl ListingTrait for ConversationsListing {
             self.cursor_pos = self.new_cursor_pos;
         }
         if self.new_cursor_pos.2 >= self.length {
-            self.new_cursor_pos.2 = self.length.saturating_sub(1);
+            self.new_cursor_pos.2 = self.length - 1;
             self.cursor_pos.2 = self.new_cursor_pos.2;
         }
 
-        clear_area(grid, area, self.color_cache.theme_default);
         /* Page_no has changed, so draw new page */
-        self.draw_rows(grid, area, context, top_idx);
+        _ = self
+            .data_columns
+            .recalc_widths((width!(area), height!(area)), top_idx);
+        clear_area(grid, area, self.color_cache.theme_default);
+        /* copy table columns */
+        self.data_columns
+            .draw(grid, top_idx, self.cursor_pos.2, grid.bounds_iter(area));
+        /* apply each row colors separately */
+        for i in top_idx..(top_idx + height!(area)) {
+            if let Some(row_attr) = self.rows.row_attr_cache.get(&i) {
+                change_colors(grid, nth_row_area(area, i % rows), row_attr.fg, row_attr.bg);
+            }
+        }
 
-        self.highlight_line(
+        /* highlight cursor */
+        let row_attr = row_attr!(
+            self.color_cache,
+            self.cursor_pos.2 % 2 == 0,
+            false,
+            true,
+            false
+        );
+        change_colors(
             grid,
-            (
-                pos_inc(upper_left, (0, 3 * (self.cursor_pos.2 % rows))),
-                set_y(
-                    bottom_right,
-                    get_y(upper_left) + 3 * (self.cursor_pos.2 % rows) + 2,
-                ),
-            ),
-            self.cursor_pos.2,
-            context,
+            nth_row_area(area, self.cursor_pos.2 % rows),
+            row_attr.fg,
+            row_attr.bg,
         );
 
+        /* clear gap if available height is more than count of entries */
+        if top_idx + rows > self.length {
+            clear_area(
+                grid,
+                (pos_inc(upper_left, (0, rows - 1)), bottom_right),
+                self.color_cache.theme_default,
+            );
+        }
         context.dirty_areas.push_back(area);
     }
 
@@ -559,10 +821,6 @@ impl ListingTrait for ConversationsListing {
         results: SmallVec<[EnvelopeHash; 512]>,
         context: &Context,
     ) {
-        if filter_term.is_empty() {
-            return;
-        }
-
         self.length = 0;
         self.filtered_selection.clear();
         self.filtered_order.clear();
@@ -585,7 +843,7 @@ impl ListingTrait for ConversationsListing {
             if self.rows.all_threads.contains(&thread) {
                 self.filtered_selection.push(thread);
                 self.filtered_order
-                    .insert(thread, self.filtered_selection.len().saturating_sub(1));
+                    .insert(thread, self.filtered_selection.len() - 1);
             }
         }
         if !self.filtered_selection.is_empty() {
@@ -594,10 +852,10 @@ impl ListingTrait for ConversationsListing {
                 self.sort,
                 &context.accounts[&self.cursor_pos.0].collection.envelopes,
             );
-            self.new_cursor_pos.2 = std::cmp::min(
-                self.filtered_selection.len().saturating_sub(1),
-                self.cursor_pos.2,
-            );
+            self.new_cursor_pos.2 =
+                std::cmp::min(self.filtered_selection.len() - 1, self.cursor_pos.2);
+        } else {
+            self.data_columns.columns[0] = CellBuffer::new_with_context(0, 0, None, context);
         }
         self.redraw_threads_list(
             context,
@@ -661,7 +919,9 @@ impl ListingTrait for ConversationsListing {
                     return;
                 }
             }
-            Focus::EntryFullscreen => {}
+            Focus::EntryFullscreen => {
+                self.dirty = true;
+            }
         }
         self.focus = new_value;
         self.kick_parent(
@@ -676,31 +936,33 @@ impl ListingTrait for ConversationsListing {
     }
 }
 
-impl fmt::Display for ConversationsListing {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl std::fmt::Display for CompactListing {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "mail")
     }
 }
 
-impl ConversationsListing {
-    //const PADDING_CHAR: char = ' '; //░';
-
+impl CompactListing {
+    pub const DESCRIPTION: &'static str = "compact listing";
     pub fn new(parent: ComponentId, coordinates: (AccountHash, MailboxHash)) -> Box<Self> {
-        Box::new(Self {
+        Box::new(CompactListing {
             cursor_pos: (coordinates.0, MailboxHash::default(), 0),
             new_cursor_pos: (coordinates.0, coordinates.1, 0),
             length: 0,
             sort: (Default::default(), Default::default()),
+            sortcmd: false,
             subsort: (SortField::Date, SortOrder::Desc),
-            rows: RowsState::default(),
-            error: Ok(()),
             search_job: None,
+            select_job: None,
             filter_term: String::new(),
             filtered_selection: Vec::new(),
             filtered_order: HashMap::default(),
+            focus: Focus::None,
+            data_columns: DataColumns::default(),
+            rows_drawn: SegmentTree::default(),
+            rows: RowsState::default(),
             dirty: true,
             force_draw: true,
-            focus: Focus::None,
             color_cache: ColorCache::default(),
             movement: None,
             modifier_active: false,
@@ -712,7 +974,7 @@ impl ConversationsListing {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(super) fn make_entry_string(
+    fn make_entry_string(
         &self,
         root_envelope: &Envelope,
         context: &Context,
@@ -725,7 +987,7 @@ impl ConversationsListing {
     ) -> EntryStrings {
         let thread = threads.thread_ref(hash);
         let mut tags_string = String::new();
-        let mut colors = SmallVec::new();
+        let mut colors: SmallVec<[_; 8]> = SmallVec::new();
         let account = &context.accounts[&self.cursor_pos.0];
         if account.backend_capabilities.supports_tags {
             for t in tags {
@@ -782,52 +1044,84 @@ impl ConversationsListing {
         };
         EntryStrings {
             date: DateString(ConversationsListing::format_date(context, thread.date())),
-            subject: SubjectString(if thread.len() > 1 {
-                format!("{} ({})", subject, thread.len())
+            subject: if thread.len() > 1 {
+                SubjectString(format!("{} ({})", subject, thread.len()))
             } else {
-                subject
-            }),
+                SubjectString(subject)
+            },
             flag: FlagString(format!(
-                "{}{}",
-                if thread.has_attachments() { "📎" } else { "" },
-                if thread.snoozed() { "💤" } else { "" }
+                "{selected}{snoozed}{unseen}{attachments}{whitespace}",
+                selected = if self
+                    .rows
+                    .selection
+                    .get(&root_envelope.hash())
+                    .cloned()
+                    .unwrap_or(false)
+                {
+                    mailbox_settings!(
+                        context[self.cursor_pos.0][&self.cursor_pos.1]
+                            .listing
+                            .selected_flag
+                    )
+                    .as_ref()
+                    .map(|s| s.as_str())
+                    .unwrap_or(super::DEFAULT_SELECTED_FLAG)
+                } else {
+                    ""
+                },
+                snoozed = if thread.snoozed() {
+                    mailbox_settings!(
+                        context[self.cursor_pos.0][&self.cursor_pos.1]
+                            .listing
+                            .thread_snoozed_flag
+                    )
+                    .as_ref()
+                    .map(|s| s.as_str())
+                    .unwrap_or(super::DEFAULT_SNOOZED_FLAG)
+                } else {
+                    ""
+                },
+                unseen = if thread.unseen() > 0 {
+                    mailbox_settings!(
+                        context[self.cursor_pos.0][&self.cursor_pos.1]
+                            .listing
+                            .unseen_flag
+                    )
+                    .as_ref()
+                    .map(|s| s.as_str())
+                    .unwrap_or(super::DEFAULT_UNSEEN_FLAG)
+                } else {
+                    ""
+                },
+                attachments = if thread.has_attachments() {
+                    mailbox_settings!(
+                        context[self.cursor_pos.0][&self.cursor_pos.1]
+                            .listing
+                            .attachment_flag
+                    )
+                    .as_ref()
+                    .map(|s| s.as_str())
+                    .unwrap_or(super::DEFAULT_ATTACHMENT_FLAG)
+                } else {
+                    ""
+                },
+                whitespace = if self
+                    .rows
+                    .selection
+                    .get(&root_envelope.hash())
+                    .cloned()
+                    .unwrap_or(false)
+                    || thread.unseen() > 0
+                    || thread.snoozed()
+                    || thread.has_attachments()
+                {
+                    " "
+                } else {
+                    ""
+                },
             )),
             from: FromString(address_list!((from) as comma_sep_list)),
             tags: TagString(tags_string, colors),
-        }
-    }
-
-    pub(super) fn format_date(context: &Context, epoch: UnixTimestamp) -> String {
-        let d = std::time::UNIX_EPOCH + std::time::Duration::from_secs(epoch);
-        let now: std::time::Duration = std::time::SystemTime::now()
-            .duration_since(d)
-            .unwrap_or_else(|_| std::time::Duration::new(std::u64::MAX, 0));
-        match now.as_secs() {
-            n if context.settings.listing.recent_dates && n < 60 * 60 => format!(
-                "{} minute{} ago",
-                n / (60),
-                if n / 60 == 1 { "" } else { "s" }
-            ),
-            n if context.settings.listing.recent_dates && n < 24 * 60 * 60 => format!(
-                "{} hour{} ago",
-                n / (60 * 60),
-                if n / (60 * 60) == 1 { "" } else { "s" }
-            ),
-            n if context.settings.listing.recent_dates && n < 7 * 24 * 60 * 60 => format!(
-                "{} day{} ago",
-                n / (24 * 60 * 60),
-                if n / (24 * 60 * 60) == 1 { "" } else { "s" }
-            ),
-            _ => melib::utils::datetime::timestamp_to_string(
-                epoch,
-                context
-                    .settings
-                    .listing
-                    .datetime_fmt
-                    .as_deref()
-                    .or(Some("%Y-%m-%d %T")),
-                false,
-            ),
         }
     }
 
@@ -837,7 +1131,8 @@ impl ConversationsListing {
                 .thread_order
                 .iter()
                 .find(|(_, &r)| r == cursor)
-                .map(|(k, _)| *k)
+                .map(|(h, _)| h)
+                .cloned()
         } else {
             self.filtered_selection.get(cursor).cloned()
         }
@@ -845,10 +1140,26 @@ impl ConversationsListing {
 
     fn update_line(&mut self, context: &Context, env_hash: EnvelopeHash) {
         let account = &context.accounts[&self.cursor_pos.0];
+
+        if !account.contains_key(env_hash) {
+            /* The envelope has been renamed or removed, so wait for the appropriate
+             * event to arrive */
+            return;
+        }
+        let tags_lck = account.collection.tag_index.read().unwrap();
+        let envelope: EnvelopeRef = account.collection.get_env(env_hash);
         let thread_hash = self.rows.env_to_thread[&env_hash];
         let threads = account.collection.get_threads(self.cursor_pos.1);
-        let tags_lck = account.collection.tag_index.read().unwrap();
-        let idx: usize = self.rows.thread_order[&thread_hash];
+        let thread = threads.thread_ref(thread_hash);
+        let idx = self.rows.thread_order[&thread_hash];
+        let row_attr = row_attr!(
+            self.color_cache,
+            idx % 2 == 0,
+            thread.unseen() > 0,
+            false,
+            self.rows.is_thread_selected(thread_hash)
+        );
+        self.rows.row_attr_cache.insert(idx, row_attr);
 
         let mut other_subjects = IndexSet::new();
         let mut tags = IndexSet::new();
@@ -887,7 +1198,7 @@ impl ConversationsListing {
                 from_address_list.push(addr.clone());
             }
         }
-        let envelope: EnvelopeRef = account.collection.get_env(env_hash);
+
         let strings = self.make_entry_string(
             &envelope,
             context,
@@ -899,159 +1210,312 @@ impl ConversationsListing {
             thread_hash,
         );
         drop(envelope);
-        if let Some(row) = self.rows.entries.get_mut(idx) {
-            row.1 = strings;
+        let columns = &mut self.data_columns.columns;
+        let min_width = (
+            columns[0].size().0,
+            columns[1].size().0,
+            columns[2].size().0,
+            columns[3].size().0,
+        );
+        let (x, _) = write_string_to_grid(
+            &idx.to_string(),
+            &mut columns[0],
+            row_attr.fg,
+            row_attr.bg,
+            row_attr.attrs,
+            ((0, idx), (min_width.0, idx)),
+            None,
+        );
+        for c in columns[0].row_iter(x..min_width.0, idx) {
+            columns[0][c].set_bg(row_attr.bg).set_ch(' ');
         }
-    }
-
-    fn draw_rows(&self, grid: &mut CellBuffer, area: Area, context: &Context, top_idx: usize) {
-        let account = &context.accounts[&self.cursor_pos.0];
-        let threads = account.collection.get_threads(self.cursor_pos.1);
-        clear_area(grid, area, self.color_cache.theme_default);
-        let (mut upper_left, bottom_right) = area;
-        for (idx, ((thread_hash, root_env_hash), strings)) in
-            self.rows.entries.iter().enumerate().skip(top_idx)
-        {
-            if !context.accounts[&self.cursor_pos.0].contains_key(*root_env_hash) {
-                panic!();
-            }
-            let thread = threads.thread_ref(*thread_hash);
-
-            let row_attr = row_attr!(
-                self.color_cache,
-                thread.unseen() > 0,
-                self.cursor_pos.2 == idx,
-                self.rows.is_thread_selected(*thread_hash)
-            );
-            /* draw flags */
-            let (x, _) = write_string_to_grid(
-                &strings.flag,
-                grid,
-                row_attr.fg,
-                row_attr.bg,
-                row_attr.attrs,
-                (upper_left, bottom_right),
-                None,
-            );
-            for x in x..(x + 3) {
-                grid[set_x(upper_left, x)].set_bg(row_attr.bg);
-            }
-            let subject_attr = row_attr!(
-                subject,
-                self.color_cache,
-                thread.unseen() > 0,
-                self.cursor_pos.2 == idx,
-                self.rows.is_thread_selected(*thread_hash)
-            );
-            /* draw subject */
-            let (mut x, subject_overflowed) = write_string_to_grid(
-                &strings.subject,
-                grid,
-                subject_attr.fg,
-                subject_attr.bg,
-                subject_attr.attrs,
-                (set_x(upper_left, x), bottom_right),
-                None,
-            );
-            let mut subject_overflowed = subject_overflowed > get_y(upper_left);
+        let (x, _) = write_string_to_grid(
+            &strings.date,
+            &mut columns[1],
+            row_attr.fg,
+            row_attr.bg,
+            row_attr.attrs,
+            ((0, idx), (min_width.1.saturating_sub(1), idx)),
+            None,
+        );
+        for c in columns[1].row_iter(x..min_width.1, idx) {
+            columns[1][c].set_bg(row_attr.bg).set_ch(' ');
+        }
+        let (x, _) = write_string_to_grid(
+            &strings.from,
+            &mut columns[2],
+            row_attr.fg,
+            row_attr.bg,
+            row_attr.attrs,
+            ((0, idx), (min_width.2, idx)),
+            None,
+        );
+        for c in columns[2].row_iter(x..min_width.2, idx) {
+            columns[2][c].set_bg(row_attr.bg).set_ch(' ');
+        }
+        let (x, _) = write_string_to_grid(
+            &strings.flag,
+            &mut columns[3],
+            row_attr.fg,
+            row_attr.bg,
+            row_attr.attrs,
+            ((0, idx), (min_width.3, idx)),
+            None,
+        );
+        let (x, _) = write_string_to_grid(
+            &strings.subject,
+            &mut columns[3],
+            row_attr.fg,
+            row_attr.bg,
+            row_attr.attrs,
+            ((x, idx), (min_width.3, idx)),
+            None,
+        );
+        if let Some(c) = columns[3].get_mut(x, idx) {
+            c.set_bg(row_attr.bg).set_ch(' ');
+        }
+        let x = {
+            let mut x = x + 1;
             for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
-                if subject_overflowed {
-                    break;
-                };
                 let color = color.unwrap_or(self.color_cache.tag_default.bg);
-                let (_x, _y) = write_string_to_grid(
+                let (_x, _) = write_string_to_grid(
                     t,
-                    grid,
+                    &mut columns[3],
                     self.color_cache.tag_default.fg,
                     color,
                     self.color_cache.tag_default.attrs,
-                    (set_x(upper_left, x + 1), bottom_right),
+                    ((x + 1, idx), (min_width.3, idx)),
                     None,
                 );
-                if _y > get_y(upper_left) {
-                    subject_overflowed = true;
-                    break;
+                for c in columns[3].row_iter(x..(x + 1), idx) {
+                    columns[3][c].set_bg(color);
                 }
-                grid[set_x(upper_left, x)].set_bg(color);
-                if _x <= get_x(bottom_right) {
-                    grid[set_x(upper_left, _x)].set_bg(color).set_keep_bg(true);
+                for c in columns[3].row_iter(_x..(_x + 1), idx) {
+                    columns[3][c].set_bg(color).set_keep_bg(true);
                 }
-                for x in (x + 1).._x {
-                    grid[set_x(upper_left, x)]
+                for c in columns[3].row_iter((x + 1)..(_x + 1), idx) {
+                    columns[3][c]
                         .set_keep_fg(true)
-                        .set_keep_bg(true);
+                        .set_keep_bg(true)
+                        .set_keep_attrs(true);
                 }
-                grid[set_x(upper_left, x)].set_keep_bg(true);
+                for c in columns[3].row_iter(x..(x + 1), idx) {
+                    columns[3][c].set_keep_bg(true);
+                }
                 x = _x + 1;
+                columns[3][(x, idx)].set_bg(row_attr.bg).set_ch(' ');
             }
-            if !subject_overflowed {
-                for x in x..get_x(bottom_right) {
-                    grid[set_x(upper_left, x)]
-                        .set_ch(' ')
-                        .set_fg(row_attr.fg)
-                        .set_bg(row_attr.bg);
-                }
+            x
+        };
+        for c in columns[3].row_iter(x..min_width.3, idx) {
+            columns[3][c].set_ch(' ').set_bg(row_attr.bg);
+        }
+        *self.rows.entries.get_mut(idx).unwrap() = ((thread_hash, env_hash), strings);
+        self.rows_drawn.update(idx, 1);
+    }
+
+    fn draw_rows(&mut self, context: &Context, start: usize, end: usize) {
+        if self.length == 0 {
+            return;
+        }
+        debug_assert!(end >= start);
+        if self.rows_drawn.get_max(start, end) == 0 {
+            return;
+        }
+        for i in start..=end {
+            self.rows_drawn.update(i, 0);
+        }
+        let min_width = (
+            self.data_columns.columns[0].size().0,
+            self.data_columns.columns[1].size().0,
+            self.data_columns.columns[2].size().0,
+            self.data_columns.columns[3].size().0,
+        );
+
+        for (idx, ((_thread_hash, root_env_hash), strings)) in self
+            .rows
+            .entries
+            .iter()
+            .enumerate()
+            .skip(start)
+            .take(end - start + 1)
+        {
+            if !context.accounts[&self.cursor_pos.0].contains_key(*root_env_hash) {
+                //debug!("key = {}", root_env_hash);
+                //debug!(
+                //    "name = {} {}",
+                //    account[&self.cursor_pos.1].name(),
+                //    context.accounts[&self.cursor_pos.0].name()
+                //);
+                //debug!("{:#?}", context.accounts);
+
+                panic!();
             }
-            let date_attr = row_attr!(
-                date,
-                self.color_cache,
-                thread.unseen() > 0,
-                self.cursor_pos.2 == idx,
-                self.rows.is_thread_selected(*thread_hash)
+            let row_attr = self.rows.row_attr_cache[&idx];
+            let (x, _) = write_string_to_grid(
+                &idx.to_string(),
+                &mut self.data_columns.columns[0],
+                row_attr.fg,
+                row_attr.bg,
+                row_attr.attrs,
+                ((0, idx), (min_width.0, idx)),
+                None,
             );
-            upper_left.1 += 1;
-            if upper_left.1 >= bottom_right.1 {
-                return;
+            for x in x..min_width.0 {
+                self.data_columns.columns[0][(x, idx)]
+                    .set_bg(row_attr.bg)
+                    .set_attrs(row_attr.attrs);
             }
-            /* Next line, draw date */
             let (x, _) = write_string_to_grid(
                 &strings.date,
-                grid,
-                date_attr.fg,
-                date_attr.bg,
-                date_attr.attrs,
-                (upper_left, bottom_right),
+                &mut self.data_columns.columns[1],
+                row_attr.fg,
+                row_attr.bg,
+                row_attr.attrs,
+                ((0, idx), (min_width.1, idx)),
                 None,
             );
-            for x in x..(x + 4) {
-                grid[set_x(upper_left, x)]
-                    .set_ch('▁')
-                    .set_fg(row_attr.fg)
-                    .set_bg(row_attr.bg);
+            for x in x..min_width.1 {
+                self.data_columns.columns[1][(x, idx)]
+                    .set_bg(row_attr.bg)
+                    .set_attrs(row_attr.attrs);
             }
-            let from_attr = row_attr!(
-                from,
-                self.color_cache,
-                thread.unseen() > 0,
-                self.cursor_pos.2 == idx,
-                self.rows.is_thread_selected(*thread_hash)
-            );
-            /* draw from */
             let (x, _) = write_string_to_grid(
                 &strings.from,
-                grid,
-                from_attr.fg,
-                from_attr.bg,
-                from_attr.attrs,
-                (set_x(upper_left, x + 4), bottom_right),
+                &mut self.data_columns.columns[2],
+                row_attr.fg,
+                row_attr.bg,
+                row_attr.attrs,
+                ((0, idx), (min_width.2, idx)),
                 None,
             );
-
-            for x in x..get_x(bottom_right) {
-                grid[set_x(upper_left, x)]
-                    .set_ch('▁')
-                    .set_fg(row_attr.fg)
-                    .set_bg(row_attr.bg);
+            #[cfg(feature = "regexp")]
+            {
+                for text_formatter in crate::conf::text_format_regexps(context, "listing.from") {
+                    let t = self.data_columns.columns[2].insert_tag(text_formatter.tag);
+                    for (start, end) in text_formatter.regexp.find_iter(strings.from.as_str()) {
+                        self.data_columns.columns[2].set_tag(t, (start, idx), (end, idx));
+                    }
+                }
             }
-            upper_left.1 += 2;
-            if upper_left.1 >= bottom_right.1 {
-                return;
+            for x in x..min_width.2 {
+                self.data_columns.columns[2][(x, idx)]
+                    .set_bg(row_attr.bg)
+                    .set_attrs(row_attr.attrs);
+            }
+            let (x, _) = write_string_to_grid(
+                &strings.flag,
+                &mut self.data_columns.columns[3],
+                row_attr.fg,
+                row_attr.bg,
+                row_attr.attrs,
+                ((0, idx), (min_width.3, idx)),
+                None,
+            );
+            let (x, _) = write_string_to_grid(
+                &strings.subject,
+                &mut self.data_columns.columns[3],
+                row_attr.fg,
+                row_attr.bg,
+                row_attr.attrs,
+                ((x, idx), (min_width.3, idx)),
+                None,
+            );
+            #[cfg(feature = "regexp")]
+            {
+                for text_formatter in crate::conf::text_format_regexps(context, "listing.subject") {
+                    let t = self.data_columns.columns[3].insert_tag(text_formatter.tag);
+                    for (start, end) in text_formatter.regexp.find_iter(strings.subject.as_str()) {
+                        self.data_columns.columns[3].set_tag(t, (start, idx), (end, idx));
+                    }
+                }
+            }
+            let x = {
+                let mut x = x + 1;
+                for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
+                    let color = color.unwrap_or(self.color_cache.tag_default.bg);
+                    let (_x, _) = write_string_to_grid(
+                        t,
+                        &mut self.data_columns.columns[3],
+                        self.color_cache.tag_default.fg,
+                        color,
+                        self.color_cache.tag_default.attrs,
+                        ((x + 1, idx), (min_width.3, idx)),
+                        None,
+                    );
+                    self.data_columns.columns[3][(x, idx)].set_bg(color);
+                    if _x < min_width.3 {
+                        self.data_columns.columns[3][(_x, idx)]
+                            .set_bg(color)
+                            .set_keep_bg(true);
+                    }
+                    for x in (x + 1).._x {
+                        self.data_columns.columns[3][(x, idx)]
+                            .set_keep_fg(true)
+                            .set_keep_bg(true)
+                            .set_keep_attrs(true);
+                    }
+                    self.data_columns.columns[3][(x, idx)].set_keep_bg(true);
+                    x = _x + 1;
+                }
+                x
+            };
+            for x in x..min_width.3 {
+                self.data_columns.columns[3][(x, idx)]
+                    .set_ch(' ')
+                    .set_bg(row_attr.bg)
+                    .set_attrs(row_attr.attrs);
+            }
+        }
+    }
+
+    fn select(
+        &mut self,
+        search_term: &str,
+        results: Result<SmallVec<[EnvelopeHash; 512]>>,
+        context: &mut Context,
+    ) {
+        let account = &context.accounts[&self.cursor_pos.0];
+        match results {
+            Ok(results) => {
+                let threads = account.collection.get_threads(self.cursor_pos.1);
+                for env_hash in results {
+                    if !account.collection.contains_key(&env_hash) {
+                        continue;
+                    }
+                    let env_thread_node_hash = account.collection.get_env(env_hash).thread();
+                    if !threads.thread_nodes.contains_key(&env_thread_node_hash) {
+                        continue;
+                    }
+                    let thread =
+                        threads.find_group(threads.thread_nodes[&env_thread_node_hash].group);
+                    if self.rows.all_threads.contains(&thread) {
+                        self.rows
+                            .selection
+                            .entry(env_hash)
+                            .and_modify(|entry| *entry = true);
+                    }
+                }
+            }
+            Err(err) => {
+                self.cursor_pos.2 = 0;
+                self.new_cursor_pos.2 = 0;
+                let message = format!(
+                    "Encountered an error while searching for `{}`: {}.",
+                    search_term, &err
+                );
+                log::error!("{}", message);
+                context.replies.push_back(UIEvent::Notification(
+                    Some("Could not perform search".to_string()),
+                    message,
+                    Some(crate::types::NotificationType::Error(err.kind)),
+                ));
             }
         }
     }
 }
 
-impl Component for ConversationsListing {
+impl Component for CompactListing {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if matches!(self.focus, Focus::EntryFullscreen) {
             self.view_area = area.into();
@@ -1062,11 +1526,10 @@ impl Component for ConversationsListing {
             return;
         }
 
-        let (upper_left, bottom_right) = area;
-        {
+        if !self.unfocused() {
             let mut area = area;
-
             if !self.filter_term.is_empty() {
+                let (upper_left, bottom_right) = area;
                 let (x, y) = write_string_to_grid(
                     &format!(
                         "{} results for `{}` (Press ESC to exit)",
@@ -1080,14 +1543,18 @@ impl Component for ConversationsListing {
                     area,
                     Some(get_x(upper_left)),
                 );
-                for c in grid.row_iter(x..(get_x(bottom_right) + 1), y) {
-                    grid[c] = Cell::default();
+                let default_cell = {
+                    let mut ret = Cell::with_char(' ');
+                    ret.set_fg(self.color_cache.theme_default.fg)
+                        .set_bg(self.color_cache.theme_default.bg)
+                        .set_attrs(self.color_cache.theme_default.attrs);
+                    ret
+                };
+                for row in grid.bounds_iter(((x, y), set_y(bottom_right, y))) {
+                    for c in row {
+                        grid[c] = default_cell;
+                    }
                 }
-                clear_area(
-                    grid,
-                    ((x, y), set_y(bottom_right, y)),
-                    self.color_cache.theme_default,
-                );
                 context
                     .dirty_areas
                     .push_back((upper_left, set_y(bottom_right, y + 1)));
@@ -1095,7 +1562,8 @@ impl Component for ConversationsListing {
                 area = (set_y(upper_left, y + 1), bottom_right);
             }
             let (upper_left, bottom_right) = area;
-            let rows = (get_y(bottom_right) - get_y(upper_left) + 1) / 3;
+            let rows = get_y(bottom_right) - get_y(upper_left) + 1;
+
             if let Some(modifier) = self.modifier_command.take() {
                 if let Some(mvm) = self.movement.as_ref() {
                     match mvm {
@@ -1165,7 +1633,7 @@ impl Component for ConversationsListing {
                             }
                             if modifier == Modifier::Intersection {
                                 for c in (0..self.cursor_pos.2).chain(
-                                    (std::cmp::min(self.length, self.cursor_pos.2 + amount + 1) + 1)
+                                    (std::cmp::min(self.length, self.cursor_pos.2 + amount) + 1)
                                         ..self.length,
                                 ) {
                                     if let Some(thread) = self.get_thread_under_cursor(c) {
@@ -1199,7 +1667,7 @@ impl Component for ConversationsListing {
                             if modifier == Modifier::Intersection {
                                 for c in (0..self.cursor_pos.2).chain(
                                     (std::cmp::min(
-                                        self.cursor_pos.2 + rows * multiplier + 1,
+                                        self.cursor_pos.2 + rows * multiplier,
                                         self.length,
                                     ) + 1)..self.length,
                                 ) {
@@ -1228,7 +1696,7 @@ impl Component for ConversationsListing {
                                 }
                             }
                             if modifier == Modifier::Intersection {
-                                for c in (self.cursor_pos.2 + 1)..self.length {
+                                for c in (self.cursor_pos.2)..self.length {
                                     if let Some(thread) = self.get_thread_under_cursor(c) {
                                         self.rows
                                             .update_selection_with_thread(thread, |e| *e = false);
@@ -1267,24 +1735,13 @@ impl Component for ConversationsListing {
             }
 
             if !self.rows.row_updates.is_empty() {
-                /* certain rows need to be updated (eg an unseen message was just set seen)
-                 */
-                while let Some(row) = self.rows.row_updates.pop() {
-                    self.update_line(context, row);
-                    let row: usize = self.rows.env_order[&row];
-
-                    let page_no = (self.cursor_pos.2).wrapping_div(rows);
+                while let Some(env_hash) = self.rows.row_updates.pop() {
+                    self.update_line(context, env_hash);
+                    let row: usize = self.rows.env_order[&env_hash];
+                    let page_no = (self.new_cursor_pos.2).wrapping_div(rows);
 
                     let top_idx = page_no * rows;
-                    /* Update row only if it's currently visible */
-                    if row >= top_idx && row < top_idx + rows {
-                        let area = (
-                            set_y(upper_left, get_y(upper_left) + (3 * (row % rows))),
-                            set_y(bottom_right, get_y(upper_left) + (3 * (row % rows) + 2)),
-                        );
-                        self.highlight_line(grid, area, row, context);
-                        context.dirty_areas.push_back(area);
-                    }
+                    self.force_draw |= row >= top_idx && row < top_idx + rows;
                 }
                 if self.force_draw {
                     /* Draw the entire list */
@@ -1295,25 +1752,14 @@ impl Component for ConversationsListing {
                 /* Draw the entire list */
                 self.draw_list(grid, area, context);
             }
-        }
-        if matches!(self.focus, Focus::Entry) {
+        } else {
             if self.length == 0 && self.dirty {
                 clear_area(grid, area, self.color_cache.theme_default);
                 context.dirty_areas.push_back(area);
                 return;
             }
 
-            let entry_area = (
-                set_x(upper_left, get_x(upper_left) + width!(area) / 3 + 2),
-                bottom_right,
-            );
-            let gap_area = (
-                pos_dec(upper_left!(entry_area), (1, 0)),
-                bottom_right!(entry_area),
-            );
-            clear_area(grid, gap_area, self.color_cache.theme_default);
-            context.dirty_areas.push_back(gap_area);
-            self.view_area = entry_area.into();
+            self.view_area = area.into();
         }
         self.dirty = false;
     }
@@ -1355,17 +1801,17 @@ impl Component for ConversationsListing {
                     return true;
                 }
                 UIEvent::Input(ref k)
-                    if !matches!(self.focus, Focus::None)
+                    if matches!(self.focus, Focus::Entry)
                         && shortcut!(k == shortcuts[Shortcuts::LISTING]["exit_entry"]) =>
                 {
                     self.set_focus(Focus::None, context);
                     return true;
                 }
                 UIEvent::Input(ref k)
-                    if matches!(self.focus, Focus::Entry)
+                    if matches!(self.focus, Focus::None)
                         && shortcut!(k == shortcuts[Shortcuts::LISTING]["focus_right"]) =>
                 {
-                    self.set_focus(Focus::EntryFullscreen, context);
+                    self.set_focus(Focus::Entry, context);
                     return true;
                 }
                 UIEvent::Input(ref k)
@@ -1391,68 +1837,37 @@ impl Component for ConversationsListing {
                 {
                     if self.modifier_active && self.modifier_command.is_none() {
                         self.modifier_command = Some(Modifier::default());
-                    } else if let Some(thread) = self.get_thread_under_cursor(self.cursor_pos.2) {
-                        self.rows.update_selection_with_thread(thread, |e| *e = !*e);
+                    } else if let Some(thread_hash) =
+                        self.get_thread_under_cursor(self.cursor_pos.2)
+                    {
+                        self.rows
+                            .update_selection_with_thread(thread_hash, |e| *e = !*e);
                         self.set_dirty(true);
                     }
                     return true;
                 }
-                UIEvent::EnvelopeRename(ref old_hash, ref new_hash) => {
-                    let account = &context.accounts[&self.cursor_pos.0];
-                    let threads = account.collection.get_threads(self.cursor_pos.1);
-                    if !account.collection.contains_key(new_hash) {
-                        return false;
-                    }
-                    let env_thread_node_hash = account.collection.get_env(*new_hash).thread();
-                    if !threads.thread_nodes.contains_key(&env_thread_node_hash) {
-                        return false;
-                    }
-                    let thread: ThreadHash =
-                        threads.find_group(threads.thread_nodes()[&env_thread_node_hash].group);
-                    drop(threads);
-                    if self.rows.thread_order.contains_key(&thread) {
-                        self.rows.rename_env(*old_hash, *new_hash);
-                    }
-
-                    self.set_dirty(true);
-                }
-                UIEvent::EnvelopeRemove(ref _env_hash, ref thread_hash) => {
-                    if self.rows.thread_order.contains_key(thread_hash) {
-                        self.refresh_mailbox(context, false);
-                        self.set_dirty(true);
-                    }
-                }
-                UIEvent::EnvelopeUpdate(ref env_hash) => {
-                    let account = &context.accounts[&self.cursor_pos.0];
-                    let threads = account.collection.get_threads(self.cursor_pos.1);
-                    if !account.collection.contains_key(env_hash) {
-                        return false;
-                    }
-                    let env_thread_node_hash = account.collection.get_env(*env_hash).thread();
-                    if !threads.thread_nodes.contains_key(&env_thread_node_hash) {
-                        return false;
-                    }
-                    let thread: ThreadHash =
-                        threads.find_group(threads.thread_nodes()[&env_thread_node_hash].group);
-                    drop(threads);
-                    if self.rows.thread_order.contains_key(&thread) {
-                        self.rows.row_updates.push(*env_hash);
-                    }
-
-                    self.set_dirty(true);
-                }
-                UIEvent::Action(ref action) => match action {
-                    Action::SubSort(field, order) if !self.unfocused() => {
-                        self.subsort = (*field, *order);
-                        return true;
-                    }
-                    Action::Sort(field, order) if !self.unfocused() => {
-                        self.sort = (*field, *order);
-                        return true;
-                    }
-                    Action::Listing(ToggleThreadSnooze) if !self.unfocused() => {
-                        /*
-                        if let Some(thread) = self.get_thread_under_cursor(self.cursor_pos.2) {
+                UIEvent::Action(ref action) => {
+                    match action {
+                        Action::Sort(field, order) if !self.unfocused() => {
+                            self.sort = (*field, *order);
+                            self.sortcmd = true;
+                            if !self.filtered_selection.is_empty() {
+                                // [ref:FIXME]: perform sort
+                                self.set_dirty(true);
+                            } else {
+                                self.refresh_mailbox(context, false);
+                            }
+                            return true;
+                        }
+                        Action::SubSort(field, order) if !self.unfocused() => {
+                            self.subsort = (*field, *order);
+                            // [ref:FIXME]: perform subsort.
+                            return true;
+                        }
+                        Action::Listing(ToggleThreadSnooze) if !self.unfocused() => {
+                            // [ref:FIXME]: Re-implement toggle thread snooze
+                            /*
+                            let thread = self.get_thread_under_cursor(self.cursor_pos.2);
                             let account = &mut context.accounts[&self.cursor_pos.0];
                             account
                                 .collection
@@ -1466,18 +1881,19 @@ impl Component for ConversationsListing {
                                 });
                             self.rows.row_updates.push(thread);
                             self.refresh_mailbox(context, false);
+                            */
+                            return true;
                         }
-                        */
-                        return true;
+
+                        _ => {}
                     }
-                    _ => {}
-                },
+                }
                 _ => {}
             }
         }
         match *event {
             UIEvent::ConfigReload { old_settings: _ } => {
-                self.color_cache = ColorCache::new(context, IndexStyle::Conversations);
+                self.color_cache = ColorCache::new(context, IndexStyle::Compact);
                 self.refresh_mailbox(context, true);
                 self.set_dirty(true);
             }
@@ -1491,39 +1907,56 @@ impl Component for ConversationsListing {
                 self.refresh_mailbox(context, false);
                 self.set_dirty(true);
             }
+            UIEvent::EnvelopeRename(_, ref new_hash) => {
+                let account = &context.accounts[&self.cursor_pos.0];
+                let threads = account.collection.get_threads(self.cursor_pos.1);
+                if !account.collection.contains_key(new_hash) {
+                    return false;
+                }
+                let new_env_thread_node_hash = account.collection.get_env(*new_hash).thread();
+                if !threads.thread_nodes.contains_key(&new_env_thread_node_hash) {
+                    return false;
+                }
+                let thread: ThreadHash =
+                    threads.find_group(threads.thread_nodes()[&new_env_thread_node_hash].group);
+                drop(threads);
+                if self.rows.contains_thread(thread) {
+                    self.rows.row_update_add_thread(thread);
+                }
+
+                self.set_dirty(true);
+            }
+            UIEvent::EnvelopeRemove(_, ref thread_hash) => {
+                if self.rows.thread_order.contains_key(thread_hash) {
+                    self.refresh_mailbox(context, false);
+                    self.set_dirty(true);
+                }
+            }
+            UIEvent::EnvelopeUpdate(ref env_hash) => {
+                let account = &context.accounts[&self.cursor_pos.0];
+                let threads = account.collection.get_threads(self.cursor_pos.1);
+                if !account.collection.contains_key(env_hash) {
+                    return false;
+                }
+                let new_env_thread_node_hash = account.collection.get_env(*env_hash).thread();
+                if !threads.thread_nodes.contains_key(&new_env_thread_node_hash) {
+                    return false;
+                }
+                let thread: ThreadHash =
+                    threads.find_group(threads.thread_nodes()[&new_env_thread_node_hash].group);
+                drop(threads);
+                if self.rows.contains_thread(thread) {
+                    self.rows.row_update_add_thread(thread);
+                }
+
+                self.set_dirty(true);
+            }
             UIEvent::ChangeMode(UIMode::Normal) => {
                 self.set_dirty(true);
             }
             UIEvent::Resize => {
                 self.set_dirty(true);
             }
-            UIEvent::Action(ref action) => match action {
-                Action::Listing(Search(ref filter_term)) if !self.unfocused() => {
-                    match context.accounts[&self.cursor_pos.0].search(
-                        filter_term,
-                        self.sort,
-                        self.cursor_pos.1,
-                    ) {
-                        Ok(job) => {
-                            let handle = context.accounts[&self.cursor_pos.0]
-                                .main_loop_handler
-                                .job_executor
-                                .spawn_specialized("search".into(), job);
-                            self.search_job = Some((filter_term.to_string(), handle));
-                        }
-                        Err(err) => {
-                            context.replies.push_back(UIEvent::Notification(
-                                Some("Could not perform search".to_string()),
-                                err.to_string(),
-                                Some(crate::types::NotificationType::Error(err.kind)),
-                            ));
-                        }
-                    };
-                    self.set_dirty(true);
-                    return true;
-                }
-                _ => {}
-            },
             UIEvent::Input(Key::Esc)
                 if !self.unfocused()
                     && self
@@ -1533,17 +1966,67 @@ impl Component for ConversationsListing {
                         .cloned()
                         .any(std::convert::identity) =>
             {
-                self.rows.clear_selection();
+                for v in self.rows.selection.values_mut() {
+                    *v = false;
+                }
                 self.set_dirty(true);
                 return true;
             }
-            UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Char(''))
-                if !self.unfocused() && !&self.filter_term.is_empty() =>
-            {
+            UIEvent::Input(Key::Esc) if !self.unfocused() && !self.filter_term.is_empty() => {
                 self.set_coordinates((self.new_cursor_pos.0, self.new_cursor_pos.1));
                 self.refresh_mailbox(context, false);
                 self.set_dirty(true);
                 return true;
+            }
+            UIEvent::Action(Action::Listing(Search(ref filter_term))) if !self.unfocused() => {
+                match context.accounts[&self.cursor_pos.0].search(
+                    filter_term,
+                    self.sort,
+                    self.cursor_pos.1,
+                ) {
+                    Ok(job) => {
+                        let handle = context.accounts[&self.cursor_pos.0]
+                            .main_loop_handler
+                            .job_executor
+                            .spawn_specialized("search".into(), job);
+                        self.search_job = Some((filter_term.to_string(), handle));
+                    }
+                    Err(err) => {
+                        context.replies.push_back(UIEvent::Notification(
+                            Some("Could not perform search".to_string()),
+                            err.to_string(),
+                            Some(crate::types::NotificationType::Error(err.kind)),
+                        ));
+                    }
+                };
+                self.set_dirty(true);
+            }
+            UIEvent::Action(Action::Listing(Select(ref search_term))) if !self.unfocused() => {
+                match context.accounts[&self.cursor_pos.0].search(
+                    search_term,
+                    self.sort,
+                    self.cursor_pos.1,
+                ) {
+                    Ok(job) => {
+                        let mut handle = context.accounts[&self.cursor_pos.0]
+                            .main_loop_handler
+                            .job_executor
+                            .spawn_specialized("select_by_search".into(), job);
+                        if let Ok(Some(search_result)) = try_recv_timeout!(&mut handle.chan) {
+                            self.select(search_term, search_result, context);
+                        } else {
+                            self.select_job = Some((search_term.to_string(), handle));
+                        }
+                    }
+                    Err(err) => {
+                        context.replies.push_back(UIEvent::Notification(
+                            Some("Could not perform search".to_string()),
+                            err.to_string(),
+                            Some(crate::types::NotificationType::Error(err.kind)),
+                        ));
+                    }
+                };
+                self.set_dirty(true);
             }
             UIEvent::StatusEvent(StatusEvent::JobFinished(ref job_id))
                 if self
@@ -1567,9 +2050,23 @@ impl Component for ConversationsListing {
                 }
                 self.set_dirty(true);
             }
+            UIEvent::StatusEvent(StatusEvent::JobFinished(ref job_id))
+                if self
+                    .select_job
+                    .as_ref()
+                    .map(|(_, j)| j == job_id)
+                    .unwrap_or(false) =>
+            {
+                let (search_term, mut handle) = self.select_job.take().unwrap();
+                match handle.chan.try_recv() {
+                    Err(_) => { /* search was canceled */ }
+                    Ok(None) => { /* something happened, perhaps a worker thread panicked */ }
+                    Ok(Some(results)) => self.select(&search_term, results, context),
+                }
+                self.set_dirty(true);
+            }
             _ => {}
         }
-
         false
     }
 

@@ -80,6 +80,9 @@ pub use crate::utilities::*;
 pub mod contacts;
 pub use crate::contacts::*;
 
+pub mod mail;
+pub use crate::mail::*;
+
 #[macro_use]
 pub mod conf;
 pub use crate::conf::{

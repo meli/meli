@@ -186,7 +186,7 @@ pub enum SendMail {
 }
 
 /// Shell command compose hooks (See
-/// [`crate::components::mail::compose::hooks::Hook`])
+/// [`crate::mail::compose::hooks::Hook`])
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct ComposeHook {
@@ -196,7 +196,7 @@ pub struct ComposeHook {
     command: String,
 }
 
-impl From<ComposeHook> for crate::components::mail::hooks::Hook {
+impl From<ComposeHook> for crate::mail::hooks::Hook {
     fn from(c: ComposeHook) -> Self {
         Self::new_shell_command(c.name.into(), c.command)
     }

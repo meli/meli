@@ -33,8 +33,8 @@ pub struct AccountStatus {
     id: ComponentId,
 }
 
-impl fmt::Display for AccountStatus {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl std::fmt::Display for AccountStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "status")
     }
 }

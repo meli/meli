@@ -140,8 +140,8 @@ impl HtmlView {
     }
 }
 
-impl fmt::Display for HtmlView {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl std::fmt::Display for HtmlView {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "view")
     }
 }
