@@ -48,7 +48,7 @@ use smallvec::SmallVec;
 use super::*;
 use crate::{
     jobs::JobExecutor,
-    terminal::{get_events, screen::Screen},
+    terminal::{get_events, Screen},
 };
 
 struct InputHandler {
