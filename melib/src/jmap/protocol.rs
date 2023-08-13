@@ -78,7 +78,7 @@ impl Request {
     }
 }
 
-pub async fn get_mailboxes(conn: &JmapConnection) -> Result<HashMap<MailboxHash, JmapMailbox>> {
+pub async fn get_mailboxes(conn: &mut JmapConnection) -> Result<HashMap<MailboxHash, JmapMailbox>> {
     let seq = get_request_no!(conn.request_no);
     let res_text = conn
         .send_request(serde_json::to_string(&json!({
@@ -96,6 +96,7 @@ pub async fn get_mailboxes(conn: &JmapConnection) -> Result<HashMap<MailboxHash,
     let GetResponse::<MailboxObject> {
         list, account_id, ..
     } = m;
+    conn.last_method_response = Some(res_text);
     // Is account set as `personal`? (`isPersonal` property). Then, even if
     // `isSubscribed` is false on a mailbox, it should be regarded as
     // subscribed.
@@ -167,7 +168,7 @@ pub async fn get_mailboxes(conn: &JmapConnection) -> Result<HashMap<MailboxHash,
 }
 
 pub async fn get_message_list(
-    conn: &JmapConnection,
+    conn: &mut JmapConnection,
     mailbox: &JmapMailbox,
 ) -> Result<Vec<Id<EmailObject>>> {
     let email_call: EmailQuery = EmailQuery::new(
@@ -198,6 +199,7 @@ pub async fn get_message_list(
     *conn.store.online_status.lock().await = (std::time::Instant::now(), Ok(()));
     let m = QueryResponse::<EmailObject>::try_from(v.method_responses.remove(0))?;
     let QueryResponse::<EmailObject> { ids, .. } = m;
+    conn.last_method_response = Some(res_text);
     Ok(ids)
 }
 
@@ -268,7 +270,7 @@ impl EmailFetchState {
 
     pub async fn fetch(
         &mut self,
-        conn: &JmapConnection,
+        conn: &mut JmapConnection,
         store: &Store,
         mailbox_hash: MailboxHash,
     ) -> Result<Vec<Envelope>> {
@@ -325,6 +327,7 @@ impl EmailFetchState {
                     let e =
                         GetResponse::<EmailObject>::try_from(v.method_responses.pop().unwrap())?;
                     let GetResponse::<EmailObject> { list, state, .. } = e;
+                    conn.last_method_response = Some(res_text);
 
                     if self.must_update_state(conn, mailbox_hash, state).await? {
                         *self = Self::Start { batch_size };

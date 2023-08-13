@@ -33,6 +33,7 @@ pub struct JmapConnection {
     pub client: Arc<HttpClient>,
     pub server_conf: JmapServerConf,
     pub store: Arc<Store>,
+    pub last_method_response: Option<String>,
 }
 
 impl JmapConnection {
@@ -73,6 +74,7 @@ impl JmapConnection {
             client: Arc::new(client),
             server_conf,
             store,
+            last_method_response: None,
         })
     }
 

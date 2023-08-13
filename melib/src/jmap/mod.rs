@@ -325,7 +325,7 @@ impl MailBackend for JmapType {
             let mut fetch_state = protocol::EmailFetchState::Start { batch_size };
             loop {
                 let res = fetch_state.fetch(
-                    &conn,
+                    &mut conn,
                     &store,
                     mailbox_hash,
                 ).await?;
@@ -383,7 +383,7 @@ impl MailBackend for JmapType {
             let mut conn = connection.lock().await;
             conn.connect().await?;
             if store.mailboxes.read().unwrap().is_empty() {
-                let new_mailboxes = debug!(protocol::get_mailboxes(&conn).await)?;
+                let new_mailboxes = debug!(protocol::get_mailboxes(&mut conn).await)?;
                 *store.mailboxes.write().unwrap() = new_mailboxes;
             }
 
