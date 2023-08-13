@@ -62,7 +62,6 @@ impl BackendOp for JmapOp {
             conn.connect().await?;
             let download_url = conn.session.lock().unwrap().download_url.clone();
             let mut res = conn
-                .client
                 .get_async(&download_request_format(
                     download_url.as_str(),
                     &conn.mail_account_id(),

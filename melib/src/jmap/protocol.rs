@@ -185,11 +185,7 @@ pub async fn get_message_list(
     let mut req = Request::new(conn.request_no.clone());
     req.add_call(&email_call);
 
-    let api_url = conn.session.lock().unwrap().api_url.clone();
-    let mut res = conn
-        .client
-        .post_async(api_url.as_str(), serde_json::to_string(&req)?)
-        .await?;
+    let mut res = conn.post_async(None, serde_json::to_string(&req)?).await?;
 
     let res_text = res.text().await?;
     let mut v: MethodResponse = match deserialize_from_str(&res_text) {
@@ -216,8 +212,7 @@ pub async fn get_message(conn: &JmapConnection, ids: &[String]) -> Result<Vec<En
     let mut req = Request::new(conn.request_no.clone());
     req.add_call(&email_call);
     let mut res = conn
-        .client
-        .post_async(&conn.session.api_url, serde_json::to_string(&req)?)
+        .post_async(None, serde_json::to_string(&req)?)
         .await?;
 
     let res_text = res.text().await?;

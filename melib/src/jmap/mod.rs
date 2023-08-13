@@ -423,14 +423,13 @@ impl MailBackend for JmapType {
              * 1. upload binary blob, get blobId
              * 2. Email/import
              */
-            let (api_url, upload_url) = {
-                let lck = conn.session.lock().unwrap();
-                (lck.api_url.clone(), lck.upload_url.clone())
-            };
+            let upload_url = { conn.session.lock().unwrap().upload_url.clone() };
             let mut res = conn
-                .client
                 .post_async(
-                    &upload_request_format(upload_url.as_str(), &conn.mail_account_id()),
+                    Some(&upload_request_format(
+                        upload_url.as_str(),
+                        &conn.mail_account_id(),
+                    )),
                     bytes,
                 )
                 .await?;
@@ -472,10 +471,7 @@ impl MailBackend for JmapType {
                 .emails(email_imports);
 
             req.add_call(&import_call);
-            let mut res = conn
-                .client
-                .post_async(api_url.as_str(), serde_json::to_string(&req)?)
-                .await?;
+            let mut res = conn.post_async(None, serde_json::to_string(&req)?).await?;
             let res_text = res.text().await?;
 
             let mut v: MethodResponse = match deserialize_from_str(&res_text) {
@@ -549,12 +545,8 @@ impl MailBackend for JmapType {
 
             let mut req = Request::new(conn.request_no.clone());
             req.add_call(&email_call);
-            let api_url = conn.session.lock().unwrap().api_url.clone();
 
-            let mut res = conn
-                .client
-                .post_async(api_url.as_str(), serde_json::to_string(&req)?)
-                .await?;
+            let mut res = conn.post_async(None, serde_json::to_string(&req)?).await?;
 
             let res_text = res.text().await?;
             let mut v: MethodResponse = match deserialize_from_str(&res_text) {
@@ -672,7 +664,6 @@ impl MailBackend for JmapType {
                 }
             }
             let conn = connection.lock().await;
-            let api_url = conn.session.lock().unwrap().api_url.clone();
 
             let email_set_call: EmailSet = EmailSet::new(
                 Set::<EmailObject>::new()
@@ -683,10 +674,7 @@ impl MailBackend for JmapType {
             let mut req = Request::new(conn.request_no.clone());
             let _prev_seq = req.add_call(&email_set_call);
 
-            let mut res = conn
-                .client
-                .post_async(api_url.as_str(), serde_json::to_string(&req)?)
-                .await?;
+            let mut res = conn.post_async(None, serde_json::to_string(&req)?).await?;
 
             let res_text = res.text().await?;
 
@@ -789,12 +777,8 @@ impl MailBackend for JmapType {
             );
 
             req.add_call(&email_call);
-            let api_url = conn.session.lock().unwrap().api_url.clone();
-            //debug!(serde_json::to_string(&req)?);
-            let mut res = conn
-                .client
-                .post_async(api_url.as_str(), serde_json::to_string(&req)?)
-                .await?;
+
+            let mut res = conn.post_async(None, serde_json::to_string(&req)?).await?;
 
             let res_text = res.text().await?;
             /*

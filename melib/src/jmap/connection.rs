@@ -280,14 +280,15 @@ impl JmapConnection {
             } else {
                 return Ok(());
             }
-            let api_url = self.session.lock().unwrap().api_url.clone();
-            let mut res = self
-                .client
-                .post_async(api_url.as_str(), serde_json::to_string(&req)?)
-                .await?;
+            let mut res = self.post_async(None, serde_json::to_string(&req)?).await?;
 
             let res_text = res.text().await?;
-            debug!(&res_text);
+            if cfg!(feature = "jmap-trace") {
+                log::trace!(
+                    "email_changes(): for mailbox {mailbox_hash} response {:?}",
+                    res_text
+                );
+            }
             let mut v: MethodResponse = match deserialize_from_str(&res_text) {
                 Err(err) => {
                     *self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
@@ -410,8 +411,16 @@ impl JmapConnection {
                 }
                 Ok(_) => {}
                 Err(err) => {
-                    debug!(mailbox_hash);
-                    debug!(err);
+                    log::error!(
+                        "Could not deserialize EmailQueryChangesResponse from server response:
+- mailbox_hash: {mailbox_hash}
+- error: {err}
+- debug details:
+  Json request was: {:?}
+  Json reply was: {}",
+                        serde_json::to_string(&req),
+                        res_text
+                    );
                 }
             }
             let GetResponse::<EmailObject> { list, .. } =
@@ -456,11 +465,15 @@ impl JmapConnection {
     }
 
     pub async fn send_request(&self, request: String) -> Result<String> {
-        let api_url = self.session.lock().unwrap().api_url.clone();
-        let mut res = self.client.post_async(api_url.as_str(), request).await?;
+        if cfg!(feature = "jmap-trace") {
+            log::trace!("send_request(): request {:?}", request);
+        }
+        let mut res = self.post_async(None, request).await?;
 
         let res_text = res.text().await?;
-        debug!(&res_text);
+        if cfg!(feature = "jmap-trace") {
+            log::trace!("send_request(): response {:?}", res_text);
+        }
         let _: MethodResponse = match deserialize_from_str(&res_text) {
             Err(err) => {
                 log::error!("{}", &err);
@@ -470,5 +483,35 @@ impl JmapConnection {
             Ok(s) => s,
         };
         Ok(res_text)
+    }
+
+    pub async fn get_async(&self, url: &str) -> Result<isahc::Response<isahc::AsyncBody>> {
+        if cfg!(feature = "jmap-trace") {
+            let res = self.client.get_async(url).await;
+            log::trace!("get_async(): url `{}` response {:?}", url, res);
+            Ok(res?)
+        } else {
+            Ok(self.client.get_async(url).await?)
+        }
+    }
+
+    pub async fn post_async<T: Into<Vec<u8>> + Send + Sync>(
+        &self,
+        api_url: Option<&str>,
+        request: T,
+    ) -> Result<isahc::Response<isahc::AsyncBody>> {
+        let request: Vec<u8> = request.into();
+        if cfg!(feature = "jmap-trace") {
+            log::trace!(
+                "post_async(): request {:?}",
+                String::from_utf8_lossy(&request)
+            );
+        }
+        if let Some(api_url) = api_url {
+            Ok(self.client.post_async(api_url, request).await?)
+        } else {
+            let api_url = self.session.lock().unwrap().api_url.clone();
+            Ok(self.client.post_async(api_url.as_str(), request).await?)
+        }
     }
 }
