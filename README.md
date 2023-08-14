@@ -18,7 +18,7 @@ Official mirrors:
 
 ## Install
 - Try an [online interactive web demo](https://meli.delivery/wasm2.html "online interactive web demo") powered by WebAssembly
-- [`cargo install meli`](https://crates.io/crates/meli "crates.io meli package")
+- `cargo install --git https://git.meli.delivery/meli/meli.git meli`
 - [Download and install pre-built debian package, static linux binary](https://github.com/meli/meli/releases/ "github releases for meli"), or
 - Install with [Nix](https://search.nixos.org/packages?show=meli&query=meli&from=0&size=30&sort=relevance&channel=unstable#disabled "nixos package search results for 'meli'")
 
