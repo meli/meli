@@ -30,15 +30,6 @@ use socket2::{Domain, SockAddr, Socket};
 /// Connectivity Using
 /// Concurrency](https://datatracker.ietf.org/doc/html/rfc8305) to
 /// connect.
-///
-/// Examples
-/// ========
-///
-/// ```no_run
-/// let socket_addr = ("www.example", 80);
-/// let tcp_stream = connect(socket_addr, None)?;
-/// # Ok::<(), std::io::Error>(())
-/// ```
 pub fn connect<A: ToSocketAddrs>(addr: A, timeout: Option<Duration>) -> Result<TcpStream> {
     let mut happy = HappyEyeballs::new()?;
     let start = Instant::now();
