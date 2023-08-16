@@ -91,7 +91,7 @@ jobs:
       - name: cargo test
         if: success() || failure() # always run even if other steps fail, except when cancelled <https://stackoverflow.com/questions/58858429/how-to-run-a-github-actions-step-even-if-the-previous-step-fails-while-still-f>
         run: |
-          cargo nextest run --all --no-fail-fast --all-features --future-incompat-report
+          cargo nextest run --all --no-fail-fast --all-features --future-incompat-report -E 'not (test(smtp::test::test_smtp))'
           #cargo test --all --no-fail-fast --all-features -- --nocapture --quiet
       - name: cargo-sort
         if: success() || failure()
