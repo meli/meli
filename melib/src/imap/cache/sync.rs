@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use imap_codec::{
+use imap_codec::imap_types::{
     fetch::{MacroOrMessageDataItemNames, MessageDataItemName},
     search::SearchKey,
     sequence::SequenceSet,

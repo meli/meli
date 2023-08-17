@@ -44,11 +44,14 @@ use std::{
 };
 
 use futures::io::{AsyncReadExt, AsyncWriteExt};
-#[cfg(feature = "deflate_compression")]
-use imap_codec::extensions::compress::CompressionAlgorithm;
 use imap_codec::{
+    CommandCodec,
+    encode::{Encoder, Fragment},
+};
+#[cfg(feature = "deflate_compression")]
+use imap_codec::imap_types::extensions::compress::CompressionAlgorithm;
+use imap_codec::imap_types::{
     auth::AuthMechanism,
-    codec::{Encode, Fragment},
     command::{Command, CommandBody},
     core::{AString, LiteralMode, NonEmptyVec, Tag},
     extensions::enable::CapabilityEnable,
@@ -306,7 +309,7 @@ impl ImapStream {
                 &server_conf.server_username, &server_conf.server_password
             );
             ret.send_command(CommandBody::authenticate_with_ir(
-                AuthMechanism::PLAIN,
+                AuthMechanism::Plain,
                 credentials.as_bytes(),
             ))
             .await?;
@@ -394,7 +397,7 @@ impl ImapStream {
                     })
                     .chain_err_kind(ErrorKind::Configuration)?;
                 ret.send_command(CommandBody::authenticate_with_ir(
-                    AuthMechanism::XOAUTH2,
+                    AuthMechanism::XOAuth2,
                     &xoauth2,
                 ))
                 .await?;
@@ -539,7 +542,7 @@ impl ImapStream {
                 ImapProtocol::ManageSieve => {}
             }
 
-            for action in command.encode() {
+            for action in CommandCodec::default().encode(&command) {
                 match action {
                     Fragment::Line { data } => {
                         self.stream.write_all(&data).await?;

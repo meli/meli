@@ -21,35 +21,22 @@
 
 use std::sync::Arc;
 
-use imap_codec::{
-    command::{AppendError, CopyError, ListError},
-    core::LiteralError,
-    extensions::r#move::MoveError,
-    sequence::SequenceSetError,
+use imap_codec::imap_types::{
+    command::error::{AppendError, CopyError, ListError},
+    error::ValidationError,
+    extensions::r#move::error::MoveError,
 };
 
 use crate::error::{Error, ErrorKind};
 
-impl From<LiteralError> for Error {
+impl From<ValidationError> for Error {
     #[inline]
-    fn from(error: LiteralError) -> Self {
+    fn from(error: ValidationError) -> Self {
         Self {
             summary: error.to_string().into(),
             details: None,
             source: Some(Arc::new(error)),
             kind: ErrorKind::Configuration,
-        }
-    }
-}
-
-impl From<SequenceSetError> for Error {
-    #[inline]
-    fn from(error: SequenceSetError) -> Self {
-        Self {
-            summary: error.to_string().into(),
-            details: None,
-            source: Some(Arc::new(error)),
-            kind: ErrorKind::Bug,
         }
     }
 }

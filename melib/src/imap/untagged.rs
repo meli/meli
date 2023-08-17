@@ -21,7 +21,7 @@
 
 use std::convert::{TryFrom, TryInto};
 
-use imap_codec::{command::CommandBody, search::SearchKey, sequence::SequenceSet};
+use imap_codec::imap_types::{command::CommandBody, search::SearchKey, sequence::SequenceSet};
 
 use super::{ImapConnection, MailboxSelection, UID};
 use crate::{

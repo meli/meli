@@ -20,7 +20,7 @@
  */
 use std::sync::Arc;
 
-use imap_codec::search::SearchKey;
+use imap_codec::imap_types::search::SearchKey;
 
 use super::*;
 use crate::backends::SpecialUsageMailbox;

@@ -111,11 +111,10 @@ pub use attachments::{Attachment, AttachmentBuilder};
 pub use compose::{attachment_from_file, Draft};
 pub use headers::*;
 #[cfg(feature = "imap")]
-use imap_codec::{
+use imap_codec::imap_types::{
     core::{AString, Atom, NonEmptyVec},
-    fetch::{MacroOrMessageDataItemNames, MessageDataItemName},
+    fetch::{MacroOrMessageDataItemNames, MessageDataItemName, Section},
     flag::Flag as ImapCodecFlag,
-    section::Section,
 };
 use smallvec::SmallVec;
 

@@ -54,18 +54,7 @@ uuid = { version = "^1", features = ["serde", "v4", "v5"] }
 xdg = "2.1.0"
 xdg-utils = "^0.4.0"
 
-[dependencies.imap-codec]
-version = "0.10.0"
-features = [
-    "ext_condstore_qresync",
-    "ext_enable",
-    "ext_idle",
-    "ext_literal",
-    "ext_move",
-    "ext_sasl_ir",
-    "ext_unselect"
-]
-optional = true
+imap-codec = { version = "1.0.0-beta", features = ["ext_condstore_qresync"], optional = true }
 
 [dev-dependencies]
 mailin-embedded = { version = "0.7", features = ["rtls"] }
@@ -75,7 +64,7 @@ stderrlog = "^0.5"
 default = ["unicode_algorithms", "imap", "nntp", "maildir", "mbox", "vcard", "smtp", "deflate_compression"]
 
 debug-tracing = []
-deflate_compression = ["flate2", "imap-codec/ext_compress"]
+deflate_compression = ["flate2"]
 gpgme = []
 http = ["isahc"]
 http-static = ["isahc", "isahc/static-curl"]

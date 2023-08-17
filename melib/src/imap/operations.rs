@@ -21,7 +21,7 @@
 
 use std::sync::Arc;
 
-use imap_codec::fetch::MessageDataItemName;
+use imap_codec::imap_types::fetch::MessageDataItemName;
 
 use super::*;
 use crate::{backends::*, error::Error};

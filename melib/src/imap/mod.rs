@@ -53,7 +53,7 @@ use std::{
 use cache::ImapCacheReset;
 use cache::ModSequence;
 use futures::{lock::Mutex as FutureMutex, stream::Stream};
-use imap_codec::{
+use imap_codec::imap_types::{
     command::CommandBody,
     core::Literal,
     flag::{Flag as ImapCodecFlag, StoreResponse, StoreType},
