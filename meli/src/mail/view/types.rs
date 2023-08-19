@@ -19,7 +19,9 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use melib::{attachment_types::Charset, pgp::DecryptionMetadata, Attachment, Error, Result};
+use std::fmt::Write as IoWrite;
+
+use melib::{attachment_types::Charset, error::*, pgp::DecryptionMetadata, Attachment, Result};
 
 use crate::{
     conf::shortcuts::EnvelopeViewShortcuts,
@@ -101,31 +103,97 @@ pub enum Source {
     Raw,
 }
 
-#[derive(PartialEq, Debug, Default)]
-pub enum ViewMode {
-    #[default]
-    Normal,
-    Url,
-    Attachment(usize),
-    Source(Source),
-    Subview,
+bitflags::bitflags! {
+    #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+    pub struct ViewOptions: u8 {
+        const DEFAULT           = 0;
+        const URL               = 1;
+        const SOURCE            = Self::URL.bits() << 1;
+        const SOURCE_RAW        = Self::SOURCE.bits() << 1;
+    }
 }
 
-macro_rules! is_variant {
-    ($n:ident, $($var:tt)+) => {
-        #[inline]
-        pub fn $n(&self) -> bool {
-            matches!(self, Self::$($var)*)
+impl Default for ViewOptions {
+    fn default() -> Self {
+        Self::DEFAULT
+    }
+}
+
+impl ViewOptions {
+    pub fn convert(
+        &self,
+        links: &mut Vec<Link>,
+        attachment: &melib::Attachment,
+        text: &str,
+    ) -> String {
+        let mut text = if self.contains(Self::SOURCE) {
+            if self.contains(Self::SOURCE_RAW) {
+                String::from_utf8_lossy(attachment.raw()).into_owned()
+            } else {
+                /* Decode each header value */
+                let mut ret = String::new();
+                match melib::email::parser::headers::headers(attachment.raw()).map(|(_, v)| v) {
+                    Ok(headers) => {
+                        for (h, v) in headers {
+                            _ = match melib::email::parser::encodings::phrase(v, true) {
+                                Ok((_, v)) => ret.write_fmt(format_args!(
+                                    "{h}: {}\n",
+                                    String::from_utf8_lossy(&v)
+                                )),
+                                Err(err) => ret.write_fmt(format_args!("{h}: {err}\n")),
+                            };
+                        }
+                    }
+                    Err(err) => {
+                        _ = write!(&mut ret, "{err}");
+                    }
+                }
+                if !ret.ends_with("\n\n") {
+                    ret.push_str("\n\n");
+                }
+                ret.push_str(text);
+                ret
+            }
+        } else {
+            text.to_string()
+        };
+
+        while text.ends_with("\n\n") {
+            text.pop();
+            text.pop();
         }
-    };
-}
 
-impl ViewMode {
-    is_variant! { is_normal, Normal }
-    is_variant! { is_url, Url }
-    is_variant! { is_attachment, Attachment(_) }
-    is_variant! { is_source, Source(_) }
-    is_variant! { is_subview, Subview }
+        if self.contains(Self::URL) {
+            if links.is_empty() {
+                let finder = linkify::LinkFinder::new();
+                *links = finder
+                    .links(&text)
+                    .filter_map(|l| {
+                        if *l.kind() == linkify::LinkKind::Url {
+                            Some(Link {
+                                start: l.start(),
+                                end: l.end(),
+                                kind: LinkKind::Url,
+                            })
+                        } else if *l.kind() == linkify::LinkKind::Email {
+                            Some(Link {
+                                start: l.start(),
+                                end: l.end(),
+                                kind: LinkKind::Email,
+                            })
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<Link>>();
+            }
+            for (lidx, l) in links.iter().enumerate().rev() {
+                text.insert_str(l.start, &format!("[{}]", lidx));
+            }
+        }
+
+        text
+    }
 }
 
 #[derive(Debug)]
@@ -180,4 +248,314 @@ pub enum AttachmentDisplay {
         plaintext_display: Vec<AttachmentDisplay>,
         description: String,
     },
+}
+
+pub use filters::*;
+mod filters {
+    use std::{
+        borrow::Cow,
+        io::Write,
+        process::{Command, Stdio},
+        sync::Arc,
+    };
+
+    type ProcessEventFn = fn(&mut ViewFilter, &mut UIEvent, &mut Context) -> bool;
+
+    use melib::{
+        attachment_types::{ContentType, MultipartType, Text},
+        error::*,
+        text_processing::Truncate,
+        utils::xdg::query_default_app,
+        Attachment, Result,
+    };
+
+    use crate::{
+        components::*,
+        create_temp_file, desktop_exec_to_command,
+        terminal::{Area, CellBuffer},
+        Context, ErrorKind, StatusEvent, UIEvent,
+    };
+
+    #[derive(Clone)]
+    pub struct ViewFilter {
+        pub filter_invocation: String,
+        pub notice: Option<Cow<'static, str>>,
+        pub body_text: String,
+        pub unfiltered: Vec<u8>,
+        pub event_handler: Option<ProcessEventFn>,
+        pub id: ComponentId,
+    }
+
+    impl std::fmt::Debug for ViewFilter {
+        fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+            fmt.debug_struct(stringify!(ViewFilter))
+                .field("filter_invocation", &self.filter_invocation)
+                .field("notice", &self.notice)
+                .field("body_text", &self.body_text.trim_at_boundary(18))
+                .field("body_text_len", &self.body_text.len())
+                .field("event_handler", &self.event_handler.is_some())
+                .field("id", &self.id)
+                .finish()
+        }
+    }
+
+    impl std::fmt::Display for ViewFilter {
+        fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+            write!(fmt, "{}", self.filter_invocation.trim_at_boundary(5))
+        }
+    }
+
+    impl ViewFilter {
+        pub fn new_html(body: &Attachment, context: &mut Context) -> Result<Self> {
+            fn run(cmd: &str, args: &[&str], bytes: &[u8]) -> Result<String> {
+                let mut html_filter = Command::new(cmd)
+                    .args(args)
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::piped())
+                    .spawn()?;
+                html_filter
+                    .stdin
+                    .as_mut()
+                    .ok_or("Failed to write to html filter stdin")?
+                    .write_all(bytes)
+                    .chain_err_summary(|| "Failed to write to html filter stdin")?;
+                Ok(String::from_utf8_lossy(
+                    &html_filter
+                        .wait_with_output()
+                        .chain_err_summary(|| "Could not wait for process output")?
+                        .stdout,
+                )
+                .into())
+            }
+
+            let mut att = body;
+            let mut stack = vec![body];
+            while let Some(a) = stack.pop() {
+                match a.content_type {
+                    ContentType::Text {
+                        kind: Text::Html, ..
+                    } => {
+                        att = a;
+                        break;
+                    }
+                    ContentType::Text { .. }
+                    | ContentType::PGPSignature
+                    | ContentType::CMSSignature => {
+                        continue;
+                    }
+                    ContentType::Multipart {
+                        kind: MultipartType::Related,
+                        ref parts,
+                        ref parameters,
+                        ..
+                    } => {
+                        if let Some(main_attachment) = parameters
+                            .iter()
+                            .find_map(|(k, v)| if k == b"type" { Some(v) } else { None })
+                            .and_then(|t| parts.iter().find(|a| a.content_type == t.as_slice()))
+                        {
+                            stack.push(main_attachment);
+                        } else {
+                            for a in parts {
+                                if let ContentType::Text {
+                                    kind: Text::Html, ..
+                                } = a.content_type
+                                {
+                                    att = a;
+                                    break;
+                                }
+                            }
+                            stack.extend(parts);
+                        }
+                    }
+                    ContentType::Multipart {
+                        kind: MultipartType::Alternative,
+                        ref parts,
+                        ..
+                    } => {
+                        for a in parts {
+                            if let ContentType::Text {
+                                kind: Text::Html, ..
+                            } = a.content_type
+                            {
+                                att = a;
+                                break;
+                            }
+                        }
+                        stack.extend(parts);
+                    }
+                    ContentType::Multipart {
+                        kind: _, ref parts, ..
+                    } => {
+                        for a in parts {
+                            if let ContentType::Text {
+                                kind: Text::Html, ..
+                            } = a.content_type
+                            {
+                                att = a;
+                                break;
+                            }
+                        }
+                        stack.extend(parts);
+                    }
+                    _ => {}
+                }
+            }
+            let bytes: Vec<u8> = att.decode(Default::default());
+
+            let settings = &context.settings;
+            if let Some(filter_invocation) = settings.pager.html_filter.as_ref() {
+                match run("sh", &["-c", filter_invocation], &bytes) {
+                    Err(err) => {
+                        return Err(Error::new(format!(
+                            "Failed to start html filter process `{}`",
+                            filter_invocation,
+                        ))
+                        .set_source(Some(Arc::new(err)))
+                        .set_kind(ErrorKind::External));
+                    }
+                    Ok(body_text) => {
+                        let notice =
+                            Some(format!("Text piped through `{}`.\n\n", filter_invocation).into());
+                        return Ok(Self {
+                            filter_invocation: filter_invocation.clone(),
+                            notice,
+                            body_text,
+                            unfiltered: bytes,
+                            event_handler: Some(Self::html_process_event),
+                            id: ComponentId::default(),
+                        });
+                    }
+                }
+            }
+            if let Ok(body_text) = run("w3m", &["-I", "utf-8", "-T", "text/html"], &bytes) {
+                return Ok(Self {
+                    filter_invocation: "w3m -I utf-8 -T text/html".into(),
+                    notice: Some("Text piped through `w3m -I utf-8 -T text/html`.\n\n".into()),
+                    body_text,
+                    unfiltered: bytes,
+                    event_handler: Some(Self::html_process_event),
+                    id: ComponentId::default(),
+                });
+            }
+
+            Err(
+                Error::new("Failed to find any application to use as html filter")
+                    .set_kind(ErrorKind::Configuration),
+            )
+        }
+
+        pub fn new_attachment(att: &Attachment, context: &mut Context) -> Result<Self> {
+            if att.is_html() {
+                return Self::new_html(att, context);
+            }
+            if matches!(
+                att.content_type,
+                ContentType::Multipart {
+                    kind: MultipartType::Digest,
+                    ..
+                }
+            ) {
+                return Ok(Self {
+                    filter_invocation: String::new(),
+                    notice: None,
+                    body_text: String::new(),
+                    unfiltered: vec![],
+                    event_handler: None,
+                    id: ComponentId::default(),
+                });
+            }
+            let notice = Some("Viewing attachment.\n\n".into());
+            Ok(Self {
+                filter_invocation: String::new(),
+                notice,
+                body_text: att.text(),
+                unfiltered: att.decode(Default::default()),
+                event_handler: None,
+                id: ComponentId::default(),
+            })
+        }
+
+        fn html_process_event(
+            _self: &mut ViewFilter,
+            event: &mut UIEvent,
+            context: &mut Context,
+        ) -> bool {
+            if matches!(event, UIEvent::Input(key) if *key == context.settings.shortcuts.envelope_view.open_html)
+            {
+                let command = context
+                    .settings
+                    .pager
+                    .html_open
+                    .as_ref()
+                    .map(|s| s.to_string())
+                    .or_else(|| query_default_app("text/html").ok());
+                let command = if cfg!(target_os = "macos") {
+                    command.or_else(|| Some("open".into()))
+                } else if cfg!(target_os = "linux") {
+                    command.or_else(|| Some("xdg-open".into()))
+                } else {
+                    command
+                };
+                if let Some(command) = command {
+                    let p = create_temp_file(&_self.unfiltered, None, None, Some("html"), true);
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::UpdateSubStatus(
+                            command.to_string(),
+                        )));
+                    let exec_cmd =
+                        desktop_exec_to_command(&command, p.path.display().to_string(), false);
+
+                    match Command::new("sh")
+                        .args(["-c", &exec_cmd])
+                        .stdin(Stdio::piped())
+                        .stdout(Stdio::piped())
+                        .spawn()
+                    {
+                        Ok(child) => {
+                            context.temp_files.push(p);
+                            context.children.push(child);
+                        }
+                        Err(err) => {
+                            context.replies.push_back(UIEvent::StatusEvent(
+                                StatusEvent::DisplayMessage(format!(
+                                    "Failed to start `{}`: {}",
+                                    &exec_cmd, err
+                                )),
+                            ));
+                        }
+                    }
+                } else {
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
+                            "Couldn't find a default application for html files.".to_string(),
+                        )));
+                }
+                return true;
+            }
+            false
+        }
+    }
+
+    impl Component for ViewFilter {
+        fn draw(&mut self, _: &mut CellBuffer, _: Area, _: &mut Context) {}
+        fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+            if let Some(ref mut f) = self.event_handler {
+                return f(self, event, context);
+            }
+            false
+        }
+
+        fn is_dirty(&self) -> bool {
+            false
+        }
+
+        fn set_dirty(&mut self, _: bool) {}
+
+        fn id(&self) -> ComponentId {
+            self.id
+        }
+    }
 }

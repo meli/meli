@@ -49,7 +49,7 @@ impl std::fmt::Debug for HtmlView {
 impl HtmlView {
     pub fn new(body: &Attachment, context: &mut Context) -> Self {
         let id = ComponentId::default();
-        let bytes: Vec<u8> = body.decode_rec(Default::default());
+        let bytes: Vec<u8> = body.decode(Default::default());
 
         let settings = &context.settings;
         let mut display_text = if let Some(filter_invocation) = settings.pager.html_filter.as_ref()

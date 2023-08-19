@@ -39,8 +39,6 @@ use crate::{accounts::JobRequest, jobs::JobId};
 mod utils;
 pub use utils::*;
 
-mod html;
-pub use html::*;
 mod thread;
 pub use thread::*;
 mod types;
