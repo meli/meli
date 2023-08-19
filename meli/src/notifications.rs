@@ -107,7 +107,7 @@ mod dbus {
                     Some(NotificationType::Error(melib::ErrorKind::Network(_))) => {
                         notification.icon("network-error");
                     }
-                    Some(NotificationType::Error(melib::ErrorKind::Timeout)) => {
+                    Some(NotificationType::Error(melib::ErrorKind::TimedOut)) => {
                         notification.icon("network-offline");
                     }
                     _ => {}

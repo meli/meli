@@ -33,7 +33,7 @@ pub async fn timeout<O>(
             Either::Left((out, _)) => Ok(out),
             Either::Right(_) => {
                 Err(crate::error::Error::new("Timed out.")
-                    .set_kind(crate::error::ErrorKind::Timeout))
+                    .set_kind(crate::error::ErrorKind::TimedOut))
             }
         }
     } else {

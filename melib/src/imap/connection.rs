@@ -651,7 +651,7 @@ impl ImapConnection {
                         "Connection timed out after {} seconds",
                         IMAP_PROTOCOL_TIMEOUT.as_secs()
                     ))
-                    .set_kind(ErrorKind::Timeout);
+                    .set_kind(ErrorKind::TimedOut);
                     *status = Err(err.clone());
                     self.stream = Err(err);
                 }

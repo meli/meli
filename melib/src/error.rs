@@ -332,7 +332,7 @@ pub enum ErrorKind {
     ProtocolNotSupported,
     Bug,
     Network(NetworkErrorKind),
-    Timeout,
+    TimedOut,
     OSError,
     NotImplemented,
     NotSupported,
@@ -353,7 +353,7 @@ impl std::fmt::Display for ErrorKind {
                 Self::ProtocolError => "Protocol error",
                 Self::ProtocolNotSupported =>
                     "Protocol is not supported. It could be the wrong type or version.",
-                Self::Timeout => "Timeout",
+                Self::TimedOut => "Timed Out",
                 Self::OSError => "OS Error",
                 Self::Configuration => "Configuration",
                 Self::NotImplemented => "Not implemented",
@@ -385,7 +385,7 @@ impl ErrorKind {
     is_variant! { is_oserror, OSError }
     is_variant! { is_protocol_error, ProtocolError }
     is_variant! { is_protocol_not_supported, ProtocolNotSupported }
-    is_variant! { is_timeout, Timeout }
+    is_variant! { is_timeout, TimedOut }
     is_variant! { is_value_error, ValueError }
 }
 
@@ -534,13 +534,27 @@ impl std::error::Error for Error {
     }
 }
 
+impl From<io::ErrorKind> for ErrorKind {
+    fn from(kind: io::ErrorKind) -> Self {
+        match kind {
+            io::ErrorKind::ConnectionRefused
+            | io::ErrorKind::ConnectionReset
+            | io::ErrorKind::ConnectionAborted
+            | io::ErrorKind::NotConnected => Self::Network(NetworkErrorKind::ConnectionFailed),
+            io::ErrorKind::TimedOut => Self::TimedOut,
+            _ => Self::OSError,
+        }
+    }
+}
+
 impl From<io::Error> for Error {
     #[inline]
-    fn from(kind: io::Error) -> Self {
-        Self::new(kind.to_string())
-            .set_details(kind.kind().to_string())
-            .set_source(Some(Arc::new(kind)))
-            .set_kind(ErrorKind::OSError)
+    fn from(err: io::Error) -> Self {
+        let kind = err.kind().into();
+        Self::new(err.to_string())
+            .set_details(err.kind().to_string())
+            .set_source(Some(Arc::new(err)))
+            .set_kind(kind)
     }
 }
 
