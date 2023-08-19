@@ -43,7 +43,6 @@ pub fn connect<A: ToSocketAddrs>(addr: A, timeout: Option<Duration>) -> Result<T
     };
 
     for a in prepare_addresses(addr)? {
-        log::trace!("a = {:?}", a);
         match happy.add(a.into(), Domain::for_address(a)) {
             AddOutcome::Connected(tcp) => return Ok(tcp),
             AddOutcome::Error => continue,
@@ -73,7 +72,6 @@ where
         SocketAddr::V4(_) => true,
         SocketAddr::V6(_) => false,
     });
-    log::trace!("prepare_addresses 4 = {:?} 6 = {:?}", addrs_v4, addrs_v6);
     let mut addrs = Vec::with_capacity(addrs_v4.len() + addrs_v6.len());
     let (mut left, mut right) = (addrs_v6.into_iter(), addrs_v4.into_iter());
     while let Some(a) = left.next() {
@@ -158,15 +156,14 @@ impl HappyEyeballs {
         let mut events = Vec::new();
         self.poller.wait(&mut events, timeout)?;
         for evt in &events {
-            log::trace!("poll_once evt = {:?}", evt);
             assert!(evt.writable);
             let (sock_addr, sock) = self.attempts[evt.key].take().expect("attempt exists");
             self.attempts_in_progress -= 1;
             self.poller.delete(&sock).expect("socket is in poll set");
-            match debug!(nix::sys::socket::getsockopt(
+            match nix::sys::socket::getsockopt(
                 sock.as_raw_fd(),
-                nix::sys::socket::sockopt::SocketError
-            )) {
+                nix::sys::socket::sockopt::SocketError,
+            ) {
                 Err(e) => self.set_error(e.into()),
                 Ok(0) => {
                     if let Some(tcp) = self.socket_into_blocking_tcp_stream(sock) {
@@ -176,7 +173,7 @@ impl HappyEyeballs {
                 }
                 Ok(_) => {}
             }
-            match debug!(sock.connect(&sock_addr)) {
+            match sock.connect(&sock_addr) {
                 Err(e) => self.set_error(e),
                 Ok(()) => {
                     if let Some(tcp) = self.socket_into_blocking_tcp_stream(sock) {
