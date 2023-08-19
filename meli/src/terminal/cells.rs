@@ -77,7 +77,7 @@ pub struct CellBuffer {
 
 impl std::fmt::Debug for CellBuffer {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        f.debug_struct("CellBuffer")
+        f.debug_struct(stringify!(CellBuffer))
             .field("cols", &self.cols)
             .field("rows", &self.rows)
             .field("buf cells", &self.buf.len())
@@ -105,8 +105,8 @@ impl CellBuffer {
 
     /// Constructs a new `CellBuffer` with the given number of columns and rows,
     /// using the given `cell` as a blank.
-    pub fn new(cols: usize, rows: usize, default_cell: Cell) -> CellBuffer {
-        CellBuffer {
+    pub fn new(cols: usize, rows: usize, default_cell: Cell) -> Self {
+        Self {
             cols,
             rows,
             buf: vec![default_cell; cols * rows],
@@ -124,7 +124,7 @@ impl CellBuffer {
         rows: usize,
         default_cell: Option<Cell>,
         context: &Context,
-    ) -> CellBuffer {
+    ) -> Self {
         let default_cell = default_cell.unwrap_or_else(|| {
             let mut ret = Cell::default();
             let theme_default = crate::conf::value(context, "theme_default");
@@ -133,7 +133,7 @@ impl CellBuffer {
                 .set_attrs(theme_default.attrs);
             ret
         });
-        CellBuffer {
+        Self {
             cols,
             rows,
             buf: vec![default_cell; cols * rows],
@@ -453,7 +453,7 @@ impl DerefMut for CellBuffer {
 impl Index<Pos> for CellBuffer {
     type Output = Cell;
 
-    fn index(&self, index: Pos) -> &Cell {
+    fn index(&self, index: Pos) -> &Self::Output {
         let (x, y) = index;
         self.get(x, y).expect("index out of bounds")
     }
@@ -469,8 +469,8 @@ impl IndexMut<Pos> for CellBuffer {
 impl Default for CellBuffer {
     /// Constructs a new `CellBuffer` with a size of `(0, 0)`, using the default
     /// `Cell` as a blank.
-    fn default() -> CellBuffer {
-        CellBuffer::new(0, 0, Cell::default())
+    fn default() -> Self {
+        Self::new(0, 0, Cell::default())
     }
 }
 
@@ -521,8 +521,8 @@ impl Cell {
     /// assert_eq!(cell.bg(), Color::Green);
     /// assert_eq!(cell.attrs(), Attr::DEFAULT);
     /// ```
-    pub fn new(ch: char, fg: Color, bg: Color, attrs: Attr) -> Cell {
-        Cell {
+    pub fn new(ch: char, fg: Color, bg: Color, attrs: Attr) -> Self {
+        Self {
             ch,
             fg,
             bg,
@@ -547,8 +547,8 @@ impl Cell {
     /// assert_eq!(cell.bg(), Color::Default);
     /// assert_eq!(cell.attrs(), Attr::DEFAULT);
     /// ```
-    pub fn with_char(ch: char) -> Cell {
-        Cell::new(ch, Color::Default, Color::Default, Attr::DEFAULT)
+    pub fn with_char(ch: char) -> Self {
+        Self::new(ch, Color::Default, Color::Default, Attr::DEFAULT)
     }
 
     /// Creates a new `Cell` with the given style and a blank `char`.
@@ -564,8 +564,8 @@ impl Cell {
     /// assert_eq!(cell.attrs(), Attr::BOLD);
     /// assert_eq!(cell.ch(), ' ');
     /// ```
-    pub fn with_style(fg: Color, bg: Color, attr: Attr) -> Cell {
-        Cell::new(' ', fg, bg, attr)
+    pub fn with_style(fg: Color, bg: Color, attr: Attr) -> Self {
+        Self::new(' ', fg, bg, attr)
     }
 
     /// Returns the `Cell`'s character.
@@ -595,7 +595,7 @@ impl Cell {
     /// cell.set_ch('y');
     /// assert_eq!(cell.ch(), 'y');
     /// ```
-    pub fn set_ch(&mut self, newch: char) -> &mut Cell {
+    pub fn set_ch(&mut self, newch: char) -> &mut Self {
         self.ch = newch;
         self.keep_fg = false;
         self.keep_bg = false;
@@ -630,7 +630,7 @@ impl Cell {
     /// cell.set_fg(Color::White);
     /// assert_eq!(cell.fg(), Color::White);
     /// ```
-    pub fn set_fg(&mut self, newfg: Color) -> &mut Cell {
+    pub fn set_fg(&mut self, newfg: Color) -> &mut Self {
         if !self.keep_fg {
             self.fg = newfg;
         }
@@ -664,7 +664,7 @@ impl Cell {
     /// cell.set_bg(Color::Black);
     /// assert_eq!(cell.bg(), Color::Black);
     /// ```
-    pub fn set_bg(&mut self, newbg: Color) -> &mut Cell {
+    pub fn set_bg(&mut self, newbg: Color) -> &mut Self {
         if !self.keep_bg {
             self.bg = newbg;
         }
@@ -675,7 +675,7 @@ impl Cell {
         self.attrs
     }
 
-    pub fn set_attrs(&mut self, newattrs: Attr) -> &mut Cell {
+    pub fn set_attrs(&mut self, newattrs: Attr) -> &mut Self {
         if !self.keep_attrs {
             self.attrs = newattrs;
         }
@@ -688,21 +688,21 @@ impl Cell {
         self.empty
     }
 
-    pub fn set_empty(&mut self, new_val: bool) -> &mut Cell {
+    pub fn set_empty(&mut self, new_val: bool) -> &mut Self {
         self.empty = new_val;
         self
     }
 
     /// Sets `keep_fg` field. If true, the foreground color will not be altered
     /// if attempted so until the character content of the cell is changed.
-    pub fn set_keep_fg(&mut self, new_val: bool) -> &mut Cell {
+    pub fn set_keep_fg(&mut self, new_val: bool) -> &mut Self {
         self.keep_fg = new_val;
         self
     }
 
     /// Sets `keep_bg` field. If true, the background color will not be altered
     /// if attempted so until the character content of the cell is changed.
-    pub fn set_keep_bg(&mut self, new_val: bool) -> &mut Cell {
+    pub fn set_keep_bg(&mut self, new_val: bool) -> &mut Self {
         self.keep_bg = new_val;
         self
     }
@@ -710,7 +710,7 @@ impl Cell {
     /// Sets `keep_attrs` field. If true, the text attributes will not be
     /// altered if attempted so until the character content of the cell is
     /// changed.
-    pub fn set_keep_attrs(&mut self, new_val: bool) -> &mut Cell {
+    pub fn set_keep_attrs(&mut self, new_val: bool) -> &mut Self {
         self.keep_attrs = new_val;
         self
     }
@@ -729,8 +729,8 @@ impl Default for Cell {
     /// assert_eq!(cell.fg(), Color::Default);
     /// assert_eq!(cell.bg(), Color::Default);
     /// ```
-    fn default() -> Cell {
-        Cell::new(' ', Color::Default, Color::Default, Attr::DEFAULT)
+    fn default() -> Self {
+        Self::new(' ', Color::Default, Color::Default, Attr::DEFAULT)
     }
 }
 
@@ -771,67 +771,67 @@ bitflags::bitflags! {
 
 impl Default for Attr {
     fn default() -> Self {
-        Attr::DEFAULT
+        Self::DEFAULT
     }
 }
 
 impl std::fmt::Display for Attr {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match *self {
-            Attr::DEFAULT => write!(f, "Default"),
-            Attr::BOLD => write!(f, "Bold"),
-            Attr::DIM => write!(f, "Dim"),
-            Attr::ITALICS => write!(f, "Italics"),
-            Attr::UNDERLINE => write!(f, "Underline"),
-            Attr::BLINK => write!(f, "Blink"),
-            Attr::REVERSE => write!(f, "Reverse"),
-            Attr::HIDDEN => write!(f, "Hidden"),
+            Self::DEFAULT => write!(f, "Default"),
+            Self::BOLD => write!(f, "Bold"),
+            Self::DIM => write!(f, "Dim"),
+            Self::ITALICS => write!(f, "Italics"),
+            Self::UNDERLINE => write!(f, "Underline"),
+            Self::BLINK => write!(f, "Blink"),
+            Self::REVERSE => write!(f, "Reverse"),
+            Self::HIDDEN => write!(f, "Hidden"),
             combination => {
                 let mut ctr = 0;
-                if combination.intersects(Attr::BOLD) {
+                if combination.intersects(Self::BOLD) {
                     ctr += 1;
-                    Attr::BOLD.fmt(f)?;
+                    Self::BOLD.fmt(f)?;
                 }
-                if combination.intersects(Attr::DIM) {
+                if combination.intersects(Self::DIM) {
                     if ctr > 0 {
                         write!(f, "|")?;
                     }
                     ctr += 1;
-                    Attr::DIM.fmt(f)?;
+                    Self::DIM.fmt(f)?;
                 }
-                if combination.intersects(Attr::ITALICS) {
+                if combination.intersects(Self::ITALICS) {
                     if ctr > 0 {
                         write!(f, "|")?;
                     }
                     ctr += 1;
-                    Attr::ITALICS.fmt(f)?;
+                    Self::ITALICS.fmt(f)?;
                 }
-                if combination.intersects(Attr::UNDERLINE) {
+                if combination.intersects(Self::UNDERLINE) {
                     if ctr > 0 {
                         write!(f, "|")?;
                     }
                     ctr += 1;
-                    Attr::UNDERLINE.fmt(f)?;
+                    Self::UNDERLINE.fmt(f)?;
                 }
-                if combination.intersects(Attr::BLINK) {
+                if combination.intersects(Self::BLINK) {
                     if ctr > 0 {
                         write!(f, "|")?;
                     }
                     ctr += 1;
-                    Attr::BLINK.fmt(f)?;
+                    Self::BLINK.fmt(f)?;
                 }
-                if combination.intersects(Attr::REVERSE) {
+                if combination.intersects(Self::REVERSE) {
                     if ctr > 0 {
                         write!(f, "|")?;
                     }
                     ctr += 1;
-                    Attr::REVERSE.fmt(f)?;
+                    Self::REVERSE.fmt(f)?;
                 }
-                if combination.intersects(Attr::HIDDEN) {
+                if combination.intersects(Self::HIDDEN) {
                     if ctr > 0 {
                         write!(f, "|")?;
                     }
-                    Attr::HIDDEN.fmt(f)?;
+                    Self::HIDDEN.fmt(f)?;
                 }
                 write!(f, "")
             }
@@ -845,7 +845,7 @@ impl<'de> Deserialize<'de> for Attr {
         D: Deserializer<'de>,
     {
         if let Ok(s) = <String>::deserialize(deserializer) {
-            Attr::from_string_de::<'de, D, String>(s)
+            Self::from_string_de::<'de, D, String>(s)
         } else {
             Err(de::Error::custom("Attributes value must be a string."))
         }
@@ -867,16 +867,16 @@ impl Attr {
         D: Deserializer<'de>,
     {
         match s.as_ref().trim() {
-            "Default" => Ok(Attr::DEFAULT),
-            "Dim" => Ok(Attr::DIM),
-            "Bold" => Ok(Attr::BOLD),
-            "Italics" => Ok(Attr::ITALICS),
-            "Underline" => Ok(Attr::UNDERLINE),
-            "Blink" => Ok(Attr::BLINK),
-            "Reverse" => Ok(Attr::REVERSE),
-            "Hidden" => Ok(Attr::HIDDEN),
+            "Default" => Ok(Self::DEFAULT),
+            "Dim" => Ok(Self::DIM),
+            "Bold" => Ok(Self::BOLD),
+            "Italics" => Ok(Self::ITALICS),
+            "Underline" => Ok(Self::UNDERLINE),
+            "Blink" => Ok(Self::BLINK),
+            "Reverse" => Ok(Self::REVERSE),
+            "Hidden" => Ok(Self::HIDDEN),
             combination if combination.contains('|') => {
-                let mut ret = Attr::DEFAULT;
+                let mut ret = Self::DEFAULT;
                 for c in combination.trim().split('|') {
                     ret |= Self::from_string_de::<'de, D, &str>(c)?;
                 }
@@ -887,15 +887,16 @@ impl Attr {
             )),
         }
     }
-    pub fn write(self, prev: Attr, stdout: &mut crate::StateStdout) -> std::io::Result<()> {
+
+    pub fn write(self, prev: Self, stdout: &mut crate::StateStdout) -> std::io::Result<()> {
         use std::io::Write;
-        match (self.intersects(Attr::BOLD), prev.intersects(Attr::BOLD)) {
+        match (self.intersects(Self::BOLD), prev.intersects(Self::BOLD)) {
             (true, true) | (false, false) => Ok(()),
             (false, true) => write!(stdout, "\x1B[22m"),
             (true, false) => write!(stdout, "\x1B[1m"),
         }
         .and_then(
-            |_| match (self.intersects(Attr::DIM), prev.intersects(Attr::DIM)) {
+            |_| match (self.intersects(Self::DIM), prev.intersects(Self::DIM)) {
                 (true, true) | (false, false) => Ok(()),
                 (false, true) => write!(stdout, "\x1B[22m"),
                 (true, false) => write!(stdout, "\x1B[2m"),
@@ -903,8 +904,8 @@ impl Attr {
         )
         .and_then(|_| {
             match (
-                self.intersects(Attr::ITALICS),
-                prev.intersects(Attr::ITALICS),
+                self.intersects(Self::ITALICS),
+                prev.intersects(Self::ITALICS),
             ) {
                 (true, true) | (false, false) => Ok(()),
                 (false, true) => write!(stdout, "\x1B[23m"),
@@ -913,8 +914,8 @@ impl Attr {
         })
         .and_then(|_| {
             match (
-                self.intersects(Attr::UNDERLINE),
-                prev.intersects(Attr::UNDERLINE),
+                self.intersects(Self::UNDERLINE),
+                prev.intersects(Self::UNDERLINE),
             ) {
                 (true, true) | (false, false) => Ok(()),
                 (false, true) => write!(stdout, "\x1B[24m"),
@@ -922,7 +923,7 @@ impl Attr {
             }
         })
         .and_then(
-            |_| match (self.intersects(Attr::BLINK), prev.intersects(Attr::BLINK)) {
+            |_| match (self.intersects(Self::BLINK), prev.intersects(Self::BLINK)) {
                 (true, true) | (false, false) => Ok(()),
                 (false, true) => write!(stdout, "\x1B[25m"),
                 (true, false) => write!(stdout, "\x1B[5m"),
@@ -930,8 +931,8 @@ impl Attr {
         )
         .and_then(|_| {
             match (
-                self.intersects(Attr::REVERSE),
-                prev.intersects(Attr::REVERSE),
+                self.intersects(Self::REVERSE),
+                prev.intersects(Self::REVERSE),
             ) {
                 (true, true) | (false, false) => Ok(()),
                 (false, true) => write!(stdout, "\x1B[27m"),
@@ -939,7 +940,7 @@ impl Attr {
             }
         })
         .and_then(|_| {
-            match (self.intersects(Attr::HIDDEN), prev.intersects(Attr::HIDDEN)) {
+            match (self.intersects(Self::HIDDEN), prev.intersects(Self::HIDDEN)) {
                 (true, true) | (false, false) => Ok(()),
                 (false, true) => write!(stdout, "\x1B[28m"),
                 (true, false) => write!(stdout, "\x1B[8m"),
