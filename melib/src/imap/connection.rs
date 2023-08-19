@@ -44,22 +44,22 @@ use std::{
 };
 
 use futures::io::{AsyncReadExt, AsyncWriteExt};
-use imap_codec::{
-    CommandCodec,
-    encode::{Encoder, Fragment},
-};
 #[cfg(feature = "deflate_compression")]
 use imap_codec::imap_types::extensions::compress::CompressionAlgorithm;
-use imap_codec::imap_types::{
-    auth::AuthMechanism,
-    command::{Command, CommandBody},
-    core::{AString, LiteralMode, NonEmptyVec, Tag},
-    extensions::enable::CapabilityEnable,
-    mailbox::Mailbox,
-    search::SearchKey,
-    secret::Secret,
-    sequence::SequenceSet,
-    status::StatusDataItemName,
+use imap_codec::{
+    encode::{Encoder, Fragment},
+    imap_types::{
+        auth::AuthMechanism,
+        command::{Command, CommandBody},
+        core::{AString, LiteralMode, NonEmptyVec, Tag},
+        extensions::enable::CapabilityEnable,
+        mailbox::Mailbox,
+        search::SearchKey,
+        secret::Secret,
+        sequence::SequenceSet,
+        status::StatusDataItemName,
+    },
+    CommandCodec,
 };
 use native_tls::TlsConnector;
 pub use smol::Async as AsyncWrapper;
