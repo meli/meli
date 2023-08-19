@@ -21,7 +21,6 @@
 
 use std::process::{Command, Stdio};
 
-use linkify::LinkFinder;
 use melib::utils::xdg::query_default_app;
 
 use super::*;
@@ -36,15 +35,17 @@ use crate::ThreadEvent;
 #[derive(Debug)]
 pub struct EnvelopeView {
     pub pager: Pager,
-    pub subview: Option<Box<dyn Component>>,
+    pub subview: Option<Box<EnvelopeView>>,
     pub dirty: bool,
     pub initialised: bool,
     pub force_draw_headers: bool,
-    pub mode: ViewMode,
+    pub options: ViewOptions,
     pub mail: Mail,
     pub body: Box<Attachment>,
     pub display: Vec<AttachmentDisplay>,
     pub body_text: String,
+    pub html_filter: Option<Result<ViewFilter>>,
+    pub filters: Vec<ViewFilter>,
     pub links: Vec<Link>,
     pub attachment_tree: String,
     pub attachment_paths: Vec<Vec<usize>>,
@@ -80,7 +81,7 @@ impl EnvelopeView {
     pub fn new(
         mail: Mail,
         pager: Option<Pager>,
-        subview: Option<Box<dyn Component>>,
+        subview: Option<Box<Self>>,
         view_settings: Option<ViewSettings>,
         main_loop_handler: MainLoopHandler,
     ) -> Self {
@@ -92,7 +93,7 @@ impl EnvelopeView {
             dirty: true,
             initialised: false,
             force_draw_headers: false,
-            mode: ViewMode::Normal,
+            options: ViewOptions::default(),
             force_charset: ForceCharset::None,
             attachment_tree: String::new(),
             attachment_paths: vec![],
@@ -100,6 +101,8 @@ impl EnvelopeView {
             display: vec![],
             links: vec![],
             body_text: String::new(),
+            html_filter: None,
+            filters: vec![],
             view_settings,
             headers_no: 5,
             headers_cursor: 0,
@@ -719,7 +722,7 @@ impl Component for EnvelopeView {
         let hdr_area_theme = crate::conf::value(context, "mail.view.headers_area");
 
         let y: usize = {
-            if self.mode.is_source() {
+            if self.options.contains(ViewOptions::SOURCE) {
                 grid.clear_area(area, self.view_settings.theme_default);
                 context.dirty_areas.push_back(area);
                 0
@@ -987,223 +990,114 @@ impl Component for EnvelopeView {
             }
         };
 
+        if self.filters.is_empty() || self.body_text.is_empty() {
+            let body = self.mail.body();
+            if body.is_html() {
+                let attachment = if let Some(sub) = match body.content_type {
+                    ContentType::Multipart {
+                        kind: MultipartType::Alternative,
+                        ref parts,
+                        ..
+                    } => parts.iter().find(|p| p.is_html()),
+                    _ => None,
+                } {
+                    sub
+                } else {
+                    &body
+                };
+                if let Ok(filter) = ViewFilter::new_html(attachment, context) {
+                    self.filters.push(filter);
+                }
+            } else if self.view_settings.auto_choose_multipart_alternative
+                && match body.content_type {
+                    ContentType::Multipart {
+                        kind: MultipartType::Alternative,
+                        ref parts,
+                        ..
+                    } => parts
+                        .iter()
+                        .all(|p| p.is_html() || (p.is_text() && p.body().trim().is_empty())),
+                    _ => false,
+                }
+            {
+                if let Ok(filter) = ViewFilter::new_html(
+                    body.content_type
+                        .parts()
+                        .unwrap()
+                        .iter()
+                        .find(|a| a.is_html())
+                        .unwrap_or(&body),
+                    context,
+                ) {
+                    self.filters.push(filter);
+                }
+            } else if let Ok(filter) = ViewFilter::new_attachment(&body, context) {
+                self.filters.push(filter);
+            }
+            self.body_text = String::from_utf8_lossy(
+                &body.decode(Option::<Charset>::from(&self.force_charset).into()),
+            )
+            .to_string();
+        }
         if !self.initialised {
             self.initialised = true;
-            let body = self.mail.body();
-            match self.mode {
-                ViewMode::Attachment(aidx) if body.attachments()[aidx].is_html() => {
-                    let attachment = &body.attachments()[aidx];
-                    self.subview = Some(Box::new(HtmlView::new(attachment, context)));
-                }
-                ViewMode::Attachment(aidx) => {
-                    let mut text = format!(
-                        "Viewing attachment. Press {} to return \n",
-                        self.shortcuts(context)
-                            .get(Shortcuts::ENVELOPE_VIEW)
-                            .and_then(|m| m.get("return_to_normal_view"))
-                            .unwrap_or(
-                                &context
-                                    .settings
-                                    .shortcuts
-                                    .envelope_view
-                                    .return_to_normal_view
-                            )
-                    );
-                    let attachment = &body.attachments()[aidx];
-                    text.push_str(&attachment.text());
-                    self.pager = Pager::from_string(
-                        text,
-                        Some(context),
-                        Some(0),
-                        None,
-                        self.view_settings.theme_default,
-                    );
-                    if let Some(ref filter) = self.view_settings.pager_filter {
-                        self.pager.filter(filter);
-                    }
-                    self.subview = None;
-                }
-                ViewMode::Normal if body.is_html() => {
-                    self.subview = Some(Box::new(HtmlView::new(&body, context)));
-                    self.mode = ViewMode::Subview;
-                }
-                ViewMode::Normal
-                    if self.view_settings.auto_choose_multipart_alternative
-                        && match body.content_type {
-                            ContentType::Multipart {
-                                kind: MultipartType::Alternative,
-                                ref parts,
-                                ..
-                            } => parts.iter().all(|p| {
-                                p.is_html() || (p.is_text() && p.body().trim().is_empty())
-                            }),
-                            _ => false,
-                        } =>
-                {
-                    let subview = Box::new(HtmlView::new(
-                        body.content_type
-                            .parts()
-                            .unwrap()
-                            .iter()
-                            .find(|a| a.is_html())
-                            .unwrap_or(&body),
-                        context,
-                    ));
-                    self.subview = Some(subview);
-                    self.mode = ViewMode::Subview;
-                }
-                ViewMode::Subview => {}
-                ViewMode::Source(Source::Raw) => {
-                    let text = String::from_utf8_lossy(self.mail.bytes()).into_owned();
-                    self.view_settings.body_theme = crate::conf::value(context, "mail.view.body");
-                    self.pager = Pager::from_string(
-                        text,
-                        Some(context),
-                        None,
-                        None,
-                        self.view_settings.body_theme,
-                    );
-                    if let Some(ref filter) = self.view_settings.pager_filter {
-                        self.pager.filter(filter);
-                    }
-                }
-                ViewMode::Source(Source::Decoded) => {
-                    let text = {
-                        /* Decode each header value */
-                        let mut ret = String::new();
-                        match melib::email::parser::headers::headers(self.mail.bytes())
-                            .map(|(_, v)| v)
-                        {
-                            Ok(headers) => {
-                                for (h, v) in headers {
-                                    _ = match melib::email::parser::encodings::phrase(v, true) {
-                                        Ok((_, v)) => ret.write_fmt(format_args!(
-                                            "{h}: {}\n",
-                                            String::from_utf8_lossy(&v)
-                                        )),
-                                        Err(err) => ret.write_fmt(format_args!("{h}: {err}\n")),
-                                    };
-                                }
-                            }
-                            Err(err) => {
-                                _ = write!(&mut ret, "{err}");
-                            }
-                        }
-                        if !ret.ends_with("\n\n") {
-                            if ret.ends_with('\n') {
-                                ret.pop();
-                            }
-                            ret.push_str("\n\n");
-                        }
-                        ret.push_str(&self.body_text);
-                        if !ret.ends_with("\n\n") {
-                            if ret.ends_with('\n') {
-                                ret.pop();
-                            }
-                            ret.push_str("\n\n");
-                        }
-                        // ret.push_str(&self.attachment_tree);
-                        ret
-                    };
-                    self.view_settings.body_theme = crate::conf::value(context, "mail.view.body");
-                    self.pager = Pager::from_string(
-                        text,
-                        Some(context),
-                        None,
-                        None,
-                        self.view_settings.body_theme,
-                    );
-                    if let Some(ref filter) = self.view_settings.pager_filter {
-                        self.pager.filter(filter);
-                    }
-                }
-                ViewMode::Url => {
-                    let mut text = self.body_text.clone();
-                    if self.links.is_empty() {
-                        let finder = LinkFinder::new();
-                        self.links = finder
-                            .links(&text)
-                            .filter_map(|l| {
-                                if *l.kind() == linkify::LinkKind::Url {
-                                    Some(Link {
-                                        start: l.start(),
-                                        end: l.end(),
-                                        kind: LinkKind::Url,
-                                    })
-                                } else if *l.kind() == linkify::LinkKind::Email {
-                                    Some(Link {
-                                        start: l.start(),
-                                        end: l.end(),
-                                        kind: LinkKind::Email,
-                                    })
-                                } else {
-                                    None
-                                }
-                            })
-                            .collect::<Vec<Link>>();
-                    }
-                    for (lidx, l) in self.links.iter().enumerate().rev() {
-                        text.insert_str(l.start, &format!("[{}]", lidx));
-                    }
-                    if !text.ends_with("\n\n") {
-                        text.push_str("\n\n");
-                    }
-                    text.push_str(&self.attachment_tree);
-
-                    let cursor_pos = self.pager.cursor_pos();
-                    self.view_settings.body_theme = crate::conf::value(context, "mail.view.body");
-                    self.pager = Pager::from_string(
-                        text,
-                        Some(context),
-                        Some(cursor_pos),
-                        None,
-                        self.view_settings.body_theme,
-                    );
-                    if let Some(ref filter) = self.view_settings.pager_filter {
-                        self.pager.filter(filter);
-                    }
-                    self.subview = None;
-                }
-                _ => {
-                    let mut text = self.body_text.clone();
-                    if !text.ends_with("\n\n") {
-                        text.push_str("\n\n");
-                    }
-                    text.push_str(&self.attachment_tree);
-                    let cursor_pos = if self.mode.is_attachment() {
-                        0
+            let mut text = if let Some(ViewFilter {
+                filter_invocation,
+                body_text,
+                notice,
+                ..
+            }) = self.filters.last()
+            {
+                let mut text = if self.filters.len() == 1 {
+                    if filter_invocation.is_empty() {
+                        String::new()
                     } else {
-                        self.pager.cursor_pos()
-                    };
-                    self.view_settings.body_theme = crate::conf::value(context, "mail.view.body");
-                    self.pager = Pager::from_string(
-                        text,
-                        Some(context),
-                        Some(cursor_pos),
-                        None,
-                        self.view_settings.body_theme,
-                    );
-                    if let Some(ref filter) = self.view_settings.pager_filter {
-                        self.pager.filter(filter);
+                        format!("Text piped through `{filter_invocation}`\n\n")
                     }
-                    self.subview = None;
-                }
+                } else {
+                    notice
+                        .as_ref()
+                        .map(|s| s.to_string())
+                        .or_else(|| {
+                            if filter_invocation.is_empty() {
+                                None
+                            } else {
+                                Some(format!("Text piped through `{filter_invocation}`\n\n"))
+                            }
+                        })
+                        .unwrap_or_default()
+                };
+                text.push_str(&self.options.convert(&mut self.links, &self.body, body_text));
+                text
+            } else {
+                self.options
+                    .convert(&mut self.links, &self.body, &self.body_text)
             };
-            self.dirty = false;
+            if !text.trim().is_empty() {
+                text.push_str("\n\n");
+            }
+            text.push_str(&self.attachment_tree);
+            let cursor_pos = self.pager.cursor_pos();
+            self.view_settings.body_theme = crate::conf::value(context, "mail.view.body");
+            self.pager = Pager::from_string(
+                text,
+                Some(context),
+                Some(cursor_pos),
+                None,
+                self.view_settings.body_theme,
+            );
+            if let Some(ref filter) = self.view_settings.pager_filter {
+                self.pager.filter(filter);
+            }
         }
 
-        match self.mode {
-            ViewMode::Subview if self.subview.is_some() => {
-                if let Some(s) = self.subview.as_mut() {
-                    if !s.is_dirty() {
-                        s.set_dirty(true);
-                    }
-                    s.draw(grid, area.skip_rows(y), context);
-                }
+        if let Some(s) = self.subview.as_mut() {
+            if !s.is_dirty() {
+                s.set_dirty(true);
             }
-            _ => {
-                self.pager.draw(grid, area.skip_rows(y), context);
-            }
+            s.draw(grid, area.skip_rows(y), context);
+        } else {
+            self.pager.draw(grid, area.skip_rows(y), context);
         }
         if let ForceCharset::Dialog(ref mut s) = self.force_charset {
             s.draw(grid, area, context);
@@ -1259,8 +1153,16 @@ impl Component for EnvelopeView {
             _ => {}
         }
 
+        let shortcuts = &self.shortcuts(context);
+
         if let Some(ref mut sub) = self.subview {
-            if sub.process_event(event, context) {
+            if matches!(event, UIEvent::Input(ref key) if shortcut!(
+                key == shortcuts[Shortcuts::ENVELOPE_VIEW]["return_to_normal_view"]
+            )) {
+                if sub.process_event(event, context) && !sub.filters.is_empty() {
+                    return true;
+                }
+            } else if sub.process_event(event, context) {
                 return true;
             }
         } else {
@@ -1289,12 +1191,16 @@ impl Component for EnvelopeView {
                 }
             }
 
-            if self.pager.process_event(event, context) {
+            if self.pager.process_event(event, context)
+                || self
+                    .filters
+                    .last_mut()
+                    .map(|f| f.process_event(event, context))
+                    .unwrap_or(false)
+            {
                 return true;
             }
         }
-
-        let shortcuts = &self.shortcuts(context);
 
         match *event {
             UIEvent::Resize | UIEvent::VisibilityChange(true) => {
@@ -1315,44 +1221,46 @@ impl Component for EnvelopeView {
                 return true;
             }
             UIEvent::Input(ref key)
-                if matches!(
-                    self.mode,
-                    ViewMode::Normal
-                        | ViewMode::Subview
-                        | ViewMode::Source(Source::Decoded)
-                        | ViewMode::Source(Source::Raw)
-                ) && shortcut!(
-                    key == shortcuts[Shortcuts::ENVELOPE_VIEW]["view_raw_source"]
-                ) =>
+                if shortcut!(key == shortcuts[Shortcuts::ENVELOPE_VIEW]["view_raw_source"]) =>
             {
-                self.mode = match self.mode {
-                    ViewMode::Source(Source::Decoded) => ViewMode::Source(Source::Raw),
-                    _ => ViewMode::Source(Source::Decoded),
-                };
+                if self.options.contains(ViewOptions::SOURCE) {
+                    self.options.toggle(ViewOptions::SOURCE_RAW);
+                } else {
+                    self.options.toggle(ViewOptions::SOURCE);
+                }
                 self.set_dirty(true);
                 self.initialised = false;
                 return true;
             }
             UIEvent::Input(ref key)
-                if matches!(
-                    self.mode,
-                    ViewMode::Attachment(_)
-                        | ViewMode::Subview
-                        | ViewMode::Url
-                        | ViewMode::Source(Source::Decoded)
-                        | ViewMode::Source(Source::Raw)
-                ) && shortcut!(
+                if self.options != ViewOptions::DEFAULT
+                    && shortcut!(
+                        key == shortcuts[Shortcuts::ENVELOPE_VIEW]["return_to_normal_view"]
+                    ) =>
+            {
+                self.options.remove(ViewOptions::SOURCE | ViewOptions::URL);
+                self.set_dirty(true);
+                self.initialised = false;
+                return true;
+            }
+            UIEvent::Input(ref key)
+                if shortcut!(
                     key == shortcuts[Shortcuts::ENVELOPE_VIEW]["return_to_normal_view"]
                 ) =>
             {
-                self.mode = ViewMode::Normal;
+                if self.subview.take().is_some() {
+                    self.initialised = false;
+                } else if self.filters.is_empty() {
+                    return false;
+                } else {
+                    self.filters.pop();
+                    self.initialised = false;
+                }
                 self.set_dirty(true);
-                self.initialised = false;
                 return true;
             }
             UIEvent::Input(ref key)
-                if (self.mode == ViewMode::Normal || self.mode == ViewMode::Subview)
-                    && !self.cmd_buf.is_empty()
+                if !self.cmd_buf.is_empty()
                     && shortcut!(key == shortcuts[Shortcuts::ENVELOPE_VIEW]["open_mailcap"]) =>
             {
                 let lidx = self.cmd_buf.parse::<usize>().unwrap();
@@ -1491,8 +1399,7 @@ impl Component for EnvelopeView {
             }
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Shortcuts::ENVELOPE_VIEW]["open_attachment"])
-                    && !self.cmd_buf.is_empty()
-                    && (self.mode == ViewMode::Normal || self.mode == ViewMode::Subview) =>
+                    && !self.cmd_buf.is_empty() =>
             {
                 let lidx = self.cmd_buf.parse::<usize>().unwrap();
                 self.cmd_buf.clear();
@@ -1504,7 +1411,6 @@ impl Component for EnvelopeView {
                         ContentType::MessageRfc822 => {
                             match Mail::new(attachment.body().to_vec(), Some(Flag::SEEN)) {
                                 Ok(wrapper) => {
-                                    self.mode = ViewMode::Subview;
                                     self.subview = Some(Box::new(EnvelopeView::new(
                                         wrapper,
                                         None,
@@ -1521,19 +1427,15 @@ impl Component for EnvelopeView {
                                 }
                             }
                         }
-                        ContentType::Text { .. }
+                        ContentType::Multipart { .. }
+                        | ContentType::Text { .. }
                         | ContentType::PGPSignature
                         | ContentType::CMSSignature => {
-                            self.mode = ViewMode::Attachment(lidx);
+                            if let Ok(filter) = ViewFilter::new_attachment(attachment, context) {
+                                self.filters.push(filter);
+                            }
                             self.initialised = false;
-                            self.dirty = true;
-                        }
-                        ContentType::Multipart { .. } => {
-                            context.replies.push_back(UIEvent::StatusEvent(
-                                StatusEvent::DisplayMessage(
-                                    "Multipart attachments are not supported yet.".to_string(),
-                                ),
-                            ));
+                            self.set_dirty(true);
                         }
                         ContentType::Other { .. } => {
                             let attachment_type = attachment.mime_type();
@@ -1598,8 +1500,9 @@ impl Component for EnvelopeView {
                         } => {
                             context.replies.push_back(UIEvent::StatusEvent(
                                 StatusEvent::DisplayMessage(format!(
-                                    "Failed to open {}. application/octet-stream isn't supported \
-                                     yet",
+                                    "Failed to open {}. application/octet-stream is a stream of \
+                                     bytes of unknown type. Try saving it as a file and opening \
+                                     it manually.",
                                     name.as_ref().map(|n| n.as_str()).unwrap_or("file")
                                 )),
                             ));
@@ -1609,10 +1512,9 @@ impl Component for EnvelopeView {
                 return true;
             }
             UIEvent::Input(ref key)
-                if (self.mode == ViewMode::Normal || self.mode == ViewMode::Url)
-                    && shortcut!(
-                        key == shortcuts[Shortcuts::ENVELOPE_VIEW]["toggle_expand_headers"]
-                    ) =>
+                if shortcut!(
+                    key == shortcuts[Shortcuts::ENVELOPE_VIEW]["toggle_expand_headers"]
+                ) =>
             {
                 self.view_settings.expand_headers = !self.view_settings.expand_headers;
                 self.set_dirty(true);
@@ -1620,7 +1522,7 @@ impl Component for EnvelopeView {
             }
             UIEvent::Input(ref key)
                 if !self.cmd_buf.is_empty()
-                    && self.mode == ViewMode::Url
+                    && self.options.contains(ViewOptions::URL)
                     && shortcut!(key == shortcuts[Shortcuts::ENVELOPE_VIEW]["go_to_url"]) =>
             {
                 let lidx = self.cmd_buf.parse::<usize>().unwrap();
@@ -1675,14 +1577,9 @@ impl Component for EnvelopeView {
                 return true;
             }
             UIEvent::Input(ref key)
-                if (self.mode == ViewMode::Normal || self.mode == ViewMode::Url)
-                    && shortcut!(key == shortcuts[Shortcuts::ENVELOPE_VIEW]["toggle_url_mode"]) =>
+                if shortcut!(key == shortcuts[Shortcuts::ENVELOPE_VIEW]["toggle_url_mode"]) =>
             {
-                match self.mode {
-                    ViewMode::Normal => self.mode = ViewMode::Url,
-                    ViewMode::Url => self.mode = ViewMode::Normal,
-                    _ => {}
-                }
+                self.options.toggle(ViewOptions::URL);
                 self.initialised = false;
                 self.dirty = true;
                 return true;
@@ -1846,19 +1743,15 @@ impl Component for EnvelopeView {
 
         let mut our_map = self.view_settings.env_view_shortcuts.clone();
 
-        if !(self.mode.is_attachment()
-            || self.mode == ViewMode::Subview
-            || self.mode == ViewMode::Source(Source::Decoded)
-            || self.mode == ViewMode::Source(Source::Raw)
-            || self.mode == ViewMode::Url)
-        {
-            our_map.remove("return_to_normal_view");
-        }
-        if self.mode != ViewMode::Url {
+        //if !self
+        //    .options
+        //    .contains(ViewOptions::SOURCE | ViewOptions::URL)
+        //    || self.filters.is_empty()
+        //{
+        //    our_map.remove("return_to_normal_view");
+        //}
+        if !self.options.contains(ViewOptions::URL) {
             our_map.remove("go_to_url");
-        }
-        if !(self.mode == ViewMode::Normal || self.mode == ViewMode::Url) {
-            our_map.remove("toggle_url_mode");
         }
         map.insert(Shortcuts::ENVELOPE_VIEW, our_map);
 

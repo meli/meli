@@ -39,8 +39,6 @@ use crate::{accounts::JobRequest, jobs::JobId};
 mod utils;
 pub use utils::*;
 
-mod html;
-pub use html::*;
 mod thread;
 pub use thread::*;
 mod types;
@@ -50,6 +48,9 @@ use state::*;
 
 pub mod envelope;
 pub use envelope::EnvelopeView;
+
+pub mod filters;
+pub use filters::*;
 
 /// Contains an Envelope view, with sticky headers, a pager for the body, and
 /// subviews for more menus

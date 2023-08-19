@@ -712,15 +712,14 @@ impl Attachment {
                 kind: Text::Plain, ..
             } => false,
             ContentType::Multipart {
+                kind: MultipartType::Digest,
+                ..
+            } => false,
+            ContentType::Multipart {
                 kind: MultipartType::Alternative,
                 ref parts,
                 ..
             } => parts.iter().all(Self::is_html),
-            ContentType::Multipart {
-                kind: MultipartType::Related,
-                ..
-            } => false,
-            ContentType::Multipart { ref parts, .. } => parts.iter().any(Self::is_html),
             _ => false,
         }
     }

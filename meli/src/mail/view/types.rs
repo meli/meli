@@ -19,7 +19,9 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use melib::{attachment_types::Charset, pgp::DecryptionMetadata, Attachment, Error, Result};
+use std::fmt::Write as IoWrite;
+
+use melib::{attachment_types::Charset, error::*, pgp::DecryptionMetadata, Attachment, Result};
 
 use crate::{
     conf::shortcuts::EnvelopeViewShortcuts,
@@ -101,31 +103,97 @@ pub enum Source {
     Raw,
 }
 
-#[derive(PartialEq, Debug, Default)]
-pub enum ViewMode {
-    #[default]
-    Normal,
-    Url,
-    Attachment(usize),
-    Source(Source),
-    Subview,
+bitflags::bitflags! {
+    #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+    pub struct ViewOptions: u8 {
+        const DEFAULT           = 0;
+        const URL               = 1;
+        const SOURCE            = Self::URL.bits() << 1;
+        const SOURCE_RAW        = Self::SOURCE.bits() << 1;
+    }
 }
 
-macro_rules! is_variant {
-    ($n:ident, $($var:tt)+) => {
-        #[inline]
-        pub fn $n(&self) -> bool {
-            matches!(self, Self::$($var)*)
+impl Default for ViewOptions {
+    fn default() -> Self {
+        Self::DEFAULT
+    }
+}
+
+impl ViewOptions {
+    pub fn convert(
+        &self,
+        links: &mut Vec<Link>,
+        attachment: &melib::Attachment,
+        text: &str,
+    ) -> String {
+        let mut text = if self.contains(Self::SOURCE) {
+            if self.contains(Self::SOURCE_RAW) {
+                String::from_utf8_lossy(attachment.raw()).into_owned()
+            } else {
+                /* Decode each header value */
+                let mut ret = String::new();
+                match melib::email::parser::headers::headers(attachment.raw()).map(|(_, v)| v) {
+                    Ok(headers) => {
+                        for (h, v) in headers {
+                            _ = match melib::email::parser::encodings::phrase(v, true) {
+                                Ok((_, v)) => ret.write_fmt(format_args!(
+                                    "{h}: {}\n",
+                                    String::from_utf8_lossy(&v)
+                                )),
+                                Err(err) => ret.write_fmt(format_args!("{h}: {err}\n")),
+                            };
+                        }
+                    }
+                    Err(err) => {
+                        _ = write!(&mut ret, "{err}");
+                    }
+                }
+                if !ret.ends_with("\n\n") {
+                    ret.push_str("\n\n");
+                }
+                ret.push_str(text);
+                ret
+            }
+        } else {
+            text.to_string()
+        };
+
+        while text.ends_with("\n\n") {
+            text.pop();
+            text.pop();
         }
-    };
-}
 
-impl ViewMode {
-    is_variant! { is_normal, Normal }
-    is_variant! { is_url, Url }
-    is_variant! { is_attachment, Attachment(_) }
-    is_variant! { is_source, Source(_) }
-    is_variant! { is_subview, Subview }
+        if self.contains(Self::URL) {
+            if links.is_empty() {
+                let finder = linkify::LinkFinder::new();
+                *links = finder
+                    .links(&text)
+                    .filter_map(|l| {
+                        if *l.kind() == linkify::LinkKind::Url {
+                            Some(Link {
+                                start: l.start(),
+                                end: l.end(),
+                                kind: LinkKind::Url,
+                            })
+                        } else if *l.kind() == linkify::LinkKind::Email {
+                            Some(Link {
+                                start: l.start(),
+                                end: l.end(),
+                                kind: LinkKind::Email,
+                            })
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<Link>>();
+            }
+            for (lidx, l) in links.iter().enumerate().rev() {
+                text.insert_str(l.start, &format!("[{}]", lidx));
+            }
+        }
+
+        text
+    }
 }
 
 #[derive(Debug)]
