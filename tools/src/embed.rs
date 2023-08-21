@@ -140,7 +140,14 @@ impl Component for EmbedContainer {
                         embed_area,
                         ((0, 0), pos_dec(guard.grid.terminal_size, (1, 1))),
                     );
-                    change_colors(grid, embed_area, Color::Byte(8), theme_default.bg);
+                    change_theme(
+                        grid,
+                        embed_area,
+                        ThemeAttribute {
+                            fg: Color::Byte(8),
+                            ..theme_default
+                        },
+                    );
                     let stopped_message: String =
                         format!("Process with PID {} has stopped.", guard.child_pid);
                     let stopped_message_2: String = "-press 'e' to re-activate.".to_string();

@@ -377,7 +377,7 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> Component f
                         .set_bg(highlighted_attrs.bg)
                         .set_attrs(highlighted_attrs.attrs);
                 }
-                change_colors(
+                change_theme(
                     &mut self.content,
                     (
                         ((width - OK_CANCEL.len()) / 2 + CANCEL_OFFSET, height - 1),
@@ -386,8 +386,7 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> Component f
                             height - 1,
                         ),
                     ),
-                    self.theme_default.fg,
-                    self.theme_default.bg,
+                    self.theme_default,
                 );
                 self.dirty = true;
                 return true;
@@ -703,7 +702,7 @@ impl Component for UIConfirmationDialog {
                         .set_bg(highlighted_attrs.bg)
                         .set_attrs(highlighted_attrs.attrs);
                 }
-                change_colors(
+                change_theme(
                     &mut self.content,
                     (
                         ((width - OK_CANCEL.len()) / 2 + CANCEL_OFFSET, height - 1),
@@ -712,8 +711,7 @@ impl Component for UIConfirmationDialog {
                             height - 1,
                         ),
                     ),
-                    self.theme_default.fg,
-                    self.theme_default.bg,
+                    self.theme_default,
                 );
                 self.dirty = true;
                 return true;

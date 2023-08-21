@@ -282,14 +282,14 @@ impl<const N: usize> DataColumns<N> {
             let gap_area = column_area.add_x(column_width);
             match self.theme_config.theme {
                 TableTheme::Single(row_attr) => {
-                    change_colors(grid, gap_area.area(), row_attr.fg, row_attr.bg);
+                    change_theme(grid, gap_area.area(), row_attr);
                 }
                 TableTheme::EvenOdd { even, odd } => {
-                    change_colors(grid, gap_area.area(), even.fg, even.bg);
+                    change_theme(grid, gap_area.area(), even);
                     let mut top_idx = top_idx;
                     for row in gap_area {
                         if top_idx % 2 != 0 {
-                            change_colors(grid, row.area(), odd.fg, odd.bg);
+                            change_theme(grid, row.area(), odd);
                         }
                         top_idx += 1;
                     }
@@ -306,14 +306,13 @@ impl<const N: usize> DataColumns<N> {
                 TableTheme::EvenOdd { even: _, odd } => odd,
             };
 
-            change_colors(
+            change_theme(
                 grid,
                 (
                     pos_inc(upper_left!(total_area), (0, offset)),
                     pos_inc(upper_left!(total_area), (width, offset)),
                 ),
-                row_attr.fg,
-                row_attr.bg,
+                row_attr,
             );
         }
     }

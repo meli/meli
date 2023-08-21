@@ -541,9 +541,9 @@ impl ListingTrait for ThreadListing {
                     .draw(grid, idx, self.cursor_pos.2, grid.bounds_iter(new_area));
                 if highlight {
                     let row_attr = row_attr!(self.color_cache, idx % 2 == 0, false, true, false);
-                    change_colors(grid, new_area, row_attr.fg, row_attr.bg);
+                    change_theme(grid, new_area, row_attr);
                 } else if let Some(row_attr) = self.rows.row_attr_cache.get(&idx) {
-                    change_colors(grid, new_area, row_attr.fg, row_attr.bg);
+                    change_theme(grid, new_area, *row_attr);
                 }
                 context.dirty_areas.push_back(new_area);
             }
@@ -581,7 +581,7 @@ impl ListingTrait for ThreadListing {
         /* apply each row colors separately */
         for i in top_idx..(top_idx + height!(area)) {
             if let Some(row_attr) = self.rows.row_attr_cache.get(&i) {
-                change_colors(grid, nth_row_area(area, i % rows), row_attr.fg, row_attr.bg);
+                change_theme(grid, nth_row_area(area, i % rows), *row_attr);
             }
         }
 
@@ -593,12 +593,7 @@ impl ListingTrait for ThreadListing {
             true,
             false
         );
-        change_colors(
-            grid,
-            nth_row_area(area, self.cursor_pos.2 % rows),
-            row_attr.fg,
-            row_attr.bg,
-        );
+        change_theme(grid, nth_row_area(area, self.cursor_pos.2 % rows), row_attr);
 
         /* clear gap if available height is more than count of entries */
         if top_idx + rows > self.length {

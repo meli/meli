@@ -67,6 +67,8 @@ pub struct CellBuffer {
     pub default_cell: Cell,
     /// ASCII-only flag.
     pub ascii_drawing: bool,
+    /// Use color.
+    pub use_color: bool,
     /// If printing to this buffer and we run out of space, expand it.
     growable: bool,
     tag_table: HashMap<u64, FormatTag>,
@@ -81,6 +83,7 @@ impl std::fmt::Debug for CellBuffer {
             .field("buf cells", &self.buf.len())
             .field("default_cell", &self.default_cell)
             .field("ascii_drawing", &self.ascii_drawing)
+            .field("use_color", &self.use_color)
             .field("growable", &self.growable)
             .field("tag_table", &self.tag_table)
             .field("tag_associations", &self.tag_associations)
@@ -110,6 +113,7 @@ impl CellBuffer {
             default_cell,
             growable: false,
             ascii_drawing: false,
+            use_color: true,
             tag_table: Default::default(),
             tag_associations: SmallVec::new(),
         }
@@ -136,6 +140,7 @@ impl CellBuffer {
             default_cell,
             growable: false,
             ascii_drawing: context.settings.terminal.ascii_drawing,
+            use_color: context.settings.terminal.use_color(),
             tag_table: Default::default(),
             tag_associations: SmallVec::new(),
         }
@@ -143,6 +148,10 @@ impl CellBuffer {
 
     pub fn set_ascii_drawing(&mut self, new_val: bool) {
         self.ascii_drawing = new_val;
+    }
+
+    pub fn set_use_color(&mut self, new_val: bool) {
+        self.use_color = new_val;
     }
 
     pub fn set_growable(&mut self, new_val: bool) {
@@ -1093,6 +1102,36 @@ pub fn change_colors(grid: &mut CellBuffer, area: Area, fg_color: Color, bg_colo
     }
 }
 
+/// Change [`ThemeAttribute`] in an `Area`
+pub fn change_theme(grid: &mut CellBuffer, area: Area, theme: ThemeAttribute) {
+    if cfg!(feature = "debug-tracing") {
+        let bounds = grid.size();
+        let upper_left = upper_left!(area);
+        let bottom_right = bottom_right!(area);
+        let (x, y) = upper_left;
+        if y > (get_y(bottom_right))
+            || x > get_x(bottom_right)
+            || y >= get_y(bounds)
+            || x >= get_x(bounds)
+        {
+            log::debug!("BUG: Invalid area in change_theme:\n area: {:?}", area);
+            return;
+        }
+        if !is_valid_area!(area) {
+            log::debug!("BUG: Invalid area in change_theme:\n area: {:?}", area);
+            return;
+        }
+    }
+    for row in grid.bounds_iter(area) {
+        for c in row {
+            grid[c]
+                .set_fg(theme.fg)
+                .set_bg(theme.bg)
+                .set_attrs(theme.attrs);
+        }
+    }
+}
+
 macro_rules! inspect_bounds {
     ($grid:ident, $area:ident, $x: ident, $y: ident, $line_break:ident) => {
         let bounds = $grid.size();
@@ -1227,7 +1266,7 @@ pub fn write_string_to_grid(
 
 /// Completely clear an `Area` with an empty char and the terminal's default
 /// colors.
-pub fn clear_area(grid: &mut CellBuffer, area: Area, attributes: crate::conf::ThemeAttribute) {
+pub fn clear_area(grid: &mut CellBuffer, area: Area, attributes: ThemeAttribute) {
     if !is_valid_area!(area) {
         return;
     }

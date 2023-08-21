@@ -286,7 +286,7 @@ impl MailboxManager {
                 } else {
                     self.theme_default
                 };
-                change_colors(grid, new_area, row_attr.fg, row_attr.bg);
+                change_theme(grid, new_area, row_attr);
                 context.dirty_areas.push_back(new_area);
             }
             return;
@@ -307,11 +307,10 @@ impl MailboxManager {
             .draw(grid, top_idx, self.cursor_pos, grid.bounds_iter(area));
 
         /* highlight cursor */
-        change_colors(
+        change_theme(
             grid,
             nth_row_area(area, self.cursor_pos % rows),
-            self.highlight_theme.fg,
-            self.highlight_theme.bg,
+            self.highlight_theme,
         );
 
         /* clear gap if available height is more than count of entries */

@@ -801,7 +801,8 @@ impl Component for AutoComplete {
         );
         /* Highlight cursor */
         if self.cursor > 0 {
-            change_colors(
+            let highlight = crate::conf::value(context, "highlight");
+            change_theme(
                 grid,
                 (
                     pos_inc(upper_left, (0, (self.cursor - 1) % rows)),
@@ -814,8 +815,7 @@ impl Component for AutoComplete {
                         get_y(pos_inc(upper_left, (0, (self.cursor - 1) % rows))),
                     ),
                 ),
-                crate::conf::value(context, "highlight").fg,
-                crate::conf::value(context, "highlight").bg,
+                highlight,
             );
         }
         if rows < self.entries.len() {

@@ -220,13 +220,16 @@ impl ContactList {
 
     fn highlight_line(&mut self, grid: &mut CellBuffer, area: Area, idx: usize) {
         /* Reset previously highlighted line */
-        let fg_color = self.theme_default.fg;
-        let bg_color = if idx == self.new_cursor_pos {
-            self.highlight_theme.bg
+        let mut theme = if idx == self.new_cursor_pos {
+            self.highlight_theme
         } else {
-            self.theme_default.bg
+            self.theme_default
         };
-        change_colors(grid, area, fg_color, bg_color);
+        theme.fg = self.theme_default.fg;
+        if !grid.use_color {
+            theme.attrs |= Attr::REVERSE;
+        }
+        change_theme(grid, area, theme);
     }
 
     fn draw_menu(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
@@ -533,14 +536,13 @@ impl ContactList {
             }
         }
 
-        change_colors(
+        change_theme(
             grid,
             (
                 upper_left!(area),
                 set_y(bottom_right, get_y(upper_left!(area))),
             ),
-            header_attrs.fg,
-            header_attrs.bg,
+            header_attrs,
         );
 
         if top_idx + rows > self.length {

@@ -237,27 +237,23 @@ impl StatusBar {
 
     fn draw_command_bar(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         clear_area(grid, area, crate::conf::value(context, "theme_default"));
+        let command_bar = crate::conf::value(context, "status.command_bar");
         let (_, y) = write_string_to_grid(
             self.ex_buffer.as_str(),
             grid,
-            crate::conf::value(context, "status.command_bar").fg,
-            crate::conf::value(context, "status.command_bar").bg,
-            crate::conf::value(context, "status.command_bar").attrs,
+            command_bar.fg,
+            command_bar.bg,
+            command_bar.attrs,
             area,
             None,
         );
+        change_theme(grid, area, command_bar);
         if let Some(ref mut cell) = grid.get_mut(
             pos_inc(upper_left!(area), (self.ex_buffer.cursor(), 0)).0,
             y,
         ) {
-            cell.set_attrs(Attr::UNDERLINE);
+            cell.set_attrs(command_bar.attrs | Attr::UNDERLINE);
         }
-        change_colors(
-            grid,
-            area,
-            crate::conf::value(context, "status.command_bar").fg,
-            crate::conf::value(context, "status.command_bar").bg,
-        );
         context.dirty_areas.push_back(area);
     }
 }
@@ -399,11 +395,10 @@ impl Component for StatusBar {
                         hist_height,
                         self.auto_complete.suggestions().len(),
                     );
-                    change_colors(
+                    change_theme(
                         grid,
                         hist_area,
-                        crate::conf::value(context, "status.history").fg,
-                        crate::conf::value(context, "status.history").bg,
+                        crate::conf::value(context, "status.history"),
                     );
                     context.dirty_areas.push_back(hist_area);
                     hist_area
@@ -431,13 +426,9 @@ impl Component for StatusBar {
                     hist_area,
                     crate::conf::value(context, "theme_default"),
                 );
+                let history_hints = crate::conf::value(context, "status.history.hints");
                 if hist_height > 0 {
-                    change_colors(
-                        grid,
-                        hist_area,
-                        crate::conf::value(context, "status.history.hints").fg,
-                        crate::conf::value(context, "status.history.hints").bg,
-                    );
+                    change_theme(grid, hist_area, history_hints);
                 }
                 for (y_offset, s) in self
                     .auto_complete
@@ -450,9 +441,9 @@ impl Component for StatusBar {
                     let (x, y) = write_string_to_grid(
                         s.as_str(),
                         grid,
-                        crate::conf::value(context, "status.history.hints").fg,
-                        crate::conf::value(context, "status.history.hints").bg,
-                        crate::conf::value(context, "status.history.hints").attrs,
+                        history_hints.fg,
+                        history_hints.bg,
+                        history_hints.attrs,
                         (
                             set_y(
                                 upper_left!(hist_area),
@@ -465,14 +456,14 @@ impl Component for StatusBar {
                     write_string_to_grid(
                         &s.description,
                         grid,
-                        crate::conf::value(context, "status.history.hints").fg,
-                        crate::conf::value(context, "status.history.hints").bg,
-                        crate::conf::value(context, "status.history.hints").attrs,
+                        history_hints.fg,
+                        history_hints.bg,
+                        history_hints.attrs,
                         ((x + 2, y), bottom_right!(hist_area)),
                         None,
                     );
                     if y_offset + offset == self.auto_complete.cursor() {
-                        change_colors(
+                        change_theme(
                             grid,
                             (
                                 set_y(
@@ -484,15 +475,14 @@ impl Component for StatusBar {
                                     get_y(bottom_right!(hist_area)) - hist_height + y_offset + 1,
                                 ),
                             ),
-                            crate::conf::value(context, "status.history.hints").fg,
-                            crate::conf::value(context, "status.history.hints").bg,
+                            history_hints,
                         );
                         write_string_to_grid(
                             &s.as_str()[self.ex_buffer.as_str().len()..],
                             grid,
-                            crate::conf::value(context, "status.history.hints").fg,
-                            crate::conf::value(context, "status.history.hints").bg,
-                            crate::conf::value(context, "status.history.hints").attrs,
+                            history_hints.fg,
+                            history_hints.bg,
+                            history_hints.attrs,
                             (
                                 (
                                     get_x(upper_left)

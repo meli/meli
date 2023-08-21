@@ -925,14 +925,13 @@ impl Component for Composer {
             None,
         );
         clear_area(grid, ((x, y), (set_y(bottom_right, y))), theme_default);
-        change_colors(
+        change_theme(
             grid,
             (
                 set_x(pos_dec(upper_left!(header_area), (0, 1)), x),
                 set_y(bottom_right!(header_area), y),
             ),
-            crate::conf::value(context, "highlight").fg,
-            crate::conf::value(context, "highlight").bg,
+            crate::conf::value(context, "highlight"),
         );
         clear_area(
             grid,
@@ -1054,7 +1053,7 @@ impl Component for Composer {
 
         match self.cursor {
             Cursor::Headers => {
-                change_colors(
+                change_theme(
                     grid,
                     (
                         pos_dec(upper_left!(body_area), (1, 0)),
@@ -1063,12 +1062,11 @@ impl Component for Composer {
                             (1, 0),
                         ),
                     ),
-                    theme_default.fg,
-                    theme_default.bg,
+                    theme_default,
                 );
             }
             Cursor::Body => {
-                change_colors(
+                change_theme(
                     grid,
                     (
                         pos_dec(upper_left!(body_area), (1, 0)),
@@ -1077,8 +1075,15 @@ impl Component for Composer {
                             (1, 0),
                         ),
                     ),
-                    theme_default.fg,
-                    crate::conf::value(context, "highlight").bg,
+                    ThemeAttribute {
+                        fg: theme_default.fg,
+                        bg: crate::conf::value(context, "highlight").bg,
+                        attrs: if grid.use_color {
+                            crate::conf::value(context, "highlight").attrs
+                        } else {
+                            crate::conf::value(context, "highlight").attrs | Attr::REVERSE
+                        },
+                    },
                 );
             }
             Cursor::Sign | Cursor::Encrypt | Cursor::Attachments => {}

@@ -336,7 +336,7 @@ impl ThreadView {
                 if let Some(len) = highlight_reply_subjects[y] {
                     let index = e.index.0 * 4 + 1 + e.heading.grapheme_width() - len;
                     let area = ((index, 2 * y), (width - 2, 2 * y));
-                    change_colors(&mut content, area, highlight_theme.fg, theme_default.bg);
+                    change_theme(&mut content, area, highlight_theme);
                 }
                 set_and_join_box(&mut content, (e.index.0 * 4, 2 * y), BoxBoundary::Vertical);
                 set_and_join_box(
@@ -357,12 +357,7 @@ impl ThreadView {
                 for i in 0..e.index.0 {
                     let att =
                         self.indentation_colors[(i).wrapping_rem(self.indentation_colors.len())];
-                    change_colors(
-                        &mut content,
-                        ((x, 2 * y), (x + 3, 2 * y + 1)),
-                        att.fg,
-                        att.bg,
-                    );
+                    change_theme(&mut content, ((x, 2 * y), (x + 3, 2 * y + 1)), att);
                     x += 4;
                 }
                 if y > 0 && content.get_mut(e.index.0 * 4, 2 * y - 1).is_some() {
@@ -405,10 +400,10 @@ impl ThreadView {
                     ),
                     None,
                 );
-                if let Some(_len) = highlight_reply_subjects[y] {
+                if highlight_reply_subjects[y].is_some() {
                     let index = e.index.0 * 4 + 1;
                     let area = ((index, 2 * y), (width - 2, 2 * y));
-                    change_colors(&mut content, area, highlight_theme.fg, theme_default.bg);
+                    change_theme(&mut content, area, highlight_theme);
                 }
                 set_and_join_box(&mut content, (e.index.0 * 4, 2 * y), BoxBoundary::Vertical);
                 set_and_join_box(
@@ -448,15 +443,15 @@ impl ThreadView {
             } else {
                 Attr::REVERSE
             };
-            for row in grid.bounds_iter(dest_area) {
-                for c in row {
-                    grid[c]
-                        .set_fg(theme_default.fg)
-                        .set_bg(bg_color)
-                        .set_attrs(attrs);
-                }
-            }
-            change_colors(grid, dest_area, theme_default.fg, bg_color);
+            change_theme(
+                grid,
+                dest_area,
+                ThemeAttribute {
+                    fg: theme_default.fg,
+                    bg: bg_color,
+                    attrs,
+                },
+            );
             return;
         }
 
