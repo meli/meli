@@ -20,8 +20,11 @@
  */
 
 use super::*;
-use crate::terminal::cells::boundaries::{
-    HORZ_BOUNDARY, VERT_BOUNDARY, _LIGHT_DOWN_AND_HORIZONTAL, _LIGHT_UP_AND_HORIZONTAL,
+use crate::{
+    components::ExtendShortcutsMaps,
+    terminal::cells::boundaries::{
+        HORZ_BOUNDARY, VERT_BOUNDARY, _LIGHT_DOWN_AND_HORIZONTAL, _LIGHT_UP_AND_HORIZONTAL,
+    },
 };
 
 /// A horizontally split in half container.
@@ -106,7 +109,7 @@ impl Component for HSplit {
 
     fn shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut top_map = self.top.shortcuts(context);
-        top_map.extend(self.bottom.shortcuts(context).into_iter());
+        top_map.extend_shortcuts(self.bottom.shortcuts(context));
         top_map
     }
 
@@ -243,7 +246,7 @@ impl Component for VSplit {
 
     fn shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut right_map = self.right.shortcuts(context);
-        right_map.extend(self.left.shortcuts(context).into_iter());
+        right_map.extend_shortcuts(self.left.shortcuts(context));
         right_map
     }
 

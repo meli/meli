@@ -48,7 +48,7 @@ use std::collections::HashSet;
 use indexmap::IndexMap;
 
 pub use self::tables::*;
-use crate::{jobs::JobId, melib::text_processing::TextProcessing};
+use crate::{components::ExtendShortcutsMaps, jobs::JobId, melib::text_processing::TextProcessing};
 
 #[derive(Default, Debug, Clone)]
 pub struct SearchPattern {
@@ -854,8 +854,7 @@ impl Tabbed {
             dirty: true,
             id: ComponentId::default(),
         };
-        ret.help_curr_views
-            .extend(ret.shortcuts(context).into_iter());
+        ret.help_curr_views.extend_shortcuts(ret.shortcuts(context));
         ret
     }
 
@@ -937,6 +936,18 @@ impl Tabbed {
         new.realize(self.id().into(), context);
         self.children.push(new);
     }
+
+    fn update_help_curr_views(&mut self, context: &Context) {
+        let mut children_maps = self.children[self.cursor_pos].shortcuts(context);
+        children_maps.extend_shortcuts(self.shortcuts(context));
+        if let Some(i) = children_maps
+            .get_index_of(Shortcuts::GENERAL)
+            .filter(|i| i + 1 != children_maps.len())
+        {
+            children_maps.move_index(i, children_maps.len().saturating_sub(1));
+        }
+        self.help_curr_views = children_maps;
+    }
 }
 
 impl std::fmt::Display for Tabbed {
@@ -990,10 +1001,15 @@ impl Component for Tabbed {
 
         if (self.show_shortcuts && self.dirty) || must_redraw_shortcuts {
             let mut children_maps = self.children[self.cursor_pos].shortcuts(context);
-            let our_map = self.shortcuts(context);
-            children_maps.extend(our_map.into_iter());
+            children_maps.extend_shortcuts(self.shortcuts(context));
             if children_maps.is_empty() {
                 return;
+            }
+            if let Some(i) = children_maps
+                .get_index_of(Shortcuts::GENERAL)
+                .filter(|i| i + 1 != children_maps.len())
+            {
+                children_maps.move_index(i, children_maps.len().saturating_sub(1));
             }
             if (children_maps == self.help_curr_views) && must_redraw_shortcuts {
                 let dialog_area = align_area(
@@ -1021,7 +1037,10 @@ impl Component for Tabbed {
                     None,
                 );
                 write_string_to_grid(
-                    "Press ? to close",
+                    &format!(
+                        "Press {} to close",
+                        children_maps[Shortcuts::GENERAL]["toggle_help"]
+                    ),
                     grid,
                     self.theme_default.fg,
                     self.theme_default.bg,
@@ -1097,7 +1116,7 @@ impl Component for Tabbed {
             }
             let mut max_length = 6;
             let mut max_width =
-                "Press ? to close, use COMMAND \"search\" to find shortcuts".len() + 3;
+                "Press XXXX to close, use COMMAND \"search\" to find shortcuts".len() + 3;
 
             let mut max_first_column_width = 3;
 
@@ -1200,7 +1219,10 @@ impl Component for Tabbed {
                 None,
             );
             write_string_to_grid(
-                "Press ? to close",
+                &format!(
+                    "Press {} to close",
+                    self.help_curr_views[Shortcuts::GENERAL]["toggle_help"]
+                ),
                 grid,
                 self.theme_default.fg,
                 self.theme_default.bg,
@@ -1363,9 +1385,7 @@ impl Component for Tabbed {
                     self.children[self.cursor_pos]
                         .process_event(&mut UIEvent::VisibilityChange(false), context);
                     self.cursor_pos = no % self.children.len();
-                    let mut children_maps = self.children[self.cursor_pos].shortcuts(context);
-                    children_maps.extend(self.shortcuts(context));
-                    self.help_curr_views = children_maps;
+                    self.update_help_curr_views(context);
                     context
                         .replies
                         .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
@@ -1381,9 +1401,7 @@ impl Component for Tabbed {
                 self.children[self.cursor_pos]
                     .process_event(&mut UIEvent::VisibilityChange(false), context);
                 self.cursor_pos = (self.cursor_pos + 1) % self.children.len();
-                let mut children_maps = self.children[self.cursor_pos].shortcuts(context);
-                children_maps.extend(self.shortcuts(context));
-                self.help_curr_views = children_maps;
+                self.update_help_curr_views(context);
                 context
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
@@ -1414,9 +1432,7 @@ impl Component for Tabbed {
                     .process_event(&mut UIEvent::VisibilityChange(false), context);
                 self.cursor_pos = self.children.len() - 1;
                 self.children[self.cursor_pos].set_dirty(true);
-                let mut children_maps = self.children[self.cursor_pos].shortcuts(context);
-                children_maps.extend(self.shortcuts(context));
-                self.help_curr_views = children_maps;
+                self.update_help_curr_views(context);
                 return true;
             }
             UIEvent::Action(Tab(Close)) => {
@@ -1425,9 +1441,7 @@ impl Component for Tabbed {
                 }
                 let id = self.children[self.cursor_pos].id();
                 self.children[self.cursor_pos].kill(id, context);
-                let mut children_maps = self.children[self.cursor_pos].shortcuts(context);
-                children_maps.extend(self.shortcuts(context));
-                self.help_curr_views = children_maps;
+                self.update_help_curr_views(context);
                 self.set_dirty(true);
                 return true;
             }
@@ -1442,9 +1456,7 @@ impl Component for Tabbed {
                     self.children.remove(c_idx);
                     self.cursor_pos = 0;
                     self.set_dirty(true);
-                    let mut children_maps = self.children[self.cursor_pos].shortcuts(context);
-                    children_maps.extend(self.shortcuts(context));
-                    self.help_curr_views = children_maps;
+                    self.update_help_curr_views(context);
                     return true;
                 } else {
                     log::debug!(

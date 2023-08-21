@@ -75,6 +75,29 @@ impl std::fmt::UpperHex for ComponentId {
 pub type ShortcutMap = IndexMap<&'static str, Key>;
 pub type ShortcutMaps = IndexMap<&'static str, ShortcutMap>;
 
+mod private {
+    pub trait Sealed {}
+}
+impl private::Sealed for ShortcutMaps {}
+
+pub trait ExtendShortcutsMaps: private::Sealed {
+    fn extend_shortcuts(&mut self, other: Self);
+}
+
+impl ExtendShortcutsMaps for ShortcutMaps {
+    fn extend_shortcuts(&mut self, mut other: Self) {
+        other.retain(|k, v| {
+            if let Some(m) = self.get_mut(k) {
+                m.extend(v.iter().map(|(k, v)| (*k, v.clone())));
+                false
+            } else {
+                true
+            }
+        });
+        self.extend(other.into_iter());
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum PageMovement {
     Up(usize),

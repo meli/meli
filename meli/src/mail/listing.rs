@@ -29,7 +29,9 @@ use melib::{backends::EnvelopeHashBatch, Address};
 use smallvec::SmallVec;
 
 use super::*;
-use crate::{conf::accounts::JobRequest, types::segment_tree::SegmentTree};
+use crate::{
+    components::ExtendShortcutsMaps, conf::accounts::JobRequest, types::segment_tree::SegmentTree,
+};
 
 // [ref:TODO]: emoji_text_presentation_selector should be printed along with the chars
 // before it but not as a separate Cell
@@ -2152,17 +2154,18 @@ impl Component for Listing {
     }
 
     fn shortcuts(&self, context: &Context) -> ShortcutMaps {
-        let mut map = if let Some(s) = self.status.as_ref() {
+        let mut map = ShortcutMaps::default();
+        if self.focus != ListingFocus::Menu && self.component.unfocused() {
+            map.extend_shortcuts(self.view.shortcuts(context));
+        }
+        map.extend_shortcuts(if let Some(s) = self.status.as_ref() {
             s.shortcuts(context)
         } else {
             self.component.shortcuts(context)
-        };
+        });
         let mut config_map = context.settings.shortcuts.listing.key_values();
         if self.focus != ListingFocus::Menu {
             config_map.remove("open_mailbox");
-            if self.component.unfocused() {
-                map.extend(self.view.shortcuts(context).into_iter());
-            }
         }
         map.insert(Shortcuts::LISTING, config_map);
 
