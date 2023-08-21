@@ -21,7 +21,7 @@
 
 use std::{cmp, convert::TryInto, iter::FromIterator};
 
-use melib::{ThreadNode, Threads};
+use melib::{SortField, SortOrder, ThreadNode, Threads};
 
 use super::*;
 use crate::components::PageMovement;

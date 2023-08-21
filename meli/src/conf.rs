@@ -31,7 +31,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-use melib::{backends::TagHash, search::Query, StderrLogger};
+use melib::{backends::TagHash, search::Query, SortField, SortOrder, StderrLogger};
 
 use crate::{conf::deserializers::non_empty_opt_string, terminal::Color};
 
@@ -61,7 +61,6 @@ use std::{
 };
 
 use indexmap::IndexMap;
-pub use melib::thread::{SortField, SortOrder};
 use melib::{
     conf::{AccountSettings, MailboxConf, ToggleFlag},
     error::*,

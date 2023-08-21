@@ -23,8 +23,7 @@
 
 use std::path::PathBuf;
 
-use melib::email::mailto::Mailto;
-pub use melib::thread::{SortField, SortOrder};
+use melib::{email::mailto::Mailto, SortField, SortOrder};
 
 use crate::components::{Component, ComponentId};
 

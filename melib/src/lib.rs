@@ -134,6 +134,7 @@ pub mod text_processing;
 pub use utils::{
     datetime::UnixTimestamp,
     logging::{LogLevel, StderrLogger},
+    SortField, SortOrder,
 };
 
 pub mod addressbook;

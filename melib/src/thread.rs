@@ -35,7 +35,7 @@
 
 use crate::{
     email::{address::StrBuild, parser::BytesExt, *},
-    UnixTimestamp,
+    SortField, SortOrder, UnixTimestamp,
 };
 
 mod iterators;
@@ -44,8 +44,6 @@ use std::{
     collections::{HashMap, HashSet, VecDeque},
     iter::FromIterator,
     ops::Index,
-    result::Result as StdResult,
-    str::FromStr,
     string::ToString,
     sync::{Arc, RwLock},
 };
@@ -464,44 +462,6 @@ impl SubjectPrefix for &str {
         };
         *self = result;
         self
-    }
-}
-
-/* Sorting states. */
-
-#[derive(Debug, Default, Clone, PartialEq, Eq, Copy, Deserialize, Serialize)]
-pub enum SortOrder {
-    Asc,
-    #[default]
-    Desc,
-}
-
-#[derive(Debug, Default, Clone, PartialEq, Eq, Copy, Deserialize, Serialize)]
-pub enum SortField {
-    Subject,
-    #[default]
-    Date,
-}
-
-impl FromStr for SortField {
-    type Err = ();
-    fn from_str(s: &str) -> StdResult<Self, Self::Err> {
-        match s.trim() {
-            "subject" | "s" | "sub" | "sbj" | "subj" => Ok(Self::Subject),
-            "date" | "d" => Ok(Self::Date),
-            _ => Err(()),
-        }
-    }
-}
-
-impl FromStr for SortOrder {
-    type Err = ();
-    fn from_str(s: &str) -> StdResult<Self, Self::Err> {
-        match s.trim() {
-            "asc" => Ok(Self::Asc),
-            "desc" => Ok(Self::Desc),
-            _ => Err(()),
-        }
     }
 }
 

@@ -33,9 +33,8 @@ use melib::{
         escape_double_quote,
         Query::{self, *},
     },
-    thread::{SortField, SortOrder},
     utils::sqlite3::{self as melib_sqlite3, rusqlite::params, DatabaseDescription},
-    Error, Result,
+    Error, Result, SortField, SortOrder,
 };
 use smallvec::SmallVec;
 

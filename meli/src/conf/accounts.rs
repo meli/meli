@@ -47,8 +47,8 @@ use melib::{
     error::{Error, ErrorKind, Result},
     log,
     text_processing::GlobMatch,
-    thread::{SortField, SortOrder, Threads},
-    AddressBook, Collection, LogLevel,
+    thread::Threads,
+    AddressBook, Collection, LogLevel, SortField, SortOrder,
 };
 use smallvec::SmallVec;
 

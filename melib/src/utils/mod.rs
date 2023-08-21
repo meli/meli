@@ -92,6 +92,8 @@ pub mod html_escape {
     }
 }
 
+use std::str::FromStr;
+
 #[macro_export]
 macro_rules! declare_u64_hash {
     ($type_name:ident) => {
@@ -154,4 +156,53 @@ macro_rules! declare_u64_hash {
             }
         }
     };
+}
+
+/* Sorting states. */
+
+#[derive(Debug, Default, Clone, PartialEq, Eq, Copy, Deserialize, Serialize)]
+pub enum SortOrder {
+    Asc,
+    #[default]
+    Desc,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq, Copy, Deserialize, Serialize)]
+pub enum SortField {
+    Subject,
+    #[default]
+    Date,
+}
+
+impl FromStr for SortField {
+    type Err = ();
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "subject" | "s" | "sub" | "sbj" | "subj" => Ok(Self::Subject),
+            "date" | "d" => Ok(Self::Date),
+            _ => Err(()),
+        }
+    }
+}
+
+impl FromStr for SortOrder {
+    type Err = ();
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "asc" => Ok(Self::Asc),
+            "desc" => Ok(Self::Desc),
+            _ => Err(()),
+        }
+    }
+}
+
+impl std::ops::Not for SortOrder {
+    type Output = Self;
+
+    fn not(self) -> Self::Output {
+        match self {
+            Self::Asc => Self::Desc,
+            Self::Desc => Self::Asc,
+        }
+    }
 }

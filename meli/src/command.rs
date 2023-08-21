@@ -22,7 +22,6 @@
 //! A parser module for user commands passed through
 //! [`Command`](crate::types::UIMode::Command) mode.
 
-pub use melib::thread::{SortField, SortOrder};
 use melib::{
     nom::{
         self,
@@ -35,7 +34,7 @@ use melib::{
         sequence::{pair, preceded, separated_pair},
         IResult,
     },
-    Error,
+    Error, SortField, SortOrder,
 };
 
 use crate::melib::parser::BytesExt;
