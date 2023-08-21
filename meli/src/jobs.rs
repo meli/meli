@@ -40,7 +40,7 @@ pub use futures::channel::oneshot;
 use indexmap::IndexMap;
 use melib::{log, smol, utils::datetime, uuid::Uuid, UnixTimestamp};
 
-use crate::types::{ThreadEvent, UIEvent};
+use crate::types::{StatusEvent, ThreadEvent, UIEvent};
 
 type AsyncTask = async_task::Runnable;
 
@@ -425,8 +425,14 @@ pub struct JoinHandle<T> {
 }
 
 impl<T> JoinHandle<T> {
-    pub fn cancel(&self) {
-        *self.cancel.lock().unwrap() = true;
+    pub fn cancel(&self) -> Option<StatusEvent> {
+        let mut lck = self.cancel.lock().unwrap();
+        if !*lck {
+            *lck = true;
+            Some(StatusEvent::JobCanceled(self.job_id))
+        } else {
+            None
+        }
     }
 }
 

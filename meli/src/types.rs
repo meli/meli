@@ -84,7 +84,13 @@ pub enum ThreadEvent {
 
 impl From<RefreshEvent> for ThreadEvent {
     fn from(event: RefreshEvent) -> Self {
-        ThreadEvent::RefreshMailbox(Box::new(event))
+        Self::RefreshMailbox(Box::new(event))
+    }
+}
+
+impl From<UIEvent> for ThreadEvent {
+    fn from(event: UIEvent) -> Self {
+        Self::UIEvent(event)
     }
 }
 

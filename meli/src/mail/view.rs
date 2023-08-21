@@ -53,7 +53,7 @@ pub use envelope::EnvelopeView;
 
 /// Contains an Envelope view, with sticky headers, a pager for the body, and
 /// subviews for more menus
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct MailView {
     coordinates: Option<(AccountHash, MailboxHash, EnvelopeHash)>,
     dirty: bool,
@@ -62,6 +62,7 @@ pub struct MailView {
     theme_default: ThemeAttribute,
     active_jobs: HashSet<JobId>,
     state: MailViewState,
+    main_loop_handler: MainLoopHandler,
     id: ComponentId,
 }
 
@@ -72,6 +73,7 @@ impl Clone for MailView {
             forward_dialog: None,
             state: MailViewState::default(),
             active_jobs: self.active_jobs.clone(),
+            main_loop_handler: self.main_loop_handler.clone(),
             ..*self
         }
     }
@@ -80,6 +82,17 @@ impl Clone for MailView {
 impl std::fmt::Display for MailView {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "view mail")
+    }
+}
+
+impl Drop for MailView {
+    fn drop(&mut self) {
+        if let MailViewState::LoadingBody { ref mut handle, .. } = self.state {
+            if let Some(canceled) = handle.cancel() {
+                self.main_loop_handler
+                    .send(UIEvent::StatusEvent(canceled).into());
+            }
+        }
     }
 }
 
@@ -96,6 +109,7 @@ impl MailView {
             theme_default: crate::conf::value(context, "mail.view.body"),
             active_jobs: Default::default(),
             state: MailViewState::default(),
+            main_loop_handler: context.main_loop_handler.clone(),
             id: ComponentId::default(),
         };
 
@@ -222,6 +236,11 @@ impl MailView {
         new_coordinates: (AccountHash, MailboxHash, EnvelopeHash),
         context: &mut Context,
     ) {
+        if let MailViewState::LoadingBody { ref mut handle, .. } = self.state {
+            if let Some(canceled) = handle.cancel() {
+                context.replies.push_back(UIEvent::StatusEvent(canceled));
+            }
+        }
         if self.coordinates != Some(new_coordinates) {
             self.coordinates = Some(new_coordinates);
             self.init_futures(context);
