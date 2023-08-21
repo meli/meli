@@ -361,7 +361,7 @@ define_commands!([
                    )
                  },
                  { tags: ["go"],
-                   desc: "go [n], switch to nth mailbox in this account",
+                   desc: "go <n>, switch to nth mailbox in this account",
                    tokens: &[One(Literal("goto")), One(MailboxIndexValue)],
                    parser: (
                        fn goto(input: &[u8]) -> IResult<&[u8], Action> {
@@ -397,7 +397,27 @@ define_commands!([
                           let (input, _) = eof(input)?;
                           Ok((input, (Sort(p.0, p.1))))
                       }
-                  )},
+                  )
+                },
+                { tags: ["sort"],
+                  desc: "sort <column index> [asc/desc], sorts table columns.",
+                   tokens: &[One(Literal("sort")), One(IndexValue), ZeroOrOne(Alternatives(&[to_stream!(One(Literal("asc"))), to_stream!(One(Literal("desc")))])) ],
+                  parser: (
+                      fn sort_column(input: &[u8]) -> IResult<&[u8], Action> {
+                          let (input, _) = tag("sort")(input)?;
+                          let (input, _) = is_a(" ")(input)?;
+                          let (input, i) = usize_c(input)?;
+                          let (input, order) = if input.trim().is_empty() {
+                              (input, SortOrder::Desc)
+                          } else {
+                              let (input, (_, order)) = pair(is_a(" "), sortorder)(input)?;
+                              (input, order)
+                          };
+                          let (input, _) = eof(input)?;
+                          Ok((input, (SortColumn(i, order))))
+                      }
+                  )
+                },
                 { tags: ["set", "set plain", "set threaded", "set compact"],
                   desc: "set [plain/threaded/compact/conversations], changes the mail listing view",
                   tokens: &[One(Literal("set")), One(Alternatives(&[to_stream!(One(Literal("plain"))), to_stream!(One(Literal("threaded"))), to_stream!(One(Literal("compact"))), to_stream!(One(Literal("conversations")))]))],
@@ -997,6 +1017,7 @@ pub fn parse_command(input: &[u8]) -> Result<Action, Error> {
         goto,
         listing_action,
         sort,
+        sort_column,
         subsort,
         close,
         mailinglist,

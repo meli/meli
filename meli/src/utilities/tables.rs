@@ -159,6 +159,15 @@ impl<const N: usize> Default for DataColumns<N> {
 }
 
 impl<const N: usize> DataColumns<N> {
+    pub const ARROW_UP: &str = "🠉";
+    pub const ARROW_DOWN: &str = "🠋";
+    pub const ARROW_UP_ASCII: &str = "^";
+    pub const ARROW_DOWN_ASCII: &str = "v";
+    // const ARROW_UP_1: &str = "↑";
+    // const ARROW_DOWN_1: &str = "↓";
+    // const ARROW_UP_3: &str = "▲";
+    // const ARROW_DOWN_4: &str = "▼";
+
     pub fn recalc_widths(
         &mut self,
         (screen_width, screen_height): (usize, usize),

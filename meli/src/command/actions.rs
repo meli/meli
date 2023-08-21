@@ -114,6 +114,7 @@ pub enum Action {
     Listing(ListingAction),
     ViewMailbox(usize),
     Sort(SortField, SortOrder),
+    SortColumn(usize, SortOrder),
     SubSort(SortField, SortOrder),
     Tab(TabAction),
     MailingListAction(MailingListAction),

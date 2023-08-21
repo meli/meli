@@ -26,8 +26,29 @@ use indexmap::IndexMap;
 use super::*;
 use crate::{
     jobs::{JobId, JobMetadata},
-    melib::utils::datetime::{self, formats::RFC3339_DATETIME_AND_SPACE},
+    melib::{
+        utils::datetime::{self, formats::RFC3339_DATETIME_AND_SPACE},
+        SortOrder,
+    },
 };
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+#[repr(u8)]
+enum Column {
+    _0 = 0,
+    _1,
+    _2,
+    _3,
+    _4,
+}
+
+const fn _assert_len() {
+    if JobManager::HEADERS.len() != Column::_4 as usize + 1 {
+        panic!("JobManager::HEADERS length changed, please update Column enum accordingly.");
+    }
+}
+
+const _: () = _assert_len();
 
 #[derive(Debug)]
 pub struct JobManager {
@@ -35,6 +56,9 @@ pub struct JobManager {
     new_cursor_pos: usize,
     length: usize,
     data_columns: DataColumns<5>,
+    min_width: [usize; 5],
+    sort_col: Column,
+    sort_order: SortOrder,
     entries: IndexMap<JobId, JobMetadata>,
 
     initialized: bool,
@@ -54,8 +78,18 @@ impl std::fmt::Display for JobManager {
 }
 
 impl JobManager {
+    const HEADERS: [&str; 5] = ["id", "desc", "started", "finished", "succeeded"];
+
     pub fn new(context: &Context) -> Self {
         let theme_default = crate::conf::value(context, "theme_default");
+        let highlight_theme = if context.settings.terminal.use_color() {
+            crate::conf::value(context, "highlight")
+        } else {
+            ThemeAttribute {
+                attrs: Attr::REVERSE,
+                ..ThemeAttribute::default()
+            }
+        };
         let mut data_columns = DataColumns::default();
         data_columns.theme_config.set_single_theme(theme_default);
         Self {
@@ -64,8 +98,11 @@ impl JobManager {
             entries: IndexMap::default(),
             length: 0,
             data_columns,
+            min_width: [0; 5],
+            sort_col: Column::_2,
+            sort_order: SortOrder::Desc,
             theme_default,
-            highlight_theme: crate::conf::value(context, "highlight"),
+            highlight_theme,
             initialized: false,
             dirty: true,
             movement: None,
@@ -74,43 +111,63 @@ impl JobManager {
     }
 
     fn initialize(&mut self, context: &mut Context) {
-        self.entries = (*context.main_loop_handler.job_executor.jobs.lock().unwrap()).clone();
-        self.length = self.entries.len();
-        self.entries.sort_by(|_, a, _, b| a.started.cmp(&b.started));
-
         self.set_dirty(true);
-        let mut min_width = (
-            "id".len(),
-            "desc".len(),
-            "started".len(),
-            "finished".len(),
-            "succeeded".len(),
-            0,
-        );
+
+        let mut entries = (*context.main_loop_handler.job_executor.jobs.lock().unwrap()).clone();
+
+        self.length = entries.len();
+        entries.sort_by(|_, a, _, b| match (self.sort_col, self.sort_order) {
+            (Column::_0, SortOrder::Asc) => a.id.cmp(&b.id),
+            (Column::_0, SortOrder::Desc) => b.id.cmp(&b.id),
+            (Column::_1, SortOrder::Asc) => a.desc.cmp(&b.desc),
+            (Column::_1, SortOrder::Desc) => b.desc.cmp(&a.desc),
+            (Column::_2, SortOrder::Asc) => a.started.cmp(&b.started),
+            (Column::_2, SortOrder::Desc) => b.started.cmp(&a.started),
+            (Column::_3, SortOrder::Asc) => a.finished.cmp(&b.finished),
+            (Column::_3, SortOrder::Desc) => b.finished.cmp(&a.finished),
+            (Column::_4, SortOrder::Asc) if a.finished.is_some() && b.finished.is_some() => {
+                a.succeeded.cmp(&b.succeeded)
+            }
+            (Column::_4, SortOrder::Desc) if a.finished.is_some() && b.finished.is_some() => {
+                b.succeeded.cmp(&a.succeeded)
+            }
+            (Column::_4, SortOrder::Asc) if a.finished.is_none() => std::cmp::Ordering::Less,
+            (Column::_4, SortOrder::Asc) => std::cmp::Ordering::Greater,
+            (Column::_4, SortOrder::Desc) if a.finished.is_none() => std::cmp::Ordering::Greater,
+            (Column::_4, SortOrder::Desc) => std::cmp::Ordering::Less,
+        });
+        self.entries = entries;
+
+        macro_rules! hdr {
+            ($idx:literal) => {{
+                Self::HEADERS[$idx].len() + if self.sort_col as u8 == $idx { 1 } else { 0 }
+            }};
+        }
+        self.min_width = [hdr!(0), hdr!(1), hdr!(2), hdr!(3), hdr!(4)];
 
         for c in self.entries.values() {
             /* title */
-            min_width.0 = cmp::max(min_width.0, c.id.to_string().len());
+            self.min_width[0] = cmp::max(self.min_width[0], c.id.to_string().len());
             /* desc */
-            min_width.1 = cmp::max(min_width.1, c.desc.len());
+            self.min_width[1] = cmp::max(self.min_width[1], c.desc.len());
         }
-        min_width.2 = "1970-01-01 00:00:00".len();
-        min_width.3 = min_width.2;
+        self.min_width[2] = "1970-01-01 00:00:00".len();
+        self.min_width[3] = self.min_width[2];
 
         /* name column */
         self.data_columns.columns[0] =
-            CellBuffer::new_with_context(min_width.0, self.length, None, context);
+            CellBuffer::new_with_context(self.min_width[0], self.length, None, context);
         /* path column */
         self.data_columns.columns[1] =
-            CellBuffer::new_with_context(min_width.1, self.length, None, context);
+            CellBuffer::new_with_context(self.min_width[1], self.length, None, context);
         /* size column */
         self.data_columns.columns[2] =
-            CellBuffer::new_with_context(min_width.2, self.length, None, context);
+            CellBuffer::new_with_context(self.min_width[2], self.length, None, context);
         /* subscribed column */
         self.data_columns.columns[3] =
-            CellBuffer::new_with_context(min_width.3, self.length, None, context);
+            CellBuffer::new_with_context(self.min_width[3], self.length, None, context);
         self.data_columns.columns[4] =
-            CellBuffer::new_with_context(min_width.4, self.length, None, context);
+            CellBuffer::new_with_context(self.min_width[4], self.length, None, context);
 
         for (idx, e) in self.entries.values().enumerate() {
             write_string_to_grid(
@@ -119,7 +176,7 @@ impl JobManager {
                 self.theme_default.fg,
                 self.theme_default.bg,
                 self.theme_default.attrs,
-                ((0, idx), (min_width.0, idx)),
+                ((0, idx), (self.min_width[0], idx)),
                 None,
             );
 
@@ -129,7 +186,7 @@ impl JobManager {
                 self.theme_default.fg,
                 self.theme_default.bg,
                 self.theme_default.attrs,
-                ((0, idx), (min_width.1, idx)),
+                ((0, idx), (self.min_width[1], idx)),
                 None,
             );
 
@@ -139,7 +196,7 @@ impl JobManager {
                 self.theme_default.fg,
                 self.theme_default.bg,
                 self.theme_default.attrs,
-                ((0, idx), (min_width.2, idx)),
+                ((0, idx), (self.min_width[2], idx)),
                 None,
             );
 
@@ -157,7 +214,7 @@ impl JobManager {
                 self.theme_default.fg,
                 self.theme_default.bg,
                 self.theme_default.attrs,
-                ((0, idx), (min_width.3, idx)),
+                ((0, idx), (self.min_width[3], idx)),
                 None,
             );
 
@@ -171,13 +228,13 @@ impl JobManager {
                 self.theme_default.fg,
                 self.theme_default.bg,
                 self.theme_default.attrs,
-                ((0, idx), (min_width.4, idx)),
+                ((0, idx), (self.min_width[4], idx)),
                 None,
             );
         }
 
         if self.length == 0 {
-            let message = "No mailboxes.".to_string();
+            let message = "No jobs.".to_string();
             self.data_columns.columns[0] =
                 CellBuffer::new_with_context(message.len(), self.length, None, context);
             write_string_to_grid(
@@ -286,7 +343,7 @@ impl JobManager {
                 } else {
                     self.theme_default
                 };
-                change_colors(grid, new_area, row_attr.fg, row_attr.bg);
+                change_theme(grid, new_area, row_attr);
                 context.dirty_areas.push_back(new_area);
             }
             return;
@@ -307,11 +364,10 @@ impl JobManager {
             .draw(grid, top_idx, self.cursor_pos, grid.bounds_iter(area));
 
         /* highlight cursor */
-        change_colors(
+        change_theme(
             grid,
             nth_row_area(area, self.cursor_pos % rows),
-            self.highlight_theme.fg,
-            self.highlight_theme.bg,
+            self.highlight_theme,
         );
 
         /* clear gap if available height is more than count of entries */
@@ -337,8 +393,49 @@ impl Component for JobManager {
         if !self.initialized {
             self.initialize(context);
         }
+        {
+            // Draw column headers.
+            let area = nth_row_area(area, 0);
+            clear_area(grid, area, self.theme_default);
+            let mut x_offset = 0;
+            let (upper_left, bottom_right) = area;
+            for (i, (h, w)) in Self::HEADERS.iter().zip(self.min_width).enumerate() {
+                write_string_to_grid(
+                    h,
+                    grid,
+                    self.theme_default.fg,
+                    self.theme_default.bg,
+                    self.theme_default.attrs | Attr::BOLD,
+                    (pos_inc(upper_left, (x_offset, 0)), bottom_right),
+                    None,
+                );
+                if self.sort_col as usize == i {
+                    use SortOrder::*;
+                    let arrow = match (grid.ascii_drawing, self.sort_order) {
+                        (true, Asc) => DataColumns::<5>::ARROW_UP_ASCII,
+                        (true, Desc) => DataColumns::<5>::ARROW_DOWN_ASCII,
+                        (false, Asc) => DataColumns::<5>::ARROW_UP,
+                        (false, Desc) => DataColumns::<5>::ARROW_DOWN,
+                    };
+                    write_string_to_grid(
+                        arrow,
+                        grid,
+                        self.theme_default.fg,
+                        self.theme_default.bg,
+                        self.theme_default.attrs,
+                        (pos_inc(upper_left, (x_offset + h.len(), 0)), bottom_right),
+                        None,
+                    );
+                }
+                x_offset += w + 2;
+            }
+            context.dirty_areas.push_back(area);
+        }
 
-        self.draw_list(grid, area, context);
+        // Draw entry rows.
+        if let Some(area) = skip_rows(area, 1) {
+            self.draw_list(grid, area, context);
+        }
         self.dirty = false;
     }
 
@@ -357,6 +454,55 @@ impl Component for JobManager {
                 self.initialized = false;
                 self.set_dirty(true);
                 return false;
+            }
+            UIEvent::Action(Action::SortColumn(column, order)) => {
+                let column = match *column {
+                    0 => Column::_0,
+                    1 => Column::_1,
+                    2 => Column::_2,
+                    3 => Column::_3,
+                    4 => Column::_4,
+                    other => {
+                        context.replies.push_back(UIEvent::StatusEvent(
+                            StatusEvent::DisplayMessage(format!(
+                                "Invalid column index `{}`: there are {} columns.",
+                                other,
+                                Self::HEADERS.len()
+                            )),
+                        ));
+
+                        return true;
+                    }
+                };
+                if (self.sort_col, self.sort_order) != (column, *order) {
+                    self.sort_col = column;
+                    self.sort_order = *order;
+                    self.initialized = false;
+                    self.set_dirty(true);
+                }
+                return true;
+            }
+            UIEvent::Input(Key::Char(ref c)) if c.is_ascii_digit() => {
+                let n = *c as u8 - b'0'; // safe cast because of is_ascii_digit() check;
+                let column = match n {
+                    1 => Column::_0,
+                    2 => Column::_1,
+                    3 => Column::_2,
+                    4 => Column::_3,
+                    5 => Column::_4,
+                    _ => {
+                        return false;
+                    }
+                };
+                if self.sort_col == column {
+                    self.sort_order = !self.sort_order;
+                } else {
+                    self.sort_col = column;
+                    self.sort_order = SortOrder::default();
+                }
+                self.initialized = false;
+                self.set_dirty(true);
+                return true;
             }
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_up"]) =>
@@ -405,6 +551,9 @@ impl Component for JobManager {
                 self.movement = Some(PageMovement::End);
                 return true;
             }
+            UIEvent::Resize => {
+                self.set_dirty(true);
+            }
             _ => {}
         }
         false
@@ -430,6 +579,11 @@ impl Component for JobManager {
             Shortcuts::GENERAL,
             context.settings.shortcuts.general.key_values(),
         );
+        map[Shortcuts::GENERAL].insert("sort by 1st column", Key::Char('1'));
+        map[Shortcuts::GENERAL].insert("sort by 2nd column", Key::Char('2'));
+        map[Shortcuts::GENERAL].insert("sort by 3rd column", Key::Char('3'));
+        map[Shortcuts::GENERAL].insert("sort by 4th column", Key::Char('4'));
+        map[Shortcuts::GENERAL].insert("sort by 5th column", Key::Char('5'));
 
         map
     }
@@ -443,6 +597,10 @@ impl Component for JobManager {
     }
 
     fn status(&self, _context: &Context) -> String {
-        format!("{} entries", self.entries.len())
+        format!(
+            "{} entries. Use `sort <n> [asc/desc]` command or press column index number key \
+             (twice to toggle asc/desc) to sort",
+            self.entries.len()
+        )
     }
 }

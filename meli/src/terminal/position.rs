@@ -60,6 +60,15 @@ pub fn pos_dec(p: Pos, dec: (usize, usize)) -> Pos {
 /// ```
 pub type Area = (Pos, Pos);
 
+#[inline(always)]
+pub fn skip_rows(area: Area, n: usize) -> Option<Area> {
+    let (upper_left, bottom_right) = area;
+    if upper_left.1 + n <= bottom_right.1 {
+        return Some((pos_inc(upper_left, (0, n)), bottom_right));
+    }
+    None
+}
+
 /// Get an area's height
 ///
 /// Example:
