@@ -620,12 +620,31 @@ impl Component for ContactList {
     }
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
-        if let UIEvent::ConfigReload { old_settings: _ } = event {
-            self.theme_default = crate::conf::value(context, "theme_default");
-            self.initialized = false;
-            self.sidebar_divider = context.settings.listing.sidebar_divider;
-            self.sidebar_divider_theme = conf::value(context, "mail.sidebar_divider");
-            self.set_dirty(true);
+        match event {
+            UIEvent::ConfigReload { old_settings: _ } => {
+                self.theme_default = crate::conf::value(context, "theme_default");
+                self.initialized = false;
+                self.sidebar_divider = context.settings.listing.sidebar_divider;
+                self.sidebar_divider_theme = conf::value(context, "mail.sidebar_divider");
+                self.set_dirty(true);
+            }
+            UIEvent::AccountStatusChange(_, _) => {
+                self.initialized = false;
+                self.set_dirty(true);
+            }
+            UIEvent::ComponentUnrealize(ref kill_id) if self.mode == ViewMode::View(*kill_id) => {
+                self.mode = ViewMode::List;
+                self.view.take();
+                self.set_dirty(true);
+                return true;
+            }
+            UIEvent::ChangeMode(UIMode::Normal) => {
+                self.set_dirty(true);
+            }
+            UIEvent::Resize => {
+                self.set_dirty(true);
+            }
+            _ => {}
         }
 
         if let Some(ref mut v) = self.view {
@@ -633,6 +652,7 @@ impl Component for ContactList {
                 return true;
             }
         }
+
         let shortcuts = self.shortcuts(context);
         if self.view.is_none() {
             match *event {
@@ -655,9 +675,11 @@ impl Component for ContactList {
                 }
 
                 UIEvent::Input(ref key)
-                    if shortcut!(key == shortcuts[Shortcuts::CONTACT_LIST]["edit_contact"])
-                        && self.length > 0 =>
+                    if shortcut!(key == shortcuts[Shortcuts::CONTACT_LIST]["edit_contact"]) =>
                 {
+                    if self.length == 0 {
+                        return true;
+                    }
                     let account = &mut context.accounts[self.account_pos];
                     let book = &mut account.address_book;
                     let card = book[&self.id_positions[self.cursor_pos]].clone();
@@ -677,9 +699,11 @@ impl Component for ContactList {
                     return true;
                 }
                 UIEvent::Input(ref key)
-                    if shortcut!(key == shortcuts[Shortcuts::CONTACT_LIST]["mail_contact"])
-                        && self.length > 0 =>
+                    if shortcut!(key == shortcuts[Shortcuts::CONTACT_LIST]["mail_contact"]) =>
                 {
+                    if self.length == 0 {
+                        return true;
+                    }
                     let account = &context.accounts[self.account_pos];
                     let account_hash = account.hash();
                     let book = &account.address_book;
@@ -692,6 +716,24 @@ impl Component for ContactList {
                     context
                         .replies
                         .push_back(UIEvent::Action(Tab(New(Some(Box::new(composer))))));
+
+                    return true;
+                }
+                UIEvent::Input(ref key)
+                    if shortcut!(key == shortcuts[Shortcuts::CONTACT_LIST]["delete_contact"]) =>
+                {
+                    if self.length == 0 {
+                        return true;
+                    }
+                    // [ref:TODO]: add a confirmation dialog?
+                    context.accounts[self.account_pos]
+                        .address_book
+                        .remove_card(self.id_positions[self.cursor_pos]);
+                    self.initialized = false;
+                    self.set_dirty(true);
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
 
                     return true;
                 }
@@ -713,9 +755,6 @@ impl Component for ContactList {
                             .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
                         return true;
                     };
-                    if self.accounts.is_empty() {
-                        return true;
-                    }
                     if self.account_pos + amount < self.accounts.len() {
                         self.account_pos += amount;
                         self.set_dirty(true);
@@ -817,9 +856,11 @@ impl Component for ContactList {
                     return true;
                 }
                 UIEvent::Input(ref key)
-                    if shortcut!(key == shortcuts[Shortcuts::CONTACT_LIST]["scroll_down"])
-                        && self.cursor_pos < self.length.saturating_sub(1) =>
+                    if shortcut!(key == shortcuts[Shortcuts::CONTACT_LIST]["scroll_down"]) =>
                 {
+                    if self.cursor_pos >= self.length.saturating_sub(1) {
+                        return true;
+                    }
                     let amount = if self.cmd_buf.is_empty() {
                         1
                     } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
@@ -896,24 +937,6 @@ impl Component for ContactList {
                     self.set_dirty(true);
                     self.movement = Some(PageMovement::End);
                     return true;
-                }
-                _ => {}
-            }
-        } else {
-            match event {
-                UIEvent::ComponentUnrealize(ref kill_id)
-                    if self.mode == ViewMode::View(*kill_id) =>
-                {
-                    self.mode = ViewMode::List;
-                    self.view.take();
-                    self.set_dirty(true);
-                    return true;
-                }
-                UIEvent::ChangeMode(UIMode::Normal) => {
-                    self.set_dirty(true);
-                }
-                UIEvent::Resize => {
-                    self.set_dirty(true);
                 }
                 _ => {}
             }
