@@ -19,17 +19,16 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+pub mod mutt;
 #[cfg(feature = "vcard")]
 pub mod vcard;
-
-pub mod mutt;
 
 use std::{collections::HashMap, ops::Deref};
 
 use uuid::Uuid;
 
 use crate::utils::{
-    datetime::{self, UnixTimestamp},
+    datetime::{now, timestamp_to_string, UnixTimestamp},
     parsec::Parser,
 };
 
@@ -92,17 +91,14 @@ pub struct Card {
     additionalname: String,
     name_prefix: String,
     name_suffix: String,
-    //address
     birthday: Option<UnixTimestamp>,
     email: String,
     url: String,
     key: String,
-
     color: u8,
     last_edited: UnixTimestamp,
     extra_properties: HashMap<String, String>,
-
-    /// If true, we can't make any changes because we do not manage this
+    /// If `true`, we can't make any changes because we do not manage this
     /// resource.
     external_resource: bool,
 }
@@ -111,8 +107,8 @@ impl AddressBook {
     pub fn new(display_name: String) -> Self {
         Self {
             display_name,
-            created: datetime::now(),
-            last_edited: datetime::now(),
+            created: now(),
+            last_edited: now(),
             cards: HashMap::default(),
         }
     }
@@ -162,17 +158,30 @@ impl AddressBook {
     pub fn add_card(&mut self, card: Card) {
         self.cards.insert(card.id, card);
     }
+
     pub fn remove_card(&mut self, card_id: CardId) {
         self.cards.remove(&card_id);
     }
+
     pub fn card_exists(&self, card_id: CardId) -> bool {
         self.cards.contains_key(&card_id)
     }
+
     pub fn search(&self, term: &str) -> Vec<String> {
         self.cards
             .values()
-            .filter(|c| c.email.contains(term))
-            .map(|c| format!("{} <{}>", &c.name, &c.email))
+            .filter(|c| c.email.contains(term) || c.name.contains(term))
+            .map(|c| {
+                crate::email::Address::new(
+                    if c.name.is_empty() {
+                        None
+                    } else {
+                        Some(c.name.clone())
+                    },
+                    c.email.clone(),
+                )
+                .to_string()
+            })
             .collect()
     }
 }
@@ -183,6 +192,23 @@ impl Deref for AddressBook {
     fn deref(&self) -> &HashMap<CardId, Card> {
         &self.cards
     }
+}
+
+macro_rules! get_fn {
+    ($fn:tt str) => {
+        pub fn $fn(&self) -> &str {
+            self.$fn.as_str()
+        }
+    };
+}
+
+macro_rules! set_fn {
+    ($n:ident, $fn:tt) => {
+        pub fn $n(&mut self, val: String) -> &mut Self {
+            self.$fn = val;
+            self
+        }
+    };
 }
 
 impl Card {
@@ -200,7 +226,7 @@ impl Card {
             url: String::new(),
             key: String::new(),
 
-            last_edited: datetime::now(),
+            last_edited: now(),
             external_resource: false,
             extra_properties: HashMap::default(),
             color: 0,
@@ -211,82 +237,17 @@ impl Card {
         &self.id
     }
 
-    pub fn title(&self) -> &str {
-        self.title.as_str()
-    }
-    pub fn name(&self) -> &str {
-        self.name.as_str()
-    }
-    pub fn additionalname(&self) -> &str {
-        self.additionalname.as_str()
-    }
-    pub fn name_prefix(&self) -> &str {
-        self.name_prefix.as_str()
-    }
-    pub fn name_suffix(&self) -> &str {
-        self.name_suffix.as_str()
-    }
-    pub fn email(&self) -> &str {
-        self.email.as_str()
-    }
-    pub fn url(&self) -> &str {
-        self.url.as_str()
-    }
-    pub fn key(&self) -> &str {
-        self.key.as_str()
-    }
+    get_fn! { title str }
+    get_fn! { name str }
+    get_fn! { additionalname str }
+    get_fn! { name_prefix str }
+    get_fn! { name_suffix str }
+    get_fn! { email str }
+    get_fn! { url str }
+    get_fn! { key str }
+
     pub fn last_edited(&self) -> String {
-        datetime::timestamp_to_string(self.last_edited, None, false)
-    }
-
-    pub fn set_id(&mut self, new_val: CardId) -> &mut Self {
-        self.id = new_val;
-        self
-    }
-
-    pub fn set_title(&mut self, new: String) -> &mut Self {
-        self.title = new;
-        self
-    }
-
-    pub fn set_name(&mut self, new: String) -> &mut Self {
-        self.name = new;
-        self
-    }
-
-    pub fn set_additionalname(&mut self, new: String) -> &mut Self {
-        self.additionalname = new;
-        self
-    }
-
-    pub fn set_name_prefix(&mut self, new: String) -> &mut Self {
-        self.name_prefix = new;
-        self
-    }
-
-    pub fn set_name_suffix(&mut self, new: String) -> &mut Self {
-        self.name_suffix = new;
-        self
-    }
-
-    pub fn set_email(&mut self, new: String) -> &mut Self {
-        self.email = new;
-        self
-    }
-
-    pub fn set_url(&mut self, new: String) -> &mut Self {
-        self.url = new;
-        self
-    }
-
-    pub fn set_key(&mut self, new: String) -> &mut Self {
-        self.key = new;
-        self
-    }
-
-    pub fn set_extra_property(&mut self, key: &str, value: String) -> &mut Self {
-        self.extra_properties.insert(key.to_string(), value);
-        self
+        timestamp_to_string(self.last_edited, None, false)
     }
 
     pub fn extra_property(&self, key: &str) -> Option<&str> {
@@ -297,44 +258,53 @@ impl Card {
         &self.extra_properties
     }
 
-    pub fn set_external_resource(&mut self, new_val: bool) -> &mut Self {
-        self.external_resource = new_val;
+    pub fn external_resource(&self) -> bool {
+        self.external_resource
+    }
+
+    pub fn set_id(&mut self, new_val: CardId) -> &mut Self {
+        self.id = new_val;
         self
     }
 
-    pub fn external_resource(&self) -> bool {
-        self.external_resource
+    set_fn! { set_title, title }
+    set_fn! { set_name, name }
+    set_fn! { set_additionalname, additionalname }
+    set_fn! { set_name_prefix, name_prefix }
+    set_fn! { set_name_suffix, name_suffix }
+    set_fn! { set_email, email }
+    set_fn! { set_url, url }
+    set_fn! { set_key, key }
+
+    pub fn set_extra_property(&mut self, key: &str, value: String) -> &mut Self {
+        self.extra_properties.insert(key.to_string(), value);
+        self
+    }
+
+    pub fn set_external_resource(&mut self, new_val: bool) -> &mut Self {
+        self.external_resource = new_val;
+        self
     }
 }
 
 impl From<HashMap<String, String>> for Card {
     fn from(mut map: HashMap<String, String>) -> Self {
         let mut card = Self::new();
-        if let Some(val) = map.remove("TITLE") {
-            card.title = val;
+        macro_rules! get {
+            ($key:literal, $field:tt) => {
+                if let Some(val) = map.remove($key) {
+                    card.$field = val;
+                }
+            };
         }
-        if let Some(val) = map.remove("NAME") {
-            card.name = val;
-        }
-        if let Some(val) = map.remove("ADDITIONAL NAME") {
-            card.additionalname = val;
-        }
-        if let Some(val) = map.remove("NAME PREFIX") {
-            card.name_prefix = val;
-        }
-        if let Some(val) = map.remove("NAME SUFFIX") {
-            card.name_suffix = val;
-        }
-
-        if let Some(val) = map.remove("E-MAIL") {
-            card.email = val;
-        }
-        if let Some(val) = map.remove("URL") {
-            card.url = val;
-        }
-        if let Some(val) = map.remove("KEY") {
-            card.key = val;
-        }
+        get! { "TITLE", title };
+        get! { "NAME", name };
+        get! { "ADDITIONAL NAME", additionalname };
+        get! { "NAME PREFIX", name_prefix };
+        get! { "NAME SUFFIX", name_suffix };
+        get! { "E-MAIL", email };
+        get! { "URL", url };
+        get! { "KEY", key };
         card.extra_properties = map;
         card
     }
