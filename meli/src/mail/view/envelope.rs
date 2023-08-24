@@ -1092,33 +1092,36 @@ impl Component for EnvelopeView {
                 ViewMode::Source(Source::Decoded) => {
                     let text = {
                         /* Decode each header value */
-                        let mut ret = melib::email::parser::headers::headers(self.mail.bytes())
+                        let mut ret = String::new();
+                        match melib::email::parser::headers::headers(self.mail.bytes())
                             .map(|(_, v)| v)
-                            .map_err(|err| err.into())
-                            .and_then(|headers| {
-                                Ok(headers
-                                    .into_iter()
-                                    .map(|(h, v)| {
-                                        melib::email::parser::encodings::phrase(v, true)
-                                            .map(|(_, v)| {
-                                                let mut h = h.to_vec();
-                                                h.push(b':');
-                                                h.push(b' ');
-                                                h.extend(v.into_iter());
-                                                h
-                                            })
-                                            .map_err(|err| err.into())
-                                    })
-                                    .collect::<Result<Vec<Vec<u8>>>>()?
-                                    .join(&b"\n"[..]))
-                            })
-                            .map(|v| String::from_utf8_lossy(&v).into_owned())
-                            .unwrap_or_else(|err: Error| err.to_string());
+                        {
+                            Ok(headers) => {
+                                for (h, v) in headers {
+                                    _ = match melib::email::parser::encodings::phrase(v, true) {
+                                        Ok((_, v)) => ret.write_fmt(format_args!(
+                                            "{h}: {}\n",
+                                            String::from_utf8_lossy(&v)
+                                        )),
+                                        Err(err) => ret.write_fmt(format_args!("{h}: {err}\n")),
+                                    };
+                                }
+                            }
+                            Err(err) => {
+                                _ = write!(&mut ret, "{err}");
+                            }
+                        }
                         if !ret.ends_with("\n\n") {
+                            if ret.ends_with('\n') {
+                                ret.pop();
+                            }
                             ret.push_str("\n\n");
                         }
                         ret.push_str(&self.body_text);
                         if !ret.ends_with("\n\n") {
+                            if ret.ends_with('\n') {
+                                ret.pop();
+                            }
                             ret.push_str("\n\n");
                         }
                         // ret.push_str(&self.attachment_tree);

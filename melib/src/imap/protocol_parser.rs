@@ -42,7 +42,10 @@ use crate::{
         },
     },
     error::ResultIntoError,
+    utils::parsec::CRLF,
 };
+
+const UNTAGGED_PREFIX: &[u8] = b"* ";
 
 bitflags! {
     #[derive(Default, Serialize, Deserialize)]
@@ -75,10 +78,10 @@ bitflags! {
 
 impl RequiredResponses {
     pub fn check(&self, line: &[u8]) -> bool {
-        if !line.starts_with(b"* ") {
+        if !line.starts_with(UNTAGGED_PREFIX) {
             return false;
         }
-        let line = &line[b"* ".len()..];
+        let line = &line[UNTAGGED_PREFIX.len()..];
         let mut ret = false;
         if self.intersects(Self::CAPABILITY) {
             ret |= line.starts_with(b"CAPABILITY");
@@ -356,7 +359,7 @@ impl<'a> Iterator for ImapLineIterator<'a> {
         let mut i = 0;
         loop {
             let cur_slice = &self.slice[i..];
-            if let Some(pos) = cur_slice.find(b"\r\n") {
+            if let Some(pos) = cur_slice.find(CRLF) {
                 /* Skip literal continuation line */
                 if cur_slice.get(pos.saturating_sub(1)) == Some(&b'}') {
                     i += pos + 2;
@@ -424,7 +427,7 @@ pub fn list_mailbox_result(input: &[u8]) -> IResult<&[u8], ImapMailbox> {
     let (input, separator) = delimited(tag(b"\""), take(1_u32), tag(b"\""))(input)?;
     let (input, _) = take(1_u32)(input)?;
     let (input, path) = mailbox_token(input)?;
-    let (input, _) = tag("\r\n")(input)?;
+    let (input, _) = tag(CRLF)(input)?;
     Ok((
         input,
         ({
@@ -495,7 +498,7 @@ pub struct FetchResponse<'a> {
 
 pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
     macro_rules! should_start_with {
-        ($input:expr, $tag:literal) => {
+        ($input:expr, $tag:tt) => {
             if !$input.starts_with($tag) {
                 return Err(Error::new(format!(
                     "Expected `{}` but got `{:.50}`",
@@ -505,9 +508,9 @@ pub fn fetch_response(input: &[u8]) -> ImapParseResult<FetchResponse<'_>> {
             }
         };
     }
-    should_start_with!(input, b"* ");
+    should_start_with!(input, UNTAGGED_PREFIX);
 
-    let mut i = b"* ".len();
+    let mut i = UNTAGGED_PREFIX.len();
     macro_rules! bounds {
         () => {
             if i == input.len() {
@@ -707,7 +710,7 @@ pub fn fetch_responses(mut input: &[u8]) -> ImapParseResult<Vec<FetchResponse<'_
     let mut ret = Vec::new();
     let mut alert: Option<Alert> = None;
 
-    while input.starts_with(b"* ") {
+    while input.starts_with(UNTAGGED_PREFIX) {
         let next_response = fetch_response(input);
         match next_response {
             Ok((rest, el, el_alert)) => {
@@ -784,8 +787,8 @@ pub fn capabilities(input: &[u8]) -> IResult<&[u8], Vec<&[u8]>> {
     let (input, _) = take_until("CAPABILITY ")(input)?;
     let (input, _) = tag("CAPABILITY ")(input)?;
     let (input, ret) = separated_list1(tag(" "), is_not(" ]\r\n"))(input)?;
-    let (input, _) = take_until("\r\n")(input)?;
-    let (input, _) = tag("\r\n")(input)?;
+    let (input, _) = take_until(CRLF)(input)?;
+    let (input, _) = tag(CRLF)(input)?;
     Ok((input, ret))
 }
 
@@ -860,14 +863,13 @@ pub enum UntaggedResponse<'s> {
 
 pub fn untagged_responses(input: &[u8]) -> ImapParseResult<Option<UntaggedResponse<'_>>> {
     let orig_input = input;
-    let (input, _) = tag::<_, &[u8], (&[u8], nom::error::ErrorKind)>(b"* ")(input)?;
+    let (input, _) = tag::<_, &[u8], (&[u8], nom::error::ErrorKind)>(UNTAGGED_PREFIX)(input)?;
     let (input, num) = map_res::<_, _, _, (&[u8], nom::error::ErrorKind), _, _, _>(digit1, |s| {
         ImapNum::from_str(unsafe { std::str::from_utf8_unchecked(s) })
     })(input)?;
     let (input, _) = tag::<_, &[u8], (&[u8], nom::error::ErrorKind)>(b" ")(input)?;
-    let (input, _tag) =
-        take_until::<_, &[u8], (&[u8], nom::error::ErrorKind)>(&b"\r\n"[..])(input)?;
-    let (input, _) = tag::<_, &[u8], (&[u8], nom::error::ErrorKind)>(b"\r\n")(input)?;
+    let (input, _tag) = take_until::<_, &[u8], (&[u8], nom::error::ErrorKind)>(CRLF)(input)?;
+    let (input, _) = tag::<_, &[u8], (&[u8], nom::error::ErrorKind)>(CRLF)(input)?;
     debug!(
         "Parse untagged response from {:?}",
         String::from_utf8_lossy(orig_input)
@@ -904,7 +906,7 @@ pub fn search_results<'a>(input: &'a [u8]) -> IResult<&'a [u8], Vec<ImapNum>> {
                     ImapNum::from_str(unsafe { std::str::from_utf8_unchecked(s) })
                 }),
             )(input)?;
-            let (input, _) = tag("\r\n")(input)?;
+            let (input, _) = tag(CRLF)(input)?;
             Ok((input, list))
         },
         |input: &'a [u8]| -> IResult<&'a [u8], Vec<ImapNum>> {
@@ -918,8 +920,8 @@ pub fn search_results_raw<'a>(input: &'a [u8]) -> IResult<&'a [u8], &'a [u8]> {
     alt((
         |input: &'a [u8]| -> IResult<&'a [u8], &'a [u8]> {
             let (input, _) = tag("* SEARCH ")(input)?;
-            let (input, list) = take_until("\r\n")(input)?;
-            let (input, _) = tag("\r\n")(input)?;
+            let (input, list) = take_until(CRLF)(input)?;
+            let (input, _) = tag(CRLF)(input)?;
             Ok((input, list))
         },
         |input: &'a [u8]| -> IResult<&'a [u8], &'a [u8]> {
@@ -971,13 +973,13 @@ pub fn select_response(input: &[u8]) -> Result<SelectResponse> {
     if input.contains_subsequence(b"* OK") {
         let mut ret = SelectResponse::default();
         for l in input.split_rn() {
-            if l.starts_with(b"* ") && l.ends_with(b" EXISTS\r\n") {
+            if l.starts_with(UNTAGGED_PREFIX) && l.ends_with(b" EXISTS\r\n") {
                 ret.exists = ImapNum::from_str(&String::from_utf8_lossy(
-                    &l[b"* ".len()..l.len() - b" EXISTS\r\n".len()],
+                    &l[UNTAGGED_PREFIX.len()..l.len() - b" EXISTS\r\n".len()],
                 ))?;
-            } else if l.starts_with(b"* ") && l.ends_with(b" RECENT\r\n") {
+            } else if l.starts_with(UNTAGGED_PREFIX) && l.ends_with(b" RECENT\r\n") {
                 ret.recent = ImapNum::from_str(&String::from_utf8_lossy(
-                    &l[b"* ".len()..l.len() - b" RECENT\r\n".len()],
+                    &l[UNTAGGED_PREFIX.len()..l.len() - b" RECENT\r\n".len()],
                 ))?;
             } else if l.starts_with(b"* FLAGS (") {
                 ret.flags = flags(&l[b"* FLAGS (".len()..l.len() - b")".len()]).map(|(_, v)| v)?;
@@ -1110,28 +1112,29 @@ pub fn byte_flags(input: &[u8]) -> IResult<&[u8], (Flag, Vec<String>)> {
  */
 
 pub fn envelope(input: &[u8]) -> IResult<&[u8], Envelope> {
+    const WS: &[u8] = b"\r\n\t ";
     let (input, _) = tag("(")(input)?;
-    let (input, _) = opt(is_a("\r\n\t "))(input)?;
+    let (input, _) = opt(is_a(WS))(input)?;
     let (input, date) = quoted_or_nil(input)?;
-    let (input, _) = opt(is_a("\r\n\t "))(input)?;
+    let (input, _) = opt(is_a(WS))(input)?;
     let (input, subject) = quoted_or_nil(input)?;
-    let (input, _) = opt(is_a("\r\n\t "))(input)?;
+    let (input, _) = opt(is_a(WS))(input)?;
     let (input, from) = envelope_addresses(input)?;
-    let (input, _) = opt(is_a("\r\n\t "))(input)?;
+    let (input, _) = opt(is_a(WS))(input)?;
     let (input, _sender) = envelope_addresses(input)?;
-    let (input, _) = opt(is_a("\r\n\t "))(input)?;
+    let (input, _) = opt(is_a(WS))(input)?;
     let (input, _reply_to) = envelope_addresses(input)?;
-    let (input, _) = opt(is_a("\r\n\t "))(input)?;
+    let (input, _) = opt(is_a(WS))(input)?;
     let (input, to) = envelope_addresses(input)?;
-    let (input, _) = opt(is_a("\r\n\t "))(input)?;
+    let (input, _) = opt(is_a(WS))(input)?;
     let (input, cc) = envelope_addresses(input)?;
-    let (input, _) = opt(is_a("\r\n\t "))(input)?;
+    let (input, _) = opt(is_a(WS))(input)?;
     let (input, bcc) = envelope_addresses(input)?;
-    let (input, _) = opt(is_a("\r\n\t "))(input)?;
+    let (input, _) = opt(is_a(WS))(input)?;
     let (input, in_reply_to) = quoted_or_nil(input)?;
-    let (input, _) = opt(is_a("\r\n\t "))(input)?;
+    let (input, _) = opt(is_a(WS))(input)?;
     let (input, message_id) = quoted_or_nil(input)?;
-    let (input, _) = opt(is_a("\r\n\t "))(input)?;
+    let (input, _) = opt(is_a(WS))(input)?;
     let (input, _) = tag(")")(input)?;
     Ok((
         input,
@@ -1215,13 +1218,14 @@ pub fn envelope_addresses<'a>(
 // Parse an address in the format of the ENVELOPE structure eg
 // ("Terry Gray" NIL "gray" "cac.washington.edu")
 pub fn envelope_address(input: &[u8]) -> IResult<&[u8], Address> {
+    const WS: &[u8] = b"\r\n\t ";
     let (input, name) = alt((quoted, map(tag("NIL"), |_| Vec::new())))(input)?;
-    let (input, _) = is_a("\r\n\t ")(input)?;
+    let (input, _) = is_a(WS)(input)?;
     let (input, _) = alt((quoted, map(tag("NIL"), |_| Vec::new())))(input)?;
-    let (input, _) = is_a("\r\n\t ")(input)?;
+    let (input, _) = is_a(WS)(input)?;
     let (input, mailbox_name) = alt((quoted, map(tag("NIL"), |_| Vec::new())))(input)?;
     let (input, host_name) = opt(preceded(
-        is_a("\r\n\t "),
+        is_a(WS),
         alt((quoted, map(tag("NIL"), |_| Vec::new()))),
     ))(input)?;
     Ok((
@@ -1369,7 +1373,7 @@ fn eat_whitespace(mut input: &[u8]) -> IResult<&[u8], ()> {
     while !input.is_empty() {
         if input[0] == b' ' || input[0] == b'\n' || input[0] == b'\t' {
             input = &input[1..];
-        } else if input.starts_with(b"\r\n") {
+        } else if input.starts_with(CRLF) {
             input = &input[2..];
         } else {
             break;

@@ -20,7 +20,10 @@
  */
 
 use super::*;
-use crate::utils::datetime;
+use crate::utils::{
+    datetime,
+    parsec::{CRLF, LF},
+};
 
 impl MboxFormat {
     #[allow(clippy::too_many_arguments)]
@@ -38,7 +41,7 @@ impl MboxFormat {
         if tags.iter().any(|t| t.contains(' ')) {
             return Err(Error::new("mbox tags/keywords can't contain spaces"));
         }
-        let line_ending: &'static [u8] = if crlf { &b"\r\n"[..] } else { &b"\n"[..] };
+        let line_ending: &'static [u8] = if crlf { CRLF } else { LF };
         if !is_empty {
             writer.write_all(line_ending)?;
             writer.write_all(line_ending)?;
@@ -62,21 +65,21 @@ impl MboxFormat {
         writer.write_all(line_ending)?;
         let (mut headers, body) = parser::mail(input)?;
         headers.retain(|(header_name, _)| {
-            !header_name.eq_ignore_ascii_case(b"Status")
-                && !header_name.eq_ignore_ascii_case(b"X-Status")
-                && !header_name.eq_ignore_ascii_case(b"X-Keywords")
-                && !header_name.eq_ignore_ascii_case(b"Content-Length")
+            header_name != HeaderName::STATUS
+                && header_name != HeaderName::X_STATUS
+                && header_name != HeaderName::X_KEYWORDS
+                && header_name != HeaderName::CONTENT_LENGTH
         });
         let write_header_val_fn = |writer: &mut dyn std::io::Write, bytes: &[u8]| {
             let mut i = 0;
             if crlf {
                 while i < bytes.len() {
-                    if bytes[i..].starts_with(b"\r\n") {
-                        writer.write_all(&[b'\r', b'\n'])?;
+                    if bytes[i..].starts_with(CRLF) {
+                        writer.write_all(CRLF)?;
                         i += 2;
                         continue;
                     } else if bytes[i] == b'\n' {
-                        writer.write_all(&[b'\r', b'\n'])?;
+                        writer.write_all(CRLF)?;
                     } else {
                         writer.write_all(&[bytes[i]])?;
                     }
@@ -84,8 +87,8 @@ impl MboxFormat {
                 }
             } else {
                 while i < bytes.len() {
-                    if bytes[i..].starts_with(b"\r\n") {
-                        writer.write_all(&[b'\n'])?;
+                    if bytes[i..].starts_with(CRLF) {
+                        writer.write_all(LF)?;
                         i += 2;
                     } else {
                         writer.write_all(&[bytes[i]])?;
@@ -99,7 +102,7 @@ impl MboxFormat {
             MboxMetadata::CClient => {
                 for (h, v) in {
                     if flags.is_seen() {
-                        Some((&b"Status"[..], "R".into()))
+                        Some((HeaderName::STATUS, "R".into()))
                     } else {
                         None
                     }
@@ -113,7 +116,7 @@ impl MboxFormat {
                             None
                         } else {
                             Some((
-                                &b"X-Status"[..],
+                                HeaderName::X_STATUS,
                                 format!(
                                     "{flagged}{replied}{draft}{trashed}",
                                     flagged = if flags.is_flagged() { "F" } else { "" },
@@ -127,11 +130,10 @@ impl MboxFormat {
                     .chain(if tags.is_empty() {
                         None
                     } else {
-                        Some((&b"X-Keywords"[..], tags.as_slice().join(" ")))
+                        Some((HeaderName::X_KEYWORDS, tags.as_slice().join(" ")))
                     })
                 } {
-                    writer.write_all(h)?;
-                    writer.write_all(&b": "[..])?;
+                    writer.write_fmt(format_args!("{}: ", h))?;
                     writer.write_all(v.as_bytes())?;
                     writer.write_all(line_ending)?;
                 }
@@ -144,17 +146,19 @@ impl MboxFormat {
             let mut len = body.len();
             if crlf {
                 let stray_lfs = body.iter().filter(|b| **b == b'\n').count()
-                    - body.windows(b"\r\n".len()).filter(|w| w == b"\r\n").count();
+                    - body.windows(CRLF.len()).filter(|w| w == &CRLF).count();
                 len += stray_lfs;
             } else {
-                let crlfs = body.windows(b"\r\n".len()).filter(|w| w == b"\r\n").count();
+                let crlfs = body.windows(CRLF.len()).filter(|w| w == &CRLF).count();
                 len -= crlfs;
             }
             len
         };
 
         match self {
-            Self::MboxO | Self::MboxRd => Err(Error::new("Unimplemented.")),
+            Self::MboxO | Self::MboxRd => {
+                Err(Error::new("Not implemented.").set_kind(ErrorKind::NotImplemented))
+            }
             Self::MboxCl => {
                 let len = (body_len
                     + body
@@ -165,10 +169,9 @@ impl MboxFormat {
                 .to_string();
                 for (h, v) in headers
                     .into_iter()
-                    .chain(Some((&b"Content-Length"[..], len.as_bytes())))
+                    .chain(Some((HeaderName::CONTENT_LENGTH, len.as_bytes())))
                 {
-                    writer.write_all(h)?;
-                    writer.write_all(&b": "[..])?;
+                    writer.write_fmt(format_args!("{}: ", h))?;
                     write_header_val_fn(writer, v)?;
                     writer.write_all(line_ending)?;
                 }
@@ -181,14 +184,14 @@ impl MboxFormat {
                 let mut i = 0;
                 if crlf {
                     while i < body.len() {
-                        if body[i..].starts_with(b"\r\n") {
-                            writer.write_all(&[b'\r', b'\n'])?;
+                        if body[i..].starts_with(CRLF) {
+                            writer.write_all(CRLF)?;
                             if body[i..].starts_with(b"\r\nFrom ") {
                                 writer.write_all(&[b'>'])?;
                             }
                             i += 2;
                         } else if body[i] == b'\n' {
-                            writer.write_all(&[b'\r', b'\n'])?;
+                            writer.write_all(CRLF)?;
                             if body[i..].starts_with(b"\nFrom ") {
                                 writer.write_all(&[b'>'])?;
                             }
@@ -200,8 +203,8 @@ impl MboxFormat {
                     }
                 } else {
                     while i < body.len() {
-                        if body[i..].starts_with(b"\r\n") {
-                            writer.write_all(&[b'\n'])?;
+                        if body[i..].starts_with(CRLF) {
+                            writer.write_all(LF)?;
                             if body[i..].starts_with(b"\r\nFrom ") {
                                 writer.write_all(&[b'>'])?;
                             }
@@ -221,10 +224,9 @@ impl MboxFormat {
                 let len = body_len.to_string();
                 for (h, v) in headers
                     .into_iter()
-                    .chain(Some((&b"Content-Length"[..], len.as_bytes())))
+                    .chain(Some((HeaderName::CONTENT_LENGTH, len.as_bytes())))
                 {
-                    writer.write_all(h)?;
-                    writer.write_all(&b": "[..])?;
+                    writer.write_fmt(format_args!("{}: ", h))?;
                     write_header_val_fn(writer, v)?;
                     writer.write_all(line_ending)?;
                 }
@@ -233,12 +235,12 @@ impl MboxFormat {
                 let mut i = 0;
                 if crlf {
                     while i < body.len() {
-                        if body[i..].starts_with(b"\r\n") {
-                            writer.write_all(&[b'\r', b'\n'])?;
+                        if body[i..].starts_with(CRLF) {
+                            writer.write_all(CRLF)?;
                             i += 2;
                             continue;
                         } else if body[i] == b'\n' {
-                            writer.write_all(&[b'\r', b'\n'])?;
+                            writer.write_all(CRLF)?;
                         } else {
                             writer.write_all(&[body[i]])?;
                         }
@@ -246,8 +248,8 @@ impl MboxFormat {
                     }
                 } else {
                     while i < body.len() {
-                        if body[i..].starts_with(b"\r\n") {
-                            writer.write_all(&[b'\n'])?;
+                        if body[i..].starts_with(CRLF) {
+                            writer.write_all(LF)?;
                             i += 2;
                         } else {
                             writer.write_all(&[body[i]])?;

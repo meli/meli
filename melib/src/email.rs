@@ -104,7 +104,7 @@ pub mod mailto;
 pub mod parser;
 pub mod pgp;
 
-use std::{borrow::Cow, convert::TryInto, ops::Deref};
+use std::{borrow::Cow, ops::Deref};
 
 pub use address::{Address, MessageID, References, StrBuild, StrBuilder};
 pub use attachments::{Attachment, AttachmentBuilder};
@@ -371,47 +371,55 @@ impl Envelope {
             }
         };
         for (name, value) in headers {
-            let name: HeaderName = name.try_into()?;
-            if name == "to" {
-                let parse_result = parser::address::rfc2822address_list(value);
-                if let Ok((_, value)) = parse_result {
-                    self.set_to(value);
-                };
-            } else if name == "cc" {
-                let parse_result = parser::address::rfc2822address_list(value);
-                if let Ok((_, value)) = parse_result {
-                    self.set_cc(value);
-                };
-            } else if name == "bcc" {
-                let parse_result = parser::address::rfc2822address_list(value);
-                if let Ok((_, value)) = parse_result {
-                    self.set_bcc(value.to_vec());
-                };
-            } else if name == "from" {
-                let parse_result = parser::address::rfc2822address_list(value);
-                if let Ok((_, value)) = parse_result {
-                    self.set_from(value);
+            match name {
+                HeaderName::TO => {
+                    let parse_result = parser::address::rfc2822address_list(value);
+                    if let Ok((_, value)) = parse_result {
+                        self.set_to(value);
+                    };
                 }
-            } else if name == "subject" {
-                let parse_result = parser::encodings::phrase(value.trim(), false);
-                if let Ok((_, value)) = parse_result {
-                    self.set_subject(value);
-                };
-            } else if name == "message-id" {
-                self.set_message_id(value);
-            } else if name == "references" {
-                self.set_references(value);
-            } else if name == "in-reply-to" {
-                self.set_in_reply_to(value);
-            } else if name == "date" {
-                let parse_result = parser::encodings::phrase(value, false);
-                if let Ok((_, value)) = parse_result {
-                    self.set_date(value.as_slice());
-                } else {
-                    self.set_date(value);
+                HeaderName::CC => {
+                    let parse_result = parser::address::rfc2822address_list(value);
+                    if let Ok((_, value)) = parse_result {
+                        self.set_cc(value);
+                    };
                 }
-            } else if name == "content-type" {
-                match parser::attachments::content_type(value) {
+                HeaderName::BCC => {
+                    let parse_result = parser::address::rfc2822address_list(value);
+                    if let Ok((_, value)) = parse_result {
+                        self.set_bcc(value.to_vec());
+                    };
+                }
+                HeaderName::FROM => {
+                    let parse_result = parser::address::rfc2822address_list(value);
+                    if let Ok((_, value)) = parse_result {
+                        self.set_from(value);
+                    }
+                }
+                HeaderName::SUBJECT => {
+                    let parse_result = parser::encodings::phrase(value.trim(), false);
+                    if let Ok((_, value)) = parse_result {
+                        self.set_subject(value);
+                    };
+                }
+                HeaderName::MESSAGE_ID => {
+                    self.set_message_id(value);
+                }
+                HeaderName::REFERENCES => {
+                    self.set_references(value);
+                }
+                HeaderName::IN_REPLY_TO => {
+                    self.set_in_reply_to(value);
+                }
+                HeaderName::DATE => {
+                    let parse_result = parser::encodings::phrase(value, false);
+                    if let Ok((_, value)) = parse_result {
+                        self.set_date(value.as_slice());
+                    } else {
+                        self.set_date(value);
+                    }
+                }
+                HeaderName::CONTENT_TYPE => match parser::attachments::content_type(value) {
                     Ok((_, (ct, cst, ref params)))
                         if ct.eq_ignore_ascii_case(b"multipart")
                             && cst.eq_ignore_ascii_case(b"mixed") =>
@@ -437,7 +445,8 @@ impl Envelope {
                         }
                     }
                     _ => {}
-                }
+                },
+                _ => {}
             }
             self.other_headers.insert(
                 name,
@@ -598,13 +607,13 @@ impl Envelope {
         builder.build()
     }
 
-    pub fn headers<'a>(&self, bytes: &'a [u8]) -> Result<Vec<(&'a str, &'a str)>> {
+    pub fn headers<'a>(&self, bytes: &'a [u8]) -> Result<Vec<(HeaderName, &'a str)>> {
         let ret = parser::headers::headers(bytes)?.1;
         let len = ret.len();
         ret.into_iter()
             .try_fold(Vec::with_capacity(len), |mut acc, (a, b)| {
                 Ok({
-                    acc.push((std::str::from_utf8(a)?, std::str::from_utf8(b)?));
+                    acc.push((a, std::str::from_utf8(b)?));
                     acc
                 })
             })

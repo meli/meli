@@ -25,6 +25,11 @@ use std::borrow::Cow;
 
 use crate::utils::datetime::{parse_timestamp_from_string, UnixTimestamp};
 
+pub const CRLF: &[u8] = b"\r\n";
+pub const LF: &[u8] = b"\n";
+pub const NULL: &[u8] = b"\0";
+pub const EMPTY: &[u8] = b"";
+
 pub type Result<'a, Output> = std::result::Result<(&'a str, Output), &'a str>;
 
 pub trait Parser<'a, Output> {

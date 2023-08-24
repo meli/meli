@@ -57,7 +57,7 @@ impl Eq for dyn HeaderKey + '_ {}
 
 impl HeaderKey for HeaderName {
     fn to_key(&self) -> &[u8] {
-        self.as_bytes()
+        self.as_lowercase_bytes()
     }
 }
 

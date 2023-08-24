@@ -309,7 +309,7 @@ impl<'a, P: for<'r> FnMut(&'r u8) -> bool> BytesIterExt for std::slice::Split<'a
 }
 
 //fn parser(input: I) -> IResult<I, O, E>;
-pub fn mail(input: &[u8]) -> Result<(Vec<(&[u8], &[u8])>, &[u8])> {
+pub fn mail(input: &[u8]) -> Result<(Vec<(HeaderName, &[u8])>, &[u8])> {
     let (rest, result) = alt((
         separated_pair(
             headers::headers,
@@ -1097,8 +1097,9 @@ pub mod generic {
     pub struct HeaderIterator<'a>(pub &'a [u8]);
 
     impl<'a> Iterator for HeaderIterator<'a> {
-        type Item = (&'a [u8], &'a [u8]);
-        fn next(&mut self) -> Option<(&'a [u8], &'a [u8])> {
+        type Item = (HeaderName, &'a [u8]);
+
+        fn next(&mut self) -> Option<(HeaderName, &'a [u8])> {
             if self.0.is_empty() {
                 return None;
             }
@@ -1425,15 +1426,15 @@ pub mod headers {
     //! Email headers.
     use super::*;
 
-    pub fn headers(input: &[u8]) -> IResult<&[u8], Vec<(&[u8], &[u8])>> {
+    pub fn headers(input: &[u8]) -> IResult<&[u8], Vec<(HeaderName, &[u8])>> {
         many1(header)(input)
     }
 
-    pub fn header(input: &[u8]) -> IResult<&[u8], (&[u8], &[u8])> {
+    pub fn header(input: &[u8]) -> IResult<&[u8], (HeaderName, &[u8])> {
         alt((header_without_val, header_with_val))(input)
     }
 
-    pub fn header_without_val(input: &[u8]) -> IResult<&[u8], (&[u8], &[u8])> {
+    pub fn header_without_val(input: &[u8]) -> IResult<&[u8], (HeaderName, &[u8])> {
         if input.is_empty() {
             return Err(nom::Err::Error(
                 (input, "header_without_val(): input is empty").into(),
@@ -1477,6 +1478,11 @@ pub mod headers {
                 (input, "header_without_val(): not enough input").into(),
             ));
         }
+        let Ok(name) = HeaderName::try_from(name) else {
+            return Err(nom::Err::Error(
+                (input, "header_without_val(): invalid header name").into(),
+            ));
+        };
         if input[ptr] == b':' {
             ptr += 1;
             has_colon = true;
@@ -1592,8 +1598,9 @@ pub mod headers {
         ))
     }
 
-    /* Parse a single header as a tuple */
-    pub fn header_with_val(input: &[u8]) -> IResult<&[u8], (&[u8], &[u8])> {
+    /// Parse a single header as a ([`HeaderName`](crate::email::HeaderName),
+    /// [`&[u8]`]) tuple.
+    pub fn header_with_val(input: &[u8]) -> IResult<&[u8], (HeaderName, &[u8])> {
         if input.is_empty() {
             return Err(nom::Err::Error(
                 (input, "header_with_val(): empty input").into(),
@@ -1660,6 +1667,11 @@ pub mod headers {
                 ));
             }
         }
+        let Ok(name) = HeaderName::try_from(name) else {
+            return Err(nom::Err::Error(
+                (input, "header_with_val(): invalid header name").into(),
+            ));
+        };
         header_value(&input[ptr..]).map(|(rest, value)| (rest, (name, value)))
     }
 
@@ -1689,7 +1701,8 @@ pub mod attachments {
         address::*,
         attachment_types::{ContentDisposition, ContentDispositionKind},
     };
-    pub fn attachment(input: &[u8]) -> IResult<&[u8], (std::vec::Vec<(&[u8], &[u8])>, &[u8])> {
+
+    pub fn attachment(input: &[u8]) -> IResult<&[u8], (std::vec::Vec<(HeaderName, &[u8])>, &[u8])> {
         alt((
             separated_pair(
                 many0(headers::header),

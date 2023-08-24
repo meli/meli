@@ -44,6 +44,7 @@ bitflags! {
         const Mail    =  Self::None.bits() << 1;
         const NNTP    =  Self::Mail.bits() << 1;
         const MIME    =  Self::NNTP.bits() << 1;
+        const Mbox    =  Self::MIME.bits() << 1;
     }
 }
 
@@ -141,11 +142,19 @@ impl HeaderName {
     /// The returned string will always be lower case. Use `Display` for a
     /// properly formatted representation.
     #[inline]
-    pub fn as_bytes(&self) -> &[u8] {
+    pub fn as_lowercase_bytes(&self) -> &[u8] {
         match self.inner {
             Repr::Standard(v) => v.as_str().as_bytes(),
             Repr::Custom(ref v) => v.0.as_ref(),
         }
+    }
+
+    /// Converts a header into a `Vec<u8>`.
+    ///
+    /// The returned string will always be formatted.
+    #[inline]
+    pub fn into_bytes(self) -> Vec<u8> {
+        self.to_string().into_bytes()
     }
 
     pub fn from_bytes(src: &[u8]) -> Result<Self, InvalidHeaderName> {
@@ -413,9 +422,11 @@ const UPPERCASE_TOKENS: &[&str] = &[
     "SIO", "SPF", "TLS", "VBR",
 ];
 
-impl std::fmt::Display for Custom {
+struct HeaderNameFmt<'a>(&'a str);
+
+impl std::fmt::Display for HeaderNameFmt<'_> {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let as_str = self.as_str();
+        let as_str = self.0;
         let len = as_str.len();
         let mut bytes_count = 0;
         for chunk in as_str.split('-') {
@@ -464,6 +475,12 @@ impl std::fmt::Display for Custom {
             }
         }
         Ok(())
+    }
+}
+
+impl std::fmt::Display for Custom {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(fmt, "{}", HeaderNameFmt(self.as_str()))
     }
 }
 

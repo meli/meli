@@ -31,7 +31,7 @@ use crate::{
         address::StrBuilder,
         attachment_types::*,
         parser::{self, BytesExt},
-        Mail,
+        HeaderName, Mail,
     },
     BytesDisplay,
 };
@@ -108,11 +108,11 @@ impl AttachmentBuilder {
             ..Default::default()
         };
         for (name, value) in headers {
-            if name.eq_ignore_ascii_case(b"content-type") {
+            if name == HeaderName::CONTENT_TYPE {
                 builder.set_content_type_from_bytes(value);
-            } else if name.eq_ignore_ascii_case(b"content-transfer-encoding") {
+            } else if name == HeaderName::CONTENT_TRANSFER_ENCODING {
                 builder.set_content_transfer_encoding(ContentTransferEncoding::from(value));
-            } else if name.eq_ignore_ascii_case(b"content-disposition") {
+            } else if name == HeaderName::CONTENT_DISPOSITION {
                 builder.set_content_disposition(ContentDisposition::from(value));
             }
         }
@@ -321,13 +321,13 @@ impl AttachmentBuilder {
                         length: body.len(),
                     };
                     for (name, value) in headers {
-                        if name.eq_ignore_ascii_case(b"content-type") {
+                        if name == HeaderName::CONTENT_TYPE {
                             builder.set_content_type_from_bytes(value);
-                        } else if name.eq_ignore_ascii_case(b"content-transfer-encoding") {
+                        } else if name == HeaderName::CONTENT_TRANSFER_ENCODING {
                             builder.set_content_transfer_encoding(ContentTransferEncoding::from(
                                 value,
                             ));
-                        } else if name.eq_ignore_ascii_case(b"content-disposition") {
+                        } else if name == HeaderName::CONTENT_DISPOSITION {
                             builder.set_content_disposition(ContentDisposition::from(value));
                         }
                     }
@@ -547,10 +547,10 @@ impl Attachment {
                         Err(_err) => return false,
                     };
                     let headers = crate::email::parser::generic::HeaderIterator(headers)
-                        .collect::<SmallVec<[(&[u8], &[u8]); 16]>>();
+                        .collect::<SmallVec<[(HeaderName, &[u8]); 16]>>();
                     let disposition = headers
                         .iter()
-                        .find(|(n, _)| n.eq_ignore_ascii_case(b"content-disposition"))
+                        .find(|(n, _)| n == HeaderName::CONTENT_DISPOSITION)
                         .map(|(_, v)| ContentDisposition::from(*v))
                         .unwrap_or_default();
                     if disposition.kind.is_attachment() {
@@ -558,7 +558,7 @@ impl Attachment {
                     }
                     if let Some(boundary) = headers
                         .iter()
-                        .find(|(n, _)| n.eq_ignore_ascii_case(b"content-type"))
+                        .find(|(n, _)| n == HeaderName::CONTENT_TYPE)
                         .and_then(|(_, v)| {
                             if let Ok((_, (ct, _cst, params))) =
                                 parser::attachments::content_type(v)
@@ -856,7 +856,7 @@ impl Attachment {
             Err(_) => return ret,
         };
         for (name, value) in headers {
-            if name.eq_ignore_ascii_case(b"content-type") {
+            if name == HeaderName::CONTENT_TYPE {
                 if let Ok((_, (_, _, params))) = parser::attachments::content_type(value) {
                     ret = params;
                 }

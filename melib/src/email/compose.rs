@@ -92,8 +92,7 @@ impl FromStr for Draft {
         let mut ret = Self::default();
 
         for (k, v) in headers {
-            ret.headers
-                .insert(k.try_into()?, String::from_utf8(v.to_vec())?);
+            ret.headers.insert(k, String::from_utf8(v.to_vec())?);
         }
         let body = Envelope::new(EnvelopeHash::default()).body_bytes(s.as_bytes());
 
@@ -107,7 +106,7 @@ impl Draft {
     pub fn edit(envelope: &Envelope, bytes: &[u8]) -> Result<Self> {
         let mut ret = Self::default();
         for (k, v) in envelope.headers(bytes).unwrap_or_else(|_| Vec::new()) {
-            ret.headers.insert(k.try_into()?, v.into());
+            ret.headers.insert(k, v.into());
         }
 
         let body = envelope.body_bytes(bytes);
