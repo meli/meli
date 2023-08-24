@@ -22,6 +22,7 @@
 //! Wrapper type [`HeaderName`] for case-insensitive comparisons.
 
 pub mod names;
+pub mod standards;
 use std::{
     borrow::Borrow,
     cmp::{Eq, PartialEq},
@@ -31,7 +32,8 @@ use std::{
 };
 
 use indexmap::IndexMap;
-pub use names::{HeaderName, InvalidHeaderName, Protocol, Standard, StandardHeader, Status};
+pub use names::{HeaderName, InvalidHeaderName, Protocol};
+pub use standards::{Standard, StandardHeader, Status};
 
 trait HeaderKey {
     fn to_key(&self) -> &[u8];
