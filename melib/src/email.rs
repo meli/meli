@@ -145,7 +145,7 @@ pub(crate) fn common_attributes() -> MacroOrMessageDataItemNames<'static> {
 }
 
 bitflags! {
-    #[derive(Default, Serialize, Deserialize)]
+    #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
     pub struct Flag: u8 {
         const PASSED  =  0b0000_0001;
         const REPLIED =  0b0000_0010;

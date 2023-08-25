@@ -48,7 +48,7 @@ use crate::{
 const UNTAGGED_PREFIX: &[u8] = b"* ";
 
 bitflags! {
-    #[derive(Default, Serialize, Deserialize)]
+    #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct RequiredResponses: u64 {
         const CAPABILITY          = 0b0000_0000_0000_0001;
         const BYE                 = 0b0000_0000_0000_0010;
@@ -66,13 +66,13 @@ bitflags! {
         const SEARCH              = 0b0010_0000_0000_0000;
         const FETCH               = 0b0100_0000_0000_0000;
         const NO_REQUIRED         = 0b1000_0000_0000_0000;
-        const CAPABILITY_REQUIRED = Self::CAPABILITY.bits;
-        const LOGOUT_REQUIRED     = Self::BYE.bits;
-        const SELECT_REQUIRED     = Self::FLAGS.bits | Self::EXISTS.bits | Self::RECENT.bits | Self::UNSEEN.bits | Self::PERMANENTFLAGS.bits | Self::UIDNEXT.bits | Self::UIDVALIDITY.bits;
-        const EXAMINE_REQUIRED    = Self::FLAGS.bits | Self::EXISTS.bits | Self::RECENT.bits | Self::UNSEEN.bits | Self::PERMANENTFLAGS.bits | Self::UIDNEXT.bits | Self::UIDVALIDITY.bits;
-        const LIST_REQUIRED       = Self::LIST.bits;
-        const LSUB_REQUIRED       = Self::LSUB.bits;
-        const FETCH_REQUIRED      = Self::FETCH.bits;
+        const CAPABILITY_REQUIRED = Self::CAPABILITY.bits();
+        const LOGOUT_REQUIRED     = Self::BYE.bits();
+        const SELECT_REQUIRED     = Self::FLAGS.bits() | Self::EXISTS.bits() | Self::RECENT.bits() | Self::UNSEEN.bits() | Self::PERMANENTFLAGS.bits() | Self::UIDNEXT.bits() | Self::UIDVALIDITY.bits();
+        const EXAMINE_REQUIRED    = Self::FLAGS.bits() | Self::EXISTS.bits() | Self::RECENT.bits() | Self::UNSEEN.bits() | Self::PERMANENTFLAGS.bits() | Self::UIDNEXT.bits() | Self::UIDVALIDITY.bits();
+        const LIST_REQUIRED       = Self::LIST.bits();
+        const LSUB_REQUIRED       = Self::LSUB.bits();
+        const FETCH_REQUIRED      = Self::FETCH.bits();
     }
 }
 

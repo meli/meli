@@ -85,6 +85,7 @@ pub enum GpgmeFlag {
 }
 
 bitflags! {
+    #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct LocateKey: u8 {
         /// Locate a key using DNS CERT, as specified in RFC-4398.
         const CERT = 0b1;

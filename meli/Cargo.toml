@@ -29,7 +29,7 @@ required-features = ["melib/imap"]
 
 [dependencies]
 async-task = "^4.2.0"
-bitflags = "1.0"
+bitflags = { version = "2.4", features = ["serde"] }
 crossbeam = { version = "^0.8" }
 flate2 = { version = "1", optional = true }
 futures = "0.3.5"

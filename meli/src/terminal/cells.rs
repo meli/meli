@@ -755,6 +755,7 @@ bitflags::bitflags! {
     /// // Combination.
     /// let comb = Attr::UNDERLINE | Attr::REVERSE;
     /// ```
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct Attr: u8 {
         /// Terminal default.
         const DEFAULT   = 0b000_0000;
