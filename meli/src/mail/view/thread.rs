@@ -1031,7 +1031,7 @@ impl Component for ThreadView {
                     self.new_cursor_pos = self.new_cursor_pos.saturating_sub(1);
                     self.dirty = true;
                 }
-                return true;
+                true
             }
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Shortcuts::THREAD_VIEW]["scroll_down"]) =>
@@ -1041,41 +1041,44 @@ impl Component for ThreadView {
                     self.new_cursor_pos += 1;
                     self.dirty = true;
                 }
-                return true;
+                true
             }
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Shortcuts::THREAD_VIEW]["prev_page"]) =>
             {
                 self.movement = Some(PageMovement::PageUp(1));
                 self.dirty = true;
+                true
             }
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Shortcuts::THREAD_VIEW]["next_page"]) =>
             {
                 self.movement = Some(PageMovement::PageDown(1));
                 self.dirty = true;
+                true
             }
             UIEvent::Input(ref k) if shortcut!(k == shortcuts[Shortcuts::GENERAL]["home_page"]) => {
                 self.movement = Some(PageMovement::Home);
                 self.dirty = true;
+                true
             }
             UIEvent::Input(ref k) if shortcut!(k == shortcuts[Shortcuts::GENERAL]["end_page"]) => {
                 self.movement = Some(PageMovement::End);
                 self.dirty = true;
+                true
             }
             UIEvent::Input(ref k)
                 if shortcut!(k == shortcuts[Shortcuts::GENERAL]["open_entry"]) =>
             {
-                if self.entries.len() < 2 {
-                    return true;
+                if self.entries.len() > 1 {
+                    self.new_expanded_pos = self.current_pos();
+                    self.expanded_pos = self.current_pos();
+                    if matches!(self.focus, ThreadViewFocus::Thread) {
+                        self.focus = ThreadViewFocus::None;
+                    }
+                    self.set_dirty(true);
                 }
-                self.new_expanded_pos = self.current_pos();
-                self.expanded_pos = self.current_pos();
-                if matches!(self.focus, ThreadViewFocus::Thread) {
-                    self.focus = ThreadViewFocus::None;
-                }
-                self.set_dirty(true);
-                return true;
+                true
             }
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Shortcuts::THREAD_VIEW]["toggle_mailview"]) =>
@@ -1085,7 +1088,7 @@ impl Component for ThreadView {
                     ThreadViewFocus::Thread => ThreadViewFocus::None,
                 };
                 self.set_dirty(true);
-                return true;
+                true
             }
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Shortcuts::THREAD_VIEW]["toggle_threadview"]) =>
@@ -1095,7 +1098,7 @@ impl Component for ThreadView {
                     ThreadViewFocus::MailView => ThreadViewFocus::None,
                 };
                 self.set_dirty(true);
-                return true;
+                true
             }
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Shortcuts::THREAD_VIEW]["reverse_thread_order"]) =>
@@ -1104,7 +1107,7 @@ impl Component for ThreadView {
                 let expanded_hash = self.entries[self.expanded_pos].msg_hash;
                 self.initiate(Some(expanded_hash), context);
                 self.dirty = true;
-                return true;
+                true
             }
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Shortcuts::THREAD_VIEW]["collapse_subtree"]) =>
@@ -1136,10 +1139,11 @@ impl Component for ThreadView {
                 self.cursor_pos = self.new_cursor_pos;
                 self.recalc_visible_entries();
                 self.dirty = true;
-                return true;
+                true
             }
             UIEvent::Resize | UIEvent::VisibilityChange(true) => {
                 self.set_dirty(true);
+                false
             }
             UIEvent::EnvelopeRename(ref old_hash, ref new_hash) => {
                 let account = &context.accounts[&self.coordinates.0];
@@ -1147,6 +1151,7 @@ impl Component for ThreadView {
                     if e.msg_hash == *old_hash {
                         e.msg_hash = *new_hash;
                         let seen: bool = account.collection.get_env(*new_hash).is_seen();
+                        e.dirty = e.seen != seen;
                         e.seen = seen;
                         e.mailview.process_event(
                             &mut UIEvent::EnvelopeRename(*old_hash, *new_hash),
@@ -1156,12 +1161,14 @@ impl Component for ThreadView {
                         break;
                     }
                 }
+                false
             }
             UIEvent::EnvelopeUpdate(ref env_hash) => {
                 let account = &context.accounts[&self.coordinates.0];
                 for e in self.entries.iter_mut() {
                     if e.msg_hash == *env_hash {
                         let seen: bool = account.collection.get_env(*env_hash).is_seen();
+                        e.dirty = e.seen != seen;
                         e.seen = seen;
                         e.mailview
                             .process_event(&mut UIEvent::EnvelopeUpdate(*env_hash), context);
@@ -1169,6 +1176,7 @@ impl Component for ThreadView {
                         break;
                     }
                 }
+                false
             }
             _ => {
                 if self
@@ -1178,9 +1186,9 @@ impl Component for ThreadView {
                 {
                     return true;
                 }
+                false
             }
         }
-        false
     }
 
     fn is_dirty(&self) -> bool {
