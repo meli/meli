@@ -285,6 +285,8 @@ const DEFAULT_KEYS: &[&str] = &[
     "mail.listing.compact.odd_selected",
     "mail.listing.compact.even_highlighted",
     "mail.listing.compact.odd_highlighted",
+    "mail.listing.compact.even_highlighted_selected",
+    "mail.listing.compact.odd_highlighted_selected",
     "mail.listing.plain.even",
     "mail.listing.plain.odd",
     "mail.listing.plain.even_unseen",
@@ -293,6 +295,8 @@ const DEFAULT_KEYS: &[&str] = &[
     "mail.listing.plain.odd_selected",
     "mail.listing.plain.even_highlighted",
     "mail.listing.plain.odd_highlighted",
+    "mail.listing.plain.even_highlighted_selected",
+    "mail.listing.plain.odd_highlighted_selected",
     "mail.listing.conversations",
     "mail.listing.conversations.subject",
     "mail.listing.conversations.from",
@@ -300,6 +304,7 @@ const DEFAULT_KEYS: &[&str] = &[
     "mail.listing.conversations.unseen",
     "mail.listing.conversations.highlighted",
     "mail.listing.conversations.selected",
+    "mail.listing.conversations.highlighted_selected",
     "mail.view.headers",
     "mail.view.headers_names",
     "mail.view.headers_area",
@@ -1491,6 +1496,20 @@ impl Default for Themes {
                 bg: Color::Byte(244)
             }
         );
+        add!("mail.listing.compact.even_highlighted_selected",
+            dark = {
+                bg: Color::Byte(210),
+                attrs: Attr::REVERSE,
+            },
+            light = {
+                bg: Color::Byte(210),
+                attrs: Attr::REVERSE,
+            }
+        );
+        add!(
+            "mail.listing.compact.odd_highlighted_selected",
+            "mail.listing.compact.even_highlighted_selected"
+        );
 
         /* ConversationsListing */
 
@@ -1551,6 +1570,17 @@ impl Default for Themes {
             },
             light = {
                 bg: Color::Byte(210)
+            }
+        );
+
+        add!("mail.listing.conversations.highlighted_selected",
+            dark = {
+                bg: Color::Byte(210),
+                attrs: Attr::REVERSE,
+            },
+            light = {
+                bg: Color::Byte(210),
+                attrs: Attr::REVERSE,
             }
         );
 
@@ -1621,6 +1651,20 @@ impl Default for Themes {
             light = {
                 bg: Color::Byte(244)
             }
+        );
+        add!("mail.listing.plain.even_highlighted_selected",
+            dark = {
+                bg: Color::Byte(210),
+                attrs: Attr::REVERSE,
+            },
+            light = {
+                bg: Color::Byte(210),
+                attrs: Attr::REVERSE,
+            }
+        );
+        add!(
+            "mail.listing.plain.odd_highlighted_selected",
+            "mail.listing.plain.even_highlighted_selected"
         );
 
         add!(

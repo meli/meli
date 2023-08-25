@@ -266,6 +266,7 @@ pub struct ColorCache {
     pub unseen: ThemeAttribute,
     pub highlighted: ThemeAttribute,
     pub selected: ThemeAttribute,
+    pub highlighted_selected: ThemeAttribute,
     pub even: ThemeAttribute,
     pub odd: ThemeAttribute,
     pub even_unseen: ThemeAttribute,
@@ -274,6 +275,8 @@ pub struct ColorCache {
     pub odd_unseen: ThemeAttribute,
     pub odd_highlighted: ThemeAttribute,
     pub odd_selected: ThemeAttribute,
+    pub even_highlighted_selected: ThemeAttribute,
+    pub odd_highlighted_selected: ThemeAttribute,
     pub tag_default: ThemeAttribute,
 
     /* Conversations */
@@ -295,7 +298,15 @@ impl ColorCache {
                     "mail.listing.plain.even_highlighted",
                 ),
                 odd_highlighted: crate::conf::value(context, "mail.listing.plain.odd_highlighted"),
+                odd_highlighted_selected: crate::conf::value(
+                    context,
+                    "mail.listing.plain.odd_highlighted_selected",
+                ),
                 even_selected: crate::conf::value(context, "mail.listing.plain.even_selected"),
+                even_highlighted_selected: crate::conf::value(
+                    context,
+                    "mail.listing.plain.even_highlighted_selected",
+                ),
                 odd_selected: crate::conf::value(context, "mail.listing.plain.odd_selected"),
                 tag_default: crate::conf::value(context, "mail.listing.tag_default"),
                 theme_default: crate::conf::value(context, "theme_default"),
@@ -308,9 +319,17 @@ impl ColorCache {
                     context,
                     "mail.listing.plain.even_highlighted",
                 ),
+                even_highlighted_selected: crate::conf::value(
+                    context,
+                    "mail.listing.plain.even_highlighted_selected",
+                ),
                 odd_unseen: crate::conf::value(context, "mail.listing.plain.odd_unseen"),
                 odd_selected: crate::conf::value(context, "mail.listing.plain.odd_selected"),
                 odd_highlighted: crate::conf::value(context, "mail.listing.plain.odd_highlighted"),
+                odd_highlighted_selected: crate::conf::value(
+                    context,
+                    "mail.listing.plain.odd_highlighted_selected",
+                ),
                 even: crate::conf::value(context, "mail.listing.plain.even"),
                 odd: crate::conf::value(context, "mail.listing.plain.odd"),
                 tag_default: crate::conf::value(context, "mail.listing.tag_default"),
@@ -324,11 +343,19 @@ impl ColorCache {
                     context,
                     "mail.listing.compact.even_highlighted",
                 ),
+                even_highlighted_selected: crate::conf::value(
+                    context,
+                    "mail.listing.compact.even_highlighted_selected",
+                ),
                 odd_unseen: crate::conf::value(context, "mail.listing.compact.odd_unseen"),
                 odd_selected: crate::conf::value(context, "mail.listing.compact.odd_selected"),
                 odd_highlighted: crate::conf::value(
                     context,
                     "mail.listing.compact.odd_highlighted",
+                ),
+                odd_highlighted_selected: crate::conf::value(
+                    context,
+                    "mail.listing.compact.odd_highlighted_selected",
                 ),
                 even: crate::conf::value(context, "mail.listing.compact.even"),
                 odd: crate::conf::value(context, "mail.listing.compact.odd"),
@@ -344,6 +371,10 @@ impl ColorCache {
                 selected: crate::conf::value(context, "mail.listing.conversations.selected"),
                 unseen: crate::conf::value(context, "mail.listing.conversations.unseen"),
                 highlighted: crate::conf::value(context, "mail.listing.conversations.highlighted"),
+                highlighted_selected: crate::conf::value(
+                    context,
+                    "mail.listing.conversations.highlighted_selected",
+                ),
                 tag_default: crate::conf::value(context, "mail.listing.tag_default"),
                 ..Self::default()
             },
@@ -353,6 +384,8 @@ impl ColorCache {
             ret.tag_default.attrs |= Attr::REVERSE;
             ret.even_highlighted.attrs |= Attr::REVERSE;
             ret.odd_highlighted.attrs |= Attr::REVERSE;
+            ret.even_highlighted_selected.attrs |= Attr::REVERSE | Attr::DIM;
+            ret.odd_highlighted_selected.attrs |= Attr::REVERSE | Attr::DIM;
         }
         ret
     }

@@ -28,75 +28,98 @@ use crate::components::PageMovement;
 
 macro_rules! row_attr {
     ($color_cache:expr, $even: expr, $unseen:expr, $highlighted:expr, $selected:expr  $(,)*) => {{
+        let color_cache = &$color_cache;
+        let even = $even;
+        let unseen = $unseen;
+        let highlighted = $highlighted;
+        let selected = $selected;
         ThemeAttribute {
-            fg: if $highlighted {
-                if $even {
-                    $color_cache.even_highlighted.fg
+            fg: if highlighted && selected {
+                if even {
+                    color_cache.even_highlighted_selected.fg
                 } else {
-                    $color_cache.odd_highlighted.fg
+                    color_cache.odd_highlighted_selected.fg
                 }
-            } else if $selected {
-                if $even {
-                    $color_cache.even_selected.fg
+            } else if highlighted {
+                if even {
+                    color_cache.even_highlighted.fg
                 } else {
-                    $color_cache.odd_selected.fg
+                    color_cache.odd_highlighted.fg
                 }
-            } else if $unseen {
-                if $even {
-                    $color_cache.even_unseen.fg
+            } else if selected {
+                if even {
+                    color_cache.even_selected.fg
                 } else {
-                    $color_cache.odd_unseen.fg
+                    color_cache.odd_selected.fg
                 }
-            } else if $even {
-                $color_cache.even.fg
+            } else if unseen {
+                if even {
+                    color_cache.even_unseen.fg
+                } else {
+                    color_cache.odd_unseen.fg
+                }
+            } else if even {
+                color_cache.even.fg
             } else {
-                $color_cache.odd.fg
+                color_cache.odd.fg
             },
-            bg: if $highlighted {
-                if $even {
-                    $color_cache.even_highlighted.bg
+            bg: if highlighted && selected {
+                if even {
+                    color_cache.even_highlighted_selected.bg
                 } else {
-                    $color_cache.odd_highlighted.bg
+                    color_cache.odd_highlighted_selected.bg
                 }
-            } else if $selected {
-                if $even {
-                    $color_cache.even_selected.bg
+            } else if highlighted {
+                if even {
+                    color_cache.even_highlighted.bg
                 } else {
-                    $color_cache.odd_selected.bg
+                    color_cache.odd_highlighted.bg
                 }
-            } else if $unseen {
-                if $even {
-                    $color_cache.even_unseen.bg
+            } else if selected {
+                if even {
+                    color_cache.even_selected.bg
                 } else {
-                    $color_cache.odd_unseen.bg
+                    color_cache.odd_selected.bg
                 }
-            } else if $even {
-                $color_cache.even.bg
+            } else if unseen {
+                if even {
+                    color_cache.even_unseen.bg
+                } else {
+                    color_cache.odd_unseen.bg
+                }
+            } else if even {
+                color_cache.even.bg
             } else {
-                $color_cache.odd.bg
+                color_cache.odd.bg
             },
-            attrs: if $highlighted {
-                if $even {
-                    $color_cache.even_highlighted.attrs
+            attrs: if highlighted && selected {
+                if even {
+                    color_cache.even_highlighted_selected.attrs
                 } else {
-                    $color_cache.odd_highlighted.attrs
+                    color_cache.odd_highlighted_selected.attrs
                 }
-            } else if $selected {
-                if $even {
-                    $color_cache.even_selected.attrs
+            } else if highlighted {
+                if even {
+                    color_cache.even_highlighted.attrs
                 } else {
-                    $color_cache.odd_selected.attrs
+                    color_cache.odd_highlighted.attrs
                 }
-            } else if $unseen {
-                if $even {
-                    $color_cache.even_unseen.attrs
+            } else if selected {
+                if even {
+                    color_cache.even_selected.attrs
                 } else {
-                    $color_cache.odd_unseen.attrs
+                    color_cache.odd_selected.attrs
                 }
-            } else if $even {
-                $color_cache.even.attrs
+            } else if unseen {
+                if even {
+                    color_cache.even_unseen.attrs
+                } else {
+                    color_cache.odd_unseen.attrs
+                }
+            } else if even {
+                color_cache.even.attrs
             } else {
-                $color_cache.odd.attrs
+                color_cache.odd.attrs
             },
         }
     }};
@@ -123,6 +146,7 @@ pub struct ThreadListing {
 
     data_columns: DataColumns<5>,
     rows: RowsState<(ThreadHash, EnvelopeHash)>,
+    seen_cache: IndexMap<EnvelopeHash, bool>,
     /// If we must redraw on next redraw event
     dirty: bool,
     force_draw: bool,
@@ -355,14 +379,7 @@ impl MailListingTrait for ThreadListing {
                     smallvec::smallvec![env_hash],
                     entry_strings,
                 );
-                let row_attr = row_attr!(
-                    self.color_cache,
-                    idx % 2 == 0,
-                    !envelope.is_seen(),
-                    false,
-                    false,
-                );
-                self.rows.row_attr_cache.insert(idx, row_attr);
+                self.seen_cache.insert(env_hash, envelope.is_seen());
                 idx += 1;
             }
 
@@ -539,11 +556,15 @@ impl ListingTrait for ThreadListing {
                 let new_area = nth_row_area(area, idx % rows);
                 self.data_columns
                     .draw(grid, idx, self.cursor_pos.2, grid.bounds_iter(new_area));
-                if highlight {
-                    let row_attr = row_attr!(self.color_cache, idx % 2 == 0, false, true, false);
+                if let Some(env_hash) = self.get_env_under_cursor(idx) {
+                    let row_attr = row_attr!(
+                        self.color_cache,
+                        idx % 2 == 0,
+                        !self.seen_cache[&env_hash],
+                        highlight,
+                        self.rows.selection[&env_hash]
+                    );
                     change_theme(grid, new_area, row_attr);
-                } else if let Some(row_attr) = self.rows.row_attr_cache.get(&idx) {
-                    change_theme(grid, new_area, *row_attr);
                 }
                 context.dirty_areas.push_back(new_area);
             }
@@ -579,21 +600,30 @@ impl ListingTrait for ThreadListing {
             self.draw_relative_numbers(grid, area, top_idx);
         }
         /* apply each row colors separately */
-        for i in top_idx..(top_idx + height!(area)) {
-            if let Some(row_attr) = self.rows.row_attr_cache.get(&i) {
-                change_theme(grid, nth_row_area(area, i % rows), *row_attr);
+        for idx in top_idx..(top_idx + height!(area)) {
+            if let Some(env_hash) = self.get_env_under_cursor(idx) {
+                let row_attr = row_attr!(
+                    self.color_cache,
+                    idx % 2 == 0,
+                    !self.seen_cache[&env_hash],
+                    self.cursor_pos.2 == idx,
+                    self.rows.selection[&env_hash]
+                );
+                change_theme(grid, nth_row_area(area, idx % rows), row_attr);
             }
         }
 
-        /* highlight cursor */
-        let row_attr = row_attr!(
-            self.color_cache,
-            self.cursor_pos.2 % 2 == 0,
-            false,
-            true,
-            false
-        );
-        change_theme(grid, nth_row_area(area, self.cursor_pos.2 % rows), row_attr);
+        if let Some(env_hash) = self.get_env_under_cursor(self.cursor_pos.2) {
+            /* highlight cursor */
+            let row_attr = row_attr!(
+                self.color_cache,
+                self.cursor_pos.2 % 2 == 0,
+                !self.seen_cache[&env_hash],
+                true, // because self.cursor_pos.2 == idx,
+                self.rows.selection[&env_hash]
+            );
+            change_theme(grid, nth_row_area(area, self.cursor_pos.2 % rows), row_attr);
+        }
 
         /* clear gap if available height is more than count of entries */
         if top_idx + rows > self.length {
@@ -745,6 +775,7 @@ impl ThreadListing {
             color_cache: ColorCache::new(context, IndexStyle::Threaded),
             data_columns: DataColumns::default(),
             rows: RowsState::default(),
+            seen_cache: IndexMap::default(),
             search_job: None,
             dirty: true,
             force_draw: true,
@@ -910,7 +941,13 @@ impl ThreadListing {
 
                 panic!();
             }
-            let row_attr = self.rows.row_attr_cache[&idx];
+            let row_attr = row_attr!(
+                self.color_cache,
+                idx % 2 == 0,
+                !self.seen_cache[env_hash],
+                self.cursor_pos.2 == idx,
+                self.rows.selection[env_hash]
+            );
             if !*account_settings!(context[self.cursor_pos.0].listing.relative_list_indices) {
                 let (x, _) = write_string_to_grid(
                     &idx.to_string(),
@@ -1053,7 +1090,7 @@ impl ThreadListing {
             false,
             self.rows.selection[&env_hash]
         );
-        self.rows.row_attr_cache.insert(idx, row_attr);
+        self.seen_cache.insert(env_hash, envelope.is_seen());
 
         let mut strings = self.make_entry_string(&envelope, context);
         drop(envelope);
@@ -1083,7 +1120,17 @@ impl ThreadListing {
         let width = self.data_columns.columns[0].size().0;
         let upper_left = upper_left!(area);
         for i in 0..height!(area) {
-            let row_attr = row_attr!(self.color_cache, (top_idx + i) % 2 == 0, false, true, false);
+            let row_attr = if let Some(env_hash) = self.get_env_under_cursor(top_idx + i) {
+                row_attr!(
+                    self.color_cache,
+                    (top_idx + i) % 2 == 0,
+                    !self.seen_cache[&env_hash],
+                    self.cursor_pos.2 == (top_idx + i),
+                    self.rows.selection[&env_hash]
+                )
+            } else {
+                row_attr!(self.color_cache, (top_idx + i) % 2 == 0, false, true, false)
+            };
 
             clear_area(
                 &mut self.data_columns.columns[0],
@@ -1490,6 +1537,9 @@ impl Component for ThreadListing {
                     return false;
                 }
                 self.rows.rename_env(*old_hash, *new_hash);
+                self.seen_cache.remove(old_hash);
+                self.seen_cache
+                    .insert(*new_hash, account.collection.get_env(*new_hash).is_seen());
                 if let Some(&row) = self.rows.env_order.get(new_hash) {
                     (self.rows.entries[row].0).1 = *new_hash;
                 }
@@ -1499,6 +1549,7 @@ impl Component for ThreadListing {
             UIEvent::EnvelopeRemove(ref env_hash, _) => {
                 if self.rows.contains_env(*env_hash) {
                     self.refresh_mailbox(context, false);
+                    self.seen_cache.remove(env_hash);
                     self.set_dirty(true);
                 }
             }
@@ -1509,6 +1560,8 @@ impl Component for ThreadListing {
                 }
                 if self.rows.contains_env(*env_hash) {
                     self.rows.row_updates.push(*env_hash);
+                    self.seen_cache
+                        .insert(*env_hash, account.collection.get_env(*env_hash).is_seen());
                 }
 
                 self.set_dirty(true);

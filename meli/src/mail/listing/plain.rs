@@ -44,75 +44,98 @@ macro_rules! address_list {
 
 macro_rules! row_attr {
     ($color_cache:expr, $even: expr, $unseen:expr, $highlighted:expr, $selected:expr  $(,)*) => {{
+        let color_cache = &$color_cache;
+        let even = $even;
+        let unseen = $unseen;
+        let highlighted = $highlighted;
+        let selected = $selected;
         ThemeAttribute {
-            fg: if $highlighted {
-                if $even {
-                    $color_cache.even_highlighted.fg
+            fg: if highlighted && selected {
+                if even {
+                    color_cache.even_highlighted_selected.fg
                 } else {
-                    $color_cache.odd_highlighted.fg
+                    color_cache.odd_highlighted_selected.fg
                 }
-            } else if $selected {
-                if $even {
-                    $color_cache.even_selected.fg
+            } else if highlighted {
+                if even {
+                    color_cache.even_highlighted.fg
                 } else {
-                    $color_cache.odd_selected.fg
+                    color_cache.odd_highlighted.fg
                 }
-            } else if $unseen {
-                if $even {
-                    $color_cache.even_unseen.fg
+            } else if selected {
+                if even {
+                    color_cache.even_selected.fg
                 } else {
-                    $color_cache.odd_unseen.fg
+                    color_cache.odd_selected.fg
                 }
-            } else if $even {
-                $color_cache.even.fg
+            } else if unseen {
+                if even {
+                    color_cache.even_unseen.fg
+                } else {
+                    color_cache.odd_unseen.fg
+                }
+            } else if even {
+                color_cache.even.fg
             } else {
-                $color_cache.odd.fg
+                color_cache.odd.fg
             },
-            bg: if $highlighted {
-                if $even {
-                    $color_cache.even_highlighted.bg
+            bg: if highlighted && selected {
+                if even {
+                    color_cache.even_highlighted_selected.bg
                 } else {
-                    $color_cache.odd_highlighted.bg
+                    color_cache.odd_highlighted_selected.bg
                 }
-            } else if $selected {
-                if $even {
-                    $color_cache.even_selected.bg
+            } else if highlighted {
+                if even {
+                    color_cache.even_highlighted.bg
                 } else {
-                    $color_cache.odd_selected.bg
+                    color_cache.odd_highlighted.bg
                 }
-            } else if $unseen {
-                if $even {
-                    $color_cache.even_unseen.bg
+            } else if selected {
+                if even {
+                    color_cache.even_selected.bg
                 } else {
-                    $color_cache.odd_unseen.bg
+                    color_cache.odd_selected.bg
                 }
-            } else if $even {
-                $color_cache.even.bg
+            } else if unseen {
+                if even {
+                    color_cache.even_unseen.bg
+                } else {
+                    color_cache.odd_unseen.bg
+                }
+            } else if even {
+                color_cache.even.bg
             } else {
-                $color_cache.odd.bg
+                color_cache.odd.bg
             },
-            attrs: if $highlighted {
-                if $even {
-                    $color_cache.even_highlighted.attrs
+            attrs: if highlighted && selected {
+                if even {
+                    color_cache.even_highlighted_selected.attrs
                 } else {
-                    $color_cache.odd_highlighted.attrs
+                    color_cache.odd_highlighted_selected.attrs
                 }
-            } else if $selected {
-                if $even {
-                    $color_cache.even_selected.attrs
+            } else if highlighted {
+                if even {
+                    color_cache.even_highlighted.attrs
                 } else {
-                    $color_cache.odd_selected.attrs
+                    color_cache.odd_highlighted.attrs
                 }
-            } else if $unseen {
-                if $even {
-                    $color_cache.even_unseen.attrs
+            } else if selected {
+                if even {
+                    color_cache.even_selected.attrs
                 } else {
-                    $color_cache.odd_unseen.attrs
+                    color_cache.odd_selected.attrs
                 }
-            } else if $even {
-                $color_cache.even.attrs
+            } else if unseen {
+                if even {
+                    color_cache.even_unseen.attrs
+                } else {
+                    color_cache.odd_unseen.attrs
+                }
+            } else if even {
+                color_cache.even.attrs
             } else {
-                $color_cache.odd.attrs
+                color_cache.odd.attrs
             },
         }
     }};

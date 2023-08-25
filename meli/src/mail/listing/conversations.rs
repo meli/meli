@@ -29,64 +29,76 @@ use crate::{components::PageMovement, jobs::JoinHandle};
 
 macro_rules! row_attr {
     ($field:ident, $color_cache:expr, $unseen:expr, $highlighted:expr, $selected:expr  $(,)*) => {{
+        let color_cache = &$color_cache;
+        let unseen = $unseen;
+        let highlighted = $highlighted;
+        let selected = $selected;
         ThemeAttribute {
-            fg: if $highlighted {
-                $color_cache.highlighted.fg
-            } else if $selected {
-                $color_cache.selected.fg
-            } else if $unseen {
-                $color_cache.unseen.fg
+            fg: if highlighted {
+                color_cache.highlighted.fg
+            } else if selected {
+                color_cache.selected.fg
+            } else if unseen {
+                color_cache.unseen.fg
             } else {
-                $color_cache.$field.fg
+                color_cache.$field.fg
             },
-            bg: if $highlighted {
-                $color_cache.highlighted.bg
-            } else if $selected {
-                $color_cache.selected.bg
-            } else if $unseen {
-                $color_cache.unseen.bg
+            bg: if highlighted {
+                color_cache.highlighted.bg
+            } else if selected {
+                color_cache.selected.bg
+            } else if unseen {
+                color_cache.unseen.bg
             } else {
-                $color_cache.$field.bg
+                color_cache.$field.bg
             },
-            attrs: if $highlighted {
-                $color_cache.highlighted.attrs
-            } else if $selected {
-                $color_cache.selected.attrs
-            } else if $unseen {
-                $color_cache.unseen.attrs
+            attrs: if highlighted && selected {
+                color_cache.highlighted_selected.attrs
+            } else if highlighted {
+                color_cache.highlighted.attrs
+            } else if selected {
+                color_cache.selected.attrs
+            } else if unseen {
+                color_cache.unseen.attrs
             } else {
-                $color_cache.$field.attrs
+                color_cache.$field.attrs
             },
         }
     }};
     ($color_cache:expr, $unseen:expr, $highlighted:expr, $selected:expr  $(,)*) => {{
+        let color_cache = &$color_cache;
+        let unseen = $unseen;
+        let highlighted = $highlighted;
+        let selected = $selected;
         ThemeAttribute {
-            fg: if $highlighted {
-                $color_cache.highlighted.fg
-            } else if $selected {
-                $color_cache.selected.fg
-            } else if $unseen {
-                $color_cache.unseen.fg
+            fg: if highlighted {
+                color_cache.highlighted.fg
+            } else if selected {
+                color_cache.selected.fg
+            } else if unseen {
+                color_cache.unseen.fg
             } else {
-                $color_cache.theme_default.fg
+                color_cache.theme_default.fg
             },
-            bg: if $highlighted {
-                $color_cache.highlighted.bg
-            } else if $selected {
-                $color_cache.selected.bg
-            } else if $unseen {
-                $color_cache.unseen.bg
+            bg: if highlighted {
+                color_cache.highlighted.bg
+            } else if selected {
+                color_cache.selected.bg
+            } else if unseen {
+                color_cache.unseen.bg
             } else {
-                $color_cache.theme_default.bg
+                color_cache.theme_default.bg
             },
-            attrs: if $highlighted {
-                $color_cache.highlighted.attrs
-            } else if $selected {
-                $color_cache.selected.attrs
-            } else if $unseen {
-                $color_cache.unseen.attrs
+            attrs: if highlighted && selected {
+                color_cache.highlighted_selected.attrs
+            } else if highlighted {
+                color_cache.highlighted.attrs
+            } else if selected {
+                color_cache.selected.attrs
+            } else if unseen {
+                color_cache.unseen.attrs
             } else {
-                $color_cache.theme_default.attrs
+                color_cache.theme_default.attrs
             },
         }
     }};
