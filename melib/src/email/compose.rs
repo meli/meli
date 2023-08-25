@@ -352,7 +352,7 @@ impl Draft {
                 body_attachment.set_raw(self.body.as_bytes().to_vec());
                 parts.push(body_attachment);
             }
-            parts.extend(attachments.into_iter());
+            parts.extend(attachments);
             build_multipart(&mut ret, MultipartType::Mixed, &[], parts);
         }
 

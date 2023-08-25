@@ -1216,7 +1216,7 @@ fn reflow_helper(
         if in_paragraph {
             if let Some(width) = width {
                 let ex = linear(&paragraph, width);
-                ret.extend(ex.into_iter());
+                ret.extend(ex);
             } else {
                 ret.push(paragraph);
             }
@@ -1803,7 +1803,7 @@ fn reflow_helper2(
         if in_paragraph {
             if let Some(width) = width {
                 let ex = linear(&paragraph, width);
-                ret.extend(ex.into_iter());
+                ret.extend(ex);
             } else {
                 ret.push_back(paragraph);
             }

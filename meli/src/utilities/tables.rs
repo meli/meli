@@ -176,7 +176,6 @@ impl<const N: usize> DataColumns<N> {
         let mut width_accum = 0;
         let mut growees = 0;
         let mut growees_max = 0;
-        let grow_minmax = None;
         for i in 0..N {
             if screen_height == 0 {
                 self.widths[i] = 0;
@@ -207,20 +206,12 @@ impl<const N: usize> DataColumns<N> {
         // add column gaps
         width_accum += 2 * N.saturating_sub(1);
         debug_assert!(growees >= growees_max);
-        debug_assert!(grow_minmax.is_none() || growees_max > 0);
         if width_accum >= screen_width || screen_height == 0 || screen_width == 0 || growees == 0 {
             self.width_accum = width_accum;
             return width_accum;
         }
         let distribute = screen_width - width_accum;
-        let maxmins = growees_max * grow_minmax.unwrap_or(0);
-        let part = if maxmins != 0 && growees_max < growees {
-            distribute.saturating_sub(maxmins) / (growees - growees_max)
-        } else if maxmins != 0 {
-            distribute.saturating_sub(maxmins) / growees_max + grow_minmax.unwrap_or(0)
-        } else {
-            distribute / growees
-        };
+        let part = distribute / growees;
 
         for i in 0..N {
             match self.elasticities[i] {

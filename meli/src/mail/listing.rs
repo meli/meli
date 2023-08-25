@@ -680,7 +680,7 @@ pub trait MailListingTrait: ListingTrait {
                                     .collect();
                                 let mut file =
                                     std::io::BufWriter::new(std::fs::File::create(&path_)?);
-                                let mut iter = envs.iter().zip(bytes.into_iter());
+                                let mut iter = envs.iter().zip(bytes);
                                 let tags_lck = collection.tag_index.read().unwrap();
                                 if let Some((env, ref bytes)) = iter.next() {
                                     let tags: Vec<&str> = env
@@ -1552,7 +1552,7 @@ impl Component for Listing {
                                     row_updates.push(*k);
                                 }
                             }
-                            self.component.row_updates().extend(row_updates.into_iter());
+                            self.component.row_updates().extend(row_updates);
                         }
                         _ => {}
                     },

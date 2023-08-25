@@ -26,6 +26,7 @@ use std::{
     os::unix::ffi::OsStrExt,
     path::{Path, PathBuf},
     pin::Pin,
+    ptr::NonNull,
     sync::{Arc, Mutex, RwLock},
 };
 
@@ -72,19 +73,32 @@ mod thread;
 pub use thread::*;
 
 #[derive(Debug)]
+#[repr(transparent)]
+struct DbPointer(NonNull<notmuch_database_t>);
+
+unsafe impl Send for DbPointer {}
+unsafe impl Sync for DbPointer {}
+
+impl DbPointer {
+    #[inline]
+    pub(self) fn as_mut(&mut self) -> *mut notmuch_database_t {
+        unsafe { self.0.as_mut() }
+    }
+}
+
+#[derive(Debug)]
 pub struct DbConnection {
     #[allow(dead_code)]
     pub lib: Arc<libloading::Library>,
-    pub inner: Arc<RwLock<*mut notmuch_database_t>>,
+    inner: Arc<Mutex<DbPointer>>,
     pub revision_uuid: Arc<RwLock<u64>>,
-    pub database_ph: std::marker::PhantomData<&'static mut notmuch_database_t>,
 }
 
 impl DbConnection {
     pub fn get_revision_uuid(&self) -> u64 {
         unsafe {
             call!(self.lib, notmuch_database_get_revision)(
-                *self.inner.read().unwrap(),
+                self.inner.lock().unwrap().as_mut(),
                 std::ptr::null_mut(),
             )
         }
@@ -182,8 +196,6 @@ impl DbConnection {
     }
 }
 
-unsafe impl Send for DbConnection {}
-unsafe impl Sync for DbConnection {}
 #[derive(Debug)]
 pub struct NotmuchError(String);
 
@@ -201,14 +213,19 @@ impl std::error::Error for NotmuchError {
 
 impl Drop for DbConnection {
     fn drop(&mut self) {
-        let inner = self.inner.write().unwrap();
+        let mut inner = self.inner.lock().unwrap();
         unsafe {
-            if let Err(err) = try_call!(self.lib, call!(self.lib, notmuch_database_close)(*inner)) {
+            if let Err(err) = try_call!(
+                self.lib,
+                call!(self.lib, notmuch_database_close)(inner.as_mut())
+            ) {
                 debug!(err);
                 return;
             }
-            if let Err(err) = try_call!(self.lib, call!(self.lib, notmuch_database_destroy)(*inner))
-            {
+            if let Err(err) = try_call!(
+                self.lib,
+                call!(self.lib, notmuch_database_destroy)(inner.as_mut())
+            ) {
                 debug!(err);
             }
         }
@@ -550,12 +567,24 @@ impl NotmuchDb {
                 status
             )));
         }
-        assert!(!database.is_null());
+        #[cfg(debug_assertions)]
+        let database = DbPointer(
+            NonNull::new(database)
+                .expect("notmuch_database_open returned a NULL pointer and status = 0"),
+        );
+        #[cfg(not(debug_assertions))]
+        let database = NonNull::new(database).map(DbPointer).ok_or_else(|| {
+            Error::new("notmuch_database_open returned a NULL pointer and status = 0")
+                .set_kind(ErrorKind::External)
+                .set_details(
+                    "libnotmuch exhibited an unexpected and unrecoverable error. Make sure your \
+                     libnotmuch version is compatible with this release.",
+                )
+        })?;
         let ret = DbConnection {
             lib,
             revision_uuid,
-            inner: Arc::new(RwLock::new(database)),
-            database_ph: std::marker::PhantomData,
+            inner: Arc::new(Mutex::new(database)),
         };
         if *ret.revision_uuid.read().unwrap() == 0 {
             let new = ret.get_revision_uuid();
@@ -1071,7 +1100,10 @@ impl<'s> Query<'s> {
         let lib: Arc<libloading::Library> = database.lib.clone();
         let query_cstr = std::ffi::CString::new(query_str)?;
         let query: *mut notmuch_query_t = unsafe {
-            call!(lib, notmuch_query_create)(*database.inner.read().unwrap(), query_cstr.as_ptr())
+            call!(lib, notmuch_query_create)(
+                database.inner.lock().unwrap().as_mut(),
+                query_cstr.as_ptr(),
+            )
         };
         if query.is_null() {
             return Err(Error::new("Could not create query. Out of memory?"));

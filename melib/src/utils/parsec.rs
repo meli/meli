@@ -312,7 +312,7 @@ macro_rules! permutation {
                 let mut any_success = false;
                 $(if results.$field.is_none() {
                     if let Ok((rest, res)) = $parser.parse(input) {
-                        if !matches!(res, None) || count > left {
+                        if res.is_some() || count > left {
                             results.$field = Some(res);
                             finished += 1;
                             count = 1;

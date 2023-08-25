@@ -634,18 +634,17 @@ impl Component for StatusBar {
                     return true;
                 }
                 let pos = self.ex_buffer_cmd_history_pos.map(|p| p + 1).unwrap_or(0);
-                let pos = Some(std::cmp::min(pos, self.cmd_history.len().saturating_sub(1)));
-                if pos != self.ex_buffer_cmd_history_pos {
+                let pos = std::cmp::min(pos, self.cmd_history.len().saturating_sub(1));
+                if Some(pos) != self.ex_buffer_cmd_history_pos {
                     let mut utext = UText::new(
-                        self.cmd_history[self.cmd_history.len().saturating_sub(1) - pos.unwrap()]
-                            .clone(),
+                        self.cmd_history[self.cmd_history.len().saturating_sub(1) - pos].clone(),
                     );
                     let len = utext.as_str().len();
                     utext.set_cursor(len);
                     self.container.set_dirty(true);
                     self.set_dirty(true);
                     self.ex_buffer = TextField::new(utext, None);
-                    self.ex_buffer_cmd_history_pos = pos;
+                    self.ex_buffer_cmd_history_pos = Some(pos);
                     self.dirty = true;
                 }
 
@@ -659,18 +658,16 @@ impl Component for StatusBar {
                     self.ex_buffer_cmd_history_pos = None;
                     self.ex_buffer.clear();
                     self.dirty = true;
-                } else if self.ex_buffer_cmd_history_pos.is_some() {
-                    let pos = self.ex_buffer_cmd_history_pos.map(|p| p - 1);
+                } else if let Some(pos) = self.ex_buffer_cmd_history_pos.map(|p| p - 1) {
                     let mut utext = UText::new(
-                        self.cmd_history[self.cmd_history.len().saturating_sub(1) - pos.unwrap()]
-                            .clone(),
+                        self.cmd_history[self.cmd_history.len().saturating_sub(1) - pos].clone(),
                     );
                     let len = utext.as_str().len();
                     utext.set_cursor(len);
                     self.container.set_dirty(true);
                     self.set_dirty(true);
                     self.ex_buffer = TextField::new(utext, None);
-                    self.ex_buffer_cmd_history_pos = pos;
+                    self.ex_buffer_cmd_history_pos = Some(pos);
                     self.dirty = true;
                 }
 

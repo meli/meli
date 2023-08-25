@@ -94,7 +94,7 @@ impl ExtendShortcutsMaps for ShortcutMaps {
                 true
             }
         });
-        self.extend(other.into_iter());
+        self.extend(other);
     }
 }
 

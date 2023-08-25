@@ -36,7 +36,7 @@ impl<'m> Message<'m> {
         let lib = db.lib.clone();
         unsafe {
             call!(lib, notmuch_database_find_message)(
-                *db.inner.read().unwrap(),
+                db.inner.lock().unwrap().as_mut(),
                 msg_id.as_ptr(),
                 std::ptr::addr_of_mut!(message),
             )

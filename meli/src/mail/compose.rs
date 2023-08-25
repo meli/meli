@@ -344,7 +344,7 @@ impl Composer {
                             melib::email::parser::generic::mailto(list_post_addr)
                                 .map(|(_, m)| m.address)
                         {
-                            to.extend(list_address.into_iter());
+                            to.extend(list_address);
                         }
                     }
                 }

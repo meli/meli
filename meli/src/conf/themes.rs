@@ -2044,13 +2044,13 @@ fn test_theme_parsing() {
     assert!(def.validate().is_ok());
     /* MUST SUCCEED: new user theme `hunter2`, theme `dark` has user
      * redefinitions */
-    const TEST_STR: &str = r##"[dark]
+    const TEST_STR: &str = r#"[dark]
 "mail.listing.tag_default" = { fg = "White", bg = "HotPink3" }
 "mail.listing.attachment_flag" = { fg = "mail.listing.tag_default.bg" }
 "mail.view.headers" = { bg = "mail.listing.tag_default.fg" }
 
 ["hunter2"]
-"mail.view.body" = { fg = "Black", bg = "White"}"##;
+"mail.view.body" = { fg = "Black", bg = "White"}"#;
     let parsed: Themes = toml::from_str(TEST_STR).unwrap();
     assert!(parsed.other_themes.contains_key("hunter2"));
     assert_eq!(
@@ -2079,16 +2079,16 @@ fn test_theme_parsing() {
     );
     assert!(parsed.validate().is_ok());
     /* MUST FAIL: theme `dark` contains a cycle */
-    const HAS_CYCLE: &str = r##"[dark]
+    const HAS_CYCLE: &str = r#"[dark]
 "mail.listing.compact.even" = { fg = "mail.listing.compact.odd" }
 "mail.listing.compact.odd" = { fg = "mail.listing.compact.even" }
-"##;
+"#;
     let parsed: Themes = toml::from_str(HAS_CYCLE).unwrap();
     assert!(parsed.validate().is_err());
     /* MUST FAIL: theme `dark` contains an invalid key */
-    const HAS_INVALID_KEYS: &str = r##"[dark]
+    const HAS_INVALID_KEYS: &str = r#"[dark]
 "asdfsafsa" = { fg = "Black" }
-"##;
+"#;
     let parsed: std::result::Result<Themes, _> = toml::from_str(HAS_INVALID_KEYS);
     assert!(parsed.is_err());
     /* MUST SUCCEED: alias $Jebediah resolves to a valid color */
@@ -2114,38 +2114,38 @@ color_aliases= { "Jebediah" = "#b4da55" }
     let parsed: Themes = toml::from_str(TEST_INVALID_ALIAS_STR).unwrap();
     assert!(parsed.validate().is_err());
     /* MUST FAIL: Color alias $Jebediah is defined as itself */
-    const TEST_CYCLIC_ALIAS_STR: &str = r##"[dark]
+    const TEST_CYCLIC_ALIAS_STR: &str = r#"[dark]
 color_aliases= { "Jebediah" = "$Jebediah" }
 "mail.listing.tag_default" = { fg = "$Jebediah" }
-"##;
+"#;
     let parsed: Themes = toml::from_str(TEST_CYCLIC_ALIAS_STR).unwrap();
     assert!(parsed.validate().is_err());
     /* MUST FAIL: Attr alias $Jebediah is defined as itself */
-    const TEST_CYCLIC_ALIAS_ATTR_STR: &str = r##"[dark]
+    const TEST_CYCLIC_ALIAS_ATTR_STR: &str = r#"[dark]
 attr_aliases= { "Jebediah" = "$Jebediah" }
 "mail.listing.tag_default" = { attrs = "$Jebediah" }
-"##;
+"#;
     let parsed: Themes = toml::from_str(TEST_CYCLIC_ALIAS_ATTR_STR).unwrap();
     assert!(parsed.validate().is_err());
     /* MUST FAIL: alias $Jebediah resolves to a cycle */
-    const TEST_CYCLIC_ALIAS_STR_2: &str = r##"[dark]
+    const TEST_CYCLIC_ALIAS_STR_2: &str = r#"[dark]
 color_aliases= { "Jebediah" = "$JebediahJr", "JebediahJr" = "mail.listing.tag_default" }
 "mail.listing.tag_default" = { fg = "$Jebediah" }
-"##;
+"#;
     let parsed: Themes = toml::from_str(TEST_CYCLIC_ALIAS_STR_2).unwrap();
     assert!(parsed.validate().is_err());
     /* MUST SUCCEED: alias $Jebediah resolves to a key's field */
-    const TEST_CYCLIC_ALIAS_STR_3: &str = r##"[dark]
+    const TEST_CYCLIC_ALIAS_STR_3: &str = r#"[dark]
 color_aliases= { "Jebediah" = "$JebediahJr", "JebediahJr" = "mail.listing.tag_default.bg" }
 "mail.listing.tag_default" = { fg = "$Jebediah", bg = "Black" }
-"##;
+"#;
     let parsed: Themes = toml::from_str(TEST_CYCLIC_ALIAS_STR_3).unwrap();
     assert!(parsed.validate().is_ok());
     /* MUST FAIL: alias $Jebediah resolves to an invalid key */
-    const TEST_INVALID_LINK_KEY_FIELD_STR: &str = r##"[dark]
+    const TEST_INVALID_LINK_KEY_FIELD_STR: &str = r#"[dark]
 color_aliases= { "Jebediah" = "$JebediahJr", "JebediahJr" = "mail.listing.tag_default.attrs" }
 "mail.listing.tag_default" = { fg = "$Jebediah", bg = "Black" }
-"##;
+"#;
     let parsed: Themes = toml::from_str(TEST_INVALID_LINK_KEY_FIELD_STR).unwrap();
     assert!(parsed.validate().is_err());
 }
@@ -2156,7 +2156,7 @@ fn test_theme_key_values() {
     let mut rust_files: VecDeque<PathBuf> = VecDeque::new();
     let mut dirs_queue: VecDeque<PathBuf> = VecDeque::new();
     dirs_queue.push_back("src/".into());
-    let re_whitespace = regex::Regex::new(r#"\s*"#).unwrap();
+    let re_whitespace = regex::Regex::new(r"\s*").unwrap();
     let re_conf = regex::Regex::new(r#"value\([&]?context,"([^"]*)""#).unwrap();
 
     while let Some(dir) = dirs_queue.pop_front() {
