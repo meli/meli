@@ -896,6 +896,12 @@ enum ListingFocus {
 }
 
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
+struct CursorPos {
+    account: usize,
+    menu: MenuEntryCursor,
+}
+
+#[derive(PartialEq, Eq, Copy, Clone, Debug)]
 enum MenuEntryCursor {
     Status,
     Mailbox(usize),
@@ -926,8 +932,8 @@ pub struct Listing {
     accounts: Vec<AccountMenuEntry>,
     status: Option<AccountStatus>,
     dirty: bool,
-    cursor_pos: (usize, MenuEntryCursor),
-    menu_cursor_pos: (usize, MenuEntryCursor),
+    cursor_pos: CursorPos,
+    menu_cursor_pos: CursorPos,
     menu_content: CellBuffer,
     menu_scrollbar_show_timer: crate::jobs::Timer,
     show_menu_scrollbar: ShowMenuScrollbar,
@@ -1009,7 +1015,7 @@ impl Component for Listing {
                 .push_back(((mid, get_y(upper_left)), (mid, get_y(bottom_right))));
         }
 
-        let account_hash = self.accounts[self.cursor_pos.0].hash;
+        let account_hash = self.accounts[self.cursor_pos.account].hash;
         if right_component_width == total_cols {
             if context.is_online(account_hash).is_err()
                 && !matches!(self.component, ListingComponent::Offline(_))
@@ -1063,7 +1069,7 @@ impl Component for Listing {
         match event {
             UIEvent::ConfigReload { old_settings: _ } => {
                 self.theme_default = crate::conf::value(context, "theme_default");
-                let account_hash = context.accounts[self.cursor_pos.0].hash();
+                let account_hash = context.accounts[self.cursor_pos.account].hash();
                 self.sidebar_divider =
                     *account_settings!(context[account_hash].listing.sidebar_divider);
                 self.sidebar_divider_theme = conf::value(context, "mail.sidebar_divider");
@@ -1097,7 +1103,7 @@ impl Component for Listing {
                     .accounts
                     .get_index_of(account_hash)
                     .expect("Invalid account_hash in UIEventMailbox{Delete,Create}");
-                if self.cursor_pos.0 == account_index {
+                if self.cursor_pos.account == account_index {
                     self.change_account(context);
                 } else {
                     let previous_collapsed_mailboxes: BTreeSet<MailboxHash> = self.accounts
@@ -1179,9 +1185,9 @@ impl Component for Listing {
                     })
                     .collect::<_>();
                 let mut fallback = 0;
-                if let MenuEntryCursor::Mailbox(ref mut cur) = self.cursor_pos.1 {
+                if let MenuEntryCursor::Mailbox(ref mut cur) = self.cursor_pos.menu {
                     *cur = std::cmp::min(
-                        self.accounts[self.cursor_pos.0]
+                        self.accounts[self.cursor_pos.account]
                             .entries
                             .len()
                             .saturating_sub(1),
@@ -1193,8 +1199,8 @@ impl Component for Listing {
                     self.component
                         .process_event(&mut UIEvent::VisibilityChange(false), context);
                     self.component.set_coordinates((
-                        self.accounts[self.cursor_pos.0].hash,
-                        self.accounts[self.cursor_pos.0].entries[fallback].mailbox_hash,
+                        self.accounts[self.cursor_pos.account].hash,
+                        self.accounts[self.cursor_pos.account].entries[fallback].mailbox_hash,
                     ));
                     self.component.refresh_mailbox(context, true);
                 }
@@ -1214,10 +1220,10 @@ impl Component for Listing {
             }
             UIEvent::Action(Action::ViewMailbox(ref idx)) => {
                 if let Some(MailboxMenuEntry { mailbox_hash, .. }) =
-                    self.accounts[self.cursor_pos.0].entries.get(*idx)
+                    self.accounts[self.cursor_pos.account].entries.get(*idx)
                 {
-                    let account_hash = self.accounts[self.cursor_pos.0].hash;
-                    self.cursor_pos.1 = MenuEntryCursor::Mailbox(*idx);
+                    let account_hash = self.accounts[self.cursor_pos.account].hash;
+                    self.cursor_pos.menu = MenuEntryCursor::Mailbox(*idx);
                     self.status = None;
                     self.component
                         .process_event(&mut UIEvent::VisibilityChange(false), context);
@@ -1389,13 +1395,13 @@ impl Component for Listing {
                     };
                     let target = match k {
                         k if shortcut!(k == shortcuts[Shortcuts::LISTING]["next_mailbox"]) => {
-                            match self.cursor_pos.1 {
+                            match self.cursor_pos.menu {
                                 MenuEntryCursor::Status => amount.saturating_sub(1),
                                 MenuEntryCursor::Mailbox(idx) => idx + amount,
                             }
                         }
                         k if shortcut!(k == shortcuts[Shortcuts::LISTING]["prev_mailbox"]) => {
-                            match self.cursor_pos.1 {
+                            match self.cursor_pos.menu {
                                 MenuEntryCursor::Status => {
                                     return true;
                                 }
@@ -1410,12 +1416,12 @@ impl Component for Listing {
                         }
                         _ => return true,
                     };
-                    if self.accounts[self.cursor_pos.0]
+                    if self.accounts[self.cursor_pos.account]
                         .entries
                         .get(target)
                         .is_some()
                     {
-                        self.cursor_pos.1 = MenuEntryCursor::Mailbox(target)
+                        self.cursor_pos.menu = MenuEntryCursor::Mailbox(target)
                     } else {
                         return true;
                     }
@@ -1445,17 +1451,17 @@ impl Component for Listing {
                     };
                     match k {
                         k if shortcut!(k == shortcuts[Shortcuts::LISTING]["next_account"]) => {
-                            if self.cursor_pos.0 + amount < self.accounts.len() {
-                                self.cursor_pos =
-                                    (self.cursor_pos.0 + amount, MenuEntryCursor::Mailbox(0));
+                            if self.cursor_pos.account + amount < self.accounts.len() {
+                                self.cursor_pos.account += amount;
+                                self.cursor_pos.menu = MenuEntryCursor::Mailbox(0);
                             } else {
                                 return true;
                             }
                         }
                         k if shortcut!(k == shortcuts[Shortcuts::LISTING]["prev_account"]) => {
-                            if self.cursor_pos.0 >= amount {
-                                self.cursor_pos =
-                                    (self.cursor_pos.0 - amount, MenuEntryCursor::Mailbox(0));
+                            if self.cursor_pos.account >= amount {
+                                self.cursor_pos.account -= amount;
+                                self.cursor_pos.menu = MenuEntryCursor::Mailbox(0);
                             } else {
                                 return true;
                             }
@@ -1513,7 +1519,7 @@ impl Component for Listing {
                             return true;
                         }
                         Action::Listing(ListingAction::Import(file_path, mailbox_path)) => {
-                            let account = &mut context.accounts[self.cursor_pos.0];
+                            let account = &mut context.accounts[self.cursor_pos.account];
                             if let Err(err) = account
                                 .mailbox_by_path(mailbox_path)
                                 .and_then(|mailbox_hash| {
@@ -1678,8 +1684,8 @@ impl Component for Listing {
                     UIEvent::Input(ref key)
                         if shortcut!(key == shortcuts[Shortcuts::LISTING]["refresh"]) =>
                     {
-                        let account = &mut context.accounts[self.cursor_pos.0];
-                        if let MenuEntryCursor::Mailbox(idx) = self.cursor_pos.1 {
+                        let account = &mut context.accounts[self.cursor_pos.account];
+                        if let MenuEntryCursor::Mailbox(idx) = self.cursor_pos.menu {
                             if let Some(&mailbox_hash) = account.mailboxes_order.get(idx) {
                                 if let Err(err) = account.refresh(mailbox_hash) {
                                     context.replies.push_back(UIEvent::Notification(
@@ -1753,10 +1759,10 @@ impl Component for Listing {
                 }
                 UIEvent::Input(ref k)
                     if shortcut!(k == shortcuts[Shortcuts::LISTING]["open_mailbox"])
-                        && self.menu_cursor_pos.1 == MenuEntryCursor::Status =>
+                        && self.menu_cursor_pos.menu == MenuEntryCursor::Status =>
                 {
                     self.cursor_pos = self.menu_cursor_pos;
-                    self.open_status(self.menu_cursor_pos.0, context);
+                    self.open_status(self.menu_cursor_pos.account, context);
                     self.set_dirty(true);
                     self.focus = ListingFocus::Mailbox;
                     self.ratio = self.prev_ratio;
@@ -1769,15 +1775,15 @@ impl Component for Listing {
                 }
                 UIEvent::Input(ref k)
                     if shortcut!(k == shortcuts[Shortcuts::LISTING]["toggle_mailbox_collapse"])
-                        && matches!(self.menu_cursor_pos.1, MenuEntryCursor::Mailbox(_)) =>
+                        && matches!(self.menu_cursor_pos.menu, MenuEntryCursor::Mailbox(_)) =>
                 {
                     let target_mailbox_idx =
-                        if let MenuEntryCursor::Mailbox(idx) = self.menu_cursor_pos.1 {
+                        if let MenuEntryCursor::Mailbox(idx) = self.menu_cursor_pos.menu {
                             idx
                         } else {
                             return false;
                         };
-                    if let Some(target) = self.accounts[self.menu_cursor_pos.0]
+                    if let Some(target) = self.accounts[self.menu_cursor_pos.account]
                         .entries
                         .get_mut(target_mailbox_idx)
                     {
@@ -1837,35 +1843,30 @@ impl Component for Listing {
                     if shortcut!(k == shortcuts[Shortcuts::LISTING]["scroll_up"]) {
                         while amount > 0 {
                             match self.menu_cursor_pos {
-                                (
-                                    ref mut account_cursor,
-                                    ref mut entry_cursor @ MenuEntryCursor::Status,
-                                ) => {
-                                    if *account_cursor > 0 {
-                                        *account_cursor -= 1;
-                                        *entry_cursor = MenuEntryCursor::Mailbox(
-                                            self.accounts[*account_cursor]
-                                                .entries
-                                                .len()
-                                                .saturating_sub(1),
+                                CursorPos {
+                                    ref mut account,
+                                    menu: MenuEntryCursor::Status,
+                                } => {
+                                    if *account > 0 {
+                                        *account -= 1;
+                                        self.menu_cursor_pos.menu = MenuEntryCursor::Mailbox(
+                                            self.accounts[*account].entries.len().saturating_sub(1),
                                         );
                                     } else {
                                         return true;
                                     }
                                 }
-                                (
-                                    ref account_cursor,
-                                    MenuEntryCursor::Mailbox(ref mut mailbox_idx),
-                                ) => loop {
+                                CursorPos {
+                                    ref account,
+                                    menu: MenuEntryCursor::Mailbox(ref mut mailbox_idx),
+                                } => loop {
                                     if *mailbox_idx > 0 {
                                         *mailbox_idx -= 1;
-                                        if self.accounts[*account_cursor].entries[*mailbox_idx]
-                                            .visible
-                                        {
+                                        if self.accounts[*account].entries[*mailbox_idx].visible {
                                             break;
                                         }
                                     } else {
-                                        self.menu_cursor_pos.1 = MenuEntryCursor::Status;
+                                        self.menu_cursor_pos.menu = MenuEntryCursor::Status;
                                         break;
                                     }
                                 },
@@ -1877,41 +1878,44 @@ impl Component for Listing {
                         while amount > 0 {
                             match self.menu_cursor_pos {
                                 /* If current account has mailboxes, go to first mailbox */
-                                (
-                                    ref account_cursor,
-                                    ref mut entry_cursor @ MenuEntryCursor::Status,
-                                ) if !self.accounts[*account_cursor].entries.is_empty() => {
-                                    *entry_cursor = MenuEntryCursor::Mailbox(0);
+                                CursorPos {
+                                    ref account,
+                                    ref mut menu,
+                                } if !self.accounts[*account].entries.is_empty()
+                                    && *menu == MenuEntryCursor::Status =>
+                                {
+                                    *menu = MenuEntryCursor::Mailbox(0);
                                 }
                                 /* If current account has no mailboxes, go to next account */
-                                (
-                                    ref mut account_cursor,
-                                    ref mut entry_cursor @ MenuEntryCursor::Status,
-                                ) if *account_cursor + 1 < self.accounts.len() => {
-                                    *account_cursor += 1;
-                                    *entry_cursor = MenuEntryCursor::Status;
+                                CursorPos {
+                                    ref mut account,
+                                    ref mut menu,
+                                } if *account + 1 < self.accounts.len()
+                                    && *menu == MenuEntryCursor::Status =>
+                                {
+                                    *account += 1;
+                                    *menu = MenuEntryCursor::Status;
                                 }
                                 /* If current account has no mailboxes and there is no next
                                  * account, return true */
-                                (_, MenuEntryCursor::Status) => {
+                                CursorPos {
+                                    menu: MenuEntryCursor::Status,
+                                    ..
+                                } => {
                                     return true;
                                 }
-                                (
-                                    ref mut account_cursor,
-                                    MenuEntryCursor::Mailbox(ref mut mailbox_idx),
-                                ) => loop {
-                                    if (*mailbox_idx + 1)
-                                        < self.accounts[*account_cursor].entries.len()
-                                    {
+                                CursorPos {
+                                    ref mut account,
+                                    menu: MenuEntryCursor::Mailbox(ref mut mailbox_idx),
+                                } => loop {
+                                    if (*mailbox_idx + 1) < self.accounts[*account].entries.len() {
                                         *mailbox_idx += 1;
-                                        if self.accounts[*account_cursor].entries[*mailbox_idx]
-                                            .visible
-                                        {
+                                        if self.accounts[*account].entries[*mailbox_idx].visible {
                                             break;
                                         }
-                                    } else if *account_cursor + 1 < self.accounts.len() {
-                                        *account_cursor += 1;
-                                        self.menu_cursor_pos.1 = MenuEntryCursor::Status;
+                                    } else if *account + 1 < self.accounts.len() {
+                                        *account += 1;
+                                        self.menu_cursor_pos.menu = MenuEntryCursor::Status;
                                         break;
                                     } else {
                                         return true;
@@ -1953,13 +1957,13 @@ impl Component for Listing {
                     };
                     let target = match k {
                         k if shortcut!(k == shortcuts[Shortcuts::LISTING]["next_mailbox"]) => {
-                            match self.menu_cursor_pos.1 {
+                            match self.menu_cursor_pos.menu {
                                 MenuEntryCursor::Status => amount.saturating_sub(1),
                                 MenuEntryCursor::Mailbox(idx) => idx + amount,
                             }
                         }
                         k if shortcut!(k == shortcuts[Shortcuts::LISTING]["prev_mailbox"]) => {
-                            match self.menu_cursor_pos.1 {
+                            match self.menu_cursor_pos.menu {
                                 MenuEntryCursor::Status => {
                                     return true;
                                 }
@@ -1974,12 +1978,12 @@ impl Component for Listing {
                         }
                         _ => return true,
                     };
-                    if self.accounts[self.menu_cursor_pos.0]
+                    if self.accounts[self.menu_cursor_pos.account]
                         .entries
                         .get(target)
                         .is_some()
                     {
-                        self.menu_cursor_pos.1 = MenuEntryCursor::Mailbox(target)
+                        self.menu_cursor_pos.menu = MenuEntryCursor::Mailbox(target)
                     } else {
                         return true;
                     }
@@ -2017,9 +2021,9 @@ impl Component for Listing {
                         k if shortcut!(k == shortcuts[Shortcuts::LISTING]["next_account"])
                             || shortcut!(k == shortcuts[Shortcuts::LISTING]["next_page"]) =>
                         {
-                            if self.menu_cursor_pos.0 + amount < self.accounts.len() {
-                                self.menu_cursor_pos =
-                                    (self.menu_cursor_pos.0 + amount, MenuEntryCursor::Mailbox(0));
+                            if self.menu_cursor_pos.account + amount < self.accounts.len() {
+                                self.menu_cursor_pos.account += amount;
+                                self.menu_cursor_pos.menu = MenuEntryCursor::Mailbox(0);
                             } else {
                                 return true;
                             }
@@ -2027,9 +2031,9 @@ impl Component for Listing {
                         k if shortcut!(k == shortcuts[Shortcuts::LISTING]["prev_account"])
                             || shortcut!(k == shortcuts[Shortcuts::LISTING]["prev_page"]) =>
                         {
-                            if self.menu_cursor_pos.0 >= amount {
-                                self.menu_cursor_pos =
-                                    (self.menu_cursor_pos.0 - amount, MenuEntryCursor::Mailbox(0));
+                            if self.menu_cursor_pos.account >= amount {
+                                self.menu_cursor_pos.account -= amount;
+                                self.menu_cursor_pos.menu = MenuEntryCursor::Mailbox(0);
                             } else {
                                 return true;
                             }
@@ -2045,12 +2049,75 @@ impl Component for Listing {
 
                     return true;
                 }
+                UIEvent::Input(ref key) if *key == Key::Home => {
+                    if matches!(
+                        self.menu_cursor_pos,
+                        CursorPos {
+                            account: 0,
+                            menu: MenuEntryCursor::Mailbox(0)
+                        }
+                    ) {
+                        return true;
+                    }
+                    if self.menu_cursor_pos.menu == MenuEntryCursor::Mailbox(0) {
+                        self.menu_cursor_pos.account = 0;
+                    } else {
+                        self.menu_cursor_pos.menu = MenuEntryCursor::Mailbox(0);
+                    }
+                    if self.show_menu_scrollbar != ShowMenuScrollbar::Never {
+                        self.menu_scrollbar_show_timer.rearm();
+                        self.show_menu_scrollbar = ShowMenuScrollbar::True;
+                    }
+                    self.menu_content.empty();
+                    self.set_dirty(true);
+                    return true;
+                }
+                UIEvent::Input(ref key) if *key == Key::End => {
+                    let CursorPos {
+                        ref mut account,
+                        ref mut menu,
+                    } = self.menu_cursor_pos;
+                    if matches!(
+                        (*account, *menu),
+                        (a, MenuEntryCursor::Mailbox(
+                            i
+                        )) if a == self.accounts.len().saturating_sub(1) && i ==
+                            self.accounts[*account].entries.len().saturating_sub(1)
+                    ) {
+                        // Do nothing, this is the End.
+                        // "Father?"
+                        // "Yes, son?"
+                        // "I want to kill you"
+                        // "Come on, baby"
+                        return true;
+                    } else if matches!(
+                        *menu,
+                        MenuEntryCursor::Mailbox(
+                            i
+                        ) if i ==
+                            self.accounts[*account].entries.len().saturating_sub(1)
+                    ) {
+                        *account = self.accounts.len().saturating_sub(1);
+                        *menu = MenuEntryCursor::Mailbox(0);
+                    } else {
+                        *menu = MenuEntryCursor::Mailbox(
+                            self.accounts[*account].entries.len().saturating_sub(1),
+                        );
+                    }
+                    if self.show_menu_scrollbar != ShowMenuScrollbar::Never {
+                        self.menu_scrollbar_show_timer.rearm();
+                        self.show_menu_scrollbar = ShowMenuScrollbar::True;
+                    }
+                    self.menu_content.empty();
+                    self.set_dirty(true);
+                    return true;
+                }
                 _ => {}
             }
         }
         match *event {
             UIEvent::Input(ref k) if shortcut!(k == shortcuts[Shortcuts::LISTING]["new_mail"]) => {
-                let account_hash = context.accounts[self.cursor_pos.0].hash();
+                let account_hash = context.accounts[self.cursor_pos.account].hash();
                 let composer = Composer::with_account(account_hash, context);
                 context
                     .replies
@@ -2058,7 +2125,7 @@ impl Component for Listing {
                 return true;
             }
             UIEvent::Action(Action::Tab(ManageMailboxes)) => {
-                let account_pos = self.cursor_pos.0;
+                let account_pos = self.cursor_pos.account;
                 let mgr = MailboxManager::new(context, account_pos);
                 context
                     .replies
@@ -2073,7 +2140,7 @@ impl Component for Listing {
                 return true;
             }
             UIEvent::Action(Action::Compose(ComposeAction::Mailto(ref mailto))) => {
-                let account_hash = context.accounts[self.cursor_pos.0].hash();
+                let account_hash = context.accounts[self.cursor_pos.account].hash();
                 let mut composer = Composer::with_account(account_hash, context);
                 composer.set_draft(mailto.into(), context);
                 context
@@ -2177,10 +2244,10 @@ impl Component for Listing {
     }
 
     fn status(&self, context: &Context) -> String {
-        let mailbox_hash = match self.cursor_pos.1 {
+        let mailbox_hash = match self.cursor_pos.menu {
             MenuEntryCursor::Mailbox(idx) => {
                 if let Some(MailboxMenuEntry { mailbox_hash, .. }) =
-                    self.accounts[self.cursor_pos.0].entries.get(idx)
+                    self.accounts[self.cursor_pos.account].entries.get(idx)
                 {
                     *mailbox_hash
                 } else {
@@ -2188,11 +2255,11 @@ impl Component for Listing {
                 }
             }
             MenuEntryCursor::Status => {
-                return format!("{} status", &self.accounts[self.cursor_pos.0].name)
+                return format!("{} status", &self.accounts[self.cursor_pos.account].name)
             }
         };
 
-        let account = &context.accounts[self.cursor_pos.0];
+        let account = &context.accounts[self.cursor_pos.account];
         use crate::conf::accounts::MailboxStatus;
         match account[&mailbox_hash].status {
             MailboxStatus::Available | MailboxStatus::Parsing(_, _) => {
@@ -2289,8 +2356,14 @@ impl Listing {
             accounts: account_entries,
             status: None,
             dirty: true,
-            cursor_pos: (0, MenuEntryCursor::Mailbox(0)),
-            menu_cursor_pos: (0, MenuEntryCursor::Mailbox(0)),
+            cursor_pos: CursorPos {
+                account: 0,
+                menu: MenuEntryCursor::Mailbox(0),
+            },
+            menu_cursor_pos: CursorPos {
+                account: 0,
+                menu: MenuEntryCursor::Mailbox(0),
+            },
             menu_content: CellBuffer::new_with_context(0, 0, None, context),
             menu_scrollbar_show_timer: context.main_loop_handler.job_executor.clone().create_timer(
                 std::time::Duration::from_secs(0),
@@ -2350,14 +2423,14 @@ impl Listing {
         let rows = height!(area);
         let (width, height) = self.menu_content.size();
         const SCROLLING_CONTEXT: usize = 3;
-        let y_offset = (cursor.0)
+        let y_offset = (cursor.account)
             + self
                 .accounts
                 .iter()
-                .take(cursor.0)
+                .take(cursor.account)
                 .map(|entry| entry.entries.len() + 1)
                 .sum::<usize>()
-            + match cursor.1 {
+            + match cursor.menu {
                 MenuEntryCursor::Status => 0,
                 MenuEntryCursor::Mailbox(idx) => idx + 1,
             }
@@ -2452,7 +2525,7 @@ impl Listing {
             ListingFocus::Menu => self.menu_cursor_pos,
         };
 
-        let must_highlight_account: bool = cursor.0 == self.accounts[aidx].index;
+        let must_highlight_account: bool = cursor.account == self.accounts[aidx].index;
 
         let mut lines: Vec<Line> = Vec::new();
 
@@ -2499,7 +2572,7 @@ impl Listing {
         }
 
         let account_attrs = if must_highlight_account {
-            if cursor.1 == MenuEntryCursor::Status {
+            if cursor.menu == MenuEntryCursor::Status {
                 let mut v = crate::conf::value(context, "mail.sidebar_highlighted");
                 if !context.settings.terminal.use_color() {
                     v.attrs |= Attr::REVERSE;
@@ -2579,7 +2652,7 @@ impl Listing {
                 l.collapsed_count = Some(counter);
             }
             let (att, index_att, unread_count_att) = if must_highlight_account {
-                if match cursor.1 {
+                if match cursor.menu {
                     MenuEntryCursor::Mailbox(c) => c == idx,
                     _ => false,
                 } {
@@ -2675,7 +2748,7 @@ impl Listing {
                 {
                     format!(
                         "{:>width$}",
-                        (l.inc - cursor.1).abs(),
+                        (l.inc - cursor.menu).abs(),
                         width = total_mailbox_no_digits
                     )
                 } else {
@@ -2777,8 +2850,9 @@ impl Listing {
     }
 
     fn change_account(&mut self, context: &mut Context) {
-        let account_hash = context.accounts[self.cursor_pos.0].hash();
-        let previous_collapsed_mailboxes: BTreeSet<MailboxHash> = self.accounts[self.cursor_pos.0]
+        let account_hash = context.accounts[self.cursor_pos.account].hash();
+        let previous_collapsed_mailboxes: BTreeSet<MailboxHash> = self.accounts
+            [self.cursor_pos.account]
             .entries
             .iter()
             .filter_map(|e| {
@@ -2789,11 +2863,11 @@ impl Listing {
                 }
             })
             .collect::<_>();
-        self.accounts[self.cursor_pos.0].entries = context.accounts[self.cursor_pos.0]
+        self.accounts[self.cursor_pos.account].entries = context.accounts[self.cursor_pos.account]
             .list_mailboxes()
             .into_iter()
             .filter(|mailbox_node| {
-                context.accounts[self.cursor_pos.0][&mailbox_node.hash]
+                context.accounts[self.cursor_pos.account][&mailbox_node.hash]
                     .ref_mailbox
                     .is_subscribed()
             })
@@ -2804,17 +2878,19 @@ impl Listing {
                 mailbox_hash: f.hash,
                 visible: true,
                 collapsed: if previous_collapsed_mailboxes.is_empty() {
-                    context.accounts[self.cursor_pos.0][&f.hash].conf.collapsed
+                    context.accounts[self.cursor_pos.account][&f.hash]
+                        .conf
+                        .collapsed
                 } else {
                     previous_collapsed_mailboxes.contains(&f.hash)
                 },
             })
             .collect::<_>();
-        match self.cursor_pos.1 {
+        match self.cursor_pos.menu {
             MenuEntryCursor::Mailbox(idx) => {
                 /* Account might have no mailboxes yet if it's offline */
                 if let Some(MailboxMenuEntry { mailbox_hash, .. }) =
-                    self.accounts[self.cursor_pos.0].entries.get(idx)
+                    self.accounts[self.cursor_pos.account].entries.get(idx)
                 {
                     self.component
                         .process_event(&mut UIEvent::VisibilityChange(false), context);
@@ -2840,7 +2916,7 @@ impl Listing {
                     )));
             }
             MenuEntryCursor::Status => {
-                self.open_status(self.cursor_pos.0, context);
+                self.open_status(self.cursor_pos.account, context);
             }
         }
         self.sidebar_divider = *account_settings!(context[account_hash].listing.sidebar_divider);
