@@ -1316,7 +1316,14 @@ impl Component for Listing {
             return true;
         }
 
-        let shortcuts = self.shortcuts(context);
+        let shortcuts = {
+            let mut m = self.shortcuts(context);
+            m.insert(
+                Shortcuts::GENERAL,
+                context.settings.shortcuts.general.key_values(),
+            );
+            m
+        };
         if self.focus == ListingFocus::Mailbox {
             match *event {
                 UIEvent::Input(Key::Mouse(MouseEvent::Press(MouseButton::Left, x, _y)))
@@ -1654,11 +1661,15 @@ impl Component for Listing {
                         self.component.set_movement(PageMovement::PageDown(mult));
                         return true;
                     }
-                    UIEvent::Input(ref key) if *key == Key::Home => {
+                    UIEvent::Input(ref key)
+                        if shortcut!(key == shortcuts[Shortcuts::GENERAL]["home_page"]) =>
+                    {
                         self.component.set_movement(PageMovement::Home);
                         return true;
                     }
-                    UIEvent::Input(ref key) if *key == Key::End => {
+                    UIEvent::Input(ref key)
+                        if shortcut!(key == shortcuts[Shortcuts::GENERAL]["end_page"]) =>
+                    {
                         self.component.set_movement(PageMovement::End);
                         return true;
                     }
@@ -2049,7 +2060,9 @@ impl Component for Listing {
 
                     return true;
                 }
-                UIEvent::Input(ref key) if *key == Key::Home => {
+                UIEvent::Input(ref key)
+                    if shortcut!(key == shortcuts[Shortcuts::GENERAL]["home_page"]) =>
+                {
                     if matches!(
                         self.menu_cursor_pos,
                         CursorPos {
@@ -2072,7 +2085,9 @@ impl Component for Listing {
                     self.set_dirty(true);
                     return true;
                 }
-                UIEvent::Input(ref key) if *key == Key::End => {
+                UIEvent::Input(ref key)
+                    if shortcut!(key == shortcuts[Shortcuts::GENERAL]["end_page"]) =>
+                {
                     let CursorPos {
                         ref mut account,
                         ref mut menu,
