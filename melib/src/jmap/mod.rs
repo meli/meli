@@ -889,7 +889,7 @@ impl JmapType {
         let store = Arc::new(Store {
             account_name: Arc::new(s.name.clone()),
             account_hash,
-            account_id: Arc::new(Mutex::new(Id::new())),
+            account_id: Arc::new(Mutex::new(Id::empty())),
             online_status,
             event_consumer,
             is_subscribed: Arc::new(IsSubscribedFn(is_subscribed)),

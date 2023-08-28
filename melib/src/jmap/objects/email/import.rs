@@ -75,7 +75,7 @@ pub struct EmailImport {
 impl ImportCall {
     pub fn new() -> Self {
         Self {
-            account_id: Id::new(),
+            account_id: Id::empty(),
             if_in_state: None,
             emails: IndexMap::default(),
         }
@@ -104,7 +104,7 @@ impl Method<EmailObject> for ImportCall {
 impl EmailImport {
     pub fn new() -> Self {
         Self {
-            blob_id: Id::new(),
+            blob_id: Id::empty(),
             mailbox_ids: IndexMap::default(),
             keywords: IndexMap::default(),
             received_at: None,

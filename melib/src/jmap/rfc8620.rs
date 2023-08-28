@@ -94,7 +94,7 @@ impl<OBJ> Hash for Id<OBJ> {
 
 impl<OBJ> Default for Id<OBJ> {
     fn default() -> Self {
-        Self::new()
+        Self::empty()
     }
 }
 
@@ -107,6 +107,15 @@ impl<OBJ> From<String> for Id<OBJ> {
     }
 }
 
+impl<OBJ> From<&str> for Id<OBJ> {
+    fn from(inner: &str) -> Self {
+        Self {
+            inner: inner.to_string(),
+            _ph: PhantomData,
+        }
+    }
+}
+
 impl<OBJ> std::fmt::Display for Id<OBJ> {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         std::fmt::Display::fmt(&self.inner, fmt)
@@ -114,9 +123,16 @@ impl<OBJ> std::fmt::Display for Id<OBJ> {
 }
 
 impl<OBJ> Id<OBJ> {
-    pub fn new() -> Self {
+    pub fn empty() -> Self {
         Self {
             inner: String::new(),
+            _ph: PhantomData,
+        }
+    }
+
+    pub fn new_uuid_v4() -> Self {
+        Self {
+            inner: uuid::Uuid::new_v4().hyphenated().to_string(),
             _ph: PhantomData,
         }
     }
@@ -303,7 +319,7 @@ where
 {
     pub fn new() -> Self {
         Self {
-            account_id: Id::new(),
+            account_id: Id::empty(),
             ids: None,
             properties: None,
             _ph: PhantomData,
@@ -478,7 +494,7 @@ where
 {
     pub fn new() -> Self {
         Self {
-            account_id: Id::new(),
+            account_id: Id::empty(),
             filter: None,
             sort: None,
             position: 0,
@@ -623,7 +639,7 @@ where
 {
     pub fn new() -> Self {
         Self {
-            account_id: Id::new(),
+            account_id: Id::empty(),
             since_state: State::new(),
             max_changes: None,
             _ph: PhantomData,
@@ -793,7 +809,7 @@ where
 {
     pub fn new() -> Self {
         Self {
-            account_id: Id::new(),
+            account_id: Id::empty(),
             if_in_state: None,
             create: None,
             update: None,
