@@ -35,7 +35,7 @@ use super::*;
 ///       The id of the account to use.
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct ImportCall {
+pub struct EmailImport {
     /// accountId: `Id`
     /// The id of the account to use.
     pub account_id: Id<Account>,
@@ -72,7 +72,7 @@ pub struct EmailImportObject {
     pub received_at: Option<String>,
 }
 
-impl ImportCall {
+impl EmailImport {
     pub fn new() -> Self {
         Self {
             account_id: Id::empty(),
@@ -91,13 +91,13 @@ impl ImportCall {
     _impl!(emails: IndexMap<Id<EmailObject>, EmailImportObject>);
 }
 
-impl Default for ImportCall {
+impl Default for EmailImport {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Method<EmailObject> for ImportCall {
+impl Method<EmailObject> for EmailImport {
     const NAME: &'static str = "Email/import";
 }
 
@@ -126,7 +126,7 @@ impl Default for EmailImportObject {
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 #[serde(tag = "type")]
-pub enum ImportError {
+pub enum EmailImportError {
     /// The server MAY forbid two Email objects with the same exact content
     /// `RFC5322`, or even just with the same Message-ID `RFC5322`, to
     /// coexist within an account.  In this case, it MUST reject attempts to
@@ -166,7 +166,7 @@ pub enum ImportError {
 
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct ImportResponse {
+pub struct EmailImportResponse {
     /// o  accountId: `Id`
     /// The id of the account used for this call.
     pub account_id: Id<Account>,
@@ -186,28 +186,28 @@ pub struct ImportResponse {
     /// A map of the creation id to an object containing the `id`,
     /// `blobId`, `threadId`, and `size` properties for each successfully
     /// imported Email, or null if none.
-    pub created: Option<IndexMap<Id<EmailObject>, ImportEmailResult>>,
+    pub created: Option<IndexMap<Id<EmailObject>, EmailImportResult>>,
 
     /// o  notCreated: `Id[SetError]|null`
     /// A map of the creation id to a SetError object for each Email that
     /// failed to be created, or null if all successful.  The possible
     /// errors are defined above.
-    pub not_created: Option<IndexMap<Id<EmailObject>, ImportError>>,
+    pub not_created: Option<IndexMap<Id<EmailObject>, EmailImportError>>,
 }
 
-impl std::convert::TryFrom<&RawValue> for ImportResponse {
+impl std::convert::TryFrom<&RawValue> for EmailImportResponse {
     type Error = crate::error::Error;
 
     fn try_from(t: &RawValue) -> Result<Self> {
         let res: (String, Self, String) = deserialize_from_str(t.get())?;
-        assert_eq!(&res.0, &ImportCall::NAME);
+        assert_eq!(&res.0, &EmailImport::NAME);
         Ok(res.1)
     }
 }
 
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct ImportEmailResult {
+pub struct EmailImportResult {
     pub id: Id<EmailObject>,
     pub blob_id: Id<BlobObject>,
     pub thread_id: Id<ThreadObject>,

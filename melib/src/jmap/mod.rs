@@ -471,7 +471,7 @@ impl MailBackend for JmapType {
             let mut req = Request::new(conn.request_no.clone());
             let creation_id: Id<EmailObject> = "1".to_string().into();
 
-            let import_call: ImportCall = ImportCall::new()
+            let import_call: EmailImport = EmailImport::new()
                 .account_id(conn.mail_account_id())
                 .emails(indexmap! {
                     creation_id.clone() => EmailImportObject::new()
@@ -492,8 +492,8 @@ impl MailBackend for JmapType {
                 }
                 Ok(s) => s,
             };
-            let m = ImportResponse::try_from(v.method_responses.remove(0)).map_err(|err| {
-                let ierr: Result<ImportError> = deserialize_from_str(&res_text);
+            let m = EmailImportResponse::try_from(v.method_responses.remove(0)).map_err(|err| {
+                let ierr: Result<EmailImportError> = deserialize_from_str(&res_text);
                 if let Ok(err) = ierr {
                     Error::new(format!("Could not save message: {:?}", err))
                 } else {
