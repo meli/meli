@@ -29,3 +29,6 @@ pub use mailbox::*;
 
 mod thread;
 pub use thread::*;
+
+mod identity;
+pub use identity::*;

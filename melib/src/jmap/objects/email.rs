@@ -211,7 +211,7 @@ impl EmailObject {
     _impl!(get keywords, keywords: IndexMap<String, bool>);
 }
 
-#[derive(Deserialize, Serialize, Debug, Default)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Header {
     pub name: String,
@@ -228,7 +228,7 @@ where
     Ok(v.into_iter().map(|t| (t.name, t.value)).collect())
 }
 
-#[derive(Deserialize, Serialize, Debug, Default)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct EmailAddress {
     pub email: String,
