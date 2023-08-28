@@ -19,8 +19,9 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::{collections::HashMap, marker::PhantomData};
+use std::marker::PhantomData;
 
+use indexmap::IndexMap;
 use serde::de::{Deserialize, Deserializer};
 use serde_json::{value::RawValue, Value};
 
@@ -144,7 +145,7 @@ pub struct EmailObject {
     #[serde(default)]
     pub blob_id: Id<BlobObject>,
     #[serde(default)]
-    pub mailbox_ids: HashMap<Id<MailboxObject>, bool>,
+    pub mailbox_ids: IndexMap<Id<MailboxObject>, bool>,
     #[serde(default)]
     pub size: u64,
     #[serde(default)]
@@ -168,7 +169,7 @@ pub struct EmailObject {
     #[serde(default)]
     pub references: Option<Vec<String>>,
     #[serde(default)]
-    pub keywords: HashMap<String, bool>,
+    pub keywords: IndexMap<String, bool>,
     #[serde(default)]
     pub attached_emails: Option<Id<BlobObject>>,
     #[serde(default)]
@@ -177,7 +178,7 @@ pub struct EmailObject {
     pub has_attachment: bool,
     #[serde(default)]
     #[serde(deserialize_with = "deserialize_header")]
-    pub headers: HashMap<String, String>,
+    pub headers: IndexMap<String, String>,
     #[serde(default)]
     pub html_body: Vec<HtmlBody>,
     #[serde(default)]
@@ -191,7 +192,7 @@ pub struct EmailObject {
     #[serde(default)]
     pub thread_id: Id<ThreadObject>,
     #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
+    pub extra: IndexMap<String, Value>,
 }
 
 /// Deserializer that uses `Default::default()` in place of a present but `null`
@@ -207,7 +208,7 @@ where
 }
 
 impl EmailObject {
-    _impl!(get keywords, keywords: HashMap<String, bool>);
+    _impl!(get keywords, keywords: IndexMap<String, bool>);
 }
 
 #[derive(Deserialize, Serialize, Debug, Default)]
@@ -219,7 +220,7 @@ pub struct Header {
 
 fn deserialize_header<'de, D>(
     deserializer: D,
-) -> std::result::Result<HashMap<String, String>, D::Error>
+) -> std::result::Result<IndexMap<String, String>, D::Error>
 where
     D: Deserializer<'de>,
 {

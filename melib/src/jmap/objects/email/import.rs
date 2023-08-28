@@ -19,6 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use indexmap::IndexMap;
 use serde_json::value::RawValue;
 
 use super::*;
@@ -48,7 +49,7 @@ pub struct ImportCall {
     pub if_in_state: Option<State<EmailObject>>,
     /// o  emails: `Id[EmailImport]`
     /// A map of creation id (client specified) to EmailImport objects.
-    pub emails: HashMap<Id<EmailObject>, EmailImport>,
+    pub emails: IndexMap<Id<EmailObject>, EmailImport>,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -60,10 +61,10 @@ pub struct EmailImport {
     /// o  mailboxIds: `Id[Boolean]`
     /// The ids of the Mailboxes to assign this Email to.  At least one
     /// Mailbox MUST be given.
-    pub mailbox_ids: HashMap<Id<MailboxObject>, bool>,
+    pub mailbox_ids: IndexMap<Id<MailboxObject>, bool>,
     /// o  keywords: `String[Boolean]` (default: {})
     /// The keywords to apply to the Email.
-    pub keywords: HashMap<String, bool>,
+    pub keywords: IndexMap<String, bool>,
 
     /// o  receivedAt: `UTCDate` (default: time of most recent Received
     /// header, or time of import on server if none)
@@ -76,7 +77,7 @@ impl ImportCall {
         Self {
             account_id: Id::new(),
             if_in_state: None,
-            emails: HashMap::default(),
+            emails: IndexMap::default(),
         }
     }
 
@@ -87,7 +88,7 @@ impl ImportCall {
         account_id: Id<Account>
     );
     _impl!(if_in_state: Option<State<EmailObject>>);
-    _impl!(emails: HashMap<Id<EmailObject>, EmailImport>);
+    _impl!(emails: IndexMap<Id<EmailObject>, EmailImport>);
 }
 
 impl Default for ImportCall {
@@ -104,15 +105,15 @@ impl EmailImport {
     pub fn new() -> Self {
         Self {
             blob_id: Id::new(),
-            mailbox_ids: HashMap::default(),
-            keywords: HashMap::default(),
+            mailbox_ids: IndexMap::default(),
+            keywords: IndexMap::default(),
             received_at: None,
         }
     }
 
     _impl!(blob_id: Id<BlobObject>);
-    _impl!(mailbox_ids: HashMap<Id<MailboxObject>, bool>);
-    _impl!(keywords: HashMap<String, bool>);
+    _impl!(mailbox_ids: IndexMap<Id<MailboxObject>, bool>);
+    _impl!(keywords: IndexMap<String, bool>);
     _impl!(received_at: Option<String>);
 }
 
@@ -185,13 +186,13 @@ pub struct ImportResponse {
     /// A map of the creation id to an object containing the `id`,
     /// `blobId`, `threadId`, and `size` properties for each successfully
     /// imported Email, or null if none.
-    pub created: HashMap<Id<EmailObject>, ImportEmailResult>,
+    pub created: IndexMap<Id<EmailObject>, ImportEmailResult>,
 
     /// o  notCreated: `Id[SetError]|null`
     /// A map of the creation id to a SetError object for each Email that
     /// failed to be created, or null if all successful.  The possible
     /// errors are defined above.
-    pub not_created: HashMap<Id<EmailObject>, ImportError>,
+    pub not_created: IndexMap<Id<EmailObject>, ImportError>,
 }
 
 impl std::convert::TryFrom<&RawValue> for ImportResponse {

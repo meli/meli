@@ -38,9 +38,8 @@ pub use filters::*;
 mod comparator;
 pub use comparator::*;
 mod argument;
-use std::collections::HashMap;
-
 pub use argument::*;
+use indexmap::IndexMap;
 
 use super::{deserialize_from_str, protocol::Method};
 pub trait Object {
@@ -212,9 +211,9 @@ impl<OBJ> State<OBJ> {
 #[derive(Deserialize, Serialize, Debug, Clone, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct JmapSession {
-    pub capabilities: HashMap<String, CapabilitiesObject>,
-    pub accounts: HashMap<Id<Account>, Account>,
-    pub primary_accounts: HashMap<String, Id<Account>>,
+    pub capabilities: IndexMap<String, CapabilitiesObject>,
+    pub accounts: IndexMap<Id<Account>, Account>,
+    pub primary_accounts: IndexMap<String, Id<Account>>,
     pub username: String,
     pub api_url: Arc<String>,
     pub download_url: Arc<String>,
@@ -223,7 +222,7 @@ pub struct JmapSession {
     pub event_source_url: Arc<String>,
     pub state: State<JmapSession>,
     #[serde(flatten)]
-    pub extra_properties: HashMap<String, Value>,
+    pub extra_properties: IndexMap<String, Value>,
 }
 
 impl Object for JmapSession {
@@ -257,9 +256,9 @@ pub struct Account {
     pub name: String,
     pub is_personal: bool,
     pub is_read_only: bool,
-    pub account_capabilities: HashMap<String, Value>,
+    pub account_capabilities: IndexMap<String, Value>,
     #[serde(flatten)]
-    pub extra_properties: HashMap<String, Value>,
+    pub extra_properties: IndexMap<String, Value>,
 }
 
 impl Object for Account {
@@ -409,7 +408,7 @@ pub struct MethodResponse<'a> {
     #[serde(borrow)]
     pub method_responses: Vec<&'a RawValue>,
     #[serde(default)]
-    pub created_ids: HashMap<Id<String>, Id<String>>,
+    pub created_ids: IndexMap<Id<String>, Id<String>>,
     #[serde(default)]
     pub session_state: State<JmapSession>,
 }
@@ -736,7 +735,7 @@ where
     ///
     ///   The client MUST omit any properties that may only be set by the
     ///   server (for example, the `id` property on most object types).
-    pub create: Option<HashMap<Id<OBJ>, OBJ>>,
+    pub create: Option<IndexMap<Id<OBJ>, OBJ>>,
     /// o  update: `Id[PatchObject]|null`
     ///
     ///   A map of an id to a Patch object to apply to the current Foo
@@ -780,7 +779,7 @@ where
     ///   is also a valid PatchObject.  The client may choose to optimise
     ///   network usage by just sending the diff or may send the whole
     ///   object; the server processes it the same either way.
-    pub update: Option<HashMap<Id<OBJ>, Value>>,
+    pub update: Option<IndexMap<Id<OBJ>, Value>>,
     /// o  destroy: `Id[]|null`
     ///
     ///   A list of ids for Foo objects to permanently delete, or null if no
@@ -813,7 +812,7 @@ where
         ///   state.
         if_in_state: Option<State<OBJ>>
     );
-    _impl!(update: Option<HashMap<Id<OBJ>, Value>>);
+    _impl!(update: Option<IndexMap<Id<OBJ>, Value>>);
 }
 
 impl<OBJ> Default for Set<OBJ>
@@ -851,7 +850,7 @@ pub struct SetResponse<OBJ: Object> {
     ///   and thus set to a default by the server.
     ///
     ///   This argument is null if no Foo objects were successfully created.
-    pub created: Option<HashMap<Id<OBJ>, OBJ>>,
+    pub created: Option<IndexMap<Id<OBJ>, OBJ>>,
     /// o  updated: `Id[Foo|null]|null`
     ///
     ///   The keys in this map are the ids of all Foos that were
@@ -863,7 +862,7 @@ pub struct SetResponse<OBJ: Object> {
     ///   any changes to server-set or computed properties.
     ///
     ///   This argument is null if no Foo objects were successfully updated.
-    pub updated: Option<HashMap<Id<OBJ>, Option<OBJ>>>,
+    pub updated: Option<IndexMap<Id<OBJ>, Option<OBJ>>>,
     /// o  destroyed: `Id[]|null`
     ///
     ///   A list of Foo ids for records that were successfully destroyed, or

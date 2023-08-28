@@ -29,6 +29,7 @@ use std::{
 };
 
 use futures::{lock::Mutex as FutureMutex, Stream};
+use indexmap::IndexMap;
 use isahc::{config::RedirectPolicy, AsyncReadResponseExt, HttpClient};
 use serde_json::Value;
 use smallvec::SmallVec;
@@ -456,19 +457,16 @@ impl MailBackend for JmapType {
             };
             let mut req = Request::new(conn.request_no.clone());
             let creation_id: Id<EmailObject> = "1".to_string().into();
-            let mut email_imports = HashMap::default();
-            let mut mailbox_ids = HashMap::default();
-            mailbox_ids.insert(mailbox_id, true);
-            email_imports.insert(
-                creation_id.clone(),
-                EmailImport::new()
-                    .blob_id(upload_response.blob_id)
-                    .mailbox_ids(mailbox_ids),
-            );
 
             let import_call: ImportCall = ImportCall::new()
                 .account_id(conn.mail_account_id())
-                .emails(email_imports);
+                .emails(indexmap! {
+                    creation_id.clone() => EmailImport::new()
+                    .blob_id(upload_response.blob_id)
+                    .mailbox_ids(indexmap! {
+                        mailbox_id => true
+                    })
+                });
 
             req.add_call(&import_call);
             let mut res = conn.post_async(None, serde_json::to_string(&req)?).await?;
@@ -642,8 +640,8 @@ impl MailBackend for JmapType {
                     mailboxes_lck[&destination_mailbox_hash].id.clone(),
                 )
             };
-            let mut update_map: HashMap<Id<EmailObject>, Value> = HashMap::default();
-            let mut update_keywords: HashMap<String, Value> = HashMap::default();
+            let mut update_map: IndexMap<Id<EmailObject>, Value> = IndexMap::default();
+            let mut update_keywords: IndexMap<String, Value> = IndexMap::default();
             update_keywords.insert(
                 format!("mailboxIds/{}", &destination_mailbox_id),
                 serde_json::json!(true),
@@ -711,10 +709,10 @@ impl MailBackend for JmapType {
         let store = self.store.clone();
         let connection = self.connection.clone();
         Ok(Box::pin(async move {
-            let mut update_map: HashMap<Id<EmailObject>, Value> = HashMap::default();
+            let mut update_map: IndexMap<Id<EmailObject>, Value> = IndexMap::default();
             let mut ids: Vec<Id<EmailObject>> = Vec::with_capacity(env_hashes.rest.len() + 1);
-            let mut id_map: HashMap<Id<EmailObject>, EnvelopeHash> = HashMap::default();
-            let mut update_keywords: HashMap<String, Value> = HashMap::default();
+            let mut id_map: IndexMap<Id<EmailObject>, EnvelopeHash> = IndexMap::default();
+            let mut update_keywords: IndexMap<String, Value> = IndexMap::default();
             for (flag, value) in flags.iter() {
                 match flag {
                     Ok(f) => {
