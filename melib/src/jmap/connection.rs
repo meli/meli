@@ -184,8 +184,6 @@ impl JmapConnection {
             *self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
             return Err(err);
         }
-        *self.store.core_capabilities.lock().unwrap() =
-            session.capabilities[JMAP_CORE_CAPABILITY].clone();
         if !session.capabilities.contains_key(JMAP_MAIL_CAPABILITY) {
             let err = Error::new(format!(
                 "Server {} does not support JMAP Mail capability ({mail_capability}). Returned \
@@ -202,6 +200,7 @@ impl JmapConnection {
             *self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
             return Err(err);
         }
+        *self.store.core_capabilities.lock().unwrap() = session.capabilities.clone();
 
         *self.store.online_status.lock().await = (Instant::now(), Ok(()));
         *self.session.lock().unwrap() = session;

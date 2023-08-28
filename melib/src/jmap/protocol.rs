@@ -22,7 +22,7 @@
 use std::convert::{TryFrom, TryInto};
 
 use serde::Serialize;
-use serde_json::{json, Value};
+use serde_json::Value;
 
 use super::{mailbox::JmapMailbox, *};
 
@@ -78,17 +78,15 @@ impl Request {
     }
 }
 
-pub async fn get_mailboxes(conn: &mut JmapConnection) -> Result<HashMap<MailboxHash, JmapMailbox>> {
-    let seq = get_request_no!(conn.request_no);
-    let res_text = conn
-        .send_request(serde_json::to_string(&json!({
-            "using": [JMAP_CORE_CAPABILITY, JMAP_MAIL_CAPABILITY],
-            "methodCalls": [["Mailbox/get", {
-            "accountId": conn.mail_account_id()
-            },
-             format!("#m{}",seq).as_str()]],
-        }))?)
-        .await?;
+pub async fn get_mailboxes(
+    conn: &mut JmapConnection,
+    request: Option<Request>,
+) -> Result<HashMap<MailboxHash, JmapMailbox>> {
+    let mut req = request.unwrap_or_else(|| Request::new(conn.request_no.clone()));
+    let mailbox_get: MailboxGet =
+        MailboxGet::new(Get::<MailboxObject>::new().account_id(conn.mail_account_id()));
+    req.add_call(&mailbox_get);
+    let res_text = conn.send_request(serde_json::to_string(&req)?).await?;
 
     let mut v: MethodResponse = deserialize_from_str(&res_text)?;
     *conn.store.online_status.lock().await = (std::time::Instant::now(), Ok(()));

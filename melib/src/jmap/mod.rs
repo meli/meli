@@ -68,6 +68,7 @@ macro_rules! _impl {
 
 pub const JMAP_CORE_CAPABILITY: &str = "urn:ietf:params:jmap:core";
 pub const JMAP_MAIL_CAPABILITY: &str = "urn:ietf:params:jmap:mail";
+pub const JMAP_SUBMISSION_CAPABILITY: &str = "urn:ietf:params:jmap:submission";
 
 pub mod operations;
 use operations::*;
@@ -196,7 +197,7 @@ pub struct Store {
     pub mailbox_state: Arc<Mutex<State<MailboxObject>>>,
     pub online_status: Arc<FutureMutex<(Instant, Result<()>)>>,
     pub is_subscribed: Arc<IsSubscribedFn>,
-    pub core_capabilities: Arc<Mutex<rfc8620::CapabilitiesObject>>,
+    pub core_capabilities: Arc<Mutex<IndexMap<String, rfc8620::CapabilitiesObject>>>,
     pub event_consumer: BackendEventConsumer,
 }
 
@@ -292,9 +293,18 @@ impl MailBackend for JmapType {
             supports_search: true,
             extensions: None,
             supports_tags: true,
-            supports_submission: false,
+            supports_submission: true,
         };
-        CAPABILITIES
+        let supports_submission: bool = self
+            .store
+            .core_capabilities
+            .lock()
+            .map(|c| c.contains_key(JMAP_SUBMISSION_CAPABILITY))
+            .unwrap_or(false);
+        MailBackendCapabilities {
+            supports_submission: CAPABILITIES.supports_submission || supports_submission,
+            ..CAPABILITIES
+        }
     }
 
     fn is_online(&self) -> ResultFuture<()> {
@@ -322,7 +332,7 @@ impl MailBackend for JmapType {
         Ok(Box::pin(async_stream::try_stream! {
             let mut conn = connection.lock().await;
             conn.connect().await?;
-            let batch_size: u64 = conn.store.core_capabilities.lock().unwrap().max_objects_in_get;
+            let batch_size: u64 = conn.store.core_capabilities.lock().unwrap()[JMAP_CORE_CAPABILITY].max_objects_in_get;
             let mut fetch_state = protocol::EmailFetchState::Start { batch_size };
             loop {
                 let res = fetch_state.fetch(
@@ -384,7 +394,7 @@ impl MailBackend for JmapType {
             let mut conn = connection.lock().await;
             conn.connect().await?;
             if store.mailboxes.read().unwrap().is_empty() {
-                let new_mailboxes = debug!(protocol::get_mailboxes(&mut conn).await)?;
+                let new_mailboxes = debug!(protocol::get_mailboxes(&mut conn, None).await)?;
                 *store.mailboxes.write().unwrap() = new_mailboxes;
             }
 
@@ -488,7 +498,7 @@ impl MailBackend for JmapType {
                 }
             })?;
 
-            if let Some(err) = m.not_created.get(&creation_id) {
+            if let Some(err) = m.not_created.and_then(|m| m.get(&creation_id).cloned()) {
                 return Err(Error::new(format!("Could not save message: {:?}", err)));
             }
             Ok(())
@@ -894,7 +904,7 @@ impl JmapType {
             event_consumer,
             is_subscribed: Arc::new(IsSubscribedFn(is_subscribed)),
             collection: Collection::default(),
-            core_capabilities: Arc::new(Mutex::new(rfc8620::CapabilitiesObject::default())),
+            core_capabilities: Arc::new(Mutex::new(IndexMap::default())),
             byte_cache: Default::default(),
             id_store: Default::default(),
             reverse_id_store: Default::default(),
