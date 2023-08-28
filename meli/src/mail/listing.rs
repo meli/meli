@@ -22,10 +22,15 @@
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
     convert::TryFrom,
+    fs::File,
+    future::Future,
+    io::{BufWriter, Write},
     ops::{Deref, DerefMut},
+    pin::Pin,
 };
 
-use melib::{backends::EnvelopeHashBatch, Address};
+use futures::future::try_join_all;
+use melib::{backends::EnvelopeHashBatch, mbox::MboxMetadata, utils::datetime, Address};
 use smallvec::SmallVec;
 
 use super::*;
@@ -655,31 +660,44 @@ pub trait MailListingTrait: ListingTrait {
                     }
                 }
                 ListingAction::ExportMbox(format, ref path) => {
-                    use std::{future::Future, io::Write, pin::Pin};
-
-                    use futures::future::try_join_all;
-
                     let futures: Result<Vec<_>> = envs_to_set
                         .iter()
                         .map(|&env_hash| {
                             account.operation(env_hash).and_then(|mut op| op.as_bytes())
                         })
                         .collect::<Result<Vec<_>>>();
-                    let path_ = path.to_path_buf();
+                    let mut path_ = path.to_path_buf();
                     let format = (*format).unwrap_or_default();
                     let collection = account.collection.clone();
                     let (sender, mut receiver) = crate::jobs::oneshot::channel();
                     let fut: Pin<Box<dyn Future<Output = Result<()>> + Send + 'static>> =
                         Box::pin(async move {
                             let cl = async move {
-                                use melib::mbox::MboxMetadata;
+                                // fully capture variables.
+                                let _ = (&envs_to_set, &collection);
                                 let bytes: Vec<Vec<u8>> = try_join_all(futures?).await?;
                                 let envs: Vec<_> = envs_to_set
                                     .iter()
                                     .map(|&env_hash| collection.get_env(env_hash))
                                     .collect();
-                                let mut file =
-                                    std::io::BufWriter::new(std::fs::File::create(&path_)?);
+                                if path_.is_dir() {
+                                    if envs.len() == 1 {
+                                        path_.push(format!("{}.mbox", envs[0].message_id_raw()));
+                                    } else {
+                                        let now = datetime::timestamp_to_string(
+                                            datetime::now(),
+                                            Some(datetime::formats::RFC3339_DATETIME),
+                                            false,
+                                        );
+                                        path_.push(format!(
+                                            "{}-{}-{}_envelopes.mbox",
+                                            now,
+                                            envs[0].message_id_raw(),
+                                            envs.len(),
+                                        ));
+                                    }
+                                }
+                                let mut file = BufWriter::new(File::create(&path_)?);
                                 let mut iter = envs.iter().zip(bytes);
                                 let tags_lck = collection.tag_index.read().unwrap();
                                 if let Some((env, ref bytes)) = iter.next() {
@@ -717,17 +735,16 @@ pub trait MailListingTrait: ListingTrait {
                                     )?;
                                 }
                                 file.flush()?;
-                                Ok(())
+                                Ok(path_)
                             };
-                            let r: Result<()> = cl.await;
+                            let r: Result<PathBuf> = cl.await;
                             let _ = sender.send(r);
                             Ok(())
                         });
                     let handle = account
                         .main_loop_handler
                         .job_executor
-                        .spawn_blocking("export_to_mbox".into(), fut);
-                    let path = path.to_path_buf();
+                        .spawn_blocking("exporting mbox".into(), fut);
                     account.insert_job(
                         handle.job_id,
                         JobRequest::Generic {
@@ -745,7 +762,7 @@ pub trait MailListingTrait: ListingTrait {
                                         err.to_string(),
                                         Some(NotificationType::Error(err.kind)),
                                     ),
-                                    Ok(Some(Ok(()))) => UIEvent::Notification(
+                                    Ok(Some(Ok(path))) => UIEvent::Notification(
                                         Some("Succesfully exported mbox".to_string()),
                                         format!("Wrote to file {}", path.display()),
                                         Some(NotificationType::Info),
