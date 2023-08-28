@@ -584,11 +584,48 @@ impl MailBackend for JmapType {
 
     fn create_mailbox(
         &mut self,
-        _path: String,
+        path: String,
     ) -> ResultFuture<(MailboxHash, HashMap<MailboxHash, Mailbox>)> {
-        Err(Error::new(
-            "Creating mailbox is currently unimplemented for the JMAP backend.",
-        ))
+        let store = self.store.clone();
+        let connection = self.connection.clone();
+        Ok(Box::pin(async move {
+            let mut conn = connection.lock().await;
+            let mailbox_set_call: MailboxSet = MailboxSet::new(
+                Set::<MailboxObject>::new()
+                    .account_id(conn.mail_account_id())
+                    .create(Some({
+                        let id: Id<MailboxObject> = path.as_str().into();
+                        indexmap! {
+                            id.clone().into() => MailboxObject {
+                                id,
+                                name: path.clone(),
+                                ..MailboxObject::default()
+                            }
+                        }
+                    })),
+            );
+
+            let mut req = Request::new(conn.request_no.clone());
+            let _prev_seq = req.add_call(&mailbox_set_call);
+            let new_mailboxes = protocol::get_mailboxes(&mut conn, Some(req)).await?;
+            *store.mailboxes.write().unwrap() = new_mailboxes;
+
+            let new_mailboxes: HashMap<MailboxHash, Mailbox> = store
+                .mailboxes
+                .read()
+                .unwrap()
+                .iter()
+                .filter(|(_, f)| f.is_subscribed)
+                .map(|(&h, f)| (h, BackendMailbox::clone(f) as Mailbox))
+                .collect();
+            let id = new_mailboxes
+                .values()
+                .find(|m| m.path() == path)
+                .map(|m| m.hash())
+                .unwrap();
+
+            Ok((id, new_mailboxes))
+        }))
     }
 
     fn delete_mailbox(

@@ -27,7 +27,7 @@ impl Id<MailboxObject> {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct MailboxObject {
     pub id: Id<MailboxObject>,
@@ -60,6 +60,23 @@ pub struct JmapRights {
     pub may_set_seen: bool,
     pub may_submit: bool,
 }
+
+impl Default for JmapRights {
+    fn default() -> Self {
+        Self {
+            may_add_items: true,
+            may_create_child: true,
+            may_delete: true,
+            may_read_items: true,
+            may_remove_items: true,
+            may_rename: true,
+            may_set_keywords: true,
+            may_set_seen: true,
+            may_submit: true,
+        }
+    }
+}
+
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct MailboxGet {
@@ -74,4 +91,48 @@ impl MailboxGet {
 
 impl Method<MailboxObject> for MailboxGet {
     const NAME: &'static str = "Mailbox/get";
+}
+
+/// 2.5.  Mailbox/set
+///
+/// This is a standard `/set` method as described in `[RFC8620]`,
+/// Section 5.3 but with the following additional request argument:
+///
+///
+/// The following extra SetError types are defined:
+///
+/// For `destroy`:
+///
+/// - `mailboxHasChild`: The Mailbox still has at least one child Mailbox.  The
+///   client MUST remove these before it can delete the parent Mailbox.
+///
+/// - `mailboxHasEmail`: The Mailbox has at least one Email assigned to it, and
+///   the `onDestroyRemoveEmails` argument was false.
+#[derive(Deserialize, Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct MailboxSet {
+    #[serde(flatten)]
+    pub set_call: Set<MailboxObject>,
+    /// onDestroyRemoveEmails: `Boolean` (default: false)
+    ///
+    /// If false, any attempt to destroy a Mailbox that still has Emails
+    /// in it will be rejected with a `mailboxHasEmail` SetError.  If
+    /// true, any Emails that were in the Mailbox will be removed from it,
+    /// and if in no other Mailboxes, they will be destroyed when the
+    /// Mailbox is destroyed.
+    #[serde(default)]
+    pub on_destroy_remove_emails: bool,
+}
+
+impl MailboxSet {
+    pub fn new(set_call: Set<MailboxObject>) -> Self {
+        Self {
+            set_call,
+            on_destroy_remove_emails: false,
+        }
+    }
+}
+
+impl Method<MailboxObject> for MailboxSet {
+    const NAME: &'static str = "Mailbox/set";
 }
