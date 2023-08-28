@@ -41,6 +41,12 @@ mod argument;
 pub use argument::*;
 use indexmap::IndexMap;
 
+pub type PatchObject = Value;
+
+impl Object for PatchObject {
+    const NAME: &'static str = "PatchObject";
+}
+
 use super::{deserialize_from_str, protocol::Method};
 pub trait Object {
     const NAME: &'static str;
@@ -288,6 +294,14 @@ impl Object for BlobObject {
     const NAME: &'static str = "Blob";
 }
 
+#[derive(Clone, Copy, Deserialize, Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct BlobGet;
+
+impl Method<BlobObject> for BlobGet {
+    const NAME: &'static str = "Blob/get";
+}
+
 /// #`get`
 ///
 ///    Objects of type `Foo` are fetched via a call to `Foo/get`.
@@ -306,7 +320,7 @@ where
     pub account_id: Id<Account>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(flatten)]
-    pub ids: Option<JmapArgument<Vec<Id<OBJ>>>>,
+    pub ids: Option<Argument<Vec<Id<OBJ>>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub properties: Option<Vec<String>>,
     #[serde(skip)]
@@ -332,13 +346,13 @@ where
         account_id: Id<Account>
     );
     _impl!(
-        ///   - ids: `Option<JmapArgument<Vec<String>>>`
+        ///   - ids: `Option<Argument<Vec<String>>>`
         ///
         ///      The ids of the Foo objects to return.  If `None`, then *all*
         /// records      of the data type are returned, if this is
         /// supported for that data      type and the number of records
         /// does not exceed the      `max_objects_in_get` limit.
-        ids: Option<JmapArgument<Vec<Id<OBJ>>>>
+        ids: Option<Argument<Vec<Id<OBJ>>>>
     );
     _impl!(
         ///   - properties: `Option<Vec<String>>`
@@ -385,11 +399,12 @@ impl<OBJ: Object + Serialize + std::fmt::Debug> Serialize for Get<OBJ> {
         }
         match self.ids.as_ref() {
             None => {}
-            Some(JmapArgument::Value(ref v)) => state.serialize_field("ids", v)?,
-            Some(JmapArgument::ResultReference {
+            Some(Argument::Value(ref v)) => state.serialize_field("ids", v)?,
+            Some(Argument::ResultReference {
                 ref result_of,
                 ref name,
                 ref path,
+                ..
             }) => {
                 #[derive(Serialize)]
                 #[serde(rename_all = "camelCase")]
@@ -573,7 +588,7 @@ pub struct ResultField<M: Method<OBJ>, OBJ: Object> {
 }
 
 impl<M: Method<OBJ>, OBJ: Object> ResultField<M, OBJ> {
-    pub fn new(field: &'static str) -> Self {
+    pub const fn new(field: &'static str) -> Self {
         Self {
             field,
             _ph: PhantomData,
@@ -581,22 +596,11 @@ impl<M: Method<OBJ>, OBJ: Object> ResultField<M, OBJ> {
     }
 }
 
-// error[E0723]: trait bounds other than `Sized` on const fn parameters are
-// unstable    --> melib/src/backends/jmap/rfc8620.rs:626:6
-//     |
-// 626 | impl<M: Method<OBJ>, OBJ: Object> ResultField<M, OBJ> {
-//     |      ^
-//     |
-//     = note: for more information, see issue https://github.com/rust-lang/rust/issues/57563
-//     = help: add `#![feature(const_fn)]` to the crate attributes to enable
-// impl<M: Method<OBJ>, OBJ: Object> ResultField<M, OBJ> {
-//     pub const fn new(field: &'static str) -> Self {
-//         Self {
-//             field,
-//             _ph: PhantomData,
-//         }
-//     }
-// }
+impl<M: Method<OBJ>, OBJ: Object> From<&'static str> for ResultField<M, OBJ> {
+    fn from(field: &'static str) -> Self {
+        Self::new(field)
+    }
+}
 
 /// #`changes`
 ///
@@ -751,7 +755,7 @@ where
     ///
     ///   The client MUST omit any properties that may only be set by the
     ///   server (for example, the `id` property on most object types).
-    pub create: Option<IndexMap<Id<OBJ>, OBJ>>,
+    pub create: Option<IndexMap<Argument<Id<OBJ>>, OBJ>>,
     /// o  update: `Id[PatchObject]|null`
     ///
     ///   A map of an id to a Patch object to apply to the current Foo
@@ -795,12 +799,12 @@ where
     ///   is also a valid PatchObject.  The client may choose to optimise
     ///   network usage by just sending the diff or may send the whole
     ///   object; the server processes it the same either way.
-    pub update: Option<IndexMap<Id<OBJ>, Value>>,
+    pub update: Option<IndexMap<Argument<Id<OBJ>>, PatchObject>>,
     /// o  destroy: `Id[]|null`
     ///
     ///   A list of ids for Foo objects to permanently delete, or null if no
     ///   objects are to be destroyed.
-    pub destroy: Option<Vec<Id<OBJ>>>,
+    pub destroy: Option<Vec<Argument<Id<OBJ>>>>,
 }
 
 impl<OBJ> Set<OBJ>
@@ -828,7 +832,9 @@ where
         ///   state.
         if_in_state: Option<State<OBJ>>
     );
-    _impl!(update: Option<IndexMap<Id<OBJ>, Value>>);
+    _impl!(update: Option<IndexMap<Argument<Id<OBJ>>, PatchObject>>);
+    _impl!(create: Option<IndexMap<Argument<Id<OBJ>>, OBJ>>);
+    _impl!(destroy: Option<Vec<Argument<Id<OBJ>>>>);
 }
 
 impl<OBJ> Default for Set<OBJ>

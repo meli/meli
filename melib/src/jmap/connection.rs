@@ -243,7 +243,11 @@ impl JmapConnection {
             let prev_seq = req.add_call(&email_changes_call);
             let email_get_call: EmailGet = EmailGet::new(
                 Get::new()
-                    .ids(Some(JmapArgument::reference(
+                    .ids(Some(Argument::reference::<
+                        EmailChanges,
+                        EmailObject,
+                        EmailObject,
+                    >(
                         prev_seq,
                         ResultField::<EmailChanges, EmailObject>::new("/created"),
                     )))
@@ -251,20 +255,26 @@ impl JmapConnection {
             );
 
             req.add_call(&email_get_call);
+            let mailbox_id: Id<MailboxObject>;
             if let Some(mailbox) = self.store.mailboxes.read().unwrap().get(&mailbox_hash) {
                 if let Some(email_query_state) = mailbox.email_query_state.lock().unwrap().clone() {
+                    mailbox_id = mailbox.id.clone();
                     let email_query_changes_call = EmailQueryChanges::new(
                         QueryChanges::new(self.mail_account_id().clone(), email_query_state)
                             .filter(Some(Filter::Condition(
                                 EmailFilterCondition::new()
-                                    .in_mailbox(Some(mailbox.id.clone()))
+                                    .in_mailbox(Some(mailbox_id.clone()))
                                     .into(),
                             ))),
                     );
                     let seq_no = req.add_call(&email_query_changes_call);
                     let email_get_call: EmailGet = EmailGet::new(
                         Get::new()
-                            .ids(Some(JmapArgument::reference(
+                            .ids(Some(Argument::reference::<
+                                EmailQueryChanges,
+                                EmailObject,
+                                EmailObject,
+                            >(
                                 seq_no,
                                 ResultField::<EmailQueryChanges, EmailObject>::new("/removed"),
                             )))

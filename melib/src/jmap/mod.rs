@@ -650,7 +650,7 @@ impl MailBackend for JmapType {
                     mailboxes_lck[&destination_mailbox_hash].id.clone(),
                 )
             };
-            let mut update_map: IndexMap<Id<EmailObject>, Value> = IndexMap::default();
+            let mut update_map: IndexMap<Argument<Id<EmailObject>>, Value> = IndexMap::default();
             let mut update_keywords: IndexMap<String, Value> = IndexMap::default();
             update_keywords.insert(
                 format!("mailboxIds/{}", &destination_mailbox_id),
@@ -667,7 +667,10 @@ impl MailBackend for JmapType {
                     if let Some(id) = store.id_store.lock().unwrap().get(&env_hash) {
                         // ids.push(id.clone());
                         // id_map.insert(id.clone(), env_hash);
-                        update_map.insert(id.clone(), serde_json::json!(update_keywords.clone()));
+                        update_map.insert(
+                            Argument::from(id.clone()),
+                            serde_json::json!(update_keywords.clone()),
+                        );
                     }
                 }
             }
@@ -719,7 +722,7 @@ impl MailBackend for JmapType {
         let store = self.store.clone();
         let connection = self.connection.clone();
         Ok(Box::pin(async move {
-            let mut update_map: IndexMap<Id<EmailObject>, Value> = IndexMap::default();
+            let mut update_map: IndexMap<Argument<Id<EmailObject>>, Value> = IndexMap::default();
             let mut ids: Vec<Id<EmailObject>> = Vec::with_capacity(env_hashes.rest.len() + 1);
             let mut id_map: IndexMap<Id<EmailObject>, EnvelopeHash> = IndexMap::default();
             let mut update_keywords: IndexMap<String, Value> = IndexMap::default();
@@ -763,7 +766,10 @@ impl MailBackend for JmapType {
                     if let Some(id) = store.id_store.lock().unwrap().get(&hash) {
                         ids.push(id.clone());
                         id_map.insert(id.clone(), hash);
-                        update_map.insert(id.clone(), serde_json::json!(update_keywords.clone()));
+                        update_map.insert(
+                            Argument::from(id.clone()),
+                            serde_json::json!(update_keywords.clone()),
+                        );
                     }
                 }
             }
@@ -779,7 +785,7 @@ impl MailBackend for JmapType {
             req.add_call(&email_set_call);
             let email_call: EmailGet = EmailGet::new(
                 Get::new()
-                    .ids(Some(JmapArgument::Value(ids)))
+                    .ids(Some(Argument::Value(ids)))
                     .account_id(conn.mail_account_id())
                     .properties(Some(vec!["keywords".to_string()])),
             );

@@ -205,7 +205,7 @@ pub async fn get_message_list(
 pub async fn get_message(conn: &JmapConnection, ids: &[String]) -> Result<Vec<Envelope>> {
     let email_call: EmailGet = EmailGet::new(
         Get::new()
-            .ids(Some(JmapArgument::value(ids.to_vec())))
+            .ids(Some(Argument::value(ids.to_vec())))
             .account_id(conn.mail_account_id().to_string()),
     );
 
@@ -304,9 +304,12 @@ impl EmailFetchState {
 
                     let email_call: EmailGet = EmailGet::new(
                         Get::new()
-                            .ids(Some(JmapArgument::reference(
-                                prev_seq,
-                                EmailQuery::RESULT_FIELD_IDS,
+                            .ids(Some(Argument::reference::<
+                                EmailQuery,
+                                EmailObject,
+                                EmailObject,
+                            >(
+                                prev_seq, EmailQuery::RESULT_FIELD_IDS
                             )))
                             .account_id(conn.mail_account_id().clone()),
                     );

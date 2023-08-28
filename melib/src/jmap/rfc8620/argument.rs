@@ -19,15 +19,18 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use std::hash::Hash;
+
 use crate::jmap::{
     protocol::Method,
     rfc8620::{Object, ResultField},
 };
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
-#[serde(rename_all = "camelCase")]
-pub enum JmapArgument<T: Clone> {
+#[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Hash, Debug)]
+#[serde(rename_all = "camelCase", untagged)]
+pub enum Argument<T: Clone + PartialEq + Eq + Hash> {
     Value(T),
+    #[serde(rename_all = "camelCase")]
     ResultReference {
         result_of: String,
         name: String,
@@ -35,14 +38,15 @@ pub enum JmapArgument<T: Clone> {
     },
 }
 
-impl<T: Clone> JmapArgument<T> {
+impl<T: Clone + PartialEq + Eq + Hash> Argument<T> {
     pub fn value(v: T) -> Self {
         Self::Value(v)
     }
 
-    pub fn reference<M, OBJ>(result_of: usize, path: ResultField<M, OBJ>) -> Self
+    pub fn reference<M, OBJ, MethodOBJ>(result_of: usize, path: ResultField<M, MethodOBJ>) -> Self
     where
-        M: Method<OBJ>,
+        M: Method<MethodOBJ>,
+        MethodOBJ: Object,
         OBJ: Object,
     {
         Self::ResultReference {
@@ -50,5 +54,11 @@ impl<T: Clone> JmapArgument<T> {
             name: M::NAME.to_string(),
             path: path.field.to_string(),
         }
+    }
+}
+
+impl<T: Clone + PartialEq + Eq + Hash> From<T> for Argument<T> {
+    fn from(v: T) -> Self {
+        Self::Value(v)
     }
 }
