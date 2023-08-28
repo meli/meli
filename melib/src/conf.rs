@@ -27,6 +27,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::{
     backends::SpecialUsageMailbox,
+    email::Address,
     error::{Error, Result},
 };
 pub use crate::{SortField, SortOrder};
@@ -55,11 +56,7 @@ impl AccountSettings {
     /// Create the account's display name from fields
     /// [`AccountSettings::identity`] and [`AccountSettings::display_name`].
     pub fn make_display_name(&self) -> String {
-        if let Some(d) = self.display_name.as_ref() {
-            format!("{} <{}>", d, self.identity)
-        } else {
-            self.identity.to_string()
-        }
+        Address::new(self.display_name.clone(), self.identity.clone()).to_string()
     }
 
     pub fn order(&self) -> Option<(SortField, SortOrder)> {

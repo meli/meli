@@ -31,7 +31,7 @@ use std::{
 use futures::{lock::Mutex as FutureMutex, Stream};
 use indexmap::IndexMap;
 use isahc::{config::RedirectPolicy, AsyncReadResponseExt, HttpClient};
-use serde_json::Value;
+use serde_json::{json, Value};
 use smallvec::SmallVec;
 
 use crate::{
@@ -189,6 +189,8 @@ impl JmapServerConf {
 pub struct Store {
     pub account_name: Arc<String>,
     pub account_hash: AccountHash,
+    pub main_identity: String,
+    pub extra_identities: Vec<String>,
     pub account_id: Arc<Mutex<Id<Account>>>,
     pub byte_cache: Arc<Mutex<HashMap<EnvelopeHash, EnvelopeCache>>>,
     pub id_store: Arc<Mutex<HashMap<EnvelopeHash, Id<EmailObject>>>>,
@@ -926,6 +928,170 @@ impl MailBackend for JmapType {
             "Deleting messages is currently unimplemented for the JMAP backend.",
         ))
     }
+
+    // [ref:TODO] add support for BLOB extension
+    fn submit(
+        &self,
+        bytes: Vec<u8>,
+        mailbox_hash: Option<MailboxHash>,
+        _flags: Option<Flag>,
+    ) -> ResultFuture<()> {
+        let store = self.store.clone();
+        let connection = self.connection.clone();
+        Ok(Box::pin(async move {
+            // Steps:
+            //
+            // 1. upload blob/save to Draft as EmailObject
+            // 2. get id and make an EmailSubmissionObject
+            // 3. This call then sends the Email immediately, and if successful, removes the
+            //    "$draft" flag and moves it from the Drafts folder to the Sent folder.
+            let (draft_mailbox_id, sent_mailbox_id) = {
+                let mailboxes_lck = store.mailboxes.read().unwrap();
+                let find_fn = |usage: SpecialUsageMailbox| -> Result<Id<MailboxObject>> {
+                    if let Some(sent_folder) =
+                        mailboxes_lck.values().find(|m| m.special_usage() == usage)
+                    {
+                        Ok(sent_folder.id.clone())
+                    } else if let Some(sent_folder) = mailboxes_lck
+                        .values()
+                        .find(|m| m.special_usage() == SpecialUsageMailbox::Inbox)
+                    {
+                        Ok(sent_folder.id.clone())
+                    } else {
+                        Ok(mailboxes_lck
+                            .values()
+                            .next()
+                            .ok_or_else(|| {
+                                Error::new(format!(
+                                    "Account `{}` has no mailboxes.",
+                                    store.account_name
+                                ))
+                            })?
+                            .id
+                            .clone())
+                    }
+                };
+
+                (find_fn(SpecialUsageMailbox::Drafts)?, {
+                    if let Some(h) = mailbox_hash {
+                        if let Some(m) = mailboxes_lck.get(&h) {
+                            m.id.clone()
+                        } else {
+                            return Err(Error::new(format!(
+                                "Could not find mailbox with hash {h}",
+                            )));
+                        }
+                    } else {
+                        find_fn(SpecialUsageMailbox::Sent)?
+                    }
+                })
+            };
+            let conn = connection.lock().await;
+            // [ref:TODO] smarter identity detection based on From: ?
+            let Some(identity_id) = conn.mail_identity_id() else {
+                return Err(Error::new(
+                    "You need to setup an Identity in the JMAP server.",
+                ));
+            };
+            let upload_url = { conn.session.lock().unwrap().upload_url.clone() };
+            let mut res = conn
+                .post_async(
+                    Some(&upload_request_format(
+                        upload_url.as_str(),
+                        &conn.mail_account_id(),
+                    )),
+                    bytes,
+                )
+                .await?;
+            let res_text = res.text().await?;
+
+            let upload_response: UploadResponse = match deserialize_from_str(&res_text) {
+                Err(err) => {
+                    *conn.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
+                    return Err(err);
+                }
+                Ok(s) => s,
+            };
+            {
+                let mut req = Request::new(conn.request_no.clone());
+                let creation_id: Id<EmailObject> = "newid".into();
+                let import_call: EmailImport = EmailImport::new()
+                    .account_id(conn.mail_account_id())
+                    .emails(indexmap! {
+                        creation_id => EmailImportObject::new()
+                            .blob_id(upload_response.blob_id)
+                            .keywords(indexmap! {
+                                "$draft".to_string() => true,
+                                "$seen".to_string() => true,
+                            })
+                            .mailbox_ids(indexmap! {
+                                draft_mailbox_id.clone() => true,
+                            }),
+                    });
+
+                req.add_call(&import_call);
+
+                let mut res = conn.post_async(None, serde_json::to_string(&req)?).await?;
+                let res_text = res.text().await?;
+                let v: MethodResponse = match deserialize_from_str(&res_text) {
+                    Err(err) => {
+                        *conn.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
+                        return Err(err);
+                    }
+                    Ok(s) => s,
+                };
+
+                // [ref:TODO] handle this better?
+                let res: Value = serde_json::from_str(v.method_responses[0].get())?;
+
+                let _new_state = res[1]["newState"].as_str().unwrap().to_string();
+                let _old_state = res[1]["oldState"].as_str().unwrap().to_string();
+                let email_id = Id::from(
+                    res[1]["created"]["newid"]["id"]
+                        .as_str()
+                        .unwrap()
+                        .to_string(),
+                );
+
+                let mut req = Request::new(conn.request_no.clone());
+                let subm_set_call: EmailSubmissionSet = EmailSubmissionSet::new(
+                    Set::<EmailSubmissionObject>::new()
+                        .account_id(conn.mail_account_id())
+                        .create(Some(indexmap! {
+                            Argument::from(Id::from("k1490")) => EmailSubmissionObject::new(
+                                /* account_id: */ conn.mail_account_id(),
+                                /* identity_id: */ identity_id,
+                                /* email_id: */ email_id,
+                                /* envelope: */ None,
+                                /* undo_status: */ None
+                                )
+                        })),
+                )
+                .on_success_update_email(Some(indexmap! {
+                    "#k1490".into() => json!({
+                        format!("mailboxIds/{draft_mailbox_id}"): null,
+                        format!("mailboxIds/{sent_mailbox_id}"): true,
+                        "keywords/$draft": null
+                    })
+                }));
+
+                req.add_call(&subm_set_call);
+                let mut res = conn.post_async(None, serde_json::to_string(&req)?).await?;
+
+                let res_text = res.text().await?;
+
+                // [ref:TODO] parse/return any error.
+                let _: MethodResponse = match deserialize_from_str(&res_text) {
+                    Err(err) => {
+                        *conn.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
+                        return Err(err);
+                    }
+                    Ok(s) => s,
+                };
+            }
+            Ok(())
+        }))
+    }
 }
 
 impl JmapType {
@@ -945,6 +1111,8 @@ impl JmapType {
         let store = Arc::new(Store {
             account_name: Arc::new(s.name.clone()),
             account_hash,
+            main_identity: s.make_display_name(),
+            extra_identities: s.extra_identities.clone(),
             account_id: Arc::new(Mutex::new(Id::empty())),
             online_status,
             event_consumer,

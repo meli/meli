@@ -682,7 +682,7 @@ impl<OBJ: Object> ChangesResponse<OBJ> {
 /// and dependencies that may exist if doing multiple operations at once
 /// (for example, to ensure there is always a minimum number of a certain
 /// record type).
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Set<OBJ>
 where
@@ -799,6 +799,38 @@ where
 {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl<OBJ: Object + Serialize + std::fmt::Debug> Serialize for Set<OBJ> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let fields_no = 5;
+
+        let mut state = serializer.serialize_struct("Set", fields_no)?;
+        state.serialize_field("accountId", &self.account_id)?;
+        state.serialize_field("ifInState", &self.if_in_state)?;
+        state.serialize_field("update", &self.update)?;
+        state.serialize_field("destroy", &self.destroy)?;
+        if let Some(ref m) = self.create {
+            let map = m
+                .into_iter()
+                .map(|(k, v)| {
+                    let mut v = serde_json::json!(v);
+                    if let Some(ref mut obj) = v.as_object_mut() {
+                        obj.remove("id");
+                    }
+                    (k, v)
+                })
+                .collect::<IndexMap<_, Value>>();
+            state.serialize_field("create", &map)?;
+        } else {
+            state.serialize_field("create", &self.create)?;
+        }
+
+        state.end()
     }
 }
 

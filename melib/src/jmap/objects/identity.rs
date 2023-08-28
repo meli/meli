@@ -25,7 +25,7 @@ use super::*;
 ///
 /// An *Identity* object stores information about an email address or domain the
 /// user may send from.
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct IdentityObject {
     ///  id: `Id` (immutable; server-set)
@@ -87,12 +87,14 @@ impl Object for IdentityObject {
     const NAME: &'static str = "Identity";
 }
 
-#[derive(Serialize, Clone, Copy, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct IdentityGet;
+pub type IdentityGet = Get<IdentityObject>;
 
 impl Method<IdentityObject> for IdentityGet {
     const NAME: &'static str = "Identity/get";
+}
+pub type IdentityChanges = Changes<IdentityObject>;
+impl Method<IdentityObject> for IdentityChanges {
+    const NAME: &'static str = "Identity/changes";
 }
 
 // [ref:TODO]: implement `forbiddenFrom` error for Identity/set.
@@ -105,18 +107,88 @@ impl Method<IdentityObject> for IdentityGet {
 ///  o  "forbiddenFrom": The user is not allowed to send from the address
 ///     given as the "email" property of the Identity.
 /// ```
-#[derive(Serialize, Clone, Copy, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct IdentitySet;
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase", transparent)]
+pub struct IdentitySet(pub Set<IdentityObject>);
 
 impl Method<IdentityObject> for IdentitySet {
     const NAME: &'static str = "Identity/set";
 }
 
-#[derive(Serialize, Clone, Copy, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct IdentityChanges;
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
 
-impl Method<IdentityObject> for IdentityChanges {
-    const NAME: &'static str = "Identity/changes";
+    use serde_json::json;
+
+    use crate::jmap::*;
+
+    #[test]
+    fn test_jmap_identity_methods() {
+        let account_id = "blahblah";
+        let prev_seq = 33;
+        let main_identity = "user@example.com";
+        let mut req = Request::new(Arc::new(Mutex::new(prev_seq)));
+
+        let identity_set = IdentitySet(
+            Set::<IdentityObject>::new()
+                .account_id(account_id.into())
+                .create(Some({
+                    let id: Id<IdentityObject> = main_identity.into();
+                    let address = crate::email::Address::try_from(main_identity)
+                        .unwrap_or_else(|_| crate::email::Address::new(None, main_identity.into()));
+                    indexmap! {
+                        id.clone().into() => IdentityObject {
+                            id,
+                            name: address.get_display_name().unwrap_or_default(),
+                            email: address.get_email(),
+                            ..IdentityObject::default()
+                        }
+                    }
+                })),
+        );
+        req.add_call(&identity_set);
+
+        let identity_get = IdentityGet::new().account_id(account_id.into());
+        req.add_call(&identity_get);
+
+        assert_eq!(
+            json! {&req},
+            json! {{
+                "methodCalls" : [
+                    [
+                        "Identity/set",
+                        {
+                            "accountId" : account_id,
+                            "create" : {
+                                "user@example.com" : {
+                                    "bcc" : null,
+                                    "email" : main_identity,
+                                    "htmlSignature" : "",
+                                    "name" : "",
+                                    "replyTo" : null,
+                                    "textSignature" : ""
+                                }
+                            },
+                            "destroy" : null,
+                            "ifInState" : null,
+                            "update" : null
+                        },
+                        "m33"
+                    ],
+                    [
+                        "Identity/get",
+                        {
+                            "accountId": account_id
+                        },
+                        "m34"
+                    ]
+                    ],
+                    "using" : [
+                        "urn:ietf:params:jmap:core",
+                        "urn:ietf:params:jmap:mail"
+                    ]
+            }},
+        );
+    }
 }

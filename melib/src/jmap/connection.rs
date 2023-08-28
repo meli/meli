@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::sync::MutexGuard;
+use std::{convert::TryFrom, sync::MutexGuard};
 
 use isahc::config::Configurable;
 
@@ -204,11 +204,104 @@ impl JmapConnection {
 
         *self.store.online_status.lock().await = (Instant::now(), Ok(()));
         *self.session.lock().unwrap() = session;
+        /* Fetch account identities. */
+
+        let mut id_list = {
+            let mut req = Request::new(self.request_no.clone());
+            let identity_get = IdentityGet::new().account_id(self.mail_account_id());
+            req.add_call(&identity_get);
+            let mut res_text = self.post_async(None, serde_json::to_string(&req)?).await?;
+            let res_text = res_text.text().await?;
+            let mut v: MethodResponse = match deserialize_from_str(&res_text) {
+                Err(err) => {
+                    *self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
+                    return Err(err);
+                }
+                Ok(s) => s,
+            };
+            let GetResponse::<IdentityObject> { list, .. } =
+                GetResponse::<IdentityObject>::try_from(v.method_responses.remove(0))?;
+            list
+        };
+        if id_list.is_empty() {
+            let mut req = Request::new(self.request_no.clone());
+            let identity_set = IdentitySet(
+                Set::<IdentityObject>::new()
+                    .account_id(self.mail_account_id())
+                    .create(Some({
+                        let address =
+                            crate::email::Address::try_from(self.store.main_identity.as_str())
+                                .unwrap_or_else(|_| {
+                                    crate::email::Address::new(
+                                        None,
+                                        self.store.main_identity.clone(),
+                                    )
+                                });
+                        let id: Id<IdentityObject> = Id::new_uuid_v4();
+                        log::trace!(
+                            "identity id = {}, {:#?}",
+                            id,
+                            IdentityObject {
+                                id: id.clone(),
+                                name: address.get_display_name().unwrap_or_default(),
+                                email: address.get_email(),
+                                ..IdentityObject::default()
+                            }
+                        );
+                        indexmap! {
+                            id.clone().into() => IdentityObject {
+                                id,
+                                name: address.get_display_name().unwrap_or_default(),
+                                email: address.get_email(),
+                                ..IdentityObject::default()
+                            }
+                        }
+                    })),
+            );
+            req.add_call(&identity_set);
+            let mut res_text = self.post_async(None, serde_json::to_string(&req)?).await?;
+            let res_text = res_text.text().await?;
+            let _: MethodResponse = match deserialize_from_str(&res_text) {
+                Err(err) => {
+                    *self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
+                    return Err(err);
+                }
+                Ok(s) => s,
+            };
+            let mut req = Request::new(self.request_no.clone());
+            let identity_get = IdentityGet::new().account_id(self.mail_account_id());
+            req.add_call(&identity_get);
+            let mut res_text = self.post_async(None, serde_json::to_string(&req)?).await?;
+            let res_text = res_text.text().await?;
+            let mut v: MethodResponse = match deserialize_from_str(&res_text) {
+                Err(err) => {
+                    *self.store.online_status.lock().await = (Instant::now(), Err(err.clone()));
+                    return Err(err);
+                }
+                Ok(s) => s,
+            };
+            let GetResponse::<IdentityObject> { list, .. } =
+                GetResponse::<IdentityObject>::try_from(v.method_responses.remove(0))?;
+            id_list = list;
+        }
+        self.session.lock().unwrap().identities =
+            id_list.into_iter().map(|id| (id.id.clone(), id)).collect();
+
         Ok(())
     }
 
     pub fn mail_account_id(&self) -> Id<Account> {
         self.session.lock().unwrap().primary_accounts[JMAP_MAIL_CAPABILITY].clone()
+    }
+
+    pub fn mail_identity_id(&self) -> Option<Id<IdentityObject>> {
+        self.session
+            .lock()
+            .unwrap()
+            .identities
+            .keys()
+            .next()
+            .cloned()
     }
 
     pub fn session_guard(&'_ self) -> MutexGuard<'_, Session> {

@@ -62,3 +62,154 @@ impl<T: Clone + PartialEq + Eq + Hash> From<T> for Argument<T> {
         Self::Value(v)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use serde_json::json;
+
+    use crate::jmap::*;
+
+    #[test]
+    fn test_jmap_argument_serde() {
+        let account_id = "blahblah";
+        let blob_id: Id<BlobObject> = Id::new_uuid_v4();
+        let draft_mailbox_id: Id<MailboxObject> = Id::new_uuid_v4();
+        let sent_mailbox_id: Id<MailboxObject> = Id::new_uuid_v4();
+        let prev_seq = 33;
+
+        let mut req = Request::new(Arc::new(Mutex::new(prev_seq)));
+        let creation_id: Id<EmailObject> = "1".into();
+        let import_call: EmailImport =
+            EmailImport::new()
+                .account_id(account_id.into())
+                .emails(indexmap! {
+                    creation_id =>
+                        EmailImportObject::new()
+                        .blob_id(blob_id.clone())
+                        .keywords(indexmap! {
+                            "$draft".to_string() => true,
+                        })
+                    .mailbox_ids(indexmap! {
+                        draft_mailbox_id.clone() => true,
+                    }),
+                });
+
+        let prev_seq = req.add_call(&import_call);
+
+        let subm_set_call: EmailSubmissionSet = EmailSubmissionSet::new(
+                Set::<EmailSubmissionObject>::new()
+                    .account_id(account_id.into())
+                    .create(Some(indexmap! {
+                        Argument::from(Id::from("k1490")) => EmailSubmissionObject::new(
+                            /* account_id: */ account_id.into(),
+                            /* identity_id: */ account_id.into(),
+                            /* email_id: */ Argument::reference::<EmailImport, EmailObject, EmailObject>(prev_seq, ResultField::<EmailImport, EmailObject>::new("/id")),
+                            /* envelope: */ None,
+                            /* undo_status: */ None
+                            )
+                    })),
+            )
+            .on_success_update_email(Some(
+                indexmap! {
+                    "#k1490".into() => json!({
+                        format!("mailboxIds/{draft_mailbox_id}"): null,
+                        format!("mailboxIds/{sent_mailbox_id}"): true,
+                        "keywords/$draft": null
+                    })
+                }
+            ));
+        _ = req.add_call(&subm_set_call);
+
+        assert_eq!(
+            json! {&subm_set_call},
+            json! {{
+                "accountId": account_id,
+                "create": {
+                    "k1490": {
+                        "#emailId": {
+                            "name": "Email/import",
+                            "path":"/id",
+                            "resultOf":"m33"
+                        },
+                        "envelope": null,
+                        "identityId": account_id,
+                        "undoStatus": "final"
+                    }
+                },
+                "destroy": null,
+                "ifInState": null,
+                "onSuccessDestroyEmail": null,
+                "onSuccessUpdateEmail": {
+                    "#k1490": {
+                        "keywords/$draft": null,
+                        format!("mailboxIds/{draft_mailbox_id}"): null,
+                        format!("mailboxIds/{sent_mailbox_id}"): true
+                    }
+                },
+                "update": null,
+            }},
+        );
+        assert_eq!(
+            json! {&req},
+            json! {{
+                "methodCalls": [
+                    [
+                        "Email/import",
+                        {
+                            "accountId": account_id,
+                            "emails": {
+                                "1": {
+                                    "blobId": blob_id.to_string(),
+                                    "keywords": {
+                                        "$draft": true
+                                    },
+                                    "mailboxIds": {
+                                        draft_mailbox_id.to_string(): true
+                                    },
+                                    "receivedAt": null
+                                }
+                            }
+                        },
+                        "m33"
+                    ],
+                    [
+                        "EmailSubmission/set",
+                        {
+                            "accountId": account_id,
+                            "create": {
+                                "k1490": {
+                                    "#emailId": {
+                                        "name": "Email/import",
+                                        "path": "/id",
+                                        "resultOf": "m33"
+                                    },
+                                    "envelope": null,
+                                    "identityId": account_id,
+                                    "undoStatus": "final"
+                                }
+                            },
+                            "destroy": null,
+                            "ifInState": null,
+                            "onSuccessDestroyEmail": null,
+                            "onSuccessUpdateEmail": {
+                                "#k1490": {
+                                    "keywords/$draft": null,
+                                    format!("mailboxIds/{draft_mailbox_id}"): null,
+                                    format!("mailboxIds/{sent_mailbox_id}"): true
+                                }
+                            },
+                            "update": null
+                        },
+                        "m34"
+                            ]
+                            ],
+                            "using": [
+                                "urn:ietf:params:jmap:core",
+                                "urn:ietf:params:jmap:mail"
+                            ]
+            }},
+        );
+    }
+}

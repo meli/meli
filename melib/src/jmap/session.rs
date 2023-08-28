@@ -24,7 +24,10 @@ use std::sync::Arc;
 use indexmap::IndexMap;
 use serde_json::Value;
 
-use crate::jmap::rfc8620::{Account, Id, Object, State};
+use crate::jmap::{
+    rfc8620::{Account, Id, Object, State},
+    IdentityObject,
+};
 
 #[derive(Deserialize, Serialize, Debug, Clone, Default)]
 #[serde(rename_all = "camelCase")]
@@ -32,6 +35,8 @@ pub struct Session {
     pub capabilities: IndexMap<String, CapabilitiesObject>,
     pub accounts: IndexMap<Id<Account>, Account>,
     pub primary_accounts: IndexMap<String, Id<Account>>,
+    #[serde(skip)]
+    pub identities: IndexMap<Id<IdentityObject>, IdentityObject>,
     pub username: String,
     pub api_url: Arc<String>,
     pub download_url: Arc<String>,
