@@ -49,12 +49,12 @@ pub struct ImportCall {
     pub if_in_state: Option<State<EmailObject>>,
     /// o  emails: `Id[EmailImport]`
     /// A map of creation id (client specified) to EmailImport objects.
-    pub emails: IndexMap<Id<EmailObject>, EmailImport>,
+    pub emails: IndexMap<Id<EmailObject>, EmailImportObject>,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct EmailImport {
+pub struct EmailImportObject {
     /// o  blobId: `Id`
     /// The id of the blob containing the raw message `RFC5322`.
     pub blob_id: Id<BlobObject>,
@@ -88,7 +88,7 @@ impl ImportCall {
         account_id: Id<Account>
     );
     _impl!(if_in_state: Option<State<EmailObject>>);
-    _impl!(emails: IndexMap<Id<EmailObject>, EmailImport>);
+    _impl!(emails: IndexMap<Id<EmailObject>, EmailImportObject>);
 }
 
 impl Default for ImportCall {
@@ -101,7 +101,7 @@ impl Method<EmailObject> for ImportCall {
     const NAME: &'static str = "Email/import";
 }
 
-impl EmailImport {
+impl EmailImportObject {
     pub fn new() -> Self {
         Self {
             blob_id: Id::empty(),
@@ -117,13 +117,13 @@ impl EmailImport {
     _impl!(received_at: Option<String>);
 }
 
-impl Default for EmailImport {
+impl Default for EmailImportObject {
     fn default() -> Self {
         Self::new()
     }
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 #[serde(tag = "type")]
 pub enum ImportError {

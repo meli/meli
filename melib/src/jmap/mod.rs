@@ -461,7 +461,7 @@ impl MailBackend for JmapType {
             let import_call: ImportCall = ImportCall::new()
                 .account_id(conn.mail_account_id())
                 .emails(indexmap! {
-                    creation_id.clone() => EmailImport::new()
+                    creation_id.clone() => EmailImportObject::new()
                     .blob_id(upload_response.blob_id)
                     .mailbox_ids(indexmap! {
                         mailbox_id => true
