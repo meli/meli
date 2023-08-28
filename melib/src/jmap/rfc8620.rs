@@ -852,7 +852,7 @@ pub struct SetResponse<OBJ: Object> {
     ///   The state string that would have been returned by `Foo/get` before
     ///   making the requested changes, or null if the server doesn't know
     ///   what the previous state string was.
-    pub old_state: State<OBJ>,
+    pub old_state: Option<State<OBJ>>,
     /// o  newState: `String`
     ///
     ///   The state string that will now be returned by `Foo/get`.

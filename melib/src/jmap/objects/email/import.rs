@@ -186,13 +186,13 @@ pub struct ImportResponse {
     /// A map of the creation id to an object containing the `id`,
     /// `blobId`, `threadId`, and `size` properties for each successfully
     /// imported Email, or null if none.
-    pub created: IndexMap<Id<EmailObject>, ImportEmailResult>,
+    pub created: Option<IndexMap<Id<EmailObject>, ImportEmailResult>>,
 
     /// o  notCreated: `Id[SetError]|null`
     /// A map of the creation id to a SetError object for each Email that
     /// failed to be created, or null if all successful.  The possible
     /// errors are defined above.
-    pub not_created: IndexMap<Id<EmailObject>, ImportError>,
+    pub not_created: Option<IndexMap<Id<EmailObject>, ImportError>>,
 }
 
 impl std::convert::TryFrom<&RawValue> for ImportResponse {
