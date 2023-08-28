@@ -28,7 +28,7 @@ use crate::error::NetworkErrorKind;
 
 #[derive(Debug)]
 pub struct JmapConnection {
-    pub session: Arc<Mutex<JmapSession>>,
+    pub session: Arc<Mutex<Session>>,
     pub request_no: Arc<Mutex<usize>>,
     pub client: Arc<HttpClient>,
     pub server_conf: JmapServerConf,
@@ -153,7 +153,7 @@ impl JmapConnection {
             Ok(s) => s,
         };
 
-        let session: JmapSession = match deserialize_from_str(&res_text) {
+        let session: Session = match deserialize_from_str(&res_text) {
             Err(err) => {
                 let err = Error::new(format!(
                     "Could not connect to JMAP server endpoint for {}. Is your server url setting \
@@ -211,7 +211,7 @@ impl JmapConnection {
         self.session.lock().unwrap().primary_accounts[JMAP_MAIL_CAPABILITY].clone()
     }
 
-    pub fn session_guard(&'_ self) -> MutexGuard<'_, JmapSession> {
+    pub fn session_guard(&'_ self) -> MutexGuard<'_, Session> {
         self.session.lock().unwrap()
     }
 

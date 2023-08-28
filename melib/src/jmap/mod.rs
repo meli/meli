@@ -79,6 +79,9 @@ use connection::*;
 pub mod protocol;
 use protocol::*;
 
+pub mod session;
+use session::*;
+
 pub mod rfc8620;
 use rfc8620::*;
 
@@ -197,7 +200,7 @@ pub struct Store {
     pub mailbox_state: Arc<Mutex<State<MailboxObject>>>,
     pub online_status: Arc<FutureMutex<(Instant, Result<()>)>>,
     pub is_subscribed: Arc<IsSubscribedFn>,
-    pub core_capabilities: Arc<Mutex<IndexMap<String, rfc8620::CapabilitiesObject>>>,
+    pub core_capabilities: Arc<Mutex<IndexMap<String, CapabilitiesObject>>>,
     pub event_consumer: BackendEventConsumer,
 }
 

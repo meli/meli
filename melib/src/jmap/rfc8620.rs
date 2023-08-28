@@ -22,16 +22,16 @@
 use std::{
     hash::{Hash, Hasher},
     marker::PhantomData,
-    sync::Arc,
 };
 
+use indexmap::IndexMap;
 use serde::{
     de::DeserializeOwned,
     ser::{Serialize, SerializeStruct, Serializer},
 };
 use serde_json::{value::RawValue, Value};
 
-use crate::email::parser::BytesExt;
+use crate::{email::parser::BytesExt, jmap::session::Session};
 
 mod filters;
 pub use filters::*;
@@ -39,8 +39,6 @@ mod comparator;
 pub use comparator::*;
 mod argument;
 pub use argument::*;
-use indexmap::IndexMap;
-
 pub type PatchObject = Value;
 
 impl Object for PatchObject {
@@ -230,48 +228,6 @@ impl<OBJ> State<OBJ> {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct JmapSession {
-    pub capabilities: IndexMap<String, CapabilitiesObject>,
-    pub accounts: IndexMap<Id<Account>, Account>,
-    pub primary_accounts: IndexMap<String, Id<Account>>,
-    pub username: String,
-    pub api_url: Arc<String>,
-    pub download_url: Arc<String>,
-
-    pub upload_url: Arc<String>,
-    pub event_source_url: Arc<String>,
-    pub state: State<JmapSession>,
-    #[serde(flatten)]
-    pub extra_properties: IndexMap<String, Value>,
-}
-
-impl Object for JmapSession {
-    const NAME: &'static str = "Session";
-}
-
-#[derive(Deserialize, Serialize, Clone, Default, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct CapabilitiesObject {
-    #[serde(default)]
-    pub max_size_upload: u64,
-    #[serde(default)]
-    pub max_concurrent_upload: u64,
-    #[serde(default)]
-    pub max_size_request: u64,
-    #[serde(default)]
-    pub max_concurrent_requests: u64,
-    #[serde(default)]
-    pub max_calls_in_request: u64,
-    #[serde(default)]
-    pub max_objects_in_get: u64,
-    #[serde(default)]
-    pub max_objects_in_set: u64,
-    #[serde(default)]
-    pub collation_algorithms: Vec<String>,
-}
-
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Account {
@@ -284,7 +240,7 @@ pub struct Account {
 }
 
 impl Object for Account {
-    const NAME: &'static str = "Account";
+    const NAME: &'static str = stringify!(Account);
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -441,7 +397,7 @@ pub struct MethodResponse<'a> {
     #[serde(default)]
     pub created_ids: IndexMap<Id<String>, Id<String>>,
     #[serde(default)]
-    pub session_state: State<JmapSession>,
+    pub session_state: State<Session>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
