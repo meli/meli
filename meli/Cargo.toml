@@ -1,6 +1,6 @@
 [package]
 name = "meli"
-version = "0.7.3"
+version = "0.8.0"
 authors = ["Manos Pitsidianakis <manos@pitsidianak.is>"]
 edition = "2018"
 rust-version = "1.65.0"

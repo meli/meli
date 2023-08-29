@@ -1240,7 +1240,7 @@ dependencies = [
 
 [[package]]
 name = "meli"
-version = "0.7.3"
+version = "0.8.0"
 dependencies = [
  "async-task",
  "bitflags 2.4.0",
