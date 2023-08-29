@@ -103,6 +103,18 @@ pub struct Card {
     external_resource: bool,
 }
 
+impl std::fmt::Display for Card {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        if !self.name.is_empty() {
+            self.name.fmt(fmt)
+        } else if !self.email.is_empty() {
+            self.email.fmt(fmt)
+        } else {
+            "empty contact".fmt(fmt)
+        }
+    }
+}
+
 impl AddressBook {
     pub fn new(display_name: String) -> Self {
         Self {

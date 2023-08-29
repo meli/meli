@@ -21,9 +21,13 @@
 
 use std::cmp;
 
-use melib::{backends::AccountHash, text_processing::TextProcessing, CardId, Draft};
+use melib::{backends::AccountHash, log, text_processing::TextProcessing, Card, CardId, Draft};
 
-use super::*;
+use crate::{
+    conf, contacts::editor::ContactManager, shortcut, terminal::*, Action::Tab, Component,
+    ComponentId, Composer, Context, DataColumns, PageMovement, ScrollContext, ScrollUpdate,
+    ShortcutMaps, Shortcuts, StatusEvent, TabAction, ThemeAttribute, UIEvent, UIMode,
+};
 
 #[derive(Debug, PartialEq, Eq)]
 enum ViewMode {
@@ -69,7 +73,7 @@ pub struct ContactList {
 
 impl std::fmt::Display for ContactList {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "contact list")
+        write!(f, "contacts")
     }
 }
 
@@ -715,7 +719,9 @@ impl Component for ContactList {
                     composer.set_draft(draft, context);
                     context
                         .replies
-                        .push_back(UIEvent::Action(Tab(New(Some(Box::new(composer))))));
+                        .push_back(UIEvent::Action(Tab(TabAction::New(Some(Box::new(
+                            composer,
+                        ))))));
 
                     return true;
                 }
@@ -957,7 +963,9 @@ impl Component for ContactList {
 
     fn kill(&mut self, uuid: ComponentId, context: &mut Context) {
         debug_assert!(uuid == self.id);
-        context.replies.push_back(UIEvent::Action(Tab(Kill(uuid))));
+        context
+            .replies
+            .push_back(UIEvent::Action(Tab(TabAction::Kill(uuid))));
     }
     fn shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut map = self

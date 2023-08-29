@@ -23,11 +23,10 @@ use std::collections::HashMap;
 
 use melib::Card;
 
-use super::*;
-
-mod contact_list;
-
-pub use self::contact_list::*;
+use crate::{
+    terminal::*, Action::*, CellBuffer, Component, ComponentId, Context, Field, FormWidget, Key,
+    StatusEvent, TabAction, ThemeAttribute, UIDialog, UIEvent,
+};
 
 #[derive(Debug)]
 enum ViewMode {
@@ -44,7 +43,7 @@ pub struct ContactManager {
     pub card: Card,
     mode: ViewMode,
     form: FormWidget<bool>,
-    account_pos: usize,
+    pub account_pos: usize,
     content: CellBuffer,
     theme_default: ThemeAttribute,
     dirty: bool,
@@ -55,12 +54,12 @@ pub struct ContactManager {
 
 impl std::fmt::Display for ContactManager {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "contacts")
+        write!(f, "{}", self.card)
     }
 }
 
 impl ContactManager {
-    fn new(context: &Context) -> Self {
+    pub fn new(context: &Context) -> Self {
         let theme_default: ThemeAttribute = crate::conf::value(context, "theme_default");
         ContactManager {
             id: ComponentId::default(),
@@ -197,7 +196,7 @@ impl Component for ContactManager {
                     if self.can_quit_cleanly(context) {
                         context
                             .replies
-                            .push_back(UIEvent::Action(Tab(Kill(parent_id))));
+                            .push_back(UIEvent::Action(Tab(TabAction::Kill(parent_id))));
                     }
                     return true;
                 }
@@ -289,7 +288,7 @@ impl Component for ContactManager {
                 ],
                 true,
                 Some(Box::new(move |_, results: &[char]| match results[0] {
-                    'x' => Some(UIEvent::Action(Tab(Kill(parent_id)))),
+                    'x' => Some(UIEvent::Action(Tab(TabAction::Kill(parent_id)))),
                     'n' => None,
                     'y' => None,
                     _ => None,

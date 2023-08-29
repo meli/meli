@@ -146,7 +146,7 @@ fn run_app(opt: Opt) -> Result<()> {
         let window = Box::new(Tabbed::new(
             vec![
                 Box::new(listing::Listing::new(&mut state.context)),
-                Box::new(ContactList::new(&state.context)),
+                Box::new(contacts::list::ContactList::new(&state.context)),
             ],
             &state.context,
         ));
