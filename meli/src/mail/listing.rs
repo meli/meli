@@ -1308,6 +1308,7 @@ impl Component for Listing {
                         env_hash,
                         thread_hash,
                         show_thread,
+                        go_to_first_unread,
                     }) => {
                         let (a, m) = self.component.coordinates();
                         self.view.unrealize(context);
@@ -1315,6 +1316,7 @@ impl Component for Listing {
                             (a, m, env_hash),
                             thread_hash,
                             Some(env_hash),
+                            go_to_first_unread,
                             if show_thread {
                                 None
                             } else {
@@ -3068,6 +3070,7 @@ pub enum ListingMessage {
         env_hash: EnvelopeHash,
         thread_hash: ThreadHash,
         show_thread: bool,
+        go_to_first_unread: bool,
     },
     UpdateView,
 }

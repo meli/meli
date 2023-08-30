@@ -238,6 +238,7 @@ impl MailListingTrait for ConversationsListing {
                         thread_hash,
                         env_hash,
                         show_thread: true,
+                        go_to_first_unread: true,
                     },
                     context,
                 );
@@ -666,6 +667,7 @@ impl ListingTrait for ConversationsListing {
                             thread_hash,
                             env_hash,
                             show_thread: true,
+                            go_to_first_unread: true,
                         },
                         context,
                     );

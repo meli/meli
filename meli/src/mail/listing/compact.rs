@@ -331,6 +331,7 @@ impl MailListingTrait for CompactListing {
                         thread_hash,
                         env_hash,
                         show_thread: true,
+                        go_to_first_unread: true,
                     },
                     context,
                 );
@@ -930,6 +931,7 @@ impl ListingTrait for CompactListing {
                             thread_hash,
                             env_hash,
                             show_thread: true,
+                            go_to_first_unread: true,
                         },
                         context,
                     );

@@ -297,6 +297,7 @@ impl MailListingTrait for PlainListing {
                         thread_hash,
                         env_hash,
                         show_thread: false,
+                        go_to_first_unread: false,
                     },
                     context,
                 );
@@ -648,6 +649,7 @@ impl ListingTrait for PlainListing {
                             thread_hash,
                             env_hash,
                             show_thread: false,
+                            go_to_first_unread: false,
                         },
                         context,
                     );

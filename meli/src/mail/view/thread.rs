@@ -81,6 +81,7 @@ impl ThreadView {
         coordinates: (AccountHash, MailboxHash, EnvelopeHash),
         thread_group: ThreadHash,
         expanded_hash: Option<EnvelopeHash>,
+        go_to_first_unread: bool,
         focus: Option<ThreadViewFocus>,
         context: &mut Context,
     ) -> Self {
@@ -105,7 +106,7 @@ impl ThreadView {
             use_color: context.settings.terminal.use_color(),
             ..Default::default()
         };
-        view.initiate(expanded_hash, context);
+        view.initiate(expanded_hash, go_to_first_unread, context);
         view.new_cursor_pos = view.new_expanded_pos;
         view
     }
@@ -130,7 +131,7 @@ impl ThreadView {
         };
 
         let expanded_hash = old_expanded_entry.as_ref().map(|e| e.msg_hash);
-        self.initiate(expanded_hash, context);
+        self.initiate(expanded_hash, false, context);
 
         let mut old_cursor = 0;
         let mut new_cursor = 0;
@@ -172,7 +173,12 @@ impl ThreadView {
         self.set_dirty(true);
     }
 
-    fn initiate(&mut self, expanded_hash: Option<EnvelopeHash>, context: &mut Context) {
+    fn initiate(
+        &mut self,
+        expanded_hash: Option<EnvelopeHash>,
+        go_to_first_unread: bool,
+        context: &mut Context,
+    ) {
         #[inline(always)]
         fn make_entry(
             i: (usize, ThreadNodeHash, usize),
@@ -210,11 +216,19 @@ impl ThreadView {
 
         let thread_iter = threads.thread_iter(self.thread_group);
         self.entries.clear();
+        let mut earliest_unread = 0;
+        let mut earliest_unread_entry = 0;
         for (line, (ind, thread_node_hash)) in thread_iter.enumerate() {
             let entry = if let Some(msg_hash) = threads.thread_nodes()[&thread_node_hash].message()
             {
                 let (is_seen, timestamp) = {
                     let env_ref = collection.get_env(msg_hash);
+                    if !env_ref.is_seen()
+                        && (earliest_unread == 0 || env_ref.timestamp < earliest_unread)
+                    {
+                        earliest_unread = env_ref.timestamp;
+                        earliest_unread_entry = self.entries.len();
+                    }
                     (env_ref.is_seen(), env_ref.timestamp)
                 };
                 make_entry(
@@ -247,6 +261,10 @@ impl ThreadView {
                 .map(|el| el.0)
                 .unwrap_or(0);
             self.expanded_pos = self.new_expanded_pos + 1;
+        }
+        if go_to_first_unread && earliest_unread > 0 {
+            self.new_expanded_pos = earliest_unread_entry;
+            self.expanded_pos = earliest_unread_entry + 1;
         }
 
         let height = 2 * self.entries.len() + 1;
@@ -1105,7 +1123,7 @@ impl Component for ThreadView {
             {
                 self.reversed = !self.reversed;
                 let expanded_hash = self.entries[self.expanded_pos].msg_hash;
-                self.initiate(Some(expanded_hash), context);
+                self.initiate(Some(expanded_hash), false, context);
                 self.dirty = true;
                 true
             }

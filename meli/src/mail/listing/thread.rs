@@ -730,6 +730,7 @@ impl ListingTrait for ThreadListing {
                             thread_hash,
                             env_hash,
                             show_thread: false,
+                            go_to_first_unread: false,
                         },
                         context,
                     );
