@@ -22,7 +22,6 @@
 //! Connections layers (TCP/fd/TLS/Deflate) to use with remote backends.
 use std::{os::unix::io::AsRawFd, time::Duration};
 
-#[cfg(feature = "deflate_compression")]
 use flate2::{read::DeflateDecoder, write::DeflateEncoder, Compression};
 #[cfg(any(target_os = "openbsd", target_os = "netbsd", target_os = "haiku"))]
 use libc::SO_KEEPALIVE as KEEPALIVE_OPTION;
@@ -60,7 +59,6 @@ pub enum Connection {
         id: Option<&'static str>,
         trace: bool,
     },
-    #[cfg(feature = "deflate_compression")]
     Deflate {
         inner: DeflateEncoder<DeflateDecoder<Box<Self>>>,
         id: Option<&'static str>,
@@ -105,7 +103,6 @@ impl std::fmt::Debug for Connection {
                 .field(stringify!(id), id)
                 .field(stringify!(inner), inner)
                 .finish(),
-            #[cfg(feature = "deflate_compression")]
             Deflate {
                 ref trace,
                 ref inner,
@@ -136,10 +133,8 @@ macro_rules! syscall {
 }
 
 impl Connection {
-    #[cfg(feature = "deflate_compression")]
     pub const IO_BUF_SIZE: usize = 64 * 1024;
 
-    #[cfg(feature = "deflate_compression")]
     pub fn deflate(mut self) -> Self {
         let trace = self.is_trace_enabled();
         let id = self.id();
@@ -180,7 +175,6 @@ impl Connection {
             Fd { ref mut trace, .. } => {
                 *trace = val;
             }
-            #[cfg(feature = "deflate_compression")]
             Deflate { ref mut trace, .. } => *trace = val,
         }
         self
@@ -194,7 +188,6 @@ impl Connection {
             Fd { ref mut id, .. } => {
                 *id = Some(val);
             }
-            #[cfg(feature = "deflate_compression")]
             Deflate { ref mut id, .. } => *id = Some(val),
         }
         self
@@ -208,7 +201,6 @@ impl Connection {
             Fd { ref mut trace, .. } => {
                 *trace = val;
             }
-            #[cfg(feature = "deflate_compression")]
             Deflate { ref mut trace, .. } => *trace = val,
         }
     }
@@ -242,7 +234,6 @@ impl Connection {
                 .map_err(|err| std::io::Error::from_raw_os_error(err as i32))?;
                 Ok(())
             }
-            #[cfg(feature = "deflate_compression")]
             Deflate { ref inner, .. } => inner.get_ref().get_ref().set_nonblocking(nonblocking),
         }
     }
@@ -264,7 +255,6 @@ impl Connection {
             #[cfg(feature = "tls")]
             Tls { ref inner, .. } => inner.get_ref().set_read_timeout(dur),
             Fd { .. } => Ok(()),
-            #[cfg(feature = "deflate_compression")]
             Deflate { ref inner, .. } => inner.get_ref().get_ref().set_read_timeout(dur),
         }
     }
@@ -286,7 +276,6 @@ impl Connection {
             #[cfg(feature = "tls")]
             Tls { ref inner, .. } => inner.get_ref().set_write_timeout(dur),
             Fd { .. } => Ok(()),
-            #[cfg(feature = "deflate_compression")]
             Deflate { ref inner, .. } => inner.get_ref().get_ref().set_write_timeout(dur),
         }
     }
@@ -371,7 +360,6 @@ impl Connection {
             Fd { trace, .. } | Tcp { trace, .. } => *trace,
             #[cfg(feature = "tls")]
             Tls { trace, .. } => *trace,
-            #[cfg(feature = "deflate_compression")]
             Deflate { trace, .. } => *trace,
         }
     }
@@ -381,7 +369,6 @@ impl Connection {
             Fd { id, .. } | Tcp { id, .. } => *id,
             #[cfg(feature = "tls")]
             Tls { id, .. } => *id,
-            #[cfg(feature = "deflate_compression")]
             Deflate { id, .. } => *id,
         }
     }
@@ -408,7 +395,6 @@ impl std::io::Read for Connection {
                 let _ = f.into_raw_fd();
                 ret
             }
-            #[cfg(feature = "deflate_compression")]
             Deflate { ref mut inner, .. } => inner.read(buf),
         };
         if self.is_trace_enabled() {
@@ -463,7 +449,6 @@ impl std::io::Write for Connection {
                 let _ = f.into_raw_fd();
                 ret
             }
-            #[cfg(feature = "deflate_compression")]
             Deflate { ref mut inner, .. } => inner.write(buf),
         }
     }
@@ -480,7 +465,6 @@ impl std::io::Write for Connection {
                 let _ = f.into_raw_fd();
                 ret
             }
-            #[cfg(feature = "deflate_compression")]
             Deflate { ref mut inner, .. } => inner.flush(),
         }
     }
@@ -493,7 +477,6 @@ impl std::os::unix::io::AsRawFd for Connection {
             #[cfg(feature = "tls")]
             Tls { ref inner, .. } => inner.get_ref().as_raw_fd(),
             Fd { ref inner, .. } => *inner,
-            #[cfg(feature = "deflate_compression")]
             Deflate { ref inner, .. } => inner.get_ref().get_ref().as_raw_fd(),
         }
     }

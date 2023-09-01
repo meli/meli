@@ -91,7 +91,6 @@ macro_rules! get_conf_val {
 }
 
 pub static SUPPORTED_CAPABILITIES: &[&str] = &[
-    #[cfg(feature = "deflate_compression")]
     "COMPRESS DEFLATE",
     "VERSION 2",
     "NEWNEWS",
@@ -185,10 +184,7 @@ impl MailBackend for NntpType {
             })
             .collect::<Vec<(String, MailBackendExtensionStatus)>>();
         let mut supports_submission = false;
-        let NntpExtensionUse {
-            #[cfg(feature = "deflate_compression")]
-            deflate,
-        } = self.server_conf.extension_use;
+        let NntpExtensionUse { deflate } = self.server_conf.extension_use;
         {
             for (name, status) in extensions.iter_mut() {
                 match name.as_str() {
@@ -197,20 +193,11 @@ impl MailBackend for NntpType {
                         *status = MailBackendExtensionStatus::Enabled { comment: None };
                     }
                     "COMPRESS DEFLATE" => {
-                        #[cfg(feature = "deflate_compression")]
-                        {
-                            if deflate {
-                                *status = MailBackendExtensionStatus::Enabled { comment: None };
-                            } else {
-                                *status = MailBackendExtensionStatus::Supported {
-                                    comment: Some("Disabled by user configuration"),
-                                };
-                            }
-                        }
-                        #[cfg(not(feature = "deflate_compression"))]
-                        {
-                            *status = MailBackendExtensionStatus::Unsupported {
-                                comment: Some("melib not compiled with DEFLATE."),
+                        if deflate {
+                            *status = MailBackendExtensionStatus::Enabled { comment: None };
+                        } else {
+                            *status = MailBackendExtensionStatus::Supported {
+                                comment: Some("Disabled by user configuration"),
                             };
                         }
                     }
@@ -680,7 +667,6 @@ impl NntpType {
             use_starttls,
             danger_accept_invalid_certs,
             extension_use: NntpExtensionUse {
-                #[cfg(feature = "deflate_compression")]
                 deflate: get_conf_val!(s["use_deflate"], false)?,
             },
         };
@@ -859,16 +845,7 @@ impl NntpType {
                 s.name.as_str(),
             )));
         }
-        #[cfg(feature = "deflate_compression")]
         get_conf_val!(s["use_deflate"], false)?;
-        #[cfg(not(feature = "deflate_compression"))]
-        if s.extra.contains_key("use_deflate") {
-            return Err(Error::new(format!(
-                "Configuration error ({}): setting `use_deflate` is set but this version of meli \
-                 isn't compiled with DEFLATE support.",
-                s.name.as_str(),
-            )));
-        }
         get_conf_val!(s["danger_accept_invalid_certs"], false)?;
         let extra_keys = s
             .extra

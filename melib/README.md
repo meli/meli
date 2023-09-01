@@ -9,7 +9,6 @@ Library for handling mail.
 | feature flag           | dependencies                        | notes                    |
 | ---------------------- | ----------------------------------- | ------------------------ |
 | `imap`                 | `native-tls`                        |                          |
-| `deflate_compression`  | `flate2`                            | for use with IMAP        |
 | `jmap`                 | `isahc`, `native-tls`, `serde_json` |                          |
 | `maildir`              | `notify`                            |                          |
 | `mbox`                 | `notify`                            |                          |

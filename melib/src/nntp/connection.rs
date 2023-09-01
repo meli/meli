@@ -37,7 +37,6 @@ use super::{Capabilities, NntpServerConf, UIDStore};
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct NntpExtensionUse {
-    #[cfg(feature = "deflate_compression")]
     pub deflate: bool,
 }
 
@@ -258,7 +257,6 @@ impl NntpStream {
             }
         }
 
-        #[cfg(feature = "deflate_compression")]
         if capabilities.contains("COMPRESS DEFLATE") && ret.extension_use.deflate {
             ret.send_command(b"COMPRESS DEFLATE").await?;
             ret.read_response(&mut res, false, command_to_replycodes("COMPRESS DEFLATE"))

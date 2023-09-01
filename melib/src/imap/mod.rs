@@ -79,7 +79,6 @@ pub type MessageSequenceNumber = ImapNum;
 
 pub static SUPPORTED_CAPABILITIES: &[&str] = &[
     "AUTH=OAUTH2",
-    #[cfg(feature = "deflate_compression")]
     "COMPRESS=DEFLATE",
     "CONDSTORE",
     "ENABLE",
@@ -230,7 +229,6 @@ impl MailBackend for ImapType {
             extension_use:
                 ImapExtensionUse {
                     idle,
-                    #[cfg(feature = "deflate_compression")]
                     deflate,
                     condstore,
                     oauth2,
@@ -249,20 +247,11 @@ impl MailBackend for ImapType {
                         }
                     }
                     "COMPRESS=DEFLATE" => {
-                        #[cfg(feature = "deflate_compression")]
-                        {
-                            if deflate {
-                                *status = MailBackendExtensionStatus::Enabled { comment: None };
-                            } else {
-                                *status = MailBackendExtensionStatus::Supported {
-                                    comment: Some("Disabled by user configuration"),
-                                };
-                            }
-                        }
-                        #[cfg(not(feature = "deflate_compression"))]
-                        {
-                            *status = MailBackendExtensionStatus::Unsupported {
-                                comment: Some("melib not compiled with DEFLATE."),
+                        if deflate {
+                            *status = MailBackendExtensionStatus::Enabled { comment: None };
+                        } else {
+                            *status = MailBackendExtensionStatus::Supported {
+                                comment: Some("Disabled by user configuration"),
                             };
                         }
                     }
@@ -1296,7 +1285,6 @@ impl ImapType {
                 extension_use: ImapExtensionUse {
                     idle: get_conf_val!(s["use_idle"], true)?,
                     condstore: get_conf_val!(s["use_condstore"], true)?,
-                    #[cfg(feature = "deflate_compression")]
                     deflate: get_conf_val!(s["use_deflate"], true)?,
                     oauth2: use_oauth2,
                 },
@@ -1566,16 +1554,7 @@ impl ImapType {
         }
         get_conf_val!(s["use_idle"], true)?;
         get_conf_val!(s["use_condstore"], true)?;
-        #[cfg(feature = "deflate_compression")]
         get_conf_val!(s["use_deflate"], true)?;
-        #[cfg(not(feature = "deflate_compression"))]
-        if s.extra.contains_key("use_deflate") {
-            return Err(Error::new(format!(
-                "Configuration error ({}): setting `use_deflate` is set but this version of meli \
-                 isn't compiled with DEFLATE support.",
-                s.name.as_str(),
-            )));
-        }
         let _timeout = get_conf_val!(s["timeout"], 16_u64)?;
         let extra_keys = s
             .extra

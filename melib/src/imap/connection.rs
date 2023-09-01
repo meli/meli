@@ -44,15 +44,13 @@ use std::{
 };
 
 use futures::io::{AsyncReadExt, AsyncWriteExt};
-#[cfg(feature = "deflate_compression")]
-use imap_codec::imap_types::extensions::compress::CompressionAlgorithm;
 use imap_codec::{
     encode::{Encoder, Fragment},
     imap_types::{
         auth::AuthMechanism,
         command::{Command, CommandBody},
         core::{AString, LiteralMode, NonEmptyVec, Tag},
-        extensions::enable::CapabilityEnable,
+        extensions::{compress::CompressionAlgorithm, enable::CapabilityEnable},
         mailbox::Mailbox,
         search::SearchKey,
         secret::Secret,
@@ -100,7 +98,6 @@ pub enum ImapProtocol {
 pub struct ImapExtensionUse {
     pub condstore: bool,
     pub idle: bool,
-    #[cfg(feature = "deflate_compression")]
     pub deflate: bool,
     pub oauth2: bool,
 }
@@ -110,7 +107,6 @@ impl Default for ImapExtensionUse {
         Self {
             condstore: true,
             idle: true,
-            #[cfg(feature = "deflate_compression")]
             deflate: true,
             oauth2: false,
         }
@@ -694,7 +690,6 @@ impl ImapConnection {
                     extension_use:
                         ImapExtensionUse {
                             condstore,
-                            #[cfg(feature = "deflate_compression")]
                             deflate,
                             idle: _idle,
                             oauth2: _,
@@ -735,7 +730,6 @@ impl ImapConnection {
                             }
                         }
                     }
-                    #[cfg(feature = "deflate_compression")]
                     if capabilities.contains(&b"COMPRESS=DEFLATE"[..]) && deflate {
                         let mut ret = Vec::new();
                         self.send_command(CommandBody::compress(CompressionAlgorithm::Deflate))

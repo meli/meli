@@ -128,7 +128,7 @@ pub mod dbg {
     }
 }
 
-#[cfg(feature = "unicode_algorithms")]
+#[cfg(feature = "text-processing")]
 pub mod text_processing;
 
 pub use utils::{

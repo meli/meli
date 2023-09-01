@@ -21,11 +21,11 @@
 
 #![allow(clippy::needless_range_loop)]
 
-#[cfg(feature = "unicode_algorithms")]
+#[cfg(any(feature = "unicode-algorithms", feature = "unicode-algorithms-cached"))]
 include!("src/text_processing/types.rs");
 
 fn main() -> Result<(), std::io::Error> {
-    #[cfg(feature = "unicode_algorithms")]
+    #[cfg(any(feature = "unicode-algorithms", feature = "unicode-algorithms-cached"))]
     {
         const MOD_PATH: &str = "src/text_processing/tables.rs";
         println!("cargo:rerun-if-changed=build.rs");
@@ -52,7 +52,25 @@ fn main() -> Result<(), std::io::Error> {
                 "{} already exists, delete it if you want to replace it.",
                 mod_path.display()
             );
-            std::process::exit(0);
+            return Ok(());
+        }
+        if cfg!(feature = "unicode-algorithms-cached") {
+            const CACHED_MODULE: &[u8] =
+                include_bytes!(concat!("./src/text_processing/tables.rs.gz"));
+
+            let mut gz = GzDecoder::new(CACHED_MODULE);
+            use flate2::bufread::GzDecoder;
+            let mut v = String::with_capacity(
+                8, /*
+                  str::parse::<usize>(unsafe {
+                      std::str::from_utf8_unchecked(gz.header().unwrap().comment().unwrap())
+                  })
+                  .unwrap_or_else(|_| panic!("was not compressed with size comment header",)),*/
+            );
+            gz.read_to_string(&mut v)?;
+            let mut file = File::create(mod_path)?;
+            file.write_all(v.as_bytes())?;
+            return Ok(());
         }
         let mut child = Command::new("curl")
             .args(["-o", "-", LINE_BREAK_TABLE_URL])

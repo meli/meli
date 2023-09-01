@@ -25,7 +25,7 @@ bitflags = { version = "2.4", features = ["serde"] }
 data-encoding = { version = "2.1.1" }
 encoding = { version = "0.2.33", default-features = false }
 encoding_rs = { version = "^0.8" }
-flate2 = { version = "1.0.16", optional = true }
+flate2 = { version = "1.0.16" }
 futures = "0.3.5"
 
 imap-codec = { version = "1.0.0", features = ["ext_condstore_qresync"], optional = true }
@@ -60,11 +60,13 @@ xdg-utils = "^0.4.0"
 mailin-embedded = { version = "0.7", features = ["rtls"] }
 stderrlog = "^0.5"
 
+[build-dependencies]
+flate2 = { version = "1.0.16" }
+
 [features]
-default = ["unicode_algorithms", "imap", "nntp", "maildir", "mbox", "vcard", "smtp", "deflate_compression"]
+default = ["unicode-algorithms", "imap", "nntp", "maildir", "mbox", "vcard", "smtp"]
 
 debug-tracing = []
-deflate_compression = ["flate2"]
 gpgme = []
 http = ["isahc"]
 http-static = ["isahc", "isahc/static-curl"]
@@ -81,5 +83,7 @@ smtp = ["tls", "base64"]
 smtp-trace = ["smtp"]
 sqlite3 = ["rusqlite", ]
 tls = ["native-tls"]
-unicode_algorithms = ["unicode-segmentation"]
+text-processing = []
+unicode-algorithms = ["text-processing", "unicode-segmentation"]
+unicode-algorithms-cached = ["text-processing", "unicode-segmentation"]
 vcard = []
