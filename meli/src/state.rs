@@ -1026,79 +1026,84 @@ impl State {
         match event {
             // Command type is handled only by State.
             UIEvent::Command(cmd) => {
-                if let Ok(action) = parse_command(cmd.as_bytes()) {
-                    if action.needs_confirmation() {
-                        let new = Box::new(UIConfirmationDialog::new(
-                            "You sure?",
-                            vec![(true, "yes".to_string()), (false, "no".to_string())],
-                            true,
-                            Some(Box::new(move |id: ComponentId, result: bool| {
-                                Some(UIEvent::FinishedUIDialog(
-                                    id,
-                                    Box::new(if result { Some(action) } else { None }),
-                                ))
-                            })),
-                            &self.context,
-                        ));
+                match parse_command(cmd.as_bytes()) {
+                    Ok(action) => {
+                        if action.needs_confirmation() {
+                            let new = Box::new(UIConfirmationDialog::new(
+                                "You sure?",
+                                vec![(true, "yes".to_string()), (false, "no".to_string())],
+                                true,
+                                Some(Box::new(move |id: ComponentId, result: bool| {
+                                    Some(UIEvent::FinishedUIDialog(
+                                        id,
+                                        Box::new(if result { Some(action) } else { None }),
+                                    ))
+                                })),
+                                &self.context,
+                            ));
 
-                        self.overlay.insert(new.id(), new);
-                    } else if let Action::ReloadConfiguration = action {
-                        match Settings::new().and_then(|new_settings| {
-                            let old_accounts = self
-                                .context
-                                .settings
-                                .accounts
-                                .keys()
-                                .collect::<std::collections::HashSet<&String>>();
-                            let new_accounts = new_settings
-                                .accounts
-                                .keys()
-                                .collect::<std::collections::HashSet<&String>>();
-                            if old_accounts != new_accounts {
-                                return Err("cannot reload account configuration changes; \
-                                            restart meli instead."
-                                    .into());
-                            }
-                            for (key, acc) in new_settings.accounts.iter() {
-                                if toml::Value::try_from(acc)
-                                    != toml::Value::try_from(&self.context.settings.accounts[key])
-                                {
+                            self.overlay.insert(new.id(), new);
+                        } else if let Action::ReloadConfiguration = action {
+                            match Settings::new().and_then(|new_settings| {
+                                let old_accounts = self
+                                    .context
+                                    .settings
+                                    .accounts
+                                    .keys()
+                                    .collect::<std::collections::HashSet<&String>>();
+                                let new_accounts = new_settings
+                                    .accounts
+                                    .keys()
+                                    .collect::<std::collections::HashSet<&String>>();
+                                if old_accounts != new_accounts {
                                     return Err("cannot reload account configuration changes; \
                                                 restart meli instead."
                                         .into());
                                 }
+                                for (key, acc) in new_settings.accounts.iter() {
+                                    if toml::Value::try_from(acc)
+                                        != toml::Value::try_from(
+                                            &self.context.settings.accounts[key],
+                                        )
+                                    {
+                                        return Err("cannot reload account configuration \
+                                                    changes; restart meli instead."
+                                            .into());
+                                    }
+                                }
+                                if toml::Value::try_from(&new_settings)
+                                    == toml::Value::try_from(&self.context.settings)
+                                {
+                                    return Err("No changes detected.".into());
+                                }
+                                Ok(Box::new(new_settings))
+                            }) {
+                                Ok(new_settings) => {
+                                    let old_settings =
+                                        std::mem::replace(&mut self.context.settings, new_settings);
+                                    self.context
+                                        .replies
+                                        .push_back(UIEvent::ConfigReload { old_settings });
+                                    self.context.replies.push_back(UIEvent::Resize);
+                                }
+                                Err(err) => {
+                                    self.context.replies.push_back(UIEvent::StatusEvent(
+                                        StatusEvent::DisplayMessage(format!(
+                                            "Could not load configuration: {}",
+                                            err
+                                        )),
+                                    ));
+                                }
                             }
-                            if toml::Value::try_from(&new_settings)
-                                == toml::Value::try_from(&self.context.settings)
-                            {
-                                return Err("No changes detected.".into());
-                            }
-                            Ok(Box::new(new_settings))
-                        }) {
-                            Ok(new_settings) => {
-                                let old_settings =
-                                    std::mem::replace(&mut self.context.settings, new_settings);
-                                self.context
-                                    .replies
-                                    .push_back(UIEvent::ConfigReload { old_settings });
-                                self.context.replies.push_back(UIEvent::Resize);
-                            }
-                            Err(err) => {
-                                self.context.replies.push_back(UIEvent::StatusEvent(
-                                    StatusEvent::DisplayMessage(format!(
-                                        "Could not load configuration: {}",
-                                        err
-                                    )),
-                                ));
-                            }
+                        } else {
+                            self.exec_command(action);
                         }
-                    } else {
-                        self.exec_command(action);
                     }
-                } else {
-                    self.context.replies.push_back(UIEvent::StatusEvent(
-                        StatusEvent::DisplayMessage("invalid command".to_string()),
-                    ));
+                    Err(err) => {
+                        self.context.replies.push_back(UIEvent::StatusEvent(
+                            StatusEvent::DisplayMessage(format!("invalid command: {err}")),
+                        ));
+                    }
                 }
                 return;
             }

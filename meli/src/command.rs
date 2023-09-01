@@ -34,7 +34,7 @@ use melib::{
         sequence::{pair, preceded, separated_pair},
         IResult,
     },
-    Error, SortField, SortOrder,
+    SortField, SortOrder,
 };
 
 use crate::melib::parser::BytesExt;
@@ -69,6 +69,29 @@ macro_rules! to_stream {
         }
     };
 }
+
+#[derive(Debug, Clone)]
+pub enum CommandError {
+    Parsing { inner: String },
+    BadValue { inner: String },
+    Other { inner: String },
+}
+
+impl<'a> From<nom::Err<melib::nom::error::Error<&'a [u8]>>> for CommandError {
+    fn from(res: nom::Err<melib::nom::error::Error<&'a [u8]>>) -> Self {
+        Self::Parsing {
+            inner: res.to_string(),
+        }
+    }
+}
+
+impl std::fmt::Display for CommandError {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(fmt, "{:?}", self)
+    }
+}
+
+impl std::error::Error for CommandError {}
 
 /// Macro to create a const table with every command part that can be
 /// auto-completed and its description
@@ -272,12 +295,12 @@ define_commands!([
                    desc: "set [seen/unseen], toggles message's Seen flag.",
                    tokens: &[One(Literal("set")), One(Alternatives(&[to_stream!(One(Literal("seen"))), to_stream!(One(Literal("unseen")))]))],
                    parser: (
-                       fn seen_flag(input: &'_ [u8]) -> IResult<&'_ [u8], Action> {
+                       fn seen_flag(input: &'_ [u8]) -> IResult<&'_ [u8], Result<Action, CommandError>> {
                            let (input, _) = tag("set")(input.trim())?;
                            let (input, _) = is_a(" ")(input)?;
                            let (input, ret) = alt((map(tag("seen"), |_| Listing(SetSeen)), map(tag("unseen"), |_| Listing(SetUnseen))))(input)?;
                            let (input, _) = eof(input)?;
-                           Ok((input, ret))
+                           Ok((input, Ok(ret)))
                        }
                      )
                  },
@@ -285,10 +308,10 @@ define_commands!([
                    desc: "delete message",
                    tokens: &[One(Literal("delete"))],
                    parser: (
-                       fn delete_message(input: &'_ [u8]) -> IResult<&'_ [u8], Action> {
+                       fn delete_message(input: &'_ [u8]) -> IResult<&'_ [u8], Result<Action, CommandError>> {
                            let (input, ret) = map(preceded(tag("delete"), eof), |_| Listing(Delete))(input)?;
                            let (input, _) = eof(input)?;
-                           Ok((input, ret))
+                           Ok((input, Ok(ret)))
                        }
                    )
                  },
@@ -296,39 +319,39 @@ define_commands!([
                    desc: "copy/move message",
                    tokens: &[One(Alternatives(&[to_stream!(One(Literal("copyto"))), to_stream!(One(Literal("moveto")))])), ZeroOrOne(AccountName), One(MailboxPath)],
                    parser: (
-                       fn copymove<'a>(input: &'a [u8]) -> IResult<&'a [u8], Action> {
+                       fn copymove<'a>(input: &'a [u8]) -> IResult<&'a [u8], Result<Action, CommandError>> {
                              alt((
-                                 |input: &'a [u8]| -> IResult<&'a [u8], Action> {
+                                 |input: &'a [u8]| -> IResult<&'a [u8], Result<Action, CommandError>> {
                                       let (input, _) = tag("copyto")(input.trim())?;
                                       let (input, _) = is_a(" ")(input)?;
                                       let (input, path) = quoted_argument(input)?;
                                       let (input, _) = eof(input)?;
-                                      Ok( (input, { Listing(CopyTo(path.to_string())) }))
+                                      Ok( (input, Ok(Listing(CopyTo(path.to_string())))))
                                  },
-                                 |input: &'a [u8]| -> IResult<&'a [u8], Action> {
+                                 |input: &'a [u8]| -> IResult<&'a [u8], Result<Action, CommandError>> {
                                       let (input, _) = tag("copyto")(input.trim())?;
                                       let (input, _) = is_a(" ")(input)?;
                                       let (input, account) = quoted_argument(input)?;
                                       let (input, _) = is_a(" ")(input)?;
                                       let (input, path) = quoted_argument(input)?;
                                       let (input, _) = eof(input)?;
-                                      Ok( (input, { Listing(CopyToOtherAccount(account.to_string(), path.to_string())) }))
+                                      Ok( (input, Ok(Listing(CopyToOtherAccount(account.to_string(), path.to_string())))))
                                  },
-                                 |input: &'a [u8]| -> IResult<&'a [u8], Action> {
+                                 |input: &'a [u8]| -> IResult<&'a [u8], Result<Action, CommandError>> {
                                       let (input, _) = tag("moveto")(input.trim())?;
                                       let (input, _) = is_a(" ")(input)?;
                                       let (input, path) = quoted_argument(input)?;
                                       let (input, _) = eof(input)?;
-                                      Ok( (input, { Listing(MoveTo(path.to_string())) }))
+                                      Ok( (input, Ok(Listing(MoveTo(path.to_string())))))
                                  },
-                                 |input: &'a [u8]| -> IResult<&'a [u8], Action> {
+                                 |input: &'a [u8]| -> IResult<&'a [u8], Result<Action, CommandError>> {
                                       let (input, _) = tag("moveto")(input.trim())?;
                                       let (input, _) = is_a(" ")(input)?;
                                       let (input, account) = quoted_argument(input)?;
                                       let (input, _) = is_a(" ")(input)?;
                                       let (input, path) = quoted_argument(input)?;
                                       let (input, _) = eof(input)?;
-                                      Ok( (input, { Listing(MoveToOtherAccount(account.to_string(), path.to_string())) }))
+                                      Ok( (input, Ok(Listing(MoveToOtherAccount(account.to_string(), path.to_string())))))
                                  }
                              ))(input)
                        }
@@ -338,14 +361,14 @@ define_commands!([
                   desc: "import FILESYSTEM_PATH MAILBOX_PATH",
                   tokens: &[One(Literal("import")), One(Filepath), One(MailboxPath)],
                   parser:(
-                      fn import(input: &[u8]) -> IResult<&[u8], Action> {
+                      fn import(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
                           let (input, _) = tag("import")(input.trim())?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, file) = quoted_argument(input)?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, mailbox_path) = quoted_argument(input)?;
                           let (input, _) = eof(input)?;
-                          Ok((input, Listing(Import(file.to_string().into(), mailbox_path.to_string()))))
+                          Ok((input, Ok(Listing(Import(file.to_string().into(), mailbox_path.to_string())))))
                       }
                   )
                 },
@@ -353,10 +376,10 @@ define_commands!([
                    desc: "close non-sticky tabs",
                    tokens: &[One(Literal("close"))],
                    parser: (
-                       fn close(input: &[u8]) -> IResult<&[u8], Action> {
+                       fn close(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
                            let (input, _) = tag("close")(input)?;
                            let (input, _) = eof(input)?;
-                           Ok( (input, { Tab(Close) }))
+                           Ok( (input, Ok(Tab(Close))))
                        }
                    )
                  },
@@ -364,12 +387,12 @@ define_commands!([
                    desc: "go <n>, switch to nth mailbox in this account",
                    tokens: &[One(Literal("goto")), One(MailboxIndexValue)],
                    parser: (
-                       fn goto(input: &[u8]) -> IResult<&[u8], Action> {
+                       fn goto(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
                            let (input, _) = tag("go")(input)?;
                            let (input, _) = is_a(" ")(input)?;
                            let (input, nth) = usize_c(input)?;
                            let (input, _) = eof(input)?;
-                           Ok( (input, { Action::ViewMailbox(nth) }))
+                           Ok( (input, Ok(Action::ViewMailbox(nth))))
                        }
                    )
                  },
@@ -377,12 +400,12 @@ define_commands!([
                    desc: "subsort [date/subject] [asc/desc], sorts first level replies in threads.",
                    tokens: &[One(Literal("subsort")), One(Alternatives(&[to_stream!(One(Literal("date"))), to_stream!(One(Literal("subject")))])), One(Alternatives(&[to_stream!(One(Literal("asc"))), to_stream!(One(Literal("desc")))])) ],
                    parser: (
-                       fn subsort(input: &[u8]) -> IResult<&[u8], Action> {
+                       fn subsort(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
                            let (input, _) = tag("subsort")(input)?;
                            let (input, _) = is_a(" ")(input)?;
                            let (input, p) = pair(sortfield, sortorder)(input)?;
                            let (input, _) = eof(input)?;
-                           Ok((input, SubSort(p.0, p.1)))
+                           Ok((input, Ok(SubSort(p.0, p.1))))
                        }
                    )
                  },
@@ -390,12 +413,12 @@ define_commands!([
                   desc: "sort [date/subject] [asc/desc], sorts threads.",
                    tokens: &[One(Literal("sort")), One(Alternatives(&[to_stream!(One(Literal("date"))), to_stream!(One(Literal("subject")))])), One(Alternatives(&[to_stream!(One(Literal("asc"))), to_stream!(One(Literal("desc")))])) ],
                   parser: (
-                      fn sort(input: &[u8]) -> IResult<&[u8], Action> {
+                      fn sort(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
                           let (input, _) = tag("sort")(input)?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, p) = separated_pair(sortfield, tag(" "), sortorder)(input)?;
                           let (input, _) = eof(input)?;
-                          Ok((input, (Sort(p.0, p.1))))
+                          Ok((input, Ok(Sort(p.0, p.1))))
                       }
                   )
                 },
@@ -403,7 +426,7 @@ define_commands!([
                   desc: "sort <column index> [asc/desc], sorts table columns.",
                    tokens: &[One(Literal("sort")), One(IndexValue), ZeroOrOne(Alternatives(&[to_stream!(One(Literal("asc"))), to_stream!(One(Literal("desc")))])) ],
                   parser: (
-                      fn sort_column(input: &[u8]) -> IResult<&[u8], Action> {
+                      fn sort_column(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
                           let (input, _) = tag("sort")(input)?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, i) = usize_c(input)?;
@@ -414,7 +437,7 @@ define_commands!([
                               (input, order)
                           };
                           let (input, _) = eof(input)?;
-                          Ok((input, (SortColumn(i, order))))
+                          Ok((input, Ok(SortColumn(i, order))))
                       }
                   )
                 },
@@ -422,7 +445,7 @@ define_commands!([
                   desc: "set [plain/threaded/compact/conversations], changes the mail listing view",
                   tokens: &[One(Literal("set")), One(Alternatives(&[to_stream!(One(Literal("plain"))), to_stream!(One(Literal("threaded"))), to_stream!(One(Literal("compact"))), to_stream!(One(Literal("conversations")))]))],
                   parser: (
-                      fn toggle(input: &[u8]) -> IResult<&[u8], Action> {
+                      fn toggle(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
                           let (input, _) = tag("set")(input.trim())?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, ret) = alt((threaded, plain, compact, conversations))(input)?;
@@ -435,12 +458,12 @@ define_commands!([
                   desc: "turn off new notifications for this thread",
                   tokens: &[One(Literal("toggle")), One(Literal("thread_snooze"))],
                   parser: (
-                      fn toggle_thread_snooze(input: &[u8]) -> IResult<&[u8], Action> {
+                      fn toggle_thread_snooze(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
                           let (input, _) = tag("toggle")(input)?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, _) = tag("thread_snooze")(input)?;
                           let (input, _) = eof(input)?;
-                          Ok((input, Listing(ToggleThreadSnooze)))
+                          Ok((input, Ok(Listing(ToggleThreadSnooze))))
                       }
                   )
                 },
@@ -448,12 +471,12 @@ define_commands!([
                   desc: "search <TERM>, searches list with given term",
                   tokens: &[One(Literal("search")), One(RestOfStringValue)],
                   parser:(
-                      fn search(input: &[u8]) -> IResult<&[u8], Action> {
+                      fn search(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
                           let (input, _) = tag("search")(input.trim())?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, string) = map_res(not_line_ending, std::str::from_utf8)(input)?;
                           let (input, _) = eof(input)?;
-                          Ok((input, Listing(Search(String::from(string)))))
+                          Ok((input, Ok(Listing(Search(String::from(string))))))
                       }
                   )
                 },
@@ -461,12 +484,12 @@ define_commands!([
                   desc: "select <TERM>, selects envelopes matching with given term",
                   tokens: &[One(Literal("select")), One(RestOfStringValue)],
                   parser:(
-                      fn select(input: &[u8]) -> IResult<&[u8], Action> {
+                      fn select(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
                           let (input, _) = tag("select")(input.trim())?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, string) = map_res(not_line_ending, std::str::from_utf8)(input)?;
                           let (input, _) = eof(input)?;
-                          Ok((input, Listing(Select(String::from(string)))))
+                          Ok((input, Ok(Listing(Select(String::from(string))))))
                       }
                   )
                 },
@@ -474,12 +497,12 @@ define_commands!([
                   desc: "export-mbox PATH",
                   tokens: &[One(Literal("export-mbox")), One(Filepath)],
                   parser:(
-                      fn export_mbox(input: &[u8]) -> IResult<&[u8], Action> {
+                      fn export_mbox(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
                           let (input, _) = tag("export-mbox")(input.trim())?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, path) = quoted_argument(input.trim())?;
                           let (input, _) = eof(input)?;
-                          Ok((input, Listing(ExportMbox(Some(melib::mbox::MboxFormat::MboxCl2), path.to_string().into()))))
+                          Ok((input, Ok(Listing(ExportMbox(Some(melib::mbox::MboxFormat::MboxCl2), path.to_string().into())))))
                       }
                   )
                 },
@@ -487,7 +510,7 @@ define_commands!([
                   desc: "list-[unsubscribe/post/archive]",
                   tokens: &[One(Alternatives(&[to_stream!(One(Literal("list-archive"))), to_stream!(One(Literal("list-post"))), to_stream!(One(Literal("list-unsubscribe")))]))],
                   parser: (
-                      fn mailinglist(input: &[u8]) -> IResult<&[u8], Action> {
+                      fn mailinglist(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
                           let (input, ret) = alt((
                               map(tag("list-post"), |_| MailingListAction(ListPost))
                               , map(tag("list-unsubscribe"), |_| MailingListAction(
@@ -498,7 +521,7 @@ define_commands!([
                               ))
                           ))(input.trim())?;
                           let (input, _) = eof(input)?;
-                          Ok((input, ret))
+                          Ok((input, Ok(ret)))
                       }
                   )
                 },
@@ -506,14 +529,14 @@ define_commands!([
                   desc: "setenv VAR=VALUE",
                   tokens: &[One(Literal("setenv")), OneOrMore(Seq(&[One(AlphanumericStringValue), One(Literal("=")), One(QuotedStringValue)]))],
                   parser: (
-                      fn setenv(input: &[u8]) -> IResult<&[u8], Action> {
+                      fn setenv(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
                           let (input, _) = tag("setenv")(input.trim())?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, key) = map_res(take_until("="), std::str::from_utf8)(input)?;
                           let (input, _) = tag("=")(input.trim())?;
                           let (input, val) = map_res(not_line_ending, std::str::from_utf8)(input)?;
                           let (input, _) = eof(input)?;
-                          Ok((input, SetEnv(key.to_string(), val.to_string())))
+                          Ok((input, Ok(SetEnv(key.to_string(), val.to_string()))))
                       }
                   )
                 },
@@ -521,12 +544,12 @@ define_commands!([
                   desc: "printenv VAR",
                   tokens: &[],
                   parser:(
-                      fn printenv(input: &[u8]) -> IResult<&[u8], Action> {
+                      fn printenv(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
                           let (input, _) = tag("printenv")(input.ltrim())?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, key) = map_res(not_line_ending, std::str::from_utf8)(input.trim())?;
                           let (input, _) = eof(input)?;
-                          Ok((input, PrintEnv(key.to_string())))
+                          Ok((input, Ok(PrintEnv(key.to_string()))))
                       }
                   )
                 },
@@ -534,13 +557,13 @@ define_commands!([
                   desc: "mailto MAILTO_ADDRESS",
                   tokens: &[One(Literal("mailto")), One(QuotedStringValue)],
                   parser:(
-                      fn mailto(input: &[u8]) -> IResult<&[u8], Action> {
+                      fn mailto(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
                           let (input, _) = tag("mailto")(input.ltrim())?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, val) = map_res(not_line_ending, std::str::from_utf8)(input.trim())?;
                           let (_empty, _) = eof(input)?;
                           let (input, val) = melib::email::parser::generic::mailto(val.as_bytes()).map_err(|err| err.map(Into::into))?;
-                          Ok((input, Compose(Mailto(val))))
+                          Ok((input, Ok(Compose(Mailto(val)))))
                       }
                   )
                 },
@@ -549,27 +572,27 @@ define_commands!([
                   desc: "pipe EXECUTABLE ARGS",
                   tokens: &[One(Literal("pipe")), One(Filepath), ZeroOrMore(QuotedStringValue)],
                   parser:(
-                      fn pipe<'a>(input: &'a [u8]) -> IResult<&'a [u8], Action> {
+                      fn pipe<'a>(input: &'a [u8]) -> IResult<&'a [u8], Result<Action, CommandError>> {
                           alt((
-                                  |input: &'a [u8]| -> IResult<&'a [u8], Action> {
+                                  |input: &'a [u8]| -> IResult<&'a [u8], Result<Action, CommandError>> {
                                       let (input, _) = tag("pipe")(input.trim())?;
                                       let (input, _) = is_a(" ")(input)?;
                                       let (input, bin) = quoted_argument(input)?;
                                       let (input, _) = is_a(" ")(input)?;
                                       let (input, args) = separated_list1(is_a(" "), quoted_argument)(input)?;
                                       let (input, _) = eof(input)?;
-                                      Ok((input, {
+                                      Ok((input, Ok(
                                           View(Pipe(bin.to_string(), args.into_iter().map(String::from).collect::<Vec<String>>()))
-                                      }))
+                                      )))
                                   },
-                                  |input: &'a [u8]| -> IResult<&'a [u8], Action> {
+                                  |input: &'a [u8]| -> IResult<&'a [u8], Result<Action, CommandError>> {
                                       let (input, _) = tag("pipe")(input.trim())?;
                                       let (input, _) = is_a(" ")(input)?;
                                       let (input, bin) = quoted_argument(input.trim())?;
                                       let (input, _) = eof(input)?;
-                                      Ok((input, {
+                                      Ok((input, Ok(
                                           View(Pipe(bin.to_string(), Vec::new()))
-                                      }))
+                                      )))
                                   }
                           ))(input)
                       }
@@ -580,13 +603,13 @@ define_commands!([
                   desc: "filter EXECUTABLE ARGS",
                   tokens: &[One(Literal("filter")), One(Filepath), ZeroOrMore(QuotedStringValue)],
                   parser:(
-                      fn filter(input: &'_ [u8]) -> IResult<&'_ [u8], Action> {
+                      fn filter(input: &'_ [u8]) -> IResult<&'_ [u8], Result<Action, CommandError>> {
                           let (input, _) = tag("filter")(input.trim())?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, cmd) = map_res(not_line_ending, std::str::from_utf8)(input)?;
-                          Ok((input, {
+                          Ok((input, Ok(
                               View(Filter(cmd.to_string()))
-                          }))
+                          )))
                       }
                   )
                 },
@@ -595,34 +618,34 @@ define_commands!([
                   tokens: &[One(
 Alternatives(&[to_stream!(One(Literal("add-attachment")), One(Filepath)), to_stream!(One(Literal("add-attachment-file-picker")))]))],
                   parser:(
-                      fn add_attachment<'a>(input: &'a [u8]) -> IResult<&'a [u8], Action> {
+                      fn add_attachment<'a>(input: &'a [u8]) -> IResult<&'a [u8], Result<Action, CommandError>> {
                           alt((
-                                  |input: &'a [u8]| -> IResult<&'a [u8], Action> {
+                                  |input: &'a [u8]| -> IResult<&'a [u8], Result<Action, CommandError>> {
                                       let (input, _) = tag("add-attachment")(input.trim())?;
                                       let (input, _) = is_a(" ")(input)?;
                                       let (input, _) = tag("<")(input.trim())?;
                                       let (input, _) = is_a(" ")(input)?;
                                       let (input, cmd) = quoted_argument(input)?;
                                       let (input, _) = eof(input)?;
-                                      Ok((input, Compose(AddAttachmentPipe(cmd.to_string()))))
-                                  }, |input: &'a [u8]| -> IResult<&'a [u8], Action> {
+                                      Ok((input, Ok(Compose(AddAttachmentPipe(cmd.to_string())))))
+                                  }, |input: &'a [u8]| -> IResult<&'a [u8], Result<Action, CommandError>> {
                                       let (input, _) = tag("add-attachment")(input.trim())?;
                                       let (input, _) = is_a(" ")(input)?;
                                       let (input, path) = quoted_argument(input)?;
                                       let (input, _) = eof(input)?;
-                                      Ok((input, Compose(AddAttachment(path.to_string()))))
-                                  }, |input: &'a [u8]| -> IResult<&'a [u8], Action> {
+                                      Ok((input, Ok(Compose(AddAttachment(path.to_string())))))
+                                  }, |input: &'a [u8]| -> IResult<&'a [u8], Result<Action, CommandError>> {
                                       let (input, _) = tag("add-attachment-file-picker")(input.trim())?;
                                       let (input, _) = eof(input)?;
-                                      Ok((input, Compose(AddAttachmentFilePicker(None))))
-                                  }, |input: &'a [u8]| -> IResult<&'a [u8], Action> {
+                                      Ok((input, Ok(Compose(AddAttachmentFilePicker(None)))))
+                                  }, |input: &'a [u8]| -> IResult<&'a [u8], Result<Action, CommandError>> {
                                       let (input, _) = tag("add-attachment-file-picker")(input.trim())?;
                                       let (input, _) = is_a(" ")(input)?;
                                       let (input, _) = tag("<")(input.trim())?;
                                       let (input, _) = is_a(" ")(input)?;
                                       let (input, shell) = map_res(not_line_ending, std::str::from_utf8)(input)?;
                                       let (input, _) = eof(input)?;
-                                      Ok((input, Compose(AddAttachmentFilePicker(Some(shell.to_string())))))
+                                      Ok((input, Ok(Compose(AddAttachmentFilePicker(Some(shell.to_string()))))))
                                   }
                               ))(input)
                       }
@@ -632,12 +655,12 @@ Alternatives(&[to_stream!(One(Literal("add-attachment")), One(Filepath)), to_str
                   desc: "remove-attachment INDEX",
                   tokens: &[One(Literal("remove-attachment")), One(IndexValue)],
                   parser:(
-                      fn remove_attachment(input: &[u8]) -> IResult<&[u8], Action> {
+                      fn remove_attachment(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
                           let (input, _) = tag("remove-attachment")(input.trim())?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, idx) = map_res(quoted_argument, usize::from_str)(input)?;
                           let (input, _) = eof(input)?;
-                          Ok((input, Compose(RemoveAttachment(idx))))
+                          Ok((input, Ok(Compose(RemoveAttachment(idx)))))
                       }
                   )
                 },
@@ -645,10 +668,10 @@ Alternatives(&[to_stream!(One(Literal("add-attachment")), One(Filepath)), to_str
                   desc: "save draft",
                   tokens: &[One(Literal("save-draft"))],
                   parser:(
-                      fn save_draft(input: &[u8]) -> IResult<&[u8], Action> {
+                      fn save_draft(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
                           let (input, _) = tag("save-draft")(input.trim())?;
                           let (input, _) = eof(input)?;
-                          Ok((input, Compose(SaveDraft)))
+                          Ok((input, Ok(Compose(SaveDraft))))
                       }
                   )
                 },
@@ -656,12 +679,12 @@ Alternatives(&[to_stream!(One(Literal("add-attachment")), One(Filepath)), to_str
                   desc: "switch between sign/unsign for this draft",
                   tokens: &[One(Literal("toggle")), One(Literal("sign"))],
                   parser:(
-                      fn toggle_sign(input: &[u8]) -> IResult<&[u8], Action> {
+                      fn toggle_sign(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
                           let (input, _) = tag("toggle")(input)?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, _) = tag("sign")(input)?;
                           let (input, _) = eof(input)?;
-                          Ok((input, Compose(ToggleSign)))
+                          Ok((input, Ok(Compose(ToggleSign))))
                       }
                   )
                 },
@@ -669,12 +692,12 @@ Alternatives(&[to_stream!(One(Literal("add-attachment")), One(Filepath)), to_str
                   desc: "toggle encryption for this draft",
                   tokens: &[One(Literal("toggle")), One(Literal("encrypt"))],
                   parser:(
-                      fn toggle_encrypt(input: &[u8]) -> IResult<&[u8], Action> {
+                      fn toggle_encrypt(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
                           let (input, _) = tag("toggle")(input)?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, _) = tag("encrypt")(input)?;
                           let (input, _) = eof(input)?;
-                          Ok((input, Compose(ToggleEncrypt)))
+                          Ok((input, Ok(Compose(ToggleEncrypt))))
                       }
                   )
                 },
@@ -682,14 +705,14 @@ Alternatives(&[to_stream!(One(Literal("add-attachment")), One(Filepath)), to_str
                   desc: "create-mailbox ACCOUNT MAILBOX_PATH",
                   tokens: &[One(Literal("create-mailbox")), One(AccountName), One(MailboxPath)],
                   parser:(
-                      fn create_mailbox(input: &[u8]) -> IResult<&[u8], Action> {
+                      fn create_mailbox(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
                           let (input, _) = tag("create-mailbox")(input.trim())?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, account) = quoted_argument(input)?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, path) = quoted_argument(input)?;
                           let (input, _) = eof(input)?;
-                          Ok((input,Mailbox(account.to_string(), MailboxOperation::Create(path.to_string()))))
+                          Ok((input, Ok(Mailbox(account.to_string(), MailboxOperation::Create(path.to_string())))))
                       }
                   )
                 },
@@ -697,14 +720,14 @@ Alternatives(&[to_stream!(One(Literal("add-attachment")), One(Filepath)), to_str
                   desc: "subscribe-mailbox ACCOUNT MAILBOX_PATH",
                   tokens: &[One(Literal("subscribe-mailbox")), One(AccountName), One(MailboxPath)],
                   parser:(
-                      fn sub_mailbox(input: &[u8]) -> IResult<&[u8], Action> {
+                      fn sub_mailbox(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
                           let (input, _) = tag("subscribe-mailbox")(input.trim())?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, account) = quoted_argument(input)?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, path) = quoted_argument(input)?;
                           let (input, _) = eof(input)?;
-                          Ok((input,Mailbox(account.to_string(), MailboxOperation::Subscribe(path.to_string()))))
+                          Ok((input, Ok(Mailbox(account.to_string(), MailboxOperation::Subscribe(path.to_string())))))
                       }
                   )
                 },
@@ -712,14 +735,14 @@ Alternatives(&[to_stream!(One(Literal("add-attachment")), One(Filepath)), to_str
                   desc: "unsubscribe-mailbox ACCOUNT MAILBOX_PATH",
                   tokens: &[One(Literal("unsubscribe-mailbox")), One(AccountName), One(MailboxPath)],
                   parser:(
-                      fn unsub_mailbox(input: &[u8]) -> IResult<&[u8], Action> {
+                      fn unsub_mailbox(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
                           let (input, _) = tag("unsubscribe-mailbox")(input.trim())?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, account) = quoted_argument(input)?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, path) = quoted_argument(input)?;
                           let (input, _) = eof(input)?;
-                          Ok((input, Mailbox(account.to_string(), MailboxOperation::Unsubscribe(path.to_string()))))
+                          Ok((input, Ok(Mailbox(account.to_string(), MailboxOperation::Unsubscribe(path.to_string())))))
                       }
                   )
                 },
@@ -727,7 +750,7 @@ Alternatives(&[to_stream!(One(Literal("add-attachment")), One(Filepath)), to_str
                   desc: "rename-mailbox ACCOUNT MAILBOX_PATH_SRC MAILBOX_PATH_DEST",
                   tokens: &[One(Literal("rename-mailbox")), One(AccountName), One(MailboxPath), One(MailboxPath)],
                   parser:(
-                      fn rename_mailbox(input: &[u8]) -> IResult<&[u8], Action> {
+                      fn rename_mailbox(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
                           let (input, _) = tag("rename-mailbox")(input.trim())?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, account) = quoted_argument(input)?;
@@ -736,7 +759,7 @@ Alternatives(&[to_stream!(One(Literal("add-attachment")), One(Filepath)), to_str
                           let (input, _) = is_a(" ")(input)?;
                           let (input, dest) = quoted_argument(input)?;
                           let (input, _) = eof(input)?;
-                          Ok((input, Mailbox(account.to_string(), MailboxOperation::Rename(src.to_string(), dest.to_string()))))
+                          Ok((input, Ok(Mailbox(account.to_string(), MailboxOperation::Rename(src.to_string(), dest.to_string())))))
                       }
                   )
                 },
@@ -744,14 +767,14 @@ Alternatives(&[to_stream!(One(Literal("add-attachment")), One(Filepath)), to_str
                   desc: "delete-mailbox ACCOUNT MAILBOX_PATH",
                   tokens: &[One(Literal("delete-mailbox")), One(AccountName), One(MailboxPath)],
                   parser:(
-                      fn delete_mailbox(input: &[u8]) -> IResult<&[u8], Action> {
+                      fn delete_mailbox(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
                           let (input, _) = tag("delete-mailbox")(input.trim())?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, account) = quoted_argument(input)?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, path) = quoted_argument(input)?;
                           let (input, _) = eof(input)?;
-                          Ok ((input, Mailbox(account.to_string(), MailboxOperation::Delete(path.to_string()))))
+                          Ok ((input, Ok(Mailbox(account.to_string(), MailboxOperation::Delete(path.to_string())))))
                       }
                   )
                 },
@@ -759,12 +782,12 @@ Alternatives(&[to_stream!(One(Literal("add-attachment")), One(Filepath)), to_str
                   desc: "reindex ACCOUNT, rebuild account cache in the background",
                   tokens: &[One(Literal("reindex")), One(AccountName)],
                   parser:(
-                      fn reindex(input: &[u8]) -> IResult<&[u8], Action> {
+                      fn reindex(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
                           let (input, _) = tag("reindex")(input.trim())?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, account) = quoted_argument(input)?;
                           let (input, _) = eof(input)?;
-                          Ok( (input, AccountAction(account.to_string(), ReIndex)))
+                          Ok((input, Ok(AccountAction(account.to_string(), ReIndex))))
                       }
                   )
                 },
@@ -772,10 +795,10 @@ Alternatives(&[to_stream!(One(Literal("add-attachment")), One(Filepath)), to_str
                   desc: "opens envelope view in new tab",
                   tokens: &[One(Literal("open-in-tab"))],
                   parser:(
-                      fn open_in_new_tab(input: &[u8]) -> IResult<&[u8], Action> {
+                      fn open_in_new_tab(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
                           let (input, _) = tag("open-in-tab")(input.trim())?;
                           let (input, _) = eof(input)?;
-                          Ok((input, Listing(OpenInNewTab)))
+                          Ok((input, Ok(Listing(OpenInNewTab))))
                       }
                   )
                 },
@@ -783,14 +806,14 @@ Alternatives(&[to_stream!(One(Literal("add-attachment")), One(Filepath)), to_str
                   desc: "save-attachment INDEX PATH",
                   tokens: &[One(Literal("save-attachment")), One(AttachmentIndexValue), One(Filepath)],
                   parser:(
-                      fn save_attachment(input: &[u8]) -> IResult<&[u8], Action> {
+                      fn save_attachment(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
                           let (input, _) = tag("save-attachment")(input.trim())?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, idx) = map_res(quoted_argument, usize::from_str)(input)?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, path) = quoted_argument(input.trim())?;
                           let (input, _) = eof(input)?;
-                          Ok((input, View(SaveAttachment(idx, path.to_string()))))
+                          Ok((input, Ok(View(SaveAttachment(idx, path.to_string())))))
                       }
                   )
                 },
@@ -798,12 +821,12 @@ Alternatives(&[to_stream!(One(Literal("add-attachment")), One(Filepath)), to_str
                   desc: "export-mail PATH",
                   tokens: &[One(Literal("export-mail")), One(Filepath)],
                   parser:(
-                      fn export_mail(input: &[u8]) -> IResult<&[u8], Action> {
+                      fn export_mail(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
                           let (input, _) = tag("export-mail")(input.trim())?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, path) = quoted_argument(input.trim())?;
                           let (input, _) = eof(input)?;
-                          Ok((input, View(ExportMail(path.to_string()))))
+                          Ok((input, Ok(View(ExportMail(path.to_string())))))
                       }
                   )
                 },
@@ -811,10 +834,10 @@ Alternatives(&[to_stream!(One(Literal("add-attachment")), One(Filepath)), to_str
                   desc: "add-addresses-to-contacts",
                   tokens: &[One(Literal("add-addresses-to-contacts"))],
                   parser:(
-                      fn add_addresses_to_contacts(input: &[u8]) -> IResult<&[u8], Action> {
+                      fn add_addresses_to_contacts(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
                           let (input, _) = tag("add-addresses-to-contacts")(input.trim())?;
                           let (input, _) = eof(input)?;
-                          Ok((input, View(AddAddressesToContacts)))
+                          Ok((input, Ok(View(AddAddressesToContacts))))
                       }
                   )
                 },
@@ -822,21 +845,21 @@ Alternatives(&[to_stream!(One(Literal("add-attachment")), One(Filepath)), to_str
                    desc: "tag [add/remove], edits message's tags.",
                    tokens: &[One(Literal("tag")), One(Alternatives(&[to_stream!(One(Literal("add"))), to_stream!(One(Literal("remove")))]))],
                    parser: (
-                       fn _tag<'a>(input: &'a [u8]) -> IResult<&'a [u8], Action> {
+                       fn _tag<'a>(input: &'a [u8]) -> IResult<&'a [u8], Result<Action, CommandError>> {
                            preceded(
                                tag("tag"),
-                               alt((|input: &'a [u8]| -> IResult<&'a [u8], Action> {
+                               alt((|input: &'a [u8]| -> IResult<&'a [u8], Result<Action, CommandError>> {
                                    let (input, _) = tag("add")(input.trim())?;
                                    let (input, _) = is_a(" ")(input)?;
                                    let (input, tag) = quoted_argument(input.trim())?;
                                    let (input, _) = eof(input)?;
-                                   Ok((input, Listing(Tag(Add(tag.to_string())))))
-                               }, |input: &'a [u8]| -> IResult<&'a [u8], Action> {
+                                   Ok((input, Ok(Listing(Tag(Add(tag.to_string()))))))
+                               }, |input: &'a [u8]| -> IResult<&'a [u8], Result<Action, CommandError>> {
                                    let (input, _) = tag("remove")(input.trim())?;
                                    let (input, _) = is_a(" ")(input)?;
                                    let (input, tag) = quoted_argument(input.trim())?;
                                    let (input, _) = eof(input)?;
-                                   Ok((input, Listing(Tag(Remove(tag.to_string())))))
+                                   Ok((input, Ok(Listing(Tag(Remove(tag.to_string()))))))
                                }
                                ))
                            )(input.trim())
@@ -847,14 +870,14 @@ Alternatives(&[to_stream!(One(Literal("add-attachment")), One(Filepath)), to_str
                   desc: "print ACCOUNT SETTING",
                   tokens: &[One(Literal("print")), One(AccountName), One(QuotedStringValue)],
                   parser:(
-                      fn print_account_setting(input: &[u8]) -> IResult<&[u8], Action> {
+                      fn print_account_setting(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
                           let (input, _) = tag("print")(input.trim())?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, account) = quoted_argument(input)?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, setting) = quoted_argument(input)?;
                           let (input, _) = eof(input)?;
-                          Ok((input, AccountAction(account.to_string(), PrintAccountSetting(setting.to_string()))))
+                          Ok((input, Ok(AccountAction(account.to_string(), PrintAccountSetting(setting.to_string())))))
                       }
                   )
                 },
@@ -862,12 +885,12 @@ Alternatives(&[to_stream!(One(Literal("add-attachment")), One(Filepath)), to_str
                   desc: "print SETTING",
                   tokens: &[One(Literal("print")), One(QuotedStringValue)],
                   parser:(
-                      fn print_setting(input: &[u8]) -> IResult<&[u8], Action> {
+                      fn print_setting(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
                           let (input, _) = tag("print")(input.trim())?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, setting) = quoted_argument(input)?;
                           let (input, _) = eof(input)?;
-                          Ok((input, PrintSetting(setting.to_string())))
+                          Ok((input, Ok(PrintSetting(setting.to_string()))))
                       }
                   )
                 },
@@ -875,12 +898,12 @@ Alternatives(&[to_stream!(One(Literal("add-attachment")), One(Filepath)), to_str
                   desc: "toggle mouse support",
                   tokens: &[One(Literal("toggle")), One(Literal("mouse"))],
                   parser:(
-                      fn toggle_mouse(input: &[u8]) -> IResult<&[u8], Action> {
+                      fn toggle_mouse(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
                           let (input, _) = tag("toggle")(input)?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, _) = tag("mouse")(input)?;
                           let (input, _) = eof(input)?;
-                          Ok((input, ToggleMouse))
+                          Ok((input, Ok(ToggleMouse)))
                       }
                   )
                 },
@@ -888,10 +911,10 @@ Alternatives(&[to_stream!(One(Literal("add-attachment")), One(Filepath)), to_str
                   desc: "view and manage mailbox preferences",
                   tokens: &[One(Literal("manage-mailboxes"))],
                   parser:(
-                      fn manage_mailboxes(input: &[u8]) -> IResult<&[u8], Action> {
+                      fn manage_mailboxes(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
                           let (input, _) = tag("manage-mailboxes")(input.trim())?;
                           let (input, _) = eof(input)?;
-                          Ok((input, Tab(ManageMailboxes)))
+                          Ok((input, Ok(Tab(ManageMailboxes))))
                       }
                   )
                 },
@@ -899,10 +922,10 @@ Alternatives(&[to_stream!(One(Literal("add-attachment")), One(Filepath)), to_str
                   desc: "view and manage jobs",
                   tokens: &[One(Literal("manage-jobs"))],
                   parser:(
-                      fn manage_jobs(input: &[u8]) -> IResult<&[u8], Action> {
+                      fn manage_jobs(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
                           let (input, _) = tag("manage-jobs")(input.trim())?;
                           let (input, _) = eof(input)?;
-                          Ok((input, Tab(ManageJobs)))
+                          Ok((input, Ok(Tab(ManageJobs))))
                       }
                   )
                 },
@@ -910,10 +933,10 @@ Alternatives(&[to_stream!(One(Literal("add-attachment")), One(Filepath)), to_str
                   desc: "quit meli",
                   tokens: &[One(Literal("quit"))],
                   parser:(
-                      fn quit(input: &[u8]) -> IResult<&[u8], Action> {
+                      fn quit(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
                           let (input, _) = tag("quit")(input.trim())?;
                           let (input, _) = eof(input.trim())?;
-                          Ok((input, Quit))
+                          Ok((input, Ok(Quit)))
                       }
                   )
                 },
@@ -921,10 +944,10 @@ Alternatives(&[to_stream!(One(Literal("add-attachment")), One(Filepath)), to_str
                   desc: "reload configuration file",
                   tokens: &[One(Literal("reload-config"))],
                   parser:(
-                      fn reload_config(input: &[u8]) -> IResult<&[u8], Action> {
+                      fn reload_config(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
                           let (input, _) = tag("reload-config")(input.trim())?;
                           let (input, _) = eof(input.trim())?;
-                          Ok((input, ReloadConfiguration))
+                          Ok((input, Ok(ReloadConfiguration)))
                       }
                   )
                 }
@@ -951,23 +974,23 @@ fn sortorder(input: &[u8]) -> IResult<&[u8], SortOrder> {
     )(input)
 }
 
-fn threaded(input: &[u8]) -> IResult<&[u8], Action> {
-    map(tag("threaded"), |_| Listing(SetThreaded))(input.trim())
+fn threaded(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
+    map(tag("threaded"), |_| Ok(Listing(SetThreaded)))(input.trim())
 }
 
-fn plain(input: &[u8]) -> IResult<&[u8], Action> {
-    map(tag("plain"), |_| Listing(SetPlain))(input.trim())
+fn plain(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
+    map(tag("plain"), |_| Ok(Listing(SetPlain)))(input.trim())
 }
 
-fn compact(input: &[u8]) -> IResult<&[u8], Action> {
-    map(tag("compact"), |_| Listing(SetCompact))(input.trim())
+fn compact(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
+    map(tag("compact"), |_| Ok(Listing(SetCompact)))(input.trim())
 }
 
-fn conversations(input: &[u8]) -> IResult<&[u8], Action> {
-    map(tag("conversations"), |_| Listing(SetConversations))(input.trim())
+fn conversations(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
+    map(tag("conversations"), |_| Ok(Listing(SetConversations)))(input.trim())
 }
 
-fn listing_action(input: &[u8]) -> IResult<&[u8], Action> {
+fn listing_action(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
     alt((
         toggle,
         seen_flag,
@@ -983,7 +1006,7 @@ fn listing_action(input: &[u8]) -> IResult<&[u8], Action> {
     ))(input)
 }
 
-fn compose_action(input: &[u8]) -> IResult<&[u8], Action> {
+fn compose_action(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
     alt((
         add_attachment,
         mailto,
@@ -994,11 +1017,11 @@ fn compose_action(input: &[u8]) -> IResult<&[u8], Action> {
     ))(input)
 }
 
-fn account_action(input: &[u8]) -> IResult<&[u8], Action> {
+fn account_action(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
     alt((reindex, print_account_setting))(input)
 }
 
-fn view(input: &[u8]) -> IResult<&[u8], Action> {
+fn view(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
     alt((
         filter,
         pipe,
@@ -1008,11 +1031,11 @@ fn view(input: &[u8]) -> IResult<&[u8], Action> {
     ))(input)
 }
 
-fn new_tab(input: &[u8]) -> IResult<&[u8], Action> {
+fn new_tab(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
     alt((manage_mailboxes, manage_jobs, compose_action))(input)
 }
 
-pub fn parse_command(input: &[u8]) -> Result<Action, Error> {
+pub fn parse_command(input: &[u8]) -> Result<Action, CommandError> {
     alt((
         goto,
         listing_action,
@@ -1036,8 +1059,8 @@ pub fn parse_command(input: &[u8]) -> Result<Action, Error> {
         reload_config,
         quit,
     ))(input)
-    .map(|(_, v)| v)
     .map_err(|err| err.into())
+    .and_then(|(_, v)| v)
 }
 
 /// Get command suggestions for input
