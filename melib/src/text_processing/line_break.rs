@@ -39,6 +39,7 @@ pub enum LineBreakCandidate {
     NoBreak, // Not used.
 }
 
+pub use alg::linear;
 use LineBreakCandidate::*;
 
 pub struct LineBreakCandidateIter<'a> {
@@ -837,37 +838,6 @@ fn search_table(c: u32, t: &'static [(u32, u32, LineBreakClass)]) -> LineBreakCl
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_line_breaks() {
-        let s = "Fell past it.\n\n‘Well!’ thought Alice to herself.";
-        let breaks = LineBreakCandidateIter::new(s).collect::<Vec<(usize, LineBreakCandidate)>>();
-        let mut prev = 0;
-        for b in breaks {
-            println!("{:?}", &s[prev..b.0]);
-            prev = b.0;
-        }
-        println!("{:?}", &s[prev..]);
-
-        let s = r#"Τ' άστρα τα κοντά -στη γλυκιά σελήνη
-την ειδή των κρύβουν - τη διαμαντένια,
-άμα φως λαμπρό -στη γή πάσα χύνει,
-όλη ασημένια."#;
-        let breaks = LineBreakCandidateIter::new(s).collect::<Vec<(usize, LineBreakCandidate)>>();
-        let mut prev = 0;
-        for b in breaks {
-            println!("{:?}", &s[prev..b.0]);
-            prev = b.0;
-        }
-        println!("{:?}", &s[prev..]);
-    }
-}
-
-pub use alg::linear;
-
 mod alg {
     use super::super::{grapheme_clusters::TextProcessing, *};
     fn cost(i: usize, j: usize, width: usize, minima: &[usize], offsets: &[usize]) -> usize {
@@ -1184,6 +1154,7 @@ fn split(ret: &mut Vec<String>, mut line: &str, width: usize) {
         line = &line[chop_index..];
     }
 }
+
 fn reflow_helper(
     ret: &mut Vec<String>,
     paragraph: &str,
@@ -1223,42 +1194,6 @@ fn reflow_helper(
         } else {
             ret.push(paragraph);
         }
-    }
-}
-
-#[test]
-fn test_reflow() {
-    let text = r#"`Take some more tea,' the March Hare said to Alice, very 
-earnestly.
-
-`I've had nothing yet,' Alice replied in an offended tone, `so 
-I can't take more.'
-
-`You mean you can't take LESS,' said the Hatter: `it's very 
-easy to take MORE than nothing.'"#;
-    for l in split_lines_reflow(text, Reflow::FormatFlowed, Some(30)) {
-        println!("{}", l);
-    }
-    println!();
-    for l in split_lines_reflow(text, Reflow::No, Some(30)) {
-        println!("{}", l);
-    }
-    println!();
-    let text = r#">>>Take some more tea.
->>I've had nothing yet, so I can't take more.
->You mean you can't take LESS, it's very easy to take 
->MORE than nothing."#;
-    for l in split_lines_reflow(text, Reflow::FormatFlowed, Some(20)) {
-        println!("{}", l);
-    }
-    println!();
-    for l in split_lines_reflow(text, Reflow::No, Some(20)) {
-        println!("{}", l);
-    }
-    println!();
-    use super::_ALICE_CHAPTER_1;
-    for l in split_lines_reflow(_ALICE_CHAPTER_1, Reflow::FormatFlowed, Some(72)) {
-        println!("{}", l);
     }
 }
 
@@ -1809,6 +1744,71 @@ fn reflow_helper2(
             }
         } else {
             ret.push_back(paragraph);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_line_breaks() {
+        let s = "Fell past it.\n\n‘Well!’ thought Alice to herself.";
+        let breaks = LineBreakCandidateIter::new(s).collect::<Vec<(usize, LineBreakCandidate)>>();
+        let mut prev = 0;
+        for b in breaks {
+            println!("{:?}", &s[prev..b.0]);
+            prev = b.0;
+        }
+        println!("{:?}", &s[prev..]);
+
+        let s = r#"Τ' άστρα τα κοντά -στη γλυκιά σελήνη
+την ειδή των κρύβουν - τη διαμαντένια,
+άμα φως λαμπρό -στη γή πάσα χύνει,
+όλη ασημένια."#;
+        let breaks = LineBreakCandidateIter::new(s).collect::<Vec<(usize, LineBreakCandidate)>>();
+        let mut prev = 0;
+        for b in breaks {
+            println!("{:?}", &s[prev..b.0]);
+            prev = b.0;
+        }
+        println!("{:?}", &s[prev..]);
+    }
+
+    #[test]
+    fn test_reflow() {
+        let text = r#"`Take some more tea,' the March Hare said to Alice, very 
+earnestly.
+
+`I've had nothing yet,' Alice replied in an offended tone, `so 
+I can't take more.'
+
+`You mean you can't take LESS,' said the Hatter: `it's very 
+easy to take MORE than nothing.'"#;
+        for l in split_lines_reflow(text, Reflow::FormatFlowed, Some(30)) {
+            println!("{}", l);
+        }
+        println!();
+        for l in split_lines_reflow(text, Reflow::No, Some(30)) {
+            println!("{}", l);
+        }
+        println!();
+        let text = r#">>>Take some more tea.
+>>I've had nothing yet, so I can't take more.
+>You mean you can't take LESS, it's very easy to take 
+>MORE than nothing."#;
+        for l in split_lines_reflow(text, Reflow::FormatFlowed, Some(20)) {
+            println!("{}", l);
+        }
+        println!();
+        for l in split_lines_reflow(text, Reflow::No, Some(20)) {
+            println!("{}", l);
+        }
+        println!();
+        use crate::text_processing::_ALICE_CHAPTER_1;
+        for l in split_lines_reflow(_ALICE_CHAPTER_1, Reflow::FormatFlowed, Some(72)) {
+            println!("{}", l);
         }
     }
 }

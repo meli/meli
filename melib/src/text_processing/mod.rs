@@ -226,25 +226,6 @@ impl GlobMatch for str {
     }
 }
 
-#[test]
-fn test_globmatch() {
-    assert!("INBOX".matches_glob("INBOX"));
-    assert!("INBOX/".matches_glob("INBOX"));
-    assert!("INBOX".matches_glob("INBO?"));
-
-    assert!("INBOX/Sent".matches_glob("INBOX/*"));
-    assert!(!"INBOX/Sent".matches_glob("INBOX"));
-    assert!(!"INBOX/Sent".matches_glob("*/Drafts"));
-    assert!("INBOX/Sent".matches_glob("*/Sent"));
-
-    assert!("INBOX/Archives/2047".matches_glob("*"));
-    assert!("INBOX/Archives/2047".matches_glob("INBOX/*/2047"));
-    assert!("INBOX/Archives/2047".matches_glob("INBOX/Archives/2*047"));
-    assert!("INBOX/Archives/2047".matches_glob("INBOX/Archives/204?"));
-
-    assert!(!"INBOX/Lists/".matches_glob("INBOX/Lists/*"));
-}
-
 pub const _ALICE_CHAPTER_1: &str = r#"CHAPTER I. Down the Rabbit-Hole
 
 Alice was beginning to get very tired of sitting by her sister on the 
@@ -295,3 +276,27 @@ she fell past it.
 think nothing of tumbling down stairs! How brave they’ll all think me at 
 home! Why, I wouldn’t say anything about it, even if I fell off the top 
 of the house!’ (Which was very likely true.)"#;
+
+#[cfg(test)]
+mod tests {
+    use crate::text_processing::GlobMatch;
+
+    #[test]
+    fn test_globmatch() {
+        assert!("INBOX".matches_glob("INBOX"));
+        assert!("INBOX/".matches_glob("INBOX"));
+        assert!("INBOX".matches_glob("INBO?"));
+
+        assert!("INBOX/Sent".matches_glob("INBOX/*"));
+        assert!(!"INBOX/Sent".matches_glob("INBOX"));
+        assert!(!"INBOX/Sent".matches_glob("*/Drafts"));
+        assert!("INBOX/Sent".matches_glob("*/Sent"));
+
+        assert!("INBOX/Archives/2047".matches_glob("*"));
+        assert!("INBOX/Archives/2047".matches_glob("INBOX/*/2047"));
+        assert!("INBOX/Archives/2047".matches_glob("INBOX/Archives/2*047"));
+        assert!("INBOX/Archives/2047".matches_glob("INBOX/Archives/204?"));
+
+        assert!(!"INBOX/Lists/".matches_glob("INBOX/Lists/*"));
+    }
+}

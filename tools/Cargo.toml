@@ -39,7 +39,7 @@ path = "src/embed.rs"
 [dependencies]
 crossbeam = { version = "^0.8" }
 meli = { version = "0.7" }
-melib = { version = "0.7", features = ["debug-tracing", "unicode_algorithms"] }
+melib = { version = "0.7", features = ["debug-tracing", "unicode-algorithms"] }
 nix = { version = "^0.24", default-features = false }
 signal-hook = { version = "^0.3", default-features = false }
 signal-hook-registry = { version = "1.2.0", default-features = false }

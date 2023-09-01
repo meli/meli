@@ -83,14 +83,19 @@ impl KMP for str {
     }
 }
 
-#[test]
-fn test_search() {
-    use super::_ALICE_CHAPTER_1;
-    for ind in _ALICE_CHAPTER_1.kmp_search("Alice") {
-        println!(
-            "{:#?}",
-            &_ALICE_CHAPTER_1
-                [ind.saturating_sub(0)..std::cmp::min(_ALICE_CHAPTER_1.len(), ind + 25)]
-        );
+#[cfg(test)]
+mod tests {
+    use crate::text_processing::search::KMP;
+
+    #[test]
+    fn test_search() {
+        use crate::text_processing::_ALICE_CHAPTER_1;
+        for ind in _ALICE_CHAPTER_1.kmp_search("Alice") {
+            println!(
+                "{:#?}",
+                &_ALICE_CHAPTER_1
+                    [ind.saturating_sub(0)..std::cmp::min(_ALICE_CHAPTER_1.len(), ind + 25)]
+            );
+        }
     }
 }

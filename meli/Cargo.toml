@@ -52,7 +52,6 @@ structopt = { version = "0.3.14", default-features = false }
 svg_crate = { version = "^0.13", optional = true, package = "svg" }
 termion = { version = "1.5.1", default-features = false }
 toml = { version = "0.5.6", default-features = false, features = ["preserve_order", ] }
-unicode-segmentation = "1.2.1" # >:c
 xdg = "2.1.0"
 
 [target.'cfg(target_os="linux")'.dependencies]
@@ -71,7 +70,7 @@ regex = "1"
 tempfile = "3.3"
 
 [features]
-default = ["sqlite3", "notmuch", "regexp", "smtp", "dbus-notifications", "gpgme", "cli-docs", "jmap"]
+default = ["sqlite3", "notmuch", "regexp", "smtp", "dbus-notifications", "gpgme", "cli-docs", "jmap", "text-processing"]
 notmuch = ["melib/notmuch", ]
 jmap = ["melib/jmap",]
 sqlite3 = ["melib/sqlite3"]
@@ -81,6 +80,7 @@ regexp = ["pcre2"]
 dbus-notifications = ["notify-rust",]
 cli-docs = ["flate2"]
 svgscreenshot = ["svg_crate"]
+text-processing = ["melib/unicode-algorithms"]
 gpgme = ["melib/gpgme"]
 
 # Print tracing logs as meli runs in stderr

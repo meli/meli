@@ -64,7 +64,7 @@ stderrlog = "^0.5"
 flate2 = { version = "1.0.16" }
 
 [features]
-default = ["unicode-algorithms", "imap", "nntp", "maildir", "mbox", "vcard", "smtp"]
+default = ["imap", "nntp", "maildir", "mbox", "vcard", "smtp"]
 
 debug-tracing = []
 gpgme = []

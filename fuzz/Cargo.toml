@@ -13,7 +13,7 @@ libfuzzer-sys = "0.3"
 
 [dependencies.melib]
 path = "../melib"
-features = ["unicode_algorithms"]
+features = ["unicode-algorithms"]
 
 # Prevent this from interfering with workspaces
 [workspace]

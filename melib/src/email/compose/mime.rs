@@ -20,14 +20,14 @@
  */
 
 use super::*;
-#[cfg(feature = "unicode_algorithms")]
+#[cfg(feature = "text-processing")]
 use crate::text_processing::grapheme_clusters::TextProcessing;
 
 pub fn encode_header(value: &str) -> String {
     let mut ret = String::with_capacity(value.len());
     let mut is_current_window_ascii = true;
     let mut current_window_start = 0;
-    #[cfg(feature = "unicode_algorithms")]
+    #[cfg(feature = "text-processing")]
     {
         let graphemes = value.graphemes_indices();
         for (idx, g) in graphemes {
@@ -81,7 +81,7 @@ pub fn encode_header(value: &str) -> String {
             }
         }
     }
-    #[cfg(not(feature = "unicode_algorithms"))]
+    #[cfg(not(feature = "text-processing"))]
     {
         /* [ref:VERIFY] [ref:TODO]: test this. If it works as fine as the one above, there's no need to
          * keep the above implementation. */

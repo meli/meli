@@ -125,6 +125,10 @@ impl HeaderMap {
         Self::default()
     }
 
+    pub fn new() -> Self {
+        Self::default()
+    }
+
     pub fn get_mut<T: TryInto<HeaderName> + std::fmt::Debug>(
         &mut self,
         key: T,

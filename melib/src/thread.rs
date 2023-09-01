@@ -52,7 +52,7 @@ pub use iterators::*;
 use smallvec::SmallVec;
 use uuid::Uuid;
 
-#[cfg(feature = "unicode_algorithms")]
+#[cfg(feature = "text-processing")]
 use crate::text_processing::grapheme_clusters::*;
 
 type Envelopes = Arc<RwLock<HashMap<EnvelopeHash, Envelope>>>;
@@ -1219,13 +1219,13 @@ impl Threads {
                 }
                 let ma = &envelopes[&a.unwrap()];
                 let mb = &envelopes[&b.unwrap()];
-                #[cfg(feature = "unicode_algorithms")]
+                #[cfg(feature = "text-processing")]
                 {
                     ma.subject()
                         .split_graphemes()
                         .cmp(&mb.subject().split_graphemes())
                 }
-                #[cfg(not(feature = "unicode_algorithms"))]
+                #[cfg(not(feature = "text-processing"))]
                 {
                     ma.subject().cmp(&mb.subject())
                 }
@@ -1248,7 +1248,7 @@ impl Threads {
                 }
                 let ma = &envelopes[&a.unwrap()];
                 let mb = &envelopes[&b.unwrap()];
-                #[cfg(feature = "unicode_algorithms")]
+                #[cfg(feature = "text-processing")]
                 {
                     mb.subject()
                         .as_ref()
@@ -1256,7 +1256,7 @@ impl Threads {
                         .cmp(&ma.subject().split_graphemes())
                 }
 
-                #[cfg(not(feature = "unicode_algorithms"))]
+                #[cfg(not(feature = "text-processing"))]
                 {
                     mb.subject().as_ref().cmp(&ma.subject())
                 }
@@ -1299,13 +1299,13 @@ impl Threads {
                 }
                 let ma = &envelopes[&a.unwrap()];
                 let mb = &envelopes[&b.unwrap()];
-                #[cfg(feature = "unicode_algorithms")]
+                #[cfg(feature = "text-processing")]
                 {
                     ma.subject()
                         .split_graphemes()
                         .cmp(&mb.subject().split_graphemes())
                 }
-                #[cfg(not(feature = "unicode_algorithms"))]
+                #[cfg(not(feature = "text-processing"))]
                 {
                     ma.subject().cmp(&mb.subject())
                 }
@@ -1328,7 +1328,7 @@ impl Threads {
                 }
                 let ma = &envelopes[&a.unwrap()];
                 let mb = &envelopes[&b.unwrap()];
-                #[cfg(feature = "unicode_algorithms")]
+                #[cfg(feature = "text-processing")]
                 {
                     mb.subject()
                         .as_ref()
@@ -1336,7 +1336,7 @@ impl Threads {
                         .cmp(&ma.subject().split_graphemes())
                 }
 
-                #[cfg(not(feature = "unicode_algorithms"))]
+                #[cfg(not(feature = "text-processing"))]
                 {
                     mb.subject().as_ref().cmp(&ma.subject())
                 }
@@ -1375,13 +1375,13 @@ impl Threads {
                 }
                 let ma = &envelopes[&a.unwrap()];
                 let mb = &envelopes[&b.unwrap()];
-                #[cfg(feature = "unicode_algorithms")]
+                #[cfg(feature = "text-processing")]
                 {
                     ma.subject()
                         .split_graphemes()
                         .cmp(&mb.subject().split_graphemes())
                 }
-                #[cfg(not(feature = "unicode_algorithms"))]
+                #[cfg(not(feature = "text-processing"))]
                 {
                     ma.subject().cmp(&mb.subject())
                 }
@@ -1404,7 +1404,7 @@ impl Threads {
                 }
                 let ma = &envelopes[&a.unwrap()];
                 let mb = &envelopes[&b.unwrap()];
-                #[cfg(feature = "unicode_algorithms")]
+                #[cfg(feature = "text-processing")]
                 {
                     mb.subject()
                         .as_ref()
@@ -1412,7 +1412,7 @@ impl Threads {
                         .cmp(&ma.subject().split_graphemes())
                 }
 
-                #[cfg(not(feature = "unicode_algorithms"))]
+                #[cfg(not(feature = "text-processing"))]
                 {
                     mb.subject().as_ref().cmp(&ma.subject())
                 }

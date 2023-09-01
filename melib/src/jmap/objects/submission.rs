@@ -290,8 +290,8 @@ pub struct EmailSubmissionSet {
     #[serde(flatten)]
     pub set_call: Set<EmailSubmissionObject>,
     /// onSuccessUpdateEmail: `Id[PatchObject]|null`
-    /// A map of [`EmailSubmissionObject`] id to an object containing properties to
-    /// update on the [`Email`](EmailObject) object referenced by the
+    /// A map of [`EmailSubmissionObject`] id to an object containing properties
+    /// to update on the [`Email`](EmailObject) object referenced by the
     /// [`EmailSubmissionObject`] if the create/update/destroy succeeds.  (For
     /// references to EmailSubmissions created in the same
     /// `/set` invocation, this is equivalent to a creation-reference, so the id
