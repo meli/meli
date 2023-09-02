@@ -32,6 +32,7 @@ pub mod percent_encoding;
 pub mod shellexpand;
 #[cfg(feature = "sqlite3")]
 pub mod sqlite3;
+pub mod xdg;
 
 pub mod html_escape {
     //! HTML Coded Character Set

@@ -190,7 +190,6 @@ pub extern crate indexmap;
 pub extern crate smallvec;
 pub extern crate smol;
 pub extern crate uuid;
-pub extern crate xdg_utils;
 
 #[derive(Debug, Copy, Clone)]
 #[repr(transparent)]

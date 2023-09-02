@@ -24,7 +24,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-use melib::xdg_utils::query_default_app;
+use melib::utils::xdg::query_default_app;
 
 use super::*;
 

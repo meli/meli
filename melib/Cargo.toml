@@ -54,7 +54,6 @@ socket2 = { version = "0.4", features = [] }
 unicode-segmentation = { version = "1.2.1", default-features = false, optional = true }
 uuid = { version = "^1", features = ["serde", "v4", "v5"] }
 xdg = "2.1.0"
-xdg-utils = "^0.4.0"
 
 [dev-dependencies]
 mailin-embedded = { version = "0.7", features = ["rtls"] }

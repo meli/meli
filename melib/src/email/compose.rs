@@ -29,7 +29,6 @@ use std::{
 };
 
 use data_encoding::BASE64_MIME;
-use xdg_utils::query_mime_info;
 
 use super::*;
 use crate::{
@@ -37,7 +36,7 @@ use crate::{
         attachment_types::{Charset, ContentTransferEncoding, ContentType, MultipartType},
         attachments::AttachmentBuilder,
     },
-    utils::{datetime, shellexpand::ShellExpandTrait},
+    utils::{datetime, shellexpand::ShellExpandTrait, xdg::query_mime_info},
 };
 
 pub mod mime;
