@@ -61,6 +61,7 @@ pub struct MailView {
     forward_dialog: Option<Box<UIDialog<Option<PendingReplyAction>>>>,
     theme_default: ThemeAttribute,
     active_jobs: HashSet<JobId>,
+    initialized: bool,
     state: MailViewState,
     main_loop_handler: MainLoopHandler,
     id: ComponentId,
@@ -86,6 +87,7 @@ impl Drop for MailView {
 impl MailView {
     pub fn new(
         coordinates: Option<(AccountHash, MailboxHash, EnvelopeHash)>,
+        initialize_now: bool,
         context: &mut Context,
     ) -> Self {
         let mut ret = MailView {
@@ -95,12 +97,15 @@ impl MailView {
             forward_dialog: None,
             theme_default: crate::conf::value(context, "mail.view.body"),
             active_jobs: Default::default(),
+            initialized: false,
             state: MailViewState::default(),
             main_loop_handler: context.main_loop_handler.clone(),
             id: ComponentId::default(),
         };
 
-        ret.init_futures(context);
+        if initialize_now {
+            ret.init_futures(context);
+        }
         ret
     }
 
@@ -163,6 +168,7 @@ impl MailView {
         if let Some(p) = pending_action {
             self.perform_action(p, context);
         }
+        self.initialized = true;
     }
 
     fn perform_action(&mut self, action: PendingReplyAction, context: &mut Context) {
@@ -284,6 +290,10 @@ impl Component for MailView {
             return;
         };
 
+        if !self.initialized {
+            self.init_futures(context);
+            return;
+        }
         {
             let account = &context.accounts[&coordinates.0];
             if !account.contains_key(coordinates.2) {
@@ -782,7 +792,7 @@ impl Component for MailView {
                 };
             }
             UIEvent::Action(Listing(OpenInNewTab)) => {
-                let mut new_tab = Self::new(self.coordinates, context);
+                let mut new_tab = Self::new(self.coordinates, true, context);
                 new_tab.set_dirty(true);
                 context
                     .replies

@@ -182,10 +182,9 @@ impl ThreadView {
         #[inline(always)]
         fn make_entry(
             i: (usize, ThreadNodeHash, usize),
-            account_hash: AccountHash,
-            mailbox_hash: MailboxHash,
-            msg_hash: EnvelopeHash,
+            (account_hash, mailbox_hash, msg_hash): (AccountHash, MailboxHash, EnvelopeHash),
             seen: bool,
+            initialize_now: bool,
             timestamp: UnixTimestamp,
             context: &mut Context,
         ) -> ThreadEntry {
@@ -195,6 +194,7 @@ impl ThreadView {
                 indentation: ind,
                 mailview: Box::new(MailView::new(
                     Some((account_hash, mailbox_hash, msg_hash)),
+                    initialize_now,
                     context,
                 )),
                 msg_hash,
@@ -214,6 +214,34 @@ impl ThreadView {
         }
         let (account_hash, mailbox_hash, _) = self.coordinates;
 
+        // Find out how many entries there are going to be, and prioritize
+        // initialization to the open entry and the most recent ones.
+        //
+        // This helps skip initializing the whole thread at once, which will make the UI
+        // loading slower.
+        //
+        // This won't help at all if the latest entry is a reply to an older entry but
+        // oh well.
+        let mut total_entries = vec![];
+        for (_, thread_node_hash) in threads.thread_iter(self.thread_group) {
+            if let Some(msg_hash) = threads.thread_nodes()[&thread_node_hash].message() {
+                if Some(msg_hash) == expanded_hash {
+                    continue;
+                }
+                let env_ref = collection.get_env(msg_hash);
+                total_entries.push((msg_hash, env_ref.timestamp));
+            };
+        }
+        total_entries.sort_by_key(|e| std::cmp::Reverse(e.1));
+        let tokens = f64::from(u32::try_from(total_entries.len()).unwrap_or(0)) * 0.29;
+        let tokens = tokens.ceil() as usize;
+        total_entries.truncate(tokens);
+
+        // Now, only the expanded envelope plus the ones that remained in total_entries
+        // (around 30% of the total messages in the thread) will be scheduled
+        // for loading immediately. The others will be lazily loaded when the
+        // user opens them for reading.
+
         let thread_iter = threads.thread_iter(self.thread_group);
         self.entries.clear();
         let mut earliest_unread = 0;
@@ -231,12 +259,29 @@ impl ThreadView {
                     }
                     (env_ref.is_seen(), env_ref.timestamp)
                 };
+                let initialize_now = if total_entries.is_empty() {
+                    false
+                } else {
+                    // ExtractIf but it hasn't been stabilized yet.
+                    // https://doc.rust-lang.org/std/vec/struct.Vec.html#method.extract_if
+                    let mut i = 0;
+                    let mut result = false;
+                    while i < total_entries.len() {
+                        if total_entries[i].0 == msg_hash {
+                            total_entries.remove(i);
+                            result = true;
+                            break;
+                        } else {
+                            i += 1;
+                        }
+                    }
+                    result
+                };
                 make_entry(
                     (ind, thread_node_hash, line),
-                    account_hash,
-                    mailbox_hash,
-                    msg_hash,
+                    (account_hash, mailbox_hash, msg_hash),
                     is_seen,
+                    initialize_now || expanded_hash == Some(msg_hash),
                     timestamp,
                     context,
                 )
