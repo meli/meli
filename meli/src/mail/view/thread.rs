@@ -1024,7 +1024,7 @@ impl Component for ThreadView {
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         if let UIEvent::Action(Listing(OpenInNewTab)) = event {
             /* Handle this before self.mailview does */
-            let new_tab = Self::new(
+            let mut new_tab = Self::new(
                 self.coordinates,
                 self.thread_group,
                 Some(self.entries[self.expanded_pos].msg_hash),
@@ -1032,6 +1032,7 @@ impl Component for ThreadView {
                 Some(self.focus),
                 context,
             );
+            new_tab.set_dirty(true);
             context
                 .replies
                 .push_back(UIEvent::Action(Tab(New(Some(Box::new(new_tab))))));

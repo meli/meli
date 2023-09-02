@@ -356,13 +356,6 @@ impl Component for MailView {
     }
 
     fn process_event(&mut self, mut event: &mut UIEvent, context: &mut Context) -> bool {
-        let Some(coordinates) = self.coordinates else {
-            return false;
-        };
-        if coordinates.0.is_null() || coordinates.1.is_null() {
-            return false;
-        }
-
         if let Some(ref mut s) = self.contact_selector {
             if s.process_event(event, context) {
                 return true;
@@ -373,6 +366,13 @@ impl Component for MailView {
             if s.process_event(event, context) {
                 return true;
             }
+        }
+
+        let Some(coordinates) = self.coordinates else {
+            return false;
+        };
+        if coordinates.0.is_null() || coordinates.1.is_null() {
+            return false;
         }
 
         /* If envelope data is loaded, pass it to envelope views */
@@ -612,8 +612,12 @@ impl Component for MailView {
             UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Alt(''))
                 if self.contact_selector.is_some() || self.forward_dialog.is_some() =>
             {
-                self.contact_selector = None;
-                self.forward_dialog = None;
+                if let Some(s) = self.contact_selector.take() {
+                    s.unrealize(context);
+                }
+                if let Some(s) = self.forward_dialog.take() {
+                    s.unrealize(context);
+                }
                 self.set_dirty(true);
                 return true;
             }
@@ -778,7 +782,8 @@ impl Component for MailView {
                 };
             }
             UIEvent::Action(Listing(OpenInNewTab)) => {
-                let new_tab = Self::new(self.coordinates, context);
+                let mut new_tab = Self::new(self.coordinates, context);
+                new_tab.set_dirty(true);
                 context
                     .replies
                     .push_back(UIEvent::Action(Tab(New(Some(Box::new(new_tab))))));

@@ -170,12 +170,14 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> Component f
                 for e in self.entries.iter_mut() {
                     e.1 = false;
                 }
-                self.done = true;
-                if let Some(event) = self.done() {
-                    context.replies.push_back(event);
+                if !self.done {
                     self.unrealize(context);
                 }
-                return true;
+                self.done = true;
+                _ = self.done();
+                context.replies.push_back(self.cancel());
+
+                return false;
             }
             (UIEvent::Input(Key::Char('\n')), SelectorCursor::Cancel) if !self.single_only => {
                 for e in self.entries.iter_mut() {
@@ -495,12 +497,14 @@ impl Component for UIConfirmationDialog {
                 for e in self.entries.iter_mut() {
                     e.1 = false;
                 }
-                self.done = true;
-                if let Some(event) = self.done() {
-                    context.replies.push_back(event);
+                if !self.done {
                     self.unrealize(context);
                 }
-                return true;
+                self.done = true;
+                _ = self.done();
+                context.replies.push_back(self.cancel());
+
+                return false;
             }
             (UIEvent::Input(Key::Char('\n')), SelectorCursor::Cancel) if !self.single_only => {
                 for e in self.entries.iter_mut() {
@@ -950,6 +954,11 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> UIDialog<T>
             )
         })
     }
+
+    fn cancel(&mut self) -> UIEvent {
+        let Self { ref id, .. } = self;
+        UIEvent::CanceledUIDialog(*id)
+    }
 }
 
 impl UIConfirmationDialog {
@@ -971,5 +980,10 @@ impl UIConfirmationDialog {
                     .any(std::convert::identity),
             )
         })
+    }
+
+    fn cancel(&mut self) -> UIEvent {
+        let Self { ref id, .. } = self;
+        UIEvent::CanceledUIDialog(*id)
     }
 }
