@@ -66,19 +66,6 @@ pub struct MailView {
     id: ComponentId,
 }
 
-impl Clone for MailView {
-    fn clone(&self) -> Self {
-        MailView {
-            contact_selector: None,
-            forward_dialog: None,
-            state: MailViewState::default(),
-            active_jobs: self.active_jobs.clone(),
-            main_loop_handler: self.main_loop_handler.clone(),
-            ..*self
-        }
-    }
-}
-
 impl std::fmt::Display for MailView {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "view mail")
@@ -791,9 +778,10 @@ impl Component for MailView {
                 };
             }
             UIEvent::Action(Listing(OpenInNewTab)) => {
+                let new_tab = Self::new(self.coordinates, context);
                 context
                     .replies
-                    .push_back(UIEvent::Action(Tab(New(Some(Box::new(self.clone()))))));
+                    .push_back(UIEvent::Action(Tab(New(Some(Box::new(new_tab))))));
                 return true;
             }
             _ => {}

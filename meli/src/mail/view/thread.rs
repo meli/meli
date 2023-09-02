@@ -26,7 +26,7 @@ use melib::UnixTimestamp;
 use super::*;
 use crate::components::PageMovement;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 struct ThreadEntry {
     index: (usize, ThreadNodeHash, usize),
     /// (indentation, thread_node index, line number in listing)
@@ -48,7 +48,7 @@ pub enum ThreadViewFocus {
     MailView,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default)]
 pub struct ThreadView {
     new_cursor_pos: usize,
     cursor_pos: usize,
@@ -116,7 +116,7 @@ impl ThreadView {
             return;
         }
 
-        let old_entries = self.entries.clone();
+        let old_entries = std::mem::take(&mut self.entries);
 
         let old_focused_entry = if self.entries.len() > self.cursor_pos {
             Some(self.entries.remove(self.cursor_pos))
@@ -1024,9 +1024,17 @@ impl Component for ThreadView {
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         if let UIEvent::Action(Listing(OpenInNewTab)) = event {
             /* Handle this before self.mailview does */
+            let new_tab = Self::new(
+                self.coordinates,
+                self.thread_group,
+                Some(self.entries[self.expanded_pos].msg_hash),
+                false,
+                Some(self.focus),
+                context,
+            );
             context
                 .replies
-                .push_back(UIEvent::Action(Tab(New(Some(Box::new(self.clone()))))));
+                .push_back(UIEvent::Action(Tab(New(Some(Box::new(new_tab))))));
             return true;
         }
 
@@ -1047,7 +1055,7 @@ impl Component for ThreadView {
             {
                 if self.cursor_pos > 0 {
                     self.new_cursor_pos = self.new_cursor_pos.saturating_sub(1);
-                    self.dirty = true;
+                    self.set_dirty(true);
                 }
                 true
             }
@@ -1057,7 +1065,7 @@ impl Component for ThreadView {
                 let height = self.visible_entries.iter().flat_map(|v| v.iter()).count();
                 if height > 0 && self.new_cursor_pos + 1 < height {
                     self.new_cursor_pos += 1;
-                    self.dirty = true;
+                    self.set_dirty(true);
                 }
                 true
             }
@@ -1065,24 +1073,24 @@ impl Component for ThreadView {
                 if shortcut!(key == shortcuts[Shortcuts::THREAD_VIEW]["prev_page"]) =>
             {
                 self.movement = Some(PageMovement::PageUp(1));
-                self.dirty = true;
+                self.set_dirty(true);
                 true
             }
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Shortcuts::THREAD_VIEW]["next_page"]) =>
             {
                 self.movement = Some(PageMovement::PageDown(1));
-                self.dirty = true;
+                self.set_dirty(true);
                 true
             }
             UIEvent::Input(ref k) if shortcut!(k == shortcuts[Shortcuts::GENERAL]["home_page"]) => {
                 self.movement = Some(PageMovement::Home);
-                self.dirty = true;
+                self.set_dirty(true);
                 true
             }
             UIEvent::Input(ref k) if shortcut!(k == shortcuts[Shortcuts::GENERAL]["end_page"]) => {
                 self.movement = Some(PageMovement::End);
-                self.dirty = true;
+                self.set_dirty(true);
                 true
             }
             UIEvent::Input(ref k)
@@ -1124,7 +1132,7 @@ impl Component for ThreadView {
                 self.reversed = !self.reversed;
                 let expanded_hash = self.entries[self.expanded_pos].msg_hash;
                 self.initiate(Some(expanded_hash), false, context);
-                self.dirty = true;
+                self.set_dirty(true);
                 true
             }
             UIEvent::Input(ref key)
@@ -1156,7 +1164,7 @@ impl Component for ThreadView {
                 }
                 self.cursor_pos = self.new_cursor_pos;
                 self.recalc_visible_entries();
-                self.dirty = true;
+                self.set_dirty(true);
                 true
             }
             UIEvent::Resize | UIEvent::VisibilityChange(true) => {
