@@ -264,6 +264,7 @@ shortcut_key_values! { "thread-view",
         prev_page |> "Go to previous page." |> Key::PageUp,
         reverse_thread_order |> "reverse thread order" |> Key::Ctrl('r'),
         toggle_mailview |> "toggle mail view visibility" |> Key::Char('p'),
-        toggle_threadview |> "toggle thread view visibility" |> Key::Char('t')
+        toggle_threadview |> "toggle thread view visibility" |> Key::Char('t'),
+        toggle_layout |> "Toggle between horizontal and vertical layout." |> Key::Char(' ')
     }
 }

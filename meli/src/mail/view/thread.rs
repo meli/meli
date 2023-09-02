@@ -62,7 +62,7 @@ pub struct ThreadView {
     visible_entries: Vec<Vec<usize>>,
     indentation_colors: [ThemeAttribute; 6],
     use_color: bool,
-
+    horizontal: Option<bool>,
     movement: Option<PageMovement>,
     dirty: bool,
     content: CellBuffer,
@@ -104,6 +104,7 @@ impl ThreadView {
                 crate::conf::value(context, "mail.view.thread.indentation.f"),
             ],
             use_color: context.settings.terminal.use_color(),
+            horizontal: None,
             ..Default::default()
         };
         view.initiate(expanded_hash, go_to_first_unread, context);
@@ -794,7 +795,7 @@ impl ThreadView {
                     (set_y(upper_left, y), set_x(bottom_right, mid - 1)),
                     context,
                 );
-                let upper_left = (mid + 1, get_y(upper_left) + y - 1);
+                let upper_left = (mid + 1, get_y(upper_left));
                 self.entries[self.new_expanded_pos].mailview.draw(
                     grid,
                     (upper_left, bottom_right),
@@ -1058,10 +1059,13 @@ impl Component for ThreadView {
             self.entries[self.new_expanded_pos]
                 .mailview
                 .draw(grid, area, context);
-        } else if total_cols >= self.content.size().0 + 74 {
-            self.draw_vert(grid, area, context);
-        } else {
+        } else if self
+            .horizontal
+            .unwrap_or(total_cols >= self.content.size().0 + 74)
+        {
             self.draw_horz(grid, area, context);
+        } else {
+            self.draw_vert(grid, area, context);
         }
         self.dirty = false;
     }
@@ -1096,6 +1100,17 @@ impl Component for ThreadView {
 
         let shortcuts = self.shortcuts(context);
         match *event {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::THREAD_VIEW]["toggle_layout"]) =>
+            {
+                if let Some(ref mut v) = self.horizontal {
+                    *v = !*v;
+                } else {
+                    self.horizontal = Some(false);
+                }
+                self.set_dirty(true);
+                true
+            }
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Shortcuts::THREAD_VIEW]["scroll_up"]) =>
             {
