@@ -860,8 +860,8 @@ impl Tabbed {
         let bottom_right = bottom_right!(area);
 
         let tab_bar_attribute = crate::conf::value(context, "tab.bar");
+        clear_area(grid, area, tab_bar_attribute);
         if self.children.is_empty() {
-            clear_area(grid, area, tab_bar_attribute);
             return;
         }
         let tab_unfocused_attribute = crate::conf::value(context, "tab.unfocused");
@@ -929,6 +929,7 @@ impl Tabbed {
 
         context.dirty_areas.push_back(area);
     }
+
     pub fn add_component(&mut self, new: Box<dyn Component>, context: &mut Context) {
         new.realize(self.id().into(), context);
         self.children.push(new);

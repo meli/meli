@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use melib::{Envelope, Error, Mail, Result};
+use melib::{text_processing::Truncate, Envelope, Error, Mail, Result};
 
 use super::{EnvelopeView, MailView, ViewSettings};
 use crate::{jobs::JoinHandle, mailbox_settings, Component, Context, ShortcutMaps, UIEvent};
@@ -51,6 +51,23 @@ pub enum MailViewState {
         env_view: Box<EnvelopeView>,
         stack: Vec<Box<dyn Component>>,
     },
+}
+
+impl std::fmt::Display for MailViewState {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::Init { .. } | Self::LoadingBody { .. } => {
+                write!(fmt, "loading")
+            }
+            Self::Error { err } => {
+                let err = err.to_string();
+                write!(fmt, "{}", err.trim_at_boundary(8))
+            }
+            Self::Loaded { env, .. } => {
+                write!(fmt, "{}", env.subject().as_ref().trim_at_boundary(8))
+            }
+        }
+    }
 }
 
 impl MailViewState {

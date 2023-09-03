@@ -1034,8 +1034,12 @@ impl ThreadView {
 }
 
 impl std::fmt::Display for ThreadView {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "view thread")
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        if let Some(e) = self.entries.get(0) {
+            e.mailview.fmt(fmt)
+        } else {
+            write!(fmt, "view thread")
+        }
     }
 }
 

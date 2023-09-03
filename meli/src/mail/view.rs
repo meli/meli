@@ -69,7 +69,7 @@ pub struct MailView {
 
 impl std::fmt::Display for MailView {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "view mail")
+        self.state.fmt(f)
     }
 }
 

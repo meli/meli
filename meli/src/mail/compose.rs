@@ -138,14 +138,20 @@ impl ViewMode {
 
 impl std::fmt::Display for Composer {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        if self.reply_context.is_some() {
-            write!(
-                f,
-                "reply: {}",
-                (&self.draft.headers()[HeaderName::SUBJECT]).trim_at_boundary(8)
-            )
+        let subject = self.draft.headers().get(HeaderName::SUBJECT);
+        if let Some(ref val) = subject.filter(|s| !s.is_empty()) {
+            val.trim_at_boundary(4);
+            write!(f, "{}", val)
+        } else if let Some(ref val) = self
+            .draft
+            .headers()
+            .get(HeaderName::TO)
+            .filter(|s| !s.is_empty())
+        {
+            val.trim_at_boundary(4);
+            write!(f, "to {}", val)
         } else {
-            write!(f, "composing")
+            write!(f, "draft")
         }
     }
 }
@@ -1195,6 +1201,7 @@ impl Component for Composer {
             && self.form.process_event(event, context)
         {
             if let UIEvent::InsertInput(_) = event {
+                self.update_draft();
                 self.has_changes = true;
             }
             self.set_dirty(true);
