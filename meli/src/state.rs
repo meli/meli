@@ -518,7 +518,7 @@ impl State {
         self.context.restore_input();
     }
 
-    /// On `SIGWNICH` the `State` redraws itself according to the new terminal
+    /// On `SIGWINCH` the `State` redraws itself according to the new terminal
     /// size.
     pub fn update_size(&mut self) {
         self.screen.update_size();
