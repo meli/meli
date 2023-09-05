@@ -1,0 +1,21 @@
+[target.aarch64-unknown-linux-gnu]
+# Build with -static features.
+pre-build = [
+  "export DEBIAN_FRONTEND=noninteractive ",
+  "dpkg --add-architecture $CROSS_DEB_ARCH",
+  "apt-get update -y",
+  """
+  apt-get install --assume-yes \
+  pkg-config \
+  libdbus-1-dev \
+  libdbus-1-dev:$CROSS_DEB_ARCH \
+  librust-libdbus-sys-dev \
+  librust-libdbus-sys-dev:$CROSS_DEB_ARCH \
+  librust-openssl-sys-dev \
+  librust-openssl-sys-dev:$CROSS_DEB_ARCH \
+  libsqlite3-dev:$CROSS_DEB_ARCH \
+  libssl-dev \
+  libssl-dev:$CROSS_DEB_ARCH \
+  sqlite3:$CROSS_DEB_ARCH
+  """,
+]

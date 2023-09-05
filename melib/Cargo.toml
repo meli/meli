@@ -30,9 +30,9 @@ futures = "0.3.5"
 
 imap-codec = { version = "1.0.0", features = ["ext_condstore_qresync"], optional = true }
 
-indexmap = { version = "^1.5", default-features = false, features = ["serde-1", ] }
+indexmap = { version = "^1.5", default-features = false, features = ["serde-1"] }
 isahc = { version = "^1.7.2", optional = true, default-features = false, features = ["http2", "json", "text-decoding"] }
-libc = { version = "0.2.125", features = ["extra_traits",] }
+libc = { version = "0.2.125", features = ["extra_traits"] }
 
 libloading = "^0.7"
 log = { version = "0.4", features = ["std"] }
@@ -43,11 +43,11 @@ notify = { version = "4.0.15", optional = true }
 polling = "2.8"
 regex = { version = "1" }
 rusqlite = { version = "^0.29", default-features = false, optional = true }
-serde = { version = "1.0", features = ["rc", ] }
+serde = { version = "1.0", features = ["rc"] }
 serde_derive = "1.0"
-serde_json = { version = "1.0", features = ["raw_value",] }
+serde_json = { version = "1.0", features = ["raw_value"] }
 serde_path_to_error = { version = "0.1" }
-smallvec = { version = "^1.5.0", features = ["serde", ] }
+smallvec = { version = "^1.5.0", features = ["serde"] }
 smol = "1.0.0"
 socket2 = { version = "0.4", features = [] }
 
@@ -80,8 +80,10 @@ mbox = ["notify"]
 notmuch = []
 smtp = ["tls", "base64"]
 smtp-trace = ["smtp"]
-sqlite3 = ["rusqlite", ]
+sqlite3 = ["rusqlite"]
+sqlite3-static = ["sqlite3", "rusqlite/bundled-full"]
 tls = ["native-tls"]
+tls-static = ["tls", "native-tls/vendored"]
 text-processing = []
 unicode-algorithms = ["text-processing", "unicode-segmentation"]
 unicode-algorithms-cached = ["text-processing", "unicode-segmentation"]
