@@ -24,7 +24,7 @@ use indexmap::IndexMap;
 use melib::backends::AccountHash;
 
 use super::*;
-use crate::{conf::accounts::MailboxEntry, melib::text_processing::TextProcessing};
+use crate::{accounts::MailboxEntry, melib::text_processing::TextProcessing};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum MailboxAction {

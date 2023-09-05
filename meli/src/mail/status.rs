@@ -104,7 +104,7 @@ impl Component for AccountStatus {
 
         for (job_id, req) in a.active_jobs.iter() {
             width = self.content.size().0;
-            use crate::conf::accounts::JobRequest;
+            use crate::accounts::JobRequest;
             let (x, y) = write_string_to_grid(
                 &format!("{} {}", req, job_id),
                 &mut self.content,

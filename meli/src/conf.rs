@@ -48,9 +48,6 @@ pub mod shortcuts;
 mod listing;
 pub mod terminal;
 mod themes;
-pub use themes::*;
-
-pub mod accounts;
 use std::{
     collections::HashMap,
     env,
@@ -67,8 +64,9 @@ use melib::{
 };
 use pager::PagerSettings;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+pub use themes::*;
 
-pub use self::{accounts::Account, composing::*, pgp::*, shortcuts::*, tags::*};
+pub use self::{composing::*, pgp::*, shortcuts::*, tags::*};
 use self::{
     default_vals::*, listing::ListingSettings, notifications::NotificationsSettings,
     terminal::TerminalSettings,

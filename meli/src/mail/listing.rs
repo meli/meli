@@ -35,7 +35,9 @@ use smallvec::SmallVec;
 
 use super::*;
 use crate::{
-    components::ExtendShortcutsMaps, conf::accounts::JobRequest, types::segment_tree::SegmentTree,
+    accounts::{JobRequest, MailboxStatus},
+    components::ExtendShortcutsMaps,
+    types::segment_tree::SegmentTree,
 };
 
 // [ref:TODO]: emoji_text_presentation_selector should be printed along with the chars
@@ -2327,7 +2329,6 @@ impl Component for Listing {
         };
 
         let account = &context.accounts[self.cursor_pos.account];
-        use crate::conf::accounts::MailboxStatus;
         match account[&mailbox_hash].status {
             MailboxStatus::Available | MailboxStatus::Parsing(_, _) => {
                 let (unseen, total) = account[&mailbox_hash]
@@ -2610,7 +2611,7 @@ impl Listing {
         {
             if mailboxes[&mailbox_hash].is_subscribed() {
                 match context.accounts[self.accounts[aidx].index][&mailbox_hash].status {
-                    crate::conf::accounts::MailboxStatus::Failed(_) => {
+                    MailboxStatus::Failed(_) => {
                         lines.push(Line {
                             collapsed,
                             depth,

@@ -926,7 +926,7 @@ impl State {
                             .spawn_blocking("sqlite3::index".into(), job);
                         self.context.accounts[account_index].active_jobs.insert(
                             handle.job_id,
-                            crate::conf::accounts::JobRequest::Generic {
+                            crate::accounts::JobRequest::Generic {
                                 name: "Message index rebuild".into(),
                                 handle,
                                 on_finish: None,

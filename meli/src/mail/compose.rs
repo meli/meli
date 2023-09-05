@@ -37,7 +37,7 @@ use melib::{
 use nix::sys::wait::WaitStatus;
 
 use super::*;
-use crate::{conf::accounts::JobRequest, jobs::JoinHandle, terminal::embed::EmbedTerminal};
+use crate::{accounts::JobRequest, jobs::JoinHandle, terminal::embed::EmbedTerminal};
 
 #[cfg(feature = "gpgme")]
 pub mod gpg;

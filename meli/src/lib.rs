@@ -97,7 +97,7 @@ pub mod svg;
 #[macro_use]
 pub mod conf;
 pub use crate::conf::{
-    Account, DotAddressable, IndexStyle, SearchBackend, Settings, Shortcuts, ThemeAttribute,
+    DotAddressable, IndexStyle, SearchBackend, Settings, Shortcuts, ThemeAttribute,
 };
 
 #[cfg(feature = "sqlite3")]
@@ -105,3 +105,6 @@ pub mod sqlite3;
 
 pub mod jobs;
 pub mod mailcap;
+
+pub mod accounts;
+pub use self::accounts::Account;

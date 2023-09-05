@@ -52,10 +52,10 @@ use melib::{
 };
 use smallvec::SmallVec;
 
-use super::{AccountConf, FileMailboxConf};
 #[cfg(feature = "sqlite3")]
 use crate::command::actions::AccountAction;
 use crate::{
+    conf::{AccountConf, FileMailboxConf},
     jobs::{JobId, JoinHandle},
     types::UIEvent::{self, EnvelopeRemove, EnvelopeRename, EnvelopeUpdate, Notification},
     MainLoopHandler, StatusEvent, ThreadEvent,

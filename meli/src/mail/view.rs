@@ -34,7 +34,7 @@ use melib::{
 use smallvec::SmallVec;
 
 use super::*;
-use crate::{conf::accounts::JobRequest, jobs::JobId};
+use crate::{accounts::JobRequest, jobs::JobId};
 
 mod utils;
 pub use utils::*;
@@ -559,7 +559,7 @@ impl Component for MailView {
                 };
                 context.accounts[&account_hash].insert_job(
                     handle.job_id,
-                    crate::conf::accounts::JobRequest::Generic {
+                    JobRequest::Generic {
                         name: "fetch envelope".into(),
                         handle,
                         on_finish: Some(CallbackFn(Box::new(move |context: &mut Context| {
