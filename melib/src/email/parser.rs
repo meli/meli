@@ -2520,7 +2520,7 @@ pub mod address {
         let (input, (display_name, angle_addr)) = alt((
             pair(map(display_name, Some), angle_addr),
             map(angle_addr, |r| (None, r)),
-        ))(input)?;
+        ))(input.ltrim())?;
         Ok((
             input,
             Address::new(
@@ -2532,14 +2532,14 @@ pub mod address {
 
     ///`mailbox         =   name-addr / addr-spec`
     pub fn mailbox(input: &[u8]) -> IResult<&[u8], Address> {
-        alt((addr_spec, name_addr))(input)
+        alt((addr_spec, name_addr))(input.ltrim())
     }
 
     ///`group-list      =   mailbox-list / CFWS / obs-group-list`
     pub fn group_list(input: &[u8]) -> IResult<&[u8], Vec<Address>> {
         ///`mailbox-list    =   (mailbox *("," mailbox)) / obs-mbox-list`
         fn mailbox_list(input: &[u8]) -> IResult<&[u8], Vec<Address>> {
-            let (mut input, first_m) = mailbox(input)?;
+            let (mut input, first_m) = mailbox(input.ltrim())?;
             let mut ret = vec![first_m];
             loop {
                 if !input.starts_with(b",") {
@@ -2553,7 +2553,7 @@ pub mod address {
             Ok((input, ret))
         }
 
-        if let Ok((input, mailboxes)) = mailbox_list(input) {
+        if let Ok((input, mailboxes)) = mailbox_list(input.ltrim()) {
             Ok((input, mailboxes))
         } else {
             let (input, _) = cfws(input)?;
@@ -2578,11 +2578,9 @@ pub mod address {
         ))
     }
 
-    ///```text
-    /// address         =   mailbox / group
-    /// ```
+    /// `address         =   mailbox / group`
     pub fn address(input: &[u8]) -> IResult<&[u8], Address> {
-        alt((mailbox, group))(input)
+        alt((mailbox, group))(input.ltrim())
     }
 
     pub fn rfc2822address_list(input: &[u8]) -> IResult<&[u8], SmallVec<[Address; 1]>> {
