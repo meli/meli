@@ -147,19 +147,19 @@ macro_rules! arg_init {
     }};
 }
 
-macro_rules! arg_value_check {
-    ($tag:literal, $input:expr) => {{
-        if tag::<&'_ str, &'_ [u8], melib::nom::error::Error<&[u8]>>($tag)($input).is_err() {
-            return Ok((
-                $input,
-                Err(CommandError::BadValue {
-                    inner: $tag.to_string().into(),
-                }),
-            ));
-        }
-        tag($tag)($input)
-    }};
-}
+//macro_rules! arg_value_check {
+//    ($tag:literal, $input:expr) => {{
+//        if tag::<&'_ str, &'_ [u8],
+// melib::nom::error::Error<&[u8]>>($tag)($input).is_err() {            return
+// Ok((                $input,
+//                Err(CommandError::BadValue {
+//                    inner: $tag.to_string().into(),
+//                }),
+//            ));
+//        }
+//        tag($tag)($input)
+//    }};
+//}
 
 macro_rules! arg_chk {
     (start $check:ident, $input:expr) => {{

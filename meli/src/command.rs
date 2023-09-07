@@ -332,7 +332,7 @@ define_commands!([
                 { tags: ["toggle thread_snooze"],
                   desc: "turn off new notifications for this thread",
                   tokens: &[One(Literal("toggle")), One(Literal("thread_snooze"))],
-                  parser: parser::toggle_thread_snooze
+                  parser: parser::toggle
                 },
                 { tags: ["search"],
                   desc: "search <TERM>, searches list with given term",
@@ -400,12 +400,12 @@ Alternatives(&[to_stream!(One(Literal("add-attachment")), One(Filepath)), to_str
                 { tags: ["toggle sign "],
                   desc: "switch between sign/unsign for this draft",
                   tokens: &[One(Literal("toggle")), One(Literal("sign"))],
-                  parser: parser::toggle_sign
+                  parser: parser::toggle
                 },
                 { tags: ["toggle encrypt"],
                   desc: "toggle encryption for this draft",
                   tokens: &[One(Literal("toggle")), One(Literal("encrypt"))],
-                  parser: parser::toggle_encrypt
+                  parser: parser::toggle
                 },
                 { tags: ["create-mailbox "],
                   desc: "create-mailbox ACCOUNT MAILBOX_PATH",
@@ -475,7 +475,7 @@ Alternatives(&[to_stream!(One(Literal("add-attachment")), One(Filepath)), to_str
                 { tags: ["toggle mouse"],
                   desc: "toggle mouse support",
                   tokens: &[One(Literal("toggle")), One(Literal("mouse"))],
-                  parser: parser::toggle_mouse
+                  parser: parser::toggle
                 },
                 { tags: ["manage-mailboxes"],
                   desc: "view and manage mailbox preferences",

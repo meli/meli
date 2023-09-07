@@ -47,6 +47,12 @@ macro_rules! command_err {
     }};
 }
 
+macro_rules! tag {
+    () => {{
+        tag::<&'_ str, &'_ [u8], melib::nom::error::Error<&[u8]>>
+    }};
+}
+
 pub fn usize_c(input: &[u8]) -> IResult<&[u8], usize> {
     map_res(
         map_res(digit1, std::str::from_utf8),
@@ -92,7 +98,6 @@ pub fn listing_action(input: &[u8]) -> IResult<&[u8], Result<Action, CommandErro
         import,
         search,
         select,
-        toggle_thread_snooze,
         open_in_new_tab,
         export_mbox,
         _tag,
@@ -100,14 +105,7 @@ pub fn listing_action(input: &[u8]) -> IResult<&[u8], Result<Action, CommandErro
 }
 
 pub fn compose_action(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
-    alt((
-        add_attachment,
-        mailto,
-        remove_attachment,
-        toggle_sign,
-        toggle_encrypt,
-        save_draft,
-    ))(input)
+    alt((add_attachment, mailto, remove_attachment, save_draft))(input)
 }
 
 pub fn account_action(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
@@ -148,7 +146,7 @@ pub fn parse_command(input: &[u8]) -> Result<Action, CommandError> {
         new_tab,
         account_action,
         print_setting,
-        toggle_mouse,
+        toggle,
         reload_config,
         quit,
     ))(input)
@@ -325,17 +323,6 @@ pub fn sort_column(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>>
     arg_chk!(finish check, input);
     let (input, _) = eof(input)?;
     Ok((input, Ok(SortColumn(i, order))))
-}
-pub fn toggle_thread_snooze(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
-    let mut check = arg_init! { min_arg:0, max_arg: 0, toggle_thread_snooze};
-    let (input, _) = tag("toggle")(input.trim())?;
-    arg_chk!(start check, input);
-    let (input, _) = is_a(" ")(input)?;
-    arg_chk!(inc check, input);
-    let (input, _) = tag("thread_snooze")(input.trim())?;
-    arg_chk!(finish check, input);
-    let (input, _) = eof(input)?;
-    Ok((input, Ok(Listing(ToggleThreadSnooze))))
 }
 pub fn search(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
     let mut check = arg_init! { min_arg:1, max_arg:{ u8::MAX}, search};
@@ -546,28 +533,6 @@ pub fn save_draft(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> 
     arg_chk!(finish check, input);
     let (input, _) = eof(input)?;
     Ok((input, Ok(Compose(SaveDraft))))
-}
-pub fn toggle_sign(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
-    let mut check = arg_init! { min_arg:1, max_arg: 1, toggle_sign};
-    let (input, _) = tag("toggle")(input.trim())?;
-    arg_chk!(start check, input);
-    let (input, _) = is_a(" ")(input)?;
-    arg_chk!(inc check, input);
-    let (input, _) = arg_value_check!("sign", input)?;
-    arg_chk!(finish check, input);
-    let (input, _) = eof(input)?;
-    Ok((input, Ok(Compose(ToggleSign))))
-}
-pub fn toggle_encrypt(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
-    let mut check = arg_init! { min_arg:1, max_arg: 1, toggle_encrypt};
-    let (input, _) = tag("toggle")(input.trim())?;
-    arg_chk!(start check, input);
-    let (input, _) = is_a(" ")(input)?;
-    arg_chk!(inc check, input);
-    let (input, _) = arg_value_check!("encrypt", input)?;
-    arg_chk!(finish check, input);
-    let (input, _) = eof(input)?;
-    Ok((input, Ok(Compose(ToggleEncrypt))))
 }
 pub fn create_mailbox(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
     let mut check = arg_init! { min_arg:1, max_arg: 1, create_malbox};
@@ -784,16 +749,44 @@ pub fn print_setting(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError
     let (input, _) = eof(input)?;
     Ok((input, Ok(PrintSetting(setting.to_string()))))
 }
-pub fn toggle_mouse(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
-    let mut check = arg_init! { min_arg:1, max_arg: 1, toggle_mouse};
+pub fn toggle(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
+    let mut check = arg_init! { min_arg:1, max_arg: 1, toggle };
     let (input, _) = tag("toggle")(input.trim())?;
     arg_chk!(start check, input);
-    let (input, _) = is_a(" ")(input)?;
+    let (mut input, _) = is_a(" ")(input)?;
     arg_chk!(inc check, input);
-    let (input, _) = tag("mouse")(input.trim())?;
+    let mut retval = if tag!()("thread_snooze")(input.ltrim()).is_ok() {
+        Some(Listing(ToggleThreadSnooze))
+    } else {
+        None
+    };
+    for (tok, action) in [
+        ("thread_snooze", Listing(ToggleThreadSnooze)),
+        ("mouse", ToggleMouse),
+        ("sign", Compose(ToggleSign)),
+        ("encrypt", Compose(ToggleEncrypt)),
+    ] {
+        if let Ok((inner_input, _)) = tag!()(tok)(input.trim()) {
+            input = inner_input;
+            retval = Some(action);
+            break;
+        }
+    }
+    let retval = match retval {
+        None => {
+            return Ok((
+                input,
+                Err(CommandError::BadValue {
+                    inner: "Valid toggle values are thread_snooze, mouse, sign, encrypt.".into(),
+                }),
+            ));
+        }
+        Some(v) => v,
+    };
+
     arg_chk!(finish check, input);
     let (input, _) = eof(input)?;
-    Ok((input, Ok(ToggleMouse)))
+    Ok((input, Ok(retval)))
 }
 pub fn manage_mailboxes(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
     let mut check = arg_init! { min_arg:0, max_arg: 0, manage_mailboxes};
