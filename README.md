@@ -1,27 +1,81 @@
 # meli [![GitHub license](https://img.shields.io/github/license/meli/meli)](https://github.com/meli/meli/blob/master/COPYING) [![Crates.io](https://img.shields.io/crates/v/meli)](https://crates.io/crates/meli)
 
-**BSD/Linux terminal email client with support for multiple accounts and Maildir / mbox / notmuch / IMAP / JMAP.**
+**BSD/Linux terminal email client with support for multiple accounts and Maildir / mbox / notmuch / IMAP / JMAP / NNTP (usenet).**
 
 Community links:
 [mailing lists](https://lists.meli.delivery/) | `#meli` on OFTC IRC | Report bugs and/or feature requests in [meli's issue tracker](https://git.meli.delivery/meli/meli/issues "meli gitea issue tracker")
+
+Main repository: <https://git.meli.delivery/meli/meli>
+
+Official mirrors: <https://github.com/meli/meli>
 
 | | | |
 :---:|:---:|:---:
 ![Main view screenshot](./meli/docs/screenshots/main.webp "mail meli view screenshot")  |  ![Compact main view screenshot](./meli/docs/screenshots/compact.webp "compact main view screenshot") | ![Compose with embed terminal editor screenshot](./meli/docs/screenshots/compose.webp "composing view screenshot")
 Main view             |  Compact main view | Compose with embed terminal editor
 
-Main repository:
-* https://git.meli.delivery/meli/meli
+## Description
 
-Official mirrors:
-* https://github.com/meli/meli
+meli aims for configurability, extensibility with sane defaults, and modern
+practices. It is a mail client for both casual and power users of the terminal.
+
+A variety of email workflows and software stacks should be usable with meli.
+Integrate e-mail storage, sync, tagging system, SMTP client, contact management
+and editor of your choice to replace the defaults.
+
+
+### Supported E-mail backends
+
+| Protocol     | Support         |
+|:------------:|:----------------|
+| IMAP         | full            |
+| Maildir      | full            |
+| notmuch      | full*           |
+| mbox         | read-only       |
+| JMAP         | functional      |
+| NNTP / Usenet| functional      |
+
+
+* there's no support for searching through all email directly, you'd have to
+  create a mailbox with a notmuch query that returns everything and search
+  inside that mailbox.
+
+### E-mail Submission backends
+--------------------------
+
+- SMTP
+- Pipe to shell script
+- Server-side submission
+
+### Non-exhaustive List of Features
+
+- TLS
+- email threading support
+- multithreaded, async operation
+- optionally run your editor of choice inside meli, with an embedded
+  xterm-compatible terminal emulator
+- plain text configuration in TOML
+- ability to open emails in UI tabs and switch to them
+- optional sqlite3 index search
+- override almost any setting per mailbox, per account
+- contact list (+read-only vCard and mutt alias file support)
+- forced UTF-8 (other encodings are read-only)
+- configurable shortcuts
+- theming
+- `NO_COLOR` support
+- ascii-only drawing characters option
+- view text/html attachments through an html filter command (w3m by default)
+- pipe attachments/mail to stuff
+- use external attachment file picker instead of typing in an attachment's full path
+- GPG signing, encryption, signing + encryption
+- GPG signature verification
 
 ## Install
 - Try an [online interactive web demo](https://meli.delivery/wasm2.html "online interactive web demo") powered by WebAssembly
+- Pre-built binaries for [pkgsrc](https://pkgsrc.se/mail/meli) and [openbsd ports](https://openports.pl/path/mail/meli).
 - `cargo install --git https://git.meli.delivery/meli/meli.git meli`
 - [Download and install pre-built debian package, static linux binary](https://github.com/meli/meli/releases/ "github releases for meli"), or
-- Install with [Nix](https://search.nixos.org/packages?show=meli&query=meli&from=0&size=30&sort=relevance&channel=unstable#disabled "nixos package search results for 'meli'")
-
+- Install with [Nix](https://search.nixos.org/packages?show=meli&query=meli&from=0&size=30&sort=relevance&channel=unstable#disabled "nixos package search results for 'meli'").
 ## Documentation
 
 See a comprehensive tour of `meli` in the manual page [`meli(7)`](./meli/docs/meli.7).
@@ -66,11 +120,9 @@ Some functionality is held behind "feature gates", or compile-time flags. The fo
 - `gpgme` enables GPG support via `libgpgme` (on by default)
 - `dbus-notifications` enables showing notifications using `dbus` (on by default)
 - `notmuch` provides support for using a notmuch database as a mail backend (on by default)
-- `jmap` provides support for connecting to a jmap server and use it as a mail backend (off by default)
+- `jmap` provides support for connecting to a jmap server and use it as a mail backend (on by default)
 - `sqlite3` provides support for builting fast search indexes in local sqlite3 databases (on by default)
-- `cli-docs` includes the manpage documentation compiled by either `mandoc` or `man` binary to plain text in `meli`'s command line. Embedded documentation can be viewed with the subcommand `meli man [PAGE]`
-- `svgscreenshot` provides support for taking screenshots of the current view of `meli` and saving it as SVG files. Its only purpose is taking screenshots for the official `meli` webpage. (off by default)
-- `debug-tracing` enables various trace debug logs from various places around the `meli` code base. The trace log is printed in `stderr`. (off by default)
+- `cli-docs` includes the manpage documentation compiled by either `mandoc` or `man` binary to plain text in `meli`'s command line. Embedded documentation can be viewed with the subcommand `meli man [PAGE]` (on by default).
 
 ### Build Debian package (*deb*)
 
@@ -89,16 +141,6 @@ In Debian-like systems, install the `libnotmuch5` packages.
 To use the optional gpg feature, you must have `libgpgme` installed in your system.
 In Debian-like systems, install the `libgpgme11` package.
 `meli` detects the library's presence on runtime.
-
-### Building with JMAP
-
-To build with JMAP support, prepend the environment variable `MELI_FEATURES='jmap'` to your make invocation:
-
-```sh
-MELI_FEATURES="jmap" make
-```
-
-or if building directly with cargo, use the flag `--features="jmap"'.
 
 ### HTML Rendering
 
