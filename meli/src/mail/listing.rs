@@ -2449,7 +2449,9 @@ impl Listing {
                 context[first_account_hash].listing.sidebar_divider
             ),
             sidebar_divider_theme: conf::value(context, "mail.sidebar_divider"),
-            menu_visibility: true,
+            menu_visibility: !*account_settings!(
+                context[first_account_hash].listing.hide_sidebar_on_launch
+            ),
             ratio: *account_settings!(context[first_account_hash].listing.sidebar_ratio),
             prev_ratio: *account_settings!(context[first_account_hash].listing.sidebar_ratio),
             menu_width: WidgetWidth::Unset,

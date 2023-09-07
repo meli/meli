@@ -42,7 +42,7 @@ pub struct PagerSettings {
     /// Always show headers when scrolling.
     /// Default: true
     #[serde(
-        default = "true_val",
+        default = "false_val",
         alias = "sticky-headers",
         /* deprecated names */
         alias = "headers-sticky",
@@ -123,7 +123,7 @@ impl Default for PagerSettings {
         Self {
             pager_context: 0,
             pager_stop: false,
-            sticky_headers: true,
+            sticky_headers: false,
             pager_ratio: 80,
             filter: None,
             html_filter: None,

@@ -152,6 +152,10 @@ pub struct ListingSettings {
     /// them. Default: "true"
     #[serde(default = "true_val", alias = "relative-list-indices")]
     pub relative_list_indices: bool,
+
+    /// Hide sidebar on launch. Default: "false"
+    #[serde(default = "false_val", alias = "hide-sidebar-on-launch")]
+    pub hide_sidebar_on_launch: bool,
 }
 
 const fn default_divider() -> char {
@@ -185,6 +189,7 @@ impl Default for ListingSettings {
             threaded_repeat_identical_from_values: false,
             relative_menu_indices: true,
             relative_list_indices: true,
+            hide_sidebar_on_launch: false,
         }
     }
 }
@@ -225,6 +230,7 @@ impl DotAddressable for ListingSettings {
                         .lookup(field, tail),
                     "relative_menu_indices" => self.relative_menu_indices.lookup(field, tail),
                     "relative_list_indices" => self.relative_list_indices.lookup(field, tail),
+                    "hide_sidebar_on_launch" => self.hide_sidebar_on_launch.lookup(field, tail),
                     other => Err(Error::new(format!(
                         "{} has no field named {}",
                         parent_field, other

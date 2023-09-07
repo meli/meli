@@ -1024,7 +1024,7 @@ Default values are shown in parentheses.
 .It Ic sticky_headers Ar boolean
 .Pq Em optional
 Always show headers when scrolling.
-.Pq Em true \" default value
+.Pq Em false \" default value
 .It Ic html_filter Ar String
 .Pq Em optional
 Pipe html attachments through this filter before display
@@ -1157,6 +1157,9 @@ Show relative indices in menu mailboxes to quickly help with jumping to them.
 .It Ic relative_list_indices Ar bool
 Show relative indices in listings to quickly help with jumping to them.
 .Pq Em true \" default value
+.It Ic hide_sidebar_on_launch Ar bool
+Start app with sidebar hidden.
+.Pq Em false \" default value
 .El
 .Ss Examples of sidebar mailbox tree customization
 The default values
