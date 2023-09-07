@@ -712,14 +712,21 @@ impl ThreadView {
                     );
                     context.dirty_areas.push_back((
                         upper_left!(area),
-                        set_x(bottom_right, get_x(upper_left!(area)) + 1),
+                        set_x(
+                            bottom_right,
+                            cmp::min(get_x(bottom_right!(area)), get_x(upper_left!(area)) + 1),
+                        ),
                     ));
                 }
 
                 let (upper_left, bottom_right) = dest_area;
-                context
-                    .dirty_areas
-                    .push_back((upper_left, (get_x(bottom_right), get_y(upper_left) + 1)));
+                context.dirty_areas.push_back((
+                    upper_left,
+                    (
+                        get_x(bottom_right),
+                        cmp::min(get_y(bottom_right), get_y(upper_left) + 1),
+                    ),
+                ));
             }
         }
     }
@@ -762,12 +769,16 @@ impl ThreadView {
                     .set_fg(theme_default.fg)
                     .set_bg(theme_default.bg);
             }
-            context
-                .dirty_areas
-                .push_back((upper_left, set_y(bottom_right, y + 1)));
-            context
-                .dirty_areas
-                .push_back(((mid, y + 1), set_x(bottom_right, mid)));
+            context.dirty_areas.push_back((
+                upper_left,
+                set_y(bottom_right, std::cmp::min(get_y(bottom_right), y + 1)),
+            ));
+            if y + 1 < get_y(bottom_right) && mid < get_x(bottom_right) {
+                context.dirty_areas.push_back((
+                    (mid, y + 1),
+                    set_x(bottom_right, std::cmp::min(get_x(bottom_right), mid)),
+                ));
+            }
             clear_area(
                 grid,
                 ((mid, y + 1), set_x(bottom_right, mid)),
@@ -792,7 +803,10 @@ impl ThreadView {
             ThreadViewFocus::None => {
                 self.draw_list(
                     grid,
-                    (set_y(upper_left, y), set_x(bottom_right, mid - 1)),
+                    (
+                        set_y(upper_left, std::cmp::min(get_y(bottom_right), y)),
+                        set_x(bottom_right, std::cmp::min(get_x(bottom_right), mid - 1)),
+                    ),
                     context,
                 );
                 let upper_left = (mid + 1, get_y(upper_left));
@@ -872,9 +886,10 @@ impl ThreadView {
                     .set_fg(theme_default.fg)
                     .set_bg(theme_default.bg);
             }
-            context
-                .dirty_areas
-                .push_back((upper_left, set_y(bottom_right, y + 2)));
+            context.dirty_areas.push_back((
+                upper_left,
+                set_y(bottom_right, std::cmp::min(get_y(bottom_right), y + 2)),
+            ));
             y + 2
         };
 
@@ -899,7 +914,10 @@ impl ThreadView {
 
         match self.focus {
             ThreadViewFocus::None => {
-                let area = (set_y(upper_left, y), set_y(bottom_right, mid));
+                let area = (
+                    set_y(upper_left, y),
+                    set_y(bottom_right, std::cmp::min(get_y(bottom_right), mid)),
+                );
                 let upper_left = upper_left!(area);
                 let bottom_right = bottom_right!(area);
 
@@ -919,7 +937,10 @@ impl ThreadView {
                 context.dirty_areas.push_back(area);
             }
             ThreadViewFocus::Thread => {
-                let area = (set_y(upper_left, y), bottom_right);
+                let area = (
+                    set_y(upper_left, std::cmp::min(y, get_y(bottom_right))),
+                    bottom_right,
+                );
                 let upper_left = upper_left!(area);
 
                 let rows = (get_y(bottom_right).saturating_sub(get_y(upper_left) + 1)) / 2;
@@ -941,7 +962,10 @@ impl ThreadView {
 
         match self.focus {
             ThreadViewFocus::None => {
-                let area = (set_y(upper_left, mid), set_y(bottom_right, mid));
+                let area = (
+                    set_y(upper_left, std::cmp::min(get_y(bottom_right), mid)),
+                    set_y(bottom_right, std::cmp::min(get_y(bottom_right), mid)),
+                );
                 context.dirty_areas.push_back(area);
                 for x in get_x(upper_left)..=get_x(bottom_right) {
                     set_and_join_box(grid, (x, mid), BoxBoundary::Horizontal);
@@ -949,17 +973,30 @@ impl ThreadView {
                         .set_fg(theme_default.fg)
                         .set_bg(theme_default.bg);
                 }
-                let area = (set_y(upper_left, y), set_y(bottom_right, mid - 1));
+                let area = (
+                    set_y(upper_left, std::cmp::min(get_y(bottom_right), y)),
+                    set_y(bottom_right, std::cmp::min(get_y(bottom_right), mid - 1)),
+                );
                 self.draw_list(grid, area, context);
                 self.entries[self.new_expanded_pos].mailview.draw(
                     grid,
-                    (set_y(upper_left, mid + 1), bottom_right),
+                    (
+                        set_y(upper_left, std::cmp::min(get_y(bottom_right), mid + 1)),
+                        bottom_right,
+                    ),
                     context,
                 );
             }
             ThreadViewFocus::Thread => {
                 self.dirty = true;
-                self.draw_list(grid, (set_y(upper_left, y), bottom_right), context);
+                self.draw_list(
+                    grid,
+                    (
+                        set_y(upper_left, std::cmp::min(get_y(bottom_right), y)),
+                        bottom_right,
+                    ),
+                    context,
+                );
             }
             ThreadViewFocus::MailView => {
                 self.entries[self.new_expanded_pos]

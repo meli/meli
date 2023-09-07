@@ -986,9 +986,10 @@ impl Component for EnvelopeView {
                     (set_y(upper_left, y), set_y(bottom_right, y)),
                     headers_area,
                 );
-                context
-                    .dirty_areas
-                    .push_back((upper_left, set_y(bottom_right, y + 3)));
+                context.dirty_areas.push_back((
+                    upper_left,
+                    set_y(bottom_right, std::cmp::min(y + 3, get_y(bottom_right))),
+                ));
                 if !self.view_settings.sticky_headers {
                     let height_p = self.pager.size().1;
 
