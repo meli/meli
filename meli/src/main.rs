@@ -117,6 +117,22 @@ fn run_app(opt: Opt) -> Result<()> {
             return Ok(());
         }
         Some(SubCommand::View { .. }) => {}
+        Some(SubCommand::PrintUsedPaths) => {
+            println!(
+                "{}",
+                xdg::BaseDirectories::with_prefix("meli")
+                    .expect(
+                        "Could not find your XDG directories. If this is unexpected, please \
+                         report it as a bug."
+                    )
+                    .get_data_file("")
+                    .display()
+            );
+            let mut temp_dir = std::env::temp_dir();
+            temp_dir.push("meli");
+            println!("{}", temp_dir.display());
+            return Ok(());
+        }
         None => {}
     }
 
