@@ -628,7 +628,7 @@ impl ImapConnection {
             #[cfg(debug_assertions)]
             id,
             server_conf: server_conf.clone(),
-            sync_policy: if uid_store.keep_offline_cache {
+            sync_policy: if *uid_store.keep_offline_cache.lock().unwrap() {
                 SyncPolicy::Basic
             } else {
                 SyncPolicy::None
@@ -984,7 +984,7 @@ impl ImapConnection {
             format!("Could not parse select response for mailbox {}", imap_path)
         })?;
         {
-            if self.uid_store.keep_offline_cache {
+            if *self.uid_store.keep_offline_cache.lock().unwrap() {
                 #[cfg(not(feature = "sqlite3"))]
                 let mut cache_handle = super::cache::DefaultCache::get(self.uid_store.clone())?;
                 #[cfg(feature = "sqlite3")]

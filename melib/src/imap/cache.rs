@@ -169,11 +169,24 @@ pub mod sqlite3_m {
 
     impl Sqlite3Cache {
         pub fn get(uid_store: Arc<UIDStore>) -> Result<Box<dyn ImapCache>> {
+            let connection =
+                match sqlite3::open_or_create_db(&DB_DESCRIPTION, Some(&uid_store.account_name)) {
+                    Ok(c) => Ok(c),
+                    Err(err) => {
+                        // try resetting database on error, but only one time.
+                        if Self::reset_db(&uid_store).is_ok() {
+                            sqlite3::open_or_create_db(
+                                &DB_DESCRIPTION,
+                                Some(&uid_store.account_name),
+                            )
+                        } else {
+                            Err(err)
+                        }
+                    }
+                }?;
+
             Ok(Box::new(Self {
-                connection: sqlite3::open_or_create_db(
-                    &DB_DESCRIPTION,
-                    Some(&uid_store.account_name),
-                )?,
+                connection,
                 loaded_mailboxes: BTreeSet::default(),
                 uid_store,
             }))
@@ -712,7 +725,7 @@ pub(super) async fn fetch_cached_envs(state: &mut FetchState) -> Result<Option<V
         cache_handle: _,
     } = state;
     let mailbox_hash = *mailbox_hash;
-    if !uid_store.keep_offline_cache {
+    if !*uid_store.keep_offline_cache.lock().unwrap() {
         return Ok(None);
     }
     {

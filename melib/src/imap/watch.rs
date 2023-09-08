@@ -90,7 +90,7 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
 
         if let Some(v) = uidvalidities.get(&mailbox_hash) {
             if *v != select_response.uidvalidity {
-                if uid_store.keep_offline_cache {
+                if *uid_store.keep_offline_cache.lock().unwrap() {
                     #[cfg(not(feature = "sqlite3"))]
                     let mut cache_handle = super::cache::DefaultCache::get(uid_store.clone())?;
                     #[cfg(feature = "sqlite3")]
@@ -232,7 +232,7 @@ pub async fn examine_updates(
 
             if let Some(v) = uidvalidities.get(&mailbox_hash) {
                 if *v != select_response.uidvalidity {
-                    if uid_store.keep_offline_cache {
+                    if *uid_store.keep_offline_cache.lock().unwrap() {
                         cache_handle.clear(mailbox_hash, &select_response)?;
                     }
                     conn.add_refresh_event(RefreshEvent {
@@ -383,7 +383,9 @@ pub async fn examine_updates(
                 }
             }
         }
-        if uid_store.keep_offline_cache && cache_handle.mailbox_state(mailbox_hash)?.is_some() {
+        if *uid_store.keep_offline_cache.lock().unwrap()
+            && cache_handle.mailbox_state(mailbox_hash)?.is_some()
+        {
             cache_handle
                 .insert_envelopes(mailbox_hash, &v)
                 .chain_err_summary(|| {

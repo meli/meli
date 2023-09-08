@@ -148,7 +148,7 @@ macro_rules! get_conf_val {
 pub struct UIDStore {
     account_hash: AccountHash,
     account_name: Arc<str>,
-    keep_offline_cache: bool,
+    keep_offline_cache: Arc<Mutex<bool>>,
     capabilities: Arc<Mutex<Capabilities>>,
     hash_index: Arc<Mutex<HashMap<EnvelopeHash, (UID, MailboxHash)>>>,
     uid_index: Arc<Mutex<HashMap<(MailboxHash, UID), EnvelopeHash>>>,
@@ -179,7 +179,7 @@ impl UIDStore {
         Self {
             account_hash,
             account_name,
-            keep_offline_cache: false,
+            keep_offline_cache: Arc::new(Mutex::new(false)),
             capabilities: Default::default(),
             uidvalidity: Default::default(),
             envelopes: Default::default(),
@@ -301,7 +301,7 @@ impl MailBackend for ImapType {
     ) -> Result<Pin<Box<dyn Stream<Item = Result<Vec<Envelope>>> + Send + 'static>>> {
         let cache_handle = {
             #[cfg(feature = "sqlite3")]
-            if self.uid_store.keep_offline_cache {
+            if *self.uid_store.keep_offline_cache.lock().unwrap() {
                 match cache::Sqlite3Cache::get(self.uid_store.clone()).chain_err_summary(|| {
                     format!(
                         "Could not initialize cache for IMAP account {}. Resetting database.",
@@ -317,9 +317,11 @@ impl MailBackend for ImapType {
                         {
                             Ok(v) => Some(v),
                             Err(err) => {
-                                (self.uid_store.event_consumer)(
-                                    self.uid_store.account_hash,
-                                    err.into(),
+                                *self.uid_store.keep_offline_cache.lock().unwrap() = false;
+                                log::trace!(
+                                    "{}: sqlite3 cache error: {}",
+                                    self.uid_store.account_name,
+                                    err
                                 );
                                 None
                             }
@@ -333,7 +335,7 @@ impl MailBackend for ImapType {
             None
         };
         let mut state = FetchState {
-            stage: if self.uid_store.keep_offline_cache && cache_handle.is_some() {
+            stage: if *self.uid_store.keep_offline_cache.lock().unwrap() && cache_handle.is_some() {
                 FetchStage::InitialCache
             } else {
                 FetchStage::InitialFresh
@@ -1294,7 +1296,7 @@ impl ImapType {
         let account_hash = AccountHash::from_bytes(s.name.as_bytes());
         let account_name = s.name.to_string().into();
         let uid_store: Arc<UIDStore> = Arc::new(UIDStore {
-            keep_offline_cache,
+            keep_offline_cache: Arc::new(Mutex::new(keep_offline_cache)),
             ..UIDStore::new(
                 account_hash,
                 account_name,

@@ -147,7 +147,7 @@ impl ImapConnection {
                             },
                         ));
                     }
-                    if self.uid_store.keep_offline_cache {
+                    if *self.uid_store.keep_offline_cache.lock().unwrap() {
                         cache_handle.update(mailbox_hash, &events)?;
                     }
                     for (_, event) in events {
@@ -190,7 +190,7 @@ impl ImapConnection {
                         kind: Remove(deleted_hash),
                     },
                 )];
-                if self.uid_store.keep_offline_cache {
+                if *self.uid_store.keep_offline_cache.lock().unwrap() {
                     cache_handle.update(mailbox_hash, &event)?;
                 }
                 self.add_refresh_event(std::mem::replace(
@@ -282,7 +282,7 @@ impl ImapConnection {
                         mailbox.path(),
                     );
                 }
-                if self.uid_store.keep_offline_cache {
+                if *self.uid_store.keep_offline_cache.lock().unwrap() {
                     if let Err(err) = cache_handle
                         .insert_envelopes(mailbox_hash, &v)
                         .chain_err_summary(|| {
@@ -384,7 +384,7 @@ impl ImapConnection {
                             }
                             mailbox.exists.lock().unwrap().insert_new(env.hash());
                         }
-                        if self.uid_store.keep_offline_cache {
+                        if *self.uid_store.keep_offline_cache.lock().unwrap() {
                             if let Err(err) = cache_handle
                                 .insert_envelopes(mailbox_hash, &v)
                                 .chain_err_summary(|| {
@@ -525,7 +525,7 @@ impl ImapConnection {
                                 kind: NewFlags(env_hash, flags),
                             },
                         )];
-                        if self.uid_store.keep_offline_cache {
+                        if *self.uid_store.keep_offline_cache.lock().unwrap() {
                             cache_handle.update(mailbox_hash, &event)?;
                         }
                         self.add_refresh_event(std::mem::replace(
