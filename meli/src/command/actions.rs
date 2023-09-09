@@ -121,6 +121,8 @@ pub enum Action {
     View(ViewAction),
     SetEnv(String, String),
     PrintEnv(String),
+    CurrentDirectory,
+    ChangeCurrentDirectory(PathBuf),
     Compose(ComposeAction),
     Mailbox(AccountName, MailboxOperation),
     AccountAction(AccountName, AccountAction),

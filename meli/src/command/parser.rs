@@ -136,7 +136,7 @@ pub fn parse_command(input: &[u8]) -> Result<Action, CommandError> {
         close,
         mailinglist,
         setenv,
-        printenv,
+        alt((printenv, currentdir, change_currentdir)),
         view,
         create_mailbox,
         sub_mailbox,
@@ -400,6 +400,25 @@ pub fn printenv(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
     arg_chk!(finish check, input);
     let (input, _) = eof(input)?;
     Ok((input, Ok(PrintEnv(key.to_string()))))
+}
+pub fn currentdir(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
+    let mut check = arg_init! { min_arg:0, max_arg: 0, currentdir};
+    let (input, _) = tag("cwd")(input.ltrim())?;
+    arg_chk!(start check, input);
+    arg_chk!(finish check, input);
+    let (input, _) = eof(input)?;
+    Ok((input, Ok(CurrentDirectory)))
+}
+pub fn change_currentdir(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
+    let mut check = arg_init! { min_arg:1, max_arg: 1, change_currentdir};
+    let (input, _) = tag("cd")(input.ltrim())?;
+    arg_chk!(start check, input);
+    let (input, _) = is_a(" ")(input)?;
+    arg_chk!(inc check, input);
+    let (input, d) = map_res(not_line_ending, std::str::from_utf8)(input.trim())?;
+    arg_chk!(finish check, input);
+    let (input, _) = eof(input)?;
+    Ok((input, Ok(ChangeCurrentDirectory(d.into()))))
 }
 pub fn mailto(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
     let mut check = arg_init! { min_arg:1, max_arg: 1, mailto};

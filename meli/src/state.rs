@@ -34,7 +34,14 @@
 //! for user input, observe folders for file changes etc. The relevant struct is
 //! [`ThreadEvent`].
 
-use std::{collections::BTreeSet, env, os::unix::io::RawFd, sync::Arc, thread};
+use std::{
+    collections::BTreeSet,
+    env,
+    os::unix::io::RawFd,
+    path::{Path, PathBuf},
+    sync::Arc,
+    thread,
+};
 
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use indexmap::{IndexMap, IndexSet};
@@ -133,6 +140,7 @@ pub struct Context {
     pub main_loop_handler: MainLoopHandler,
     receiver: Receiver<ThreadEvent>,
     input_thread: InputHandler,
+    current_dir: PathBuf,
     pub children: Vec<std::process::Child>,
 
     pub temp_files: Vec<File>,
@@ -241,6 +249,7 @@ impl Context {
             realized: IndexMap::default(),
             unrealized: IndexSet::default(),
             temp_files: Vec::new(),
+            current_dir: std::env::current_dir().unwrap(),
             children: vec![],
 
             input_thread: InputHandler {
@@ -256,6 +265,10 @@ impl Context {
             },
             receiver,
         }
+    }
+
+    pub fn current_dir(&self) -> &Path {
+        &self.current_dir
     }
 }
 
@@ -434,6 +447,7 @@ impl State {
                 realized: IndexMap::default(),
                 unrealized: IndexSet::default(),
                 temp_files: Vec::new(),
+                current_dir: std::env::current_dir()?,
                 children: vec![],
 
                 input_thread: InputHandler {
@@ -861,6 +875,21 @@ impl State {
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
                         env::var(key.as_str()).unwrap_or_else(|e| e.to_string()),
+                    )));
+            }
+            ChangeCurrentDirectory(dir) => {
+                self.context.current_dir = dir;
+                self.context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
+                        self.context.current_dir.display().to_string(),
+                    )));
+            }
+            CurrentDirectory => {
+                self.context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
+                        self.context.current_dir.display().to_string(),
                     )));
             }
             Mailbox(account_name, op) => {
