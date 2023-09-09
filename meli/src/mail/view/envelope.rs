@@ -960,14 +960,17 @@ impl Component for EnvelopeView {
                         }
                         if archive.is_some() || post.is_some() || unsubscribe.is_some() {
                             if x >= 2 {
-                                grid[(x - 2, y)].set_ch(' ');
+                                if let Some(cell) = grid.get_mut(x - 2, y) {
+                                    cell.set_ch(' ');
+                                }
                             }
                             if x > 0 {
-                                grid[(x - 1, y)]
-                                    .set_ch(']')
-                                    .set_fg(headers_names.fg)
-                                    .set_bg(headers_names.bg)
-                                    .set_attrs(headers_names.attrs);
+                                if let Some(cell) = grid.get_mut(x - 1, y) {
+                                    cell.set_ch(']')
+                                        .set_fg(headers_names.fg)
+                                        .set_bg(headers_names.bg)
+                                        .set_attrs(headers_names.attrs);
+                                }
                             }
                         }
                         for x in x..=get_x(bottom_right) {
