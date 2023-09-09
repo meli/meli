@@ -33,7 +33,10 @@ use std::{
 
 use melib::{backends::TagHash, search::Query, SortField, SortOrder, StderrLogger};
 
-use crate::{conf::deserializers::non_empty_opt_string, terminal::Color};
+use crate::{
+    conf::deserializers::non_empty_opt_string,
+    terminal::{Ask, Color},
+};
 
 #[rustfmt::skip]
 mod overrides;
@@ -401,40 +404,6 @@ define(`include', `builtin_include(substr($1,1,decr(decr(len($1)))))dnl')dnl
     drop(stdin);
     let stdout = handle.wait_with_output()?.stdout;
     Ok(String::from_utf8_lossy(&stdout).to_string())
-}
-
-struct Ask {
-    message: String,
-}
-
-impl Ask {
-    fn run(self) -> bool {
-        let mut buffer = String::new();
-        let stdin = io::stdin();
-        let mut handle = stdin.lock();
-
-        print!("{} [Y/n] ", &self.message);
-        let _ = io::stdout().flush();
-        loop {
-            buffer.clear();
-            handle
-                .read_line(&mut buffer)
-                .expect("Could not read from stdin.");
-
-            match buffer.trim() {
-                "" | "Y" | "y" | "yes" | "YES" | "Yes" => {
-                    return true;
-                }
-                "n" | "N" | "no" | "No" | "NO" => {
-                    return false;
-                }
-                _ => {
-                    print!("\n{} [Y/n] ", &self.message);
-                    let _ = io::stdout().flush();
-                }
-            }
-        }
-    }
 }
 
 impl FileSettings {

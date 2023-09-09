@@ -101,8 +101,8 @@ fn run_app(opt: Opt) -> Result<()> {
         Some(SubCommand::EditConfig) => {
             return subcommands::edit_config();
         }
-        Some(SubCommand::Man(manopt)) => {
-            return subcommands::man(manopt);
+        Some(SubCommand::Man(ManOpt { page, no_raw })) => {
+            return subcommands::man(page, false).and_then(|s| subcommands::pager(s, no_raw));
         }
         Some(SubCommand::CompiledWith) => {
             return subcommands::compiled_with();
@@ -131,6 +131,13 @@ fn run_app(opt: Opt) -> Result<()> {
             let mut temp_dir = std::env::temp_dir();
             temp_dir.push("meli");
             println!("{}", temp_dir.display());
+            return Ok(());
+        }
+        Some(SubCommand::InstallMan { destination_path }) => {
+            match args::manpages::ManPages::install(destination_path) {
+                Ok(p) => println!("Installed at {}.", p.display()),
+                Err(err) => return Err(err),
+            }
             return Ok(());
         }
         None => {}

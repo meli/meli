@@ -73,15 +73,25 @@ pub fn edit_config() -> Result<()> {
 }
 
 #[cfg(feature = "cli-docs")]
-pub fn man(ManOpt { page, no_raw }: ManOpt) -> Result<()> {
+pub fn man(page: manpages::ManPages, source: bool) -> Result<String> {
     const MANPAGES: [&[u8]; 4] = [
         include_bytes!(concat!(env!("OUT_DIR"), "/meli.txt.gz")),
         include_bytes!(concat!(env!("OUT_DIR"), "/meli.conf.txt.gz")),
         include_bytes!(concat!(env!("OUT_DIR"), "/meli-themes.txt.gz")),
         include_bytes!(concat!(env!("OUT_DIR"), "/meli.7.txt.gz")),
     ];
+    const MANPAGES_MDOC: [&[u8]; 4] = [
+        include_bytes!(concat!(env!("OUT_DIR"), "/meli.mdoc.gz")),
+        include_bytes!(concat!(env!("OUT_DIR"), "/meli.conf.mdoc.gz")),
+        include_bytes!(concat!(env!("OUT_DIR"), "/meli-themes.mdoc.gz")),
+        include_bytes!(concat!(env!("OUT_DIR"), "/meli.7.mdoc.gz")),
+    ];
 
-    let mut gz = GzDecoder::new(MANPAGES[page as usize]);
+    let mut gz = GzDecoder::new(if source {
+        MANPAGES_MDOC[page as usize]
+    } else {
+        MANPAGES[page as usize]
+    });
     let mut v = String::with_capacity(
         str::parse::<usize>(unsafe {
             std::str::from_utf8_unchecked(gz.header().unwrap().comment().unwrap())
@@ -90,17 +100,22 @@ pub fn man(ManOpt { page, no_raw }: ManOpt) -> Result<()> {
     );
     gz.read_to_string(&mut v)?;
 
+    Ok(v)
+}
+
+#[cfg(feature = "cli-docs")]
+pub fn pager(v: String, no_raw: Option<Option<bool>>) -> Result<()> {
     if let Some(no_raw) = no_raw {
         match no_raw {
             Some(true) => {}
             None if (unsafe { libc::isatty(libc::STDOUT_FILENO) == 1 }) => {}
             Some(false) | None => {
-                println!("{}", &v);
+                println!("{v}");
                 return Ok(());
             }
         }
     } else if unsafe { libc::isatty(libc::STDOUT_FILENO) != 1 } {
-        println!("{}", &v);
+        println!("{v}");
         return Ok(());
     }
 

@@ -36,6 +36,8 @@ pub mod keys;
 pub mod embed;
 pub mod text_editing;
 
+use std::io::{BufRead, Write};
+
 pub use braille::BraillePixelIter;
 pub use screen::{Screen, StateStdout};
 
@@ -123,3 +125,37 @@ derive_csi_sequence!(
     #[doc = "Empty struct with a Display implementation that returns the byte sequence to end [Bracketed Paste Mode](http://www.xfree86.org/current/ctlseqs.html#Bracketed%20Paste%20Mode)"]
     (BracketModeEnd, "?2004l")
 );
+
+pub struct Ask {
+    pub message: String,
+}
+
+impl Ask {
+    pub fn run(self) -> bool {
+        let mut buffer = String::new();
+        let stdin = std::io::stdin();
+        let mut handle = stdin.lock();
+
+        print!("{} [Y/n] ", &self.message);
+        let _ = std::io::stdout().flush();
+        loop {
+            buffer.clear();
+            handle
+                .read_line(&mut buffer)
+                .expect("Could not read from stdin.");
+
+            match buffer.trim() {
+                "" | "Y" | "y" | "yes" | "YES" | "Yes" => {
+                    return true;
+                }
+                "n" | "N" | "no" | "No" | "NO" => {
+                    return false;
+                }
+                _ => {
+                    print!("\n{} [Y/n] ", &self.message);
+                    let _ = std::io::stdout().flush();
+                }
+            }
+        }
+    }
+}

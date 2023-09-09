@@ -75,12 +75,18 @@ or
 Test a configuration file for syntax issues or missing options.
 .It Cm man Op Ar page
 Print documentation page and exit (Piping to a pager is recommended).
+.It Cm install-man Op Ar path
+Install manual pages to the first location provided by
+.Ar MANPATH
+or
+.Xr manpath 1 ,
+unless you specify the directory as an argument.
 .It Cm print-default-theme
 Print default theme keys and values in TOML syntax, to be used as a blueprint.
 .It Cm print-loaded-themes
 Print all loaded themes in TOML syntax.
 .It Cm print-used-paths
-Print all paths that meli creates/uses.
+Print all paths that are created and used.
 .It Cm compiled-with
 Print compile time feature flags of this binary.
 .It Cm view

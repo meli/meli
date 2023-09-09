@@ -45,32 +45,42 @@ fn main() {
         let out_dir = env::var("OUT_DIR").unwrap();
         let mut out_dir_path = Path::new(&out_dir).to_path_buf();
 
-        let mut cl = |filepath: &str, output: &str| {
+        let mut cl = |filepath: &str, output: &str, source: bool| {
             out_dir_path.push(output);
-            let output = Command::new("mandoc")
-                .args(MANDOC_OPTS)
-                .arg(filepath)
-                .output()
-                .or_else(|_| Command::new("man").arg("-l").arg(filepath).output())
-                .expect(
-                    "could not execute `mandoc` or `man`. If the binaries are not available in \
-                     the PATH, disable `cli-docs` feature to be able to continue compilation.",
-                );
+            let output = if source {
+                std::fs::read_to_string(filepath).unwrap().into_bytes()
+            } else {
+                let output = Command::new("mandoc")
+                    .args(MANDOC_OPTS)
+                    .arg(filepath)
+                    .output()
+                    .or_else(|_| Command::new("man").arg("-l").arg(filepath).output())
+                    .expect(
+                        "could not execute `mandoc` or `man`. If the binaries are not available \
+                         in the PATH, disable `cli-docs` feature to be able to continue \
+                         compilation.",
+                    );
+                output.stdout
+            };
 
             let file = File::create(&out_dir_path).unwrap_or_else(|err| {
                 panic!("Could not create file {}: {}", out_dir_path.display(), err)
             });
             let mut gz = GzBuilder::new()
-                .comment(output.stdout.len().to_string().into_bytes())
+                .comment(output.len().to_string().into_bytes())
                 .write(file, Compression::default());
-            gz.write_all(&output.stdout).unwrap();
+            gz.write_all(&output).unwrap();
             gz.finish().unwrap();
             out_dir_path.pop();
         };
 
-        cl("docs/meli.1", "meli.txt.gz");
-        cl("docs/meli.conf.5", "meli.conf.txt.gz");
-        cl("docs/meli-themes.5", "meli-themes.txt.gz");
-        cl("docs/meli.7", "meli.7.txt.gz");
+        cl("docs/meli.1", "meli.txt.gz", false);
+        cl("docs/meli.conf.5", "meli.conf.txt.gz", false);
+        cl("docs/meli-themes.5", "meli-themes.txt.gz", false);
+        cl("docs/meli.7", "meli.7.txt.gz", false);
+        cl("docs/meli.1", "meli.mdoc.gz", true);
+        cl("docs/meli.conf.5", "meli.conf.mdoc.gz", true);
+        cl("docs/meli-themes.5", "meli-themes.mdoc.gz", true);
+        cl("docs/meli.7", "meli.7.mdoc.gz", true);
     }
 }
