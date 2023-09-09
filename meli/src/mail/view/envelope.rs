@@ -1361,6 +1361,9 @@ impl Component for EnvelopeView {
                 if path.is_dir() {
                     path.push(format!("{}.eml", self.mail.message_id_raw()));
                 }
+                if path.is_relative() {
+                    path = context.current_dir().join(&path);
+                }
                 match save_attachment(&path, &self.mail.bytes) {
                     Err(err) => {
                         context.replies.push_back(UIEvent::Notification(
@@ -1396,6 +1399,9 @@ impl Component for EnvelopeView {
                             ));
                         }
                     }
+                    if path.is_relative() {
+                        path = context.current_dir().join(&path);
+                    }
                     match save_attachment(&path, &u.decode(Default::default())) {
                         Err(err) => {
                             context.replies.push_back(UIEvent::Notification(
@@ -1417,6 +1423,9 @@ impl Component for EnvelopeView {
                     // Save entire message as eml
                     if path.is_dir() {
                         path.push(format!("{}.eml", self.mail.message_id_raw()));
+                    }
+                    if path.is_relative() {
+                        path = context.current_dir().join(&path);
                     }
                     match save_attachment(&path, &self.mail.bytes) {
                         Err(err) => {

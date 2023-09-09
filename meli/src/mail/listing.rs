@@ -701,7 +701,11 @@ pub trait MailListingTrait: ListingTrait {
                             account.operation(env_hash).and_then(|mut op| op.as_bytes())
                         })
                         .collect::<Result<Vec<_>>>();
-                    let mut path_ = path.to_path_buf();
+                    let mut path = path.to_path_buf();
+                    if path.is_relative() {
+                        path = context.current_dir().join(&path);
+                    }
+                    let account = &mut context.accounts[&account_hash];
                     let format = (*format).unwrap_or_default();
                     let collection = account.collection.clone();
                     let (sender, mut receiver) = crate::jobs::oneshot::channel();
@@ -715,16 +719,16 @@ pub trait MailListingTrait: ListingTrait {
                                     .iter()
                                     .map(|&env_hash| collection.get_env(env_hash))
                                     .collect();
-                                if path_.is_dir() {
+                                if path.is_dir() {
                                     if envs.len() == 1 {
-                                        path_.push(format!("{}.mbox", envs[0].message_id_raw()));
+                                        path.push(format!("{}.mbox", envs[0].message_id_raw()));
                                     } else {
                                         let now = datetime::timestamp_to_string(
                                             datetime::now(),
                                             Some(datetime::formats::RFC3339_DATETIME),
                                             false,
                                         );
-                                        path_.push(format!(
+                                        path.push(format!(
                                             "{}-{}-{}_envelopes.mbox",
                                             now,
                                             envs[0].message_id_raw(),
@@ -732,7 +736,7 @@ pub trait MailListingTrait: ListingTrait {
                                         ));
                                     }
                                 }
-                                let mut file = BufWriter::new(File::create(&path_)?);
+                                let mut file = BufWriter::new(File::create(&path)?);
                                 let mut iter = envs.iter().zip(bytes);
                                 let tags_lck = collection.tag_index.read().unwrap();
                                 if let Some((env, ref bytes)) = iter.next() {
@@ -770,7 +774,7 @@ pub trait MailListingTrait: ListingTrait {
                                     )?;
                                 }
                                 file.flush()?;
-                                Ok(path_)
+                                Ok(path)
                             };
                             let r: Result<PathBuf> = cl.await;
                             let _ = sender.send(r);
