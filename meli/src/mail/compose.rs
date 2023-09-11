@@ -160,6 +160,8 @@ impl Composer {
     pub fn new(context: &Context) -> Self {
         let mut pager = Pager::new(context);
         pager.set_show_scrollbar(true);
+        let mut form = FormWidget::default();
+        form.set_cursor(2);
         Composer {
             reply_context: None,
             account_hash: AccountHash::default(),
@@ -172,7 +174,7 @@ impl Composer {
                 hooks::MISSINGATTACHMENTWARN,
                 hooks::EMPTYDRAFTWARN,
             ],
-            form: FormWidget::default(),
+            form,
             mode: ViewMode::Edit,
             #[cfg(feature = "gpgme")]
             gpg_state: gpg::GpgComposeState::default(),
