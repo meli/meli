@@ -1236,6 +1236,28 @@ impl Component for EnvelopeView {
             s.draw(grid, area, context);
         }
 
+        // Draw number command buffer at the bottom right corner:
+
+        let l = nth_row_area(area, height!(area));
+        if self.cmd_buf.is_empty() {
+            clear_area(
+                grid,
+                (pos_inc(l.0, (width!(area).saturating_sub(8), 0)), l.1),
+                self.view_settings.theme_default,
+            );
+        } else {
+            let s = self.cmd_buf.to_string();
+            write_string_to_grid(
+                &s,
+                grid,
+                self.view_settings.theme_default.fg,
+                self.view_settings.theme_default.bg,
+                self.view_settings.theme_default.attrs,
+                (pos_inc(l.0, (width!(area).saturating_sub(s.len()), 0)), l.1),
+                None,
+            );
+        }
+
         self.dirty = false;
     }
 
@@ -1291,7 +1313,10 @@ impl Component for EnvelopeView {
                 return true;
             }
             UIEvent::Input(Key::Char(c)) if c.is_ascii_digit() => {
-                self.cmd_buf.push(c);
+                if self.cmd_buf.len() < 9 {
+                    self.cmd_buf.push(c);
+                    self.set_dirty(true);
+                }
                 return true;
             }
             UIEvent::Input(ref key)
