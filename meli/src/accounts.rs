@@ -1428,7 +1428,7 @@ impl Account {
     ) -> impl FnOnce(Arc<String>) -> Pin<Box<dyn Future<Output = Result<()>> + Send>> + Send {
         let capabilities = self.backend_capabilities.clone();
         let backend = self.backend.clone();
-        |message: Arc<String>| -> Pin<Box<dyn Future<Output = Result<()>> + Send>> {
+        move |message: Arc<String>| -> Pin<Box<dyn Future<Output = Result<()>> + Send>> {
             Box::pin(async move {
                 use std::{
                     io::Write,
