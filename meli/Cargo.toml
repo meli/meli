@@ -1,6 +1,6 @@
 [package]
 name = "meli"
-version = "0.8.0"
+version = "0.8.1"
 authors = ["Manos Pitsidianakis <manos@pitsidianak.is>"]
 edition = "2021"
 rust-version = "1.65.0"
@@ -36,7 +36,7 @@ futures = "0.3.5"
 indexmap = { version = "^1.6", features = ["serde-1"] }
 libc = { version = "0.2.125", default-features = false, features = ["extra_traits"] }
 linkify = { version = "^0.8", default-features = false }
-melib = { path = "../melib", version = "0.8.0" }
+melib = { path = "../melib", version = "0.8.1" }
 nix = { version = "^0.24", default-features = false }
 notify = { version = "4.0.1", default-features = false } # >:c
 num_cpus = "1.12.0"
