@@ -69,7 +69,7 @@ impl ShellExpandTrait for Path {
 
     #[cfg(target_os = "linux")]
     fn complete(&self, force: bool) -> SmallVec<[String; 128]> {
-        use std::{convert::TryFrom, os::unix::io::AsRawFd};
+        use std::os::unix::io::AsRawFd;
 
         use libc::dirent64;
         use nix::fcntl::OFlag;

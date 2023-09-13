@@ -1216,7 +1216,6 @@ impl MailBackend for ImapType {
 
             for l in response.split_rn() {
                 if l.starts_with(b"* SEARCH") {
-                    use std::iter::FromIterator;
                     let uid_index = uid_store.uid_index.lock()?;
                     return Ok(SmallVec::from_iter(
                         String::from_utf8_lossy(l[b"* SEARCH".len()..].trim())

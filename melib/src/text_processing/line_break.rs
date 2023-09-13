@@ -1091,7 +1091,6 @@ pub fn split_lines_reflow(text: &str, reflow: Reflow, width: Option<usize>) -> V
                         continue;
                     }
                     let segment_tree = {
-                        use std::iter::FromIterator;
                         let mut t: smallvec::SmallVec<[usize; 1024]> =
                             smallvec::SmallVec::from_iter(std::iter::repeat(0).take(line.len()));
                         for (idx, _g) in UnicodeSegmentation::grapheme_indices(line, true) {
@@ -1568,7 +1567,6 @@ impl Iterator for LineBreakText {
                                 ),
                                 prev_break: 0,
                                 segment_tree: {
-                                    use std::iter::FromIterator;
                                     let mut t: smallvec::SmallVec<[usize; 1024]> =
                                         smallvec::SmallVec::from_iter(
                                             std::iter::repeat(0).take(line.len()),

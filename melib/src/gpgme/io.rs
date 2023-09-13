@@ -149,7 +149,6 @@ impl Write for Data {
 impl Seek for Data {
     #[inline]
     fn seek(&mut self, pos: io::SeekFrom) -> io::Result<u64> {
-        use std::convert::TryInto;
         let (off, whence) = match pos {
             io::SeekFrom::Start(off) => (off.try_into().unwrap_or(i64::MAX), libc::SEEK_SET),
             io::SeekFrom::End(off) => (off.saturating_abs(), libc::SEEK_END),
