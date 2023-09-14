@@ -1516,7 +1516,15 @@ impl Component for Listing {
                     };
                     match k {
                         k if shortcut!(k == shortcuts[Shortcuts::LISTING]["next_account"]) => {
-                            if self.cursor_pos.account + amount < self.accounts.len() {
+                            if self.cursor_pos.account + amount >= self.accounts.len() {
+                                // Go to last mailbox.
+                                self.cursor_pos.menu = MenuEntryCursor::Mailbox(
+                                    self.accounts[self.cursor_pos.account]
+                                        .entries
+                                        .len()
+                                        .saturating_sub(1),
+                                );
+                            } else if self.cursor_pos.account + amount < self.accounts.len() {
                                 self.cursor_pos.account += amount;
                                 self.cursor_pos.menu = MenuEntryCursor::Mailbox(0);
                             } else {
@@ -2090,7 +2098,15 @@ impl Component for Listing {
                         k if shortcut!(k == shortcuts[Shortcuts::LISTING]["next_account"])
                             || shortcut!(k == shortcuts[Shortcuts::LISTING]["next_page"]) =>
                         {
-                            if self.menu_cursor_pos.account + amount < self.accounts.len() {
+                            if self.menu_cursor_pos.account + amount >= self.accounts.len() {
+                                // Go to last mailbox.
+                                self.menu_cursor_pos.menu = MenuEntryCursor::Mailbox(
+                                    self.accounts[self.menu_cursor_pos.account]
+                                        .entries
+                                        .len()
+                                        .saturating_sub(1),
+                                );
+                            } else if self.menu_cursor_pos.account + amount < self.accounts.len() {
                                 self.menu_cursor_pos.account += amount;
                                 self.menu_cursor_pos.menu = MenuEntryCursor::Mailbox(0);
                             } else {
