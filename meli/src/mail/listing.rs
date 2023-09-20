@@ -1516,15 +1516,7 @@ impl Component for Listing {
                     };
                     match k {
                         k if shortcut!(k == shortcuts[Shortcuts::LISTING]["next_account"]) => {
-                            if self.cursor_pos.account + amount >= self.accounts.len() {
-                                // Go to last mailbox.
-                                self.cursor_pos.menu = MenuEntryCursor::Mailbox(
-                                    self.accounts[self.cursor_pos.account]
-                                        .entries
-                                        .len()
-                                        .saturating_sub(1),
-                                );
-                            } else if self.cursor_pos.account + amount < self.accounts.len() {
+                            if self.cursor_pos.account + amount < self.accounts.len() {
                                 self.cursor_pos.account += amount;
                                 self.cursor_pos.menu = MenuEntryCursor::Mailbox(0);
                             } else {
