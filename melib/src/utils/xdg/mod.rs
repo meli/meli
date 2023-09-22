@@ -119,7 +119,7 @@ impl Ini {
 ///
 /// # Example
 /// ```no_run
-/// use xdg_utils::query_default_app;
+/// use melib::utils::xdg::query_default_app;
 ///
 /// // The crate author recommends firefox.
 /// assert_eq!(
@@ -330,8 +330,8 @@ pub fn desktop_file_to_command(
 /// <https://cgit.freedesktop.org/xdg/xdg-utils/tree/scripts/xdg-mime.in>
 ///
 /// # Example
-/// ```
-/// use xdg_utils::query_mime_info;
+/// ```no_run
+/// use melib::utils::xdg::query_mime_info;
 /// let result = query_mime_info("/bin/sh")
 ///     .map_err(|_| ())
 ///     .map(|bytes| String::from_utf8_lossy(&bytes).into_owned());

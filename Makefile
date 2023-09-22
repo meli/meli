@@ -109,8 +109,12 @@ lint:
 	@RUSTFLAGS='${RUSTFLAGS}' $(CARGO_BIN) clippy --no-deps --all-features --all --tests --examples --benches --bins
 
 .PHONY: test
-test:
+test: test-docs
 	@RUSTFLAGS='${RUSTFLAGS}' ${CARGO_BIN} test ${CARGO_ARGS} ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" --all --tests --examples --benches --bins
+
+.PHONY: test-docs
+test-docs:
+	@RUSTFLAGS='${RUSTFLAGS}' ${CARGO_BIN} test ${CARGO_ARGS} ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" --all --doc
 
 .PHONY: check-deps
 check-deps:
