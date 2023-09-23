@@ -207,6 +207,14 @@ impl Composer {
                 .iter()
                 .any(|hn| hn.as_str() == h.name())
         });
+
+        for h in context.accounts[&account_hash]
+            .backend_capabilities
+            .extra_submission_headers
+        {
+            ret.draft.set_header(h.clone(), String::new());
+        }
+
         for (h, v) in
             account_settings!(context[account_hash].composing.default_header_values).iter()
         {
@@ -582,6 +590,33 @@ To: {}
         self.form.set_cursor(old_cursor);
         let headers = self.draft.headers();
         let account_hash = self.account_hash;
+        for k in context.accounts[&account_hash]
+            .backend_capabilities
+            .extra_submission_headers
+        {
+            if matches!(*k, HeaderName::NEWSGROUPS) {
+                self.form.push_cl((
+                    k.into(),
+                    headers[k].to_string(),
+                    Box::new(move |c, term| {
+                        c.accounts[&account_hash]
+                            .mailbox_entries
+                            .values()
+                            .filter_map(|v| {
+                                if v.path.starts_with(term) {
+                                    Some(v.path.to_string())
+                                } else {
+                                    None
+                                }
+                            })
+                            .map(AutoCompleteEntry::from)
+                            .collect::<Vec<AutoCompleteEntry>>()
+                    }),
+                ));
+            } else {
+                self.form.push((k.into(), headers[k].to_string()));
+            }
+        }
         for k in &[
             HeaderName::DATE,
             HeaderName::FROM,
@@ -590,7 +625,7 @@ To: {}
             HeaderName::BCC,
             HeaderName::SUBJECT,
         ] {
-            if k == HeaderName::TO || k == HeaderName::CC || k == HeaderName::BCC {
+            if matches!(*k, HeaderName::TO | HeaderName::CC | HeaderName::BCC) {
                 self.form.push_cl((
                     k.into(),
                     headers[k].to_string(),
