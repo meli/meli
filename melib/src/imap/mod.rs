@@ -292,6 +292,7 @@ impl MailBackend for ImapType {
             extensions: Some(extensions),
             supports_tags: true,
             supports_submission: false,
+            extra_submission_headers: &[],
         }
     }
 

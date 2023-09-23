@@ -603,6 +603,7 @@ impl MailBackend for NotmuchDb {
             extensions: None,
             supports_tags: true,
             supports_submission: false,
+            extra_submission_headers: &[],
         };
         CAPABILITIES
     }

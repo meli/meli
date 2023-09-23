@@ -37,7 +37,7 @@ use super::email::{Envelope, EnvelopeHash, Flag};
 use crate::{
     conf::AccountSettings,
     error::{Error, ErrorKind, Result},
-    LogLevel,
+    HeaderName, LogLevel,
 };
 
 #[macro_export]
@@ -328,6 +328,7 @@ pub struct MailBackendCapabilities {
     pub supports_search: bool,
     pub supports_tags: bool,
     pub supports_submission: bool,
+    pub extra_submission_headers: &'static [HeaderName],
 }
 
 #[derive(Debug, Copy, Clone)]

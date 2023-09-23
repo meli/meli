@@ -186,6 +186,7 @@ impl MailBackend for MaildirType {
             extensions: None,
             supports_tags: false,
             supports_submission: false,
+            extra_submission_headers: &[],
         };
         CAPABILITIES
     }
