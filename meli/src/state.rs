@@ -357,9 +357,11 @@ impl State {
         }
         */
 
-        let termsize = termion::terminal_size()?;
-        let cols = termsize.0 as usize;
-        let rows = termsize.1 as usize;
+        let (cols, rows) = termion::terminal_size().chain_err_summary(|| {
+            "Could not determine terminal size. Are you running this on a tty? If yes, do you need \
+             permissions for tty ioctls?"
+        })?;
+        let (cols, rows) = (cols as usize, rows as usize);
 
         let job_executor = Arc::new(JobExecutor::new(sender.clone()));
         let accounts = {
