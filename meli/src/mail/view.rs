@@ -52,6 +52,9 @@ pub use envelope::EnvelopeView;
 pub mod filters;
 pub use filters::*;
 
+#[cfg(test)]
+mod tests;
+
 /// Contains an Envelope view, with sticky headers, a pager for the body, and
 /// subviews for more menus
 #[derive(Debug)]
