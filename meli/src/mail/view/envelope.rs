@@ -1057,21 +1057,8 @@ impl Component for EnvelopeView {
                 ) {
                     self.filters.push(filter);
                 }
-            } else if let Some(att) = match body.content_type {
-                ContentType::Multipart {
-                    kind: MultipartType::Alternative,
-                    ref parts,
-                    ..
-                } => parts.iter().find(|p| p.is_text()),
-                ContentType::Multipart {
-                    kind: MultipartType::Digest,
-                    ..
-                } => Some(&body),
-                _ => None,
-            } {
-                if let Ok(filter) = ViewFilter::new_attachment(att, context) {
-                    self.filters.push(filter);
-                }
+            } else if let Ok(filter) = ViewFilter::new_attachment(&body, context) {
+                self.filters.push(filter);
             }
             self.body_text = String::from_utf8_lossy(
                 &body.decode(Option::<Charset>::from(&self.force_charset).into()),
