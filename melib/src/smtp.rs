@@ -768,10 +768,6 @@ impl SmtpConnection {
                 self.stream.write_all(b"\r\n").await?;
             }
 
-            if !mail.ends_with('\n') {
-                self.stream.write_all(b".\r\n").await?;
-            }
-
             //The mail data are terminated by a line containing only a period, that is, the
             // character sequence "`<CRLF>`.`<CRLF>`", where the first `<CRLF>` is
             // actually the terminator of the previous line (see Section 4.5.2).
