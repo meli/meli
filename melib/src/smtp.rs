@@ -66,8 +66,9 @@
 //! Date: Mon, 13 Jul 2020 09:02:15 +0300
 //!
 //! Prescriptions-R-X"#,
-//!     b"l15@example.com",
-//!     b"l10@example.com",
+//!     Some(&[
+//!         Address::try_from("foo-chat@example.com").unwrap(),
+//!     ]),
 //! )).unwrap();
 //! Ok(())
 //! ```
