@@ -70,6 +70,7 @@
 //!         Address::try_from("foo-chat@example.com").unwrap(),
 //!     ]),
 //! )).unwrap();
+//! futures::executor::block_on(conn.quit()).unwrap();
 //! Ok(())
 //! ```
 
@@ -807,6 +808,12 @@ impl SmtpConnection {
         }
         Ok(())
     }
+
+    pub async fn quit(&mut self) -> Result<()> {
+        self.send_command(&[b"QUIT"]).await?;
+
+        Ok(())
+    }
 }
 
 /// Expected reply code in a single or multi-line reply by the server
@@ -1317,6 +1324,7 @@ mod test {
             ]),
         ))
         .unwrap();
+        futures::executor::block_on(connection.quit()).unwrap();
         assert_eq!(handler.stored.lock().unwrap().len(), 2);
     }
 }
