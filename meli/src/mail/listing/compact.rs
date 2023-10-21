@@ -1063,7 +1063,7 @@ impl CompactListing {
             root_envelope.subject().trim().to_string()
         };
         EntryStrings {
-            date: DateString(ConversationsListing::format_date(context, thread.date())),
+            date: DateString(self.format_date(context, thread.date())),
             subject: if thread.len() > 1 {
                 SubjectString(format!("{} ({})", subject, thread.len()))
             } else {

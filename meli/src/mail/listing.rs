@@ -30,7 +30,9 @@ use std::{
 };
 
 use futures::future::try_join_all;
-use melib::{backends::EnvelopeHashBatch, mbox::MboxMetadata, utils::datetime, Address};
+use melib::{
+    backends::EnvelopeHashBatch, mbox::MboxMetadata, utils::datetime, Address, UnixTimestamp,
+};
 use smallvec::SmallVec;
 
 use super::*;
@@ -894,6 +896,40 @@ pub trait ListingTrait: Component {
             to: parent,
             content: Box::new(msg),
         });
+    }
+
+    fn format_date(&self, context: &Context, epoch: UnixTimestamp) -> String {
+        let d = std::time::UNIX_EPOCH + std::time::Duration::from_secs(epoch);
+        let now: std::time::Duration = std::time::SystemTime::now()
+            .duration_since(d)
+            .unwrap_or_else(|_| std::time::Duration::new(std::u64::MAX, 0));
+        match now.as_secs() {
+            n if context.settings.listing.recent_dates && n < 60 * 60 => format!(
+                "{} minute{} ago",
+                n / (60),
+                if n / 60 == 1 { "" } else { "s" }
+            ),
+            n if context.settings.listing.recent_dates && n < 24 * 60 * 60 => format!(
+                "{} hour{} ago",
+                n / (60 * 60),
+                if n / (60 * 60) == 1 { "" } else { "s" }
+            ),
+            n if context.settings.listing.recent_dates && n < 7 * 24 * 60 * 60 => format!(
+                "{} day{} ago",
+                n / (24 * 60 * 60),
+                if n / (24 * 60 * 60) == 1 { "" } else { "s" }
+            ),
+            _ => melib::utils::datetime::timestamp_to_string(
+                epoch,
+                context
+                    .settings
+                    .listing
+                    .datetime_fmt
+                    .as_deref()
+                    .or(Some("%Y-%m-%d %T")),
+                false,
+            ),
+        }
     }
 }
 

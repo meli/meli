@@ -902,7 +902,7 @@ impl ThreadListing {
         }
         let subject = e.subject().trim().to_string();
         EntryStrings {
-            date: DateString(ConversationsListing::format_date(context, e.date())),
+            date: DateString(self.format_date(context, e.date())),
             subject: SubjectString(subject),
             flag: FlagString((if e.has_attachments() { "📎" } else { "" }).to_string()),
             from: FromString(address_list!((e.from()) as comma_sep_list)),

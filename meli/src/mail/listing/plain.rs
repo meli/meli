@@ -748,7 +748,7 @@ impl PlainListing {
         }
         let subject = e.subject().trim().to_string();
         EntryStrings {
-            date: DateString(ConversationsListing::format_date(context, e.date())),
+            date: DateString(self.format_date(context, e.date())),
             subject: SubjectString(subject),
             flag: FlagString(format!(
                 "{selected}{unseen}{attachments}{whitespace}",

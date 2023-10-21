@@ -22,7 +22,7 @@
 use std::{collections::BTreeMap, iter::FromIterator};
 
 use indexmap::IndexSet;
-use melib::{SortField, SortOrder, TagHash, Threads, UnixTimestamp};
+use melib::{SortField, SortOrder, TagHash, Threads};
 
 use super::*;
 use crate::{components::PageMovement, jobs::JoinHandle};
@@ -795,7 +795,7 @@ impl ConversationsListing {
             root_envelope.subject().trim().to_string()
         };
         EntryStrings {
-            date: DateString(ConversationsListing::format_date(context, thread.date())),
+            date: DateString(self.format_date(context, thread.date())),
             subject: SubjectString(if thread.len() > 1 {
                 format!("{} ({})", subject, thread.len())
             } else {
@@ -808,40 +808,6 @@ impl ConversationsListing {
             )),
             from: FromString(address_list!((from) as comma_sep_list)),
             tags: TagString(tags_string, colors),
-        }
-    }
-
-    pub(super) fn format_date(context: &Context, epoch: UnixTimestamp) -> String {
-        let d = std::time::UNIX_EPOCH + std::time::Duration::from_secs(epoch);
-        let now: std::time::Duration = std::time::SystemTime::now()
-            .duration_since(d)
-            .unwrap_or_else(|_| std::time::Duration::new(std::u64::MAX, 0));
-        match now.as_secs() {
-            n if context.settings.listing.recent_dates && n < 60 * 60 => format!(
-                "{} minute{} ago",
-                n / (60),
-                if n / 60 == 1 { "" } else { "s" }
-            ),
-            n if context.settings.listing.recent_dates && n < 24 * 60 * 60 => format!(
-                "{} hour{} ago",
-                n / (60 * 60),
-                if n / (60 * 60) == 1 { "" } else { "s" }
-            ),
-            n if context.settings.listing.recent_dates && n < 7 * 24 * 60 * 60 => format!(
-                "{} day{} ago",
-                n / (24 * 60 * 60),
-                if n / (24 * 60 * 60) == 1 { "" } else { "s" }
-            ),
-            _ => melib::utils::datetime::timestamp_to_string(
-                epoch,
-                context
-                    .settings
-                    .listing
-                    .datetime_fmt
-                    .as_deref()
-                    .or(Some("%Y-%m-%d %T")),
-                false,
-            ),
         }
     }
 
