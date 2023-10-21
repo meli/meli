@@ -347,6 +347,7 @@ impl EmbedGrid {
             };
         }
 
+        #[allow(clippy::redundant_locals)]
         let mut state = state;
         match (byte, &mut state) {
             (b'\x1b', State::Normal) => {

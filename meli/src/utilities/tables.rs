@@ -142,7 +142,6 @@ impl<const N: usize> Default for DataColumns<N> {
                 elem.write(cl());
             }
             let ptr = &data as *const [MaybeUninit<T>; N];
-            std::mem::forget(data);
             unsafe { (ptr as *const [T; N]).read() }
         }
         Self {

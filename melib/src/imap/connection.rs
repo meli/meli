@@ -180,8 +180,13 @@ impl ImapStream {
             let mut socket = AsyncWrapper::new({
                 let conn = Connection::new_tcp(tcp_stream_connect(addr, server_conf.timeout)?);
                 #[cfg(feature = "imap-trace")]
-                let conn = conn.trace(true).with_id("imap");
-                conn
+                {
+                    conn.trace(true).with_id("imap")
+                }
+                #[cfg(not(feature = "imap-trace"))]
+                {
+                    conn
+                }
             })?;
             if server_conf.use_starttls {
                 let err_fn = || {
@@ -278,8 +283,13 @@ impl ImapStream {
             AsyncWrapper::new({
                 let conn = Connection::new_tcp(tcp_stream_connect(addr, server_conf.timeout)?);
                 #[cfg(feature = "imap-trace")]
-                let conn = conn.trace(true).with_id("imap");
-                conn
+                {
+                    conn.trace(true).with_id("imap")
+                }
+                #[cfg(not(feature = "imap-trace"))]
+                {
+                    conn
+                }
             })?
         };
         if let Err(err) = stream
@@ -442,16 +452,15 @@ impl ImapStream {
             }
         }
 
-        if capabilities.is_none() {
+        if let Some(capabilities) = capabilities {
+            Ok((capabilities, ret))
+        } else {
             /* sending CAPABILITY after LOGIN automatically is an RFC recommendation, so
              * check for lazy servers */
             ret.send_command(CommandBody::Capability).await?;
-            ret.read_response(&mut res).await.unwrap();
+            ret.read_response(&mut res).await?;
             let capabilities = protocol_parser::capabilities(&res)?.1;
             let capabilities = HashSet::from_iter(capabilities.into_iter().map(|s| s.to_vec()));
-            Ok((capabilities, ret))
-        } else {
-            let capabilities = capabilities.unwrap();
             Ok((capabilities, ret))
         }
     }

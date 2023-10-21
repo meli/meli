@@ -839,7 +839,8 @@ fn search_table(c: u32, t: &'static [(u32, u32, LineBreakClass)]) -> LineBreakCl
 }
 
 mod alg {
-    use super::super::{grapheme_clusters::TextProcessing, *};
+    use crate::text_processing::{grapheme_clusters::TextProcessing, *};
+
     fn cost(i: usize, j: usize, width: usize, minima: &[usize], offsets: &[usize]) -> usize {
         let w = offsets[j] + j - offsets[i] - i - 1;
         if w > width {
@@ -849,7 +850,7 @@ mod alg {
     }
 
     fn smawk(
-        rows: &mut Vec<usize>,
+        rows: &Vec<usize>,
         columns: &mut Vec<usize>,
         minima: &mut Vec<usize>,
         breaks: &mut Vec<usize>,
@@ -876,7 +877,7 @@ mod alg {
                 i += 1;
             }
         }
-        let rows = &mut stack;
+        let rows = &stack;
         if columns.len() > 1 {
             let mut odd_columns = columns.iter().skip(1).step_by(2).cloned().collect();
             smawk(rows, &mut odd_columns, minima, breaks, width, offsets);
@@ -949,7 +950,7 @@ mod alg {
             let r = std::cmp::min(n, 2 * i);
             let edge = i + offset;
             smawk(
-                &mut (offset..edge).collect(),
+                &(offset..edge).collect(),
                 &mut (edge..(r + offset)).collect(),
                 &mut minima,
                 &mut breaks,

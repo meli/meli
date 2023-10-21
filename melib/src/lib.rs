@@ -185,6 +185,7 @@ pub extern crate nom;
 #[macro_use]
 extern crate bitflags;
 pub extern crate futures;
+#[allow(unused_imports)]
 #[macro_use]
 pub extern crate indexmap;
 pub extern crate smallvec;

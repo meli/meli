@@ -124,9 +124,9 @@ impl<F: FilterTrait<OBJ>, OBJ: Object> Not for Filter<F, OBJ> {
     fn not(self) -> Self {
         match self {
             Self::Operator {
-                operator,
+                operator: FilterOperator::Not,
                 conditions,
-            } if operator == FilterOperator::Not => Self::Operator {
+            } => Self::Operator {
                 operator: FilterOperator::Or,
                 conditions,
             },

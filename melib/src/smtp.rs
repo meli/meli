@@ -357,8 +357,13 @@ impl SmtpConnection {
                     AsyncWrapper::new({
                         let conn = Connection::new_tls(conn);
                         #[cfg(feature = "smtp-trace")]
-                        let conn = conn.trace(true).with_id("smtp");
-                        conn
+                        {
+                            conn.trace(true).with_id("smtp")
+                        }
+                        #[cfg(not(feature = "smtp-trace"))]
+                        {
+                            conn
+                        }
                     })?
                 };
                 if matches!(server_conf.security, SmtpSecurity::Tls { .. }) {
@@ -382,8 +387,13 @@ impl SmtpConnection {
                         Some(std::time::Duration::new(4, 0)),
                     )?);
                     #[cfg(feature = "smtp-trace")]
-                    let conn = conn.trace(true).with_id("smtp");
-                    conn
+                    {
+                        conn.trace(true).with_id("smtp")
+                    }
+                    #[cfg(not(feature = "smtp-trace"))]
+                    {
+                        conn
+                    }
                 })?;
                 res.clear();
                 let reply = read_lines(
