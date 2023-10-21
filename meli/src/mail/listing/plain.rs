@@ -748,7 +748,7 @@ impl PlainListing {
         }
         let subject = e.subject().trim().to_string();
         EntryStrings {
-            date: DateString(PlainListing::format_date(e)),
+            date: DateString(ConversationsListing::format_date(context, e.date())),
             subject: SubjectString(subject),
             flag: FlagString(format!(
                 "{selected}{unseen}{attachments}{whitespace}",
@@ -1027,21 +1027,6 @@ impl PlainListing {
             self.local_collection.get(cursor).cloned()
         } else {
             self.filtered_selection.get(cursor).cloned()
-        }
-    }
-
-    fn format_date(envelope: &Envelope) -> String {
-        let d = std::time::UNIX_EPOCH + std::time::Duration::from_secs(envelope.date());
-        let now: std::time::Duration = std::time::SystemTime::now()
-            .duration_since(d)
-            .unwrap_or_else(|_| std::time::Duration::new(std::u64::MAX, 0));
-        match now.as_secs() {
-            n if n < 10 * 60 * 60 => format!("{} hours ago{}", n / (60 * 60), " ".repeat(8)),
-            n if n < 24 * 60 * 60 => format!("{} hours ago{}", n / (60 * 60), " ".repeat(7)),
-            n if n < 4 * 24 * 60 * 60 => {
-                format!("{} days ago{}", n / (24 * 60 * 60), " ".repeat(9))
-            }
-            _ => melib::utils::datetime::timestamp_to_string(envelope.datetime(), None, false),
         }
     }
 
