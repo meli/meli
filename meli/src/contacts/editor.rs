@@ -147,8 +147,8 @@ impl Component for ContactManager {
             self.initialized = true;
         }
 
-        let upper_left = upper_left!(area);
-        let bottom_right = bottom_right!(area);
+        let upper_left = area.upper_left();
+        let bottom_right = area.bottom_right();
 
         if self.dirty {
             let (width, _height) = self.content.size();
@@ -157,7 +157,7 @@ impl Component for ContactManager {
                 (upper_left, set_y(bottom_right, get_y(upper_left) + 1)),
                 self.theme_default,
             );
-            grid.copy_area_with_break(&self.content, area, ((0, 0), (width - 1, 0)));
+            grid.copy_area(&self.content, area, ((0, 0), (width - 1, 0)));
             self.dirty = false;
         }
 

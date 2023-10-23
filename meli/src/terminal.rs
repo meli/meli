@@ -39,7 +39,7 @@ pub mod text_editing;
 use std::io::{BufRead, Write};
 
 pub use braille::BraillePixelIter;
-pub use screen::{Screen, StateStdout};
+pub use screen::{Area, Screen, ScreenGeneration, StateStdout, Tty, Virtual};
 
 pub use self::{cells::*, keys::*, position::*, text_editing::*};
 

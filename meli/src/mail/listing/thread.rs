@@ -489,8 +489,8 @@ impl ListingTrait for ThreadListing {
         {
             self.refresh_mailbox(context, false);
         }
-        let upper_left = upper_left!(area);
-        let bottom_right = bottom_right!(area);
+        let upper_left = area.upper_left();
+        let bottom_right = area.bottom_right();
         if self.length == 0 {
             grid.clear_area(area, self.color_cache.theme_default);
             context.dirty_areas.push_back(area);
@@ -551,7 +551,7 @@ impl ListingTrait for ThreadListing {
                 if idx >= self.length {
                     continue; //bounds check
                 }
-                let new_area = nth_row_area(area, idx % rows);
+                let new_area = area.nth_row(idx % rows);
                 self.data_columns
                     .draw(grid, idx, self.cursor_pos.2, grid.bounds_iter(new_area));
                 if let Some(env_hash) = self.get_env_under_cursor(idx) {
@@ -589,7 +589,7 @@ impl ListingTrait for ThreadListing {
 
         _ = self
             .data_columns
-            .recalc_widths((width!(area), height!(area)), top_idx);
+            .recalc_widths((area.width(), area.height()), top_idx);
         grid.clear_area(area, self.color_cache.theme_default);
         /* copy table columns */
         self.data_columns
@@ -598,7 +598,7 @@ impl ListingTrait for ThreadListing {
             self.draw_relative_numbers(grid, area, top_idx);
         }
         /* apply each row colors separately */
-        for idx in top_idx..(top_idx + height!(area)) {
+        for idx in top_idx..(top_idx + area.height()) {
             if let Some(env_hash) = self.get_env_under_cursor(idx) {
                 let row_attr = row_attr!(
                     self.color_cache,
@@ -607,7 +607,7 @@ impl ListingTrait for ThreadListing {
                     self.cursor_pos.2 == idx,
                     self.rows.selection[&env_hash]
                 );
-                grid.change_theme(nth_row_area(area, idx % rows), row_attr);
+                grid.change_theme(area.nth_row(idx % rows), row_attr);
             }
         }
 
@@ -620,7 +620,7 @@ impl ListingTrait for ThreadListing {
                 true, // because self.cursor_pos.2 == idx,
                 self.rows.selection[&env_hash]
             );
-            grid.change_theme(nth_row_area(area, self.cursor_pos.2 % rows), row_attr);
+            grid.change_theme(area.nth_row(self.cursor_pos.2 % rows), row_attr);
         }
 
         /* clear gap if available height is more than count of entries */
@@ -1110,8 +1110,8 @@ impl ThreadListing {
 
     fn draw_relative_numbers(&mut self, grid: &mut CellBuffer, area: Area, top_idx: usize) {
         let width = self.data_columns.columns[0].size().0;
-        let upper_left = upper_left!(area);
-        for i in 0..height!(area) {
+        let upper_left = area.upper_left();
+        for i in 0..area.height() {
             let row_attr = if let Some(env_hash) = self.get_env_under_cursor(top_idx + i) {
                 row_attr!(
                     self.color_cache,
@@ -1366,8 +1366,8 @@ impl Component for ThreadListing {
             self.draw_list(grid, area, context);
         } else {
             self.cursor_pos = self.new_cursor_pos;
-            let upper_left = upper_left!(area);
-            let bottom_right = bottom_right!(area);
+            let upper_left = area.upper_left();
+            let bottom_right = area.bottom_right();
             if self.length == 0 && self.dirty {
                 grid.clear_area(area, self.color_cache.theme_default);
                 context.dirty_areas.push_back(area);

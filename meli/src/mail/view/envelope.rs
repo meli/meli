@@ -711,74 +711,61 @@ impl EnvelopeView {
 
 impl Component for EnvelopeView {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        let upper_left = upper_left!(area);
-        let bottom_right = bottom_right!(area);
-
         self.view_settings.theme_default = crate::conf::value(context, "theme_default");
 
-        let headers = crate::conf::value(context, "mail.view.headers");
-        let headers_names = crate::conf::value(context, "mail.view.headers_names");
-        let headers_area = crate::conf::value(context, "mail.view.headers_area");
+        let hdr_theme = crate::conf::value(context, "mail.view.headers");
+        let hdr_name_theme = crate::conf::value(context, "mail.view.headers_names");
+        let hdr_area_theme = crate::conf::value(context, "mail.view.headers_area");
 
         let y: usize = {
             if self.mode.is_source() {
                 grid.clear_area(area, self.view_settings.theme_default);
                 context.dirty_areas.push_back(area);
-                get_y(upper_left)
+                0
             } else {
                 let envelope = &self.mail;
                 let height_p = self.pager.size().1;
 
-                let height = height!(area)
+                let height = area
+                    .height()
                     .saturating_sub(self.headers_no)
                     .saturating_sub(1);
 
                 self.headers_no = 0;
                 let mut skip_header_ctr = self.headers_cursor;
                 let sticky = self.view_settings.sticky_headers || height_p < height;
-                let (_, mut y) = upper_left;
+                let mut y = 0;
                 macro_rules! print_header {
                     ($(($header:path, $string:expr)),*$(,)?) => {
                         $({
                             if sticky || skip_header_ctr == 0 {
-                                if y <= get_y(bottom_right) {
+                                if y <= area.height() {
+                                    grid.clear_area(
+                                        area.skip_rows(y),
+                                        hdr_area_theme,
+                                    );
                                     let (_x, _y) =
                                         grid.write_string(
                                         &format!("{}:", $header),
-                                        headers_names.fg,
-                                        headers_names.bg,
-                                        headers_names.attrs,
-                                        (set_y(upper_left, y), bottom_right),
-                                        Some(get_x(upper_left)),
+                                        hdr_name_theme.fg,
+                                        hdr_name_theme.bg,
+                                        hdr_name_theme.attrs,
+                                        area.skip_rows(y),
+                                        Some(0),
                                     );
-                                    if let Some(cell) = grid.get_mut(_x, _y) {
-                                        cell.set_ch(' ')
-                                            .set_fg(headers_area.fg)
-                                            .set_bg(headers_area.bg)
-                                            .set_attrs(headers_area.attrs);
-                                    }
-
-                                    let (_x, _y) =
+                                    let (__x, __y) =
                                         grid.write_string(
                                         &$string,
-                                        headers.fg,
-                                        headers.bg,
-                                        headers.attrs,
-                                        ((_x + 1, _y), bottom_right),
-                                        Some(get_x(upper_left)),
+                                        hdr_theme.fg,
+                                        hdr_theme.bg,
+                                        hdr_theme.attrs,
+                                        area.skip(_x+1, y+ _y),
+                                        Some(0),
                                     );
-
-                                        grid.clear_area(
-                                        (
-                                            (std::cmp::min(_x, get_x(bottom_right)), _y),
-                                            (get_x(bottom_right), _y),
-                                        ),
-                                        headers_area,
-                                    );
-                                    y = _y + 1;
+                                    y += _y +__y + 1;
                                 }
                             } else {
-                                skip_header_ctr -= 1;
+                                skip_header_ctr = skip_header_ctr.saturating_sub(1);
                             }
                             self.headers_no += 1;
                         })+
@@ -871,34 +858,32 @@ impl Component for EnvelopeView {
                     ref unsubscribe,
                 }) = list_management::ListActions::detect(envelope)
                 {
-                    let mut x = get_x(upper_left);
+                    let mut x = 0;
                     if let Some(id) = id {
                         if sticky || skip_header_ctr == 0 {
-                            grid.clear_area(
-                                (set_y(upper_left, y), set_y(bottom_right, y)),
-                                headers_area,
-                            );
+                            grid.clear_area(area.nth_row(y), hdr_area_theme);
                             let (_x, _) = grid.write_string(
                                 "List-ID: ",
-                                headers_names.fg,
-                                headers_names.bg,
-                                headers_names.attrs,
-                                (set_y(upper_left, y), bottom_right),
-                                None,
-                            );
-                            let (_x, _y) = grid.write_string(
-                                id,
-                                headers.fg,
-                                headers.bg,
-                                headers.attrs,
-                                ((_x, y), bottom_right),
+                                hdr_name_theme.fg,
+                                hdr_name_theme.bg,
+                                hdr_name_theme.attrs,
+                                area.nth_row(y),
                                 None,
                             );
                             x = _x;
-                            if _y != y {
-                                x = get_x(upper_left);
+                            let (_x, _y) = grid.write_string(
+                                id,
+                                hdr_theme.fg,
+                                hdr_theme.bg,
+                                hdr_theme.attrs,
+                                area.nth_row(y).skip_cols(_x),
+                                None,
+                            );
+                            x += _x;
+                            if _y != 0 {
+                                x = 0;
                             }
-                            y = _y;
+                            y += _y;
                         }
                         self.headers_no += 1;
                     }
@@ -906,71 +891,72 @@ impl Component for EnvelopeView {
                         if archive.is_some() || post.is_some() || unsubscribe.is_some() {
                             let (_x, _y) = grid.write_string(
                                 " Available actions: [ ",
-                                headers_names.fg,
-                                headers_names.bg,
-                                headers_names.attrs,
-                                ((x, y), bottom_right),
-                                Some(get_x(upper_left)),
+                                hdr_name_theme.fg,
+                                hdr_name_theme.bg,
+                                hdr_name_theme.attrs,
+                                area.skip(x, y),
+                                Some(0),
                             );
-                            x = _x;
-                            y = _y;
+                            x += _x;
+                            y += _y;
                         }
                         if archive.is_some() {
                             let (_x, _y) = grid.write_string(
                                 "list-archive, ",
-                                headers.fg,
-                                headers.bg,
-                                headers.attrs,
-                                ((x, y), bottom_right),
-                                Some(get_x(upper_left)),
+                                hdr_theme.fg,
+                                hdr_theme.bg,
+                                hdr_theme.attrs,
+                                area.skip(x, y),
+                                Some(0),
                             );
-                            x = _x;
-                            y = _y;
+                            x += _x;
+                            y += _y;
                         }
                         if post.is_some() {
                             let (_x, _y) = grid.write_string(
                                 "list-post, ",
-                                headers.fg,
-                                headers.bg,
-                                headers.attrs,
-                                ((x, y), bottom_right),
-                                Some(get_x(upper_left)),
+                                hdr_theme.fg,
+                                hdr_theme.bg,
+                                hdr_theme.attrs,
+                                area.skip(x, y),
+                                Some(0),
                             );
-                            x = _x;
-                            y = _y;
+                            x += _x;
+                            y += _y;
                         }
                         if unsubscribe.is_some() {
                             let (_x, _y) = grid.write_string(
                                 "list-unsubscribe, ",
-                                headers.fg,
-                                headers.bg,
-                                headers.attrs,
-                                ((x, y), bottom_right),
-                                Some(get_x(upper_left)),
+                                hdr_theme.fg,
+                                hdr_theme.bg,
+                                hdr_theme.attrs,
+                                area.skip(x, y),
+                                Some(0),
                             );
-                            x = _x;
-                            y = _y;
+                            x += _x;
+                            y += _y;
                         }
                         if archive.is_some() || post.is_some() || unsubscribe.is_some() {
                             if x >= 2 {
-                                if let Some(cell) = grid.get_mut(x - 2, y) {
-                                    cell.set_ch(' ');
+                                for c in grid.row_iter(area, (x - 2)..(x - 1), y) {
+                                    grid[c].set_ch(' ');
                                 }
                             }
                             if x > 0 {
-                                if let Some(cell) = grid.get_mut(x - 1, y) {
-                                    cell.set_ch(']')
-                                        .set_fg(headers_names.fg)
-                                        .set_bg(headers_names.bg)
-                                        .set_attrs(headers_names.attrs);
+                                for c in grid.row_iter(area, (x - 1)..x, y) {
+                                    grid[c]
+                                        .set_ch(']')
+                                        .set_fg(hdr_name_theme.fg)
+                                        .set_bg(hdr_name_theme.bg)
+                                        .set_attrs(hdr_name_theme.attrs);
                                 }
                             }
                         }
-                        for x in x..=get_x(bottom_right) {
-                            grid[(x, y)]
+                        for c in grid.row_iter(area, (x + 1)..area.width(), y) {
+                            grid[c]
                                 .set_ch(' ')
-                                .set_fg(headers_area.fg)
-                                .set_bg(headers_area.bg);
+                                .set_fg(hdr_area_theme.fg)
+                                .set_bg(hdr_area_theme.bg);
                         }
                         y += 1;
                     }
@@ -978,24 +964,21 @@ impl Component for EnvelopeView {
 
                 self.force_draw_headers = false;
 
-                grid.clear_area((set_y(upper_left, y), set_y(bottom_right, y)), headers_area);
-                context.dirty_areas.push_back((
-                    upper_left,
-                    set_y(bottom_right, std::cmp::min(y + 3, get_y(bottom_right))),
-                ));
+                grid.clear_area(area.nth_row(y), hdr_area_theme);
+                context.dirty_areas.push_back(area.take_rows(y + 3));
                 if !self.view_settings.sticky_headers {
                     let height_p = self.pager.size().1;
 
-                    let height = height!(area).saturating_sub(y).saturating_sub(1);
+                    let height = area.height().saturating_sub(y).saturating_sub(1);
                     if self.pager.cursor_pos() >= self.headers_no {
-                        get_y(upper_left)
+                        0
                     } else if (height_p > height && self.headers_cursor < self.headers_no + 1)
                         || self.headers_cursor == 0
                         || height_p < height
                     {
                         y + 1
                     } else {
-                        get_y(upper_left)
+                        0
                     }
                 } else {
                     y + 1
@@ -1214,12 +1197,11 @@ impl Component for EnvelopeView {
                     if !s.is_dirty() {
                         s.set_dirty(true);
                     }
-                    s.draw(grid, (set_y(upper_left, y), bottom_right), context);
+                    s.draw(grid, area.skip_rows(y), context);
                 }
             }
             _ => {
-                self.pager
-                    .draw(grid, (set_y(upper_left, y), bottom_right), context);
+                self.pager.draw(grid, area.skip_rows(y), context);
             }
         }
         if let ForceCharset::Dialog(ref mut s) = self.force_charset {
@@ -1228,21 +1210,17 @@ impl Component for EnvelopeView {
 
         // Draw number command buffer at the bottom right corner:
 
-        let l = nth_row_area(area, height!(area));
+        let l = area.nth_row(area.height());
         if self.cmd_buf.is_empty() {
-            grid.clear_area(
-                (pos_inc(l.0, (width!(area).saturating_sub(8), 0)), l.1),
-                self.view_settings.theme_default,
-            );
+            grid.clear_area(l.skip_cols_from_end(8), self.view_settings.theme_default);
         } else {
             let s = self.cmd_buf.to_string();
-
             grid.write_string(
                 &s,
                 self.view_settings.theme_default.fg,
                 self.view_settings.theme_default.bg,
                 self.view_settings.theme_default.attrs,
-                (pos_inc(l.0, (width!(area).saturating_sub(s.len()), 0)), l.1),
+                l.skip_cols_from_end(8),
                 None,
             );
         }
@@ -1284,8 +1262,35 @@ impl Component for EnvelopeView {
             if sub.process_event(event, context) {
                 return true;
             }
-        } else if self.pager.process_event(event, context) {
-            return true;
+        } else {
+            if !self.view_settings.sticky_headers {
+                let shortcuts = self.pager.shortcuts(context);
+                match event {
+                    UIEvent::Input(ref key)
+                        if shortcut!(key == shortcuts[Shortcuts::PAGER]["scroll_up"])
+                            && self.pager.cursor_pos() == 0
+                            && self.headers_cursor > 0 =>
+                    {
+                        self.headers_cursor -= 1;
+                        self.set_dirty(true);
+                        return true;
+                    }
+                    UIEvent::Input(ref key)
+                        if shortcut!(key == shortcuts[Shortcuts::PAGER]["scroll_down"])
+                            && self.headers_cursor < self.headers_no =>
+                    {
+                        self.headers_cursor += 1;
+                        self.set_dirty(true);
+                        return true;
+                    }
+
+                    _ => {}
+                }
+            }
+
+            if self.pager.process_event(event, context) {
+                return true;
+            }
         }
 
         let shortcuts = &self.shortcuts(context);

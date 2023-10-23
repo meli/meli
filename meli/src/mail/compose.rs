@@ -42,8 +42,8 @@ use crate::{accounts::JobRequest, jobs::JoinHandle, terminal::embed::EmbedTermin
 #[cfg(feature = "gpgme")]
 pub mod gpg;
 
-pub mod edit_attachments;
-use edit_attachments::*;
+//pub mod edit_attachments;
+//use edit_attachments::*;
 
 pub mod hooks;
 
@@ -88,6 +88,11 @@ impl std::ops::DerefMut for EmbedStatus {
 }
 
 #[derive(Debug)]
+struct Embedded {
+    status: EmbedStatus,
+}
+
+#[derive(Debug)]
 pub struct Composer {
     reply_context: Option<(MailboxHash, EnvelopeHash)>,
     account_hash: AccountHash,
@@ -100,8 +105,8 @@ pub struct Composer {
 
     mode: ViewMode,
 
-    embed_area: Area,
-    embed: Option<EmbedStatus>,
+    embedded: Option<Embedded>,
+    embed_dimensions: (usize, usize),
     #[cfg(feature = "gpgme")]
     gpg_state: gpg::GpgComposeState,
     dirty: bool,
@@ -114,9 +119,9 @@ pub struct Composer {
 #[derive(Debug)]
 enum ViewMode {
     Discard(ComponentId, UIDialog<char>),
-    EditAttachments {
-        widget: EditAttachments,
-    },
+    //EditAttachments {
+    //    widget: EditAttachments,
+    //},
     Edit,
     Embed,
     SelectRecipients(UIDialog<Address>),
@@ -131,9 +136,9 @@ impl ViewMode {
         matches!(self, ViewMode::Edit)
     }
 
-    fn is_edit_attachments(&self) -> bool {
-        matches!(self, ViewMode::EditAttachments { .. })
-    }
+    //fn is_edit_attachments(&self) -> bool {
+    //    matches!(self, ViewMode::EditAttachments { .. })
+    //}
 }
 
 impl std::fmt::Display for Composer {
@@ -180,8 +185,8 @@ impl Composer {
             gpg_state: gpg::GpgComposeState::default(),
             dirty: true,
             has_changes: false,
-            embed_area: ((0, 0), (0, 0)),
-            embed: None,
+            embedded: None,
+            embed_dimensions: (80, 20),
             initialized: false,
             id: ComponentId::default(),
         }
@@ -707,7 +712,7 @@ To: {}
                     theme_default.bg
                 },
                 theme_default.attrs,
-                (pos_inc(upper_left!(area), (0, 1)), bottom_right!(area)),
+                area.skip_rows(1),
                 None,
             );
         } else {
@@ -720,7 +725,7 @@ To: {}
                     theme_default.bg
                 },
                 theme_default.attrs,
-                (pos_inc(upper_left!(area), (0, 1)), bottom_right!(area)),
+                area.skip_rows(1),
                 None,
             );
         }
@@ -755,7 +760,7 @@ To: {}
                     theme_default.bg
                 },
                 theme_default.attrs,
-                (pos_inc(upper_left!(area), (0, 2)), bottom_right!(area)),
+                area.skip_rows(2),
                 None,
             );
         } else {
@@ -768,7 +773,7 @@ To: {}
                     theme_default.bg
                 },
                 theme_default.attrs,
-                (pos_inc(upper_left!(area), (0, 2)), bottom_right!(area)),
+                area.skip_rows(2),
                 None,
             );
         }
@@ -782,7 +787,7 @@ To: {}
                     theme_default.bg
                 },
                 theme_default.attrs,
-                (pos_inc(upper_left!(area), (0, 3)), bottom_right!(area)),
+                area.skip_rows(3),
                 None,
             );
         } else {
@@ -795,40 +800,33 @@ To: {}
                     theme_default.bg
                 },
                 theme_default.attrs,
-                (pos_inc(upper_left!(area), (0, 3)), bottom_right!(area)),
+                area.skip_rows(3),
                 None,
             );
             for (i, a) in self.draft.attachments().iter().enumerate() {
-                if let Some(name) = a.content_type().name() {
-                    grid.write_string(
-                        &format!(
+                grid.write_string(
+                    &if let Some(name) = a.content_type().name() {
+                        format!(
                             "[{}] \"{}\", {} {}",
                             i,
                             name,
                             a.content_type(),
                             melib::BytesDisplay(a.raw.len())
-                        ),
-                        theme_default.fg,
-                        theme_default.bg,
-                        theme_default.attrs,
-                        (pos_inc(upper_left!(area), (0, 4 + i)), bottom_right!(area)),
-                        None,
-                    );
-                } else {
-                    grid.write_string(
-                        &format!(
+                        )
+                    } else {
+                        format!(
                             "[{}] {} {}",
                             i,
                             a.content_type(),
                             melib::BytesDisplay(a.raw.len())
-                        ),
-                        theme_default.fg,
-                        theme_default.bg,
-                        theme_default.attrs,
-                        (pos_inc(upper_left!(area), (0, 4 + i)), bottom_right!(area)),
-                        None,
-                    );
-                }
+                        )
+                    },
+                    theme_default.fg,
+                    theme_default.bg,
+                    theme_default.attrs,
+                    area.skip_rows(4 + i),
+                    None,
+                );
             }
         }
     }
@@ -859,12 +857,7 @@ To: {}
 
 impl Component for Composer {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        let upper_left = upper_left!(area);
-        let bottom_right = bottom_right!(area);
-
-        let upper_left = set_y(upper_left, get_y(upper_left) + 1);
-
-        if height!(area) < 4 {
+        if area.height() < 4 {
             return;
         }
 
@@ -917,34 +910,25 @@ impl Component for Composer {
         };
         */
 
-        let header_area = (
-            set_x(upper_left, mid + 1),
-            (
-                get_x(bottom_right).saturating_sub(mid),
-                get_y(upper_left) + header_height,
-            ),
-        );
+        let header_area = area
+            .take_rows(header_height)
+            .skip_cols(mid + 1)
+            .skip_cols_from_end(mid);
         let attachments_no = self.draft.attachments().len();
-        let attachment_area = (
-            (
-                mid + 1,
-                get_y(bottom_right).saturating_sub(4 + attachments_no),
-            ),
-            pos_dec(bottom_right, (mid, 0)),
-        );
+        let attachment_area = area
+            .skip_rows(header_height)
+            .skip_rows(
+                area.height()
+                    .saturating_sub(header_area.height() + 4 + attachments_no),
+            )
+            .skip_cols(mid + 1);
 
-        let body_area = (
-            (
-                get_x(upper_left!(header_area)),
-                get_y(bottom_right!(header_area)) + 1,
-            ),
-            (
-                get_x(bottom_right!(header_area)),
-                get_y(upper_left!(attachment_area)).saturating_sub(1),
-            ),
-        );
+        let body_area = area
+            .skip_rows(header_height)
+            .skip_rows_from_end(attachment_area.height());
 
-        let (x, y) = grid.write_string(
+        grid.clear_area(area.nth_row(0), crate::conf::value(context, "highlight"));
+        grid.write_string(
             if self.reply_context.is_some() {
                 "COMPOSING REPLY"
             } else {
@@ -953,18 +937,15 @@ impl Component for Composer {
             crate::conf::value(context, "highlight").fg,
             crate::conf::value(context, "highlight").bg,
             crate::conf::value(context, "highlight").attrs,
-            (
-                pos_dec(upper_left!(header_area), (0, 1)),
-                bottom_right!(header_area),
-            ),
+            area.nth_row(0),
             None,
         );
-        grid.clear_area(((x, y), (set_y(bottom_right, y))), theme_default);
 
+        /*
         grid.change_theme(
             (
-                set_x(pos_dec(upper_left!(header_area), (0, 1)), x),
-                set_y(bottom_right!(header_area), y),
+                set_x(pos_dec(header_area.upper_left(), (0, 1)), x),
+                set_y(header_area.bottom_right(), y),
             ),
             crate::conf::value(context, "highlight"),
         );
@@ -987,22 +968,20 @@ impl Component for Composer {
             ),
             theme_default,
         );
+        */
 
         /* Regardless of view mode, do the following */
         self.form.draw(grid, header_area, context);
-        if let Some(ref mut embed_pty) = self.embed {
-            let embed_area = (upper_left!(header_area), bottom_right!(body_area));
+        if let Some(ref mut embedded) = self.embedded {
+            let embed_pty = &mut embedded.status;
+            let embed_area = area;
             match embed_pty {
                 EmbedStatus::Running(_, _) => {
                     let mut guard = embed_pty.lock().unwrap();
                     grid.clear_area(embed_area, theme_default);
 
-                    grid.copy_area(
-                        guard.grid.buffer(),
-                        embed_area,
-                        ((0, 0), pos_dec(guard.grid.terminal_size, (1, 1))),
-                    );
-                    guard.set_terminal_size((width!(embed_area), height!(embed_area)));
+                    grid.copy_area(guard.grid.buffer(), embed_area, guard.grid.area());
+                    guard.set_terminal_size((embed_area.width(), embed_area.height()));
                     context.dirty_areas.push_back(area);
                     self.dirty = false;
                     return;
@@ -1010,11 +989,7 @@ impl Component for Composer {
                 EmbedStatus::Stopped(_, _) => {
                     let guard = embed_pty.lock().unwrap();
 
-                    grid.copy_area(
-                        guard.grid.buffer(),
-                        embed_area,
-                        ((0, 0), pos_dec(guard.grid.terminal_size, (1, 1))),
-                    );
+                    grid.copy_area(guard.grid.buffer(), embed_area, guard.grid.buffer().area());
                     grid.change_colors(embed_area, Color::Byte(8), theme_default.bg);
                     let our_map: ShortcutMap =
                         account_settings!(context[self.account_hash].shortcuts.composing)
@@ -1033,19 +1008,7 @@ impl Component for Composer {
                         stopped_message.len(),
                         std::cmp::max(stopped_message_2.len(), STOPPED_MESSAGE_3.len()),
                     );
-                    let inner_area = create_box(
-                        grid,
-                        (
-                            pos_inc(upper_left!(body_area), (1, 0)),
-                            pos_inc(
-                                upper_left!(body_area),
-                                (
-                                    std::cmp::min(max_len + 5, width!(body_area)),
-                                    std::cmp::min(5, height!(body_area)),
-                                ),
-                            ),
-                        ),
-                    );
+                    let inner_area = create_box(grid, area.center_inside((max_len + 5, 5)));
                     grid.clear_area(inner_area, theme_default);
                     for (i, l) in [
                         stopped_message.as_str(),
@@ -1060,11 +1023,8 @@ impl Component for Composer {
                             theme_default.fg,
                             theme_default.bg,
                             theme_default.attrs,
-                            (
-                                pos_inc((0, i), upper_left!(inner_area)),
-                                bottom_right!(inner_area),
-                            ),
-                            Some(get_x(upper_left!(inner_area))),
+                            inner_area.skip_rows(i),
+                            None, //Some(get_x(inner_area.upper_left())),
                         );
                     }
                     context.dirty_areas.push_back(area);
@@ -1073,10 +1033,10 @@ impl Component for Composer {
                 }
             }
         } else {
-            self.embed_area = (upper_left!(header_area), bottom_right!(body_area));
+            self.embed_dimensions = (area.width(), area.height());
         }
 
-        if self.pager.size().0 > width!(body_area) {
+        if self.pager.size().0 > body_area.width() {
             self.pager.set_initialised(false);
         }
         // Force clean pager area, because if body height is less than body_area it will
@@ -1087,23 +1047,26 @@ impl Component for Composer {
 
         match self.cursor {
             Cursor::Headers => {
+                /*
                 grid.change_theme(
                     (
-                        pos_dec(upper_left!(body_area), (1, 0)),
+                        pos_dec(body_area.upper_left(), (1, 0)),
                         pos_dec(
-                            set_y(upper_left!(body_area), get_y(bottom_right!(body_area))),
+                            set_y(body_area.upper_left(), get_y(body_area.bottom_right())),
                             (1, 0),
                         ),
                     ),
                     theme_default,
                 );
+                */
             }
             Cursor::Body => {
+                /*
                 grid.change_theme(
                     (
-                        pos_dec(upper_left!(body_area), (1, 0)),
+                        pos_dec(body_area.upper_left(), (1, 0)),
                         pos_dec(
-                            set_y(upper_left!(body_area), get_y(bottom_right!(body_area))),
+                            set_y(body_area.upper_left(), get_y(body_area.bottom_right())),
                             (1, 0),
                         ),
                     ),
@@ -1117,32 +1080,26 @@ impl Component for Composer {
                         },
                     },
                 );
+                */
             }
             Cursor::Sign | Cursor::Encrypt | Cursor::Attachments => {}
         }
 
+        //if !self.mode.is_edit_attachments() {
+        self.draw_attachments(grid, attachment_area, context);
+        //}
         match self.mode {
             ViewMode::Edit | ViewMode::Embed => {}
-            ViewMode::EditAttachments { ref mut widget } => {
-                let inner_area = create_box(
-                    grid,
-                    (upper_left!(body_area), bottom_right!(attachment_area)),
-                );
-                (EditAttachmentsRefMut {
-                    inner: widget,
-                    draft: &mut self.draft,
-                })
-                .draw(
-                    grid,
-                    (
-                        pos_inc(upper_left!(inner_area), (1, 1)),
-                        bottom_right!(inner_area),
-                    ),
-                    context,
-                );
-            }
+            //ViewMode::EditAttachments { ref mut widget } => {
+            //    let inner_area = create_box(grid, area);
+            //    (EditAttachmentsRefMut {
+            //        inner: widget,
+            //        draft: &mut self.draft,
+            //    })
+            //    .draw(grid, inner_area, context);
+            //}
             ViewMode::Send(ref mut s) => {
-                s.draw(grid, area, context);
+                s.draw(grid, body_area, context);
             }
             #[cfg(feature = "gpgme")]
             ViewMode::SelectEncryptKey(
@@ -1152,24 +1109,21 @@ impl Component for Composer {
                     keys: _,
                 },
             ) => {
-                widget.draw(grid, area, context);
+                widget.draw(grid, body_area, context);
             }
             #[cfg(feature = "gpgme")]
             ViewMode::SelectEncryptKey(_, _) => {}
             ViewMode::SelectRecipients(ref mut s) => {
-                s.draw(grid, area, context);
+                s.draw(grid, body_area, context);
             }
             ViewMode::Discard(_, ref mut s) => {
                 /* Let user choose whether to quit with/without saving or cancel */
-                s.draw(grid, area, context);
+                s.draw(grid, body_area, context);
             }
             ViewMode::WaitingForSendResult(ref mut s, _) => {
                 /* Let user choose whether to wait for success or cancel */
-                s.draw(grid, area, context);
+                s.draw(grid, body_area, context);
             }
-        }
-        if !self.mode.is_edit_attachments() {
-            self.draw_attachments(grid, attachment_area, context);
         }
         self.dirty = false;
         context.dirty_areas.push_back(area);
@@ -1239,23 +1193,22 @@ impl Component for Composer {
                     return true;
                 }
             }
-            (ViewMode::EditAttachments { ref mut widget }, _) => {
-                if (EditAttachmentsRefMut {
-                    inner: widget,
-                    draft: &mut self.draft,
-                })
-                .process_event(event, context)
-                {
-                    if matches!(
-                        widget.buttons.result(),
-                        Some(FormButtonActions::Cancel | FormButtonActions::Accept)
-                    ) {
-                        self.mode = ViewMode::Edit;
-                    }
-                    self.set_dirty(true);
-                    return true;
-                }
-            }
+            //(ViewMode::EditAttachments { ref mut widget }, _) => {
+            //    if (EditAttachmentsRefMut {
+            //        inner: widget,
+            //        draft: &mut self.draft,
+            //    })
+            //    .process_event(event, context)
+            //    {
+            //        if matches!(
+            //            widget.buttons.result(),
+            //            Some(FormButtonActions::Cancel | FormButtonActions::Accept)
+            //        ) { self.mode = ViewMode::Edit;
+            //        }
+            //        self.set_dirty(true);
+            //        return true;
+            //    }
+            //}
             (ViewMode::Send(ref selector), UIEvent::FinishedUIDialog(id, result))
                 if selector.id() == *id =>
             {
@@ -1598,10 +1551,23 @@ impl Component for Composer {
                 return true;
             }
             UIEvent::EmbedInput((Key::Ctrl('z'), _)) => {
-                self.embed.as_ref().unwrap().lock().unwrap().stop();
-                match self.embed.take() {
-                    Some(EmbedStatus::Running(e, f)) | Some(EmbedStatus::Stopped(e, f)) => {
-                        self.embed = Some(EmbedStatus::Stopped(e, f));
+                self.embedded
+                    .as_ref()
+                    .unwrap()
+                    .status
+                    .lock()
+                    .unwrap()
+                    .stop();
+                match self.embedded.take() {
+                    Some(Embedded {
+                        status: EmbedStatus::Running(e, f),
+                    })
+                    | Some(Embedded {
+                        status: EmbedStatus::Stopped(e, f),
+                    }) => {
+                        self.embedded = Some(Embedded {
+                            status: EmbedStatus::Stopped(e, f),
+                        });
                     }
                     _ => {}
                 }
@@ -1611,13 +1577,13 @@ impl Component for Composer {
                 self.set_dirty(true);
             }
             UIEvent::EmbedInput((ref k, ref b)) => {
-                if let Some(ref mut embed) = self.embed {
-                    let mut embed_guard = embed.lock().unwrap();
+                if let Some(ref mut embed) = self.embedded {
+                    let mut embed_guard = embed.status.lock().unwrap();
                     if embed_guard.write_all(b).is_err() {
                         match embed_guard.is_active() {
                             Ok(WaitStatus::Exited(_, exit_code)) => {
                                 drop(embed_guard);
-                                let embed = self.embed.take();
+                                let embedded = self.embedded.take();
                                 if exit_code != 0 {
                                     context.replies.push_back(UIEvent::Notification(
                                         None,
@@ -1629,7 +1595,10 @@ impl Component for Composer {
                                             melib::error::ErrorKind::External,
                                         )),
                                     ));
-                                } else if let Some(EmbedStatus::Running(_, file)) = embed {
+                                } else if let Some(Embedded {
+                                    status: EmbedStatus::Running(_, file),
+                                }) = embedded
+                                {
                                     self.update_from_file(file, context);
                                 }
                                 self.initialized = false;
@@ -1643,10 +1612,16 @@ impl Component for Composer {
                             Ok(WaitStatus::PtraceEvent(_, _, _))
                             | Ok(WaitStatus::PtraceSyscall(_)) => {
                                 drop(embed_guard);
-                                match self.embed.take() {
-                                    Some(EmbedStatus::Running(e, f))
-                                    | Some(EmbedStatus::Stopped(e, f)) => {
-                                        self.embed = Some(EmbedStatus::Stopped(e, f));
+                                match self.embedded.take() {
+                                    Some(Embedded {
+                                        status: EmbedStatus::Running(e, f),
+                                    })
+                                    | Some(Embedded {
+                                        status: EmbedStatus::Stopped(e, f),
+                                    }) => {
+                                        self.embedded = Some(Embedded {
+                                            status: EmbedStatus::Stopped(e, f),
+                                        });
                                     }
                                     _ => {}
                                 }
@@ -1659,10 +1634,16 @@ impl Component for Composer {
                             }
                             Ok(WaitStatus::Stopped(_, _)) => {
                                 drop(embed_guard);
-                                match self.embed.take() {
-                                    Some(EmbedStatus::Running(e, f))
-                                    | Some(EmbedStatus::Stopped(e, f)) => {
-                                        self.embed = Some(EmbedStatus::Stopped(e, f));
+                                match self.embedded.take() {
+                                    Some(Embedded {
+                                        status: EmbedStatus::Running(e, f),
+                                    })
+                                    | Some(Embedded {
+                                        status: EmbedStatus::Stopped(e, f),
+                                    }) => {
+                                        self.embedded = Some(Embedded {
+                                            status: EmbedStatus::Stopped(e, f),
+                                        });
                                     }
                                     _ => {}
                                 }
@@ -1691,7 +1672,7 @@ impl Component for Composer {
                                     )),
                                 ));
                                 self.initialized = false;
-                                self.embed = None;
+                                self.embedded = None;
                                 self.mode = ViewMode::Edit;
                                 context
                                     .replies
@@ -1707,7 +1688,7 @@ impl Component for Composer {
                                 ));
                                 drop(embed_guard);
                                 self.initialized = false;
-                                self.embed = None;
+                                self.embedded = None;
                                 self.mode = ViewMode::Edit;
                                 context
                                     .replies
@@ -1804,21 +1785,34 @@ impl Component for Composer {
                     && self.cursor == Cursor::Attachments
                     && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["edit"]) =>
             {
-                self.mode = ViewMode::EditAttachments {
-                    widget: EditAttachments::new(Some(self.account_hash)),
-                };
+                //self.mode = ViewMode::EditAttachments {
+                //    widget: EditAttachments::new(Some(self.account_hash)),
+                //};
                 self.set_dirty(true);
 
                 return true;
             }
             UIEvent::Input(ref key)
-                if self.embed.is_some()
+                if self.embedded.is_some()
                     && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["edit"]) =>
             {
-                self.embed.as_ref().unwrap().lock().unwrap().wake_up();
-                match self.embed.take() {
-                    Some(EmbedStatus::Running(e, f)) | Some(EmbedStatus::Stopped(e, f)) => {
-                        self.embed = Some(EmbedStatus::Running(e, f));
+                self.embedded
+                    .as_ref()
+                    .unwrap()
+                    .status
+                    .lock()
+                    .unwrap()
+                    .wake_up();
+                match self.embedded.take() {
+                    Some(Embedded {
+                        status: EmbedStatus::Running(e, f),
+                    })
+                    | Some(Embedded {
+                        status: EmbedStatus::Stopped(e, f),
+                    }) => {
+                        self.embedded = Some(Embedded {
+                            status: EmbedStatus::Running(e, f),
+                        });
                     }
                     _ => {}
                 }
@@ -1830,11 +1824,16 @@ impl Component for Composer {
                 return true;
             }
             UIEvent::Input(Key::Ctrl('c'))
-                if self.embed.is_some() && self.embed.as_ref().unwrap().is_stopped() =>
+                if self.embedded.is_some()
+                    && self.embedded.as_ref().unwrap().status.is_stopped() =>
             {
-                match self.embed.take() {
-                    Some(EmbedStatus::Running(embed, file))
-                    | Some(EmbedStatus::Stopped(embed, file)) => {
+                match self.embedded.take() {
+                    Some(Embedded {
+                        status: EmbedStatus::Running(embed, file),
+                    })
+                    | Some(Embedded {
+                        status: EmbedStatus::Stopped(embed, file),
+                    }) => {
                         let guard = embed.lock().unwrap();
                         guard.wake_up();
                         guard.terminate();
@@ -1908,18 +1907,26 @@ impl Component for Composer {
 
                 if *account_settings!(context[self.account_hash].composing.embed) {
                     match crate::terminal::embed::create_pty(
-                        width!(self.embed_area),
-                        height!(self.embed_area),
+                        self.embed_dimensions.0,
+                        self.embed_dimensions.1,
                         [editor, f.path().display().to_string()].join(" "),
                     ) {
                         Ok(embed) => {
-                            self.embed = Some(EmbedStatus::Running(embed, f));
+                            self.embedded = Some(Embedded {
+                                status: EmbedStatus::Running(embed, f),
+                            });
                             self.set_dirty(true);
                             context
                                 .replies
                                 .push_back(UIEvent::ChangeMode(UIMode::Embed));
                             context.replies.push_back(UIEvent::Fork(ForkType::Embed(
-                                self.embed.as_ref().unwrap().lock().unwrap().child_pid,
+                                self.embedded
+                                    .as_ref()
+                                    .unwrap()
+                                    .status
+                                    .lock()
+                                    .unwrap()
+                                    .child_pid,
                             )));
                             self.mode = ViewMode::Embed;
                         }
@@ -2199,13 +2206,13 @@ impl Component for Composer {
     fn is_dirty(&self) -> bool {
         match self.mode {
             ViewMode::Embed => true,
-            ViewMode::EditAttachments { ref widget } => {
-                widget.dirty
-                    || widget.buttons.is_dirty()
-                    || self.dirty
-                    || self.pager.is_dirty()
-                    || self.form.is_dirty()
-            }
+            //ViewMode::EditAttachments { ref widget } => {
+            //    widget.dirty
+            //        || widget.buttons.is_dirty()
+            //        || self.dirty
+            //        || self.pager.is_dirty()
+            //        || self.form.is_dirty()
+            //}
             ViewMode::Edit => self.dirty || self.pager.is_dirty() || self.form.is_dirty(),
             ViewMode::Discard(_, ref widget) => {
                 widget.is_dirty() || self.pager.is_dirty() || self.form.is_dirty()
@@ -2230,13 +2237,32 @@ impl Component for Composer {
         self.dirty = value;
         self.pager.set_dirty(value);
         self.form.set_dirty(value);
-        if let ViewMode::EditAttachments { ref mut widget } = self.mode {
-            (EditAttachmentsRefMut {
-                inner: widget,
-                draft: &mut self.draft,
-            })
-            .set_dirty(value);
+        match self.mode {
+            ViewMode::Discard(_, ref mut widget) => {
+                widget.set_dirty(value);
+            }
+            ViewMode::SelectRecipients(ref mut widget) => {
+                widget.set_dirty(value);
+            }
+            #[cfg(feature = "gpgme")]
+            ViewMode::SelectEncryptKey(_, ref mut widget) => {
+                widget.set_dirty(value);
+            }
+            ViewMode::Send(ref mut widget) => {
+                widget.set_dirty(value);
+            }
+            ViewMode::WaitingForSendResult(ref mut widget, _) => {
+                widget.set_dirty(value);
+            }
+            ViewMode::Edit | ViewMode::Embed => {}
         }
+        //if let ViewMode::EditAttachments { ref mut widget } = self.mode {
+        //    (EditAttachmentsRefMut {
+        //        inner: widget,
+        //        draft: &mut self.draft,
+        //    })
+        //    .set_dirty(value);
+        //}
     }
 
     fn kill(&mut self, uuid: ComponentId, context: &mut Context) {

@@ -127,7 +127,7 @@ impl Component for EmbedContainer {
                         embed_area,
                         ((0, 0), pos_dec(guard.grid.terminal_size, (1, 1))),
                     );
-                    guard.set_terminal_size((width!(embed_area), height!(embed_area)));
+                    guard.set_terminal_size((embed_area.width(), embed_area.height()));
                     context.dirty_areas.push_back(area);
                     self.dirty = false;
                     return;
@@ -160,12 +160,12 @@ impl Component for EmbedContainer {
                     let inner_area = create_box(
                         grid,
                         (
-                            pos_inc(upper_left!(area), (1, 0)),
+                            pos_inc(area.upper_left(), (1, 0)),
                             pos_inc(
-                                upper_left!(area),
+                                area.upper_left(),
                                 (
-                                    std::cmp::min(max_len + 5, width!(area)),
-                                    std::cmp::min(5, height!(area)),
+                                    std::cmp::min(max_len + 5, area.width()),
+                                    std::cmp::min(5, area.height()),
                                 ),
                             ),
                         ),
@@ -185,10 +185,10 @@ impl Component for EmbedContainer {
                             theme_default.bg,
                             theme_default.attrs,
                             (
-                                pos_inc((0, i), upper_left!(inner_area)),
-                                bottom_right!(inner_area),
+                                pos_inc((0, i), inner_area.upper_left()),
+                                inner_area.bottom_right(),
                             ),
-                            Some(get_x(upper_left!(inner_area))),
+                            Some(get_x(inner_area.upper_left())),
                         );
                     }
                 }
@@ -196,10 +196,10 @@ impl Component for EmbedContainer {
         } else {
             let theme_default = crate::conf::value(context, "theme_default");
             grid.clear_area(area, theme_default);
-            self.embed_area = (upper_left!(area), bottom_right!(area));
+            self.embed_area = (area.upper_left(), area.bottom_right());
             match create_pty(
-                width!(self.embed_area),
-                height!(self.embed_area),
+                self.embed_area.width(),
+                self.embed_area.height(),
                 self.command.clone(),
             ) {
                 Ok(embed) => {

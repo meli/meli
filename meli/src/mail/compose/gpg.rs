@@ -86,7 +86,7 @@ impl Component for KeySelection {
             KeySelection::LoadingKeys {
                 ref mut progress_spinner,
                 ..
-            } => progress_spinner.draw(grid, center_area(area, (2, 2)), context),
+            } => progress_spinner.draw(grid, area.center_inside((2, 2)), context),
             KeySelection::Error { ref err, .. } => {
                 let theme_default = crate::conf::value(context, "theme_default");
                 grid.write_string(
@@ -94,7 +94,7 @@ impl Component for KeySelection {
                     theme_default.fg,
                     theme_default.bg,
                     theme_default.attrs,
-                    center_area(area, (15, 2)),
+                    area.center_inside((15, 2)),
                     Some(0),
                 );
             }

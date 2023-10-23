@@ -26,11 +26,13 @@ use melib::{
 use nix::sys::wait::{waitpid, WaitPidFlag, WaitStatus};
 
 use super::*;
-use crate::terminal::{cells::*, Color};
+use crate::terminal::{cells::*, Area, Color, Screen, Virtual};
 
-#[derive(Debug)]
-enum ScreenBuffer {
-    Normal,
+#[derive(Debug, Default, Clone, Copy)]
+#[repr(u8)]
+pub enum ScreenBuffer {
+    #[default]
+    Normal = 0,
     Alternate,
 }
 
@@ -41,15 +43,15 @@ enum ScreenBuffer {
 /// translated as changes to the grid, eg changes in a cell's colors.
 ///
 /// The main process copies the grid whenever the actual terminal is redrawn.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct EmbedGrid {
     cursor: (usize, usize),
     /// `[top;bottom]`
     scroll_region: ScrollRegion,
-    pub alternate_screen: CellBuffer,
+    pub alternate_screen: Box<Screen<Virtual>>,
     pub state: State,
     /// (width, height)
-    pub terminal_size: (usize, usize),
+    terminal_size: (usize, usize),
     initialized: bool,
     fg_color: Color,
     bg_color: Color,
@@ -69,7 +71,7 @@ pub struct EmbedGrid {
     wrap_next: bool,
     /// Store state in case a multi-byte character is encountered
     codepoints: CodepointBuf,
-    pub normal_screen: CellBuffer,
+    pub normal_screen: Box<Screen<Virtual>>,
     screen_buffer: ScreenBuffer,
 }
 
@@ -177,7 +179,7 @@ impl EmbedTerminal {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CodepointBuf {
     None,
     TwoCodepoints(u8),
@@ -187,8 +189,7 @@ enum CodepointBuf {
 
 impl EmbedGrid {
     pub fn new() -> Self {
-        let mut normal_screen = CellBuffer::default();
-        normal_screen.set_growable(true);
+        let normal_screen = Box::new(Screen::<Virtual>::new());
         EmbedGrid {
             cursor: (0, 0),
             scroll_region: ScrollRegion {
@@ -199,7 +200,7 @@ impl EmbedGrid {
             },
             terminal_size: (0, 0),
             initialized: false,
-            alternate_screen: CellBuffer::default(),
+            alternate_screen: Box::new(Screen::<Virtual>::new()),
             state: State::Normal,
             fg_color: Color::Default,
             bg_color: Color::Default,
@@ -220,15 +221,15 @@ impl EmbedGrid {
 
     pub fn buffer(&self) -> &CellBuffer {
         match self.screen_buffer {
-            ScreenBuffer::Normal => &self.normal_screen,
-            ScreenBuffer::Alternate => &self.alternate_screen,
+            ScreenBuffer::Normal => self.normal_screen.grid(),
+            ScreenBuffer::Alternate => self.alternate_screen.grid(),
         }
     }
 
     pub fn buffer_mut(&mut self) -> &mut CellBuffer {
         match self.screen_buffer {
-            ScreenBuffer::Normal => &mut self.normal_screen,
-            ScreenBuffer::Alternate => &mut self.alternate_screen,
+            ScreenBuffer::Normal => self.normal_screen.grid_mut(),
+            ScreenBuffer::Alternate => self.alternate_screen.grid_mut(),
         }
     }
 
@@ -236,30 +237,32 @@ impl EmbedGrid {
         if new_val == self.terminal_size && self.initialized {
             return;
         }
+        if !self.alternate_screen.resize(new_val.0, new_val.1) {
+            return;
+        }
+        _ = self.normal_screen.resize(new_val.0, new_val.1);
         self.initialized = true;
         self.scroll_region.top = 0;
         self.scroll_region.bottom = new_val.1.saturating_sub(1);
 
         self.terminal_size = new_val;
-        if !self.alternate_screen.resize(new_val.0, new_val.1, None) {
-            panic!(
-                "Terminal size too big: ({} cols, {} rows)",
-                new_val.0, new_val.1
-            );
-        }
-        self.alternate_screen.clear(Some(Cell::default()));
-        if !self.normal_screen.resize(new_val.0, new_val.1, None) {
-            panic!(
-                "Terminal size too big: ({} cols, {} rows)",
-                new_val.0, new_val.1
-            );
-        }
-        self.normal_screen.clear(Some(Cell::default()));
         self.cursor = (0, 0);
         self.wrap_next = false;
     }
 
+    pub const fn terminal_size(&self) -> (usize, usize) {
+        self.terminal_size
+    }
+
+    pub const fn area(&self) -> Area {
+        match self.screen_buffer {
+            ScreenBuffer::Normal => self.normal_screen.area(),
+            _ => self.alternate_screen.area(),
+        }
+    }
+
     pub fn process_byte(&mut self, stdin: &mut std::fs::File, byte: u8) {
+        let area = self.area();
         let EmbedGrid {
             ref mut cursor,
             ref mut scroll_region,
@@ -282,12 +285,12 @@ impl EmbedGrid {
             ref mut normal_screen,
             initialized: _,
         } = self;
-        let mut grid = normal_screen;
+        let mut grid = normal_screen.grid_mut();
 
         let is_alternate = match *screen_buffer {
             ScreenBuffer::Normal => false,
             _ => {
-                grid = alternate_screen;
+                grid = alternate_screen.grid_mut();
                 true
             }
         };
@@ -661,19 +664,10 @@ impl EmbedGrid {
                 /* Erase Below (default). */
 
                 grid.clear_area(
-                    (
-                        (
-                            0,
-                            std::cmp::min(
-                                cursor.1 + 1 + scroll_region.top,
-                                terminal_size.1.saturating_sub(1),
-                            ),
-                        ),
-                        (
-                            terminal_size.0.saturating_sub(1),
-                            terminal_size.1.saturating_sub(1),
-                        ),
-                    ),
+                    area.skip_rows(std::cmp::min(
+                        cursor.1 + 1 + scroll_region.top,
+                        terminal_size.1.saturating_sub(1),
+                    )),
                     Default::default(),
                 );
                 //log::trace!("{}", EscCode::from((&(*state), byte)));
@@ -759,7 +753,7 @@ impl EmbedGrid {
                 //log::trace!("{}", EscCode::from((&(*state), byte)));
 
                 grid.clear_area(
-                    ((0, 0), pos_dec(*terminal_size, (1, 1))),
+                    area.take_cols(terminal_size.0).take_rows(terminal_size.1),
                     Default::default(),
                 );
                 *state = State::Normal;
@@ -769,19 +763,10 @@ impl EmbedGrid {
                 /* Erase Below (default). */
 
                 grid.clear_area(
-                    (
-                        (
-                            0,
-                            std::cmp::min(
-                                cursor.1 + 1 + scroll_region.top,
-                                terminal_size.1.saturating_sub(1),
-                            ),
-                        ),
-                        (
-                            terminal_size.0.saturating_sub(1),
-                            terminal_size.1.saturating_sub(1),
-                        ),
-                    ),
+                    area.skip_rows(std::cmp::min(
+                        cursor.1 + 1 + scroll_region.top,
+                        terminal_size.1.saturating_sub(1),
+                    )),
                     Default::default(),
                 );
                 //log::trace!("{}", EscCode::from((&(*state), byte)));
@@ -792,13 +777,7 @@ impl EmbedGrid {
                 /* Erase Above */
 
                 grid.clear_area(
-                    (
-                        (0, 0),
-                        (
-                            terminal_size.0.saturating_sub(1),
-                            cursor.1.saturating_sub(1) + scroll_region.top,
-                        ),
-                    ),
+                    area.take_rows(cursor.1.saturating_sub(1) + scroll_region.top),
                     Default::default(),
                 );
                 //log::trace!("{}", EscCode::from((&(*state), byte)));
@@ -808,10 +787,7 @@ impl EmbedGrid {
                 /* Erase in Display (ED), VT100. */
                 /* Erase All */
 
-                grid.clear_area(
-                    ((0, 0), pos_dec(*terminal_size, (1, 1))),
-                    Default::default(),
-                );
+                grid.clear_area(area, Default::default());
                 //log::trace!("{}", EscCode::from((&(*state), byte)));
                 *state = State::Normal;
             }

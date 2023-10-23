@@ -42,8 +42,6 @@ use nix::{
 };
 use smallvec::SmallVec;
 
-use crate::terminal::position::*;
-
 mod grid;
 
 #[cfg(not(target_os = "macos"))]
@@ -54,7 +52,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-pub use grid::{EmbedGrid, EmbedTerminal};
+pub use grid::{EmbedGrid, EmbedTerminal, ScreenBuffer};
 // ioctl request code to "Make the given terminal the controlling terminal of the calling
 // process"
 use libc::TIOCSCTTY;
@@ -193,7 +191,7 @@ fn forward_pty_translate_escape_codes(pty_fd: std::fs::File, grid: Arc<Mutex<Emb
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum State {
     ExpectingControlChar,
     G0,                      // Designate G0 Character Set

@@ -55,7 +55,7 @@ use smallvec::SmallVec;
 use super::*;
 use crate::{
     jobs::JobExecutor,
-    terminal::{get_events, Screen},
+    terminal::{get_events, Screen, Tty},
 };
 
 struct InputHandler {
@@ -276,7 +276,7 @@ impl Context {
 /// `State` is responsible for managing the terminal and interfacing with
 /// `melib`
 pub struct State {
-    screen: Box<Screen>,
+    screen: Box<Screen<Tty>>,
     draw_rate_limit: RateLimit,
     child: Option<ForkType>,
     pub mode: UIMode,
@@ -292,7 +292,7 @@ pub struct State {
     display_messages_dirty: bool,
     display_messages_initialised: bool,
     display_messages_pos: usize,
-    display_messages_area: Area,
+    //display_messages_area: Area,
 }
 
 #[derive(Debug)]
@@ -413,20 +413,17 @@ impl State {
 
         let working = Arc::new(());
         let control = Arc::downgrade(&working);
+        let mut screen = Box::new(Screen::<Tty>::new().with_cols_and_rows(cols, rows));
+        screen
+            .tty_mut()
+            .set_mouse(settings.terminal.use_mouse.is_true())
+            .set_draw_fn(if settings.terminal.use_color() {
+                Screen::draw_horizontal_segment
+            } else {
+                Screen::draw_horizontal_segment_no_color
+            });
         let mut s = State {
-            screen: Box::new(Screen {
-                cols,
-                rows,
-                grid: CellBuffer::new(cols, rows, Cell::with_char(' ')),
-                overlay_grid: CellBuffer::new(cols, rows, Cell::with_char(' ')),
-                mouse: settings.terminal.use_mouse.is_true(),
-                stdout: None,
-                draw_horizontal_segment_fn: if settings.terminal.use_color() {
-                    Screen::draw_horizontal_segment
-                } else {
-                    Screen::draw_horizontal_segment_no_color
-                },
-            }),
+            screen,
             child: None,
             mode: UIMode::Normal,
             components: IndexMap::default(),
@@ -440,7 +437,6 @@ impl State {
             display_messages_active: false,
             display_messages_dirty: false,
             display_messages_initialised: false,
-            display_messages_area: ((0, 0), (0, 0)),
             context: Box::new(Context {
                 accounts,
                 settings,
@@ -467,8 +463,8 @@ impl State {
             }),
         };
         if s.context.settings.terminal.ascii_drawing {
-            s.screen.grid.set_ascii_drawing(true);
-            s.screen.overlay_grid.set_ascii_drawing(true);
+            s.screen.grid_mut().set_ascii_drawing(true);
+            s.screen.overlay_grid_mut().set_ascii_drawing(true);
         }
 
         s.screen.switch_to_alternate_screen(&s.context);
@@ -541,7 +537,6 @@ impl State {
         self.rcv_event(UIEvent::Resize);
         self.display_messages_dirty = true;
         self.display_messages_initialised = false;
-        self.display_messages_area = ((0, 0), (0, 0));
 
         // Invalidate dirty areas.
         self.context.dirty_areas.clear();
@@ -569,258 +564,224 @@ impl State {
                 self.display_messages_dirty = true;
                 self.display_messages_initialised = false;
                 self.display_messages_expiration_start = None;
-                areas.push((
-                    (0, 0),
-                    (
-                        self.screen.cols.saturating_sub(1),
-                        self.screen.rows.saturating_sub(1),
-                    ),
-                ));
+                areas.push(self.screen.area());
             }
         }
 
         /* Sort by x_start, ie upper_left corner's x coordinate */
-        areas.sort_by(|a, b| (a.0).0.partial_cmp(&(b.0).0).unwrap());
+        areas.sort_by(|a, b| a.upper_left().0.partial_cmp(&b.upper_left().0).unwrap());
 
         if self.display_messages_active {
-            /* Check if any dirty area intersects with the area occupied by floating
-             * notification box */
-            let (displ_top, displ_bot) = self.display_messages_area;
-            for &((top_x, top_y), (bottom_x, bottom_y)) in &areas {
-                self.display_messages_dirty |= !(bottom_y < displ_top.1
-                    || displ_bot.1 < top_y
-                    || bottom_x < displ_top.0
-                    || displ_bot.0 < top_x);
-            }
+            /* Check if any dirty area intersects with the area occupied by
+             * floating notification box */
+            //let (displ_top, displ_bot) = self.display_messages_area;
+            //for &((top_x, top_y), (bottom_x, bottom_y)) in &areas {
+            //    self.display_messages_dirty |= !(bottom_y < displ_top.1
+            //        || displ_bot.1 < top_y
+            //        || bottom_x < displ_top.0
+            //        || displ_bot.0 < top_x);
+            //}
         }
         /* draw each dirty area */
-        let rows = self.screen.rows;
+        let rows = self.screen.area().height();
         for y in 0..rows {
             let mut segment = None;
-            for ((x_start, y_start), (x_end, y_end)) in &areas {
-                if y < *y_start || y > *y_end {
+            for ((x_start, y_start), (x_end, y_end)) in
+                areas.iter().map(|a| (a.upper_left(), a.bottom_right()))
+            {
+                if y < y_start || y > y_end {
                     continue;
                 }
                 if let Some((x_start, x_end)) = segment.take() {
-                    (self.screen.draw_horizontal_segment_fn)(
-                        &mut self.screen.grid,
-                        self.screen.stdout.as_mut().unwrap(),
-                        x_start,
-                        x_end,
-                        y,
-                    );
+                    self.screen.draw(x_start, x_end, y);
                 }
                 match segment {
                     ref mut s @ None => {
-                        *s = Some((*x_start, *x_end));
+                        *s = Some((x_start, x_end));
                     }
-                    ref mut s @ Some(_) if s.unwrap().1 < *x_start => {
-                        (self.screen.draw_horizontal_segment_fn)(
-                            &mut self.screen.grid,
-                            self.screen.stdout.as_mut().unwrap(),
-                            s.unwrap().0,
-                            s.unwrap().1,
-                            y,
-                        );
-                        *s = Some((*x_start, *x_end));
+                    ref mut s @ Some(_) if s.unwrap().1 < x_start => {
+                        self.screen.draw(s.unwrap().0, s.unwrap().1, y);
+                        *s = Some((x_start, x_end));
                     }
-                    ref mut s @ Some(_) if s.unwrap().1 < *x_end => {
-                        (self.screen.draw_horizontal_segment_fn)(
-                            &mut self.screen.grid,
-                            self.screen.stdout.as_mut().unwrap(),
-                            s.unwrap().0,
-                            s.unwrap().1,
-                            y,
-                        );
-                        *s = Some((s.unwrap().1, *x_end));
+                    ref mut s @ Some(_) if s.unwrap().1 < x_end => {
+                        self.screen.draw(s.unwrap().0, s.unwrap().1, y);
+                        *s = Some((s.unwrap().1, x_end));
                     }
                     Some((_, ref mut x)) => {
-                        *x = *x_end;
+                        *x = x_end;
                     }
                 }
             }
             if let Some((x_start, x_end)) = segment {
-                (self.screen.draw_horizontal_segment_fn)(
-                    &mut self.screen.grid,
-                    self.screen.stdout.as_mut().unwrap(),
-                    x_start,
-                    x_end,
-                    y,
-                );
+                self.screen.draw(x_start, x_end, y);
             }
         }
 
         if self.display_messages_dirty && self.display_messages_active {
-            if let Some(DisplayMessage {
-                ref timestamp,
-                ref msg,
-                ..
-            }) = self.display_messages.get(self.display_messages_pos)
-            {
-                if !self.display_messages_initialised {
-                    {
-                        /* Clear area previously occupied by floating notification box */
-                        let displ_area = self.display_messages_area;
-                        for y in get_y(upper_left!(displ_area))..=get_y(bottom_right!(displ_area)) {
-                            (self.screen.draw_horizontal_segment_fn)(
-                                &mut self.screen.grid,
-                                self.screen.stdout.as_mut().unwrap(),
-                                get_x(upper_left!(displ_area)),
-                                get_x(bottom_right!(displ_area)),
-                                y,
-                            );
-                        }
-                    }
-                    let noto_colors = crate::conf::value(&self.context, "status.notification");
-                    use crate::melib::text_processing::{Reflow, TextProcessing};
+            //if let Some(DisplayMessage {
+            //    ref timestamp,
+            //    ref msg,
+            //    ..
+            //}) = self.display_messages.get(self.display_messages_pos)
+            //{
+            //    if !self.display_messages_initialised {
+            //        {
+            //            /* Clear area previously occupied by floating
+            //             * notification box */
+            //            //let displ_area = self.display_messages_area;
+            //            //for y in get_y(displ_area.upper_left())..
+            //            // =get_y(displ_area.bottom_right()) {
+            //            //    (self.screen.tty().draw_fn())(
+            //            //        self.screen.grid_mut(),
+            //            //        self.screen.tty_mut().stdout_mut(),
+            //            //        get_x(displ_area.upper_left()),
+            //            //        get_x(displ_area.bottom_right()),
+            //            //        y,
+            //            //    );
+            //            //}
+            //        }
+            //        let noto_colors = crate::conf::value(&self.context,
+            // "status.notification");        use
+            // crate::melib::text_processing::{Reflow, TextProcessing};
 
-                    let msg_lines = msg.split_lines_reflow(Reflow::All, Some(self.screen.cols / 3));
-                    let width = msg_lines
-                        .iter()
-                        .map(|line| line.grapheme_len() + 4)
-                        .max()
-                        .unwrap_or(0);
+            //        let msg_lines =
+            //            msg.split_lines_reflow(Reflow::All,
+            // Some(self.screen.area().width() / 3));        let width =
+            // msg_lines            .iter()
+            //            .map(|line| line.grapheme_len() + 4)
+            //            .max()
+            //            .unwrap_or(0);
 
-                    let displ_area = place_in_area(
-                        (
-                            (0, 0),
-                            (
-                                self.screen.cols.saturating_sub(1),
-                                self.screen.rows.saturating_sub(1),
-                            ),
-                        ),
-                        (width, std::cmp::min(self.screen.rows, msg_lines.len() + 4)),
-                        false,
-                        false,
-                    );
-                    let box_displ_area = create_box(&mut self.screen.overlay_grid, displ_area);
-                    for row in self.screen.overlay_grid.bounds_iter(box_displ_area) {
-                        for c in row {
-                            self.screen.overlay_grid[c]
-                                .set_ch(' ')
-                                .set_fg(noto_colors.fg)
-                                .set_bg(noto_colors.bg)
-                                .set_attrs(noto_colors.attrs);
-                        }
-                    }
-                    let ((x, mut y), box_displ_area_bottom_right) = box_displ_area;
-                    for line in msg_lines
-                        .into_iter()
-                        .chain(Some(String::new()))
-                        .chain(Some(datetime::timestamp_to_string(*timestamp, None, false)))
-                    {
-                        self.screen.overlay_grid.write_string(
-                            &line,
-                            noto_colors.fg,
-                            noto_colors.bg,
-                            noto_colors.attrs,
-                            ((x, y), box_displ_area_bottom_right),
-                            Some(x),
-                        );
-                        y += 1;
-                    }
+            //        let displ_area = self.screen.area().place_inside(
+            //            (
+            //                width,
+            //                std::cmp::min(self.screen.area().height(), msg_lines.len() +
+            // 4),            ),
+            //            false,
+            //            false,
+            //        );
+            //        /*
+            //        let box_displ_area = create_box(&mut self.screen.overlay_grid,
+            // displ_area);        for row in
+            // self.screen.overlay_grid.bounds_iter(box_displ_area) {
+            //            for c in row {
+            //                self.screen.overlay_grid[c]
+            //                    .set_ch(' ')
+            //                    .set_fg(noto_colors.fg)
+            //                    .set_bg(noto_colors.bg)
+            //                    .set_attrs(noto_colors.attrs);
+            //            }
+            //        }
+            //        let ((x, mut y), box_displ_area_bottom_right) = box_displ_area;
+            //        for line in msg_lines
+            //            .into_iter()
+            //            .chain(Some(String::new()))
+            //            .chain(Some(datetime::timestamp_to_string(*timestamp, None,
+            // false)))        {
+            //            self.screen.overlay_grid.write_string(
+            //                &line,
+            //                noto_colors.fg,
+            //                noto_colors.bg,
+            //                noto_colors.attrs,
+            //                ((x, y), box_displ_area_bottom_right),
+            //                Some(x),
+            //            );
+            //            y += 1;
+            //        }
 
-                    if self.display_messages.len() > 1 {
-                        self.screen.overlay_grid.write_string(
-                            &if self.display_messages_pos == 0 {
-                                format!(
-                                    "Next: {}",
-                                    self.context.settings.shortcuts.general.info_message_next
-                                )
-                            } else if self.display_messages_pos + 1 == self.display_messages.len() {
-                                format!(
-                                    "Prev: {}",
-                                    self.context
-                                        .settings
-                                        .shortcuts
-                                        .general
-                                        .info_message_previous
-                                )
-                            } else {
-                                format!(
-                                    "Prev: {} Next: {}",
-                                    self.context
-                                        .settings
-                                        .shortcuts
-                                        .general
-                                        .info_message_previous,
-                                    self.context.settings.shortcuts.general.info_message_next
-                                )
-                            },
-                            noto_colors.fg,
-                            noto_colors.bg,
-                            noto_colors.attrs,
-                            ((x, y), box_displ_area_bottom_right),
-                            Some(x),
-                        );
-                    }
-                    self.display_messages_area = displ_area;
-                }
-                for y in get_y(upper_left!(self.display_messages_area))
-                    ..=get_y(bottom_right!(self.display_messages_area))
-                {
-                    (self.screen.draw_horizontal_segment_fn)(
-                        &mut self.screen.overlay_grid,
-                        self.screen.stdout.as_mut().unwrap(),
-                        get_x(upper_left!(self.display_messages_area)),
-                        get_x(bottom_right!(self.display_messages_area)),
-                        y,
-                    );
-                }
-            }
+            //        if self.display_messages.len() > 1 {
+            //            self.screen.overlay_grid.write_string(
+            //                &if self.display_messages_pos == 0 {
+            //                    format!(
+            //                        "Next: {}",
+            //
+            // self.context.settings.shortcuts.general.info_message_next
+            //                    )
+            //                } else if self.display_messages_pos + 1 ==
+            // self.display_messages.len() {                    format!(
+            //                        "Prev: {}",
+            //                        self.context
+            //                            .settings
+            //                            .shortcuts
+            //                            .general
+            //                            .info_message_previous
+            //                    )
+            //                } else {
+            //                    format!(
+            //                        "Prev: {} Next: {}",
+            //                        self.context
+            //                            .settings
+            //                            .shortcuts
+            //                            .general
+            //                            .info_message_previous,
+            //
+            // self.context.settings.shortcuts.general.info_message_next
+            //                    )
+            //                },
+            //                noto_colors.fg,
+            //                noto_colors.bg,
+            //                noto_colors.attrs,
+            //                ((x, y), box_displ_area_bottom_right),
+            //                Some(x),
+            //            );
+            //        }
+            //        self.display_messages_area = displ_area;
+            //        */
+            //    }
+            //    //for y in get_y(self.display_messages_area.upper_left())
+            //    //    ..=get_y(self.display_messages_area.bottom_right())
+            //    //{
+            //    //    (self.screen.tty().draw_fn())(
+            //    //        &mut self.screen.overlay_grid,
+            //    //        self.screen.tty_mut().stdout_mut(),
+            //    //        get_x(self.display_messages_area.upper_left()),
+            //    //        get_x(self.display_messages_area.bottom_right()),
+            //    //        y,
+            //    //    );
+            //    //}
+            //}
             self.display_messages_dirty = false;
         } else if self.display_messages_dirty {
             /* Clear area previously occupied by floating notification box */
-            let displ_area = self.display_messages_area;
-            for y in get_y(upper_left!(displ_area))..=get_y(bottom_right!(displ_area)) {
-                (self.screen.draw_horizontal_segment_fn)(
-                    &mut self.screen.grid,
-                    self.screen.stdout.as_mut().unwrap(),
-                    get_x(upper_left!(displ_area)),
-                    get_x(bottom_right!(displ_area)),
-                    y,
-                );
-            }
+            //let displ_area = self.display_messages_area;
+            //for y in get_y(displ_area.upper_left())..=get_y(displ_area.bottom_right()) {
+            //    (self.screen.tty().draw_fn())(
+            //        self.screen.grid_mut(),
+            //        self.screen.tty_mut().stdout_mut(),
+            //        get_x(displ_area.upper_left()),
+            //        get_x(displ_area.bottom_right()),
+            //        y,
+            //    );
+            //}
             self.display_messages_dirty = false;
         }
+
         if !self.overlay.is_empty() {
-            let area = center_area(
-                (
-                    (0, 0),
-                    (
-                        self.screen.cols.saturating_sub(1),
-                        self.screen.rows.saturating_sub(1),
-                    ),
-                ),
-                (
-                    if self.screen.cols / 3 > 30 {
-                        self.screen.cols / 3
-                    } else {
-                        self.screen.cols
-                    },
-                    if self.screen.rows / 5 > 10 {
-                        self.screen.rows / 5
-                    } else {
-                        self.screen.rows
-                    },
-                ),
-            );
-            self.screen
-                .overlay_grid
-                .copy_area(&self.screen.grid, area, area);
-            self.overlay.get_index_mut(0).unwrap().1.draw(
-                &mut self.screen.overlay_grid,
-                area,
-                &mut self.context,
-            );
-            for y in get_y(upper_left!(area))..=get_y(bottom_right!(area)) {
-                (self.screen.draw_horizontal_segment_fn)(
-                    &mut self.screen.overlay_grid,
-                    self.screen.stdout.as_mut().unwrap(),
-                    get_x(upper_left!(area)),
-                    get_x(bottom_right!(area)),
-                    y,
+            let area: Area = self.screen.area();
+            let overlay_area = area.center_inside((
+                if self.screen.cols() / 3 > 30 {
+                    self.screen.cols() / 3
+                } else {
+                    self.screen.cols()
+                },
+                if self.screen.rows() / 5 > 10 {
+                    self.screen.rows() / 5
+                } else {
+                    self.screen.rows()
+                },
+            ));
+            {
+                let (grid, overlay_grid) = self.screen.grid_and_overlay_grid_mut();
+                overlay_grid.copy_area(grid, area, area);
+                self.overlay.get_index_mut(0).unwrap().1.draw(
+                    overlay_grid,
+                    overlay_area,
+                    &mut self.context,
                 );
+            }
+            for row in self.screen.overlay_grid().bounds_iter(overlay_area) {
+                self.screen
+                    .draw_overlay(row.cols().start, row.cols().end, row.row_index());
             }
         }
         self.flush();
@@ -829,26 +790,17 @@ impl State {
     /// Draw the entire screen from scratch.
     pub fn render(&mut self) {
         self.screen.update_size();
-        let cols = self.screen.cols;
-        let rows = self.screen.rows;
-        self.context
-            .dirty_areas
-            .push_back(((0, 0), (cols - 1, rows - 1)));
+        self.context.dirty_areas.push_back(self.screen.area());
 
         self.redraw();
     }
 
     pub fn draw_component(&mut self, idx: usize) {
         let component = &mut self.components[idx];
-        let upper_left = (0, 0);
-        let bottom_right = (self.screen.cols - 1, self.screen.rows - 1);
 
         if component.is_dirty() {
-            component.draw(
-                &mut self.screen.grid,
-                (upper_left, bottom_right),
-                &mut self.context,
-            );
+            let area = self.screen.area();
+            component.draw(self.screen.grid_mut(), area, &mut self.context);
         }
     }
 
@@ -1024,11 +976,9 @@ impl State {
                     )));
             }
             ToggleMouse => {
-                self.screen.mouse = !self.screen.mouse;
-                self.screen.set_mouse(self.screen.mouse);
-                self.rcv_event(UIEvent::StatusEvent(StatusEvent::SetMouse(
-                    self.screen.mouse,
-                )));
+                let new_val = !self.screen.tty().mouse();
+                self.screen.tty_mut().set_mouse(new_val);
+                self.rcv_event(UIEvent::StatusEvent(StatusEvent::SetMouse(new_val)));
             }
             Quit => {
                 self.context
@@ -1061,7 +1011,7 @@ impl State {
                     Ok(action) => {
                         if action.needs_confirmation() {
                             let new = Box::new(UIConfirmationDialog::new(
-                                "You sure?",
+                                "Are you sure?",
                                 vec![(true, "yes".to_string()), (false, "no".to_string())],
                                 true,
                                 Some(Box::new(move |id: ComponentId, result: bool| {

@@ -329,7 +329,7 @@ impl JobManager {
                 if idx >= self.length {
                     continue; //bounds check
                 }
-                let new_area = nth_row_area(area, idx % rows);
+                let new_area = area.nth_row(idx % rows);
                 self.data_columns
                     .draw(grid, idx, self.cursor_pos, grid.bounds_iter(new_area));
                 let row_attr = if highlight {
@@ -351,18 +351,14 @@ impl JobManager {
         /* Page_no has changed, so draw new page */
         _ = self
             .data_columns
-            .recalc_widths((width!(area), height!(area)), top_idx);
+            .recalc_widths((area.width(), area.height()), top_idx);
         grid.clear_area(area, self.theme_default);
         /* copy table columns */
         self.data_columns
             .draw(grid, top_idx, self.cursor_pos, grid.bounds_iter(area));
 
         /* highlight cursor */
-
-        grid.change_theme(
-            nth_row_area(area, self.cursor_pos % rows),
-            self.highlight_theme,
-        );
+        grid.change_theme(area.nth_row(self.cursor_pos % rows), self.highlight_theme);
 
         /* clear gap if available height is more than count of entries */
         if top_idx + rows > self.length {
@@ -386,45 +382,43 @@ impl Component for JobManager {
         if !self.initialized {
             self.initialize(context);
         }
-        {
-            // Draw column headers.
-            let area = nth_row_area(area, 0);
-            grid.clear_area(area, self.theme_default);
-            let mut x_offset = 0;
-            let (upper_left, bottom_right) = area;
-            for (i, (h, w)) in Self::HEADERS.iter().zip(self.min_width).enumerate() {
+        let area = area.nth_row(0);
+        // Draw column headers.
+        grid.clear_area(area, self.theme_default);
+        let mut x_offset = 0;
+        let (upper_left, bottom_right) = area;
+        for (i, (h, w)) in Self::HEADERS.iter().zip(self.min_width).enumerate() {
+            grid.write_string(
+                h,
+                self.theme_default.fg,
+                self.theme_default.bg,
+                self.theme_default.attrs | Attr::BOLD,
+                (pos_inc(upper_left, (x_offset, 0)), bottom_right),
+                None,
+            );
+            if self.sort_col as usize == i {
+                use SortOrder::*;
+                let arrow = match (grid.ascii_drawing, self.sort_order) {
+                    (true, Asc) => DataColumns::<5>::ARROW_UP_ASCII,
+                    (true, Desc) => DataColumns::<5>::ARROW_DOWN_ASCII,
+                    (false, Asc) => DataColumns::<5>::ARROW_UP,
+                    (false, Desc) => DataColumns::<5>::ARROW_DOWN,
+                };
                 grid.write_string(
-                    h,
+                    arrow,
                     self.theme_default.fg,
                     self.theme_default.bg,
-                    self.theme_default.attrs | Attr::BOLD,
-                    (pos_inc(upper_left, (x_offset, 0)), bottom_right),
+                    self.theme_default.attrs,
+                    (pos_inc(upper_left, (x_offset + h.len(), 0)), bottom_right),
                     None,
                 );
-                if self.sort_col as usize == i {
-                    use SortOrder::*;
-                    let arrow = match (grid.ascii_drawing, self.sort_order) {
-                        (true, Asc) => DataColumns::<5>::ARROW_UP_ASCII,
-                        (true, Desc) => DataColumns::<5>::ARROW_DOWN_ASCII,
-                        (false, Asc) => DataColumns::<5>::ARROW_UP,
-                        (false, Desc) => DataColumns::<5>::ARROW_DOWN,
-                    };
-                    grid.write_string(
-                        arrow,
-                        self.theme_default.fg,
-                        self.theme_default.bg,
-                        self.theme_default.attrs,
-                        (pos_inc(upper_left, (x_offset + h.len(), 0)), bottom_right),
-                        None,
-                    );
-                }
-                x_offset += w + 2;
             }
-            context.dirty_areas.push_back(area);
+            x_offset += w + 2;
         }
+        context.dirty_areas.push_back(area);
 
         // Draw entry rows.
-        if let Some(area) = skip_rows(area, 1) {
+        if let Some(area) = area.skip_rows(1) {
             self.draw_list(grid, area, context);
         }
         self.dirty = false;

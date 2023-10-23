@@ -22,6 +22,7 @@
 use melib::text_processing::{LineBreakText, Truncate};
 
 use super::*;
+use crate::terminal::embed::EmbedGrid;
 
 /// A pager for text.
 /// `Pager` holds its own content in its own `CellBuffer` and when `draw` is
@@ -49,7 +50,7 @@ pub struct Pager {
     /// total height? Used to decide whether to accept `scroll_down` key
     /// events.
     rows_lt_height: bool,
-    filtered_content: Option<(String, Result<CellBuffer>)>,
+    filtered_content: Option<(String, Result<EmbedGrid>)>,
     text_lines: Vec<String>,
     line_breaker: LineBreakText,
     movement: Option<PageMovement>,
@@ -180,7 +181,7 @@ impl Pager {
     }
 
     pub fn filter(&mut self, cmd: &str) {
-        let _f = |bin: &str, text: &str| -> Result<CellBuffer> {
+        let _f = |bin: &str, text: &str| -> Result<EmbedGrid> {
             use std::{
                 io::Write,
                 process::{Command, Stdio},
@@ -200,16 +201,16 @@ impl Pager {
                 .chain_err_summary(|| "Failed to wait on filter")?
                 .stdout;
             let mut dev_null = std::fs::File::open("/dev/null")?;
-            let mut embedded = crate::terminal::embed::EmbedGrid::new();
+            let mut embedded = EmbedGrid::new();
             embedded.set_terminal_size((80, 20));
 
             for b in out {
                 embedded.process_byte(&mut dev_null, b);
             }
-            Ok(std::mem::take(embedded.buffer_mut()))
+            Ok(embedded)
         };
         let buf = _f(cmd, &self.text);
-        if let Some((width, height)) = buf.as_ref().ok().map(CellBuffer::size) {
+        if let Some((width, height)) = buf.as_ref().ok().map(EmbedGrid::terminal_size) {
             self.width = width;
             self.height = height;
         }
@@ -225,7 +226,7 @@ impl Pager {
     }
 
     pub fn initialise(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        let mut width = width!(area);
+        let mut width = area.width();
         if width < self.minimum_width {
             width = self.minimum_width;
         }
@@ -253,7 +254,7 @@ impl Pager {
                     );
                 }
                 if let Some(pos) = search.positions.get(search.cursor) {
-                    if self.cursor.1 > pos.0 || self.cursor.1 + height!(area) < pos.0 {
+                    if self.cursor.1 > pos.0 || self.cursor.1 + area.height() < pos.0 {
                         self.cursor.1 = pos.0.saturating_sub(3);
                     }
                 }
@@ -262,7 +263,7 @@ impl Pager {
                 grid,
                 area,
                 context,
-                self.cursor.1 + Self::PAGES_AHEAD_TO_RENDER_NO * height!(area),
+                self.cursor.1 + Self::PAGES_AHEAD_TO_RENDER_NO * area.height(),
             );
         }
         self.draw_page(grid, area, context);
@@ -284,10 +285,10 @@ impl Pager {
         if up_to == 0 {
             self.text_lines.extend(self.line_breaker.by_ref());
         } else {
-            if old_lines_no >= up_to + height!(area) {
+            if old_lines_no >= up_to + area.height() {
                 return;
             }
-            let new_lines_no = (up_to + height!(area)) - old_lines_no;
+            let new_lines_no = (up_to + area.height()) - old_lines_no;
             self.text_lines
                 .extend(self.line_breaker.by_ref().take(new_lines_no));
         };
@@ -310,21 +311,14 @@ impl Pager {
             match filtered_content {
                 Ok(ref content) => {
                     grid.copy_area(
-                        content,
+                        content.buffer(),
                         area,
-                        (
-                            (
-                                std::cmp::min(
-                                    self.cursor.0,
-                                    content.size().0.saturating_sub(width!(area)),
-                                ),
-                                std::cmp::min(
-                                    self.cursor.1,
-                                    content.size().1.saturating_sub(height!(area)),
-                                ),
-                            ),
-                            pos_dec(content.size(), (1, 1)),
-                        ),
+                        content
+                            .area()
+                            .skip_cols(self.cursor.0)
+                            .skip_rows(self.cursor.1)
+                            .take_cols(content.terminal_size().0.saturating_sub(area.width()))
+                            .take_rows(content.terminal_size().1.saturating_sub(area.height())),
                     );
                     context
                         .replies
@@ -346,86 +340,95 @@ impl Pager {
             }
         }
 
-        let (mut upper_left, bottom_right) = area;
-        for l in self
-            .text_lines
-            .iter()
-            .skip(self.cursor.1)
-            .take(height!(area))
         {
-            grid.write_string(
-                l,
-                self.colors.fg,
-                self.colors.bg,
-                Attr::DEFAULT,
-                (upper_left, bottom_right),
-                None,
-            );
-            if l.starts_with('⤷') {
-                grid[upper_left]
-                    .set_fg(crate::conf::value(context, "highlight").fg)
-                    .set_attrs(crate::conf::value(context, "highlight").attrs);
+            let mut area2 = area;
+            for l in self
+                .text_lines
+                .iter()
+                .skip(self.cursor.1)
+                .take(area2.height())
+            {
+                if area2.is_empty() {
+                    break;
+                }
+                grid.write_string(
+                    l,
+                    self.colors.fg,
+                    self.colors.bg,
+                    Attr::DEFAULT,
+                    area2,
+                    None,
+                );
+                if l.starts_with('⤷') {
+                    grid[area2.upper_left()]
+                        .set_fg(crate::conf::value(context, "highlight").fg)
+                        .set_attrs(crate::conf::value(context, "highlight").attrs);
+                }
+                area2 = area2.skip_rows(1);
             }
-            upper_left = pos_inc(upper_left, (0, 1));
+
+            if area2.height() <= 1 {
+                grid.clear_area(area2, crate::conf::value(context, "theme_default"));
+            }
         }
 
-        if get_y(upper_left) <= get_y(bottom_right) {
-            grid.clear_area(
-                (upper_left, bottom_right),
-                crate::conf::value(context, "theme_default"),
-            );
-        }
-
-        let (upper_left, _bottom_right) = area;
-        #[cfg(feature = "regexp")]
         {
-            for text_formatter in crate::conf::text_format_regexps(context, "pager.envelope.body") {
-                let t = grid.insert_tag(text_formatter.tag);
-                for (i, l) in self
-                    .text_lines
-                    .iter()
-                    .skip(self.cursor.1)
-                    .enumerate()
-                    .take(height!(area) + 1)
+            #[cfg(feature = "regexp")]
+            {
+                let area3 = area;
+                for text_formatter in
+                    crate::conf::text_format_regexps(context, "pager.envelope.body")
                 {
-                    let i = i + get_y(upper_left);
-                    for (start, end) in text_formatter.regexp.find_iter(l) {
-                        let start = start + get_x(upper_left);
-                        let end = end + get_x(upper_left);
-                        grid.set_tag(t, (start, i), (end, i));
+                    let t = grid.insert_tag(text_formatter.tag);
+                    for (i, l) in self
+                        .text_lines
+                        .iter()
+                        .skip(self.cursor.1)
+                        .enumerate()
+                        .take(area3.height() + 1)
+                    {
+                        let i = i + area3.upper_left().1;
+                        for (start, end) in text_formatter.regexp.find_iter(l) {
+                            let start = start + area3.upper_left().0;
+                            let end = end + area3.upper_left().0;
+                            grid.set_tag(t, (start, i), (end, i));
+                        }
                     }
                 }
             }
-        }
-        let cursor_line = self.cursor.1;
-        if let Some(ref mut search) = self.search {
-            let results_attr = crate::conf::value(context, "pager.highlight_search");
-            let results_current_attr =
-                crate::conf::value(context, "pager.highlight_search_current");
-            search.cursor = std::cmp::min(search.positions.len().saturating_sub(1), search.cursor);
-            for (i, (y, x)) in search
-                .positions
-                .iter()
-                .enumerate()
-                .filter(|(_, (y, _))| *y >= cursor_line)
-                .take(height!(area) + 1)
-            {
-                let x = *x + get_x(upper_left);
-                let y = *y - cursor_line;
-                for c in grid.row_iter(
-                    x..x + search.pattern.grapheme_width(),
-                    y + get_y(upper_left),
-                ) {
-                    if i == search.cursor {
-                        grid[c]
-                            .set_fg(results_current_attr.fg)
-                            .set_bg(results_current_attr.bg)
-                            .set_attrs(results_current_attr.attrs);
+            if let Some(ref mut search) = self.search {
+                // Last row will be reserved for the "Results for ..." line.
+                let area3 = area.skip_rows_from_end(1);
+                let cursor_line = self.cursor.1;
+                let results_attr = crate::conf::value(context, "pager.highlight_search");
+                let results_current_attr =
+                    crate::conf::value(context, "pager.highlight_search_current");
+                search.cursor =
+                    std::cmp::min(search.positions.len().saturating_sub(1), search.cursor);
+                for (i, (y, offset)) in search
+                    .positions
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, &(y, _))| y >= cursor_line && y < cursor_line + area3.height())
+                {
+                    let attr = if i == search.cursor {
+                        results_current_attr
                     } else {
+                        results_attr
+                    };
+
+                    let (y, x) = (*y, *offset);
+                    let row_iter = grid.row_iter(
+                        area3.nth_row(y - cursor_line),
+                        x..x + search.pattern.grapheme_width(),
+                        0,
+                    );
+                    debug_assert_eq!(row_iter.area().width(), search.pattern.grapheme_width());
+                    for c in row_iter {
                         grid[c]
-                            .set_fg(results_attr.fg)
-                            .set_bg(results_attr.bg)
-                            .set_attrs(results_attr.attrs);
+                            .set_fg(attr.fg)
+                            .set_bg(attr.bg)
+                            .set_attrs(attr.attrs);
                     }
                 }
             }
@@ -435,9 +438,6 @@ impl Pager {
 
 impl Component for Pager {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        if !is_valid_area!(area) {
-            return;
-        }
         if !self.is_dirty() {
             return;
         }
@@ -448,14 +448,42 @@ impl Component for Pager {
 
         self.dirty = false;
 
-        let height = height!(area);
+        if self.height == 0 || self.width == 0 {
+            grid.clear_area(area, crate::conf::value(context, "theme_default"));
+            return;
+        }
+
+        let (mut cols, mut rows) = (area.width(), area.height());
+        let (has_more_lines, (width, height)) = if self.filtered_content.is_some() {
+            (false, (self.width, self.height))
+        } else {
+            (
+                !self.line_breaker.is_finished(),
+                (self.line_breaker.width().unwrap_or(cols), self.height),
+            )
+        };
+        if cols < 2 || rows < 2 {
+            return;
+        }
+
+        if self.show_scrollbar && rows < height {
+            cols -= 1;
+            rows -= 1;
+        } else if self.search.is_some() {
+            rows -= 1;
+        }
+
+        if self.show_scrollbar && cols < width {
+            rows -= 1;
+        }
+
         if let Some(mvm) = self.movement.take() {
             match mvm {
                 PageMovement::Up(amount) => {
                     self.cursor.1 = self.cursor.1.saturating_sub(amount);
                 }
                 PageMovement::PageUp(multiplier) => {
-                    self.cursor.1 = self.cursor.1.saturating_sub(height * multiplier);
+                    self.cursor.1 = self.cursor.1.saturating_sub(rows * multiplier);
                 }
                 PageMovement::Down(amount) => {
                     if self.cursor.1 + amount + 1 < self.height {
@@ -467,22 +495,22 @@ impl Component for Pager {
                         grid,
                         area,
                         context,
-                        self.cursor.1 + Self::PAGES_AHEAD_TO_RENDER_NO * height,
+                        self.cursor.1 + Self::PAGES_AHEAD_TO_RENDER_NO * rows,
                     );
                 }
                 PageMovement::PageDown(multiplier) => {
-                    if self.cursor.1 + height * multiplier + 1 < self.height {
-                        self.cursor.1 += height * multiplier;
-                    } else if self.cursor.1 + height * multiplier > self.height {
+                    if self.cursor.1 + rows * multiplier + 1 < self.height {
+                        self.cursor.1 += rows * multiplier;
+                    } else if self.cursor.1 + rows * multiplier > self.height {
                         self.cursor.1 = self.height.saturating_sub(1);
                     } else {
-                        self.cursor.1 = (self.height / height) * height;
+                        self.cursor.1 = (self.height / rows) * rows;
                     }
                     self.draw_lines_up_to(
                         grid,
                         area,
                         context,
-                        self.cursor.1 + Self::PAGES_AHEAD_TO_RENDER_NO * height,
+                        self.cursor.1 + Self::PAGES_AHEAD_TO_RENDER_NO * rows,
                     );
                 }
                 PageMovement::Right(amount) => {
@@ -505,9 +533,6 @@ impl Component for Pager {
             }
         }
 
-        if self.height == 0 || self.width == 0 {
-            return;
-        }
         if let Some(ref mut search) = self.search {
             if !search.positions.is_empty() {
                 if let Some(mvm) = search.movement.take() {
@@ -529,49 +554,19 @@ impl Component for Pager {
         }
 
         grid.clear_area(area, crate::conf::value(context, "theme_default"));
-        let (mut cols, mut rows) = (width!(area), height!(area));
-        let (has_more_lines, (width, height)) = if self.filtered_content.is_some() {
-            (false, (self.width, self.height))
-        } else {
-            (
-                !self.line_breaker.is_finished(),
-                (self.line_breaker.width().unwrap_or(cols), self.height),
-            )
-        };
 
         self.cols_lt_width = cols + self.cursor.0 < width;
         self.rows_lt_height = rows + self.cursor.1 < height;
 
-        if cols < 2 || rows < 2 {
-            return;
-        }
-
-        if self.show_scrollbar && rows < height {
-            cols -= 1;
-            rows -= 1;
-        } else if self.search.is_some() {
-            rows -= 1;
-        }
-
-        if self.show_scrollbar && cols < width {
-            rows -= 1;
-        }
         self.cursor = (
             std::cmp::min(width.saturating_sub(cols), self.cursor.0),
             std::cmp::min(height.saturating_sub(rows), self.cursor.1),
         );
-        self.draw_page(
-            grid,
-            (upper_left!(area), pos_inc(upper_left!(area), (cols, rows))),
-            context,
-        );
+        self.draw_page(grid, area.take_cols(cols).take_rows(rows), context);
         if self.show_scrollbar && rows < height {
             ScrollBar::default().set_show_arrows(true).draw(
                 grid,
-                (
-                    set_x(upper_left!(area), get_x(bottom_right!(area))),
-                    bottom_right!(area),
-                ),
+                area.nth_col(area.width()),
                 context,
                 /* position */
                 self.cursor.1,
@@ -584,10 +579,7 @@ impl Component for Pager {
         if self.show_scrollbar && cols < width {
             ScrollBar::default().set_show_arrows(true).draw_horizontal(
                 grid,
-                (
-                    set_y(upper_left!(area), get_y(bottom_right!(area))),
-                    bottom_right!(area),
-                ),
+                area.nth_row(area.height()),
                 context,
                 self.cursor.0,
                 cols,
@@ -635,23 +627,26 @@ impl Component for Pager {
                 if !context.settings.terminal.use_color() {
                     attribute.attrs |= Attr::REVERSE;
                 }
-                let (_, y) = grid.write_string(
+                grid.write_string(
                     &status_message,
                     attribute.fg,
                     attribute.bg,
                     attribute.attrs,
-                    (
-                        set_y(upper_left!(area), get_y(bottom_right!(area))),
-                        bottom_right!(area),
-                    ),
+                    area.nth_row(area.height().saturating_sub(1)),
                     None,
                 );
                 /* set search pattern to italics */
-                let start_x = get_x(upper_left!(area)) + RESULTS_STR.len();
-                for c in grid.row_iter(start_x..(start_x + search.pattern.grapheme_width()), y) {
+                let start_x = RESULTS_STR.len();
+                let row_iter = grid.row_iter(
+                    area.nth_row(area.height().saturating_sub(1)),
+                    start_x..(start_x + search.pattern.grapheme_width()),
+                    0,
+                );
+                debug_assert_eq!(row_iter.area().width(), search.pattern.grapheme_width());
+                for c in row_iter {
                     grid[c].set_attrs(attribute.attrs | Attr::ITALICS);
                 }
-            };
+            }
         }
         context.dirty_areas.push_back(area);
     }

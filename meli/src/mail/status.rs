@@ -22,12 +22,13 @@
 use melib::{MailBackendExtensionStatus, SpecialUsageMailbox};
 
 use super::*;
+use crate::accounts::JobRequest;
 
 #[derive(Debug)]
 pub struct AccountStatus {
     cursor: (usize, usize),
     account_pos: usize,
-    content: CellBuffer,
+    content: Screen<Virtual>,
     dirty: bool,
     theme_default: ThemeAttribute,
     id: ComponentId,
@@ -48,8 +49,10 @@ impl AccountStatus {
                 .set_attrs(theme_default.attrs);
             ret
         };
-        let mut content = CellBuffer::new(120, 5, default_cell);
-        content.set_growable(true);
+        let mut content = Screen::<Virtual>::new();
+        content.grid_mut().default_cell = default_cell;
+        content.grid_mut().set_growable(true);
+        _ = content.resize(80, 20);
 
         AccountStatus {
             cursor: (0, 0),
@@ -60,54 +63,51 @@ impl AccountStatus {
             id: ComponentId::default(),
         }
     }
-}
 
-impl Component for AccountStatus {
-    fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        if !self.dirty {
+    fn update_content(&mut self, (width, height): (usize, usize), context: &Context) {
+        if !self.content.resize_with_context(width, height, context) {
             return;
         }
-        self.dirty = false;
-        let (mut width, _) = self.content.size();
         let a = &context.accounts[self.account_pos];
-        let (_x, _y) = self.content.write_string(
+        let area = self.content.area().skip_cols(1);
+        let (_x, _y) = self.content.grid_mut().write_string(
             "Account ",
             self.theme_default.fg,
             self.theme_default.bg,
             self.theme_default.attrs | Attr::UNDERLINE,
-            ((1, 0), (width - 1, 0)),
+            area,
             None,
         );
-        let (_x, _y) = self.content.write_string(
+        let area = self.content.area().skip(_x + 1, _y);
+        let (_x, _y) = self.content.grid_mut().write_string(
             a.name(),
             self.theme_default.fg,
             self.theme_default.bg,
             Attr::BOLD | Attr::UNDERLINE,
-            ((_x, _y), (width - 1, _y)),
+            area,
             None,
         );
-        width = self.content.size().0;
         let mut line = 2;
 
-        self.content.write_string(
+        let area = self.content.area().skip(1, line);
+        self.content.grid_mut().write_string(
             "In-progress jobs:",
             self.theme_default.fg,
             self.theme_default.bg,
             Attr::BOLD,
-            ((1, line), (width - 1, line)),
+            area,
             None,
         );
         line += 2;
 
         for (job_id, req) in a.active_jobs.iter() {
-            width = self.content.size().0;
-            use crate::accounts::JobRequest;
-            let (x, y) = self.content.write_string(
+            let area = self.content.area().skip(1, line);
+            let (x, y) = self.content.grid_mut().write_string(
                 &format!("{} {}", req, job_id),
                 self.theme_default.fg,
                 self.theme_default.bg,
                 self.theme_default.attrs,
-                ((1, line), (width - 1, line)),
+                area,
                 None,
             );
             if let JobRequest::DeleteMailbox { mailbox_hash, .. }
@@ -116,12 +116,13 @@ impl Component for AccountStatus {
             | JobRequest::Refresh { mailbox_hash, .. }
             | JobRequest::Fetch { mailbox_hash, .. } = req
             {
-                self.content.write_string(
+                let area = self.content.area().skip(x + 1, y + line);
+                self.content.grid_mut().write_string(
                     a.mailbox_entries[mailbox_hash].name(),
                     self.theme_default.fg,
                     self.theme_default.bg,
                     self.theme_default.attrs,
-                    ((x + 1, y), (width - 1, y)),
+                    area,
                     None,
                 );
             }
@@ -130,18 +131,18 @@ impl Component for AccountStatus {
         }
 
         line += 2;
-        width = self.content.size().0;
 
-        let (_x, _y) = self.content.write_string(
+        let area = self.content.area().skip(1, line);
+        let (_x, _y) = self.content.grid_mut().write_string(
             "Tag support: ",
             self.theme_default.fg,
             self.theme_default.bg,
             Attr::BOLD,
-            ((1, line), (width - 1, line)),
+            area,
             None,
         );
-        width = self.content.size().0;
-        self.content.write_string(
+        let area = self.content.area().skip(_x + 1, _y + line);
+        self.content.grid_mut().write_string(
             if a.backend_capabilities.supports_tags {
                 "yes"
             } else {
@@ -150,21 +151,21 @@ impl Component for AccountStatus {
             self.theme_default.fg,
             self.theme_default.bg,
             self.theme_default.attrs,
-            ((_x, _y), (width - 1, line)),
+            area,
             None,
         );
-        width = self.content.size().0;
         line += 1;
-        let (_x, _y) = self.content.write_string(
+        let area = self.content.area().skip(1, line);
+        let (_x, _y) = self.content.grid_mut().write_string(
             "Search backend: ",
             self.theme_default.fg,
             self.theme_default.bg,
             Attr::BOLD,
-            ((1, line), (width - 1, line)),
+            area,
             None,
         );
-        width = self.content.size().0;
-        self.content.write_string(
+        let area = self.content.area().skip(_x + 1, _y + line);
+        self.content.grid_mut().write_string(
             &match (
                 a.settings.conf.search_backend(),
                 a.backend_capabilities.supports_search,
@@ -187,18 +188,18 @@ impl Component for AccountStatus {
             self.theme_default.fg,
             self.theme_default.bg,
             self.theme_default.attrs,
-            ((_x, _y), (width - 1, _y)),
+            area,
             None,
         );
-        width = self.content.size().0;
         line += 1;
 
-        self.content.write_string(
+        let area = self.content.area().skip(1, line);
+        self.content.grid_mut().write_string(
             "Special Mailboxes:",
             self.theme_default.fg,
             self.theme_default.bg,
             Attr::BOLD,
-            ((1, line), (width - 1, line)),
+            area,
             None,
         );
         for f in a
@@ -207,38 +208,38 @@ impl Component for AccountStatus {
             .map(|entry| &entry.ref_mailbox)
             .filter(|f| f.special_usage() != SpecialUsageMailbox::Normal)
         {
-            width = self.content.size().0;
             line += 1;
-            self.content.write_string(
+            let area = self.content.area().skip(1, line);
+            self.content.grid_mut().write_string(
                 &format!("{}: {}", f.path(), f.special_usage()),
                 self.theme_default.fg,
                 self.theme_default.bg,
                 self.theme_default.attrs,
-                ((1, line), (width - 1, line)),
+                area,
                 None,
             );
         }
         line += 2;
-        width = self.content.size().0;
-        self.content.write_string(
+        let area = self.content.area().skip(1, line);
+        self.content.grid_mut().write_string(
             "Subscribed mailboxes:",
             self.theme_default.fg,
             self.theme_default.bg,
             Attr::BOLD,
-            ((1, line), (width - 1, line)),
+            area,
             None,
         );
         line += 2;
         for mailbox_node in a.list_mailboxes() {
-            width = self.content.size().0;
             let f: &Mailbox = &a[&mailbox_node.hash].ref_mailbox;
             if f.is_subscribed() {
-                self.content.write_string(
+                let area = self.content.area().skip(1, line);
+                self.content.grid_mut().write_string(
                     f.path(),
                     self.theme_default.fg,
                     self.theme_default.bg,
                     self.theme_default.attrs,
-                    ((1, line), (width - 1, line)),
+                    area,
                     None,
                 );
                 line += 1;
@@ -246,14 +247,14 @@ impl Component for AccountStatus {
         }
 
         line += 1;
-        width = self.content.size().0;
         if let Some(ref extensions) = a.backend_capabilities.extensions {
-            self.content.write_string(
+            let area = self.content.area().skip(1, line);
+            self.content.grid_mut().write_string(
                 "Server Extensions:",
                 self.theme_default.fg,
                 self.theme_default.bg,
                 Attr::BOLD,
-                ((1, line), (width - 1, line)),
+                area,
                 None,
             );
             let max_name_width = std::cmp::max(
@@ -264,28 +265,27 @@ impl Component for AccountStatus {
                     .max()
                     .unwrap_or(0),
             );
-            width = self.content.size().0;
-            self.content.write_string(
+            let area = self.content.area().skip(max_name_width + 6, line);
+            self.content.grid_mut().write_string(
                 "meli support:",
                 self.theme_default.fg,
                 self.theme_default.bg,
                 self.theme_default.attrs,
-                ((max_name_width + 6, line), (width - 1, line)),
+                area,
                 None,
             );
             line += 1;
             for (name, status) in extensions.iter() {
-                width = self.content.size().0;
-                self.content.write_string(
+                let area = self.content.area().skip(1, line);
+                self.content.grid_mut().write_string(
                     name.trim_at_boundary(30),
                     self.theme_default.fg,
                     self.theme_default.bg,
                     self.theme_default.attrs,
-                    ((1, line), (width - 1, line)),
+                    area,
                     None,
                 );
 
-                width = self.content.size().0;
                 let (x, y) = {
                     let (status, color) = match status {
                         MailBackendExtensionStatus::Unsupported { comment: _ } => {
@@ -298,12 +298,13 @@ impl Component for AccountStatus {
                             ("enabled", Color::Green)
                         }
                     };
-                    self.content.write_string(
+                    let area = self.content.area().skip(max_name_width + 6, line);
+                    self.content.grid_mut().write_string(
                         status,
                         color,
                         self.theme_default.bg,
                         self.theme_default.attrs,
-                        ((max_name_width + 6, line), (width - 1, line)),
+                        area,
                         None,
                     )
                 };
@@ -312,28 +313,44 @@ impl Component for AccountStatus {
                     | MailBackendExtensionStatus::Supported { comment }
                     | MailBackendExtensionStatus::Enabled { comment } => {
                         if let Some(s) = comment {
-                            let (x, y) = self.content.write_string(
+                            let area = self
+                                .content
+                                .area()
+                                .skip(max_name_width + 6, line)
+                                .skip(x, y);
+                            let (_x, _y) = self.content.grid_mut().write_string(
                                 " (",
                                 self.theme_default.fg,
                                 self.theme_default.bg,
                                 self.theme_default.attrs,
-                                ((x, y), (width - 1, y)),
+                                area,
                                 None,
                             );
-                            let (x, y) = self.content.write_string(
+                            let area = self
+                                .content
+                                .area()
+                                .skip(max_name_width + 6, line)
+                                .skip(x, y)
+                                .skip(_x, _y);
+                            let (__x, __y) = self.content.grid_mut().write_string(
                                 s,
                                 self.theme_default.fg,
                                 self.theme_default.bg,
                                 self.theme_default.attrs,
-                                ((x, y), (width - 1, y)),
+                                area,
                                 None,
                             );
-                            self.content.write_string(
+                            let area = self
+                                .content
+                                .area()
+                                .skip(max_name_width + 6, line)
+                                .skip(x + _x + __x, y + _y + __y);
+                            self.content.grid_mut().write_string(
                                 ")",
                                 self.theme_default.fg,
                                 self.theme_default.bg,
                                 self.theme_default.attrs,
-                                ((x, y), (width - 1, y)),
+                                area,
                                 None,
                             );
                         }
@@ -342,11 +359,21 @@ impl Component for AccountStatus {
                 line += 1;
             }
         }
+    }
+}
+
+impl Component for AccountStatus {
+    fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        if !self.dirty {
+            return;
+        }
+        self.dirty = false;
+        self.update_content(area.size(), context);
 
         /* self.content may have been resized with write_string() calls above
          * since it has growable set */
-        let (width, height) = self.content.size();
-        let (cols, rows) = (width!(area), height!(area));
+        let (width, height) = self.content.area().size();
+        let (cols, rows) = area.size();
         self.cursor = (
             std::cmp::min(width.saturating_sub(cols), self.cursor.0),
             std::cmp::min(height.saturating_sub(rows), self.cursor.1),
@@ -354,18 +381,12 @@ impl Component for AccountStatus {
         grid.clear_area(area, self.theme_default);
 
         grid.copy_area(
-            &self.content,
+            self.content.grid(),
             area,
-            (
-                (
-                    std::cmp::min((width - 1).saturating_sub(cols), self.cursor.0),
-                    std::cmp::min((height - 1).saturating_sub(rows), self.cursor.1),
-                ),
-                (
-                    std::cmp::min(self.cursor.0 + cols, width - 1),
-                    std::cmp::min(self.cursor.1 + rows, height - 1),
-                ),
-            ),
+            self.content
+                .area()
+                .skip(self.cursor.0, self.cursor.1)
+                .take(cols, rows),
         );
         context.dirty_areas.push_back(area);
     }

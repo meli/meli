@@ -460,8 +460,8 @@ impl ListingTrait for ConversationsListing {
         {
             self.refresh_mailbox(context, false);
         }
-        let upper_left = upper_left!(area);
-        let bottom_right = bottom_right!(area);
+        let upper_left = area.upper_left();
+        let bottom_right = area.bottom_right();
         if let Err(message) = self.error.as_ref() {
             grid.clear_area(area, self.color_cache.theme_default);
 
@@ -528,10 +528,7 @@ impl ListingTrait for ConversationsListing {
                 if *idx >= self.length {
                     continue; //bounds check
                 }
-                let new_area = (
-                    set_y(upper_left, get_y(upper_left) + 3 * (*idx % rows)),
-                    set_y(bottom_right, get_y(upper_left) + 3 * (*idx % rows) + 2),
-                );
+                let new_area = area.skip_rows(3 * (*idx % rows)).take_rows(2);
                 self.highlight_line(grid, new_area, *idx, context);
                 context.dirty_areas.push_back(new_area);
             }
@@ -552,13 +549,7 @@ impl ListingTrait for ConversationsListing {
 
         self.highlight_line(
             grid,
-            (
-                pos_inc(upper_left, (0, 3 * (self.cursor_pos.2 % rows))),
-                set_y(
-                    bottom_right,
-                    get_y(upper_left) + 3 * (self.cursor_pos.2 % rows) + 2,
-                ),
-            ),
+            area.skip_rows(3 * (self.cursor_pos.2 % rows)).take_rows(2),
             self.cursor_pos.2,
             context,
         );
@@ -888,12 +879,11 @@ impl ConversationsListing {
         let account = &context.accounts[&self.cursor_pos.0];
         let threads = account.collection.get_threads(self.cursor_pos.1);
         grid.clear_area(area, self.color_cache.theme_default);
-        let (mut upper_left, bottom_right) = area;
         for (idx, ((thread_hash, root_env_hash), strings)) in
             self.rows.entries.iter().enumerate().skip(top_idx)
         {
             if !context.accounts[&self.cursor_pos.0].contains_key(*root_env_hash) {
-                panic!();
+                continue;
             }
             let thread = threads.thread_ref(*thread_hash);
 
@@ -909,11 +899,11 @@ impl ConversationsListing {
                 row_attr.fg,
                 row_attr.bg,
                 row_attr.attrs,
-                (upper_left, bottom_right),
+                area.skip_rows(idx),
                 None,
             );
-            for x in x..(x + 3) {
-                grid[set_x(upper_left, x)].set_bg(row_attr.bg);
+            for c in grid.row_iter(area, x..(x + 3), idx) {
+                grid[c].set_bg(row_attr.bg);
             }
             let subject_attr = row_attr!(
                 subject,
@@ -928,10 +918,10 @@ impl ConversationsListing {
                 subject_attr.fg,
                 subject_attr.bg,
                 subject_attr.attrs,
-                (set_x(upper_left, x), bottom_right),
+                area.skip(idx, x),
                 None,
             );
-            let mut subject_overflowed = subject_overflowed > get_y(upper_left);
+            let mut subject_overflowed = subject_overflowed > 0;
             for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
                 if subject_overflowed {
                     break;
@@ -942,10 +932,10 @@ impl ConversationsListing {
                     self.color_cache.tag_default.fg,
                     color,
                     self.color_cache.tag_default.attrs,
-                    (set_x(upper_left, x + 1), bottom_right),
+                    area.skip(idx, x + 1),
                     None,
                 );
-                if _y > get_y(upper_left) {
+                if _y > 0 {
                     subject_overflowed = true;
                     break;
                 }
@@ -1054,7 +1044,7 @@ impl Component for ConversationsListing {
                     area,
                     Some(get_x(upper_left)),
                 );
-                for c in grid.row_iter(x..(get_x(bottom_right) + 1), y) {
+                for c in grid.row_iter(area, x..(get_x(bottom_right) + 1), y) {
                     grid[c] = Cell::default();
                 }
 
@@ -1278,12 +1268,12 @@ impl Component for ConversationsListing {
             }
 
             let entry_area = (
-                set_x(upper_left, get_x(upper_left) + width!(area) / 3 + 2),
+                set_x(upper_left, get_x(upper_left) + area.width() / 3 + 2),
                 bottom_right,
             );
             let gap_area = (
-                pos_dec(upper_left!(entry_area), (1, 0)),
-                bottom_right!(entry_area),
+                pos_dec(entry_area.upper_left(), (1, 0)),
+                entry_area.bottom_right(),
             );
             grid.clear_area(gap_area, self.color_cache.theme_default);
             context.dirty_areas.push_back(gap_area);

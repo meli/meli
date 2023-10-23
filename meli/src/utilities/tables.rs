@@ -23,7 +23,10 @@
 use std::mem::MaybeUninit;
 
 use super::*;
-use crate::segment_tree::SegmentTree;
+use crate::{
+    segment_tree::SegmentTree,
+    terminal::{Screen, Virtual},
+};
 
 #[derive(Debug, Default, Copy, Clone)]
 pub enum ColumnElasticity {
@@ -122,7 +125,7 @@ impl TableCursorConfig {
 pub struct DataColumns<const N: usize> {
     pub cursor_config: TableCursorConfig,
     pub theme_config: TableThemeConfig,
-    pub columns: Box<[CellBuffer; N]>,
+    pub columns: Box<[Screen<Virtual>; N]>,
     /// widths of columns calculated in first draw and after size changes
     pub widths: [usize; N],
     pub elasticities: [ColumnElasticity; N],
@@ -144,10 +147,11 @@ impl<const N: usize> Default for DataColumns<N> {
             let ptr = &data as *const [MaybeUninit<T>; N];
             unsafe { (ptr as *const [T; N]).read() }
         }
+
         Self {
             cursor_config: TableCursorConfig::default(),
             theme_config: TableThemeConfig::default(),
-            columns: Box::new(init_array(CellBuffer::default)),
+            columns: Box::new(init_array(|| Screen::init(Virtual))),
             widths: [0_usize; N],
             elasticities: [ColumnElasticity::default(); N],
             x_offset: 0,
@@ -183,7 +187,7 @@ impl<const N: usize> DataColumns<N> {
             self.widths[i] =
                 self.segment_tree[i].get_max(top_idx, top_idx + screen_height - 1) as usize;
             if self.widths[i] == 0 {
-                self.widths[i] = self.columns[i].cols;
+                self.widths[i] = self.columns[i].cols();
             }
             match self.elasticities[i] {
                 ColumnElasticity::Rigid => {}
@@ -191,11 +195,18 @@ impl<const N: usize> DataColumns<N> {
                     min,
                     max: Some(max),
                 } => {
-                    self.widths[i] = std::cmp::max(min, std::cmp::min(max, self.widths[i]));
+                    if self.widths[i] < min {
+                        self.widths[i] = min;
+                    }
+                    if self.widths[i] > max {
+                        self.widths[i] = max;
+                    }
                     growees += 1;
                 }
                 ColumnElasticity::Grow { min, max: None } => {
-                    self.widths[i] = std::cmp::max(min, self.widths[i]);
+                    if self.widths[i] < min {
+                        self.widths[i] = min;
+                    }
                     growees += 1;
                     growees_max += 1;
                 }
@@ -240,7 +251,7 @@ impl<const N: usize> DataColumns<N> {
         let mut skip_cols = (0, 0);
         let mut start_col = 0;
         let total_area = bounds.area();
-        let (width, height) = (width!(total_area), height!(total_area));
+        let height = total_area.height();
         while _relative_x_offset < self.x_offset && start_col < N {
             _relative_x_offset += self.widths[start_col] + 2;
             if self.x_offset <= _relative_x_offset {
@@ -258,45 +269,42 @@ impl<const N: usize> DataColumns<N> {
             }
 
             let mut column_width = self.widths[col];
-            if column_width > bounds.width {
-                column_width = bounds.width;
+            if column_width > bounds.width() {
+                column_width = bounds.width();
             } else if column_width == 0 {
                 skip_cols.1 = 0;
                 continue;
             }
 
-            let mut column_area = bounds.add_x(column_width + 2);
-
             grid.copy_area(
-                &self.columns[col],
-                column_area.area(),
-                (
-                    (skip_cols.1, top_idx),
-                    (
-                        column_width.saturating_sub(1),
-                        self.columns[col].rows.saturating_sub(1),
-                    ),
-                ),
+                self.columns[col].grid(),
+                bounds.area(),
+                self.columns[col]
+                    .area()
+                    .skip_rows(top_idx)
+                    .skip_cols(skip_cols.1)
+                    .take_cols(column_width),
             );
-            let gap_area = column_area.add_x(column_width);
-            match self.theme_config.theme {
-                TableTheme::Single(row_attr) => {
-                    grid.change_theme(gap_area.area(), row_attr);
-                }
-                TableTheme::EvenOdd { even, odd } => {
-                    grid.change_theme(gap_area.area(), even);
-                    let mut top_idx = top_idx;
-                    for row in gap_area {
-                        if top_idx % 2 != 0 {
-                            grid.change_theme(row.area(), odd);
-                        }
-                        top_idx += 1;
-                    }
-                }
-            };
-
+            bounds.add_x(column_width + 2);
             skip_cols.1 = 0;
         }
+
+        match self.theme_config.theme {
+            TableTheme::Single(row_attr) => {
+                grid.change_theme(total_area, row_attr);
+            }
+            TableTheme::EvenOdd { even, odd } => {
+                grid.change_theme(total_area, even);
+                let mut top_idx = top_idx;
+                for row in 0..total_area.height() {
+                    if top_idx % 2 != 0 {
+                        grid.change_theme(total_area.nth_row(row), odd);
+                    }
+                    top_idx += 1;
+                }
+            }
+        }
+
         if self.cursor_config.handle && (top_idx..(top_idx + height)).contains(&cursor_pos) {
             let offset = cursor_pos - top_idx;
             let row_attr = match self.cursor_config.theme {
@@ -305,13 +313,13 @@ impl<const N: usize> DataColumns<N> {
                 TableTheme::EvenOdd { even: _, odd } => odd,
             };
 
-            grid.change_theme(
-                (
-                    pos_inc(upper_left!(total_area), (0, offset)),
-                    pos_inc(upper_left!(total_area), (width, offset)),
-                ),
-                row_attr,
-            );
+            grid.change_theme(total_area.skip_rows(offset).take_rows(1), row_attr);
+        }
+    }
+
+    pub fn clear(&mut self) {
+        for i in 0..N {
+            self.columns[i].grid_mut().clear(None);
         }
     }
 }

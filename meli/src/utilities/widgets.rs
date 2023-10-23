@@ -347,19 +347,10 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> FormWidget<T> 
 
 impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> Component for FormWidget<T> {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        let upper_left = upper_left!(area);
-        let bottom_right = bottom_right!(area);
-
         if self.is_dirty() {
             let theme_default = crate::conf::value(context, "theme_default");
 
-            grid.clear_area(
-                (
-                    upper_left,
-                    set_y(bottom_right, get_y(upper_left) + self.layout.len()),
-                ),
-                theme_default,
-            );
+            grid.clear_area(area.take_rows(self.layout.len()), theme_default);
             let label_attrs = crate::conf::value(context, "widgets.form.label");
 
             for (i, k) in self.layout.iter().enumerate().rev() {
@@ -370,19 +361,13 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> Component for 
                     label_attrs.fg,
                     label_attrs.bg,
                     label_attrs.attrs,
-                    (
-                        pos_inc(upper_left, (1, i)),
-                        set_y(bottom_right, i + get_y(upper_left)),
-                    ),
+                    area.nth_row(i).skip_cols(1),
                     None,
                 );
                 /* draw field */
                 v.draw(
                     grid,
-                    (
-                        pos_inc(upper_left, (self.field_name_max_length + 3, i)),
-                        set_y(bottom_right, i + get_y(upper_left)),
-                    ),
+                    area.nth_row(i).skip_cols(self.field_name_max_length + 3),
                     context,
                 );
 
@@ -394,10 +379,9 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> Component for 
                         if !context.settings.terminal.use_color() {
                             field_attrs.attrs |= Attr::REVERSE;
                         }
-                        for row in grid.bounds_iter((
-                            pos_inc(upper_left, (0, i)),
-                            (get_x(bottom_right).saturating_sub(1), i + get_y(upper_left)),
-                        )) {
+                        for row in grid
+                            .bounds_iter(area.nth_row(i).take_cols(area.width().saturating_sub(1)))
+                        {
                             for c in row {
                                 grid[c]
                                     .set_fg(field_attrs.fg)
@@ -409,14 +393,9 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> Component for 
                     if self.focus == FormFocus::TextInput {
                         v.draw_cursor(
                             grid,
-                            (
-                                pos_inc(upper_left, (self.field_name_max_length + 3, i)),
-                                (get_x(bottom_right), i + get_y(upper_left)),
-                            ),
-                            (
-                                pos_inc(upper_left, (self.field_name_max_length + 3, i + 1)),
-                                bottom_right,
-                            ),
+                            area.nth_row(i).skip_cols(self.field_name_max_length + 3),
+                            area.nth_row(i + 1)
+                                .skip_cols(self.field_name_max_length + 3),
                             context,
                         );
                     }
@@ -425,28 +404,13 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> Component for 
 
             let length = self.layout.len();
 
-            grid.clear_area(
-                (
-                    pos_inc(upper_left, (0, length)),
-                    set_y(bottom_right, length + 2 + get_y(upper_left)),
-                ),
-                theme_default,
-            );
+            grid.clear_area(area.skip_rows(length).take_rows(length + 2), theme_default);
             if !self.hide_buttons {
-                self.buttons.draw(
-                    grid,
-                    (
-                        pos_inc(upper_left, (1, length + 3)),
-                        set_y(bottom_right, length + 3 + get_y(upper_left)),
-                    ),
-                    context,
-                );
+                self.buttons
+                    .draw(grid, area.nth_row(length + 3).skip_cols(1), context);
             }
-            if length + 4 < height!(area) {
-                grid.clear_area(
-                    (pos_inc(upper_left, (0, length + 4)), bottom_right),
-                    theme_default,
-                );
+            if length + 4 < area.height() {
+                grid.clear_area(area.skip_rows(length + 3), theme_default);
             }
             self.set_dirty(false);
             context.dirty_areas.push_back(area);
@@ -646,7 +610,6 @@ where
         if self.dirty {
             let theme_default = crate::conf::value(context, "theme_default");
             grid.clear_area(area, theme_default);
-            let upper_left = upper_left!(area);
 
             let mut len = 0;
             for (i, k) in self.layout.iter().enumerate() {
@@ -660,10 +623,7 @@ where
                         theme_default.bg
                     },
                     Attr::BOLD,
-                    (
-                        pos_inc(upper_left, (len, 0)),
-                        pos_inc(upper_left, (cur_len + len, 0)),
-                    ),
+                    area.skip_cols(len).take_cols(cur_len + len),
                     None,
                 );
                 len += cur_len + 3;
@@ -755,7 +715,6 @@ impl From<(String, String)> for AutoCompleteEntry {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct AutoComplete {
     entries: Vec<AutoCompleteEntry>,
-    content: CellBuffer,
     cursor: usize,
 
     dirty: bool,
@@ -775,8 +734,7 @@ impl Component for AutoComplete {
         };
         self.dirty = false;
 
-        let (upper_left, bottom_right) = area;
-        let rows = get_y(bottom_right) - get_y(upper_left);
+        let rows = area.height();
         if rows == 0 {
             return;
         }
@@ -784,43 +742,62 @@ impl Component for AutoComplete {
         let top_idx = page_no * rows;
         let x_offset = if rows < self.entries.len() { 1 } else { 0 };
 
-        let (width, height) = self.content.size();
         grid.clear_area(area, crate::conf::value(context, "theme_default"));
+        let width = self
+            .entries
+            .iter()
+            .map(|a| a.entry.grapheme_len() + a.description.grapheme_len() + 2)
+            .max()
+            .unwrap_or(0)
+            + 1;
+        // [ref:hardcoded_color_value]
+        let theme_attr = ThemeAttribute {
+            fg: Color::Byte(23),
+            bg: Color::Byte(7),
+            attrs: Attr::DEFAULT,
+        };
+        grid.change_theme(area, theme_attr);
+        for (i, e) in self.entries.iter().skip(top_idx).enumerate() {
+            let (x, _) = grid.write_string(
+                &e.entry,
+                Color::Byte(23),
+                Color::Byte(7),
+                Attr::DEFAULT,
+                area.nth_row(i).take_cols(width),
+                None,
+            );
+            grid.write_string(
+                &e.description,
+                Color::Byte(23),
+                Color::Byte(7),
+                Attr::ITALICS,
+                area.nth_row(i).skip_cols(x + 2).take_cols(width),
+                None,
+            );
+            grid.write_string(
+                "▒",
+                Color::Byte(23),
+                Color::Byte(7),
+                Attr::DEFAULT,
+                area.nth_row(i).skip_cols(width - 1),
+                None,
+            );
+        }
 
-        grid.copy_area(
-            &self.content,
-            (upper_left, pos_dec(bottom_right, (x_offset, 0))),
-            (
-                (0, top_idx),
-                (width.saturating_sub(1), height.saturating_sub(1)),
-            ),
-        );
         /* Highlight cursor */
         if self.cursor > 0 {
             let highlight = crate::conf::value(context, "highlight");
 
             grid.change_theme(
-                (
-                    pos_inc(upper_left, (0, (self.cursor - 1) % rows)),
-                    (
-                        std::cmp::min(
-                            get_x(upper_left) + width.saturating_sub(1),
-                            get_x(bottom_right),
-                        )
-                        .saturating_sub(x_offset),
-                        get_y(pos_inc(upper_left, (0, (self.cursor - 1) % rows))),
-                    ),
-                ),
+                area.nth_row((self.cursor - 1) % rows)
+                    .skip_cols(width.saturating_sub(1 + x_offset)),
                 highlight,
             );
         }
         if rows < self.entries.len() {
             ScrollBar { show_arrows: false }.draw(
                 grid,
-                (
-                    set_y(pos_dec(bottom_right, (x_offset, 0)), get_y(upper_left)),
-                    pos_dec(bottom_right, (x_offset, 0)),
-                ),
+                area.take_rows(x_offset),
                 context,
                 self.cursor.saturating_sub(1),
                 rows,
@@ -829,12 +806,15 @@ impl Component for AutoComplete {
         }
         context.dirty_areas.push_back(area);
     }
+
     fn process_event(&mut self, _event: &mut UIEvent, _context: &mut Context) -> bool {
         false
     }
+
     fn is_dirty(&self) -> bool {
         self.dirty
     }
+
     fn set_dirty(&mut self, value: bool) {
         self.dirty = value;
     }
@@ -848,7 +828,6 @@ impl AutoComplete {
     pub fn new(entries: Vec<AutoCompleteEntry>) -> Box<Self> {
         let mut ret = AutoComplete {
             entries: Vec::new(),
-            content: CellBuffer::default(),
             cursor: 0,
             dirty: true,
             id: ComponentId::default(),
@@ -862,45 +841,6 @@ impl AutoComplete {
             return false;
         }
 
-        // [ref:hardcoded_color_value]
-        let mut content = CellBuffer::new(
-            entries
-                .iter()
-                .map(|a| a.entry.grapheme_len() + a.description.grapheme_len() + 2)
-                .max()
-                .unwrap_or(0)
-                + 1,
-            entries.len(),
-            Cell::with_style(Color::Byte(23), Color::Byte(7), Attr::DEFAULT),
-        );
-        let width = content.cols();
-        for (i, e) in entries.iter().enumerate() {
-            let (x, _) = content.write_string(
-                &e.entry,
-                Color::Byte(23),
-                Color::Byte(7),
-                Attr::DEFAULT,
-                ((0, i), (width - 1, i)),
-                None,
-            );
-            content.write_string(
-                &e.description,
-                Color::Byte(23),
-                Color::Byte(7),
-                Attr::ITALICS,
-                ((x + 2, i), (width - 1, i)),
-                None,
-            );
-            content.write_string(
-                "▒",
-                Color::Byte(23),
-                Color::Byte(7),
-                Attr::DEFAULT,
-                ((width - 1, i), (width - 1, i)),
-                None,
-            );
-        }
-        self.content = content;
         self.entries = entries;
         self.cursor = 0;
         true
@@ -933,7 +873,6 @@ impl AutoComplete {
         let ret = self.entries.remove(self.cursor - 1);
         self.entries.clear();
         self.cursor = 0;
-        self.content.empty();
         Some(ret.entry)
     }
 
@@ -965,7 +904,7 @@ impl ScrollBar {
         if length == 0 {
             return;
         }
-        let height = height!(area);
+        let height = area.height();
         if height < 3 {
             return;
         }
@@ -977,21 +916,21 @@ impl ScrollBar {
         let ratio: f64 = (height as f64) / (length as f64);
         let scrollbar_height = std::cmp::max((ratio * (visible_rows as f64)) as usize, 1);
         let scrollbar_offset = (ratio * (pos as f64)) as usize;
-        let (mut upper_left, bottom_right) = area;
+        let mut area2 = area;
 
         if self.show_arrows {
-            grid[upper_left]
+            grid[area2.upper_left()]
                 .set_ch(if ascii_drawing { '^' } else { '▀' })
                 .set_fg(crate::conf::value(context, "widgets.options.highlighted").bg);
-            upper_left = pos_inc(upper_left, (0, 1));
+            area2 = area2.skip_rows(1);
         }
 
-        upper_left = pos_inc(upper_left, (0, scrollbar_offset));
+        area2 = area2.skip_rows(scrollbar_offset);
         for _ in 0..scrollbar_height {
-            if get_y(upper_left) >= get_y(bottom_right) {
+            if area2.is_empty() {
                 break;
             }
-            grid[upper_left]
+            grid[area2.upper_left()]
                 .set_ch(if ascii_drawing { '#' } else { '█' })
                 .set_fg(crate::conf::value(context, "widgets.options.highlighted").bg)
                 .set_attrs(if !context.settings.terminal.use_color() {
@@ -999,10 +938,10 @@ impl ScrollBar {
                 } else {
                     theme_default.attrs
                 });
-            upper_left = pos_inc(upper_left, (0, 1));
+            area2 = area2.skip_rows(1);
         }
         if self.show_arrows {
-            grid[bottom_right]
+            grid[area2.bottom_right()]
                 .set_ch(if ascii_drawing { 'v' } else { '▄' })
                 .set_fg(crate::conf::value(context, "widgets.options.highlighted").bg)
                 .set_bg(crate::conf::value(context, "theme_default").bg);
@@ -1021,7 +960,7 @@ impl ScrollBar {
         if length == 0 {
             return;
         }
-        let width = width!(area);
+        let width = area.width();
         if width < 3 {
             return;
         }
@@ -1033,21 +972,21 @@ impl ScrollBar {
         let ratio: f64 = (width as f64) / (length as f64);
         let scrollbar_width = std::cmp::min((ratio * (visible_cols as f64)) as usize, 1);
         let scrollbar_offset = (ratio * (pos as f64)) as usize;
-        let (mut upper_left, bottom_right) = area;
+        let mut area2 = area;
 
         if self.show_arrows {
-            grid[upper_left]
+            grid[area2.upper_left()]
                 .set_ch(if ascii_drawing { '<' } else { '▐' })
                 .set_fg(crate::conf::value(context, "widgets.options.highlighted").bg);
-            upper_left = pos_inc(upper_left, (1, 0));
+            area2 = area2.skip_cols(1);
         }
 
-        upper_left = pos_inc(upper_left, (scrollbar_offset, 0));
+        area2 = area2.skip_cols(scrollbar_offset);
         for _ in 0..scrollbar_width {
-            if get_x(upper_left) >= get_x(bottom_right) {
+            if area2.is_empty() {
                 break;
             }
-            grid[upper_left]
+            grid[area2.upper_left()]
                 .set_ch(if ascii_drawing { '#' } else { '█' })
                 .set_fg(crate::conf::value(context, "widgets.options.highlighted").bg)
                 .set_attrs(if !context.settings.terminal.use_color() {
@@ -1055,10 +994,10 @@ impl ScrollBar {
                 } else {
                     theme_default.attrs
                 });
-            upper_left = pos_inc(upper_left, (1, 0));
+            area2 = area2.skip_cols(1);
         }
         if self.show_arrows {
-            grid[bottom_right]
+            grid[area2.bottom_right()]
                 .set_ch(if ascii_drawing { '>' } else { '▌' })
                 .set_fg(crate::conf::value(context, "widgets.options.highlighted").bg)
                 .set_bg(crate::conf::value(context, "theme_default").bg);

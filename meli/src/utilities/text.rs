@@ -92,8 +92,7 @@ impl TextField {
         secondary_area: Area,
         context: &mut Context,
     ) {
-        let upper_left = upper_left!(area);
-        let width = width!(area);
+        let width = area.width();
         let pos = if width < self.inner.grapheme_pos() {
             width
         } else {
@@ -101,7 +100,7 @@ impl TextField {
         };
 
         grid.change_colors(
-            (pos_inc(upper_left, (pos, 0)), pos_inc(upper_left, (pos, 0))),
+            area.skip_cols(pos).take_cols(1),
             crate::conf::value(context, "theme_default").fg,
             crate::conf::value(context, "highlight").bg,
         );
@@ -119,7 +118,7 @@ impl TextField {
 impl Component for TextField {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         let theme_attr = crate::conf::value(context, "widgets.form.field");
-        let width = width!(area);
+        let width = area.width();
         let str = self.as_str();
         /* Calculate which part of the str is visible
          * ##########################################

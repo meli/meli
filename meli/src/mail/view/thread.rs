@@ -65,7 +65,7 @@ pub struct ThreadView {
     horizontal: Option<bool>,
     movement: Option<PageMovement>,
     dirty: bool,
-    content: CellBuffer,
+    content: Screen<Virtual>,
     id: ComponentId,
 }
 
@@ -353,65 +353,99 @@ impl ThreadView {
             e.heading = string;
             width = cmp::max(width, e.index.0 * 4 + e.heading.grapheme_width() + 2);
         }
+        if !self.content.resize_with_context(width, height, context) {
+            return;
+        }
         let theme_default = crate::conf::value(context, "theme_default");
         let highlight_theme = crate::conf::value(context, "highlight");
-        let mut content = CellBuffer::new_with_context(width, height, None, context);
         if self.reversed {
             for (y, e) in self.entries.iter().rev().enumerate() {
                 /* Box character drawing stuff */
-                if y > 0 && content.get_mut(e.index.0 * 4, 2 * y - 1).is_some() {
+                if y > 0
+                    && self
+                        .content
+                        .grid_mut()
+                        .get_mut(e.index.0 * 4, 2 * y - 1)
+                        .is_some()
+                {
                     let index = (e.index.0 * 4, 2 * y - 1);
-                    if content[index].ch() == ' ' {
+                    if self.content.grid()[index].ch() == ' ' {
                         let mut ctr = 1;
-                        while content.get(e.index.0 * 4 + ctr, 2 * y - 1).is_some() {
-                            if content[(e.index.0 * 4 + ctr, 2 * y - 1)].ch() != ' ' {
+                        while self
+                            .content
+                            .grid()
+                            .get(e.index.0 * 4 + ctr, 2 * y - 1)
+                            .is_some()
+                        {
+                            if self.content.grid()[(e.index.0 * 4 + ctr, 2 * y - 1)].ch() != ' ' {
                                 break;
                             }
                             set_and_join_box(
-                                &mut content,
+                                self.content.grid_mut(),
                                 (e.index.0 * 4 + ctr, 2 * y - 1),
                                 BoxBoundary::Horizontal,
                             );
                             ctr += 1;
                         }
-                        set_and_join_box(&mut content, index, BoxBoundary::Horizontal);
+                        set_and_join_box(self.content.grid_mut(), index, BoxBoundary::Horizontal);
                     }
                 }
-                content.write_string(
-                    &e.heading,
-                    if e.seen {
-                        theme_default.fg
-                    } else {
-                        highlight_theme.fg
-                    },
-                    if e.seen {
-                        theme_default.bg
-                    } else {
-                        highlight_theme.bg
-                    },
-                    theme_default.attrs,
-                    (
-                        (e.index.0 * 4 + 1, 2 * y),
-                        (e.index.0 * 4 + e.heading.grapheme_width() + 1, height - 1),
-                    ),
-                    None,
-                );
+                {
+                    let area = self
+                        .content
+                        .area()
+                        .skip(e.index.0 * 4 + 1, 2 * y)
+                        .take(e.heading.grapheme_width() + 1, height - 1);
+                    self.content.grid_mut().write_string(
+                        &e.heading,
+                        if e.seen {
+                            theme_default.fg
+                        } else {
+                            highlight_theme.fg
+                        },
+                        if e.seen {
+                            theme_default.bg
+                        } else {
+                            highlight_theme.bg
+                        },
+                        theme_default.attrs,
+                        area,
+                        None,
+                    );
+                }
                 if let Some(len) = highlight_reply_subjects[y] {
                     let index = e.index.0 * 4 + 1 + e.heading.grapheme_width() - len;
-                    let area = ((index, 2 * y), (width - 2, 2 * y));
-                    content.change_theme(area, highlight_theme);
+                    //let area = ((index, 2 * y), (width - 2, 2 * y));
+                    let area = self.content.area().skip(index, 2 * y).take_rows(1);
+                    self.content.grid_mut().change_theme(area, highlight_theme);
                 }
-                set_and_join_box(&mut content, (e.index.0 * 4, 2 * y), BoxBoundary::Vertical);
                 set_and_join_box(
-                    &mut content,
+                    self.content.grid_mut(),
+                    (e.index.0 * 4, 2 * y),
+                    BoxBoundary::Vertical,
+                );
+                set_and_join_box(
+                    self.content.grid_mut(),
                     (e.index.0 * 4, 2 * y + 1),
                     BoxBoundary::Vertical,
                 );
                 for i in ((e.index.0 * 4) + 1)..width - 1 {
-                    set_and_join_box(&mut content, (i, 2 * y + 1), BoxBoundary::Horizontal);
+                    set_and_join_box(
+                        self.content.grid_mut(),
+                        (i, 2 * y + 1),
+                        BoxBoundary::Horizontal,
+                    );
                 }
-                set_and_join_box(&mut content, (width - 1, 2 * y), BoxBoundary::Vertical);
-                set_and_join_box(&mut content, (width - 1, 2 * y + 1), BoxBoundary::Vertical);
+                set_and_join_box(
+                    self.content.grid_mut(),
+                    (width - 1, 2 * y),
+                    BoxBoundary::Vertical,
+                );
+                set_and_join_box(
+                    self.content.grid_mut(),
+                    (width - 1, 2 * y + 1),
+                    BoxBoundary::Vertical,
+                );
             }
         } else {
             for (y, e) in self.entries.iter().enumerate() {
@@ -420,71 +454,112 @@ impl ThreadView {
                 for i in 0..e.index.0 {
                     let att =
                         self.indentation_colors[(i).wrapping_rem(self.indentation_colors.len())];
-                    content.change_theme(((x, 2 * y), (x + 3, 2 * y + 1)), att);
+                    let area = self.content.area().skip(x, 2 * y).take(3, 1);
+                    self.content.grid_mut().change_theme(area, att);
                     x += 4;
                 }
-                if y > 0 && content.get_mut(e.index.0 * 4, 2 * y - 1).is_some() {
+                if y > 0
+                    && self
+                        .content
+                        .grid_mut()
+                        .get_mut(e.index.0 * 4, 2 * y - 1)
+                        .is_some()
+                {
                     let index = (e.index.0 * 4, 2 * y - 1);
-                    if content[index].ch() == ' ' {
+                    if self.content.grid()[index].ch() == ' ' {
                         let mut ctr = 1;
-                        content[(e.index.0 * 4, 2 * y - 1)].set_bg(theme_default.bg);
-                        while content.get(e.index.0 * 4 + ctr, 2 * y - 1).is_some() {
-                            content[(e.index.0 * 4 + ctr, 2 * y - 1)].set_bg(theme_default.bg);
-                            if content[(e.index.0 * 4 + ctr, 2 * y - 1)].ch() != ' ' {
+                        self.content.grid_mut()[(e.index.0 * 4, 2 * y - 1)]
+                            .set_bg(theme_default.bg);
+                        while self
+                            .content
+                            .grid()
+                            .get(e.index.0 * 4 + ctr, 2 * y - 1)
+                            .is_some()
+                        {
+                            self.content.grid_mut()[(e.index.0 * 4 + ctr, 2 * y - 1)]
+                                .set_bg(theme_default.bg);
+                            if self.content.grid()[(e.index.0 * 4 + ctr, 2 * y - 1)].ch() != ' ' {
                                 break;
                             }
                             set_and_join_box(
-                                &mut content,
+                                self.content.grid_mut(),
                                 (e.index.0 * 4 + ctr, 2 * y - 1),
                                 BoxBoundary::Horizontal,
                             );
                             ctr += 1;
                         }
-                        set_and_join_box(&mut content, index, BoxBoundary::Horizontal);
+                        set_and_join_box(self.content.grid_mut(), index, BoxBoundary::Horizontal);
                     }
                 }
-                content.write_string(
-                    &e.heading,
-                    if e.seen {
-                        theme_default.fg
-                    } else {
-                        highlight_theme.fg
-                    },
-                    if e.seen {
-                        theme_default.bg
-                    } else {
-                        highlight_theme.bg
-                    },
-                    theme_default.attrs,
-                    (
-                        (e.index.0 * 4 + 1, 2 * y),
-                        (e.index.0 * 4 + e.heading.grapheme_width() + 1, height - 1),
-                    ),
-                    None,
-                );
+                {
+                    let area = self
+                        .content
+                        .area()
+                        .skip(e.index.0 * 4 + 1, 2 * y)
+                        .take(e.heading.grapheme_width(), height - 1);
+                    self.content.grid_mut().write_string(
+                        &e.heading,
+                        if e.seen {
+                            theme_default.fg
+                        } else {
+                            highlight_theme.fg
+                        },
+                        if e.seen {
+                            theme_default.bg
+                        } else {
+                            highlight_theme.bg
+                        },
+                        theme_default.attrs,
+                        area,
+                        None,
+                    );
+                }
                 if highlight_reply_subjects[y].is_some() {
                     let index = e.index.0 * 4 + 1;
-                    let area = ((index, 2 * y), (width - 2, 2 * y));
-                    content.change_theme(area, highlight_theme);
+                    let area = self
+                        .content
+                        .area()
+                        .skip(index, 2 * y)
+                        .take(width - 2, 2 * y);
+                    self.content.grid_mut().change_theme(area, highlight_theme);
                 }
-                set_and_join_box(&mut content, (e.index.0 * 4, 2 * y), BoxBoundary::Vertical);
                 set_and_join_box(
-                    &mut content,
+                    self.content.grid_mut(),
+                    (e.index.0 * 4, 2 * y),
+                    BoxBoundary::Vertical,
+                );
+                set_and_join_box(
+                    self.content.grid_mut(),
                     (e.index.0 * 4, 2 * y + 1),
                     BoxBoundary::Vertical,
                 );
                 for i in ((e.index.0 * 4) + 1)..width - 1 {
-                    set_and_join_box(&mut content, (i, 2 * y + 1), BoxBoundary::Horizontal);
+                    set_and_join_box(
+                        self.content.grid_mut(),
+                        (i, 2 * y + 1),
+                        BoxBoundary::Horizontal,
+                    );
                 }
-                set_and_join_box(&mut content, (width - 1, 2 * y), BoxBoundary::Vertical);
-                set_and_join_box(&mut content, (width - 1, 2 * y + 1), BoxBoundary::Vertical);
+                set_and_join_box(
+                    self.content.grid_mut(),
+                    (width - 1, 2 * y),
+                    BoxBoundary::Vertical,
+                );
+                set_and_join_box(
+                    self.content.grid_mut(),
+                    (width - 1, 2 * y + 1),
+                    BoxBoundary::Vertical,
+                );
             }
 
             for y in 0..height - 1 {
-                set_and_join_box(&mut content, (width - 1, y), BoxBoundary::Vertical);
+                set_and_join_box(
+                    self.content.grid_mut(),
+                    (width - 1, y),
+                    BoxBoundary::Vertical,
+                );
             }
         }
-        self.content = content;
         self.visible_entries = vec![(0..self.entries.len()).collect()];
     }
 
@@ -517,17 +592,20 @@ impl ThreadView {
             return;
         }
 
-        grid.copy_area(&self.content, dest_area, src_area);
+        grid.copy_area(self.content.grid(), dest_area, src_area);
     }
 
     fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        let (upper_left, bottom_right) = area;
-        let (width, height) = self.content.size();
+        if self.entries.is_empty() {
+            context.dirty_areas.push_back(area);
+            return;
+        }
+        let height = self.content.area().height();
         if height == 0 {
             context.dirty_areas.push_back(area);
             return;
         }
-        let rows = (get_y(bottom_right) - get_y(upper_left)).wrapping_div(2);
+        let rows = area.height();
         if rows == 0 {
             context.dirty_areas.push_back(area);
             return;
@@ -576,12 +654,9 @@ impl ThreadView {
         let get_entry_area = |idx: usize, entries: &[ThreadEntry]| {
             let entries = &entries;
             let visual_indentation = entries[idx].index.0 * 4;
-            (
-                (visual_indentation, 2 * idx),
-                (
-                    visual_indentation + entries[idx].heading.grapheme_width() + 1,
-                    2 * idx,
-                ),
+            self.content.area().skip(visual_indentation, 2 * idx).take(
+                visual_indentation + entries[idx].heading.grapheme_width() + 1,
+                2 * idx,
             )
         };
 
@@ -599,15 +674,9 @@ impl ThreadView {
                 let idx = *v;
 
                 grid.copy_area(
-                    &self.content,
-                    (
-                        pos_inc(upper_left, (0, 2 * visible_entry_counter)), // dest_area
-                        bottom_right,
-                    ),
-                    (
-                        (0, 2 * idx), //src_area
-                        (width - 1, 2 * idx + 1),
-                    ),
+                    self.content.grid(),
+                    area.skip_rows(2 * visible_entry_counter),
+                    self.content.area().nth_row(2 * idx),
                 );
             }
             /* If cursor position has changed, remove the highlight from the previous
@@ -617,36 +686,20 @@ impl ThreadView {
                 self.cursor_pos = visibles.len().saturating_sub(1);
             }
             let idx = *visibles[self.cursor_pos];
-            let src_area = { get_entry_area(idx, &self.entries) };
+            let src_area = get_entry_area(idx, &self.entries);
             let visual_indentation = self.entries[idx].indentation * 4;
-            let dest_area = (
-                pos_inc(
-                    upper_left,
-                    (visual_indentation, 2 * (self.cursor_pos - top_idx)),
-                ),
-                (
-                    cmp::min(
-                        get_x(bottom_right),
-                        get_x(upper_left)
-                            + visual_indentation
-                            + self.entries[idx].heading.grapheme_width()
-                            + 1,
-                    ),
-                    cmp::min(
-                        get_y(bottom_right),
-                        get_y(upper_left) + 2 * (self.cursor_pos - top_idx),
-                    ),
-                ),
-            );
+            let dest_area = area
+                .skip(visual_indentation, 2 * (self.cursor_pos - top_idx))
+                .take(
+                    visual_indentation + self.entries[idx].heading.grapheme_width() + 1,
+                    2 * (self.cursor_pos - top_idx),
+                );
 
             self.highlight_line(grid, dest_area, src_area, idx, context);
             if rows < visibles.len() {
                 ScrollBar::default().set_show_arrows(true).draw(
                     grid,
-                    (
-                        pos_inc(upper_left!(area), (width!(area).saturating_sub(1), 0)),
-                        bottom_right,
-                    ),
+                    area.nth_col(area.width().saturating_sub(1)),
                     context,
                     2 * self.cursor_pos,
                     rows,
@@ -655,14 +708,10 @@ impl ThreadView {
             }
             if 2 * top_idx + rows > 2 * visibles.len() + 1 {
                 grid.clear_area(
-                    (
-                        pos_inc(upper_left, (0, 2 * (visibles.len() - top_idx) + 1)),
-                        bottom_right,
-                    ),
+                    area.skip_rows(2 * (visibles.len() - top_idx) + 1),
                     crate::conf::value(context, "theme_default"),
                 );
             }
-            context.dirty_areas.push_back(area);
         } else {
             let old_cursor_pos = self.cursor_pos;
             self.cursor_pos = self.new_cursor_pos;
@@ -672,67 +721,36 @@ impl ThreadView {
                 self.visible_entries.iter().flat_map(|v| v.iter()).collect();
             for &idx in &[old_cursor_pos, self.cursor_pos] {
                 let entry_idx = *visibles[idx];
-                let src_area = { get_entry_area(entry_idx, &self.entries) };
+                let src_area = get_entry_area(entry_idx, &self.entries);
                 let visual_indentation = self.entries[entry_idx].indentation * 4;
-                let dest_area = (
-                    pos_inc(
-                        upper_left,
-                        (visual_indentation, 2 * (visibles[..idx].len() - top_idx)),
-                    ),
-                    (
-                        cmp::min(
-                            get_x(bottom_right),
-                            get_x(upper_left)
-                                + visual_indentation
-                                + self.entries[entry_idx].heading.grapheme_width()
-                                + 1,
-                        ),
-                        cmp::min(
-                            get_y(bottom_right),
-                            get_y(upper_left) + 2 * (visibles[..idx].len() - top_idx),
-                        ),
-                    ),
-                );
+                let dest_area = area
+                    .skip(visual_indentation, 2 * (visibles[..idx].len() - top_idx))
+                    .take(
+                        visual_indentation + self.entries[entry_idx].heading.grapheme_width() + 1,
+                        2 * (visibles[..idx].len() - top_idx),
+                    );
 
                 self.highlight_line(grid, dest_area, src_area, entry_idx, context);
                 if rows < visibles.len() {
                     ScrollBar::default().set_show_arrows(true).draw(
                         grid,
-                        (
-                            pos_inc(upper_left!(area), (width!(area).saturating_sub(1), 0)),
-                            bottom_right,
-                        ),
+                        area.nth_col(area.width().saturating_sub(1)),
                         context,
                         2 * self.cursor_pos,
                         rows,
                         2 * visibles.len() + 1,
                     );
-                    context.dirty_areas.push_back((
-                        upper_left!(area),
-                        set_x(
-                            bottom_right,
-                            cmp::min(get_x(bottom_right!(area)), get_x(upper_left!(area)) + 1),
-                        ),
-                    ));
                 }
-
-                let (upper_left, bottom_right) = dest_area;
-                context.dirty_areas.push_back((
-                    upper_left,
-                    (
-                        get_x(bottom_right),
-                        cmp::min(get_y(bottom_right), get_y(upper_left) + 1),
-                    ),
-                ));
             }
         }
+        context.dirty_areas.push_back(area);
     }
 
     fn draw_vert(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        let upper_left = upper_left!(area);
-
-        let bottom_right = bottom_right!(area);
-        let mid = get_x(upper_left) + self.content.size().0;
+        if self.entries.is_empty() {
+            return;
+        }
+        let mid = area.width() / 2; //get_x(upper_left) + self.content.size().0;
 
         let theme_default = crate::conf::value(context, "theme_default");
         /* First draw the thread subject on the first row */
@@ -751,41 +769,26 @@ impl ThreadView {
             });
             let envelope: EnvelopeRef = account.collection.get_env(i);
 
-            let (x, y) = grid.write_string(
+            let (_, y) = grid.write_string(
                 &envelope.subject(),
                 crate::conf::value(context, "highlight").fg,
                 theme_default.bg,
                 theme_default.attrs,
                 area,
-                Some(get_x(upper_left)),
+                Some(0),
             );
-            for x in x..=get_x(bottom_right) {
-                grid[(x, y)]
-                    .set_ch(' ')
-                    .set_fg(theme_default.fg)
-                    .set_bg(theme_default.bg);
-            }
-            context.dirty_areas.push_back((
-                upper_left,
-                set_y(bottom_right, std::cmp::min(get_y(bottom_right), y + 1)),
-            ));
-            if y + 1 < get_y(bottom_right) && mid < get_x(bottom_right) {
-                context.dirty_areas.push_back((
-                    (mid, y + 1),
-                    set_x(bottom_right, std::cmp::min(get_x(bottom_right), mid)),
-                ));
-            }
+            context.dirty_areas.push_back(area);
 
-            grid.clear_area(((mid, y + 1), set_x(bottom_right, mid)), theme_default);
+            grid.clear_area(area.skip(mid, y + 1), theme_default);
             y + 2
         } else {
-            get_y(upper_left) + 2
+            2
         };
-        let (width, height) = self.content.size();
+        let (width, height) = self.content.area().size();
         if height == 0 || width == 0 {
             return;
         }
-        for x in get_x(upper_left)..=get_x(bottom_right) {
+        for x in get_x(area.upper_left())..=get_x(area.bottom_right()) {
             set_and_join_box(grid, (x, y - 1), BoxBoundary::Horizontal);
             grid[(x, y - 1)]
                 .set_fg(theme_default.fg)
@@ -796,25 +799,18 @@ impl ThreadView {
             ThreadViewFocus::None => {
                 self.draw_list(
                     grid,
-                    (
-                        set_y(upper_left, std::cmp::min(get_y(bottom_right), y)),
-                        set_x(bottom_right, std::cmp::min(get_x(bottom_right), mid - 1)),
-                    ),
+                    area.skip_rows(y).take_cols(mid.saturating_sub(1)),
                     context,
                 );
-                let upper_left = (mid + 1, get_y(upper_left));
                 self.entries[self.new_expanded_pos].mailview.draw(
                     grid,
-                    (upper_left, bottom_right),
+                    area.skip_cols(mid + 1),
                     context,
                 );
             }
             ThreadViewFocus::Thread => {
-                grid.clear_area(
-                    ((mid + 1, get_y(upper_left) + y - 1), bottom_right),
-                    theme_default,
-                );
-                self.draw_list(grid, (set_y(upper_left, y), bottom_right), context);
+                grid.clear_area(area.skip(mid + 1, y - 1), theme_default);
+                self.draw_list(grid, area.skip_rows(y), context);
             }
             ThreadViewFocus::MailView => {
                 self.entries[self.new_expanded_pos]
@@ -825,9 +821,12 @@ impl ThreadView {
     }
 
     fn draw_horz(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        let upper_left = upper_left!(area);
-        let bottom_right = bottom_right!(area);
-        let total_rows = height!(area);
+        if self.entries.is_empty() {
+            return;
+        }
+        let upper_left = area.upper_left();
+        let bottom_right = area.bottom_right();
+        let total_rows = area.height();
 
         let pager_ratio = *mailbox_settings!(
             context[self.coordinates.0][&self.coordinates.1]
@@ -877,10 +876,7 @@ impl ThreadView {
                     .set_fg(theme_default.fg)
                     .set_bg(theme_default.bg);
             }
-            context.dirty_areas.push_back((
-                upper_left,
-                set_y(bottom_right, std::cmp::min(get_y(bottom_right), y + 2)),
-            ));
+            context.dirty_areas.push_back(area);
             y + 2
         };
 
@@ -891,27 +887,17 @@ impl ThreadView {
                 .set_bg(theme_default.bg);
         }
 
-        let (width, height) = self.content.size();
+        let (width, height) = self.content.area().size();
         if height == 0 || height == self.cursor_pos || width == 0 {
             return;
         }
 
-        grid.clear_area(
-            (set_y(upper_left, y), set_y(bottom_right, mid + 1)),
-            theme_default,
-        );
-        let (width, height) = self.content.size();
+        grid.clear_area(area.skip_rows(y).take_rows(mid + 1), theme_default);
 
         match self.focus {
             ThreadViewFocus::None => {
-                let area = (
-                    set_y(upper_left, y),
-                    set_y(bottom_right, std::cmp::min(get_y(bottom_right), mid)),
-                );
-                let upper_left = upper_left!(area);
-                let bottom_right = bottom_right!(area);
-
-                let rows = (get_y(bottom_right).saturating_sub(get_y(upper_left) + 1)) / 2;
+                let area = area.skip_rows(y).take_rows(mid);
+                let rows = area.height() / 2;
                 if rows == 0 {
                     return;
                 }
@@ -919,20 +905,22 @@ impl ThreadView {
                 let top_idx = page_no * rows;
 
                 grid.copy_area(
-                    &self.content,
+                    self.content.grid(),
                     area,
-                    ((0, 2 * top_idx), (width - 1, height - 1)),
+                    self.content.area().skip_rows(2 * top_idx),
                 );
                 context.dirty_areas.push_back(area);
             }
             ThreadViewFocus::Thread => {
-                let area = (
-                    set_y(upper_left, std::cmp::min(y, get_y(bottom_right))),
-                    bottom_right,
-                );
-                let upper_left = upper_left!(area);
-
-                let rows = (get_y(bottom_right).saturating_sub(get_y(upper_left) + 1)) / 2;
+                let area = {
+                    let val = area.skip_rows(y);
+                    if val.height() < 20 {
+                        area
+                    } else {
+                        val
+                    }
+                };
+                let rows = area.height() / 2;
                 if rows == 0 {
                     return;
                 }
@@ -940,9 +928,9 @@ impl ThreadView {
                 let top_idx = page_no * rows;
 
                 grid.copy_area(
-                    &self.content,
+                    self.content.grid(),
                     area,
-                    ((0, 2 * top_idx), (width - 1, height - 1)),
+                    self.content.area().skip_rows(2 * top_idx),
                 );
                 context.dirty_areas.push_back(area);
             }
@@ -951,41 +939,35 @@ impl ThreadView {
 
         match self.focus {
             ThreadViewFocus::None => {
-                let area = (
-                    set_y(upper_left, std::cmp::min(get_y(bottom_right), mid)),
-                    set_y(bottom_right, std::cmp::min(get_y(bottom_right), mid)),
-                );
-                context.dirty_areas.push_back(area);
-                for x in get_x(upper_left)..=get_x(bottom_right) {
-                    set_and_join_box(grid, (x, mid), BoxBoundary::Horizontal);
-                    grid[(x, mid)]
-                        .set_fg(theme_default.fg)
-                        .set_bg(theme_default.bg);
+                {
+                    let area = {
+                        let val = area.skip_rows(mid);
+                        if val.height() < 20 {
+                            area
+                        } else {
+                            val
+                        }
+                    };
+                    context.dirty_areas.push_back(area);
+                    for x in get_x(area.upper_left())..=get_x(area.bottom_right()) {
+                        set_and_join_box(grid, (x, mid), BoxBoundary::Horizontal);
+                        grid[(x, mid)]
+                            .set_fg(theme_default.fg)
+                            .set_bg(theme_default.bg);
+                    }
                 }
-                let area = (
-                    set_y(upper_left, std::cmp::min(get_y(bottom_right), y)),
-                    set_y(bottom_right, std::cmp::min(get_y(bottom_right), mid - 1)),
-                );
-                self.draw_list(grid, area, context);
-                self.entries[self.new_expanded_pos].mailview.draw(
-                    grid,
-                    (
-                        set_y(upper_left, std::cmp::min(get_y(bottom_right), mid + 1)),
-                        bottom_right,
-                    ),
-                    context,
-                );
+                {
+                    let area = area.skip_rows(y).take_rows(mid - 1);
+                    self.draw_list(grid, area, context);
+                }
+                let area = area.take_rows(mid);
+                self.entries[self.new_expanded_pos]
+                    .mailview
+                    .draw(grid, area, context);
             }
             ThreadViewFocus::Thread => {
                 self.dirty = true;
-                self.draw_list(
-                    grid,
-                    (
-                        set_y(upper_left, std::cmp::min(get_y(bottom_right), y)),
-                        bottom_right,
-                    ),
-                    context,
-                );
+                self.draw_list(grid, area.skip_rows(y), context);
             }
             ThreadViewFocus::MailView => {
                 self.entries[self.new_expanded_pos]
@@ -996,6 +978,9 @@ impl ThreadView {
     }
 
     fn recalc_visible_entries(&mut self) {
+        if self.entries.is_empty() {
+            return;
+        }
         if self
             .entries
             .iter_mut()
@@ -1071,7 +1056,7 @@ impl std::fmt::Display for ThreadView {
 
 impl Component for ThreadView {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        let total_cols = width!(area);
+        let total_cols = area.width();
         if self.entries.is_empty() {
             self.dirty = false;
             return;
@@ -1091,7 +1076,7 @@ impl Component for ThreadView {
                 .draw(grid, area, context);
         } else if self
             .horizontal
-            .unwrap_or(total_cols >= self.content.size().0 + 74)
+            .unwrap_or(total_cols >= self.content.area().width() + 74)
         {
             self.draw_horz(grid, area, context);
         } else {
@@ -1101,7 +1086,7 @@ impl Component for ThreadView {
     }
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
-        if let UIEvent::Action(Listing(OpenInNewTab)) = event {
+        if let (UIEvent::Action(Listing(OpenInNewTab)), false) = (&event, self.entries.is_empty()) {
             /* Handle this before self.mailview does */
             let mut new_tab = Self::new(
                 self.coordinates,
@@ -1121,9 +1106,10 @@ impl Component for ThreadView {
         if matches!(
             self.focus,
             ThreadViewFocus::None | ThreadViewFocus::MailView
-        ) && self.entries[self.new_expanded_pos]
-            .mailview
-            .process_event(event, context)
+        ) && !self.entries.is_empty()
+            && self.entries[self.new_expanded_pos]
+                .mailview
+                .process_event(event, context)
         {
             return true;
         }
@@ -1220,15 +1206,20 @@ impl Component for ThreadView {
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Shortcuts::THREAD_VIEW]["reverse_thread_order"]) =>
             {
-                self.reversed = !self.reversed;
-                let expanded_hash = self.entries[self.expanded_pos].msg_hash;
-                self.initiate(Some(expanded_hash), false, context);
-                self.set_dirty(true);
+                if !self.entries.is_empty() {
+                    self.reversed = !self.reversed;
+                    let expanded_hash = self.entries[self.expanded_pos].msg_hash;
+                    self.initiate(Some(expanded_hash), false, context);
+                    self.set_dirty(true);
+                }
                 true
             }
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Shortcuts::THREAD_VIEW]["collapse_subtree"]) =>
             {
+                if self.entries.is_empty() {
+                    return true;
+                }
                 let current_pos = self.current_pos();
                 self.entries[current_pos].hidden = !self.entries[current_pos].hidden;
                 self.entries[current_pos].dirty = true;
@@ -1317,15 +1308,21 @@ impl Component for ThreadView {
 
     fn set_dirty(&mut self, value: bool) {
         self.dirty = value;
-        self.entries[self.new_expanded_pos]
-            .mailview
-            .set_dirty(value);
+        if !self.entries.is_empty() {
+            self.entries[self.new_expanded_pos]
+                .mailview
+                .set_dirty(value);
+        }
     }
 
     fn shortcuts(&self, context: &Context) -> ShortcutMaps {
-        let mut map = self.entries[self.new_expanded_pos]
-            .mailview
-            .shortcuts(context);
+        let mut map = if !self.entries.is_empty() {
+            self.entries[self.new_expanded_pos]
+                .mailview
+                .shortcuts(context)
+        } else {
+            ShortcutMaps::default()
+        };
 
         map.insert(
             Shortcuts::GENERAL,

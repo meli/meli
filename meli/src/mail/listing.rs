@@ -31,8 +31,7 @@ use std::{
 
 use futures::future::try_join_all;
 use melib::{
-    backends::EnvelopeHashBatch, mbox::MboxMetadata, utils::datetime, Address, FlagOp,
-    UnixTimestamp,
+    backends::EnvelopeHashBatch, mbox::MboxMetadata, utils::datetime, FlagOp, UnixTimestamp,
 };
 use smallvec::SmallVec;
 
@@ -40,7 +39,6 @@ use super::*;
 use crate::{
     accounts::{JobRequest, MailboxStatus},
     components::ExtendShortcutsMaps,
-    types::segment_tree::SegmentTree,
 };
 
 // [ref:TODO]: emoji_text_presentation_selector should be printed along with the chars
@@ -232,14 +230,14 @@ impl<T> RowsState<T> {
     }
 }
 
-mod conversations;
-pub use self::conversations::*;
+//mod conversations;
+//pub use self::conversations::*;
 
-mod compact;
-pub use self::compact::*;
+//mod compact;
+//pub use self::compact::*;
 
-mod thread;
-pub use self::thread::*;
+//mod thread;
+//pub use self::thread::*;
 
 mod plain;
 pub use self::plain::*;
@@ -284,7 +282,7 @@ pub struct ColorCache {
     pub odd_highlighted_selected: ThemeAttribute,
     pub tag_default: ThemeAttribute,
 
-    /* Conversations */
+    // Conversations
     pub subject: ThemeAttribute,
     pub from: ThemeAttribute,
     pub date: ThemeAttribute,
@@ -885,11 +883,11 @@ pub trait ListingTrait: Component {
 
 #[derive(Debug)]
 pub enum ListingComponent {
-    Plain(Box<PlainListing>),
-    Threaded(Box<ThreadListing>),
-    Compact(Box<CompactListing>),
-    Conversations(Box<ConversationsListing>),
+    //Compact(Box<CompactListing>),
+    //Conversations(Box<ConversationsListing>),
     Offline(Box<OfflineListing>),
+    Plain(Box<PlainListing>),
+    //Threaded(Box<ThreadListing>),
 }
 use crate::ListingComponent::*;
 
@@ -898,11 +896,11 @@ impl std::ops::Deref for ListingComponent {
 
     fn deref(&self) -> &Self::Target {
         match &self {
-            Compact(ref l) => l.as_ref(),
-            Plain(ref l) => l.as_ref(),
-            Threaded(ref l) => l.as_ref(),
-            Conversations(ref l) => l.as_ref(),
+            //Compact(ref l) => l.as_ref(),
+            //Conversations(ref l) => l.as_ref(),
             Offline(ref l) => l.as_ref(),
+            Plain(ref l) => l.as_ref(),
+            //Threaded(ref l) => l.as_ref(),
         }
     }
 }
@@ -910,11 +908,11 @@ impl std::ops::Deref for ListingComponent {
 impl std::ops::DerefMut for ListingComponent {
     fn deref_mut(&mut self) -> &mut (dyn MailListingTrait + 'static) {
         match self {
-            Compact(l) => l.as_mut(),
-            Plain(l) => l.as_mut(),
-            Threaded(l) => l.as_mut(),
-            Conversations(l) => l.as_mut(),
+            //Compact(l) => l.as_mut(),
+            //Conversations(l) => l.as_mut(),
             Offline(l) => l.as_mut(),
+            Plain(l) => l.as_mut(),
+            //Threaded(l) => l.as_mut(),
         }
     }
 }
@@ -922,11 +920,11 @@ impl std::ops::DerefMut for ListingComponent {
 impl ListingComponent {
     fn id(&self) -> ComponentId {
         match self {
-            Compact(l) => l.as_component().id(),
-            Plain(l) => l.as_component().id(),
-            Threaded(l) => l.as_component().id(),
-            Conversations(l) => l.as_component().id(),
+            //Compact(l) => l.as_component().id(),
+            //Conversations(l) => l.as_component().id(),
             Offline(l) => l.as_component().id(),
+            Plain(l) => l.as_component().id(),
+            //Threaded(l) => l.as_component().id(),
         }
     }
 }
@@ -976,7 +974,7 @@ pub struct Listing {
     dirty: bool,
     cursor_pos: CursorPos,
     menu_cursor_pos: CursorPos,
-    menu_content: CellBuffer,
+    menu: Screen<Virtual>,
     menu_scrollbar_show_timer: crate::jobs::Timer,
     show_menu_scrollbar: ShowMenuScrollbar,
     startup_checks_rate: RateLimit,
@@ -999,11 +997,11 @@ pub struct Listing {
 impl std::fmt::Display for Listing {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self.component {
-            Compact(ref l) => write!(f, "{}", l),
-            Plain(ref l) => write!(f, "{}", l),
-            Threaded(ref l) => write!(f, "{}", l),
-            Conversations(ref l) => write!(f, "{}", l),
+            //Compact(ref l) => write!(f, "{}", l),
+            //Conversations(ref l) => write!(f, "{}", l),
             Offline(ref l) => write!(f, "{}", l),
+            Plain(ref l) => write!(f, "{}", l),
+            //Threaded(ref l) => write!(f, "{}", l),
         }
     }
 }
@@ -1013,12 +1011,7 @@ impl Component for Listing {
         if !self.is_dirty() {
             return;
         }
-        if !is_valid_area!(area) {
-            return;
-        }
-        let upper_left = upper_left!(area);
-        let bottom_right = bottom_right!(area);
-        let total_cols = get_x(bottom_right) - get_x(upper_left);
+        let total_cols = area.width();
 
         let right_component_width = if self.is_menu_visible() {
             if self.focus == ListingFocus::Menu {
@@ -1043,18 +1036,19 @@ impl Component for Listing {
         } else {
             total_cols
         };
-        let mid = get_x(bottom_right) - right_component_width;
-        if self.dirty && mid != get_x(upper_left) {
-            for i in get_y(upper_left)..=get_y(bottom_right) {
-                grid[(mid, i)]
-                    .set_ch(self.sidebar_divider)
-                    .set_fg(self.sidebar_divider_theme.fg)
-                    .set_bg(self.sidebar_divider_theme.bg)
-                    .set_attrs(self.sidebar_divider_theme.attrs);
+        let mid = area.width().saturating_sub(right_component_width);
+        if self.dirty && mid != 0 {
+            let divider_area = area.nth_col(mid);
+            for row in grid.bounds_iter(divider_area) {
+                for c in row {
+                    grid[c]
+                        .set_ch(self.sidebar_divider)
+                        .set_fg(self.sidebar_divider_theme.fg)
+                        .set_bg(self.sidebar_divider_theme.bg)
+                        .set_attrs(self.sidebar_divider_theme.attrs);
+                }
             }
-            context
-                .dirty_areas
-                .push_back(((mid, get_y(upper_left)), (mid, get_y(bottom_right))));
+            context.dirty_areas.push_back(divider_area);
         }
 
         let account_hash = self.accounts[self.cursor_pos.account].hash;
@@ -1065,6 +1059,8 @@ impl Component for Listing {
                 self.component.unrealize(context);
                 self.component =
                     Offline(OfflineListing::new((account_hash, MailboxHash::default())));
+                self.component
+                    .process_event(&mut UIEvent::VisibilityChange(true), context);
                 self.component.realize(self.id().into(), context);
             }
 
@@ -1080,23 +1076,21 @@ impl Component for Listing {
         } else if right_component_width == 0 {
             self.draw_menu(grid, area, context);
         } else {
-            self.draw_menu(
-                grid,
-                (upper_left, (mid.saturating_sub(1), get_y(bottom_right))),
-                context,
-            );
+            self.draw_menu(grid, area.take_cols(mid), context);
             if context.is_online(account_hash).is_err()
                 && !matches!(self.component, ListingComponent::Offline(_))
             {
                 self.component.unrealize(context);
                 self.component =
                     Offline(OfflineListing::new((account_hash, MailboxHash::default())));
+                self.component
+                    .process_event(&mut UIEvent::VisibilityChange(true), context);
                 self.component.realize(self.id().into(), context);
             }
             if let Some(s) = self.status.as_mut() {
-                s.draw(grid, (set_x(upper_left, mid + 1), bottom_right), context);
+                s.draw(grid, area.skip_cols(mid + 1), context);
             } else {
-                let area = (set_x(upper_left, mid + 1), bottom_right);
+                let area = area.skip_cols(mid + 1);
                 self.component.draw(grid, area, context);
                 if self.component.unfocused() {
                     self.view
@@ -1115,14 +1109,14 @@ impl Component for Listing {
                 self.sidebar_divider =
                     *account_settings!(context[account_hash].listing.sidebar_divider);
                 self.sidebar_divider_theme = conf::value(context, "mail.sidebar_divider");
-                self.menu_content = CellBuffer::new_with_context(0, 0, None, context);
+                self.menu.grid_mut().empty();
                 self.set_dirty(true);
             }
             UIEvent::Timer(n) if *n == self.menu_scrollbar_show_timer.id() => {
                 if self.show_menu_scrollbar == ShowMenuScrollbar::True {
                     self.show_menu_scrollbar = ShowMenuScrollbar::False;
                     self.set_dirty(true);
-                    self.menu_content.empty();
+                    self.menu.grid_mut().empty();
                 }
                 return true;
             }
@@ -1181,7 +1175,7 @@ impl Component for Listing {
                             },
                         })
                         .collect::<_>();
-                    self.menu_content.empty();
+                    self.menu.grid_mut().empty();
                     context
                         .replies
                         .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(match msg {
@@ -1196,7 +1190,7 @@ impl Component for Listing {
                     .accounts
                     .get_index_of(account_hash)
                     .expect("Invalid account_hash in UIEventMailbox{Delete,Create}");
-                self.menu_content.empty();
+                self.menu.grid_mut().empty();
                 let previous_collapsed_mailboxes: BTreeSet<MailboxHash> = self.accounts
                     [account_index]
                     .entries
@@ -1245,6 +1239,8 @@ impl Component for Listing {
                         self.accounts[self.cursor_pos.account].entries[fallback].mailbox_hash,
                     ));
                     self.component.refresh_mailbox(context, true);
+                    self.component
+                        .process_event(&mut UIEvent::VisibilityChange(true), context);
                 }
                 context
                     .replies
@@ -1271,7 +1267,9 @@ impl Component for Listing {
                         .process_event(&mut UIEvent::VisibilityChange(false), context);
                     self.component
                         .set_coordinates((account_hash, *mailbox_hash));
-                    self.menu_content.empty();
+                    self.component
+                        .process_event(&mut UIEvent::VisibilityChange(true), context);
+                    self.menu.grid_mut().empty();
                     self.set_dirty(true);
                 }
                 return true;
@@ -1292,9 +1290,10 @@ impl Component for Listing {
                             // Need to clear gap between sidebar and listing component, if any.
                             self.dirty = true;
                         }
+                        self.set_dirty(matches!(new_value, Focus::EntryFullscreen));
                     }
                     Some(ListingMessage::UpdateView) => {
-                        log::trace!("UpdateView");
+                        self.view.set_dirty(true);
                     }
                     Some(ListingMessage::OpenEntryUnderCursor {
                         env_hash,
@@ -1844,7 +1843,7 @@ impl Component for Listing {
                     {
                         target.collapsed = !(target.collapsed);
                         self.dirty = true;
-                        self.menu_content.empty();
+                        self.menu.grid_mut().empty();
                         context
                             .replies
                             .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
@@ -1932,7 +1931,7 @@ impl Component for Listing {
                     } else if shortcut!(k == shortcuts[Shortcuts::LISTING]["scroll_down"]) {
                         while amount > 0 {
                             match self.menu_cursor_pos {
-                                /* If current account has mailboxes, go to first mailbox */
+                                // If current account has mailboxes, go to first mailbox
                                 CursorPos {
                                     ref account,
                                     ref mut menu,
@@ -1941,7 +1940,7 @@ impl Component for Listing {
                                 {
                                     *menu = MenuEntryCursor::Mailbox(0);
                                 }
-                                /* If current account has no mailboxes, go to next account */
+                                // If current account has no mailboxes, go to next account
                                 CursorPos {
                                     ref mut account,
                                     ref mut menu,
@@ -1951,8 +1950,8 @@ impl Component for Listing {
                                     *account += 1;
                                     *menu = MenuEntryCursor::Status;
                                 }
-                                /* If current account has no mailboxes and there is no next
-                                 * account, return true */
+                                // If current account has no mailboxes and there is no next account,
+                                // return true
                                 CursorPos {
                                     menu: MenuEntryCursor::Status,
                                     ..
@@ -1985,7 +1984,7 @@ impl Component for Listing {
                         self.menu_scrollbar_show_timer.rearm();
                         self.show_menu_scrollbar = ShowMenuScrollbar::True;
                     }
-                    self.menu_content.empty();
+                    self.menu.grid_mut().empty();
                     self.set_dirty(true);
                     return true;
                 }
@@ -2046,7 +2045,7 @@ impl Component for Listing {
                         self.menu_scrollbar_show_timer.rearm();
                         self.show_menu_scrollbar = ShowMenuScrollbar::True;
                     }
-                    self.menu_content.empty();
+                    self.menu.grid_mut().empty();
                     return true;
                 }
                 UIEvent::Input(ref k)
@@ -2107,7 +2106,7 @@ impl Component for Listing {
                         self.menu_scrollbar_show_timer.rearm();
                         self.show_menu_scrollbar = ShowMenuScrollbar::True;
                     }
-                    self.menu_content.empty();
+                    self.menu.grid_mut().empty();
                     self.set_dirty(true);
 
                     return true;
@@ -2133,7 +2132,7 @@ impl Component for Listing {
                         self.menu_scrollbar_show_timer.rearm();
                         self.show_menu_scrollbar = ShowMenuScrollbar::True;
                     }
-                    self.menu_content.empty();
+                    self.menu.grid_mut().empty();
                     self.set_dirty(true);
                     return true;
                 }
@@ -2175,7 +2174,7 @@ impl Component for Listing {
                         self.menu_scrollbar_show_timer.rearm();
                         self.show_menu_scrollbar = ShowMenuScrollbar::True;
                     }
-                    self.menu_content.empty();
+                    self.menu.grid_mut().empty();
                     self.set_dirty(true);
                     return true;
                 }
@@ -2192,18 +2191,18 @@ impl Component for Listing {
                 return true;
             }
             UIEvent::Action(Action::Tab(ManageMailboxes)) => {
-                let account_pos = self.cursor_pos.account;
-                let mgr = MailboxManager::new(context, account_pos);
-                context
-                    .replies
-                    .push_back(UIEvent::Action(Tab(New(Some(Box::new(mgr))))));
+                //let account_pos = self.cursor_pos.account;
+                //let mgr = MailboxManager::new(context, account_pos);
+                //context
+                //    .replies
+                //    .push_back(UIEvent::Action(Tab(New(Some(Box::new(mgr))))));
                 return true;
             }
             UIEvent::Action(Action::Tab(ManageJobs)) => {
-                let mgr = JobManager::new(context);
-                context
-                    .replies
-                    .push_back(UIEvent::Action(Tab(New(Some(Box::new(mgr))))));
+                //let mgr = JobManager::new(context);
+                //context
+                //    .replies
+                //    .push_back(UIEvent::Action(Tab(New(Some(Box::new(mgr))))));
                 return true;
             }
             UIEvent::Action(Action::Compose(ComposeAction::Mailto(ref mailto))) => {
@@ -2221,8 +2220,8 @@ impl Component for Listing {
             | UIEvent::EnvelopeRename(_, _)
             | UIEvent::EnvelopeRemove(_, _) => {
                 self.dirty = true;
-                /* clear menu to force redraw */
-                self.menu_content.empty();
+                // clear menu to force redraw
+                self.menu.grid_mut().empty();
                 context
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
@@ -2355,11 +2354,11 @@ impl Component for Listing {
         ret.insert(
             self.component.id(),
             match &self.component {
-                Compact(l) => l.as_component(),
-                Plain(l) => l.as_component(),
-                Threaded(l) => l.as_component(),
-                Conversations(l) => l.as_component(),
+                //Compact(l) => l.as_component(),
+                //Conversations(l) => l.as_component(),
                 Offline(l) => l.as_component(),
+                Plain(l) => l.as_component(),
+                //Threaded(l) => l.as_component(),
             },
         );
 
@@ -2371,11 +2370,11 @@ impl Component for Listing {
         ret.insert(
             self.component.id(),
             match &mut self.component {
-                Compact(l) => l.as_component_mut(),
-                Plain(l) => l.as_component_mut(),
-                Threaded(l) => l.as_component_mut(),
-                Conversations(l) => l.as_component_mut(),
+                //Compact(l) => l.as_component_mut(),
+                //Conversations(l) => l.as_component_mut(),
                 Offline(l) => l.as_component_mut(),
+                Plain(l) => l.as_component_mut(),
+                //Threaded(l) => l.as_component_mut(),
             },
         );
 
@@ -2430,7 +2429,7 @@ impl Listing {
                 account: 0,
                 menu: MenuEntryCursor::Mailbox(0),
             },
-            menu_content: CellBuffer::new_with_context(0, 0, None, context),
+            menu: Screen::<Virtual>::new(),
             menu_scrollbar_show_timer: context.main_loop_handler.job_executor.clone().create_timer(
                 std::time::Duration::from_secs(0),
                 std::time::Duration::from_millis(1200),
@@ -2469,27 +2468,23 @@ impl Listing {
                 .iter()
                 .map(|entry| entry.entries.len() + 1)
                 .sum::<usize>();
-        let min_width: usize = 2 * width!(area);
-        let (width, height) = self.menu_content.size();
+        let min_width: usize = 2 * area.width();
+        let (width, height) = self.menu.grid().size();
         let cursor = match self.focus {
             ListingFocus::Mailbox => self.cursor_pos,
             ListingFocus::Menu => self.menu_cursor_pos,
         };
         if min_width > width || height < total_height || self.dirty {
-            let _ = self.menu_content.resize(min_width * 2, total_height, None);
-            let bottom_right = pos_dec(self.menu_content.size(), (1, 1));
+            let _ = self.menu.resize(min_width * 2, total_height);
             let mut y = 0;
             for a in 0..self.accounts.len() {
-                if y > get_y(bottom_right) {
-                    break;
-                }
-                y += self.print_account(((0, y), bottom_right), a, context);
+                let menu_area = self.menu.area().skip_rows(y);
+                y += self.print_account(menu_area, a, context);
                 y += 3;
             }
         }
 
-        let rows = height!(area);
-        let (width, height) = self.menu_content.size();
+        let rows = area.height();
         const SCROLLING_CONTEXT: usize = 3;
         let y_offset = (cursor.account)
             + self
@@ -2510,15 +2505,12 @@ impl Listing {
         };
 
         grid.copy_area(
-            &self.menu_content,
+            self.menu.grid(),
             area,
-            (
-                (
-                    0,
-                    std::cmp::min((height - 1).saturating_sub(rows), skip_offset),
-                ),
-                (width - 1, std::cmp::min(skip_offset + rows, height - 1)),
-            ),
+            self.menu
+                .area()
+                .skip_rows(skip_offset.min((self.menu.area().height() - 1).saturating_sub(rows)))
+                .take_rows((skip_offset + rows).min(self.menu.area().height() - 1)),
         );
         if self.show_menu_scrollbar == ShowMenuScrollbar::True && total_height > rows {
             if self.focus == ListingFocus::Menu {
@@ -2537,16 +2529,13 @@ impl Listing {
             }
             ScrollBar::default().set_show_arrows(true).draw(
                 grid,
-                (
-                    pos_inc(upper_left!(area), (width!(area).saturating_sub(1), 0)),
-                    bottom_right!(area),
-                ),
+                area.nth_col(area.width().saturating_sub(1)),
                 context,
-                /* position */
+                // position
                 skip_offset,
-                /* visible_rows */
+                // visible_rows
                 rows,
-                /* length */
+                // length
                 total_height,
             );
         } else if total_height < rows {
@@ -2560,12 +2549,9 @@ impl Listing {
         context.dirty_areas.push_back(area);
     }
 
-    /*
-     * Print a single account in the menu area.
-     */
-    fn print_account(&mut self, area: Area, aidx: usize, context: &mut Context) -> usize {
-        debug_assert!(is_valid_area!(area));
-
+    /// Print a single account in the menu area.
+    fn print_account(&mut self, mut area: Area, aidx: usize, context: &mut Context) -> usize {
+        let account_y = self.menu.area().height() - area.height();
         #[derive(Copy, Debug, Clone)]
         struct Line {
             collapsed: bool,
@@ -2583,9 +2569,6 @@ impl Listing {
             .iter()
             .map(|(&hash, entry)| (hash, entry.ref_mailbox.clone()))
             .collect();
-
-        let upper_left = upper_left!(area);
-        let bottom_right = bottom_right!(area);
 
         let cursor = match self.focus {
             ListingFocus::Mailbox => self.cursor_pos,
@@ -2652,8 +2635,8 @@ impl Listing {
             crate::conf::value(context, "mail.sidebar_account_name")
         };
 
-        /* Print account name first */
-        self.menu_content.write_string(
+        // Print account name first
+        self.menu.grid_mut().write_string(
             &self.accounts[aidx].name,
             account_attrs.fg,
             account_attrs.bg,
@@ -2661,18 +2644,20 @@ impl Listing {
             area,
             None,
         );
+        area = self.menu.area().skip_rows(account_y);
 
         if lines.is_empty() {
-            self.menu_content.write_string(
+            self.menu.grid_mut().write_string(
                 "offline",
                 crate::conf::value(context, "error_message").fg,
                 account_attrs.bg,
                 account_attrs.attrs,
-                (pos_inc(upper_left, (0, 1)), bottom_right),
+                area.skip_rows(1),
                 None,
             );
             return 0;
         }
+        area = self.menu.area().skip_rows(account_y);
 
         let lines_len = lines.len();
         let mut idx = 0;
@@ -2683,7 +2668,7 @@ impl Listing {
         // are not visible.
         let mut skip: Option<usize> = None;
         let mut skipped_counter: usize = 0;
-        'grid_loop: for y in get_y(upper_left) + 1..get_y(bottom_right) {
+        'grid_loop: for y in 0..area.height() {
             if idx == lines_len {
                 break;
             }
@@ -2751,14 +2736,13 @@ impl Listing {
                 )
             };
 
-            /* Calculate how many columns the mailbox index tags should occupy with right
-             * alignment, eg.
-             *  1
-             *  2
-             * ...
-             *  9
-             * 10
-             */
+            // Calculate how many columns the mailbox index tags should occupy with right
+            // alignment, eg.
+            //  1
+            //  2
+            // ...
+            //  9
+            // 10
             let total_mailbox_no_digits = {
                 let mut len = lines_len;
                 let mut ctr = 1;
@@ -2804,7 +2788,7 @@ impl Listing {
             .map(|s| s.as_str())
             .unwrap_or(" ");
 
-            let (x, _) = self.menu_content.write_string(
+            let (x, _) = self.menu.grid_mut().write_string(
                 &if *account_settings!(
                     context[self.accounts[aidx].hash]
                         .listing
@@ -2822,9 +2806,10 @@ impl Listing {
                 index_att.fg,
                 index_att.bg,
                 index_att.attrs,
-                (set_y(upper_left, y), bottom_right),
+                area.nth_row(y + 1),
                 None,
             );
+            area = self.menu.area().skip_rows(account_y);
             {
                 branches.clear();
                 branches.push_str(no_sibling_str);
@@ -2846,24 +2831,37 @@ impl Listing {
                     }
                 }
             }
-            let (x, _) = self.menu_content.write_string(
-                &branches,
-                att.fg,
-                att.bg,
-                att.attrs,
-                ((x, y), bottom_right),
-                None,
-            );
-            let (x, _) = self.menu_content.write_string(
-                context.accounts[self.accounts[aidx].index].mailbox_entries[&l.mailbox_idx].name(),
-                att.fg,
-                att.bg,
-                att.attrs,
-                ((x, y), bottom_right),
-                None,
-            );
+            let x = self
+                .menu
+                .grid_mut()
+                .write_string(
+                    &branches,
+                    att.fg,
+                    att.bg,
+                    att.attrs,
+                    area.nth_row(y + 1).skip_cols(x),
+                    None,
+                )
+                .0
+                + x;
+            area = self.menu.area().skip_rows(account_y);
+            let x = self
+                .menu
+                .grid_mut()
+                .write_string(
+                    context.accounts[self.accounts[aidx].index].mailbox_entries[&l.mailbox_idx]
+                        .name(),
+                    att.fg,
+                    att.bg,
+                    att.attrs,
+                    area.nth_row(y + 1).skip_cols(x),
+                    None,
+                )
+                .0
+                + x;
+            area = self.menu.area().skip_rows(account_y);
 
-            /* Unread message count */
+            // Unread message count
             let count_string = match (l.count, l.collapsed_count) {
                 (None, None) => " ...".to_string(),
                 (Some(0), None) => String::new(),
@@ -2875,28 +2873,28 @@ impl Listing {
                 (None, Some(coll)) => format!(" ({}) v", coll),
             };
 
-            let (x, _) = self.menu_content.write_string(
-                &count_string,
-                unread_count_att.fg,
-                unread_count_att.bg,
-                unread_count_att.attrs
-                    | if l.count.unwrap_or(0) > 0 {
-                        Attr::BOLD
-                    } else {
-                        Attr::DEFAULT
-                    },
-                (
-                    (
-                        /* Hide part of mailbox name if need be to fit the message count */
-                        std::cmp::min(x, get_x(bottom_right).saturating_sub(count_string.len())),
-                        y,
-                    ),
-                    bottom_right,
-                ),
-                None,
-            );
-            for c in self.menu_content.row_iter(x..(get_x(bottom_right) + 1), y) {
-                self.menu_content[c]
+            let x = self
+                .menu
+                .grid_mut()
+                .write_string(
+                    &count_string,
+                    unread_count_att.fg,
+                    unread_count_att.bg,
+                    unread_count_att.attrs
+                        | if l.count.unwrap_or(0) > 0 {
+                            Attr::BOLD
+                        } else {
+                            Attr::DEFAULT
+                        },
+                    area.nth_row(y + 1)
+                        .skip_cols(x.min(area.width().saturating_sub(count_string.len()))),
+                    None,
+                )
+                .0
+                + x.min(area.width().saturating_sub(count_string.len()));
+            area = self.menu.area().skip_rows(account_y);
+            for c in self.menu.grid_mut().row_iter(area, x..area.width(), y + 1) {
+                self.menu.grid_mut()[c]
                     .set_fg(att.fg)
                     .set_bg(att.bg)
                     .set_attrs(att.attrs);
@@ -2958,7 +2956,6 @@ impl Listing {
                     self.component
                         .set_coordinates((account_hash, *mailbox_hash));
                     self.component.refresh_mailbox(context, true);
-                    /* Check if per-mailbox configuration overrides general configuration */
 
                     let index_style =
                         mailbox_settings!(context[account_hash][mailbox_hash].listing.index_style);
@@ -2969,6 +2966,8 @@ impl Listing {
                         Offline(OfflineListing::new((account_hash, MailboxHash::default())));
                     self.component.realize(self.id().into(), context);
                 }
+                self.component
+                    .process_event(&mut UIEvent::VisibilityChange(true), context);
                 self.status = None;
                 context
                     .replies
@@ -2983,8 +2982,8 @@ impl Listing {
         self.sidebar_divider = *account_settings!(context[account_hash].listing.sidebar_divider);
         self.set_dirty(true);
         self.menu_cursor_pos = self.cursor_pos;
-        /* clear menu to force redraw */
-        self.menu_content.empty();
+        // clear menu to force redraw
+        self.menu.grid_mut().empty();
         if *account_settings!(context[account_hash].listing.show_menu_scrollbar) {
             self.show_menu_scrollbar = ShowMenuScrollbar::True;
             self.menu_scrollbar_show_timer.rearm();
@@ -2995,7 +2994,7 @@ impl Listing {
 
     fn open_status(&mut self, account_idx: usize, context: &mut Context) {
         self.status = Some(AccountStatus::new(account_idx, self.theme_default));
-        self.menu_content.empty();
+        self.menu.grid_mut().empty();
         context
             .replies
             .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
@@ -3007,51 +3006,61 @@ impl Listing {
         !matches!(self.component.focus(), Focus::EntryFullscreen) && self.menu_visibility
     }
 
-    fn set_style(&mut self, new_style: IndexStyle, context: &mut Context) {
-        let old = match new_style {
-            IndexStyle::Plain => {
-                if matches!(self.component, Plain(_)) {
-                    return;
-                }
-                let coordinates = self.component.coordinates();
-                std::mem::replace(
-                    &mut self.component,
-                    Plain(PlainListing::new(self.id, coordinates)),
-                )
-            }
-            IndexStyle::Threaded => {
-                if matches!(self.component, Threaded(_)) {
-                    return;
-                }
-                let coordinates = self.component.coordinates();
-                std::mem::replace(
-                    &mut self.component,
-                    Threaded(ThreadListing::new(self.id, coordinates, context)),
-                )
-            }
-            IndexStyle::Compact => {
-                if matches!(self.component, Compact(_)) {
-                    return;
-                }
-                let coordinates = self.component.coordinates();
-                std::mem::replace(
-                    &mut self.component,
-                    Compact(CompactListing::new(self.id, coordinates)),
-                )
-            }
-            IndexStyle::Conversations => {
-                if matches!(self.component, Conversations(_)) {
-                    return;
-                }
-                let coordinates = self.component.coordinates();
-                std::mem::replace(
-                    &mut self.component,
-                    Conversations(ConversationsListing::new(self.id, coordinates)),
-                )
-            }
-        };
-        old.unrealize(context);
-        self.component.realize(self.id.into(), context);
+    fn set_style(&mut self, _new_style: IndexStyle, context: &mut Context) {
+        if matches!(self.component, Plain(_)) {
+            return;
+        }
+        let coordinates = self.component.coordinates();
+        self.component = Plain(PlainListing::new(self.id, coordinates));
+        self.component
+            .process_event(&mut UIEvent::VisibilityChange(true), context);
+        //let old = match new_style {
+        //    IndexStyle::Plain => {
+        //        if matches!(self.component, Plain(_)) {
+        //            return;
+        //        }
+        //        let coordinates = self.component.coordinates();
+        //        std::mem::replace(
+        //            &mut self.component,
+        //            Plain(PlainListing::new(self.id, coordinates)),
+        //        )
+        //    }
+        //    IndexStyle::Threaded => {
+        //        return;
+        //        //if matches!(self.component, Threaded(_)) {
+        //        //    return;
+        //        //}
+        //        //let coordinates = self.component.coordinates();
+        //        //std::mem::replace(
+        //        //    &mut self.component,
+        //        //    Threaded(ThreadListing::new(self.id, coordinates,
+        // context)),        //)
+        //    }
+        //    IndexStyle::Compact => {
+        //        return;
+        //        //if matches!(self.component, Compact(_)) {
+        //        //    return;
+        //        //}
+        //        //let coordinates = self.component.coordinates();
+        //        //std::mem::replace(
+        //        //    &mut self.component,
+        //        //    Compact(CompactListing::new(self.id, coordinates)),
+        //        //)
+        //    }
+        //    IndexStyle::Conversations => {
+        //        return;
+        //        //if matches!(self.component, Conversations(_)) {
+        //        //    return;
+        //        //}
+        //        //let coordinates = self.component.coordinates();
+        //        //std::mem::replace(
+        //        //    &mut self.component,
+        //        //    Conversations(ConversationsListing::new(self.id,
+        // coordinates)),        //)
+        //    }
+        //};
+        //old.unrealize(context);
+        //self.component.realize(self.id.into(), context);
     }
 }
 

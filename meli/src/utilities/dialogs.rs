@@ -53,7 +53,6 @@ pub struct Selector<
     single_only: bool,
     entries: Vec<(T, bool)>,
     entry_titles: Vec<String>,
-    pub content: CellBuffer,
     theme_default: ThemeAttribute,
 
     cursor: SelectorCursor,
@@ -114,7 +113,6 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> Component f
             return false;
         }
 
-        let (width, height) = self.content.size();
         let shortcuts = self.shortcuts(context);
         let mut highlighted_attrs = crate::conf::value(context, "widgets.options.highlighted");
         if !context.settings.terminal.use_color() {
@@ -134,25 +132,6 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> Component f
                 /* User can select multiple entries, so Enter key toggles the entry under the
                  * cursor */
                 self.entries[c].1 = !self.entries[c].1;
-                if self.entries[c].1 {
-                    self.content.write_string(
-                        "x",
-                        highlighted_attrs.fg,
-                        highlighted_attrs.bg,
-                        highlighted_attrs.attrs,
-                        ((1, c), (width - 1, c)),
-                        None,
-                    );
-                } else {
-                    self.content.write_string(
-                        " ",
-                        highlighted_attrs.fg,
-                        highlighted_attrs.bg,
-                        highlighted_attrs.attrs,
-                        ((1, c), (width - 1, c)),
-                        None,
-                    );
-                }
                 self.dirty = true;
                 return true;
             }
@@ -192,20 +171,7 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> Component f
                 if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_down"]) =>
             {
                 if self.single_only {
-                    for c in self.content.row_iter(0..(width - 1), 0) {
-                        self.content[c]
-                            .set_fg(highlighted_attrs.fg)
-                            .set_bg(highlighted_attrs.bg)
-                            .set_attrs(highlighted_attrs.attrs);
-                    }
                     self.entries[0].1 = true;
-                } else {
-                    for c in self.content.row_iter(0..3, 0) {
-                        self.content[c]
-                            .set_fg(highlighted_attrs.fg)
-                            .set_bg(highlighted_attrs.bg)
-                            .set_attrs(highlighted_attrs.attrs);
-                    }
                 }
                 self.cursor = SelectorCursor::Entry(0);
                 self.dirty = true;
@@ -216,34 +182,8 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> Component f
             {
                 if self.single_only {
                     // Redraw selection
-                    for c in self.content.row_iter(0..(width - 1), c) {
-                        self.content[c]
-                            .set_fg(self.theme_default.fg)
-                            .set_bg(self.theme_default.bg)
-                            .set_attrs(self.theme_default.attrs);
-                    }
-                    for c in self.content.row_iter(0..(width - 1), c - 1) {
-                        self.content[c]
-                            .set_fg(highlighted_attrs.fg)
-                            .set_bg(highlighted_attrs.bg)
-                            .set_attrs(highlighted_attrs.attrs);
-                    }
                     self.entries[c].1 = false;
                     self.entries[c - 1].1 = true;
-                } else {
-                    // Redraw cursor
-                    for c in self.content.row_iter(0..3, c) {
-                        self.content[c]
-                            .set_fg(self.theme_default.fg)
-                            .set_bg(self.theme_default.bg)
-                            .set_attrs(self.theme_default.attrs);
-                    }
-                    for c in self.content.row_iter(0..3, c - 1) {
-                        self.content[c]
-                            .set_fg(highlighted_attrs.fg)
-                            .set_bg(highlighted_attrs.bg)
-                            .set_attrs(highlighted_attrs.attrs);
-                    }
                 }
                 self.cursor = SelectorCursor::Entry(c - 1);
                 self.dirty = true;
@@ -253,23 +193,8 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> Component f
             | (UIEvent::Input(ref key), SelectorCursor::Cancel)
                 if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_up"]) =>
             {
-                for c in self
-                    .content
-                    .row_iter(((width - OK_CANCEL.len()) / 2)..(width - 1), height - 1)
-                {
-                    self.content[c]
-                        .set_fg(self.theme_default.fg)
-                        .set_bg(self.theme_default.bg)
-                        .set_attrs(self.theme_default.attrs);
-                }
                 let c = self.entries.len().saturating_sub(1);
                 self.cursor = SelectorCursor::Entry(c);
-                for c in self.content.row_iter(0..3, c) {
-                    self.content[c]
-                        .set_fg(highlighted_attrs.fg)
-                        .set_bg(highlighted_attrs.bg)
-                        .set_attrs(highlighted_attrs.attrs);
-                }
                 self.dirty = true;
                 return true;
             }
@@ -279,34 +204,8 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> Component f
             {
                 if self.single_only {
                     // Redraw selection
-                    for c in self.content.row_iter(0..(width - 1), c) {
-                        self.content[c]
-                            .set_fg(self.theme_default.fg)
-                            .set_bg(self.theme_default.bg)
-                            .set_attrs(self.theme_default.attrs);
-                    }
-                    for c in self.content.row_iter(0..(width - 1), c + 1) {
-                        self.content[c]
-                            .set_fg(highlighted_attrs.fg)
-                            .set_bg(highlighted_attrs.bg)
-                            .set_attrs(highlighted_attrs.attrs);
-                    }
                     self.entries[c].1 = false;
                     self.entries[c + 1].1 = true;
-                } else {
-                    // Redraw cursor
-                    for c in self.content.row_iter(0..3, c) {
-                        self.content[c]
-                            .set_fg(self.theme_default.fg)
-                            .set_bg(self.theme_default.bg)
-                            .set_attrs(self.theme_default.attrs);
-                    }
-                    for c in self.content.row_iter(0..3, c + 1) {
-                        self.content[c]
-                            .set_fg(highlighted_attrs.fg)
-                            .set_bg(highlighted_attrs.bg)
-                            .set_attrs(highlighted_attrs.attrs);
-                    }
                 }
                 self.cursor = SelectorCursor::Entry(c + 1);
                 self.dirty = true;
@@ -317,22 +216,6 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> Component f
                     && shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_down"]) =>
             {
                 self.cursor = SelectorCursor::Ok;
-                for c in self.content.row_iter(0..3, c) {
-                    self.content[c]
-                        .set_fg(self.theme_default.fg)
-                        .set_bg(self.theme_default.bg)
-                        .set_attrs(self.theme_default.attrs);
-                }
-                for c in self.content.row_iter(
-                    ((width - OK_CANCEL.len()) / 2 + OK_OFFSET)
-                        ..((width - OK_CANCEL.len()) / 2 + OK_OFFSET + OK_LENGTH),
-                    height - 1,
-                ) {
-                    self.content[c]
-                        .set_fg(highlighted_attrs.fg)
-                        .set_bg(highlighted_attrs.bg)
-                        .set_attrs(highlighted_attrs.attrs);
-                }
                 self.dirty = true;
                 return true;
             }
@@ -340,26 +223,6 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> Component f
                 if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_right"]) =>
             {
                 self.cursor = SelectorCursor::Cancel;
-                for c in self.content.row_iter(
-                    ((width - OK_CANCEL.len()) / 2 + OK_OFFSET)
-                        ..((width - OK_CANCEL.len()) / 2 + OK_OFFSET + OK_LENGTH),
-                    height - 1,
-                ) {
-                    self.content[c]
-                        .set_fg(self.theme_default.fg)
-                        .set_bg(self.theme_default.bg)
-                        .set_attrs(self.theme_default.attrs);
-                }
-                for c in self.content.row_iter(
-                    ((width - OK_CANCEL.len()) / 2 + CANCEL_OFFSET)
-                        ..((width - OK_CANCEL.len()) / 2 + CANCEL_OFFSET + CANCEL_LENGTH),
-                    height - 1,
-                ) {
-                    self.content[c]
-                        .set_fg(highlighted_attrs.fg)
-                        .set_bg(highlighted_attrs.bg)
-                        .set_attrs(highlighted_attrs.attrs);
-                }
                 self.dirty = true;
                 return true;
             }
@@ -367,27 +230,6 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> Component f
                 if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_left"]) =>
             {
                 self.cursor = SelectorCursor::Ok;
-                for c in self.content.row_iter(
-                    ((width - OK_CANCEL.len()) / 2 + OK_OFFSET)
-                        ..((width - OK_CANCEL.len()) / 2 + OK_OFFSET + OK_LENGTH),
-                    height - 1,
-                ) {
-                    self.content[c]
-                        .set_fg(highlighted_attrs.fg)
-                        .set_bg(highlighted_attrs.bg)
-                        .set_attrs(highlighted_attrs.attrs);
-                }
-
-                self.content.change_theme(
-                    (
-                        ((width - OK_CANCEL.len()) / 2 + CANCEL_OFFSET, height - 1),
-                        (
-                            (width - OK_CANCEL.len()) / 2 + CANCEL_OFFSET + CANCEL_LENGTH,
-                            height - 1,
-                        ),
-                    ),
-                    self.theme_default,
-                );
                 self.dirty = true;
                 return true;
             }
@@ -439,7 +281,6 @@ impl Component for UIConfirmationDialog {
             return false;
         }
 
-        let (width, height) = self.content.size();
         let shortcuts = self.shortcuts(context);
         let mut highlighted_attrs = crate::conf::value(context, "widgets.options.highlighted");
         if !context.settings.terminal.use_color() {
@@ -459,25 +300,6 @@ impl Component for UIConfirmationDialog {
                 /* User can select multiple entries, so Enter key toggles the entry under the
                  * cursor */
                 self.entries[c].1 = !self.entries[c].1;
-                if self.entries[c].1 {
-                    self.content.write_string(
-                        "x",
-                        highlighted_attrs.fg,
-                        highlighted_attrs.bg,
-                        highlighted_attrs.attrs,
-                        ((1, c), (width - 1, c)),
-                        None,
-                    );
-                } else {
-                    self.content.write_string(
-                        " ",
-                        highlighted_attrs.fg,
-                        highlighted_attrs.bg,
-                        highlighted_attrs.attrs,
-                        ((1, c), (width - 1, c)),
-                        None,
-                    );
-                }
                 self.dirty = true;
                 return true;
             }
@@ -518,34 +340,8 @@ impl Component for UIConfirmationDialog {
             {
                 if self.single_only {
                     // Redraw selection
-                    for c in self.content.row_iter(0..(width - 1), c) {
-                        self.content[c]
-                            .set_fg(self.theme_default.fg)
-                            .set_bg(self.theme_default.bg)
-                            .set_attrs(self.theme_default.attrs);
-                    }
-                    for c in self.content.row_iter(0..(width - 1), c - 1) {
-                        self.content[c]
-                            .set_fg(highlighted_attrs.fg)
-                            .set_bg(highlighted_attrs.bg)
-                            .set_attrs(highlighted_attrs.attrs);
-                    }
                     self.entries[c].1 = false;
                     self.entries[c - 1].1 = true;
-                } else {
-                    // Redraw cursor
-                    for c in self.content.row_iter(0..3, c) {
-                        self.content[c]
-                            .set_fg(self.theme_default.fg)
-                            .set_bg(self.theme_default.bg)
-                            .set_attrs(self.theme_default.attrs);
-                    }
-                    for c in self.content.row_iter(0..3, c - 1) {
-                        self.content[c]
-                            .set_fg(highlighted_attrs.fg)
-                            .set_bg(highlighted_attrs.bg)
-                            .set_attrs(highlighted_attrs.attrs);
-                    }
                 }
                 self.cursor = SelectorCursor::Entry(c - 1);
                 self.dirty = true;
@@ -555,23 +351,8 @@ impl Component for UIConfirmationDialog {
             | (UIEvent::Input(ref key), SelectorCursor::Cancel)
                 if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_up"]) =>
             {
-                for c in self
-                    .content
-                    .row_iter(((width - OK_CANCEL.len()) / 2)..(width - 1), height - 1)
-                {
-                    self.content[c]
-                        .set_fg(self.theme_default.fg)
-                        .set_bg(self.theme_default.bg)
-                        .set_attrs(self.theme_default.attrs);
-                }
                 let c = self.entries.len().saturating_sub(1);
                 self.cursor = SelectorCursor::Entry(c);
-                for c in self.content.row_iter(0..3, c) {
-                    self.content[c]
-                        .set_fg(highlighted_attrs.fg)
-                        .set_bg(highlighted_attrs.bg)
-                        .set_attrs(highlighted_attrs.attrs);
-                }
                 self.dirty = true;
                 return true;
             }
@@ -579,20 +360,7 @@ impl Component for UIConfirmationDialog {
                 if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_down"]) =>
             {
                 if self.single_only {
-                    for c in self.content.row_iter(0..(width - 1), 0) {
-                        self.content[c]
-                            .set_fg(highlighted_attrs.fg)
-                            .set_bg(highlighted_attrs.bg)
-                            .set_attrs(highlighted_attrs.attrs);
-                    }
                     self.entries[0].1 = true;
-                } else {
-                    for c in self.content.row_iter(0..3, 0) {
-                        self.content[c]
-                            .set_fg(highlighted_attrs.fg)
-                            .set_bg(highlighted_attrs.bg)
-                            .set_attrs(highlighted_attrs.attrs);
-                    }
                 }
                 self.cursor = SelectorCursor::Entry(0);
                 self.dirty = true;
@@ -604,34 +372,8 @@ impl Component for UIConfirmationDialog {
             {
                 if self.single_only {
                     // Redraw selection
-                    for c in self.content.row_iter(0..(width - 1), c) {
-                        self.content[c]
-                            .set_fg(self.theme_default.fg)
-                            .set_bg(self.theme_default.bg)
-                            .set_attrs(self.theme_default.attrs);
-                    }
-                    for c in self.content.row_iter(0..(width - 1), c + 1) {
-                        self.content[c]
-                            .set_fg(highlighted_attrs.fg)
-                            .set_bg(highlighted_attrs.bg)
-                            .set_attrs(highlighted_attrs.attrs);
-                    }
                     self.entries[c].1 = false;
                     self.entries[c + 1].1 = true;
-                } else {
-                    // Redraw cursor
-                    for c in self.content.row_iter(0..3, c) {
-                        self.content[c]
-                            .set_fg(self.theme_default.fg)
-                            .set_bg(self.theme_default.bg)
-                            .set_attrs(self.theme_default.attrs);
-                    }
-                    for c in self.content.row_iter(0..3, c + 1) {
-                        self.content[c]
-                            .set_fg(highlighted_attrs.fg)
-                            .set_bg(highlighted_attrs.bg)
-                            .set_attrs(highlighted_attrs.attrs);
-                    }
                 }
                 self.cursor = SelectorCursor::Entry(c + 1);
                 self.dirty = true;
@@ -642,22 +384,6 @@ impl Component for UIConfirmationDialog {
                     && shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_down"]) =>
             {
                 self.cursor = SelectorCursor::Ok;
-                for c in self.content.row_iter(0..3, c) {
-                    self.content[c]
-                        .set_fg(self.theme_default.fg)
-                        .set_bg(self.theme_default.bg)
-                        .set_attrs(self.theme_default.attrs);
-                }
-                for c in self.content.row_iter(
-                    ((width - OK_CANCEL.len()) / 2 + OK_OFFSET)
-                        ..((width - OK_CANCEL.len()) / 2 + OK_OFFSET + OK_LENGTH),
-                    height - 1,
-                ) {
-                    self.content[c]
-                        .set_fg(highlighted_attrs.fg)
-                        .set_bg(highlighted_attrs.bg)
-                        .set_attrs(highlighted_attrs.attrs);
-                }
                 self.dirty = true;
                 return true;
             }
@@ -665,26 +391,6 @@ impl Component for UIConfirmationDialog {
                 if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_right"]) =>
             {
                 self.cursor = SelectorCursor::Cancel;
-                for c in self.content.row_iter(
-                    ((width - OK_CANCEL.len()) / 2 + OK_OFFSET)
-                        ..((width - OK_CANCEL.len()) / 2 + OK_OFFSET + OK_LENGTH),
-                    height - 1,
-                ) {
-                    self.content[c]
-                        .set_fg(self.theme_default.fg)
-                        .set_bg(self.theme_default.bg)
-                        .set_attrs(self.theme_default.attrs);
-                }
-                for c in self.content.row_iter(
-                    ((width - OK_CANCEL.len()) / 2 + CANCEL_OFFSET)
-                        ..((width - OK_CANCEL.len()) / 2 + CANCEL_OFFSET + CANCEL_LENGTH),
-                    height - 1,
-                ) {
-                    self.content[c]
-                        .set_fg(highlighted_attrs.fg)
-                        .set_bg(highlighted_attrs.bg)
-                        .set_attrs(highlighted_attrs.attrs);
-                }
                 self.dirty = true;
                 return true;
             }
@@ -692,27 +398,6 @@ impl Component for UIConfirmationDialog {
                 if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_left"]) =>
             {
                 self.cursor = SelectorCursor::Ok;
-                for c in self.content.row_iter(
-                    ((width - OK_CANCEL.len()) / 2 + OK_OFFSET)
-                        ..((width - OK_CANCEL.len()) / 2 + OK_OFFSET + OK_LENGTH),
-                    height - 1,
-                ) {
-                    self.content[c]
-                        .set_fg(highlighted_attrs.fg)
-                        .set_bg(highlighted_attrs.bg)
-                        .set_attrs(highlighted_attrs.attrs);
-                }
-
-                self.content.change_theme(
-                    (
-                        ((width - OK_CANCEL.len()) / 2 + CANCEL_OFFSET, height - 1),
-                        (
-                            (width - OK_CANCEL.len()) / 2 + CANCEL_OFFSET + CANCEL_LENGTH,
-                            height - 1,
-                        ),
-                    ),
-                    self.theme_default,
-                );
                 self.dirty = true;
                 return true;
             }
@@ -761,7 +446,7 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
         single_only: bool,
         done_fn: F,
         context: &Context,
-    ) -> Selector<T, F> {
+    ) -> Self {
         let entry_titles = entries
             .iter_mut()
             .map(|(_id, ref mut title)| std::mem::take(title))
@@ -773,11 +458,10 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
             identifiers[0].1 = true;
         }
 
-        let mut ret = Selector {
+        let mut ret = Self {
             single_only,
             entries: identifiers,
             entry_titles,
-            content: Default::default(),
             cursor: SelectorCursor::Unfocused,
             vertical_alignment: Alignment::Center,
             horizontal_alignment: Alignment::Center,
@@ -794,60 +478,6 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
 
     fn initialise(&mut self, context: &Context) {
         self.theme_default = crate::conf::value(context, "theme_default");
-        let width = std::cmp::max(
-            OK_CANCEL.len(),
-            std::cmp::max(
-                self.entry_titles
-                    .iter()
-                    .max_by_key(|e| e.len())
-                    .map(|v| v.len())
-                    .unwrap_or(0),
-                self.title.len(),
-            ),
-        ) + 5;
-        let height = self.entries.len()
-            + if self.single_only {
-                0
-            } else {
-                /* Extra room for buttons Okay/Cancel */
-                2
-            };
-        let mut content = CellBuffer::new_with_context(width, height, None, context);
-        if self.single_only {
-            for (i, e) in self.entry_titles.iter().enumerate() {
-                content.write_string(
-                    e,
-                    self.theme_default.fg,
-                    self.theme_default.bg,
-                    self.theme_default.attrs,
-                    ((0, i), (width - 1, i)),
-                    None,
-                );
-            }
-        } else {
-            for (i, e) in self.entry_titles.iter().enumerate() {
-                content.write_string(
-                    &format!("[ ] {}", e),
-                    self.theme_default.fg,
-                    self.theme_default.bg,
-                    self.theme_default.attrs,
-                    ((0, i), (width - 1, i)),
-                    None,
-                );
-            }
-            content.write_string(
-                OK_CANCEL,
-                self.theme_default.fg,
-                self.theme_default.bg,
-                self.theme_default.attrs | Attr::BOLD,
-                (
-                    ((width - OK_CANCEL.len()) / 2, height - 1),
-                    (width - 1, height - 1),
-                ),
-                None,
-            );
-        }
-        self.content = content;
     }
 
     pub fn is_done(&self) -> bool {
@@ -871,18 +501,17 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
             Key::Char('\n')
         );
         let width = std::cmp::max(
-            self.content.size().0 + 1,
+            self.entry_titles.iter().map(|e| e.len()).max().unwrap_or(0) + 3,
             std::cmp::max(self.title.len(), navigate_help_string.len()) + 3,
         ) + 3;
-        let height = self.content.size().1 + {
+        let height = self.entries.len() + {
             /* padding */
             3
         };
-        let dialog_area = align_area(
-            area,
+        let dialog_area = area.align_inside(
             (width, height),
-            self.vertical_alignment,
             self.horizontal_alignment,
+            self.vertical_alignment,
         );
         let inner_area = create_box(grid, dialog_area);
         grid.clear_area(inner_area, self.theme_default);
@@ -892,10 +521,7 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
             self.theme_default.fg,
             self.theme_default.bg,
             self.theme_default.attrs | Attr::BOLD,
-            (
-                pos_inc(upper_left!(dialog_area), (2, 0)),
-                bottom_right!(dialog_area),
-            ),
+            dialog_area.skip_cols(2),
             None,
         );
 
@@ -904,19 +530,62 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
             self.theme_default.fg,
             self.theme_default.bg,
             self.theme_default.attrs | Attr::ITALICS,
-            (
-                pos_inc(upper_left!(dialog_area), (2, height)),
-                bottom_right!(dialog_area),
-            ),
+            dialog_area.skip_cols(2).skip_rows(height),
             None,
         );
-        let inner_area = (
-            pos_inc(upper_left!(inner_area), (1, 1)),
-            bottom_right!(inner_area),
-        );
-        let (width, height) = self.content.size();
 
-        grid.copy_area(&self.content, inner_area, ((0, 0), (width - 1, height - 1)));
+        let inner_area = inner_area.skip_cols(1).skip_rows(1);
+        let width = std::cmp::max(
+            OK_CANCEL.len(),
+            std::cmp::max(
+                self.entry_titles
+                    .iter()
+                    .max_by_key(|e| e.len())
+                    .map(|v| v.len())
+                    .unwrap_or(0),
+                self.title.len(),
+            ),
+        ) + 5;
+        let height = self.entries.len()
+            + if self.single_only {
+                0
+            } else {
+                /* Extra room for buttons Okay/Cancel */
+                2
+            };
+        if self.single_only {
+            for (i, e) in self.entry_titles.iter().enumerate() {
+                grid.write_string(
+                    e,
+                    self.theme_default.fg,
+                    self.theme_default.bg,
+                    self.theme_default.attrs,
+                    inner_area.nth_row(i),
+                    None,
+                );
+            }
+        } else {
+            for (i, e) in self.entry_titles.iter().enumerate() {
+                grid.write_string(
+                    &format!("[{}] {}", if self.entries[i].1 { "x" } else { " " }, e),
+                    self.theme_default.fg,
+                    self.theme_default.bg,
+                    self.theme_default.attrs,
+                    inner_area.nth_row(i),
+                    None,
+                );
+            }
+            grid.write_string(
+                OK_CANCEL,
+                self.theme_default.fg,
+                self.theme_default.bg,
+                self.theme_default.attrs | Attr::BOLD,
+                inner_area
+                    .nth_row(height - 1)
+                    .skip_cols((width - OK_CANCEL.len()) / 2),
+                None,
+            );
+        }
         context.dirty_areas.push_back(dialog_area);
         self.dirty = false;
     }

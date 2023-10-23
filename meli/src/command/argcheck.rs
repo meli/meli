@@ -47,9 +47,9 @@ impl<const MIN: u8, const MAX: u8> ArgCheck<MIN, MAX> {
                 }
             );
         };
-        let is_empty = dbg!(input.trim().is_empty());
-        if is_empty && dbg!(MIN) > 0 {
-            return dbg!(Err(CommandError::WrongNumberOfArguments {
+        let is_empty = input.trim().is_empty();
+        if is_empty && MIN > 0 {
+            return Err(CommandError::WrongNumberOfArguments {
                 too_many: false,
                 takes: (MIN, MAX.into()),
                 given: 0,
@@ -60,7 +60,7 @@ impl<const MIN: u8, const MAX: u8> ArgCheck<MIN, MAX> {
                     MIN
                 )
                 .into(),
-            }));
+            });
         }
         *self = Self::BeforeArgument {
             so_far: 0,

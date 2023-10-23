@@ -150,36 +150,38 @@ impl Component for OfflineListing {
                 None,
             );
 
-            grid.write_string(
+            let (_, mut y_offset) = grid.write_string(
                 &err.to_string(),
                 error_message.fg,
                 error_message.bg,
                 error_message.attrs,
-                (set_x(upper_left!(area), x + 1), bottom_right!(area)),
-                Some(get_x(upper_left!(area))),
+                area.skip_cols(x + 1),
+                Some(0),
             );
+            y_offset += 1;
             if let Some(msg) = self.messages.last() {
                 grid.write_string(
                     msg,
                     text_unfocused.fg,
                     text_unfocused.bg,
                     Attr::BOLD,
-                    (pos_inc((0, 1), upper_left!(area)), bottom_right!(area)),
+                    area.skip_rows(y_offset),
                     None,
                 );
             }
+            y_offset += 1;
             for (i, msg) in self.messages.iter().rev().skip(1).enumerate() {
                 grid.write_string(
                     msg,
                     text_unfocused.fg,
                     text_unfocused.bg,
                     text_unfocused.attrs,
-                    (pos_inc((0, 2 + i), upper_left!(area)), bottom_right!(area)),
+                    area.skip_rows(y_offset + i),
                     None,
                 );
             }
         } else {
-            let (_, mut y) = grid.write_string(
+            grid.write_string(
                 "loading...",
                 conf::value(context, "highlight").fg,
                 conf::value(context, "highlight").bg,
@@ -192,16 +194,15 @@ impl Component for OfflineListing {
                 .iter()
                 .collect();
             jobs.sort_by_key(|(j, _)| *j);
-            for (job_id, j) in jobs {
+            for (i, (job_id, j)) in jobs.into_iter().enumerate() {
                 grid.write_string(
                     &format!("{}: {:?}", job_id, j),
                     text_unfocused.fg,
                     text_unfocused.bg,
                     text_unfocused.attrs,
-                    (set_y(upper_left!(area), y + 1), bottom_right!(area)),
+                    area.skip_rows(i + 1),
                     None,
                 );
-                y += 1;
             }
 
             context

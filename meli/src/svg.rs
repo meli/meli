@@ -51,7 +51,7 @@ impl Default for SVGScreenshotFilter {
 }
 
 impl Component for SVGScreenshotFilter {
-    fn draw(&mut self, _grid: &mut CellBuffer, _area: Area, context: &mut Context) {
+    fn draw(&mut self, _grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if !self.save_screenshot {
             return;
         }
@@ -89,7 +89,7 @@ impl Component for SVGScreenshotFilter {
 
         /* keep a map with used colors and write a stylesheet when we're done */
         let mut classes: BTreeMap<(u8, u8, u8), usize> = BTreeMap::new();
-        for (row_idx, row) in grid.bounds_iter(((0, 0), (width, height))).enumerate() {
+        for (row_idx, row) in grid.bounds_iter(area).enumerate() {
             text.clear();
             escaped_text.clear();
             /* Each row is a <g> group element, consisting of text elements */

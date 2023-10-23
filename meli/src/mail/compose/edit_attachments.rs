@@ -164,7 +164,7 @@ impl Component for EditAttachmentsRefMut<'_, '_> {
                             theme_default.fg,
                             bg,
                             theme_default.attrs,
-                            (pos_inc(upper_left!(area), (0, 1 + i)), bottom_right!(area)),
+                            (pos_inc(area.upper_left(), (0, 1 + i)), area.bottom_right()),
                             None,
                         );
                     } else {
@@ -178,7 +178,7 @@ impl Component for EditAttachmentsRefMut<'_, '_> {
                             theme_default.fg,
                             bg,
                             theme_default.attrs,
-                            (pos_inc(upper_left!(area), (0, 1 + i)), bottom_right!(area)),
+                            (pos_inc(area.upper_left(), (0, 1 + i)), area.bottom_right()),
                             None,
                         );
                     }
@@ -187,8 +187,8 @@ impl Component for EditAttachmentsRefMut<'_, '_> {
             self.inner.buttons.draw(
                 grid,
                 (
-                    pos_inc(upper_left!(area), (0, 1 + self.draft.attachments().len())),
-                    bottom_right!(area),
+                    pos_inc(area.upper_left(), (0, 1 + self.draft.attachments().len())),
+                    area.bottom_right(),
                 ),
                 context,
             );

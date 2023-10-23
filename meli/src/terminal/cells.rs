@@ -35,7 +35,7 @@ use melib::{
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use smallvec::SmallVec;
 
-use super::{position::*, Color};
+use super::{position::*, Area, Color, ScreenGeneration};
 use crate::{state::Context, ThemeAttribute};
 
 /// In a scroll region up and down cursor movements shift the region vertically.
@@ -73,6 +73,7 @@ pub struct CellBuffer {
     growable: bool,
     tag_table: HashMap<u64, FormatTag>,
     tag_associations: SmallVec<[(u64, (usize, usize)); 128]>,
+    pub(super) area: Area,
 }
 
 impl std::fmt::Debug for CellBuffer {
@@ -87,25 +88,39 @@ impl std::fmt::Debug for CellBuffer {
             .field("growable", &self.growable)
             .field("tag_table", &self.tag_table)
             .field("tag_associations", &self.tag_associations)
+            .field("area", &self.area)
+            .field("generation", &self.area.generation())
             .finish()
     }
 }
 
 impl CellBuffer {
-    pub const MAX_SIZE: usize = 300_000;
-    pub fn area(&self) -> Area {
-        (
-            (0, 0),
-            (self.cols.saturating_sub(1), self.rows.saturating_sub(1)),
-        )
+    pub const MAX_SIZE: usize = 1_000_000;
+
+    pub fn nil(area: Area) -> Self {
+        Self {
+            cols: 0,
+            rows: 0,
+            buf: vec![],
+            default_cell: Cell::new_default(),
+            growable: false,
+            ascii_drawing: false,
+            use_color: false,
+            tag_table: Default::default(),
+            tag_associations: SmallVec::new(),
+            area,
+        }
     }
+
     pub fn set_cols(&mut self, new_cols: usize) {
         self.cols = new_cols;
     }
 
     /// Constructs a new `CellBuffer` with the given number of columns and rows,
     /// using the given `cell` as a blank.
-    pub fn new(cols: usize, rows: usize, default_cell: Cell) -> Self {
+    pub fn new(default_cell: Cell, area: Area) -> Self {
+        let cols = area.width();
+        let rows = area.height();
         Self {
             cols,
             rows,
@@ -116,15 +131,11 @@ impl CellBuffer {
             use_color: true,
             tag_table: Default::default(),
             tag_associations: SmallVec::new(),
+            area,
         }
     }
 
-    pub fn new_with_context(
-        cols: usize,
-        rows: usize,
-        default_cell: Option<Cell>,
-        context: &Context,
-    ) -> Self {
+    pub fn new_with_context(default_cell: Option<Cell>, area: Area, context: &Context) -> Self {
         let default_cell = default_cell.unwrap_or_else(|| {
             let mut ret = Cell::default();
             let theme_default = crate::conf::value(context, "theme_default");
@@ -134,15 +145,9 @@ impl CellBuffer {
             ret
         });
         Self {
-            cols,
-            rows,
-            buf: vec![default_cell; cols * rows],
-            default_cell,
-            growable: false,
             ascii_drawing: context.settings.terminal.ascii_drawing,
             use_color: context.settings.terminal.use_color(),
-            tag_table: Default::default(),
-            tag_associations: SmallVec::new(),
+            ..Self::new(default_cell, area)
         }
     }
 
@@ -161,21 +166,45 @@ impl CellBuffer {
     /// Resizes `CellBuffer` to the given number of rows and columns, using the
     /// given `Cell` as a blank.
     #[must_use]
-    pub fn resize(&mut self, newcols: usize, newrows: usize, blank: Option<Cell>) -> bool {
+    pub(super) fn resize_with_context(
+        &mut self,
+        newcols: usize,
+        newrows: usize,
+        context: &Context,
+    ) -> bool {
+        self.default_cell = {
+            let mut ret = Cell::default();
+            let theme_default = crate::conf::value(context, "theme_default");
+            ret.set_fg(theme_default.fg)
+                .set_bg(theme_default.bg)
+                .set_attrs(theme_default.attrs);
+            ret
+        };
+        self.ascii_drawing = context.settings.terminal.ascii_drawing;
+        self.use_color = context.settings.terminal.use_color();
+
+        let newlen = newcols * newrows;
+        if (self.cols, self.rows) == (newcols, newrows) || newlen >= Self::MAX_SIZE {
+            return newlen < Self::MAX_SIZE;
+        }
+
+        self.buf = vec![self.default_cell; newlen];
+        self.cols = newcols;
+        self.rows = newrows;
+        true
+    }
+
+    /// Resizes `CellBuffer` to the given number of rows and columns, using the
+    /// given `Cell` as a blank.
+    #[must_use]
+    pub(super) fn resize(&mut self, newcols: usize, newrows: usize, blank: Option<Cell>) -> bool {
         let newlen = newcols * newrows;
         if (self.cols, self.rows) == (newcols, newrows) || newlen >= Self::MAX_SIZE {
             return newlen < Self::MAX_SIZE;
         }
 
         let blank = blank.unwrap_or(self.default_cell);
-        let mut newbuf: Vec<Cell> = Vec::with_capacity(newlen);
-        for y in 0..newrows {
-            for x in 0..newcols {
-                let cell = self.get(x, y).unwrap_or(&blank);
-                newbuf.push(*cell);
-            }
-        }
-        self.buf = newbuf;
+        self.buf = vec![blank; newlen];
         self.cols = newcols;
         self.rows = newrows;
         true
@@ -359,33 +388,44 @@ impl CellBuffer {
 
     /// See `BoundsIterator` documentation.
     pub fn bounds_iter(&self, area: Area) -> BoundsIterator {
+        debug_assert_eq!(self.generation(), area.generation());
+
         BoundsIterator {
-            width: width!(area),
-            height: height!(area),
-            rows: std::cmp::min(self.rows.saturating_sub(1), get_y(upper_left!(area)))
-                ..(std::cmp::min(self.rows, get_y(bottom_right!(area)) + 1)),
+            width: area.width(),
+            height: area.height(),
+            rows: std::cmp::min(self.rows.saturating_sub(1), get_y(area.upper_left()))
+                ..(std::cmp::min(self.rows, get_y(area.bottom_right()) + 1)),
             cols: (
-                std::cmp::min(self.cols.saturating_sub(1), get_x(upper_left!(area))),
-                std::cmp::min(self.cols, get_x(bottom_right!(area)) + 1),
+                std::cmp::min(self.cols.saturating_sub(1), get_x(area.upper_left())),
+                std::cmp::min(self.cols, get_x(area.bottom_right()) + 1),
             ),
+            area,
         }
     }
 
     /// See `RowIterator` documentation.
-    pub fn row_iter(&self, bounds: std::ops::Range<usize>, row: usize) -> RowIterator {
+    pub fn row_iter(
+        &self,
+        area: Area,
+        bounds: std::ops::Range<usize>,
+        relative_row: usize,
+    ) -> RowIterator {
+        debug_assert_eq!(self.generation(), area.generation());
+        if self.generation() != area.generation() {
+            return RowIterator::empty(self.generation());
+        }
+        let row = area.offset().1 + relative_row;
+
         if row < self.rows {
-            RowIterator {
-                row,
-                col: std::cmp::min(self.cols.saturating_sub(1), bounds.start)
-                    ..(std::cmp::min(self.cols, bounds.end)),
-                _width: bounds.len(),
-            }
+            let col = std::cmp::min(self.cols.saturating_sub(1), area.offset().0 + bounds.start)
+                ..(std::cmp::min(self.cols, area.offset().0 + bounds.end));
+            let area = area
+                .nth_row(relative_row)
+                .skip_cols(bounds.start)
+                .take_cols(bounds.len());
+            RowIterator { row, col, area }
         } else {
-            RowIterator {
-                row,
-                col: 0..0,
-                _width: 0,
-            }
+            RowIterator::empty(self.generation())
         }
     }
 
@@ -435,207 +475,98 @@ impl CellBuffer {
         }
     }
 
-    /// Write an `&str` to a `CellBuffer` in a specified `Area` with the passed
-    /// colors.
-    pub fn write_string(
-        &mut self,
-        s: &str,
-        fg_color: Color,
-        bg_color: Color,
-        attrs: Attr,
-        area: Area,
-        // The left-most x coordinate.
-        line_break: Option<usize>,
-    ) -> Pos {
-        macro_rules! inspect_bounds {
-            ($grid:ident, $area:ident, $x: ident, $y: ident, $line_break:ident) => {
-                let bounds = $grid.size();
-                let (upper_left, bottom_right) = $area;
-                if $x > (get_x(bottom_right)) || $x >= get_x(bounds) {
-                    if $grid.growable {
-                        if !$grid.resize(std::cmp::max($x + 1, $grid.cols), $grid.rows, None) {
-                            break;
-                        };
-                    } else {
-                        $x = get_x(upper_left);
-                        $y += 1;
-                        if let Some(_x) = $line_break {
-                            $x = _x;
-                        } else {
-                            break;
-                        }
-                    }
-                }
-                if $y > (get_y(bottom_right)) || $y >= get_y(bounds) {
-                    if $grid.growable {
-                        if !$grid.resize($grid.cols, std::cmp::max($y + 1, $grid.rows), None) {
-                            break;
-                        };
-                    } else {
-                        return ($x, $y - 1);
-                    }
-                }
-            };
-        }
-
-        let mut bounds = self.size();
-        let upper_left = upper_left!(area);
-        let bottom_right = bottom_right!(area);
-        let (mut x, mut y) = upper_left;
-        if y == get_y(bounds) || x == get_x(bounds) {
-            if self.growable {
-                if !self.resize(
-                    std::cmp::max(self.cols, x + 2),
-                    std::cmp::max(self.rows, y + 2),
-                    None,
-                ) {
-                    return (x, y);
-                }
-                bounds = self.size();
-            } else {
-                return (x, y);
-            }
-        }
-
-        if y > (get_y(bottom_right))
-            || x > get_x(bottom_right)
-            || y > get_y(bounds)
-            || x > get_x(bounds)
-        {
-            if self.growable {
-                if !self.resize(
-                    std::cmp::max(self.cols, x + 2),
-                    std::cmp::max(self.rows, y + 2),
-                    None,
-                ) {
-                    return (x, y);
-                }
-            } else {
-                log::debug!(" Invalid area with string {} and area {:?}", s, area);
-                return (x, y);
-            }
-        }
-        for c in s.chars() {
-            inspect_bounds!(self, area, x, y, line_break);
-            if c == '\r' {
-                continue;
-            }
-            if c == '\n' {
-                y += 1;
-                if let Some(_x) = line_break {
-                    x = _x;
-                    inspect_bounds!(self, area, x, y, line_break);
-                    continue;
-                } else {
-                    break;
-                }
-            }
-            if c == '\t' {
-                self[(x, y)].set_ch(' ');
-                x += 1;
-                inspect_bounds!(self, area, x, y, line_break);
-                self[(x, y)].set_ch(' ');
-            } else {
-                self[(x, y)].set_ch(c);
-            }
-            self[(x, y)]
-                .set_fg(fg_color)
-                .set_bg(bg_color)
-                .set_attrs(attrs);
-
-            match wcwidth(u32::from(c)) {
-                Some(0) | None => {
-                    /* Skip drawing zero width characters */
-                    self[(x, y)].empty = true;
-                }
-                Some(2) => {
-                    /* Grapheme takes more than one column, so the next cell will be
-                     * drawn over. Set it as empty to skip drawing it. */
-                    x += 1;
-                    inspect_bounds!(self, area, x, y, line_break);
-                    self[(x, y)] = Cell::default();
-                    self[(x, y)]
-                        .set_fg(fg_color)
-                        .set_bg(bg_color)
-                        .set_attrs(attrs)
-                        .set_empty(true);
-                }
-                _ => {}
-            }
-            x += 1;
-        }
-        (x, y)
+    #[inline(always)]
+    pub fn generation(&self) -> ScreenGeneration {
+        self.area.generation()
     }
 
-    pub fn copy_area_with_break(&mut self, grid_src: &Self, dest: Area, src: Area) -> Pos {
-        if !is_valid_area!(dest) || !is_valid_area!(src) {
-            log::debug!(
-                "BUG: Invalid areas in copy_area:\n src: {:?}\n dest: {:?}",
-                src,
-                dest
-            );
-            return upper_left!(dest);
-        }
-
-        if grid_src.is_empty() || self.is_empty() {
-            return upper_left!(dest);
-        }
-
-        let mut ret = bottom_right!(dest);
-        let mut src_x = get_x(upper_left!(src));
-        let mut src_y = get_y(upper_left!(src));
-
-        'y_: for y in get_y(upper_left!(dest))..=get_y(bottom_right!(dest)) {
-            'x_: for x in get_x(upper_left!(dest))..=get_x(bottom_right!(dest)) {
-                if grid_src[(src_x, src_y)].ch() == '\n' {
-                    src_y += 1;
-                    src_x = 0;
-                    if src_y >= get_y(bottom_right!(src)) {
-                        ret.1 = y;
-                        break 'y_;
-                    }
-                    continue 'y_;
-                }
-
-                self[(x, y)] = grid_src[(src_x, src_y)];
-                src_x += 1;
-                if src_x >= get_x(bottom_right!(src)) {
-                    src_y += 1;
-                    src_x = 0;
-                    if src_y >= get_y(bottom_right!(src)) {
-                        //clear_area(self, ((get_x(upper_left!(dest)), y), bottom_right!(dest)));
-                        ret.1 = y;
-                        break 'y_;
-                    }
-                    break 'x_;
-                }
+    /// Completely clear an `Area` with an empty char and the terminal's default
+    /// colors.
+    pub fn clear_area(&mut self, area: Area, attributes: ThemeAttribute) {
+        for row in self.bounds_iter(area) {
+            for c in row {
+                self[c] = Cell::default();
+                self[c]
+                    .set_fg(attributes.fg)
+                    .set_bg(attributes.bg)
+                    .set_attrs(attributes.attrs);
             }
         }
-        ret
+    }
+
+    /// Change foreground and background colors in an `Area`
+    pub fn change_colors(&mut self, area: Area, fg_color: Color, bg_color: Color) {
+        if cfg!(feature = "debug-tracing") {
+            let bounds = self.size();
+            let upper_left = area.upper_left();
+            let bottom_right = area.bottom_right();
+            let (x, y) = upper_left;
+            if y > (get_y(bottom_right))
+                || x > get_x(bottom_right)
+                || y >= get_y(bounds)
+                || x >= get_x(bounds)
+            {
+                log::debug!("BUG: Invalid area in change_colors:\n area: {:?}", area);
+                return;
+            }
+        }
+        for row in self.bounds_iter(area) {
+            for c in row {
+                self[c].set_fg(fg_color).set_bg(bg_color);
+            }
+        }
+    }
+
+    /// Change [`ThemeAttribute`] in an `Area`
+    pub fn change_theme(&mut self, area: Area, theme: ThemeAttribute) {
+        if cfg!(feature = "debug-tracing") {
+            let bounds = self.size();
+            let upper_left = area.upper_left();
+            let bottom_right = area.bottom_right();
+            let (x, y) = upper_left;
+            if y > (get_y(bottom_right))
+                || x > get_x(bottom_right)
+                || y >= get_y(bounds)
+                || x >= get_x(bounds)
+            {
+                log::debug!("BUG: Invalid area in change_theme:\n area: {:?}", area);
+                return;
+            }
+        }
+        for row in self.bounds_iter(area) {
+            for c in row {
+                self[c]
+                    .set_fg(theme.fg)
+                    .set_bg(theme.bg)
+                    .set_attrs(theme.attrs);
+            }
+        }
     }
 
     /// Copy a source `Area` to a destination.
     pub fn copy_area(&mut self, grid_src: &Self, dest: Area, src: Area) -> Pos {
-        if !is_valid_area!(dest) || !is_valid_area!(src) {
+        debug_assert_eq!(self.generation(), dest.generation());
+        debug_assert_eq!(grid_src.generation(), src.generation());
+        if self.generation() != dest.generation() || grid_src.generation() != src.generation() {
             log::debug!(
                 "BUG: Invalid areas in copy_area:\n src: {:?}\n dest: {:?}",
                 src,
                 dest
             );
-            return upper_left!(dest);
+            return dest.upper_left();
         }
 
         if grid_src.is_empty() || self.is_empty() {
-            return upper_left!(dest);
+            return dest.upper_left();
         }
 
-        let mut ret = bottom_right!(dest);
-        let mut src_x = get_x(upper_left!(src));
-        let mut src_y = get_y(upper_left!(src));
+        let mut ret = dest.bottom_right();
+        let mut src_x = get_x(src.upper_left());
+        let mut src_y = get_y(src.upper_left());
         let (cols, rows) = grid_src.size();
         if src_x >= cols || src_y >= rows {
             log::debug!("BUG: src area outside of grid_src in copy_area",);
-            return upper_left!(dest);
+            return dest.upper_left();
         }
 
         let tag_associations = grid_src.tag_associations();
@@ -645,8 +576,8 @@ impl CellBuffer {
             .unwrap_or_else(|i| i);
         let mut stack: std::collections::BTreeSet<&FormatTag> =
             std::collections::BTreeSet::default();
-        for y in get_y(upper_left!(dest))..=get_y(bottom_right!(dest)) {
-            'for_x: for x in get_x(upper_left!(dest))..=get_x(bottom_right!(dest)) {
+        for y in get_y(dest.upper_left())..=get_y(dest.bottom_right()) {
+            'for_x: for x in get_x(dest.upper_left())..=get_x(dest.bottom_right()) {
                 let idx = grid_src.pos_to_index(src_x, src_y).unwrap();
                 while tag_offset < tag_associations.len() && tag_associations[tag_offset].0 <= idx {
                     if tag_associations[tag_offset].2 {
@@ -669,17 +600,15 @@ impl CellBuffer {
                         self[(x, y)].set_keep_attrs(true);
                     }
                 }
-                if src_x >= get_x(bottom_right!(src)) {
+                if src_x >= get_x(src.bottom_right()) {
                     break 'for_x;
                 }
                 src_x += 1;
             }
-            src_x = get_x(upper_left!(src));
+            src_x = get_x(src.upper_left());
             src_y += 1;
-            if src_y > get_y(bottom_right!(src)) {
-                for row in
-                    self.bounds_iter(((get_x(upper_left!(dest)), y + 1), bottom_right!(dest)))
-                {
+            if src_y > get_y(src.bottom_right()) {
+                for row in self.bounds_iter(dest.skip_rows(y + 1 - get_y(dest.upper_left()))) {
                     for c in row {
                         self[c].set_ch(' ');
                     }
@@ -691,78 +620,135 @@ impl CellBuffer {
         ret
     }
 
-    /// Change foreground and background colors in an `Area`
-    pub fn change_colors(&mut self, area: Area, fg_color: Color, bg_color: Color) {
-        if cfg!(feature = "debug-tracing") {
-            let bounds = self.size();
-            let upper_left = upper_left!(area);
-            let bottom_right = bottom_right!(area);
-            let (x, y) = upper_left;
-            if y > (get_y(bottom_right))
-                || x > get_x(bottom_right)
-                || y >= get_y(bounds)
-                || x >= get_x(bounds)
-            {
-                log::debug!("BUG: Invalid area in change_colors:\n area: {:?}", area);
-                return;
-            }
-            if !is_valid_area!(area) {
-                log::debug!("BUG: Invalid area in change_colors:\n area: {:?}", area);
-                return;
-            }
-        }
-        for row in self.bounds_iter(area) {
-            for c in row {
-                self[c].set_fg(fg_color).set_bg(bg_color);
-            }
-        }
-    }
-
-    /// Change [`ThemeAttribute`] in an `Area`
-    pub fn change_theme(&mut self, area: Area, theme: ThemeAttribute) {
-        if cfg!(feature = "debug-tracing") {
-            let bounds = self.size();
-            let upper_left = upper_left!(area);
-            let bottom_right = bottom_right!(area);
-            let (x, y) = upper_left;
-            if y > (get_y(bottom_right))
-                || x > get_x(bottom_right)
-                || y >= get_y(bounds)
-                || x >= get_x(bounds)
-            {
-                log::debug!("BUG: Invalid area in change_theme:\n area: {:?}", area);
-                return;
-            }
-            if !is_valid_area!(area) {
-                log::debug!("BUG: Invalid area in change_theme:\n area: {:?}", area);
-                return;
-            }
-        }
-        for row in self.bounds_iter(area) {
-            for c in row {
-                self[c]
-                    .set_fg(theme.fg)
-                    .set_bg(theme.bg)
-                    .set_attrs(theme.attrs);
-            }
-        }
-    }
-
-    /// Completely clear an `Area` with an empty char and the terminal's default
+    /// Write an `&str` to a `CellBuffer` in a specified `Area` with the passed
     /// colors.
-    pub fn clear_area(&mut self, area: Area, attributes: ThemeAttribute) {
-        if !is_valid_area!(area) {
-            return;
+    pub fn write_string(
+        &mut self,
+        s: &str,
+        fg_color: Color,
+        bg_color: Color,
+        attrs: Attr,
+        area: Area,
+        // The left-most x coordinate.
+        line_break: Option<usize>,
+    ) -> Pos {
+        debug_assert_eq!(area.generation(), self.generation());
+        if area.generation() != self.generation() {
+            // [ref:TODO] log error
+            return (0, 0);
         }
-        for row in self.bounds_iter(area) {
-            for c in row {
-                self[c] = Cell::default();
-                self[c]
-                    .set_fg(attributes.fg)
-                    .set_bg(attributes.bg)
-                    .set_attrs(attributes.attrs);
+        let mut bounds = self.size();
+        let upper_left = area.upper_left();
+        let bottom_right = area.bottom_right();
+        let (mut x, mut y) = upper_left;
+        if y == get_y(bounds) || x == get_x(bounds) {
+            if self.growable {
+                if !self.resize(
+                    std::cmp::max(self.cols, x + 2),
+                    std::cmp::max(self.rows, y + 2),
+                    None,
+                ) {
+                    return (x - upper_left.0, y - upper_left.1);
+                }
+                bounds = self.size();
+            } else {
+                return (x - upper_left.0, y - upper_left.1);
             }
         }
+
+        if y > (get_y(bottom_right))
+            || x > get_x(bottom_right)
+            || y > get_y(bounds)
+            || x > get_x(bounds)
+        {
+            if self.growable {
+                if !self.resize(
+                    std::cmp::max(self.cols, x + 2),
+                    std::cmp::max(self.rows, y + 2),
+                    None,
+                ) {
+                    return (x - upper_left.0, y - upper_left.1);
+                }
+            } else {
+                log::debug!(" Invalid area with string {} and area {:?}", s, area);
+                return (x - upper_left.0, y - upper_left.1);
+            }
+        }
+        for c in s.chars() {
+            if c == '\r' {
+                continue;
+            }
+            if c == '\n' {
+                y += 1;
+                if let Some(_x) = line_break {
+                    x = _x + get_x(upper_left);
+                    continue;
+                } else {
+                    break;
+                }
+            }
+            if y > get_y(bottom_right)
+                || x > get_x(bottom_right)
+                || y > get_y(bounds)
+                || x > get_x(bounds)
+            {
+                if let Some(_x) = line_break {
+                    if !(y > get_y(bottom_right) || y > get_y(bounds)) {
+                        x = _x + get_x(upper_left);
+                        y += 1;
+                        continue;
+                    }
+                }
+                break;
+            }
+            if c == '\t' {
+                self[(x, y)].set_ch(' ');
+                x += 1;
+                if let Some(c) = self.get_mut(x, y) {
+                    c.set_ch(' ');
+                } else if let Some(_x) = line_break {
+                    if !(y > get_y(bottom_right) || y > get_y(bounds)) {
+                        x = _x + get_x(upper_left);
+                        y += 1;
+                        continue;
+                    } else {
+                        break;
+                    }
+                }
+            } else {
+                self[(x, y)].set_ch(c);
+            }
+            self[(x, y)]
+                .set_fg(fg_color)
+                .set_bg(bg_color)
+                .set_attrs(attrs);
+
+            match wcwidth(u32::from(c)) {
+                Some(0) | None => {
+                    /* Skip drawing zero width characters */
+                    self[(x, y)].empty = true;
+                }
+                Some(2) => {
+                    /* Grapheme takes more than one column, so the next cell will be
+                     * drawn over. Set it as empty to skip drawing it. */
+                    x += 1;
+                    self[(x, y)] = Cell::default();
+                    self[(x, y)]
+                        .set_fg(fg_color)
+                        .set_bg(bg_color)
+                        .set_attrs(attrs)
+                        .set_empty(true);
+                }
+                _ => {}
+            }
+            x += 1;
+        }
+        (x - upper_left.0, y - upper_left.1)
+    }
+
+    #[inline]
+    pub const fn area(&self) -> Area {
+        self.area
     }
 }
 
@@ -793,14 +779,6 @@ impl IndexMut<Pos> for CellBuffer {
     fn index_mut(&mut self, index: Pos) -> &mut Cell {
         let (x, y) = index;
         self.get_mut(x, y).expect("index out of bounds")
-    }
-}
-
-impl Default for CellBuffer {
-    /// Constructs a new `CellBuffer` with a size of `(0, 0)`, using the default
-    /// `Cell` as a blank.
-    fn default() -> Self {
-        Self::new(0, 0, Cell::default())
     }
 }
 
@@ -851,7 +829,7 @@ impl Cell {
     /// assert_eq!(cell.bg(), Color::Green);
     /// assert_eq!(cell.attrs(), Attr::DEFAULT);
     /// ```
-    pub fn new(ch: char, fg: Color, bg: Color, attrs: Attr) -> Self {
+    pub const fn new(ch: char, fg: Color, bg: Color, attrs: Attr) -> Self {
         Self {
             ch,
             fg,
@@ -862,6 +840,10 @@ impl Cell {
             keep_bg: false,
             keep_attrs: false,
         }
+    }
+
+    pub const fn new_default() -> Self {
+        Self::new(' ', Color::Default, Color::Default, Attr::DEFAULT)
     }
 
     /// Creates a new `Cell` with the given `char` and default style.
@@ -1279,127 +1261,137 @@ impl Attr {
     }
 }
 
-/// Use `RowIterator` to iterate the cells of a row without the need to do any
+/// Use [`RowIterator`] to iterate the cells of a row without the need to do any
 /// bounds checking; the iterator will simply return `None` when it reaches the
-/// end of the row. `RowIterator` can be created via the `CellBuffer::row_iter`
-/// method and can be returned by `BoundsIterator` which iterates each row.
-/// ```no_run
-/// # let mut grid = meli::CellBuffer::new(1, 1, meli::Cell::default());
-/// # let x = 0;
-/// for c in grid.row_iter(x..(x + 11), 0) {
-///     grid[c].set_ch('w');
+/// end of the row. [`RowIterator`] can be created via the
+/// [`CellBuffer::row_iter`] method and can be returned by [`BoundsIterator`]
+/// which iterates each row.
+///
+/// ```rust,no_run
+/// # use meli::terminal::{Screen, Virtual, Area};
+/// # let mut screen = Screen::<Virtual>::new();
+/// # assert!(screen.resize(120, 20));
+/// # let area = screen.area();
+/// for c in screen.grid().row_iter(area, 0..area.width(), 2) {
+///     screen.grid_mut()[c].set_ch('g');
 /// }
 /// ```
 #[derive(Debug)]
 pub struct RowIterator {
     row: usize,
-    _width: usize,
     col: std::ops::Range<usize>,
+    area: Area,
 }
 
-/// `BoundsIterator` iterates each row returning a `RowIterator`.
-/// ```no_run
-/// # let mut grid = meli::CellBuffer::new(1, 1, meli::Cell::default());
-/// # let area = ((0, 0), (1, 1));
-/// /* Visit each `Cell` in `area`. */
-/// for row in grid.bounds_iter(area) {
+/// [`BoundsIterator`] iterates each row returning a [`RowIterator`].
+///
+/// ```rust,no_run
+/// # use meli::terminal::{Screen, Virtual, Area};
+/// # let mut screen = Screen::<Virtual>::new();
+/// # assert!(screen.resize(120, 20));
+/// # let area = screen.area();
+/// for row in screen.grid().bounds_iter(area) {
 ///     for c in row {
-///         grid[c].set_ch('w');
+///         screen.grid_mut()[c].set_ch('g');
 ///     }
 /// }
 /// ```
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct BoundsIterator {
     rows: std::ops::Range<usize>,
-    pub width: usize,
-    pub height: usize,
     cols: (usize, usize),
+    width: usize,
+    height: usize,
+    area: Area,
+}
+
+impl std::fmt::Debug for BoundsIterator {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        f.debug_struct(stringify!(BoundsIterator))
+            .field("rows", &self.rows)
+            .field("cols", &self.cols)
+            .field("width", &self.width)
+            .field("height", &self.height)
+            .field("is_empty", &self.is_empty())
+            .field("bounds_area", &self.area)
+            .finish()
+    }
 }
 
 impl BoundsIterator {
-    const EMPTY: Self = BoundsIterator {
-        rows: 0..0,
-        width: 0,
-        height: 0,
-        cols: (0, 0),
-    };
-
+    #[inline]
     pub fn area(&self) -> Area {
-        (
-            (self.cols.0, self.rows.start),
-            (
-                std::cmp::max(self.cols.0, self.cols.1.saturating_sub(1)),
-                std::cmp::max(self.rows.start, self.rows.end.saturating_sub(1)),
-            ),
-        )
+        self.area
     }
 
+    #[inline]
+    pub fn width(&self) -> usize {
+        self.width
+    }
+
+    #[inline]
+    pub fn height(&self) -> usize {
+        self.height
+    }
+
+    #[inline]
     pub fn is_empty(&self) -> bool {
-        self.width == 0 || self.height == 0 || self.rows.len() == 0
+        self.area.is_empty() || self.width == 0 || self.height == 0 || self.rows.len() == 0
     }
 
-    pub fn add_x(&mut self, x: usize) -> Self {
+    pub fn add_x(&mut self, x: usize) {
         if x == 0 {
-            return Self::EMPTY;
+            return;
         }
 
-        let ret = Self {
-            rows: self.rows.clone(),
-            width: self.width.saturating_sub(x),
-            height: self.height,
-            cols: self.cols,
-        };
-        if self.cols.0 + x < self.cols.1 && self.width > x {
-            self.cols.0 += x;
-            self.width -= x;
-            return ret;
-        }
-        *self = Self::EMPTY;
-        ret
+        self.width = self.width.saturating_sub(x);
+        self.cols.0 += x;
+        self.cols.0 = self.cols.0.min(self.cols.1);
+        self.area = self.area.skip_cols(x);
     }
 }
 
 impl Iterator for BoundsIterator {
     type Item = RowIterator;
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(next_row) = self.rows.next() {
-            Some(RowIterator {
-                row: next_row,
-                _width: self.width,
-                col: self.cols.0..self.cols.1,
-            })
-        } else {
-            None
-        }
+        let row = self.rows.next()?;
+        let area = self.area.nth_row(0);
+        self.area = self.area.skip_rows(1);
+        self.height = self.area.height();
+        Some(RowIterator {
+            row,
+            col: self.cols.0..self.cols.1,
+            area,
+        })
     }
 }
 
 impl Iterator for RowIterator {
     type Item = (usize, usize);
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(next_col) = self.col.next() {
-            Some((next_col, self.row))
-        } else {
-            None
-        }
+        let x = self.col.next()?;
+        self.area = self.area.skip_cols(1);
+        Some((x, self.row))
     }
 }
 
 impl RowIterator {
-    pub fn forward_col(mut self, new_val: usize) -> Self {
-        if self.col.start > new_val {
-            self
-        } else if self.col.end <= new_val {
-            self.col.start = self.col.end;
-            self
-        } else {
-            self.col.start = new_val;
-            self
-        }
+    #[inline]
+    pub const fn area(&self) -> Area {
+        self.area
     }
 
-    pub fn area(&self) -> Area {
-        ((self.col.start, self.row), (self.col.end, self.row))
+    #[inline]
+    pub const fn row_index(&self) -> usize {
+        self.row
+    }
+
+    pub const fn empty(generation: ScreenGeneration) -> Self {
+        Self {
+            row: 0,
+            col: 0..0,
+            area: Area::new_empty(generation),
+        }
     }
 }
 
@@ -1689,11 +1681,9 @@ pub mod boundaries {
     /// Puts boundaries in `area`.
     /// Returns the inner area of the created box.
     pub fn create_box(grid: &mut CellBuffer, area: Area) -> Area {
-        if !is_valid_area!(area) {
-            return ((0, 0), (0, 0));
-        }
-        let upper_left = upper_left!(area);
-        let bottom_right = bottom_right!(area);
+        debug_assert_eq!(grid.generation(), area.generation());
+        let upper_left = area.upper_left();
+        let bottom_right = area.bottom_right();
 
         if !grid.ascii_drawing {
             for x in get_x(upper_left)..get_x(bottom_right) {
@@ -1719,28 +1709,7 @@ pub mod boundaries {
             set_and_join_box(grid, bottom_right, BoxBoundary::Vertical);
         }
 
-        (
-            (
-                std::cmp::min(
-                    get_x(upper_left) + 2,
-                    std::cmp::min(get_x(upper_left) + 1, get_x(bottom_right)),
-                ),
-                std::cmp::min(
-                    get_y(upper_left) + 2,
-                    std::cmp::min(get_y(upper_left) + 1, get_y(bottom_right)),
-                ),
-            ),
-            (
-                std::cmp::max(
-                    get_x(bottom_right).saturating_sub(2),
-                    std::cmp::max(get_x(bottom_right).saturating_sub(1), get_x(upper_left)),
-                ),
-                std::cmp::max(
-                    get_y(bottom_right).saturating_sub(2),
-                    std::cmp::max(get_y(bottom_right).saturating_sub(1), get_y(upper_left)),
-                ),
-            ),
-        )
+        area.skip(1, 1).skip_rows_from_end(1).skip_cols_from_end(1)
     }
 }
 
@@ -1833,34 +1802,96 @@ pub enum WidgetWidth {
 
 #[cfg(test)]
 mod tests {
-    use melib::text_processing::{Reflow, TextProcessing, _ALICE_CHAPTER_1};
+    use crate::terminal::{Screen, Virtual};
 
-    use super::*;
+    //use melib::text_processing::{Reflow, TextProcessing, _ALICE_CHAPTER_1};
 
     #[test]
     fn test_cellbuffer_search() {
-        let lines: Vec<String> = _ALICE_CHAPTER_1.split_lines_reflow(Reflow::All, Some(78));
-        let mut buf = CellBuffer::new(
-            lines.iter().map(String::len).max().unwrap(),
-            lines.len(),
-            Cell::with_char(' '),
-        );
-        let width = buf.size().0;
-        for (i, l) in lines.iter().enumerate() {
-            buf.write_string(
-                l,
-                Color::Default,
-                Color::Default,
-                Attr::DEFAULT,
-                ((0, i), (width.saturating_sub(1), i)),
-                None,
-            );
-        }
-        for ind in buf.kmp_search("Alice") {
-            for c in &buf.cellvec()[ind..std::cmp::min(buf.cellvec().len(), ind + 25)] {
-                print!("{}", c.ch());
+        //let lines: Vec<String> =
+        // _ALICE_CHAPTER_1.split_lines_reflow(Reflow::All, Some(78));
+        // let mut buf = CellBuffer::new(
+        //    lines.iter().map(String::len).max().unwrap(),
+        //    lines.len(),
+        //    Cell::with_char(' '),
+        //);
+        //let width = buf.size().0;
+        //for (i, l) in lines.iter().enumerate() {
+        //    buf.write_string(
+        //        l,
+        //        Color::Default,
+        //        Color::Default,
+        //        Attr::DEFAULT,
+        //        ((0, i), (width.saturating_sub(1), i)),
+        //        None,
+        //    );
+        //}
+        //for ind in buf.kmp_search("Alice") {
+        //    for c in &buf.cellvec()[ind..std::cmp::min(buf.cellvec().len(),
+        // ind + 25)] {        print!("{}", c.ch());
+        //    }
+        //    println!();
+        //}
+    }
+
+    #[test]
+    fn test_bounds_iter() {
+        let mut screen = Screen::<Virtual>::new();
+        assert!(screen.resize(120, 20));
+        let area = screen.area();
+        assert_eq!(area.width(), 120);
+        assert_eq!(area.height(), 20);
+
+        let mut full_bounds = screen.grid().bounds_iter(area);
+        assert_eq!(full_bounds.area(), area);
+        assert_eq!(full_bounds.width(), area.width());
+        assert_eq!(full_bounds.height(), area.height());
+        assert!(!full_bounds.is_empty());
+
+        full_bounds.add_x(0);
+        assert_eq!(full_bounds.area(), area);
+
+        full_bounds.add_x(1);
+        assert_eq!(full_bounds.area().width(), area.width() - 1);
+        full_bounds.add_x(area.width());
+        assert_eq!(full_bounds.width(), 0);
+        assert_eq!(full_bounds.area().width(), 0);
+
+        let full_bounds = screen.grid().bounds_iter(area);
+        let row_iters = full_bounds.into_iter().collect::<Vec<_>>();
+        assert_eq!(row_iters.len(), area.height());
+
+        for mid in 0..row_iters.len() {
+            assert_eq!(mid, row_iters[mid].row_index());
+            let (left, right) = row_iters.as_slice().split_at(mid);
+            let mid = &right[0];
+            assert!(area.contains(mid.area()));
+            for l in left {
+                assert!(area.contains(l.area()));
+                assert!(!mid.area().contains(l.area()));
             }
-            println!();
+            for r in &right[1..] {
+                assert!(area.contains(r.area()));
+                assert!(!mid.area().contains(r.area()));
+            }
+        }
+
+        let inner_area = area.place_inside((60, 10), true, true);
+        let bounds = screen.grid().bounds_iter(inner_area);
+        let row_iters = bounds.into_iter().collect::<Vec<_>>();
+        assert_eq!(row_iters.len(), inner_area.height());
+
+        for mut row in row_iters {
+            let row_index = row.row_index();
+            assert_eq!(row.area().width(), 61);
+            assert_eq!(row.next(), Some((2, row_index)));
+            assert_eq!(row.area().width(), 60);
+            assert_eq!(
+                &row.collect::<Vec<(usize, usize)>>(),
+                &(3..63)
+                    .zip(std::iter::repeat(row_index))
+                    .collect::<Vec<(usize, usize)>>()
+            );
         }
     }
 }

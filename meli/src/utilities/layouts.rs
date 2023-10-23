@@ -62,11 +62,8 @@ impl HSplit {
 
 impl Component for HSplit {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        if !is_valid_area!(area) {
-            return;
-        }
-        let upper_left = upper_left!(area);
-        let bottom_right = bottom_right!(area);
+        let upper_left = area.upper_left();
+        let bottom_right = area.bottom_right();
         let total_rows = get_y(bottom_right) - get_y(upper_left);
         let bottom_component_height = (self.ratio * total_rows) / 100;
         let mid = get_y(upper_left) + total_rows - bottom_component_height;
@@ -157,11 +154,8 @@ impl VSplit {
 
 impl Component for VSplit {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        if !is_valid_area!(area) {
-            return;
-        }
-        let upper_left = upper_left!(area);
-        let bottom_right = bottom_right!(area);
+        let upper_left = area.upper_left();
+        let bottom_right = area.bottom_right();
         let total_cols = get_x(bottom_right) - get_x(upper_left);
         let visibility = (self.left.is_visible(), self.right.is_visible());
         if visibility != self.prev_visibility {

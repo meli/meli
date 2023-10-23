@@ -273,7 +273,7 @@ impl MailboxManager {
                 if idx >= self.length {
                     continue; //bounds check
                 }
-                let new_area = nth_row_area(area, idx % rows);
+                let new_area = area.nth_row(idx % rows);
                 self.data_columns
                     .draw(grid, idx, self.cursor_pos, grid.bounds_iter(new_area));
                 let row_attr = if highlight {
@@ -295,18 +295,14 @@ impl MailboxManager {
         /* Page_no has changed, so draw new page */
         _ = self
             .data_columns
-            .recalc_widths((width!(area), height!(area)), top_idx);
+            .recalc_widths((area.width(), area.height()), top_idx);
         grid.clear_area(area, self.theme_default);
         /* copy table columns */
         self.data_columns
             .draw(grid, top_idx, self.cursor_pos, grid.bounds_iter(area));
 
         /* highlight cursor */
-
-        grid.change_theme(
-            nth_row_area(area, self.cursor_pos % rows),
-            self.highlight_theme,
-        );
+        grid.change_theme(area.nth_row(self.cursor_pos % rows), self.highlight_theme);
 
         /* clear gap if available height is more than count of entries */
         if top_idx + rows > self.length {
