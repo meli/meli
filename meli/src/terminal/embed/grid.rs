@@ -659,8 +659,8 @@ impl EmbedGrid {
             (b'J', State::Csi) => {
                 /* Erase in Display (ED), VT100. */
                 /* Erase Below (default). */
-                clear_area(
-                    grid,
+
+                grid.clear_area(
                     (
                         (
                             0,
@@ -757,8 +757,8 @@ impl EmbedGrid {
                     }
                 }
                 //log::trace!("{}", EscCode::from((&(*state), byte)));
-                clear_area(
-                    grid,
+
+                grid.clear_area(
                     ((0, 0), pos_dec(*terminal_size, (1, 1))),
                     Default::default(),
                 );
@@ -767,8 +767,8 @@ impl EmbedGrid {
             (b'J', State::Csi1(ref buf)) if buf.as_ref() == b"0" => {
                 /* Erase in Display (ED), VT100. */
                 /* Erase Below (default). */
-                clear_area(
-                    grid,
+
+                grid.clear_area(
                     (
                         (
                             0,
@@ -790,8 +790,8 @@ impl EmbedGrid {
             (b'J', State::Csi1(ref buf)) if buf.as_ref() == b"1" => {
                 /* Erase in Display (ED), VT100. */
                 /* Erase Above */
-                clear_area(
-                    grid,
+
+                grid.clear_area(
                     (
                         (0, 0),
                         (
@@ -807,8 +807,8 @@ impl EmbedGrid {
             (b'J', State::Csi1(ref buf)) if buf.as_ref() == b"2" => {
                 /* Erase in Display (ED), VT100. */
                 /* Erase All */
-                clear_area(
-                    grid,
+
+                grid.clear_area(
                     ((0, 0), pos_dec(*terminal_size, (1, 1))),
                     Default::default(),
                 );

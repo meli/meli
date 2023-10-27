@@ -680,8 +680,7 @@ impl ListingTrait for CompactListing {
                 .set_attrs(row_attr.attrs);
         }
 
-        copy_area(
-            grid,
+        grid.copy_area(
             &self.data_columns.columns[3],
             (set_x(upper_left, x), bottom_right),
             (
@@ -709,9 +708,9 @@ impl ListingTrait for CompactListing {
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
         if self.length == 0 {
-            clear_area(grid, area, self.color_cache.theme_default);
-            copy_area(
-                grid,
+            grid.clear_area(area, self.color_cache.theme_default);
+
+            grid.copy_area(
                 &self.data_columns.columns[0],
                 area,
                 ((0, 0), pos_dec(self.data_columns.columns[0].size(), (1, 1))),
@@ -779,9 +778,9 @@ impl ListingTrait for CompactListing {
                     .draw(grid, idx, self.cursor_pos.2, grid.bounds_iter(new_area));
                 if highlight {
                     let row_attr = row_attr!(self.color_cache, idx % 2 == 0, false, true, false);
-                    change_theme(grid, new_area, row_attr);
+                    grid.change_theme(new_area, row_attr);
                 } else if let Some(row_attr) = self.rows.row_attr_cache.get(&idx) {
-                    change_theme(grid, new_area, *row_attr);
+                    grid.change_theme(new_area, *row_attr);
                 }
                 context.dirty_areas.push_back(new_area);
             }
@@ -800,14 +799,14 @@ impl ListingTrait for CompactListing {
         _ = self
             .data_columns
             .recalc_widths((width!(area), height!(area)), top_idx);
-        clear_area(grid, area, self.color_cache.theme_default);
+        grid.clear_area(area, self.color_cache.theme_default);
         /* copy table columns */
         self.data_columns
             .draw(grid, top_idx, self.cursor_pos.2, grid.bounds_iter(area));
         /* apply each row colors separately */
         for i in top_idx..(top_idx + height!(area)) {
             if let Some(row_attr) = self.rows.row_attr_cache.get(&i) {
-                change_theme(grid, nth_row_area(area, i % rows), *row_attr);
+                grid.change_theme(nth_row_area(area, i % rows), *row_attr);
             }
         }
 
@@ -819,12 +818,11 @@ impl ListingTrait for CompactListing {
             true,
             false
         );
-        change_theme(grid, nth_row_area(area, self.cursor_pos.2 % rows), row_attr);
+        grid.change_theme(nth_row_area(area, self.cursor_pos.2 % rows), row_attr);
 
         /* clear gap if available height is more than count of entries */
         if top_idx + rows > self.length {
-            clear_area(
-                grid,
+            grid.clear_area(
                 (pos_inc(upper_left, (0, rows - 1)), bottom_right),
                 self.color_cache.theme_default,
             );
@@ -1759,7 +1757,7 @@ impl Component for CompactListing {
             }
         } else {
             if self.length == 0 && self.dirty {
-                clear_area(grid, area, self.color_cache.theme_default);
+                grid.clear_area(area, self.color_cache.theme_default);
                 context.dirty_areas.push_back(area);
                 return;
             }

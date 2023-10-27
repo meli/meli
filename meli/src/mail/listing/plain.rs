@@ -406,8 +406,8 @@ impl ListingTrait for PlainListing {
                 .set_bg(row_attr.bg)
                 .set_attrs(row_attr.attrs);
         }
-        copy_area(
-            grid,
+
+        grid.copy_area(
             &self.data_columns.columns[3],
             (set_x(upper_left, x), bottom_right),
             (
@@ -429,9 +429,9 @@ impl ListingTrait for PlainListing {
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
         if self.length == 0 {
-            clear_area(grid, area, self.color_cache.theme_default);
-            copy_area(
-                grid,
+            grid.clear_area(area, self.color_cache.theme_default);
+
+            grid.copy_area(
                 &self.data_columns.columns[0],
                 area,
                 ((0, 0), pos_dec(self.data_columns.columns[0].size(), (1, 1))),
@@ -497,9 +497,9 @@ impl ListingTrait for PlainListing {
                     .draw(grid, idx, self.cursor_pos.2, grid.bounds_iter(new_area));
                 if highlight {
                     let row_attr = row_attr!(self.color_cache, idx % 2 == 0, false, true, false);
-                    change_theme(grid, new_area, row_attr);
+                    grid.change_theme(new_area, row_attr);
                 } else if let Some(row_attr) = self.rows.row_attr_cache.get(&idx) {
-                    change_theme(grid, new_area, *row_attr);
+                    grid.change_theme(new_area, *row_attr);
                 }
                 context.dirty_areas.push_back(new_area);
             }
@@ -518,14 +518,14 @@ impl ListingTrait for PlainListing {
         _ = self
             .data_columns
             .recalc_widths((width!(area), height!(area)), top_idx);
-        clear_area(grid, area, self.color_cache.theme_default);
+        grid.clear_area(area, self.color_cache.theme_default);
         /* copy table columns */
         self.data_columns
             .draw(grid, top_idx, self.cursor_pos.2, grid.bounds_iter(area));
         /* apply each row colors separately */
         for i in top_idx..(top_idx + height!(area)) {
             if let Some(row_attr) = self.rows.row_attr_cache.get(&i) {
-                change_theme(grid, nth_row_area(area, i % rows), *row_attr);
+                grid.change_theme(nth_row_area(area, i % rows), *row_attr);
             }
         }
 
@@ -537,12 +537,11 @@ impl ListingTrait for PlainListing {
             true,
             false
         );
-        change_theme(grid, nth_row_area(area, self.cursor_pos.2 % rows), row_attr);
+        grid.change_theme(nth_row_area(area, self.cursor_pos.2 % rows), row_attr);
 
         /* clear gap if available height is more than count of entries */
         if top_idx + rows > self.length {
-            clear_area(
-                grid,
+            grid.clear_area(
                 (
                     pos_inc(upper_left, (0, self.length - top_idx)),
                     bottom_right,
@@ -1052,10 +1051,10 @@ impl PlainListing {
             columns[3].size().0,
         );
 
-        clear_area(&mut columns[0], ((0, idx), (min_width.0, idx)), row_attr);
-        clear_area(&mut columns[1], ((0, idx), (min_width.1, idx)), row_attr);
-        clear_area(&mut columns[2], ((0, idx), (min_width.2, idx)), row_attr);
-        clear_area(&mut columns[3], ((0, idx), (min_width.3, idx)), row_attr);
+        columns[0].clear_area(((0, idx), (min_width.0, idx)), row_attr);
+        columns[1].clear_area(((0, idx), (min_width.1, idx)), row_attr);
+        columns[2].clear_area(((0, idx), (min_width.2, idx)), row_attr);
+        columns[3].clear_area(((0, idx), (min_width.3, idx)), row_attr);
 
         let (x, _) = columns[0].write_string_to_grid(
             &idx.to_string(),
@@ -1168,8 +1167,8 @@ impl Component for PlainListing {
                     area,
                     Some(get_x(upper_left)),
                 );
-                clear_area(
-                    grid,
+
+                grid.clear_area(
                     ((x, y), set_y(bottom_right, y)),
                     self.color_cache.theme_default,
                 );
@@ -1381,7 +1380,7 @@ impl Component for PlainListing {
             }
         } else {
             if self.length == 0 && self.dirty {
-                clear_area(grid, area, self.color_cache.theme_default);
+                grid.clear_area(area, self.color_cache.theme_default);
                 context.dirty_areas.push_back(area);
                 return;
             }

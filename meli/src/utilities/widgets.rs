@@ -352,8 +352,8 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> Component for 
 
         if self.is_dirty() {
             let theme_default = crate::conf::value(context, "theme_default");
-            clear_area(
-                grid,
+
+            grid.clear_area(
                 (
                     upper_left,
                     set_y(bottom_right, get_y(upper_left) + self.layout.len()),
@@ -424,8 +424,8 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> Component for 
             }
 
             let length = self.layout.len();
-            clear_area(
-                grid,
+
+            grid.clear_area(
                 (
                     pos_inc(upper_left, (0, length)),
                     set_y(bottom_right, length + 2 + get_y(upper_left)),
@@ -443,8 +443,7 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> Component for 
                 );
             }
             if length + 4 < height!(area) {
-                clear_area(
-                    grid,
+                grid.clear_area(
                     (pos_inc(upper_left, (0, length + 4)), bottom_right),
                     theme_default,
                 );
@@ -646,7 +645,7 @@ where
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if self.dirty {
             let theme_default = crate::conf::value(context, "theme_default");
-            clear_area(grid, area, theme_default);
+            grid.clear_area(area, theme_default);
             let upper_left = upper_left!(area);
 
             let mut len = 0;
@@ -786,9 +785,9 @@ impl Component for AutoComplete {
         let x_offset = if rows < self.entries.len() { 1 } else { 0 };
 
         let (width, height) = self.content.size();
-        clear_area(grid, area, crate::conf::value(context, "theme_default"));
-        copy_area(
-            grid,
+        grid.clear_area(area, crate::conf::value(context, "theme_default"));
+
+        grid.copy_area(
             &self.content,
             (upper_left, pos_dec(bottom_right, (x_offset, 0))),
             (
@@ -799,8 +798,8 @@ impl Component for AutoComplete {
         /* Highlight cursor */
         if self.cursor > 0 {
             let highlight = crate::conf::value(context, "highlight");
-            change_theme(
-                grid,
+
+            grid.change_theme(
                 (
                     pos_inc(upper_left, (0, (self.cursor - 1) % rows)),
                     (
@@ -971,7 +970,7 @@ impl ScrollBar {
             return;
         }
         let theme_default = crate::conf::value(context, "theme_default");
-        clear_area(grid, area, theme_default);
+        grid.clear_area(area, theme_default);
 
         let visible_rows = std::cmp::min(visible_rows, length);
         let ascii_drawing = grid.ascii_drawing;
@@ -1027,7 +1026,7 @@ impl ScrollBar {
             return;
         }
         let theme_default = crate::conf::value(context, "theme_default");
-        clear_area(grid, area, theme_default);
+        grid.clear_area(area, theme_default);
 
         let visible_cols = std::cmp::min(visible_cols, length);
         let ascii_drawing = grid.ascii_drawing;
@@ -1238,7 +1237,7 @@ impl std::fmt::Display for ProgressSpinner {
 impl Component for ProgressSpinner {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if self.dirty {
-            clear_area(grid, area, self.theme_attr);
+            grid.clear_area(area, self.theme_attr);
             if self.active {
                 grid.write_string_to_grid(
                     match self.kind.as_ref() {

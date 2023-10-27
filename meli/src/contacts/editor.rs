@@ -152,12 +152,12 @@ impl Component for ContactManager {
 
         if self.dirty {
             let (width, _height) = self.content.size();
-            clear_area(
-                grid,
+
+            grid.clear_area(
                 (upper_left, set_y(bottom_right, get_y(upper_left) + 1)),
                 self.theme_default,
             );
-            copy_area_with_break(grid, &self.content, area, ((0, 0), (width - 1, 0)));
+            grid.copy_area_with_break(&self.content, area, ((0, 0), (width - 1, 0)));
             self.dirty = false;
         }
 

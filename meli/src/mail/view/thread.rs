@@ -399,7 +399,7 @@ impl ThreadView {
                 if let Some(len) = highlight_reply_subjects[y] {
                     let index = e.index.0 * 4 + 1 + e.heading.grapheme_width() - len;
                     let area = ((index, 2 * y), (width - 2, 2 * y));
-                    change_theme(&mut content, area, highlight_theme);
+                    content.change_theme(area, highlight_theme);
                 }
                 set_and_join_box(&mut content, (e.index.0 * 4, 2 * y), BoxBoundary::Vertical);
                 set_and_join_box(
@@ -420,7 +420,7 @@ impl ThreadView {
                 for i in 0..e.index.0 {
                     let att =
                         self.indentation_colors[(i).wrapping_rem(self.indentation_colors.len())];
-                    change_theme(&mut content, ((x, 2 * y), (x + 3, 2 * y + 1)), att);
+                    content.change_theme(((x, 2 * y), (x + 3, 2 * y + 1)), att);
                     x += 4;
                 }
                 if y > 0 && content.get_mut(e.index.0 * 4, 2 * y - 1).is_some() {
@@ -465,7 +465,7 @@ impl ThreadView {
                 if highlight_reply_subjects[y].is_some() {
                     let index = e.index.0 * 4 + 1;
                     let area = ((index, 2 * y), (width - 2, 2 * y));
-                    change_theme(&mut content, area, highlight_theme);
+                    content.change_theme(area, highlight_theme);
                 }
                 set_and_join_box(&mut content, (e.index.0 * 4, 2 * y), BoxBoundary::Vertical);
                 set_and_join_box(
@@ -505,8 +505,8 @@ impl ThreadView {
             } else {
                 Attr::REVERSE
             };
-            change_theme(
-                grid,
+
+            grid.change_theme(
                 dest_area,
                 ThemeAttribute {
                     fg: theme_default.fg,
@@ -517,7 +517,7 @@ impl ThreadView {
             return;
         }
 
-        copy_area(grid, &self.content, dest_area, src_area);
+        grid.copy_area(&self.content, dest_area, src_area);
     }
 
     fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
@@ -587,7 +587,7 @@ impl ThreadView {
 
         if self.dirty || (page_no != prev_page_no) {
             if page_no != prev_page_no {
-                clear_area(grid, area, crate::conf::value(context, "theme_default"));
+                grid.clear_area(area, crate::conf::value(context, "theme_default"));
             }
             let visibles: Vec<&usize> =
                 self.visible_entries.iter().flat_map(|v| v.iter()).collect();
@@ -597,8 +597,8 @@ impl ThreadView {
                     break;
                 }
                 let idx = *v;
-                copy_area(
-                    grid,
+
+                grid.copy_area(
                     &self.content,
                     (
                         pos_inc(upper_left, (0, 2 * visible_entry_counter)), // dest_area
@@ -654,8 +654,7 @@ impl ThreadView {
                 );
             }
             if 2 * top_idx + rows > 2 * visibles.len() + 1 {
-                clear_area(
-                    grid,
+                grid.clear_area(
                     (
                         pos_inc(upper_left, (0, 2 * (visibles.len() - top_idx) + 1)),
                         bottom_right,
@@ -738,7 +737,7 @@ impl ThreadView {
         let theme_default = crate::conf::value(context, "theme_default");
         /* First draw the thread subject on the first row */
         let y = if self.dirty {
-            clear_area(grid, area, theme_default);
+            grid.clear_area(area, theme_default);
             let account = &context.accounts[&self.coordinates.0];
             let threads = account.collection.get_threads(self.coordinates.1);
             let thread_root = threads.thread_iter(self.thread_group).next().unwrap().1;
@@ -776,11 +775,8 @@ impl ThreadView {
                     set_x(bottom_right, std::cmp::min(get_x(bottom_right), mid)),
                 ));
             }
-            clear_area(
-                grid,
-                ((mid, y + 1), set_x(bottom_right, mid)),
-                theme_default,
-            );
+
+            grid.clear_area(((mid, y + 1), set_x(bottom_right, mid)), theme_default);
             y + 2
         } else {
             get_y(upper_left) + 2
@@ -814,8 +810,7 @@ impl ThreadView {
                 );
             }
             ThreadViewFocus::Thread => {
-                clear_area(
-                    grid,
+                grid.clear_area(
                     ((mid + 1, get_y(upper_left) + y - 1), bottom_right),
                     theme_default,
                 );
@@ -854,7 +849,7 @@ impl ThreadView {
         let theme_default = crate::conf::value(context, "theme_default");
         /* First draw the thread subject on the first row */
         let y = {
-            clear_area(grid, area, theme_default);
+            grid.clear_area(area, theme_default);
             let account = &context.accounts[&self.coordinates.0];
             let threads = account.collection.get_threads(self.coordinates.1);
             let thread_root = threads.thread_iter(self.thread_group).next().unwrap().1;
@@ -901,8 +896,7 @@ impl ThreadView {
             return;
         }
 
-        clear_area(
-            grid,
+        grid.clear_area(
             (set_y(upper_left, y), set_y(bottom_right, mid + 1)),
             theme_default,
         );
@@ -924,8 +918,7 @@ impl ThreadView {
                 let page_no = (self.new_cursor_pos).wrapping_div(rows);
                 let top_idx = page_no * rows;
 
-                copy_area(
-                    grid,
+                grid.copy_area(
                     &self.content,
                     area,
                     ((0, 2 * top_idx), (width - 1, height - 1)),
@@ -945,8 +938,8 @@ impl ThreadView {
                 }
                 let page_no = (self.new_cursor_pos).wrapping_div(rows);
                 let top_idx = page_no * rows;
-                copy_area(
-                    grid,
+
+                grid.copy_area(
                     &self.content,
                     area,
                     ((0, 2 * top_idx), (width - 1, height - 1)),

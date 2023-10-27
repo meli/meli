@@ -325,7 +325,7 @@ impl Component for MailView {
             }
             env_view.draw(grid, area, context);
         } else if let MailViewState::Error { ref err } = self.state {
-            clear_area(grid, area, self.theme_default);
+            grid.clear_area(area, self.theme_default);
             context.dirty_areas.push_back(area);
             context.replies.push_back(UIEvent::Notification(
                 Some("Failed to open e-mail".to_string()),
@@ -336,7 +336,7 @@ impl Component for MailView {
             self.init_futures(context);
             return;
         } else {
-            clear_area(grid, area, self.theme_default);
+            grid.clear_area(area, self.theme_default);
             context.dirty_areas.push_back(area);
             return;
         };

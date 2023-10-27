@@ -191,9 +191,9 @@ impl MailboxManager {
         let (upper_left, bottom_right) = area;
 
         if self.length == 0 {
-            clear_area(grid, area, self.theme_default);
-            copy_area(
-                grid,
+            grid.clear_area(area, self.theme_default);
+
+            grid.copy_area(
                 &self.data_columns.columns[0],
                 area,
                 ((0, 0), pos_dec(self.data_columns.columns[0].size(), (1, 1))),
@@ -281,7 +281,7 @@ impl MailboxManager {
                 } else {
                     self.theme_default
                 };
-                change_theme(grid, new_area, row_attr);
+                grid.change_theme(new_area, row_attr);
                 context.dirty_areas.push_back(new_area);
             }
             return;
@@ -296,22 +296,21 @@ impl MailboxManager {
         _ = self
             .data_columns
             .recalc_widths((width!(area), height!(area)), top_idx);
-        clear_area(grid, area, self.theme_default);
+        grid.clear_area(area, self.theme_default);
         /* copy table columns */
         self.data_columns
             .draw(grid, top_idx, self.cursor_pos, grid.bounds_iter(area));
 
         /* highlight cursor */
-        change_theme(
-            grid,
+
+        grid.change_theme(
             nth_row_area(area, self.cursor_pos % rows),
             self.highlight_theme,
         );
 
         /* clear gap if available height is more than count of entries */
         if top_idx + rows > self.length {
-            clear_area(
-                grid,
+            grid.clear_area(
                 (
                     pos_inc(upper_left, (0, self.length - top_idx)),
                     bottom_right,

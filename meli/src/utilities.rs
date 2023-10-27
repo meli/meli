@@ -234,7 +234,7 @@ impl StatusBar {
     }
 
     fn draw_command_bar(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        clear_area(grid, area, crate::conf::value(context, "theme_default"));
+        grid.clear_area(area, crate::conf::value(context, "theme_default"));
         let command_bar = crate::conf::value(context, "status.command_bar");
         let (_, y) = grid.write_string_to_grid(
             self.ex_buffer.as_str(),
@@ -244,7 +244,7 @@ impl StatusBar {
             area,
             None,
         );
-        change_theme(grid, area, command_bar);
+        grid.change_theme(area, command_bar);
         if let Some(ref mut cell) = grid.get_mut(
             pos_inc(upper_left!(area), (self.ex_buffer.cursor(), 0)).0,
             y,
@@ -392,11 +392,8 @@ impl Component for StatusBar {
                         hist_height,
                         self.auto_complete.suggestions().len(),
                     );
-                    change_theme(
-                        grid,
-                        hist_area,
-                        crate::conf::value(context, "status.history"),
-                    );
+
+                    grid.change_theme(hist_area, crate::conf::value(context, "status.history"));
                     context.dirty_areas.push_back(hist_area);
                     hist_area
                 } else {
@@ -418,14 +415,11 @@ impl Component for StatusBar {
                 } else {
                     self.auto_complete.cursor()
                 };
-                clear_area(
-                    grid,
-                    hist_area,
-                    crate::conf::value(context, "theme_default"),
-                );
+
+                grid.clear_area(hist_area, crate::conf::value(context, "theme_default"));
                 let history_hints = crate::conf::value(context, "status.history.hints");
                 if hist_height > 0 {
-                    change_theme(grid, hist_area, history_hints);
+                    grid.change_theme(hist_area, history_hints);
                 }
                 for (y_offset, s) in self
                     .auto_complete
@@ -458,8 +452,7 @@ impl Component for StatusBar {
                         None,
                     );
                     if y_offset + offset == self.auto_complete.cursor() {
-                        change_theme(
-                            grid,
+                        grid.change_theme(
                             (
                                 set_y(
                                     upper_left!(hist_area),
@@ -854,7 +847,7 @@ impl Tabbed {
         let bottom_right = bottom_right!(area);
 
         let tab_bar_attribute = crate::conf::value(context, "tab.bar");
-        clear_area(grid, area, tab_bar_attribute);
+        grid.clear_area(area, tab_bar_attribute);
         if self.children.is_empty() {
             return;
         }
@@ -950,8 +943,7 @@ impl std::fmt::Display for Tabbed {
 impl Component for Tabbed {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if self.dirty {
-            clear_area(
-                grid,
+            grid.clear_area(
                 (
                     upper_left!(area),
                     set_x(upper_left!(area), get_x(bottom_right!(area))),
@@ -1013,7 +1005,7 @@ impl Component for Tabbed {
                     Alignment::Center,
                 );
                 context.dirty_areas.push_back(dialog_area);
-                clear_area(grid, dialog_area, self.theme_default);
+                grid.clear_area(dialog_area, self.theme_default);
                 let inner_area = create_box(grid, dialog_area);
                 let (x, y) = grid.write_string_to_grid(
                     "shortcuts",
@@ -1039,8 +1031,8 @@ impl Component for Tabbed {
                 );
                 let (width, height) = self.help_content.size();
                 let (cols, rows) = (width!(inner_area), height!(inner_area));
-                copy_area(
-                    grid,
+
+                grid.copy_area(
                     &self.help_content,
                     inner_area,
                     (
@@ -1189,7 +1181,7 @@ impl Component for Tabbed {
                 Alignment::Center,
             );
             context.dirty_areas.push_back(dialog_area);
-            clear_area(grid, dialog_area, self.theme_default);
+            grid.clear_area(dialog_area, self.theme_default);
             let inner_area = create_box(grid, dialog_area);
             let (x, y) = grid.write_string_to_grid(
                 "shortcuts",
@@ -1296,8 +1288,8 @@ impl Component for Tabbed {
                     None,
                 );
             }
-            copy_area(
-                grid,
+
+            grid.copy_area(
                 &self.help_content,
                 inner_area,
                 (
@@ -1632,9 +1624,9 @@ impl Component for RawBuffer {
                 std::cmp::min(width.saturating_sub(cols), self.cursor.0),
                 std::cmp::min(height.saturating_sub(rows), self.cursor.1),
             );
-            clear_area(grid, area, crate::conf::value(context, "theme_default"));
-            copy_area(
-                grid,
+            grid.clear_area(area, crate::conf::value(context, "theme_default"));
+
+            grid.copy_area(
                 &self.buf,
                 area,
                 (

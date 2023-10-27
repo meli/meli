@@ -463,7 +463,7 @@ impl ListingTrait for ConversationsListing {
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
         if let Err(message) = self.error.as_ref() {
-            clear_area(grid, area, self.color_cache.theme_default);
+            grid.clear_area(area, self.color_cache.theme_default);
 
             grid.write_string_to_grid(
                 message,
@@ -546,7 +546,7 @@ impl ListingTrait for ConversationsListing {
             self.cursor_pos.2 = self.new_cursor_pos.2;
         }
 
-        clear_area(grid, area, self.color_cache.theme_default);
+        grid.clear_area(area, self.color_cache.theme_default);
         /* Page_no has changed, so draw new page */
         self.draw_rows(grid, area, context, top_idx);
 
@@ -887,7 +887,7 @@ impl ConversationsListing {
     fn draw_rows(&self, grid: &mut CellBuffer, area: Area, context: &Context, top_idx: usize) {
         let account = &context.accounts[&self.cursor_pos.0];
         let threads = account.collection.get_threads(self.cursor_pos.1);
-        clear_area(grid, area, self.color_cache.theme_default);
+        grid.clear_area(area, self.color_cache.theme_default);
         let (mut upper_left, bottom_right) = area;
         for (idx, ((thread_hash, root_env_hash), strings)) in
             self.rows.entries.iter().enumerate().skip(top_idx)
@@ -1057,8 +1057,8 @@ impl Component for ConversationsListing {
                 for c in grid.row_iter(x..(get_x(bottom_right) + 1), y) {
                     grid[c] = Cell::default();
                 }
-                clear_area(
-                    grid,
+
+                grid.clear_area(
                     ((x, y), set_y(bottom_right, y)),
                     self.color_cache.theme_default,
                 );
@@ -1272,7 +1272,7 @@ impl Component for ConversationsListing {
         }
         if matches!(self.focus, Focus::Entry) {
             if self.length == 0 && self.dirty {
-                clear_area(grid, area, self.color_cache.theme_default);
+                grid.clear_area(area, self.color_cache.theme_default);
                 context.dirty_areas.push_back(area);
                 return;
             }
@@ -1285,7 +1285,7 @@ impl Component for ConversationsListing {
                 pos_dec(upper_left!(entry_area), (1, 0)),
                 bottom_right!(entry_area),
             );
-            clear_area(grid, gap_area, self.color_cache.theme_default);
+            grid.clear_area(gap_area, self.color_cache.theme_default);
             context.dirty_areas.push_back(gap_area);
             self.view_area = entry_area.into();
         }

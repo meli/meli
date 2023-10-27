@@ -99,8 +99,8 @@ impl TextField {
         } else {
             self.inner.grapheme_pos()
         };
-        change_colors(
-            grid,
+
+        grid.change_colors(
             (pos_inc(upper_left, (pos, 0)), pos_inc(upper_left, (pos, 0))),
             crate::conf::value(context, "theme_default").fg,
             crate::conf::value(context, "highlight").bg,

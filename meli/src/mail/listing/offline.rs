@@ -139,7 +139,7 @@ impl Component for OfflineListing {
         let theme_default = conf::value(context, "theme_default");
         let text_unfocused = conf::value(context, "text.unfocused");
         let error_message = conf::value(context, "error_message");
-        clear_area(grid, area, theme_default);
+        grid.clear_area(area, theme_default);
         if let Err(err) = context.is_online(self.cursor_pos.0) {
             let (x, _) = grid.write_string_to_grid(
                 "offline: ",

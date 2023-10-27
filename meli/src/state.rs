@@ -805,7 +805,9 @@ impl State {
                     },
                 ),
             );
-            copy_area(&mut self.screen.overlay_grid, &self.screen.grid, area, area);
+            self.screen
+                .overlay_grid
+                .copy_area(&self.screen.grid, area, area);
             self.overlay.get_index_mut(0).unwrap().1.draw(
                 &mut self.screen.overlay_grid,
                 area,

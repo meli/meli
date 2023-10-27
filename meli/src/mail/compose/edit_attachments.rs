@@ -123,7 +123,7 @@ impl Component for EditAttachmentsRefMut<'_, '_> {
         } else if self.is_dirty() {
             let attachments_no = self.draft.attachments().len();
             let theme_default = crate::conf::value(context, "theme_default");
-            clear_area(grid, area, theme_default);
+            grid.clear_area(area, theme_default);
             if attachments_no == 0 {
                 grid.write_string_to_grid(
                     "no attachments",

@@ -228,14 +228,14 @@ impl ContactList {
         if !grid.use_color {
             theme.attrs |= Attr::REVERSE;
         }
-        change_theme(grid, area, theme);
+        grid.change_theme(area, theme);
     }
 
     fn draw_menu(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if !self.is_dirty() {
             return;
         }
-        clear_area(grid, area, self.theme_default);
+        grid.clear_area(area, self.theme_default);
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
         self.dirty = false;
@@ -360,9 +360,9 @@ impl ContactList {
         let bottom_right = bottom_right!(area);
 
         if self.length == 0 {
-            clear_area(grid, area, self.theme_default);
-            copy_area(
-                grid,
+            grid.clear_area(area, self.theme_default);
+
+            grid.copy_area(
                 &self.data_columns.columns[0],
                 area,
                 ((0, 0), pos_dec(self.data_columns.columns[0].size(), (1, 1))),
@@ -475,7 +475,7 @@ impl ContactList {
                 width.saturating_sub(self.data_columns.widths[0] + self.data_columns.widths[1] + 4);
             self.data_columns.widths[2] = remainder / 6;
         }
-        clear_area(grid, area, self.theme_default);
+        grid.clear_area(area, self.theme_default);
         /* Page_no has changed, so draw new page */
 
         let header_attrs = crate::conf::value(context, "widgets.list.header");
@@ -505,8 +505,8 @@ impl ContactList {
                 ),
                 None,
             );
-            copy_area(
-                grid,
+
+            grid.copy_area(
                 &self.data_columns.columns[i],
                 (
                     set_x(upper_left, x),
@@ -529,8 +529,7 @@ impl ContactList {
             }
         }
 
-        change_theme(
-            grid,
+        grid.change_theme(
             (
                 upper_left!(area),
                 set_y(bottom_right, get_y(upper_left!(area))),
@@ -539,8 +538,7 @@ impl ContactList {
         );
 
         if top_idx + rows > self.length {
-            clear_area(
-                grid,
+            grid.clear_area(
                 (
                     pos_inc(upper_left, (0, self.length - top_idx + 2)),
                     bottom_right,

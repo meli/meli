@@ -2462,7 +2462,7 @@ impl Listing {
     }
 
     fn draw_menu(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        clear_area(grid, area, self.theme_default);
+        grid.clear_area(area, self.theme_default);
         let total_height: usize = 3 * (self.accounts.len())
             + self
                 .accounts
@@ -2509,8 +2509,7 @@ impl Listing {
             rows * y_offset.wrapping_div(rows).saturating_sub(1) + y_offset.wrapping_rem(rows)
         };
 
-        copy_area(
-            grid,
+        grid.copy_area(
             &self.menu_content,
             area,
             (

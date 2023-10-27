@@ -492,7 +492,7 @@ impl ListingTrait for ThreadListing {
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
         if self.length == 0 {
-            clear_area(grid, area, self.color_cache.theme_default);
+            grid.clear_area(area, self.color_cache.theme_default);
             context.dirty_areas.push_back(area);
             return;
         }
@@ -562,7 +562,7 @@ impl ListingTrait for ThreadListing {
                         highlight,
                         self.rows.selection[&env_hash]
                     );
-                    change_theme(grid, new_area, row_attr);
+                    grid.change_theme(new_area, row_attr);
                 }
                 context.dirty_areas.push_back(new_area);
             }
@@ -590,7 +590,7 @@ impl ListingTrait for ThreadListing {
         _ = self
             .data_columns
             .recalc_widths((width!(area), height!(area)), top_idx);
-        clear_area(grid, area, self.color_cache.theme_default);
+        grid.clear_area(area, self.color_cache.theme_default);
         /* copy table columns */
         self.data_columns
             .draw(grid, top_idx, self.cursor_pos.2, grid.bounds_iter(area));
@@ -607,7 +607,7 @@ impl ListingTrait for ThreadListing {
                     self.cursor_pos.2 == idx,
                     self.rows.selection[&env_hash]
                 );
-                change_theme(grid, nth_row_area(area, idx % rows), row_attr);
+                grid.change_theme(nth_row_area(area, idx % rows), row_attr);
             }
         }
 
@@ -620,13 +620,12 @@ impl ListingTrait for ThreadListing {
                 true, // because self.cursor_pos.2 == idx,
                 self.rows.selection[&env_hash]
             );
-            change_theme(grid, nth_row_area(area, self.cursor_pos.2 % rows), row_attr);
+            grid.change_theme(nth_row_area(area, self.cursor_pos.2 % rows), row_attr);
         }
 
         /* clear gap if available height is more than count of entries */
         if top_idx + rows > self.length {
-            clear_area(
-                grid,
+            grid.clear_area(
                 (
                     pos_inc(upper_left, (0, self.length - top_idx)),
                     bottom_right,
@@ -1100,11 +1099,11 @@ impl ThreadListing {
             columns[4].size().0,
         );
 
-        clear_area(&mut columns[0], ((0, idx), (min_width.0, idx)), row_attr);
-        clear_area(&mut columns[1], ((0, idx), (min_width.1, idx)), row_attr);
-        clear_area(&mut columns[2], ((0, idx), (min_width.2, idx)), row_attr);
-        clear_area(&mut columns[3], ((0, idx), (min_width.3, idx)), row_attr);
-        clear_area(&mut columns[4], ((0, idx), (min_width.4, idx)), row_attr);
+        columns[0].clear_area(((0, idx), (min_width.0, idx)), row_attr);
+        columns[1].clear_area(((0, idx), (min_width.1, idx)), row_attr);
+        columns[2].clear_area(((0, idx), (min_width.2, idx)), row_attr);
+        columns[3].clear_area(((0, idx), (min_width.3, idx)), row_attr);
+        columns[4].clear_area(((0, idx), (min_width.4, idx)), row_attr);
 
         *self.rows.entries.get_mut(idx).unwrap() = ((thread_hash, env_hash), strings);
     }
@@ -1125,13 +1124,9 @@ impl ThreadListing {
                 row_attr!(self.color_cache, (top_idx + i) % 2 == 0, false, true, false)
             };
 
-            clear_area(
-                &mut self.data_columns.columns[0],
-                ((0, i), (width - 1, i + 1)),
-                row_attr,
-            );
-            clear_area(
-                grid,
+            self.data_columns.columns[0].clear_area(((0, i), (width - 1, i + 1)), row_attr);
+
+            grid.clear_area(
                 (
                     pos_inc(upper_left, (0, i)),
                     pos_inc(upper_left, (width - 1, i + 1)),
@@ -1374,7 +1369,7 @@ impl Component for ThreadListing {
             let upper_left = upper_left!(area);
             let bottom_right = bottom_right!(area);
             if self.length == 0 && self.dirty {
-                clear_area(grid, area, self.color_cache.theme_default);
+                grid.clear_area(area, self.color_cache.theme_default);
                 context.dirty_areas.push_back(area);
                 return;
             }
@@ -1390,7 +1385,7 @@ impl Component for ThreadListing {
             let bottom_entity_rows = (pager_ratio * total_rows) / 100;
 
             if bottom_entity_rows > total_rows {
-                clear_area(grid, area, self.color_cache.theme_default);
+                grid.clear_area(area, self.color_cache.theme_default);
                 context.dirty_areas.push_back(area);
                 return;
             }

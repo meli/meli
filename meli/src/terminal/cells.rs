@@ -566,6 +566,204 @@ impl CellBuffer {
         }
         (x, y)
     }
+
+    pub fn copy_area_with_break(&mut self, grid_src: &Self, dest: Area, src: Area) -> Pos {
+        if !is_valid_area!(dest) || !is_valid_area!(src) {
+            log::debug!(
+                "BUG: Invalid areas in copy_area:\n src: {:?}\n dest: {:?}",
+                src,
+                dest
+            );
+            return upper_left!(dest);
+        }
+
+        if grid_src.is_empty() || self.is_empty() {
+            return upper_left!(dest);
+        }
+
+        let mut ret = bottom_right!(dest);
+        let mut src_x = get_x(upper_left!(src));
+        let mut src_y = get_y(upper_left!(src));
+
+        'y_: for y in get_y(upper_left!(dest))..=get_y(bottom_right!(dest)) {
+            'x_: for x in get_x(upper_left!(dest))..=get_x(bottom_right!(dest)) {
+                if grid_src[(src_x, src_y)].ch() == '\n' {
+                    src_y += 1;
+                    src_x = 0;
+                    if src_y >= get_y(bottom_right!(src)) {
+                        ret.1 = y;
+                        break 'y_;
+                    }
+                    continue 'y_;
+                }
+
+                self[(x, y)] = grid_src[(src_x, src_y)];
+                src_x += 1;
+                if src_x >= get_x(bottom_right!(src)) {
+                    src_y += 1;
+                    src_x = 0;
+                    if src_y >= get_y(bottom_right!(src)) {
+                        //clear_area(self, ((get_x(upper_left!(dest)), y), bottom_right!(dest)));
+                        ret.1 = y;
+                        break 'y_;
+                    }
+                    break 'x_;
+                }
+            }
+        }
+        ret
+    }
+
+    /// Copy a source `Area` to a destination.
+    pub fn copy_area(&mut self, grid_src: &Self, dest: Area, src: Area) -> Pos {
+        if !is_valid_area!(dest) || !is_valid_area!(src) {
+            log::debug!(
+                "BUG: Invalid areas in copy_area:\n src: {:?}\n dest: {:?}",
+                src,
+                dest
+            );
+            return upper_left!(dest);
+        }
+
+        if grid_src.is_empty() || self.is_empty() {
+            return upper_left!(dest);
+        }
+
+        let mut ret = bottom_right!(dest);
+        let mut src_x = get_x(upper_left!(src));
+        let mut src_y = get_y(upper_left!(src));
+        let (cols, rows) = grid_src.size();
+        if src_x >= cols || src_y >= rows {
+            log::debug!("BUG: src area outside of grid_src in copy_area",);
+            return upper_left!(dest);
+        }
+
+        let tag_associations = grid_src.tag_associations();
+        let start_idx = grid_src.pos_to_index(src_x, src_y).unwrap();
+        let mut tag_offset: usize = tag_associations
+            .binary_search_by(|probe| probe.0.cmp(&start_idx))
+            .unwrap_or_else(|i| i);
+        let mut stack: std::collections::BTreeSet<&FormatTag> =
+            std::collections::BTreeSet::default();
+        for y in get_y(upper_left!(dest))..=get_y(bottom_right!(dest)) {
+            'for_x: for x in get_x(upper_left!(dest))..=get_x(bottom_right!(dest)) {
+                let idx = grid_src.pos_to_index(src_x, src_y).unwrap();
+                while tag_offset < tag_associations.len() && tag_associations[tag_offset].0 <= idx {
+                    if tag_associations[tag_offset].2 {
+                        stack.insert(&grid_src.tag_table()[&tag_associations[tag_offset].1]);
+                    } else {
+                        stack.remove(&grid_src.tag_table()[&tag_associations[tag_offset].1]);
+                    }
+                    tag_offset += 1;
+                }
+                self[(x, y)] = grid_src[(src_x, src_y)];
+                for t in &stack {
+                    if let Some(fg) = t.fg {
+                        self[(x, y)].set_fg(fg).set_keep_fg(true);
+                    }
+                    if let Some(bg) = t.bg {
+                        self[(x, y)].set_bg(bg).set_keep_bg(true);
+                    }
+                    if let Some(attrs) = t.attrs {
+                        self[(x, y)].attrs |= attrs;
+                        self[(x, y)].set_keep_attrs(true);
+                    }
+                }
+                if src_x >= get_x(bottom_right!(src)) {
+                    break 'for_x;
+                }
+                src_x += 1;
+            }
+            src_x = get_x(upper_left!(src));
+            src_y += 1;
+            if src_y > get_y(bottom_right!(src)) {
+                for row in
+                    self.bounds_iter(((get_x(upper_left!(dest)), y + 1), bottom_right!(dest)))
+                {
+                    for c in row {
+                        self[c].set_ch(' ');
+                    }
+                }
+                ret.1 = y;
+                break;
+            }
+        }
+        ret
+    }
+
+    /// Change foreground and background colors in an `Area`
+    pub fn change_colors(&mut self, area: Area, fg_color: Color, bg_color: Color) {
+        if cfg!(feature = "debug-tracing") {
+            let bounds = self.size();
+            let upper_left = upper_left!(area);
+            let bottom_right = bottom_right!(area);
+            let (x, y) = upper_left;
+            if y > (get_y(bottom_right))
+                || x > get_x(bottom_right)
+                || y >= get_y(bounds)
+                || x >= get_x(bounds)
+            {
+                log::debug!("BUG: Invalid area in change_colors:\n area: {:?}", area);
+                return;
+            }
+            if !is_valid_area!(area) {
+                log::debug!("BUG: Invalid area in change_colors:\n area: {:?}", area);
+                return;
+            }
+        }
+        for row in self.bounds_iter(area) {
+            for c in row {
+                self[c].set_fg(fg_color).set_bg(bg_color);
+            }
+        }
+    }
+
+    /// Change [`ThemeAttribute`] in an `Area`
+    pub fn change_theme(&mut self, area: Area, theme: ThemeAttribute) {
+        if cfg!(feature = "debug-tracing") {
+            let bounds = self.size();
+            let upper_left = upper_left!(area);
+            let bottom_right = bottom_right!(area);
+            let (x, y) = upper_left;
+            if y > (get_y(bottom_right))
+                || x > get_x(bottom_right)
+                || y >= get_y(bounds)
+                || x >= get_x(bounds)
+            {
+                log::debug!("BUG: Invalid area in change_theme:\n area: {:?}", area);
+                return;
+            }
+            if !is_valid_area!(area) {
+                log::debug!("BUG: Invalid area in change_theme:\n area: {:?}", area);
+                return;
+            }
+        }
+        for row in self.bounds_iter(area) {
+            for c in row {
+                self[c]
+                    .set_fg(theme.fg)
+                    .set_bg(theme.bg)
+                    .set_attrs(theme.attrs);
+            }
+        }
+    }
+
+    /// Completely clear an `Area` with an empty char and the terminal's default
+    /// colors.
+    pub fn clear_area(&mut self, area: Area, attributes: ThemeAttribute) {
+        if !is_valid_area!(area) {
+            return;
+        }
+        for row in self.bounds_iter(area) {
+            for c in row {
+                self[c] = Cell::default();
+                self[c]
+                    .set_fg(attributes.fg)
+                    .set_bg(attributes.bg)
+                    .set_attrs(attributes.attrs);
+            }
+        }
+    }
 }
 
 impl Deref for CellBuffer {
@@ -1078,208 +1276,6 @@ impl Attr {
                 (true, false) => write!(stdout, "\x1B[8m"),
             }
         })
-    }
-}
-
-pub fn copy_area_with_break(
-    grid_dest: &mut CellBuffer,
-    grid_src: &CellBuffer,
-    dest: Area,
-    src: Area,
-) -> Pos {
-    if !is_valid_area!(dest) || !is_valid_area!(src) {
-        log::debug!(
-            "BUG: Invalid areas in copy_area:\n src: {:?}\n dest: {:?}",
-            src,
-            dest
-        );
-        return upper_left!(dest);
-    }
-
-    if grid_src.is_empty() || grid_dest.is_empty() {
-        return upper_left!(dest);
-    }
-
-    let mut ret = bottom_right!(dest);
-    let mut src_x = get_x(upper_left!(src));
-    let mut src_y = get_y(upper_left!(src));
-
-    'y_: for y in get_y(upper_left!(dest))..=get_y(bottom_right!(dest)) {
-        'x_: for x in get_x(upper_left!(dest))..=get_x(bottom_right!(dest)) {
-            if grid_src[(src_x, src_y)].ch() == '\n' {
-                src_y += 1;
-                src_x = 0;
-                if src_y >= get_y(bottom_right!(src)) {
-                    ret.1 = y;
-                    break 'y_;
-                }
-                continue 'y_;
-            }
-
-            grid_dest[(x, y)] = grid_src[(src_x, src_y)];
-            src_x += 1;
-            if src_x >= get_x(bottom_right!(src)) {
-                src_y += 1;
-                src_x = 0;
-                if src_y >= get_y(bottom_right!(src)) {
-                    //clear_area(grid_dest, ((get_x(upper_left!(dest)), y), bottom_right!(dest)));
-                    ret.1 = y;
-                    break 'y_;
-                }
-                break 'x_;
-            }
-        }
-    }
-    ret
-}
-
-/// Copy a source `Area` to a destination.
-pub fn copy_area(grid_dest: &mut CellBuffer, grid_src: &CellBuffer, dest: Area, src: Area) -> Pos {
-    if !is_valid_area!(dest) || !is_valid_area!(src) {
-        log::debug!(
-            "BUG: Invalid areas in copy_area:\n src: {:?}\n dest: {:?}",
-            src,
-            dest
-        );
-        return upper_left!(dest);
-    }
-
-    if grid_src.is_empty() || grid_dest.is_empty() {
-        return upper_left!(dest);
-    }
-
-    let mut ret = bottom_right!(dest);
-    let mut src_x = get_x(upper_left!(src));
-    let mut src_y = get_y(upper_left!(src));
-    let (cols, rows) = grid_src.size();
-    if src_x >= cols || src_y >= rows {
-        log::debug!("BUG: src area outside of grid_src in copy_area",);
-        return upper_left!(dest);
-    }
-
-    let tag_associations = grid_src.tag_associations();
-    let start_idx = grid_src.pos_to_index(src_x, src_y).unwrap();
-    let mut tag_offset: usize = tag_associations
-        .binary_search_by(|probe| probe.0.cmp(&start_idx))
-        .unwrap_or_else(|i| i);
-    let mut stack: std::collections::BTreeSet<&FormatTag> = std::collections::BTreeSet::default();
-    for y in get_y(upper_left!(dest))..=get_y(bottom_right!(dest)) {
-        'for_x: for x in get_x(upper_left!(dest))..=get_x(bottom_right!(dest)) {
-            let idx = grid_src.pos_to_index(src_x, src_y).unwrap();
-            while tag_offset < tag_associations.len() && tag_associations[tag_offset].0 <= idx {
-                if tag_associations[tag_offset].2 {
-                    stack.insert(&grid_src.tag_table()[&tag_associations[tag_offset].1]);
-                } else {
-                    stack.remove(&grid_src.tag_table()[&tag_associations[tag_offset].1]);
-                }
-                tag_offset += 1;
-            }
-            grid_dest[(x, y)] = grid_src[(src_x, src_y)];
-            for t in &stack {
-                if let Some(fg) = t.fg {
-                    grid_dest[(x, y)].set_fg(fg).set_keep_fg(true);
-                }
-                if let Some(bg) = t.bg {
-                    grid_dest[(x, y)].set_bg(bg).set_keep_bg(true);
-                }
-                if let Some(attrs) = t.attrs {
-                    grid_dest[(x, y)].attrs |= attrs;
-                    grid_dest[(x, y)].set_keep_attrs(true);
-                }
-            }
-            if src_x >= get_x(bottom_right!(src)) {
-                break 'for_x;
-            }
-            src_x += 1;
-        }
-        src_x = get_x(upper_left!(src));
-        src_y += 1;
-        if src_y > get_y(bottom_right!(src)) {
-            for row in
-                grid_dest.bounds_iter(((get_x(upper_left!(dest)), y + 1), bottom_right!(dest)))
-            {
-                for c in row {
-                    grid_dest[c].set_ch(' ');
-                }
-            }
-            ret.1 = y;
-            break;
-        }
-    }
-    ret
-}
-
-/// Change foreground and background colors in an `Area`
-pub fn change_colors(grid: &mut CellBuffer, area: Area, fg_color: Color, bg_color: Color) {
-    if cfg!(feature = "debug-tracing") {
-        let bounds = grid.size();
-        let upper_left = upper_left!(area);
-        let bottom_right = bottom_right!(area);
-        let (x, y) = upper_left;
-        if y > (get_y(bottom_right))
-            || x > get_x(bottom_right)
-            || y >= get_y(bounds)
-            || x >= get_x(bounds)
-        {
-            log::debug!("BUG: Invalid area in change_colors:\n area: {:?}", area);
-            return;
-        }
-        if !is_valid_area!(area) {
-            log::debug!("BUG: Invalid area in change_colors:\n area: {:?}", area);
-            return;
-        }
-    }
-    for row in grid.bounds_iter(area) {
-        for c in row {
-            grid[c].set_fg(fg_color).set_bg(bg_color);
-        }
-    }
-}
-
-/// Change [`ThemeAttribute`] in an `Area`
-pub fn change_theme(grid: &mut CellBuffer, area: Area, theme: ThemeAttribute) {
-    if cfg!(feature = "debug-tracing") {
-        let bounds = grid.size();
-        let upper_left = upper_left!(area);
-        let bottom_right = bottom_right!(area);
-        let (x, y) = upper_left;
-        if y > (get_y(bottom_right))
-            || x > get_x(bottom_right)
-            || y >= get_y(bounds)
-            || x >= get_x(bounds)
-        {
-            log::debug!("BUG: Invalid area in change_theme:\n area: {:?}", area);
-            return;
-        }
-        if !is_valid_area!(area) {
-            log::debug!("BUG: Invalid area in change_theme:\n area: {:?}", area);
-            return;
-        }
-    }
-    for row in grid.bounds_iter(area) {
-        for c in row {
-            grid[c]
-                .set_fg(theme.fg)
-                .set_bg(theme.bg)
-                .set_attrs(theme.attrs);
-        }
-    }
-}
-
-/// Completely clear an `Area` with an empty char and the terminal's default
-/// colors.
-pub fn clear_area(grid: &mut CellBuffer, area: Area, attributes: ThemeAttribute) {
-    if !is_valid_area!(area) {
-        return;
-    }
-    for row in grid.bounds_iter(area) {
-        for c in row {
-            grid[c] = Cell::default();
-            grid[c]
-                .set_fg(attributes.fg)
-                .set_bg(attributes.bg)
-                .set_attrs(attributes.attrs);
-        }
     }
 }
 

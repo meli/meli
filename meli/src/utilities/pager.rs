@@ -309,8 +309,7 @@ impl Pager {
         if let Some((ref cmd, ref filtered_content)) = self.filtered_content {
             match filtered_content {
                 Ok(ref content) => {
-                    copy_area(
-                        grid,
+                    grid.copy_area(
                         content,
                         area,
                         (
@@ -371,8 +370,7 @@ impl Pager {
         }
 
         if get_y(upper_left) <= get_y(bottom_right) {
-            clear_area(
-                grid,
+            grid.clear_area(
                 (upper_left, bottom_right),
                 crate::conf::value(context, "theme_default"),
             );
@@ -530,7 +528,7 @@ impl Component for Pager {
             }
         }
 
-        clear_area(grid, area, crate::conf::value(context, "theme_default"));
+        grid.clear_area(area, crate::conf::value(context, "theme_default"));
         let (mut cols, mut rows) = (width!(area), height!(area));
         let (has_more_lines, (width, height)) = if self.filtered_content.is_some() {
             (false, (self.width, self.height))

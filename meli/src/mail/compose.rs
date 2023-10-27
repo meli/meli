@@ -680,7 +680,7 @@ To: {}
     fn draw_attachments(&self, grid: &mut CellBuffer, area: Area, context: &Context) {
         let attachments_no = self.draft.attachments().len();
         let theme_default = crate::conf::value(context, "theme_default");
-        clear_area(grid, area, theme_default);
+        grid.clear_area(area, theme_default);
         #[cfg(feature = "gpgme")]
         if self.gpg_state.sign_mail.is_true() {
             let key_list = self
@@ -959,25 +959,25 @@ impl Component for Composer {
             ),
             None,
         );
-        clear_area(grid, ((x, y), (set_y(bottom_right, y))), theme_default);
-        change_theme(
-            grid,
+        grid.clear_area(((x, y), (set_y(bottom_right, y))), theme_default);
+
+        grid.change_theme(
             (
                 set_x(pos_dec(upper_left!(header_area), (0, 1)), x),
                 set_y(bottom_right!(header_area), y),
             ),
             crate::conf::value(context, "highlight"),
         );
-        clear_area(
-            grid,
+
+        grid.clear_area(
             (
                 pos_dec(upper_left, (0, 1)),
                 set_x(bottom_right, get_x(upper_left) + mid),
             ),
             theme_default,
         );
-        clear_area(
-            grid,
+
+        grid.clear_area(
             (
                 (
                     get_x(bottom_right).saturating_sub(mid),
@@ -995,9 +995,9 @@ impl Component for Composer {
             match embed_pty {
                 EmbedStatus::Running(_, _) => {
                     let mut guard = embed_pty.lock().unwrap();
-                    clear_area(grid, embed_area, theme_default);
-                    copy_area(
-                        grid,
+                    grid.clear_area(embed_area, theme_default);
+
+                    grid.copy_area(
                         guard.grid.buffer(),
                         embed_area,
                         ((0, 0), pos_dec(guard.grid.terminal_size, (1, 1))),
@@ -1009,13 +1009,13 @@ impl Component for Composer {
                 }
                 EmbedStatus::Stopped(_, _) => {
                     let guard = embed_pty.lock().unwrap();
-                    copy_area(
-                        grid,
+
+                    grid.copy_area(
                         guard.grid.buffer(),
                         embed_area,
                         ((0, 0), pos_dec(guard.grid.terminal_size, (1, 1))),
                     );
-                    change_colors(grid, embed_area, Color::Byte(8), theme_default.bg);
+                    grid.change_colors(embed_area, Color::Byte(8), theme_default.bg);
                     let our_map: ShortcutMap =
                         account_settings!(context[self.account_hash].shortcuts.composing)
                             .key_values();
@@ -1046,7 +1046,7 @@ impl Component for Composer {
                             ),
                         ),
                     );
-                    clear_area(grid, inner_area, theme_default);
+                    grid.clear_area(inner_area, theme_default);
                     for (i, l) in [
                         stopped_message.as_str(),
                         stopped_message_2.as_str(),
@@ -1081,14 +1081,13 @@ impl Component for Composer {
         }
         // Force clean pager area, because if body height is less than body_area it will
         // might leave draw artifacts in the remaining area.
-        clear_area(grid, body_area, theme_default);
+        grid.clear_area(body_area, theme_default);
         self.set_dirty(true);
         self.pager.draw(grid, body_area, context);
 
         match self.cursor {
             Cursor::Headers => {
-                change_theme(
-                    grid,
+                grid.change_theme(
                     (
                         pos_dec(upper_left!(body_area), (1, 0)),
                         pos_dec(
@@ -1100,8 +1099,7 @@ impl Component for Composer {
                 );
             }
             Cursor::Body => {
-                change_theme(
-                    grid,
+                grid.change_theme(
                     (
                         pos_dec(upper_left!(body_area), (1, 0)),
                         pos_dec(

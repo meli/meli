@@ -722,7 +722,7 @@ impl Component for EnvelopeView {
 
         let y: usize = {
             if self.mode.is_source() {
-                clear_area(grid, area, self.view_settings.theme_default);
+                grid.clear_area(area, self.view_settings.theme_default);
                 context.dirty_areas.push_back(area);
                 get_y(upper_left)
             } else {
@@ -767,8 +767,8 @@ impl Component for EnvelopeView {
                                         ((_x + 1, _y), bottom_right),
                                         Some(get_x(upper_left)),
                                     );
-                                    clear_area(
-                                        grid,
+
+                                        grid.clear_area(
                                         (
                                             (std::cmp::min(_x, get_x(bottom_right)), _y),
                                             (get_x(bottom_right), _y),
@@ -874,8 +874,7 @@ impl Component for EnvelopeView {
                     let mut x = get_x(upper_left);
                     if let Some(id) = id {
                         if sticky || skip_header_ctr == 0 {
-                            clear_area(
-                                grid,
+                            grid.clear_area(
                                 (set_y(upper_left, y), set_y(bottom_right, y)),
                                 headers_area,
                             );
@@ -978,11 +977,8 @@ impl Component for EnvelopeView {
                 }
 
                 self.force_draw_headers = false;
-                clear_area(
-                    grid,
-                    (set_y(upper_left, y), set_y(bottom_right, y)),
-                    headers_area,
-                );
+
+                grid.clear_area((set_y(upper_left, y), set_y(bottom_right, y)), headers_area);
                 context.dirty_areas.push_back((
                     upper_left,
                     set_y(bottom_right, std::cmp::min(y + 3, get_y(bottom_right))),
@@ -1234,8 +1230,7 @@ impl Component for EnvelopeView {
 
         let l = nth_row_area(area, height!(area));
         if self.cmd_buf.is_empty() {
-            clear_area(
-                grid,
+            grid.clear_area(
                 (pos_inc(l.0, (width!(area).saturating_sub(8), 0)), l.1),
                 self.view_settings.theme_default,
             );

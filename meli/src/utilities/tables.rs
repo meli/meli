@@ -266,8 +266,8 @@ impl<const N: usize> DataColumns<N> {
             }
 
             let mut column_area = bounds.add_x(column_width + 2);
-            copy_area(
-                grid,
+
+            grid.copy_area(
                 &self.columns[col],
                 column_area.area(),
                 (
@@ -281,14 +281,14 @@ impl<const N: usize> DataColumns<N> {
             let gap_area = column_area.add_x(column_width);
             match self.theme_config.theme {
                 TableTheme::Single(row_attr) => {
-                    change_theme(grid, gap_area.area(), row_attr);
+                    grid.change_theme(gap_area.area(), row_attr);
                 }
                 TableTheme::EvenOdd { even, odd } => {
-                    change_theme(grid, gap_area.area(), even);
+                    grid.change_theme(gap_area.area(), even);
                     let mut top_idx = top_idx;
                     for row in gap_area {
                         if top_idx % 2 != 0 {
-                            change_theme(grid, row.area(), odd);
+                            grid.change_theme(row.area(), odd);
                         }
                         top_idx += 1;
                     }
@@ -305,8 +305,7 @@ impl<const N: usize> DataColumns<N> {
                 TableTheme::EvenOdd { even: _, odd } => odd,
             };
 
-            change_theme(
-                grid,
+            grid.change_theme(
                 (
                     pos_inc(upper_left!(total_area), (0, offset)),
                     pos_inc(upper_left!(total_area), (width, offset)),

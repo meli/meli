@@ -173,7 +173,7 @@ impl Component for VSplit {
             (false, true) => total_cols,
             (true, false) => 0,
             (false, false) => {
-                clear_area(grid, area, crate::conf::value(context, "theme_default"));
+                grid.clear_area(area, crate::conf::value(context, "theme_default"));
                 return;
             }
         };

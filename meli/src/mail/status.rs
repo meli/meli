@@ -351,9 +351,9 @@ impl Component for AccountStatus {
             std::cmp::min(width.saturating_sub(cols), self.cursor.0),
             std::cmp::min(height.saturating_sub(rows), self.cursor.1),
         );
-        clear_area(grid, area, self.theme_default);
-        copy_area(
-            grid,
+        grid.clear_area(area, self.theme_default);
+
+        grid.copy_area(
             &self.content,
             area,
             (

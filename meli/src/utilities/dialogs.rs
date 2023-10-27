@@ -377,8 +377,8 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> Component f
                         .set_bg(highlighted_attrs.bg)
                         .set_attrs(highlighted_attrs.attrs);
                 }
-                change_theme(
-                    &mut self.content,
+
+                self.content.change_theme(
                     (
                         ((width - OK_CANCEL.len()) / 2 + CANCEL_OFFSET, height - 1),
                         (
@@ -702,8 +702,8 @@ impl Component for UIConfirmationDialog {
                         .set_bg(highlighted_attrs.bg)
                         .set_attrs(highlighted_attrs.attrs);
                 }
-                change_theme(
-                    &mut self.content,
+
+                self.content.change_theme(
                     (
                         ((width - OK_CANCEL.len()) / 2 + CANCEL_OFFSET, height - 1),
                         (
@@ -885,7 +885,7 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
             self.horizontal_alignment,
         );
         let inner_area = create_box(grid, dialog_area);
-        clear_area(grid, inner_area, self.theme_default);
+        grid.clear_area(inner_area, self.theme_default);
 
         grid.write_string_to_grid(
             &self.title,
@@ -915,12 +915,8 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
             bottom_right!(inner_area),
         );
         let (width, height) = self.content.size();
-        copy_area(
-            grid,
-            &self.content,
-            inner_area,
-            ((0, 0), (width - 1, height - 1)),
-        );
+
+        grid.copy_area(&self.content, inner_area, ((0, 0), (width - 1, height - 1)));
         context.dirty_areas.push_back(dialog_area);
         self.dirty = false;
     }

@@ -120,9 +120,9 @@ impl Component for EmbedContainer {
             match embed_pty {
                 EmbedStatus::Running(_) => {
                     let mut guard = embed_pty.lock().unwrap();
-                    clear_area(grid, embed_area, theme_default);
-                    copy_area(
-                        grid,
+                    grid.clear_area(embed_area, theme_default);
+
+                    grid.copy_area(
                         guard.grid.buffer(),
                         embed_area,
                         ((0, 0), pos_dec(guard.grid.terminal_size, (1, 1))),
@@ -134,14 +134,14 @@ impl Component for EmbedContainer {
                 }
                 EmbedStatus::Stopped(_) => {
                     let guard = embed_pty.lock().unwrap();
-                    copy_area(
-                        grid,
+
+                    grid.copy_area(
                         guard.grid.buffer(),
                         embed_area,
                         ((0, 0), pos_dec(guard.grid.terminal_size, (1, 1))),
                     );
-                    change_theme(
-                        grid,
+
+                    grid.change_theme(
                         embed_area,
                         ThemeAttribute {
                             fg: Color::Byte(8),
@@ -170,7 +170,7 @@ impl Component for EmbedContainer {
                             ),
                         ),
                     );
-                    clear_area(grid, inner_area, theme_default);
+                    grid.clear_area(inner_area, theme_default);
                     for (i, l) in [
                         stopped_message.as_str(),
                         stopped_message_2.as_str(),
@@ -195,7 +195,7 @@ impl Component for EmbedContainer {
             }
         } else {
             let theme_default = crate::conf::value(context, "theme_default");
-            clear_area(grid, area, theme_default);
+            grid.clear_area(area, theme_default);
             self.embed_area = (upper_left!(area), bottom_right!(area));
             match create_pty(
                 width!(self.embed_area),
