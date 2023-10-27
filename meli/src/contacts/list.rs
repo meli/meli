@@ -161,7 +161,7 @@ impl ContactList {
         for (idx, c) in book_values.iter().enumerate() {
             self.id_positions.push(*c.id());
 
-            self.data_columns.columns[0].write_string_to_grid(
+            self.data_columns.columns[0].write_string(
                 c.name(),
                 self.theme_default.fg,
                 self.theme_default.bg,
@@ -170,7 +170,7 @@ impl ContactList {
                 None,
             );
 
-            self.data_columns.columns[1].write_string_to_grid(
+            self.data_columns.columns[1].write_string(
                 c.email(),
                 self.theme_default.fg,
                 self.theme_default.bg,
@@ -179,7 +179,7 @@ impl ContactList {
                 None,
             );
 
-            self.data_columns.columns[2].write_string_to_grid(
+            self.data_columns.columns[2].write_string(
                 c.url(),
                 self.theme_default.fg,
                 self.theme_default.bg,
@@ -188,7 +188,7 @@ impl ContactList {
                 None,
             );
 
-            self.data_columns.columns[3].write_string_to_grid(
+            self.data_columns.columns[3].write_string(
                 if c.external_resource() {
                     "external"
                 } else {
@@ -206,7 +206,7 @@ impl ContactList {
             let message = "Address book is empty.".to_string();
             self.data_columns.columns[0] =
                 CellBuffer::new_with_context(message.len(), self.length, None, context);
-            self.data_columns.columns[0].write_string_to_grid(
+            self.data_columns.columns[0].write_string(
                 &message,
                 self.theme_default.fg,
                 self.theme_default.bg,
@@ -277,7 +277,7 @@ impl ContactList {
 
         if a.name.grapheme_len() + s.len() > width + 1 {
             /* Print account name */
-            let (x, y) = grid.write_string_to_grid(
+            let (x, y) = grid.write_string(
                 &a.name,
                 account_attrs.fg,
                 account_attrs.bg,
@@ -285,7 +285,7 @@ impl ContactList {
                 area,
                 None,
             );
-            grid.write_string_to_grid(
+            grid.write_string(
                 &s,
                 account_attrs.fg,
                 account_attrs.bg,
@@ -299,7 +299,7 @@ impl ContactList {
                 ),
                 None,
             );
-            grid.write_string_to_grid(
+            grid.write_string(
                 "…",
                 account_attrs.fg,
                 account_attrs.bg,
@@ -323,7 +323,7 @@ impl ContactList {
         } else {
             /* Print account name */
 
-            let (x, y) = grid.write_string_to_grid(
+            let (x, y) = grid.write_string(
                 &a.name,
                 account_attrs.fg,
                 account_attrs.bg,
@@ -331,7 +331,7 @@ impl ContactList {
                 area,
                 None,
             );
-            grid.write_string_to_grid(
+            grid.write_string(
                 &s,
                 account_attrs.fg,
                 account_attrs.bg,
@@ -485,7 +485,7 @@ impl ContactList {
                 continue;
             }
             let (column_width, column_height) = self.data_columns.columns[i].size();
-            grid.write_string_to_grid(
+            grid.write_string(
                 match i {
                     0 => "NAME",
                     1 => "E-MAIL",

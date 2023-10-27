@@ -130,7 +130,7 @@ impl MailboxManager {
             CellBuffer::new_with_context(min_width.3, self.length, None, context);
 
         for (idx, e) in self.entries.values().enumerate() {
-            self.data_columns.columns[0].write_string_to_grid(
+            self.data_columns.columns[0].write_string(
                 e.name(),
                 self.theme_default.fg,
                 self.theme_default.bg,
@@ -139,7 +139,7 @@ impl MailboxManager {
                 None,
             );
 
-            self.data_columns.columns[1].write_string_to_grid(
+            self.data_columns.columns[1].write_string(
                 e.ref_mailbox.path(),
                 self.theme_default.fg,
                 self.theme_default.bg,
@@ -149,7 +149,7 @@ impl MailboxManager {
             );
 
             let (_unseen, total) = e.ref_mailbox.count().ok().unwrap_or((0, 0));
-            self.data_columns.columns[2].write_string_to_grid(
+            self.data_columns.columns[2].write_string(
                 &total.to_string(),
                 self.theme_default.fg,
                 self.theme_default.bg,
@@ -158,7 +158,7 @@ impl MailboxManager {
                 None,
             );
 
-            self.data_columns.columns[3].write_string_to_grid(
+            self.data_columns.columns[3].write_string(
                 if e.ref_mailbox.is_subscribed() {
                     "yes"
                 } else {
@@ -176,7 +176,7 @@ impl MailboxManager {
             let message = "No mailboxes.".to_string();
             self.data_columns.columns[0] =
                 CellBuffer::new_with_context(message.len(), self.length, None, context);
-            self.data_columns.columns[0].write_string_to_grid(
+            self.data_columns.columns[0].write_string(
                 &message,
                 self.theme_default.fg,
                 self.theme_default.bg,

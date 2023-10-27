@@ -353,7 +353,7 @@ impl Pager {
             .skip(self.cursor.1)
             .take(height!(area))
         {
-            grid.write_string_to_grid(
+            grid.write_string(
                 l,
                 self.colors.fg,
                 self.colors.bg,
@@ -635,7 +635,7 @@ impl Component for Pager {
                 if !context.settings.terminal.use_color() {
                     attribute.attrs |= Attr::REVERSE;
                 }
-                let (_, y) = grid.write_string_to_grid(
+                let (_, y) = grid.write_string(
                     &status_message,
                     attribute.fg,
                     attribute.bg,

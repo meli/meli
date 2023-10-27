@@ -691,7 +691,7 @@ To: {}
                 .collect::<Vec<_>>()
                 .join(", ");
 
-            grid.write_string_to_grid(
+            grid.write_string(
                 &format!(
                     "☑ sign with {}",
                     if self.gpg_state.sign_keys.is_empty() {
@@ -711,7 +711,7 @@ To: {}
                 None,
             );
         } else {
-            grid.write_string_to_grid(
+            grid.write_string(
                 "☐ don't sign",
                 theme_default.fg,
                 if self.cursor == Cursor::Sign {
@@ -734,7 +734,7 @@ To: {}
                 .collect::<Vec<_>>()
                 .join(", ");
 
-            grid.write_string_to_grid(
+            grid.write_string(
                 &format!(
                     "{}{}",
                     if self.gpg_state.encrypt_keys.is_empty() {
@@ -759,7 +759,7 @@ To: {}
                 None,
             );
         } else {
-            grid.write_string_to_grid(
+            grid.write_string(
                 "☐ don't encrypt",
                 theme_default.fg,
                 if self.cursor == Cursor::Encrypt {
@@ -773,7 +773,7 @@ To: {}
             );
         }
         if attachments_no == 0 {
-            grid.write_string_to_grid(
+            grid.write_string(
                 "no attachments",
                 theme_default.fg,
                 if self.cursor == Cursor::Attachments {
@@ -786,7 +786,7 @@ To: {}
                 None,
             );
         } else {
-            grid.write_string_to_grid(
+            grid.write_string(
                 &format!("{} attachments ", attachments_no),
                 theme_default.fg,
                 if self.cursor == Cursor::Attachments {
@@ -800,7 +800,7 @@ To: {}
             );
             for (i, a) in self.draft.attachments().iter().enumerate() {
                 if let Some(name) = a.content_type().name() {
-                    grid.write_string_to_grid(
+                    grid.write_string(
                         &format!(
                             "[{}] \"{}\", {} {}",
                             i,
@@ -815,7 +815,7 @@ To: {}
                         None,
                     );
                 } else {
-                    grid.write_string_to_grid(
+                    grid.write_string(
                         &format!(
                             "[{}] {} {}",
                             i,
@@ -944,7 +944,7 @@ impl Component for Composer {
             ),
         );
 
-        let (x, y) = grid.write_string_to_grid(
+        let (x, y) = grid.write_string(
             if self.reply_context.is_some() {
                 "COMPOSING REPLY"
             } else {
@@ -1055,7 +1055,7 @@ impl Component for Composer {
                     .iter()
                     .enumerate()
                     {
-                        grid.write_string_to_grid(
+                        grid.write_string(
                             l,
                             theme_default.fg,
                             theme_default.bg,

@@ -135,7 +135,7 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> Component f
                  * cursor */
                 self.entries[c].1 = !self.entries[c].1;
                 if self.entries[c].1 {
-                    self.content.write_string_to_grid(
+                    self.content.write_string(
                         "x",
                         highlighted_attrs.fg,
                         highlighted_attrs.bg,
@@ -144,7 +144,7 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> Component f
                         None,
                     );
                 } else {
-                    self.content.write_string_to_grid(
+                    self.content.write_string(
                         " ",
                         highlighted_attrs.fg,
                         highlighted_attrs.bg,
@@ -460,7 +460,7 @@ impl Component for UIConfirmationDialog {
                  * cursor */
                 self.entries[c].1 = !self.entries[c].1;
                 if self.entries[c].1 {
-                    self.content.write_string_to_grid(
+                    self.content.write_string(
                         "x",
                         highlighted_attrs.fg,
                         highlighted_attrs.bg,
@@ -469,7 +469,7 @@ impl Component for UIConfirmationDialog {
                         None,
                     );
                 } else {
-                    self.content.write_string_to_grid(
+                    self.content.write_string(
                         " ",
                         highlighted_attrs.fg,
                         highlighted_attrs.bg,
@@ -815,7 +815,7 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
         let mut content = CellBuffer::new_with_context(width, height, None, context);
         if self.single_only {
             for (i, e) in self.entry_titles.iter().enumerate() {
-                content.write_string_to_grid(
+                content.write_string(
                     e,
                     self.theme_default.fg,
                     self.theme_default.bg,
@@ -826,7 +826,7 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
             }
         } else {
             for (i, e) in self.entry_titles.iter().enumerate() {
-                content.write_string_to_grid(
+                content.write_string(
                     &format!("[ ] {}", e),
                     self.theme_default.fg,
                     self.theme_default.bg,
@@ -835,7 +835,7 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
                     None,
                 );
             }
-            content.write_string_to_grid(
+            content.write_string(
                 OK_CANCEL,
                 self.theme_default.fg,
                 self.theme_default.bg,
@@ -887,7 +887,7 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
         let inner_area = create_box(grid, dialog_area);
         grid.clear_area(inner_area, self.theme_default);
 
-        grid.write_string_to_grid(
+        grid.write_string(
             &self.title,
             self.theme_default.fg,
             self.theme_default.bg,
@@ -899,7 +899,7 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
             None,
         );
 
-        grid.write_string_to_grid(
+        grid.write_string(
             &navigate_help_string,
             self.theme_default.fg,
             self.theme_default.bg,

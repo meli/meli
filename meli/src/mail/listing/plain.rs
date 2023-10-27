@@ -232,7 +232,7 @@ impl MailListingTrait for PlainListing {
                 self.data_columns.columns[0] =
                     CellBuffer::new_with_context(message.len(), 1, None, context);
                 self.length = 0;
-                self.data_columns.columns[0].write_string_to_grid(
+                self.data_columns.columns[0].write_string(
                     message.as_str(),
                     self.color_cache.theme_default.fg,
                     self.color_cache.theme_default.bg,
@@ -917,7 +917,7 @@ impl PlainListing {
 
             let row_attr = self.rows.row_attr_cache[&idx];
 
-            let (x, _) = columns[0].write_string_to_grid(
+            let (x, _) = columns[0].write_string(
                 &idx.to_string(),
                 row_attr.fg,
                 row_attr.bg,
@@ -928,7 +928,7 @@ impl PlainListing {
             for c in columns[0].row_iter(x..min_width.0, idx) {
                 columns[0][c].set_bg(row_attr.bg).set_attrs(row_attr.attrs);
             }
-            let (x, _) = columns[1].write_string_to_grid(
+            let (x, _) = columns[1].write_string(
                 &strings.date,
                 row_attr.fg,
                 row_attr.bg,
@@ -939,7 +939,7 @@ impl PlainListing {
             for c in columns[1].row_iter(x..min_width.1, idx) {
                 columns[1][c].set_bg(row_attr.bg).set_attrs(row_attr.attrs);
             }
-            let (x, _) = columns[2].write_string_to_grid(
+            let (x, _) = columns[2].write_string(
                 &strings.from,
                 row_attr.fg,
                 row_attr.bg,
@@ -950,7 +950,7 @@ impl PlainListing {
             for c in columns[2].row_iter(x..min_width.2, idx) {
                 columns[2][c].set_bg(row_attr.bg).set_attrs(row_attr.attrs);
             }
-            let (x, _) = columns[3].write_string_to_grid(
+            let (x, _) = columns[3].write_string(
                 &strings.flag,
                 row_attr.fg,
                 row_attr.bg,
@@ -958,7 +958,7 @@ impl PlainListing {
                 ((0, idx), (min_width.3, idx)),
                 None,
             );
-            let (x, _) = columns[3].write_string_to_grid(
+            let (x, _) = columns[3].write_string(
                 &strings.subject,
                 row_attr.fg,
                 row_attr.bg,
@@ -970,7 +970,7 @@ impl PlainListing {
                 let mut x = x + 1;
                 for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
                     let color = color.unwrap_or(self.color_cache.tag_default.bg);
-                    let (_x, _) = columns[3].write_string_to_grid(
+                    let (_x, _) = columns[3].write_string(
                         t,
                         self.color_cache.tag_default.fg,
                         color,
@@ -1002,7 +1002,7 @@ impl PlainListing {
             let message: String = account[&self.cursor_pos.1].status();
             self.data_columns.columns[0] =
                 CellBuffer::new_with_context(message.len(), self.length + 1, None, context);
-            self.data_columns.columns[0].write_string_to_grid(
+            self.data_columns.columns[0].write_string(
                 &message,
                 self.color_cache.theme_default.fg,
                 self.color_cache.theme_default.bg,
@@ -1056,7 +1056,7 @@ impl PlainListing {
         columns[2].clear_area(((0, idx), (min_width.2, idx)), row_attr);
         columns[3].clear_area(((0, idx), (min_width.3, idx)), row_attr);
 
-        let (x, _) = columns[0].write_string_to_grid(
+        let (x, _) = columns[0].write_string(
             &idx.to_string(),
             row_attr.fg,
             row_attr.bg,
@@ -1067,7 +1067,7 @@ impl PlainListing {
         for c in columns[0].row_iter(x..min_width.0, idx) {
             columns[0][c].set_bg(row_attr.bg).set_attrs(row_attr.attrs);
         }
-        let (x, _) = columns[1].write_string_to_grid(
+        let (x, _) = columns[1].write_string(
             &strings.date,
             row_attr.fg,
             row_attr.bg,
@@ -1078,7 +1078,7 @@ impl PlainListing {
         for c in columns[1].row_iter(x..min_width.1, idx) {
             columns[1][c].set_bg(row_attr.bg).set_attrs(row_attr.attrs);
         }
-        let (x, _) = columns[2].write_string_to_grid(
+        let (x, _) = columns[2].write_string(
             &strings.from,
             row_attr.fg,
             row_attr.bg,
@@ -1089,7 +1089,7 @@ impl PlainListing {
         for c in columns[2].row_iter(x..min_width.2, idx) {
             columns[2][c].set_bg(row_attr.bg).set_attrs(row_attr.attrs);
         }
-        let (x, _) = columns[3].write_string_to_grid(
+        let (x, _) = columns[3].write_string(
             &strings.flag,
             row_attr.fg,
             row_attr.bg,
@@ -1097,7 +1097,7 @@ impl PlainListing {
             ((0, idx), (min_width.3, idx)),
             None,
         );
-        let (x, _) = columns[3].write_string_to_grid(
+        let (x, _) = columns[3].write_string(
             &strings.subject,
             row_attr.fg,
             row_attr.bg,
@@ -1109,7 +1109,7 @@ impl PlainListing {
             let mut x = x + 1;
             for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
                 let color = color.unwrap_or(self.color_cache.tag_default.bg);
-                let (_x, _) = columns[3].write_string_to_grid(
+                let (_x, _) = columns[3].write_string(
                     t,
                     self.color_cache.tag_default.fg,
                     color,
@@ -1155,7 +1155,7 @@ impl Component for PlainListing {
             let mut area = area;
             if !self.filter_term.is_empty() {
                 let (upper_left, bottom_right) = area;
-                let (x, y) = grid.write_string_to_grid(
+                let (x, y) = grid.write_string(
                     &format!(
                         "{} results for `{}` (Press ESC to exit)",
                         self.filtered_selection.len(),

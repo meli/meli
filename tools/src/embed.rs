@@ -179,7 +179,7 @@ impl Component for EmbedContainer {
                     .iter()
                     .enumerate()
                     {
-                        grid.write_string_to_grid(
+                        grid.write_string(
                             l,
                             theme_default.fg,
                             theme_default.bg,

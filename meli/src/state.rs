@@ -709,7 +709,7 @@ impl State {
                         .chain(Some(String::new()))
                         .chain(Some(datetime::timestamp_to_string(*timestamp, None, false)))
                     {
-                        self.screen.overlay_grid.write_string_to_grid(
+                        self.screen.overlay_grid.write_string(
                             &line,
                             noto_colors.fg,
                             noto_colors.bg,
@@ -721,7 +721,7 @@ impl State {
                     }
 
                     if self.display_messages.len() > 1 {
-                        self.screen.overlay_grid.write_string_to_grid(
+                        self.screen.overlay_grid.write_string(
                             &if self.display_messages_pos == 0 {
                                 format!(
                                     "Next: {}",

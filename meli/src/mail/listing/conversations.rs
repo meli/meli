@@ -465,7 +465,7 @@ impl ListingTrait for ConversationsListing {
         if let Err(message) = self.error.as_ref() {
             grid.clear_area(area, self.color_cache.theme_default);
 
-            grid.write_string_to_grid(
+            grid.write_string(
                 message,
                 self.color_cache.theme_default.fg,
                 self.color_cache.theme_default.bg,
@@ -904,7 +904,7 @@ impl ConversationsListing {
                 self.rows.is_thread_selected(*thread_hash)
             );
             /* draw flags */
-            let (x, _) = grid.write_string_to_grid(
+            let (x, _) = grid.write_string(
                 &strings.flag,
                 row_attr.fg,
                 row_attr.bg,
@@ -923,7 +923,7 @@ impl ConversationsListing {
                 self.rows.is_thread_selected(*thread_hash)
             );
             /* draw subject */
-            let (mut x, subject_overflowed) = grid.write_string_to_grid(
+            let (mut x, subject_overflowed) = grid.write_string(
                 &strings.subject,
                 subject_attr.fg,
                 subject_attr.bg,
@@ -937,7 +937,7 @@ impl ConversationsListing {
                     break;
                 };
                 let color = color.unwrap_or(self.color_cache.tag_default.bg);
-                let (_x, _y) = grid.write_string_to_grid(
+                let (_x, _y) = grid.write_string(
                     t,
                     self.color_cache.tag_default.fg,
                     color,
@@ -981,7 +981,7 @@ impl ConversationsListing {
                 return;
             }
             /* Next line, draw date */
-            let (x, _) = grid.write_string_to_grid(
+            let (x, _) = grid.write_string(
                 &strings.date,
                 date_attr.fg,
                 date_attr.bg,
@@ -1003,7 +1003,7 @@ impl ConversationsListing {
                 self.rows.is_thread_selected(*thread_hash)
             );
             /* draw from */
-            let (x, _) = grid.write_string_to_grid(
+            let (x, _) = grid.write_string(
                 &strings.from,
                 from_attr.fg,
                 from_attr.bg,
@@ -1042,7 +1042,7 @@ impl Component for ConversationsListing {
             let mut area = area;
 
             if !self.filter_term.is_empty() {
-                let (x, y) = grid.write_string_to_grid(
+                let (x, y) = grid.write_string(
                     &format!(
                         "{} results for `{}` (Press ESC to exit)",
                         self.filtered_selection.len(),

@@ -70,7 +70,7 @@ impl Component for AccountStatus {
         self.dirty = false;
         let (mut width, _) = self.content.size();
         let a = &context.accounts[self.account_pos];
-        let (_x, _y) = self.content.write_string_to_grid(
+        let (_x, _y) = self.content.write_string(
             "Account ",
             self.theme_default.fg,
             self.theme_default.bg,
@@ -78,7 +78,7 @@ impl Component for AccountStatus {
             ((1, 0), (width - 1, 0)),
             None,
         );
-        let (_x, _y) = self.content.write_string_to_grid(
+        let (_x, _y) = self.content.write_string(
             a.name(),
             self.theme_default.fg,
             self.theme_default.bg,
@@ -89,7 +89,7 @@ impl Component for AccountStatus {
         width = self.content.size().0;
         let mut line = 2;
 
-        self.content.write_string_to_grid(
+        self.content.write_string(
             "In-progress jobs:",
             self.theme_default.fg,
             self.theme_default.bg,
@@ -102,7 +102,7 @@ impl Component for AccountStatus {
         for (job_id, req) in a.active_jobs.iter() {
             width = self.content.size().0;
             use crate::accounts::JobRequest;
-            let (x, y) = self.content.write_string_to_grid(
+            let (x, y) = self.content.write_string(
                 &format!("{} {}", req, job_id),
                 self.theme_default.fg,
                 self.theme_default.bg,
@@ -116,7 +116,7 @@ impl Component for AccountStatus {
             | JobRequest::Refresh { mailbox_hash, .. }
             | JobRequest::Fetch { mailbox_hash, .. } = req
             {
-                self.content.write_string_to_grid(
+                self.content.write_string(
                     a.mailbox_entries[mailbox_hash].name(),
                     self.theme_default.fg,
                     self.theme_default.bg,
@@ -132,7 +132,7 @@ impl Component for AccountStatus {
         line += 2;
         width = self.content.size().0;
 
-        let (_x, _y) = self.content.write_string_to_grid(
+        let (_x, _y) = self.content.write_string(
             "Tag support: ",
             self.theme_default.fg,
             self.theme_default.bg,
@@ -141,7 +141,7 @@ impl Component for AccountStatus {
             None,
         );
         width = self.content.size().0;
-        self.content.write_string_to_grid(
+        self.content.write_string(
             if a.backend_capabilities.supports_tags {
                 "yes"
             } else {
@@ -155,7 +155,7 @@ impl Component for AccountStatus {
         );
         width = self.content.size().0;
         line += 1;
-        let (_x, _y) = self.content.write_string_to_grid(
+        let (_x, _y) = self.content.write_string(
             "Search backend: ",
             self.theme_default.fg,
             self.theme_default.bg,
@@ -164,7 +164,7 @@ impl Component for AccountStatus {
             None,
         );
         width = self.content.size().0;
-        self.content.write_string_to_grid(
+        self.content.write_string(
             &match (
                 a.settings.conf.search_backend(),
                 a.backend_capabilities.supports_search,
@@ -193,7 +193,7 @@ impl Component for AccountStatus {
         width = self.content.size().0;
         line += 1;
 
-        self.content.write_string_to_grid(
+        self.content.write_string(
             "Special Mailboxes:",
             self.theme_default.fg,
             self.theme_default.bg,
@@ -209,7 +209,7 @@ impl Component for AccountStatus {
         {
             width = self.content.size().0;
             line += 1;
-            self.content.write_string_to_grid(
+            self.content.write_string(
                 &format!("{}: {}", f.path(), f.special_usage()),
                 self.theme_default.fg,
                 self.theme_default.bg,
@@ -220,7 +220,7 @@ impl Component for AccountStatus {
         }
         line += 2;
         width = self.content.size().0;
-        self.content.write_string_to_grid(
+        self.content.write_string(
             "Subscribed mailboxes:",
             self.theme_default.fg,
             self.theme_default.bg,
@@ -233,7 +233,7 @@ impl Component for AccountStatus {
             width = self.content.size().0;
             let f: &Mailbox = &a[&mailbox_node.hash].ref_mailbox;
             if f.is_subscribed() {
-                self.content.write_string_to_grid(
+                self.content.write_string(
                     f.path(),
                     self.theme_default.fg,
                     self.theme_default.bg,
@@ -248,7 +248,7 @@ impl Component for AccountStatus {
         line += 1;
         width = self.content.size().0;
         if let Some(ref extensions) = a.backend_capabilities.extensions {
-            self.content.write_string_to_grid(
+            self.content.write_string(
                 "Server Extensions:",
                 self.theme_default.fg,
                 self.theme_default.bg,
@@ -265,7 +265,7 @@ impl Component for AccountStatus {
                     .unwrap_or(0),
             );
             width = self.content.size().0;
-            self.content.write_string_to_grid(
+            self.content.write_string(
                 "meli support:",
                 self.theme_default.fg,
                 self.theme_default.bg,
@@ -276,7 +276,7 @@ impl Component for AccountStatus {
             line += 1;
             for (name, status) in extensions.iter() {
                 width = self.content.size().0;
-                self.content.write_string_to_grid(
+                self.content.write_string(
                     name.trim_at_boundary(30),
                     self.theme_default.fg,
                     self.theme_default.bg,
@@ -298,7 +298,7 @@ impl Component for AccountStatus {
                             ("enabled", Color::Green)
                         }
                     };
-                    self.content.write_string_to_grid(
+                    self.content.write_string(
                         status,
                         color,
                         self.theme_default.bg,
@@ -312,7 +312,7 @@ impl Component for AccountStatus {
                     | MailBackendExtensionStatus::Supported { comment }
                     | MailBackendExtensionStatus::Enabled { comment } => {
                         if let Some(s) = comment {
-                            let (x, y) = self.content.write_string_to_grid(
+                            let (x, y) = self.content.write_string(
                                 " (",
                                 self.theme_default.fg,
                                 self.theme_default.bg,
@@ -320,7 +320,7 @@ impl Component for AccountStatus {
                                 ((x, y), (width - 1, y)),
                                 None,
                             );
-                            let (x, y) = self.content.write_string_to_grid(
+                            let (x, y) = self.content.write_string(
                                 s,
                                 self.theme_default.fg,
                                 self.theme_default.bg,
@@ -328,7 +328,7 @@ impl Component for AccountStatus {
                                 ((x, y), (width - 1, y)),
                                 None,
                             );
-                            self.content.write_string_to_grid(
+                            self.content.write_string(
                                 ")",
                                 self.theme_default.fg,
                                 self.theme_default.bg,
@@ -343,7 +343,7 @@ impl Component for AccountStatus {
             }
         }
 
-        /* self.content may have been resized with write_string_to_grid() calls above
+        /* self.content may have been resized with write_string() calls above
          * since it has growable set */
         let (width, height) = self.content.size();
         let (cols, rows) = (width!(area), height!(area));

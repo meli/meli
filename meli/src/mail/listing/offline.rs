@@ -141,7 +141,7 @@ impl Component for OfflineListing {
         let error_message = conf::value(context, "error_message");
         grid.clear_area(area, theme_default);
         if let Err(err) = context.is_online(self.cursor_pos.0) {
-            let (x, _) = grid.write_string_to_grid(
+            let (x, _) = grid.write_string(
                 "offline: ",
                 error_message.fg,
                 error_message.bg,
@@ -150,7 +150,7 @@ impl Component for OfflineListing {
                 None,
             );
 
-            grid.write_string_to_grid(
+            grid.write_string(
                 &err.to_string(),
                 error_message.fg,
                 error_message.bg,
@@ -159,7 +159,7 @@ impl Component for OfflineListing {
                 Some(get_x(upper_left!(area))),
             );
             if let Some(msg) = self.messages.last() {
-                grid.write_string_to_grid(
+                grid.write_string(
                     msg,
                     text_unfocused.fg,
                     text_unfocused.bg,
@@ -169,7 +169,7 @@ impl Component for OfflineListing {
                 );
             }
             for (i, msg) in self.messages.iter().rev().skip(1).enumerate() {
-                grid.write_string_to_grid(
+                grid.write_string(
                     msg,
                     text_unfocused.fg,
                     text_unfocused.bg,
@@ -179,7 +179,7 @@ impl Component for OfflineListing {
                 );
             }
         } else {
-            let (_, mut y) = grid.write_string_to_grid(
+            let (_, mut y) = grid.write_string(
                 "loading...",
                 conf::value(context, "highlight").fg,
                 conf::value(context, "highlight").bg,
@@ -193,7 +193,7 @@ impl Component for OfflineListing {
                 .collect();
             jobs.sort_by_key(|(j, _)| *j);
             for (job_id, j) in jobs {
-                grid.write_string_to_grid(
+                grid.write_string(
                     &format!("{}: {:?}", job_id, j),
                     text_unfocused.fg,
                     text_unfocused.bg,

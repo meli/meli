@@ -170,7 +170,7 @@ impl JobManager {
             CellBuffer::new_with_context(self.min_width[4], self.length, None, context);
 
         for (idx, e) in self.entries.values().enumerate() {
-            self.data_columns.columns[0].write_string_to_grid(
+            self.data_columns.columns[0].write_string(
                 &e.id.to_string(),
                 self.theme_default.fg,
                 self.theme_default.bg,
@@ -179,7 +179,7 @@ impl JobManager {
                 None,
             );
 
-            self.data_columns.columns[1].write_string_to_grid(
+            self.data_columns.columns[1].write_string(
                 &e.desc,
                 self.theme_default.fg,
                 self.theme_default.bg,
@@ -188,7 +188,7 @@ impl JobManager {
                 None,
             );
 
-            self.data_columns.columns[2].write_string_to_grid(
+            self.data_columns.columns[2].write_string(
                 &datetime::timestamp_to_string(e.started, Some(RFC3339_DATETIME_AND_SPACE), true),
                 self.theme_default.fg,
                 self.theme_default.bg,
@@ -197,7 +197,7 @@ impl JobManager {
                 None,
             );
 
-            self.data_columns.columns[3].write_string_to_grid(
+            self.data_columns.columns[3].write_string(
                 &if let Some(t) = e.finished {
                     Cow::Owned(datetime::timestamp_to_string(
                         t,
@@ -214,7 +214,7 @@ impl JobManager {
                 None,
             );
 
-            self.data_columns.columns[4].write_string_to_grid(
+            self.data_columns.columns[4].write_string(
                 &if e.finished.is_some() {
                     Cow::Owned(format!("{:?}", e.succeeded))
                 } else {
@@ -232,7 +232,7 @@ impl JobManager {
             let message = "No jobs.".to_string();
             self.data_columns.columns[0] =
                 CellBuffer::new_with_context(message.len(), self.length, None, context);
-            self.data_columns.columns[0].write_string_to_grid(
+            self.data_columns.columns[0].write_string(
                 &message,
                 self.theme_default.fg,
                 self.theme_default.bg,
@@ -393,7 +393,7 @@ impl Component for JobManager {
             let mut x_offset = 0;
             let (upper_left, bottom_right) = area;
             for (i, (h, w)) in Self::HEADERS.iter().zip(self.min_width).enumerate() {
-                grid.write_string_to_grid(
+                grid.write_string(
                     h,
                     self.theme_default.fg,
                     self.theme_default.bg,
@@ -409,7 +409,7 @@ impl Component for JobManager {
                         (false, Asc) => DataColumns::<5>::ARROW_UP,
                         (false, Desc) => DataColumns::<5>::ARROW_DOWN,
                     };
-                    grid.write_string_to_grid(
+                    grid.write_string(
                         arrow,
                         self.theme_default.fg,
                         self.theme_default.bg,

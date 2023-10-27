@@ -2653,7 +2653,7 @@ impl Listing {
         };
 
         /* Print account name first */
-        self.menu_content.write_string_to_grid(
+        self.menu_content.write_string(
             &self.accounts[aidx].name,
             account_attrs.fg,
             account_attrs.bg,
@@ -2663,7 +2663,7 @@ impl Listing {
         );
 
         if lines.is_empty() {
-            self.menu_content.write_string_to_grid(
+            self.menu_content.write_string(
                 "offline",
                 crate::conf::value(context, "error_message").fg,
                 account_attrs.bg,
@@ -2804,7 +2804,7 @@ impl Listing {
             .map(|s| s.as_str())
             .unwrap_or(" ");
 
-            let (x, _) = self.menu_content.write_string_to_grid(
+            let (x, _) = self.menu_content.write_string(
                 &if *account_settings!(
                     context[self.accounts[aidx].hash]
                         .listing
@@ -2846,7 +2846,7 @@ impl Listing {
                     }
                 }
             }
-            let (x, _) = self.menu_content.write_string_to_grid(
+            let (x, _) = self.menu_content.write_string(
                 &branches,
                 att.fg,
                 att.bg,
@@ -2854,7 +2854,7 @@ impl Listing {
                 ((x, y), bottom_right),
                 None,
             );
-            let (x, _) = self.menu_content.write_string_to_grid(
+            let (x, _) = self.menu_content.write_string(
                 context.accounts[self.accounts[aidx].index].mailbox_entries[&l.mailbox_idx].name(),
                 att.fg,
                 att.bg,
@@ -2875,7 +2875,7 @@ impl Listing {
                 (None, Some(coll)) => format!(" ({}) v", coll),
             };
 
-            let (x, _) = self.menu_content.write_string_to_grid(
+            let (x, _) = self.menu_content.write_string(
                 &count_string,
                 unread_count_att.fg,
                 unread_count_att.bg,

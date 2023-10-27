@@ -437,7 +437,7 @@ impl CellBuffer {
 
     /// Write an `&str` to a `CellBuffer` in a specified `Area` with the passed
     /// colors.
-    pub fn write_string_to_grid(
+    pub fn write_string(
         &mut self,
         s: &str,
         fg_color: Color,
@@ -1847,7 +1847,7 @@ mod tests {
         );
         let width = buf.size().0;
         for (i, l) in lines.iter().enumerate() {
-            buf.write_string_to_grid(
+            buf.write_string(
                 l,
                 Color::Default,
                 Color::Default,

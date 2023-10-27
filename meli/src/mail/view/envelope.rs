@@ -743,7 +743,7 @@ impl Component for EnvelopeView {
                             if sticky || skip_header_ctr == 0 {
                                 if y <= get_y(bottom_right) {
                                     let (_x, _y) =
-                                        grid.write_string_to_grid(
+                                        grid.write_string(
                                         &format!("{}:", $header),
                                         headers_names.fg,
                                         headers_names.bg,
@@ -759,7 +759,7 @@ impl Component for EnvelopeView {
                                     }
 
                                     let (_x, _y) =
-                                        grid.write_string_to_grid(
+                                        grid.write_string(
                                         &$string,
                                         headers.fg,
                                         headers.bg,
@@ -878,7 +878,7 @@ impl Component for EnvelopeView {
                                 (set_y(upper_left, y), set_y(bottom_right, y)),
                                 headers_area,
                             );
-                            let (_x, _) = grid.write_string_to_grid(
+                            let (_x, _) = grid.write_string(
                                 "List-ID: ",
                                 headers_names.fg,
                                 headers_names.bg,
@@ -886,7 +886,7 @@ impl Component for EnvelopeView {
                                 (set_y(upper_left, y), bottom_right),
                                 None,
                             );
-                            let (_x, _y) = grid.write_string_to_grid(
+                            let (_x, _y) = grid.write_string(
                                 id,
                                 headers.fg,
                                 headers.bg,
@@ -904,7 +904,7 @@ impl Component for EnvelopeView {
                     }
                     if sticky || skip_header_ctr == 0 {
                         if archive.is_some() || post.is_some() || unsubscribe.is_some() {
-                            let (_x, _y) = grid.write_string_to_grid(
+                            let (_x, _y) = grid.write_string(
                                 " Available actions: [ ",
                                 headers_names.fg,
                                 headers_names.bg,
@@ -916,7 +916,7 @@ impl Component for EnvelopeView {
                             y = _y;
                         }
                         if archive.is_some() {
-                            let (_x, _y) = grid.write_string_to_grid(
+                            let (_x, _y) = grid.write_string(
                                 "list-archive, ",
                                 headers.fg,
                                 headers.bg,
@@ -928,7 +928,7 @@ impl Component for EnvelopeView {
                             y = _y;
                         }
                         if post.is_some() {
-                            let (_x, _y) = grid.write_string_to_grid(
+                            let (_x, _y) = grid.write_string(
                                 "list-post, ",
                                 headers.fg,
                                 headers.bg,
@@ -940,7 +940,7 @@ impl Component for EnvelopeView {
                             y = _y;
                         }
                         if unsubscribe.is_some() {
-                            let (_x, _y) = grid.write_string_to_grid(
+                            let (_x, _y) = grid.write_string(
                                 "list-unsubscribe, ",
                                 headers.fg,
                                 headers.bg,
@@ -1237,7 +1237,7 @@ impl Component for EnvelopeView {
         } else {
             let s = self.cmd_buf.to_string();
 
-            grid.write_string_to_grid(
+            grid.write_string(
                 &s,
                 self.view_settings.theme_default.fg,
                 self.view_settings.theme_default.bg,

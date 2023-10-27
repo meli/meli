@@ -377,7 +377,7 @@ impl ThreadView {
                         set_and_join_box(&mut content, index, BoxBoundary::Horizontal);
                     }
                 }
-                content.write_string_to_grid(
+                content.write_string(
                     &e.heading,
                     if e.seen {
                         theme_default.fg
@@ -443,7 +443,7 @@ impl ThreadView {
                         set_and_join_box(&mut content, index, BoxBoundary::Horizontal);
                     }
                 }
-                content.write_string_to_grid(
+                content.write_string(
                     &e.heading,
                     if e.seen {
                         theme_default.fg
@@ -751,7 +751,7 @@ impl ThreadView {
             });
             let envelope: EnvelopeRef = account.collection.get_env(i);
 
-            let (x, y) = grid.write_string_to_grid(
+            let (x, y) = grid.write_string(
                 &envelope.subject(),
                 crate::conf::value(context, "highlight").fg,
                 theme_default.bg,
@@ -863,7 +863,7 @@ impl ThreadView {
             });
             let envelope: EnvelopeRef = account.collection.get_env(i);
 
-            let (x, y) = grid.write_string_to_grid(
+            let (x, y) = grid.write_string(
                 &envelope.subject(),
                 theme_default.fg,
                 theme_default.bg,

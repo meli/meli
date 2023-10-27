@@ -131,7 +131,7 @@ impl StatusBar {
         if !context.settings.terminal.use_color() {
             attribute.attrs |= Attr::REVERSE;
         }
-        let (x, y) = grid.write_string_to_grid(
+        let (x, y) = grid.write_string(
             &self.status,
             attribute.fg,
             attribute.bg,
@@ -174,7 +174,7 @@ impl StatusBar {
                 total_lines = *total_lines,
                 has_more_lines = if *has_more_lines { "(+)" } else { "" }
             );
-            grid.write_string_to_grid(
+            grid.write_string(
                 &s,
                 attribute.fg,
                 attribute.bg,
@@ -236,7 +236,7 @@ impl StatusBar {
     fn draw_command_bar(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         grid.clear_area(area, crate::conf::value(context, "theme_default"));
         let command_bar = crate::conf::value(context, "status.command_bar");
-        let (_, y) = grid.write_string_to_grid(
+        let (_, y) = grid.write_string(
             self.ex_buffer.as_str(),
             command_bar.fg,
             command_bar.bg,
@@ -429,7 +429,7 @@ impl Component for StatusBar {
                     .take(hist_height)
                     .enumerate()
                 {
-                    let (x, y) = grid.write_string_to_grid(
+                    let (x, y) = grid.write_string(
                         s.as_str(),
                         history_hints.fg,
                         history_hints.bg,
@@ -443,7 +443,7 @@ impl Component for StatusBar {
                         ),
                         Some(get_x(upper_left!(hist_area))),
                     );
-                    grid.write_string_to_grid(
+                    grid.write_string(
                         &s.description,
                         history_hints.fg,
                         history_hints.bg,
@@ -465,7 +465,7 @@ impl Component for StatusBar {
                             ),
                             history_hints,
                         );
-                        grid.write_string_to_grid(
+                        grid.write_string(
                             &s.as_str()[self.ex_buffer.as_str().len()..],
                             history_hints.fg,
                             history_hints.bg,
@@ -865,7 +865,7 @@ impl Tabbed {
             } else {
                 tab_unfocused_attribute
             };
-            let (x_, _y_) = grid.write_string_to_grid(
+            let (x_, _y_) = grid.write_string(
                 &format!(" {} ", c),
                 fg,
                 bg,
@@ -1007,7 +1007,7 @@ impl Component for Tabbed {
                 context.dirty_areas.push_back(dialog_area);
                 grid.clear_area(dialog_area, self.theme_default);
                 let inner_area = create_box(grid, dialog_area);
-                let (x, y) = grid.write_string_to_grid(
+                let (x, y) = grid.write_string(
                     "shortcuts",
                     self.theme_default.fg,
                     self.theme_default.bg,
@@ -1018,7 +1018,7 @@ impl Component for Tabbed {
                     ),
                     None,
                 );
-                grid.write_string_to_grid(
+                grid.write_string(
                     &format!(
                         "Press {} to close",
                         children_maps[Shortcuts::GENERAL]["toggle_help"]
@@ -1126,7 +1126,7 @@ impl Component for Tabbed {
             self.help_content =
                 CellBuffer::new_with_context(max_width, max_length + 2, None, context);
             self.help_content.set_growable(true);
-            self.help_content.write_string_to_grid(
+            self.help_content.write_string(
                 "use COMMAND \"search\" to find shortcuts",
                 self.theme_default.fg,
                 self.theme_default.bg,
@@ -1136,7 +1136,7 @@ impl Component for Tabbed {
             );
             let mut idx = 2;
             for (desc, shortcuts) in children_maps.iter() {
-                self.help_content.write_string_to_grid(
+                self.help_content.write_string(
                     desc,
                     self.theme_default.fg,
                     self.theme_default.bg,
@@ -1146,7 +1146,7 @@ impl Component for Tabbed {
                 );
                 idx += 2;
                 for (k, v) in shortcuts {
-                    let (x, y) = self.help_content.write_string_to_grid(
+                    let (x, y) = self.help_content.write_string(
                         &format!(
                             "{: >width$}",
                             format!("{}", v),
@@ -1158,7 +1158,7 @@ impl Component for Tabbed {
                         ((2, 2 + idx), (max_width.saturating_sub(2), max_length - 1)),
                         None,
                     );
-                    self.help_content.write_string_to_grid(
+                    self.help_content.write_string(
                         k,
                         self.theme_default.fg,
                         self.theme_default.bg,
@@ -1183,7 +1183,7 @@ impl Component for Tabbed {
             context.dirty_areas.push_back(dialog_area);
             grid.clear_area(dialog_area, self.theme_default);
             let inner_area = create_box(grid, dialog_area);
-            let (x, y) = grid.write_string_to_grid(
+            let (x, y) = grid.write_string(
                 "shortcuts",
                 self.theme_default.fg,
                 self.theme_default.bg,
@@ -1194,7 +1194,7 @@ impl Component for Tabbed {
                 ),
                 None,
             );
-            grid.write_string_to_grid(
+            grid.write_string(
                 &format!(
                     "Press {} to close",
                     self.help_curr_views[Shortcuts::GENERAL]["toggle_help"]
@@ -1279,7 +1279,7 @@ impl Component for Tabbed {
 
             /* In this case we will be scrolling, so show the user how to do it */
             if height.wrapping_div(rows + 1) > 0 || width.wrapping_div(cols + 1) > 0 {
-                self.help_content.write_string_to_grid(
+                self.help_content.write_string(
                     "Use Up, Down, Left, Right to scroll.",
                     self.theme_default.fg,
                     self.theme_default.bg,

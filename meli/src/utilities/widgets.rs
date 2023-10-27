@@ -118,7 +118,7 @@ impl Component for Field {
                 text_field.draw(grid, area, context);
             }
             Self::Choice(_, _, _) => {
-                grid.write_string_to_grid(
+                grid.write_string(
                     str,
                     theme_attr.fg,
                     theme_attr.bg,
@@ -365,7 +365,7 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> Component for 
             for (i, k) in self.layout.iter().enumerate().rev() {
                 let v = self.fields.get_mut(k).unwrap();
                 /* Write field label */
-                grid.write_string_to_grid(
+                grid.write_string(
                     k.as_ref(),
                     label_attrs.fg,
                     label_attrs.bg,
@@ -651,7 +651,7 @@ where
             let mut len = 0;
             for (i, k) in self.layout.iter().enumerate() {
                 let cur_len = k.len();
-                grid.write_string_to_grid(
+                grid.write_string(
                     k.as_ref(),
                     theme_default.fg,
                     if i == self.cursor && self.focus {
@@ -875,7 +875,7 @@ impl AutoComplete {
         );
         let width = content.cols();
         for (i, e) in entries.iter().enumerate() {
-            let (x, _) = content.write_string_to_grid(
+            let (x, _) = content.write_string(
                 &e.entry,
                 Color::Byte(23),
                 Color::Byte(7),
@@ -883,7 +883,7 @@ impl AutoComplete {
                 ((0, i), (width - 1, i)),
                 None,
             );
-            content.write_string_to_grid(
+            content.write_string(
                 &e.description,
                 Color::Byte(23),
                 Color::Byte(7),
@@ -891,7 +891,7 @@ impl AutoComplete {
                 ((x + 2, i), (width - 1, i)),
                 None,
             );
-            content.write_string_to_grid(
+            content.write_string(
                 "▒",
                 Color::Byte(23),
                 Color::Byte(7),
@@ -1239,7 +1239,7 @@ impl Component for ProgressSpinner {
         if self.dirty {
             grid.clear_area(area, self.theme_attr);
             if self.active {
-                grid.write_string_to_grid(
+                grid.write_string(
                     match self.kind.as_ref() {
                         Ok(kind) => (Self::KINDS[*kind].1)[self.stage],
                         Err(custom) => custom[self.stage].as_ref(),

@@ -218,7 +218,7 @@ impl MailListingTrait for ThreadListing {
                 self.data_columns.columns[0] =
                     CellBuffer::new_with_context(message.len(), 1, None, context);
                 self.length = 0;
-                self.data_columns.columns[0].write_string_to_grid(
+                self.data_columns.columns[0].write_string(
                     message.as_str(),
                     self.color_cache.theme_default.fg,
                     self.color_cache.theme_default.bg,
@@ -258,7 +258,7 @@ impl MailListingTrait for ThreadListing {
             let message: String = account[&self.cursor_pos.1].status();
             self.data_columns.columns[0] =
                 CellBuffer::new_with_context(message.len(), 1, None, context);
-            self.data_columns.columns[0].write_string_to_grid(
+            self.data_columns.columns[0].write_string(
                 message.as_str(),
                 self.color_cache.theme_default.fg,
                 self.color_cache.theme_default.bg,
@@ -947,7 +947,7 @@ impl ThreadListing {
                 self.rows.selection[env_hash]
             );
             if !*account_settings!(context[self.cursor_pos.0].listing.relative_list_indices) {
-                let (x, _) = self.data_columns.columns[0].write_string_to_grid(
+                let (x, _) = self.data_columns.columns[0].write_string(
                     &idx.to_string(),
                     row_attr.fg,
                     row_attr.bg,
@@ -961,7 +961,7 @@ impl ThreadListing {
                         .set_attrs(row_attr.attrs);
                 }
             }
-            let (x, _) = self.data_columns.columns[1].write_string_to_grid(
+            let (x, _) = self.data_columns.columns[1].write_string(
                 &strings.date,
                 row_attr.fg,
                 row_attr.bg,
@@ -974,7 +974,7 @@ impl ThreadListing {
                     .set_bg(row_attr.bg)
                     .set_attrs(row_attr.attrs);
             }
-            let (x, _) = self.data_columns.columns[2].write_string_to_grid(
+            let (x, _) = self.data_columns.columns[2].write_string(
                 &strings.from,
                 row_attr.fg,
                 row_attr.bg,
@@ -996,7 +996,7 @@ impl ThreadListing {
                     .set_bg(row_attr.bg)
                     .set_attrs(row_attr.attrs);
             }
-            let (x, _) = self.data_columns.columns[3].write_string_to_grid(
+            let (x, _) = self.data_columns.columns[3].write_string(
                 &strings.flag,
                 row_attr.fg,
                 row_attr.bg,
@@ -1009,7 +1009,7 @@ impl ThreadListing {
                     .set_bg(row_attr.bg)
                     .set_attrs(row_attr.attrs);
             }
-            let (x, _) = self.data_columns.columns[4].write_string_to_grid(
+            let (x, _) = self.data_columns.columns[4].write_string(
                 &strings.subject,
                 row_attr.fg,
                 row_attr.bg,
@@ -1030,7 +1030,7 @@ impl ThreadListing {
                 let mut x = x + 1;
                 for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
                     let color = color.unwrap_or(self.color_cache.tag_default.bg);
-                    let (_x, _) = self.data_columns.columns[4].write_string_to_grid(
+                    let (_x, _) = self.data_columns.columns[4].write_string(
                         t,
                         self.color_cache.tag_default.fg,
                         color,
@@ -1133,7 +1133,7 @@ impl ThreadListing {
                 ),
                 row_attr,
             );
-            self.data_columns.columns[0].write_string_to_grid(
+            self.data_columns.columns[0].write_string(
                 &if self.new_cursor_pos.2.saturating_sub(top_idx) == i {
                     self.new_cursor_pos.2.to_string()
                 } else {
@@ -1148,7 +1148,7 @@ impl ThreadListing {
                 None,
             );
 
-            grid.write_string_to_grid(
+            grid.write_string(
                 &if self.new_cursor_pos.2.saturating_sub(top_idx) == i {
                     self.new_cursor_pos.2.to_string()
                 } else {
