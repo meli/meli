@@ -89,9 +89,8 @@ impl Component for KeySelection {
             } => progress_spinner.draw(grid, center_area(area, (2, 2)), context),
             KeySelection::Error { ref err, .. } => {
                 let theme_default = crate::conf::value(context, "theme_default");
-                write_string_to_grid(
+                grid.write_string_to_grid(
                     &err.to_string(),
-                    grid,
                     theme_default.fg,
                     theme_default.bg,
                     theme_default.attrs,

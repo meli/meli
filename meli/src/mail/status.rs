@@ -70,18 +70,16 @@ impl Component for AccountStatus {
         self.dirty = false;
         let (mut width, _) = self.content.size();
         let a = &context.accounts[self.account_pos];
-        let (_x, _y) = write_string_to_grid(
+        let (_x, _y) = self.content.write_string_to_grid(
             "Account ",
-            &mut self.content,
             self.theme_default.fg,
             self.theme_default.bg,
             self.theme_default.attrs | Attr::UNDERLINE,
             ((1, 0), (width - 1, 0)),
             None,
         );
-        let (_x, _y) = write_string_to_grid(
+        let (_x, _y) = self.content.write_string_to_grid(
             a.name(),
-            &mut self.content,
             self.theme_default.fg,
             self.theme_default.bg,
             Attr::BOLD | Attr::UNDERLINE,
@@ -91,9 +89,8 @@ impl Component for AccountStatus {
         width = self.content.size().0;
         let mut line = 2;
 
-        write_string_to_grid(
+        self.content.write_string_to_grid(
             "In-progress jobs:",
-            &mut self.content,
             self.theme_default.fg,
             self.theme_default.bg,
             Attr::BOLD,
@@ -105,9 +102,8 @@ impl Component for AccountStatus {
         for (job_id, req) in a.active_jobs.iter() {
             width = self.content.size().0;
             use crate::accounts::JobRequest;
-            let (x, y) = write_string_to_grid(
+            let (x, y) = self.content.write_string_to_grid(
                 &format!("{} {}", req, job_id),
-                &mut self.content,
                 self.theme_default.fg,
                 self.theme_default.bg,
                 self.theme_default.attrs,
@@ -120,9 +116,8 @@ impl Component for AccountStatus {
             | JobRequest::Refresh { mailbox_hash, .. }
             | JobRequest::Fetch { mailbox_hash, .. } = req
             {
-                write_string_to_grid(
+                self.content.write_string_to_grid(
                     a.mailbox_entries[mailbox_hash].name(),
-                    &mut self.content,
                     self.theme_default.fg,
                     self.theme_default.bg,
                     self.theme_default.attrs,
@@ -137,9 +132,8 @@ impl Component for AccountStatus {
         line += 2;
         width = self.content.size().0;
 
-        let (_x, _y) = write_string_to_grid(
+        let (_x, _y) = self.content.write_string_to_grid(
             "Tag support: ",
-            &mut self.content,
             self.theme_default.fg,
             self.theme_default.bg,
             Attr::BOLD,
@@ -147,13 +141,12 @@ impl Component for AccountStatus {
             None,
         );
         width = self.content.size().0;
-        write_string_to_grid(
+        self.content.write_string_to_grid(
             if a.backend_capabilities.supports_tags {
                 "yes"
             } else {
                 "no"
             },
-            &mut self.content,
             self.theme_default.fg,
             self.theme_default.bg,
             self.theme_default.attrs,
@@ -162,9 +155,8 @@ impl Component for AccountStatus {
         );
         width = self.content.size().0;
         line += 1;
-        let (_x, _y) = write_string_to_grid(
+        let (_x, _y) = self.content.write_string_to_grid(
             "Search backend: ",
-            &mut self.content,
             self.theme_default.fg,
             self.theme_default.bg,
             Attr::BOLD,
@@ -172,7 +164,7 @@ impl Component for AccountStatus {
             None,
         );
         width = self.content.size().0;
-        write_string_to_grid(
+        self.content.write_string_to_grid(
             &match (
                 a.settings.conf.search_backend(),
                 a.backend_capabilities.supports_search,
@@ -192,7 +184,6 @@ impl Component for AccountStatus {
                     }
                 }
             },
-            &mut self.content,
             self.theme_default.fg,
             self.theme_default.bg,
             self.theme_default.attrs,
@@ -202,9 +193,8 @@ impl Component for AccountStatus {
         width = self.content.size().0;
         line += 1;
 
-        write_string_to_grid(
+        self.content.write_string_to_grid(
             "Special Mailboxes:",
-            &mut self.content,
             self.theme_default.fg,
             self.theme_default.bg,
             Attr::BOLD,
@@ -219,9 +209,8 @@ impl Component for AccountStatus {
         {
             width = self.content.size().0;
             line += 1;
-            write_string_to_grid(
+            self.content.write_string_to_grid(
                 &format!("{}: {}", f.path(), f.special_usage()),
-                &mut self.content,
                 self.theme_default.fg,
                 self.theme_default.bg,
                 self.theme_default.attrs,
@@ -231,9 +220,8 @@ impl Component for AccountStatus {
         }
         line += 2;
         width = self.content.size().0;
-        write_string_to_grid(
+        self.content.write_string_to_grid(
             "Subscribed mailboxes:",
-            &mut self.content,
             self.theme_default.fg,
             self.theme_default.bg,
             Attr::BOLD,
@@ -245,9 +233,8 @@ impl Component for AccountStatus {
             width = self.content.size().0;
             let f: &Mailbox = &a[&mailbox_node.hash].ref_mailbox;
             if f.is_subscribed() {
-                write_string_to_grid(
+                self.content.write_string_to_grid(
                     f.path(),
-                    &mut self.content,
                     self.theme_default.fg,
                     self.theme_default.bg,
                     self.theme_default.attrs,
@@ -261,9 +248,8 @@ impl Component for AccountStatus {
         line += 1;
         width = self.content.size().0;
         if let Some(ref extensions) = a.backend_capabilities.extensions {
-            write_string_to_grid(
+            self.content.write_string_to_grid(
                 "Server Extensions:",
-                &mut self.content,
                 self.theme_default.fg,
                 self.theme_default.bg,
                 Attr::BOLD,
@@ -279,9 +265,8 @@ impl Component for AccountStatus {
                     .unwrap_or(0),
             );
             width = self.content.size().0;
-            write_string_to_grid(
+            self.content.write_string_to_grid(
                 "meli support:",
-                &mut self.content,
                 self.theme_default.fg,
                 self.theme_default.bg,
                 self.theme_default.attrs,
@@ -291,9 +276,8 @@ impl Component for AccountStatus {
             line += 1;
             for (name, status) in extensions.iter() {
                 width = self.content.size().0;
-                write_string_to_grid(
+                self.content.write_string_to_grid(
                     name.trim_at_boundary(30),
-                    &mut self.content,
                     self.theme_default.fg,
                     self.theme_default.bg,
                     self.theme_default.attrs,
@@ -302,61 +286,50 @@ impl Component for AccountStatus {
                 );
 
                 width = self.content.size().0;
-                let (x, y) = match status {
-                    MailBackendExtensionStatus::Unsupported { comment: _ } => write_string_to_grid(
-                        "not supported",
-                        &mut self.content,
-                        Color::Red,
+                let (x, y) = {
+                    let (status, color) = match status {
+                        MailBackendExtensionStatus::Unsupported { comment: _ } => {
+                            ("not supported", Color::Red)
+                        }
+                        MailBackendExtensionStatus::Supported { comment: _ } => {
+                            ("supported", Color::Green)
+                        }
+                        MailBackendExtensionStatus::Enabled { comment: _ } => {
+                            ("enabled", Color::Green)
+                        }
+                    };
+                    self.content.write_string_to_grid(
+                        status,
+                        color,
                         self.theme_default.bg,
                         self.theme_default.attrs,
                         ((max_name_width + 6, line), (width - 1, line)),
                         None,
-                    ),
-                    MailBackendExtensionStatus::Supported { comment: _ } => write_string_to_grid(
-                        "supported",
-                        &mut self.content,
-                        Color::Green,
-                        self.theme_default.bg,
-                        self.theme_default.attrs,
-                        ((max_name_width + 6, line), (width - 1, line)),
-                        None,
-                    ),
-                    MailBackendExtensionStatus::Enabled { comment: _ } => write_string_to_grid(
-                        "enabled",
-                        &mut self.content,
-                        Color::Green,
-                        self.theme_default.bg,
-                        self.theme_default.attrs,
-                        ((max_name_width + 6, line), (width - 1, line)),
-                        None,
-                    ),
+                    )
                 };
                 match status {
                     MailBackendExtensionStatus::Unsupported { comment }
                     | MailBackendExtensionStatus::Supported { comment }
                     | MailBackendExtensionStatus::Enabled { comment } => {
                         if let Some(s) = comment {
-                            let (x, y) = write_string_to_grid(
+                            let (x, y) = self.content.write_string_to_grid(
                                 " (",
-                                &mut self.content,
                                 self.theme_default.fg,
                                 self.theme_default.bg,
                                 self.theme_default.attrs,
                                 ((x, y), (width - 1, y)),
                                 None,
                             );
-                            let (x, y) = write_string_to_grid(
+                            let (x, y) = self.content.write_string_to_grid(
                                 s,
-                                &mut self.content,
                                 self.theme_default.fg,
                                 self.theme_default.bg,
                                 self.theme_default.attrs,
                                 ((x, y), (width - 1, y)),
                                 None,
                             );
-                            write_string_to_grid(
+                            self.content.write_string_to_grid(
                                 ")",
-                                &mut self.content,
                                 self.theme_default.fg,
                                 self.theme_default.bg,
                                 self.theme_default.attrs,

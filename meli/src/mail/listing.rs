@@ -2654,9 +2654,8 @@ impl Listing {
         };
 
         /* Print account name first */
-        write_string_to_grid(
+        self.menu_content.write_string_to_grid(
             &self.accounts[aidx].name,
-            &mut self.menu_content,
             account_attrs.fg,
             account_attrs.bg,
             account_attrs.attrs,
@@ -2665,9 +2664,8 @@ impl Listing {
         );
 
         if lines.is_empty() {
-            write_string_to_grid(
+            self.menu_content.write_string_to_grid(
                 "offline",
-                &mut self.menu_content,
                 crate::conf::value(context, "error_message").fg,
                 account_attrs.bg,
                 account_attrs.attrs,
@@ -2807,7 +2805,7 @@ impl Listing {
             .map(|s| s.as_str())
             .unwrap_or(" ");
 
-            let (x, _) = write_string_to_grid(
+            let (x, _) = self.menu_content.write_string_to_grid(
                 &if *account_settings!(
                     context[self.accounts[aidx].hash]
                         .listing
@@ -2822,7 +2820,6 @@ impl Listing {
                 } else {
                     format!("{:>width$}", l.inc, width = total_mailbox_no_digits)
                 },
-                &mut self.menu_content,
                 index_att.fg,
                 index_att.bg,
                 index_att.attrs,
@@ -2850,18 +2847,16 @@ impl Listing {
                     }
                 }
             }
-            let (x, _) = write_string_to_grid(
+            let (x, _) = self.menu_content.write_string_to_grid(
                 &branches,
-                &mut self.menu_content,
                 att.fg,
                 att.bg,
                 att.attrs,
                 ((x, y), bottom_right),
                 None,
             );
-            let (x, _) = write_string_to_grid(
+            let (x, _) = self.menu_content.write_string_to_grid(
                 context.accounts[self.accounts[aidx].index].mailbox_entries[&l.mailbox_idx].name(),
-                &mut self.menu_content,
                 att.fg,
                 att.bg,
                 att.attrs,
@@ -2881,9 +2876,8 @@ impl Listing {
                 (None, Some(coll)) => format!(" ({}) v", coll),
             };
 
-            let (x, _) = write_string_to_grid(
+            let (x, _) = self.menu_content.write_string_to_grid(
                 &count_string,
-                &mut self.menu_content,
                 unread_count_att.fg,
                 unread_count_att.bg,
                 unread_count_att.attrs

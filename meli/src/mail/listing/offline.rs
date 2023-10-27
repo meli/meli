@@ -141,18 +141,17 @@ impl Component for OfflineListing {
         let error_message = conf::value(context, "error_message");
         clear_area(grid, area, theme_default);
         if let Err(err) = context.is_online(self.cursor_pos.0) {
-            let (x, _) = write_string_to_grid(
+            let (x, _) = grid.write_string_to_grid(
                 "offline: ",
-                grid,
                 error_message.fg,
                 error_message.bg,
                 error_message.attrs,
                 area,
                 None,
             );
-            write_string_to_grid(
+
+            grid.write_string_to_grid(
                 &err.to_string(),
-                grid,
                 error_message.fg,
                 error_message.bg,
                 error_message.attrs,
@@ -160,9 +159,8 @@ impl Component for OfflineListing {
                 Some(get_x(upper_left!(area))),
             );
             if let Some(msg) = self.messages.last() {
-                write_string_to_grid(
+                grid.write_string_to_grid(
                     msg,
-                    grid,
                     text_unfocused.fg,
                     text_unfocused.bg,
                     Attr::BOLD,
@@ -171,9 +169,8 @@ impl Component for OfflineListing {
                 );
             }
             for (i, msg) in self.messages.iter().rev().skip(1).enumerate() {
-                write_string_to_grid(
+                grid.write_string_to_grid(
                     msg,
-                    grid,
                     text_unfocused.fg,
                     text_unfocused.bg,
                     text_unfocused.attrs,
@@ -182,9 +179,8 @@ impl Component for OfflineListing {
                 );
             }
         } else {
-            let (_, mut y) = write_string_to_grid(
+            let (_, mut y) = grid.write_string_to_grid(
                 "loading...",
-                grid,
                 conf::value(context, "highlight").fg,
                 conf::value(context, "highlight").bg,
                 conf::value(context, "highlight").attrs,
@@ -197,9 +193,8 @@ impl Component for OfflineListing {
                 .collect();
             jobs.sort_by_key(|(j, _)| *j);
             for (job_id, j) in jobs {
-                write_string_to_grid(
+                grid.write_string_to_grid(
                     &format!("{}: {:?}", job_id, j),
-                    grid,
                     text_unfocused.fg,
                     text_unfocused.bg,
                     text_unfocused.attrs,

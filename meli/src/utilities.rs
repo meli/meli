@@ -131,9 +131,8 @@ impl StatusBar {
         if !context.settings.terminal.use_color() {
             attribute.attrs |= Attr::REVERSE;
         }
-        let (x, y) = write_string_to_grid(
+        let (x, y) = grid.write_string_to_grid(
             &self.status,
-            grid,
             attribute.fg,
             attribute.bg,
             attribute.attrs,
@@ -175,9 +174,8 @@ impl StatusBar {
                 total_lines = *total_lines,
                 has_more_lines = if *has_more_lines { "(+)" } else { "" }
             );
-            write_string_to_grid(
+            grid.write_string_to_grid(
                 &s,
-                grid,
                 attribute.fg,
                 attribute.bg,
                 attribute.attrs,
@@ -238,9 +236,8 @@ impl StatusBar {
     fn draw_command_bar(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         clear_area(grid, area, crate::conf::value(context, "theme_default"));
         let command_bar = crate::conf::value(context, "status.command_bar");
-        let (_, y) = write_string_to_grid(
+        let (_, y) = grid.write_string_to_grid(
             self.ex_buffer.as_str(),
-            grid,
             command_bar.fg,
             command_bar.bg,
             command_bar.attrs,
@@ -438,9 +435,8 @@ impl Component for StatusBar {
                     .take(hist_height)
                     .enumerate()
                 {
-                    let (x, y) = write_string_to_grid(
+                    let (x, y) = grid.write_string_to_grid(
                         s.as_str(),
-                        grid,
                         history_hints.fg,
                         history_hints.bg,
                         history_hints.attrs,
@@ -453,9 +449,8 @@ impl Component for StatusBar {
                         ),
                         Some(get_x(upper_left!(hist_area))),
                     );
-                    write_string_to_grid(
+                    grid.write_string_to_grid(
                         &s.description,
-                        grid,
                         history_hints.fg,
                         history_hints.bg,
                         history_hints.attrs,
@@ -477,9 +472,8 @@ impl Component for StatusBar {
                             ),
                             history_hints,
                         );
-                        write_string_to_grid(
+                        grid.write_string_to_grid(
                             &s.as_str()[self.ex_buffer.as_str().len()..],
-                            grid,
                             history_hints.fg,
                             history_hints.bg,
                             history_hints.attrs,
@@ -878,9 +872,8 @@ impl Tabbed {
             } else {
                 tab_unfocused_attribute
             };
-            let (x_, _y_) = write_string_to_grid(
+            let (x_, _y_) = grid.write_string_to_grid(
                 &format!(" {} ", c),
-                grid,
                 fg,
                 bg,
                 attrs,
@@ -1022,9 +1015,8 @@ impl Component for Tabbed {
                 context.dirty_areas.push_back(dialog_area);
                 clear_area(grid, dialog_area, self.theme_default);
                 let inner_area = create_box(grid, dialog_area);
-                let (x, y) = write_string_to_grid(
+                let (x, y) = grid.write_string_to_grid(
                     "shortcuts",
-                    grid,
                     self.theme_default.fg,
                     self.theme_default.bg,
                     self.theme_default.attrs | Attr::BOLD,
@@ -1034,12 +1026,11 @@ impl Component for Tabbed {
                     ),
                     None,
                 );
-                write_string_to_grid(
+                grid.write_string_to_grid(
                     &format!(
                         "Press {} to close",
                         children_maps[Shortcuts::GENERAL]["toggle_help"]
                     ),
-                    grid,
                     self.theme_default.fg,
                     self.theme_default.bg,
                     self.theme_default.attrs | Attr::ITALICS,
@@ -1143,9 +1134,8 @@ impl Component for Tabbed {
             self.help_content =
                 CellBuffer::new_with_context(max_width, max_length + 2, None, context);
             self.help_content.set_growable(true);
-            write_string_to_grid(
+            self.help_content.write_string_to_grid(
                 "use COMMAND \"search\" to find shortcuts",
-                &mut self.help_content,
                 self.theme_default.fg,
                 self.theme_default.bg,
                 self.theme_default.attrs,
@@ -1154,9 +1144,8 @@ impl Component for Tabbed {
             );
             let mut idx = 2;
             for (desc, shortcuts) in children_maps.iter() {
-                write_string_to_grid(
+                self.help_content.write_string_to_grid(
                     desc,
-                    &mut self.help_content,
                     self.theme_default.fg,
                     self.theme_default.bg,
                     self.theme_default.attrs,
@@ -1165,22 +1154,20 @@ impl Component for Tabbed {
                 );
                 idx += 2;
                 for (k, v) in shortcuts {
-                    let (x, y) = write_string_to_grid(
+                    let (x, y) = self.help_content.write_string_to_grid(
                         &format!(
                             "{: >width$}",
                             format!("{}", v),
                             width = max_first_column_width
                         ),
-                        &mut self.help_content,
                         self.theme_default.fg,
                         self.theme_default.bg,
                         self.theme_default.attrs | Attr::BOLD,
                         ((2, 2 + idx), (max_width.saturating_sub(2), max_length - 1)),
                         None,
                     );
-                    write_string_to_grid(
+                    self.help_content.write_string_to_grid(
                         k,
-                        &mut self.help_content,
                         self.theme_default.fg,
                         self.theme_default.bg,
                         self.theme_default.attrs,
@@ -1204,9 +1191,8 @@ impl Component for Tabbed {
             context.dirty_areas.push_back(dialog_area);
             clear_area(grid, dialog_area, self.theme_default);
             let inner_area = create_box(grid, dialog_area);
-            let (x, y) = write_string_to_grid(
+            let (x, y) = grid.write_string_to_grid(
                 "shortcuts",
-                grid,
                 self.theme_default.fg,
                 self.theme_default.bg,
                 self.theme_default.attrs | Attr::BOLD,
@@ -1216,12 +1202,11 @@ impl Component for Tabbed {
                 ),
                 None,
             );
-            write_string_to_grid(
+            grid.write_string_to_grid(
                 &format!(
                     "Press {} to close",
                     self.help_curr_views[Shortcuts::GENERAL]["toggle_help"]
                 ),
-                grid,
                 self.theme_default.fg,
                 self.theme_default.bg,
                 self.theme_default.attrs | Attr::ITALICS,
@@ -1302,9 +1287,8 @@ impl Component for Tabbed {
 
             /* In this case we will be scrolling, so show the user how to do it */
             if height.wrapping_div(rows + 1) > 0 || width.wrapping_div(cols + 1) > 0 {
-                write_string_to_grid(
+                self.help_content.write_string_to_grid(
                     "Use Up, Down, Left, Right to scroll.",
-                    &mut self.help_content,
                     self.theme_default.fg,
                     self.theme_default.bg,
                     self.theme_default.attrs | Attr::ITALICS,

@@ -161,9 +161,8 @@ impl ContactList {
         for (idx, c) in book_values.iter().enumerate() {
             self.id_positions.push(*c.id());
 
-            write_string_to_grid(
+            self.data_columns.columns[0].write_string_to_grid(
                 c.name(),
-                &mut self.data_columns.columns[0],
                 self.theme_default.fg,
                 self.theme_default.bg,
                 self.theme_default.attrs,
@@ -171,9 +170,8 @@ impl ContactList {
                 None,
             );
 
-            write_string_to_grid(
+            self.data_columns.columns[1].write_string_to_grid(
                 c.email(),
-                &mut self.data_columns.columns[1],
                 self.theme_default.fg,
                 self.theme_default.bg,
                 self.theme_default.attrs,
@@ -181,9 +179,8 @@ impl ContactList {
                 None,
             );
 
-            write_string_to_grid(
+            self.data_columns.columns[2].write_string_to_grid(
                 c.url(),
-                &mut self.data_columns.columns[2],
                 self.theme_default.fg,
                 self.theme_default.bg,
                 self.theme_default.attrs,
@@ -191,13 +188,12 @@ impl ContactList {
                 None,
             );
 
-            write_string_to_grid(
+            self.data_columns.columns[3].write_string_to_grid(
                 if c.external_resource() {
                     "external"
                 } else {
                     "local"
                 },
-                &mut self.data_columns.columns[3],
                 self.theme_default.fg,
                 self.theme_default.bg,
                 self.theme_default.attrs,
@@ -210,9 +206,8 @@ impl ContactList {
             let message = "Address book is empty.".to_string();
             self.data_columns.columns[0] =
                 CellBuffer::new_with_context(message.len(), self.length, None, context);
-            write_string_to_grid(
+            self.data_columns.columns[0].write_string_to_grid(
                 &message,
-                &mut self.data_columns.columns[0],
                 self.theme_default.fg,
                 self.theme_default.bg,
                 self.theme_default.attrs,
@@ -282,18 +277,16 @@ impl ContactList {
 
         if a.name.grapheme_len() + s.len() > width + 1 {
             /* Print account name */
-            let (x, y) = write_string_to_grid(
+            let (x, y) = grid.write_string_to_grid(
                 &a.name,
-                grid,
                 account_attrs.fg,
                 account_attrs.bg,
                 account_attrs.attrs,
                 area,
                 None,
             );
-            write_string_to_grid(
+            grid.write_string_to_grid(
                 &s,
-                grid,
                 account_attrs.fg,
                 account_attrs.bg,
                 account_attrs.attrs,
@@ -306,9 +299,8 @@ impl ContactList {
                 ),
                 None,
             );
-            write_string_to_grid(
+            grid.write_string_to_grid(
                 "…",
-                grid,
                 account_attrs.fg,
                 account_attrs.bg,
                 account_attrs.attrs,
@@ -331,18 +323,16 @@ impl ContactList {
         } else {
             /* Print account name */
 
-            let (x, y) = write_string_to_grid(
+            let (x, y) = grid.write_string_to_grid(
                 &a.name,
-                grid,
                 account_attrs.fg,
                 account_attrs.bg,
                 account_attrs.attrs,
                 area,
                 None,
             );
-            write_string_to_grid(
+            grid.write_string_to_grid(
                 &s,
-                grid,
                 account_attrs.fg,
                 account_attrs.bg,
                 account_attrs.attrs,
@@ -495,7 +485,7 @@ impl ContactList {
                 continue;
             }
             let (column_width, column_height) = self.data_columns.columns[i].size();
-            write_string_to_grid(
+            grid.write_string_to_grid(
                 match i {
                     0 => "NAME",
                     1 => "E-MAIL",
@@ -503,7 +493,6 @@ impl ContactList {
                     3 => "SOURCE",
                     _ => "",
                 },
-                grid,
                 header_attrs.fg,
                 header_attrs.bg,
                 header_attrs.attrs,

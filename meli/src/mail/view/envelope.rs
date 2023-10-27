@@ -742,9 +742,9 @@ impl Component for EnvelopeView {
                         $({
                             if sticky || skip_header_ctr == 0 {
                                 if y <= get_y(bottom_right) {
-                                    let (_x, _y) = write_string_to_grid(
+                                    let (_x, _y) =
+                                        grid.write_string_to_grid(
                                         &format!("{}:", $header),
-                                        grid,
                                         headers_names.fg,
                                         headers_names.bg,
                                         headers_names.attrs,
@@ -758,9 +758,9 @@ impl Component for EnvelopeView {
                                             .set_attrs(headers_area.attrs);
                                     }
 
-                                    let (_x, _y) = write_string_to_grid(
+                                    let (_x, _y) =
+                                        grid.write_string_to_grid(
                                         &$string,
-                                        grid,
                                         headers.fg,
                                         headers.bg,
                                         headers.attrs,
@@ -879,18 +879,16 @@ impl Component for EnvelopeView {
                                 (set_y(upper_left, y), set_y(bottom_right, y)),
                                 headers_area,
                             );
-                            let (_x, _) = write_string_to_grid(
+                            let (_x, _) = grid.write_string_to_grid(
                                 "List-ID: ",
-                                grid,
                                 headers_names.fg,
                                 headers_names.bg,
                                 headers_names.attrs,
                                 (set_y(upper_left, y), bottom_right),
                                 None,
                             );
-                            let (_x, _y) = write_string_to_grid(
+                            let (_x, _y) = grid.write_string_to_grid(
                                 id,
-                                grid,
                                 headers.fg,
                                 headers.bg,
                                 headers.attrs,
@@ -907,9 +905,8 @@ impl Component for EnvelopeView {
                     }
                     if sticky || skip_header_ctr == 0 {
                         if archive.is_some() || post.is_some() || unsubscribe.is_some() {
-                            let (_x, _y) = write_string_to_grid(
+                            let (_x, _y) = grid.write_string_to_grid(
                                 " Available actions: [ ",
-                                grid,
                                 headers_names.fg,
                                 headers_names.bg,
                                 headers_names.attrs,
@@ -920,9 +917,8 @@ impl Component for EnvelopeView {
                             y = _y;
                         }
                         if archive.is_some() {
-                            let (_x, _y) = write_string_to_grid(
+                            let (_x, _y) = grid.write_string_to_grid(
                                 "list-archive, ",
-                                grid,
                                 headers.fg,
                                 headers.bg,
                                 headers.attrs,
@@ -933,9 +929,8 @@ impl Component for EnvelopeView {
                             y = _y;
                         }
                         if post.is_some() {
-                            let (_x, _y) = write_string_to_grid(
+                            let (_x, _y) = grid.write_string_to_grid(
                                 "list-post, ",
-                                grid,
                                 headers.fg,
                                 headers.bg,
                                 headers.attrs,
@@ -946,9 +941,8 @@ impl Component for EnvelopeView {
                             y = _y;
                         }
                         if unsubscribe.is_some() {
-                            let (_x, _y) = write_string_to_grid(
+                            let (_x, _y) = grid.write_string_to_grid(
                                 "list-unsubscribe, ",
-                                grid,
                                 headers.fg,
                                 headers.bg,
                                 headers.attrs,
@@ -1247,9 +1241,9 @@ impl Component for EnvelopeView {
             );
         } else {
             let s = self.cmd_buf.to_string();
-            write_string_to_grid(
+
+            grid.write_string_to_grid(
                 &s,
-                grid,
                 self.view_settings.theme_default.fg,
                 self.view_settings.theme_default.bg,
                 self.view_settings.theme_default.attrs,

@@ -218,9 +218,8 @@ impl MailListingTrait for ThreadListing {
                 self.data_columns.columns[0] =
                     CellBuffer::new_with_context(message.len(), 1, None, context);
                 self.length = 0;
-                write_string_to_grid(
+                self.data_columns.columns[0].write_string_to_grid(
                     message.as_str(),
-                    &mut self.data_columns.columns[0],
                     self.color_cache.theme_default.fg,
                     self.color_cache.theme_default.bg,
                     self.color_cache.theme_default.attrs,
@@ -259,9 +258,8 @@ impl MailListingTrait for ThreadListing {
             let message: String = account[&self.cursor_pos.1].status();
             self.data_columns.columns[0] =
                 CellBuffer::new_with_context(message.len(), 1, None, context);
-            write_string_to_grid(
+            self.data_columns.columns[0].write_string_to_grid(
                 message.as_str(),
-                &mut self.data_columns.columns[0],
                 self.color_cache.theme_default.fg,
                 self.color_cache.theme_default.bg,
                 self.color_cache.theme_default.attrs,
@@ -950,9 +948,8 @@ impl ThreadListing {
                 self.rows.selection[env_hash]
             );
             if !*account_settings!(context[self.cursor_pos.0].listing.relative_list_indices) {
-                let (x, _) = write_string_to_grid(
+                let (x, _) = self.data_columns.columns[0].write_string_to_grid(
                     &idx.to_string(),
-                    &mut self.data_columns.columns[0],
                     row_attr.fg,
                     row_attr.bg,
                     row_attr.attrs,
@@ -965,9 +962,8 @@ impl ThreadListing {
                         .set_attrs(row_attr.attrs);
                 }
             }
-            let (x, _) = write_string_to_grid(
+            let (x, _) = self.data_columns.columns[1].write_string_to_grid(
                 &strings.date,
-                &mut self.data_columns.columns[1],
                 row_attr.fg,
                 row_attr.bg,
                 row_attr.attrs,
@@ -979,9 +975,8 @@ impl ThreadListing {
                     .set_bg(row_attr.bg)
                     .set_attrs(row_attr.attrs);
             }
-            let (x, _) = write_string_to_grid(
+            let (x, _) = self.data_columns.columns[2].write_string_to_grid(
                 &strings.from,
-                &mut self.data_columns.columns[2],
                 row_attr.fg,
                 row_attr.bg,
                 row_attr.attrs,
@@ -1002,9 +997,8 @@ impl ThreadListing {
                     .set_bg(row_attr.bg)
                     .set_attrs(row_attr.attrs);
             }
-            let (x, _) = write_string_to_grid(
+            let (x, _) = self.data_columns.columns[3].write_string_to_grid(
                 &strings.flag,
-                &mut self.data_columns.columns[3],
                 row_attr.fg,
                 row_attr.bg,
                 row_attr.attrs,
@@ -1016,9 +1010,8 @@ impl ThreadListing {
                     .set_bg(row_attr.bg)
                     .set_attrs(row_attr.attrs);
             }
-            let (x, _) = write_string_to_grid(
+            let (x, _) = self.data_columns.columns[4].write_string_to_grid(
                 &strings.subject,
-                &mut self.data_columns.columns[4],
                 row_attr.fg,
                 row_attr.bg,
                 row_attr.attrs,
@@ -1038,9 +1031,8 @@ impl ThreadListing {
                 let mut x = x + 1;
                 for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
                     let color = color.unwrap_or(self.color_cache.tag_default.bg);
-                    let (_x, _) = write_string_to_grid(
+                    let (_x, _) = self.data_columns.columns[4].write_string_to_grid(
                         t,
-                        &mut self.data_columns.columns[4],
                         self.color_cache.tag_default.fg,
                         color,
                         self.color_cache.tag_default.attrs,
@@ -1146,7 +1138,7 @@ impl ThreadListing {
                 ),
                 row_attr,
             );
-            write_string_to_grid(
+            self.data_columns.columns[0].write_string_to_grid(
                 &if self.new_cursor_pos.2.saturating_sub(top_idx) == i {
                     self.new_cursor_pos.2.to_string()
                 } else {
@@ -1154,14 +1146,14 @@ impl ThreadListing {
                         .abs()
                         .to_string()
                 },
-                &mut self.data_columns.columns[0],
                 row_attr.fg,
                 row_attr.bg,
                 row_attr.attrs,
                 ((0, i), (width, i + 1)),
                 None,
             );
-            write_string_to_grid(
+
+            grid.write_string_to_grid(
                 &if self.new_cursor_pos.2.saturating_sub(top_idx) == i {
                     self.new_cursor_pos.2.to_string()
                 } else {
@@ -1169,7 +1161,6 @@ impl ThreadListing {
                         .abs()
                         .to_string()
                 },
-                grid,
                 row_attr.fg,
                 row_attr.bg,
                 row_attr.attrs,

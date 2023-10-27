@@ -171,7 +171,7 @@ impl Component for TextField {
          * ⇧+⇧⇧⇧⇧⇧⇧⇧⇧⇧⇧++⇧⇧⇧⇧⇧⇧⇧⇧⇧⇧
          *              skip offset
          */
-        write_string_to_grid(
+        grid.write_string_to_grid(
             if width < self.inner.grapheme_pos() {
                 str.trim_left_at_boundary(
                     width
@@ -185,7 +185,6 @@ impl Component for TextField {
             } else {
                 str
             },
-            grid,
             theme_attr.fg,
             theme_attr.bg,
             theme_attr.attrs,

@@ -709,9 +709,8 @@ impl State {
                         .chain(Some(String::new()))
                         .chain(Some(datetime::timestamp_to_string(*timestamp, None, false)))
                     {
-                        write_string_to_grid(
+                        self.screen.overlay_grid.write_string_to_grid(
                             &line,
-                            &mut self.screen.overlay_grid,
                             noto_colors.fg,
                             noto_colors.bg,
                             noto_colors.attrs,
@@ -722,7 +721,7 @@ impl State {
                     }
 
                     if self.display_messages.len() > 1 {
-                        write_string_to_grid(
+                        self.screen.overlay_grid.write_string_to_grid(
                             &if self.display_messages_pos == 0 {
                                 format!(
                                     "Next: {}",
@@ -748,7 +747,6 @@ impl State {
                                     self.context.settings.shortcuts.general.info_message_next
                                 )
                             },
-                            &mut self.screen.overlay_grid,
                             noto_colors.fg,
                             noto_colors.bg,
                             noto_colors.attrs,

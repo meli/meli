@@ -690,7 +690,8 @@ To: {}
                 .map(|k| k.fingerprint())
                 .collect::<Vec<_>>()
                 .join(", ");
-            write_string_to_grid(
+
+            grid.write_string_to_grid(
                 &format!(
                     "☑ sign with {}",
                     if self.gpg_state.sign_keys.is_empty() {
@@ -699,7 +700,6 @@ To: {}
                         key_list.as_str()
                     }
                 ),
-                grid,
                 theme_default.fg,
                 if self.cursor == Cursor::Sign {
                     crate::conf::value(context, "highlight").bg
@@ -711,9 +711,8 @@ To: {}
                 None,
             );
         } else {
-            write_string_to_grid(
+            grid.write_string_to_grid(
                 "☐ don't sign",
-                grid,
                 theme_default.fg,
                 if self.cursor == Cursor::Sign {
                     crate::conf::value(context, "highlight").bg
@@ -735,7 +734,7 @@ To: {}
                 .collect::<Vec<_>>()
                 .join(", ");
 
-            write_string_to_grid(
+            grid.write_string_to_grid(
                 &format!(
                     "{}{}",
                     if self.gpg_state.encrypt_keys.is_empty() {
@@ -749,7 +748,6 @@ To: {}
                         key_list.as_str()
                     }
                 ),
-                grid,
                 theme_default.fg,
                 if self.cursor == Cursor::Encrypt {
                     crate::conf::value(context, "highlight").bg
@@ -761,9 +759,8 @@ To: {}
                 None,
             );
         } else {
-            write_string_to_grid(
+            grid.write_string_to_grid(
                 "☐ don't encrypt",
-                grid,
                 theme_default.fg,
                 if self.cursor == Cursor::Encrypt {
                     crate::conf::value(context, "highlight").bg
@@ -776,9 +773,8 @@ To: {}
             );
         }
         if attachments_no == 0 {
-            write_string_to_grid(
+            grid.write_string_to_grid(
                 "no attachments",
-                grid,
                 theme_default.fg,
                 if self.cursor == Cursor::Attachments {
                     crate::conf::value(context, "highlight").bg
@@ -790,9 +786,8 @@ To: {}
                 None,
             );
         } else {
-            write_string_to_grid(
+            grid.write_string_to_grid(
                 &format!("{} attachments ", attachments_no),
-                grid,
                 theme_default.fg,
                 if self.cursor == Cursor::Attachments {
                     crate::conf::value(context, "highlight").bg
@@ -805,7 +800,7 @@ To: {}
             );
             for (i, a) in self.draft.attachments().iter().enumerate() {
                 if let Some(name) = a.content_type().name() {
-                    write_string_to_grid(
+                    grid.write_string_to_grid(
                         &format!(
                             "[{}] \"{}\", {} {}",
                             i,
@@ -813,7 +808,6 @@ To: {}
                             a.content_type(),
                             melib::BytesDisplay(a.raw.len())
                         ),
-                        grid,
                         theme_default.fg,
                         theme_default.bg,
                         theme_default.attrs,
@@ -821,14 +815,13 @@ To: {}
                         None,
                     );
                 } else {
-                    write_string_to_grid(
+                    grid.write_string_to_grid(
                         &format!(
                             "[{}] {} {}",
                             i,
                             a.content_type(),
                             melib::BytesDisplay(a.raw.len())
                         ),
-                        grid,
                         theme_default.fg,
                         theme_default.bg,
                         theme_default.attrs,
@@ -951,13 +944,12 @@ impl Component for Composer {
             ),
         );
 
-        let (x, y) = write_string_to_grid(
+        let (x, y) = grid.write_string_to_grid(
             if self.reply_context.is_some() {
                 "COMPOSING REPLY"
             } else {
                 "COMPOSING MESSAGE"
             },
-            grid,
             crate::conf::value(context, "highlight").fg,
             crate::conf::value(context, "highlight").bg,
             crate::conf::value(context, "highlight").attrs,
@@ -1063,9 +1055,8 @@ impl Component for Composer {
                     .iter()
                     .enumerate()
                     {
-                        write_string_to_grid(
+                        grid.write_string_to_grid(
                             l,
-                            grid,
                             theme_default.fg,
                             theme_default.bg,
                             theme_default.attrs,

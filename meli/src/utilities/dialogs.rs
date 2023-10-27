@@ -135,9 +135,8 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> Component f
                  * cursor */
                 self.entries[c].1 = !self.entries[c].1;
                 if self.entries[c].1 {
-                    write_string_to_grid(
+                    self.content.write_string_to_grid(
                         "x",
-                        &mut self.content,
                         highlighted_attrs.fg,
                         highlighted_attrs.bg,
                         highlighted_attrs.attrs,
@@ -145,9 +144,8 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> Component f
                         None,
                     );
                 } else {
-                    write_string_to_grid(
+                    self.content.write_string_to_grid(
                         " ",
-                        &mut self.content,
                         highlighted_attrs.fg,
                         highlighted_attrs.bg,
                         highlighted_attrs.attrs,
@@ -462,9 +460,8 @@ impl Component for UIConfirmationDialog {
                  * cursor */
                 self.entries[c].1 = !self.entries[c].1;
                 if self.entries[c].1 {
-                    write_string_to_grid(
+                    self.content.write_string_to_grid(
                         "x",
-                        &mut self.content,
                         highlighted_attrs.fg,
                         highlighted_attrs.bg,
                         highlighted_attrs.attrs,
@@ -472,9 +469,8 @@ impl Component for UIConfirmationDialog {
                         None,
                     );
                 } else {
-                    write_string_to_grid(
+                    self.content.write_string_to_grid(
                         " ",
-                        &mut self.content,
                         highlighted_attrs.fg,
                         highlighted_attrs.bg,
                         highlighted_attrs.attrs,
@@ -819,9 +815,8 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
         let mut content = CellBuffer::new_with_context(width, height, None, context);
         if self.single_only {
             for (i, e) in self.entry_titles.iter().enumerate() {
-                write_string_to_grid(
+                content.write_string_to_grid(
                     e,
-                    &mut content,
                     self.theme_default.fg,
                     self.theme_default.bg,
                     self.theme_default.attrs,
@@ -831,9 +826,8 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
             }
         } else {
             for (i, e) in self.entry_titles.iter().enumerate() {
-                write_string_to_grid(
+                content.write_string_to_grid(
                     &format!("[ ] {}", e),
-                    &mut content,
                     self.theme_default.fg,
                     self.theme_default.bg,
                     self.theme_default.attrs,
@@ -841,9 +835,8 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
                     None,
                 );
             }
-            write_string_to_grid(
+            content.write_string_to_grid(
                 OK_CANCEL,
-                &mut content,
                 self.theme_default.fg,
                 self.theme_default.bg,
                 self.theme_default.attrs | Attr::BOLD,
@@ -893,9 +886,9 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
         );
         let inner_area = create_box(grid, dialog_area);
         clear_area(grid, inner_area, self.theme_default);
-        write_string_to_grid(
+
+        grid.write_string_to_grid(
             &self.title,
-            grid,
             self.theme_default.fg,
             self.theme_default.bg,
             self.theme_default.attrs | Attr::BOLD,
@@ -905,9 +898,9 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
             ),
             None,
         );
-        write_string_to_grid(
+
+        grid.write_string_to_grid(
             &navigate_help_string,
-            grid,
             self.theme_default.fg,
             self.theme_default.bg,
             self.theme_default.attrs | Attr::ITALICS,

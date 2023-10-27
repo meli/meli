@@ -79,18 +79,16 @@ impl ContactManager {
     fn initialize(&mut self, context: &Context) {
         let (width, _) = self.content.size();
 
-        let (x, _) = write_string_to_grid(
+        let (x, _) = self.content.write_string_to_grid(
             "Last edited: ",
-            &mut self.content,
             self.theme_default.fg,
             self.theme_default.bg,
             self.theme_default.attrs,
             ((0, 0), (width - 1, 0)),
             None,
         );
-        let (x, y) = write_string_to_grid(
+        let (x, y) = self.content.write_string_to_grid(
             &self.card.last_edited(),
-            &mut self.content,
             self.theme_default.fg,
             self.theme_default.bg,
             self.theme_default.attrs,
@@ -100,10 +98,9 @@ impl ContactManager {
 
         if self.card.external_resource() {
             self.mode = ViewMode::ReadOnly;
-            let _ = self.content.resize(self.content.size().0, 2, None);
-            write_string_to_grid(
+            _ = self.content.resize(self.content.size().0, 2, None);
+            self.content.write_string_to_grid(
                 "This contact's origin is external and cannot be edited within meli.",
-                &mut self.content,
                 self.theme_default.fg,
                 self.theme_default.bg,
                 self.theme_default.attrs,

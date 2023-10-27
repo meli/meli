@@ -130,9 +130,8 @@ impl MailboxManager {
             CellBuffer::new_with_context(min_width.3, self.length, None, context);
 
         for (idx, e) in self.entries.values().enumerate() {
-            write_string_to_grid(
+            self.data_columns.columns[0].write_string_to_grid(
                 e.name(),
-                &mut self.data_columns.columns[0],
                 self.theme_default.fg,
                 self.theme_default.bg,
                 self.theme_default.attrs,
@@ -140,9 +139,8 @@ impl MailboxManager {
                 None,
             );
 
-            write_string_to_grid(
+            self.data_columns.columns[1].write_string_to_grid(
                 e.ref_mailbox.path(),
-                &mut self.data_columns.columns[1],
                 self.theme_default.fg,
                 self.theme_default.bg,
                 self.theme_default.attrs,
@@ -151,9 +149,8 @@ impl MailboxManager {
             );
 
             let (_unseen, total) = e.ref_mailbox.count().ok().unwrap_or((0, 0));
-            write_string_to_grid(
+            self.data_columns.columns[2].write_string_to_grid(
                 &total.to_string(),
-                &mut self.data_columns.columns[2],
                 self.theme_default.fg,
                 self.theme_default.bg,
                 self.theme_default.attrs,
@@ -161,13 +158,12 @@ impl MailboxManager {
                 None,
             );
 
-            write_string_to_grid(
+            self.data_columns.columns[3].write_string_to_grid(
                 if e.ref_mailbox.is_subscribed() {
                     "yes"
                 } else {
                     "no"
                 },
-                &mut self.data_columns.columns[3],
                 self.theme_default.fg,
                 self.theme_default.bg,
                 self.theme_default.attrs,
@@ -180,9 +176,8 @@ impl MailboxManager {
             let message = "No mailboxes.".to_string();
             self.data_columns.columns[0] =
                 CellBuffer::new_with_context(message.len(), self.length, None, context);
-            write_string_to_grid(
+            self.data_columns.columns[0].write_string_to_grid(
                 &message,
-                &mut self.data_columns.columns[0],
                 self.theme_default.fg,
                 self.theme_default.bg,
                 self.theme_default.attrs,

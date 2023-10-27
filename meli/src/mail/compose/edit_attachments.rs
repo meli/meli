@@ -125,9 +125,8 @@ impl Component for EditAttachmentsRefMut<'_, '_> {
             let theme_default = crate::conf::value(context, "theme_default");
             clear_area(grid, area, theme_default);
             if attachments_no == 0 {
-                write_string_to_grid(
+                grid.write_string_to_grid(
                     "no attachments",
-                    grid,
                     theme_default.fg,
                     theme_default.bg,
                     theme_default.attrs,
@@ -135,9 +134,8 @@ impl Component for EditAttachmentsRefMut<'_, '_> {
                     None,
                 );
             } else {
-                write_string_to_grid(
+                grid.write_string_to_grid(
                     &format!("{} attachments ", attachments_no),
-                    grid,
                     theme_default.fg,
                     theme_default.bg,
                     theme_default.attrs,
@@ -155,7 +153,7 @@ impl Component for EditAttachmentsRefMut<'_, '_> {
                         theme_default.bg
                     };
                     if let Some(name) = a.content_type().name() {
-                        write_string_to_grid(
+                        grid.write_string_to_grid(
                             &format!(
                                 "[{}] \"{}\", {} {}",
                                 i,
@@ -163,7 +161,6 @@ impl Component for EditAttachmentsRefMut<'_, '_> {
                                 a.content_type(),
                                 melib::BytesDisplay(a.raw.len())
                             ),
-                            grid,
                             theme_default.fg,
                             bg,
                             theme_default.attrs,
@@ -171,14 +168,13 @@ impl Component for EditAttachmentsRefMut<'_, '_> {
                             None,
                         );
                     } else {
-                        write_string_to_grid(
+                        grid.write_string_to_grid(
                             &format!(
                                 "[{}] {} {}",
                                 i,
                                 a.content_type(),
                                 melib::BytesDisplay(a.raw.len())
                             ),
-                            grid,
                             theme_default.fg,
                             bg,
                             theme_default.attrs,

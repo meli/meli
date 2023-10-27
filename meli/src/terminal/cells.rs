@@ -434,6 +434,138 @@ impl CellBuffer {
             self.tag_associations.push((tag, (start, end)));
         }
     }
+
+    /// Write an `&str` to a `CellBuffer` in a specified `Area` with the passed
+    /// colors.
+    pub fn write_string_to_grid(
+        &mut self,
+        s: &str,
+        fg_color: Color,
+        bg_color: Color,
+        attrs: Attr,
+        area: Area,
+        // The left-most x coordinate.
+        line_break: Option<usize>,
+    ) -> Pos {
+        macro_rules! inspect_bounds {
+            ($grid:ident, $area:ident, $x: ident, $y: ident, $line_break:ident) => {
+                let bounds = $grid.size();
+                let (upper_left, bottom_right) = $area;
+                if $x > (get_x(bottom_right)) || $x >= get_x(bounds) {
+                    if $grid.growable {
+                        if !$grid.resize(std::cmp::max($x + 1, $grid.cols), $grid.rows, None) {
+                            break;
+                        };
+                    } else {
+                        $x = get_x(upper_left);
+                        $y += 1;
+                        if let Some(_x) = $line_break {
+                            $x = _x;
+                        } else {
+                            break;
+                        }
+                    }
+                }
+                if $y > (get_y(bottom_right)) || $y >= get_y(bounds) {
+                    if $grid.growable {
+                        if !$grid.resize($grid.cols, std::cmp::max($y + 1, $grid.rows), None) {
+                            break;
+                        };
+                    } else {
+                        return ($x, $y - 1);
+                    }
+                }
+            };
+        }
+
+        let mut bounds = self.size();
+        let upper_left = upper_left!(area);
+        let bottom_right = bottom_right!(area);
+        let (mut x, mut y) = upper_left;
+        if y == get_y(bounds) || x == get_x(bounds) {
+            if self.growable {
+                if !self.resize(
+                    std::cmp::max(self.cols, x + 2),
+                    std::cmp::max(self.rows, y + 2),
+                    None,
+                ) {
+                    return (x, y);
+                }
+                bounds = self.size();
+            } else {
+                return (x, y);
+            }
+        }
+
+        if y > (get_y(bottom_right))
+            || x > get_x(bottom_right)
+            || y > get_y(bounds)
+            || x > get_x(bounds)
+        {
+            if self.growable {
+                if !self.resize(
+                    std::cmp::max(self.cols, x + 2),
+                    std::cmp::max(self.rows, y + 2),
+                    None,
+                ) {
+                    return (x, y);
+                }
+            } else {
+                log::debug!(" Invalid area with string {} and area {:?}", s, area);
+                return (x, y);
+            }
+        }
+        for c in s.chars() {
+            inspect_bounds!(self, area, x, y, line_break);
+            if c == '\r' {
+                continue;
+            }
+            if c == '\n' {
+                y += 1;
+                if let Some(_x) = line_break {
+                    x = _x;
+                    inspect_bounds!(self, area, x, y, line_break);
+                    continue;
+                } else {
+                    break;
+                }
+            }
+            if c == '\t' {
+                self[(x, y)].set_ch(' ');
+                x += 1;
+                inspect_bounds!(self, area, x, y, line_break);
+                self[(x, y)].set_ch(' ');
+            } else {
+                self[(x, y)].set_ch(c);
+            }
+            self[(x, y)]
+                .set_fg(fg_color)
+                .set_bg(bg_color)
+                .set_attrs(attrs);
+
+            match wcwidth(u32::from(c)) {
+                Some(0) | None => {
+                    /* Skip drawing zero width characters */
+                    self[(x, y)].empty = true;
+                }
+                Some(2) => {
+                    /* Grapheme takes more than one column, so the next cell will be
+                     * drawn over. Set it as empty to skip drawing it. */
+                    x += 1;
+                    inspect_bounds!(self, area, x, y, line_break);
+                    self[(x, y)] = Cell::default();
+                    self[(x, y)]
+                        .set_fg(fg_color)
+                        .set_bg(bg_color)
+                        .set_attrs(attrs)
+                        .set_empty(true);
+                }
+                _ => {}
+            }
+            x += 1;
+        }
+        (x, y)
+    }
 }
 
 impl Deref for CellBuffer {
@@ -1134,138 +1266,6 @@ pub fn change_theme(grid: &mut CellBuffer, area: Area, theme: ThemeAttribute) {
     }
 }
 
-macro_rules! inspect_bounds {
-    ($grid:ident, $area:ident, $x: ident, $y: ident, $line_break:ident) => {
-        let bounds = $grid.size();
-        let (upper_left, bottom_right) = $area;
-        if $x > (get_x(bottom_right)) || $x >= get_x(bounds) {
-            if $grid.growable {
-                if !$grid.resize(std::cmp::max($x + 1, $grid.cols), $grid.rows, None) {
-                    break;
-                };
-            } else {
-                $x = get_x(upper_left);
-                $y += 1;
-                if let Some(_x) = $line_break {
-                    $x = _x;
-                } else {
-                    break;
-                }
-            }
-        }
-        if $y > (get_y(bottom_right)) || $y >= get_y(bounds) {
-            if $grid.growable {
-                if !$grid.resize($grid.cols, std::cmp::max($y + 1, $grid.rows), None) {
-                    break;
-                };
-            } else {
-                return ($x, $y - 1);
-            }
-        }
-    };
-}
-
-/// Write an `&str` to a `CellBuffer` in a specified `Area` with the passed
-/// colors.
-pub fn write_string_to_grid(
-    s: &str,
-    grid: &mut CellBuffer,
-    fg_color: Color,
-    bg_color: Color,
-    attrs: Attr,
-    area: Area,
-    // The left-most x coordinate.
-    line_break: Option<usize>,
-) -> Pos {
-    let mut bounds = grid.size();
-    let upper_left = upper_left!(area);
-    let bottom_right = bottom_right!(area);
-    let (mut x, mut y) = upper_left;
-    if y == get_y(bounds) || x == get_x(bounds) {
-        if grid.growable {
-            if !grid.resize(
-                std::cmp::max(grid.cols, x + 2),
-                std::cmp::max(grid.rows, y + 2),
-                None,
-            ) {
-                return (x, y);
-            }
-            bounds = grid.size();
-        } else {
-            return (x, y);
-        }
-    }
-
-    if y > (get_y(bottom_right))
-        || x > get_x(bottom_right)
-        || y > get_y(bounds)
-        || x > get_x(bounds)
-    {
-        if grid.growable {
-            if !grid.resize(
-                std::cmp::max(grid.cols, x + 2),
-                std::cmp::max(grid.rows, y + 2),
-                None,
-            ) {
-                return (x, y);
-            }
-        } else {
-            log::debug!(" Invalid area with string {} and area {:?}", s, area);
-            return (x, y);
-        }
-    }
-    for c in s.chars() {
-        inspect_bounds!(grid, area, x, y, line_break);
-        if c == '\r' {
-            continue;
-        }
-        if c == '\n' {
-            y += 1;
-            if let Some(_x) = line_break {
-                x = _x;
-                inspect_bounds!(grid, area, x, y, line_break);
-                continue;
-            } else {
-                break;
-            }
-        }
-        if c == '\t' {
-            grid[(x, y)].set_ch(' ');
-            x += 1;
-            inspect_bounds!(grid, area, x, y, line_break);
-            grid[(x, y)].set_ch(' ');
-        } else {
-            grid[(x, y)].set_ch(c);
-        }
-        grid[(x, y)]
-            .set_fg(fg_color)
-            .set_bg(bg_color)
-            .set_attrs(attrs);
-
-        match wcwidth(u32::from(c)) {
-            Some(0) | None => {
-                /* Skip drawing zero width characters */
-                grid[(x, y)].empty = true;
-            }
-            Some(2) => {
-                /* Grapheme takes more than one column, so the next cell will be
-                 * drawn over. Set it as empty to skip drawing it. */
-                x += 1;
-                inspect_bounds!(grid, area, x, y, line_break);
-                grid[(x, y)] = Cell::default();
-                grid[(x, y)]
-                    .set_fg(fg_color)
-                    .set_bg(bg_color)
-                    .set_attrs(attrs)
-                    .set_empty(true);
-            }
-            _ => {}
-        }
-        x += 1;
-    }
-    (x, y)
-}
-
 /// Completely clear an `Area` with an empty char and the terminal's default
 /// colors.
 pub fn clear_area(grid: &mut CellBuffer, area: Area, attributes: ThemeAttribute) {
@@ -1851,9 +1851,8 @@ mod tests {
         );
         let width = buf.size().0;
         for (i, l) in lines.iter().enumerate() {
-            write_string_to_grid(
+            buf.write_string_to_grid(
                 l,
-                &mut buf,
                 Color::Default,
                 Color::Default,
                 Attr::DEFAULT,

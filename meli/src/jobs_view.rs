@@ -170,9 +170,8 @@ impl JobManager {
             CellBuffer::new_with_context(self.min_width[4], self.length, None, context);
 
         for (idx, e) in self.entries.values().enumerate() {
-            write_string_to_grid(
+            self.data_columns.columns[0].write_string_to_grid(
                 &e.id.to_string(),
-                &mut self.data_columns.columns[0],
                 self.theme_default.fg,
                 self.theme_default.bg,
                 self.theme_default.attrs,
@@ -180,9 +179,8 @@ impl JobManager {
                 None,
             );
 
-            write_string_to_grid(
+            self.data_columns.columns[1].write_string_to_grid(
                 &e.desc,
-                &mut self.data_columns.columns[1],
                 self.theme_default.fg,
                 self.theme_default.bg,
                 self.theme_default.attrs,
@@ -190,9 +188,8 @@ impl JobManager {
                 None,
             );
 
-            write_string_to_grid(
+            self.data_columns.columns[2].write_string_to_grid(
                 &datetime::timestamp_to_string(e.started, Some(RFC3339_DATETIME_AND_SPACE), true),
-                &mut self.data_columns.columns[2],
                 self.theme_default.fg,
                 self.theme_default.bg,
                 self.theme_default.attrs,
@@ -200,7 +197,7 @@ impl JobManager {
                 None,
             );
 
-            write_string_to_grid(
+            self.data_columns.columns[3].write_string_to_grid(
                 &if let Some(t) = e.finished {
                     Cow::Owned(datetime::timestamp_to_string(
                         t,
@@ -210,7 +207,6 @@ impl JobManager {
                 } else {
                     Cow::Borrowed("null")
                 },
-                &mut self.data_columns.columns[3],
                 self.theme_default.fg,
                 self.theme_default.bg,
                 self.theme_default.attrs,
@@ -218,13 +214,12 @@ impl JobManager {
                 None,
             );
 
-            write_string_to_grid(
+            self.data_columns.columns[4].write_string_to_grid(
                 &if e.finished.is_some() {
                     Cow::Owned(format!("{:?}", e.succeeded))
                 } else {
                     Cow::Borrowed("-")
                 },
-                &mut self.data_columns.columns[4],
                 self.theme_default.fg,
                 self.theme_default.bg,
                 self.theme_default.attrs,
@@ -237,9 +232,8 @@ impl JobManager {
             let message = "No jobs.".to_string();
             self.data_columns.columns[0] =
                 CellBuffer::new_with_context(message.len(), self.length, None, context);
-            write_string_to_grid(
+            self.data_columns.columns[0].write_string_to_grid(
                 &message,
-                &mut self.data_columns.columns[0],
                 self.theme_default.fg,
                 self.theme_default.bg,
                 self.theme_default.attrs,
@@ -400,9 +394,8 @@ impl Component for JobManager {
             let mut x_offset = 0;
             let (upper_left, bottom_right) = area;
             for (i, (h, w)) in Self::HEADERS.iter().zip(self.min_width).enumerate() {
-                write_string_to_grid(
+                grid.write_string_to_grid(
                     h,
-                    grid,
                     self.theme_default.fg,
                     self.theme_default.bg,
                     self.theme_default.attrs | Attr::BOLD,
@@ -417,9 +410,8 @@ impl Component for JobManager {
                         (false, Asc) => DataColumns::<5>::ARROW_UP,
                         (false, Desc) => DataColumns::<5>::ARROW_DOWN,
                     };
-                    write_string_to_grid(
+                    grid.write_string_to_grid(
                         arrow,
-                        grid,
                         self.theme_default.fg,
                         self.theme_default.bg,
                         self.theme_default.attrs,
