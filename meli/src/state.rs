@@ -48,13 +48,13 @@ use indexmap::{IndexMap, IndexSet};
 use melib::{
     backends::{AccountHash, BackendEvent, BackendEventConsumer, Backends, RefreshEvent},
     utils::datetime,
-    UnixTimestamp,
 };
 use smallvec::SmallVec;
 
 use super::*;
 use crate::{
     jobs::JobExecutor,
+    notifications::{DisplayMessage, DisplayMessageBox},
     terminal::{get_events, Screen, Tty},
 };
 
@@ -285,20 +285,7 @@ pub struct State {
     component_tree: IndexMap<ComponentId, ComponentPath>,
     pub context: Box<Context>,
     timer: thread::JoinHandle<()>,
-
-    display_messages: SmallVec<[DisplayMessage; 8]>,
-    display_messages_expiration_start: Option<UnixTimestamp>,
-    display_messages_active: bool,
-    display_messages_dirty: bool,
-    display_messages_initialised: bool,
-    display_messages_pos: usize,
-    //display_messages_area: Area,
-}
-
-#[derive(Debug)]
-struct DisplayMessage {
-    timestamp: UnixTimestamp,
-    msg: String,
+    message_box: Box<DisplayMessageBox>,
 }
 
 impl Drop for State {
@@ -422,6 +409,7 @@ impl State {
             } else {
                 Screen::draw_horizontal_segment_no_color
             });
+        let message_box = DisplayMessageBox::new(&screen);
         let mut s = State {
             screen,
             child: None,
@@ -431,12 +419,7 @@ impl State {
             component_tree: IndexMap::default(),
             timer,
             draw_rate_limit: RateLimit::new(1, 3, job_executor.clone()),
-            display_messages: SmallVec::new(),
-            display_messages_expiration_start: None,
-            display_messages_pos: 0,
-            display_messages_active: false,
-            display_messages_dirty: false,
-            display_messages_initialised: false,
+            message_box,
             context: Box::new(Context {
                 accounts,
                 settings,
@@ -535,8 +518,8 @@ impl State {
     pub fn update_size(&mut self) {
         self.screen.update_size();
         self.rcv_event(UIEvent::Resize);
-        self.display_messages_dirty = true;
-        self.display_messages_initialised = false;
+        self.message_box.set_dirty(true);
+        self.message_box.initialised = false;
 
         // Invalidate dirty areas.
         self.context.dirty_areas.clear();
@@ -553,17 +536,18 @@ impl State {
         }
         let mut areas: smallvec::SmallVec<[Area; 8]> =
             self.context.dirty_areas.drain(0..).collect();
-        if self.display_messages_active {
+        if self.message_box.active {
             let now = datetime::now();
             if self
-                .display_messages_expiration_start
+                .message_box
+                .expiration_start
                 .map(|t| t + 5 < now)
                 .unwrap_or(false)
             {
-                self.display_messages_active = false;
-                self.display_messages_dirty = true;
-                self.display_messages_initialised = false;
-                self.display_messages_expiration_start = None;
+                self.message_box.active = false;
+                self.message_box.set_dirty(true);
+                self.message_box.initialised = false;
+                self.message_box.expiration_start = None;
                 areas.push(self.screen.area());
             }
         }
@@ -571,16 +555,21 @@ impl State {
         /* Sort by x_start, ie upper_left corner's x coordinate */
         areas.sort_by(|a, b| a.upper_left().0.partial_cmp(&b.upper_left().0).unwrap());
 
-        if self.display_messages_active {
+        if self.message_box.active {
             /* Check if any dirty area intersects with the area occupied by
              * floating notification box */
-            //let (displ_top, displ_bot) = self.display_messages_area;
-            //for &((top_x, top_y), (bottom_x, bottom_y)) in &areas {
-            //    self.display_messages_dirty |= !(bottom_y < displ_top.1
-            //        || displ_bot.1 < top_y
-            //        || bottom_x < displ_top.0
-            //        || displ_bot.0 < top_x);
-            //}
+            let displ = self.message_box.cached_area();
+            let (displ_top, displ_bot) = (displ.upper_left(), displ.bottom_right());
+            let mut is_dirty = self.message_box.is_dirty();
+            for a in &areas {
+                let (top_x, top_y) = a.upper_left();
+                let (bottom_x, bottom_y) = a.bottom_right();
+                is_dirty |= !(bottom_y < displ_top.1
+                    || displ_bot.1 < top_y
+                    || bottom_x < displ_top.0
+                    || displ_bot.0 < top_x);
+            }
+            self.message_box.set_dirty(is_dirty);
         }
         /* draw each dirty area */
         let rows = self.screen.area().height();
@@ -617,143 +606,52 @@ impl State {
             }
         }
 
-        if self.display_messages_dirty && self.display_messages_active {
-            //if let Some(DisplayMessage {
-            //    ref timestamp,
-            //    ref msg,
-            //    ..
-            //}) = self.display_messages.get(self.display_messages_pos)
-            //{
-            //    if !self.display_messages_initialised {
-            //        {
-            //            /* Clear area previously occupied by floating
-            //             * notification box */
-            //            //let displ_area = self.display_messages_area;
-            //            //for y in get_y(displ_area.upper_left())..
-            //            // =get_y(displ_area.bottom_right()) {
-            //            //    (self.screen.tty().draw_fn())(
-            //            //        self.screen.grid_mut(),
-            //            //        self.screen.tty_mut().stdout_mut(),
-            //            //        get_x(displ_area.upper_left()),
-            //            //        get_x(displ_area.bottom_right()),
-            //            //        y,
-            //            //    );
-            //            //}
-            //        }
-            //        let noto_colors = crate::conf::value(&self.context,
-            // "status.notification");        use
-            // crate::melib::text_processing::{Reflow, TextProcessing};
-
-            //        let msg_lines =
-            //            msg.split_lines_reflow(Reflow::All,
-            // Some(self.screen.area().width() / 3));        let width =
-            // msg_lines            .iter()
-            //            .map(|line| line.grapheme_len() + 4)
-            //            .max()
-            //            .unwrap_or(0);
-
-            //        let displ_area = self.screen.area().place_inside(
-            //            (
-            //                width,
-            //                std::cmp::min(self.screen.area().height(), msg_lines.len() +
-            // 4),            ),
-            //            false,
-            //            false,
-            //        );
-            //        /*
-            //        let box_displ_area = create_box(&mut self.screen.overlay_grid,
-            // displ_area);        for row in
-            // self.screen.overlay_grid.bounds_iter(box_displ_area) {
-            //            for c in row {
-            //                self.screen.overlay_grid[c]
-            //                    .set_ch(' ')
-            //                    .set_fg(noto_colors.fg)
-            //                    .set_bg(noto_colors.bg)
-            //                    .set_attrs(noto_colors.attrs);
-            //            }
-            //        }
-            //        let ((x, mut y), box_displ_area_bottom_right) = box_displ_area;
-            //        for line in msg_lines
-            //            .into_iter()
-            //            .chain(Some(String::new()))
-            //            .chain(Some(datetime::timestamp_to_string(*timestamp, None,
-            // false)))        {
-            //            self.screen.overlay_grid.write_string(
-            //                &line,
-            //                noto_colors.fg,
-            //                noto_colors.bg,
-            //                noto_colors.attrs,
-            //                ((x, y), box_displ_area_bottom_right),
-            //                Some(x),
-            //            );
-            //            y += 1;
-            //        }
-
-            //        if self.display_messages.len() > 1 {
-            //            self.screen.overlay_grid.write_string(
-            //                &if self.display_messages_pos == 0 {
-            //                    format!(
-            //                        "Next: {}",
-            //
-            // self.context.settings.shortcuts.general.info_message_next
-            //                    )
-            //                } else if self.display_messages_pos + 1 ==
-            // self.display_messages.len() {                    format!(
-            //                        "Prev: {}",
-            //                        self.context
-            //                            .settings
-            //                            .shortcuts
-            //                            .general
-            //                            .info_message_previous
-            //                    )
-            //                } else {
-            //                    format!(
-            //                        "Prev: {} Next: {}",
-            //                        self.context
-            //                            .settings
-            //                            .shortcuts
-            //                            .general
-            //                            .info_message_previous,
-            //
-            // self.context.settings.shortcuts.general.info_message_next
-            //                    )
-            //                },
-            //                noto_colors.fg,
-            //                noto_colors.bg,
-            //                noto_colors.attrs,
-            //                ((x, y), box_displ_area_bottom_right),
-            //                Some(x),
-            //            );
-            //        }
-            //        self.display_messages_area = displ_area;
-            //        */
-            //    }
-            //    //for y in get_y(self.display_messages_area.upper_left())
-            //    //    ..=get_y(self.display_messages_area.bottom_right())
-            //    //{
-            //    //    (self.screen.tty().draw_fn())(
-            //    //        &mut self.screen.overlay_grid,
-            //    //        self.screen.tty_mut().stdout_mut(),
-            //    //        get_x(self.display_messages_area.upper_left()),
-            //    //        get_x(self.display_messages_area.bottom_right()),
-            //    //        y,
-            //    //    );
-            //    //}
-            //}
-            self.display_messages_dirty = false;
-        } else if self.display_messages_dirty {
+        if self.message_box.is_dirty() && self.message_box.active {
+            if !self.message_box.is_empty() {
+                if !self.message_box.initialised {
+                    {
+                        /* Clear area previously occupied by floating
+                         * notification box */
+                        if self.message_box.cached_area().generation()
+                            == self.screen.area().generation()
+                        {
+                            for row in self
+                                .screen
+                                .grid()
+                                .bounds_iter(self.message_box.cached_area())
+                            {
+                                self.screen
+                                    .draw(row.cols().start, row.cols().end, row.row_index());
+                            }
+                        }
+                    }
+                }
+                let area = self.screen.area();
+                self.message_box
+                    .draw(self.screen.overlay_grid_mut(), area, &mut self.context);
+                for row in self
+                    .screen
+                    .overlay_grid()
+                    .bounds_iter(self.message_box.cached_area())
+                {
+                    self.screen
+                        .draw_overlay(row.cols().start, row.cols().end, row.row_index());
+                }
+            }
+            self.message_box.set_dirty(false);
+        } else if self.message_box.is_dirty() {
             /* Clear area previously occupied by floating notification box */
-            //let displ_area = self.display_messages_area;
-            //for y in get_y(displ_area.upper_left())..=get_y(displ_area.bottom_right()) {
-            //    (self.screen.tty().draw_fn())(
-            //        self.screen.grid_mut(),
-            //        self.screen.tty_mut().stdout_mut(),
-            //        get_x(displ_area.upper_left()),
-            //        get_x(displ_area.bottom_right()),
-            //        y,
-            //    );
-            //}
-            self.display_messages_dirty = false;
+            if self.message_box.cached_area().generation() == self.screen.area().generation() {
+                for row in self
+                    .screen
+                    .grid()
+                    .bounds_iter(self.message_box.cached_area())
+                {
+                    self.screen
+                        .draw(row.cols().start, row.cols().end, row.row_index());
+                }
+            }
+            self.message_box.set_dirty(false);
         }
 
         if !self.overlay.is_empty() {
@@ -999,8 +897,8 @@ impl State {
     /// The application's main loop sends `UIEvents` to state via this method.
     pub fn rcv_event(&mut self, mut event: UIEvent) {
         if let UIEvent::Input(_) = event {
-            if self.display_messages_expiration_start.is_none() {
-                self.display_messages_expiration_start = Some(datetime::now());
+            if self.message_box.expiration_start.is_none() {
+                self.message_box.expiration_start = Some(datetime::now());
             }
         }
 
@@ -1160,36 +1058,36 @@ impl State {
                         .general
                         .info_message_previous =>
             {
-                self.display_messages_expiration_start = Some(datetime::now());
-                self.display_messages_active = true;
-                self.display_messages_initialised = false;
-                self.display_messages_dirty = true;
-                self.display_messages_pos = self.display_messages_pos.saturating_sub(1);
+                self.message_box.expiration_start = Some(datetime::now());
+                self.message_box.active = true;
+                self.message_box.initialised = false;
+                self.message_box.set_dirty(true);
+                self.message_box.pos = self.message_box.pos.saturating_sub(1);
                 return;
             }
             UIEvent::Input(ref key)
                 if *key == self.context.settings.shortcuts.general.info_message_next =>
             {
-                self.display_messages_expiration_start = Some(datetime::now());
-                self.display_messages_active = true;
-                self.display_messages_initialised = false;
-                self.display_messages_dirty = true;
-                self.display_messages_pos = std::cmp::min(
-                    self.display_messages.len().saturating_sub(1),
-                    self.display_messages_pos + 1,
+                self.message_box.expiration_start = Some(datetime::now());
+                self.message_box.active = true;
+                self.message_box.initialised = false;
+                self.message_box.set_dirty(true);
+                self.message_box.pos = std::cmp::min(
+                    self.message_box.len().saturating_sub(1),
+                    self.message_box.pos + 1,
                 );
                 return;
             }
             UIEvent::StatusEvent(StatusEvent::DisplayMessage(ref msg)) => {
-                self.display_messages.push(DisplayMessage {
+                self.message_box.push(DisplayMessage {
                     timestamp: datetime::now(),
                     msg: msg.clone(),
                 });
-                self.display_messages_active = true;
-                self.display_messages_initialised = false;
-                self.display_messages_dirty = true;
-                self.display_messages_expiration_start = None;
-                self.display_messages_pos = self.display_messages.len() - 1;
+                self.message_box.active = true;
+                self.message_box.initialised = false;
+                self.message_box.set_dirty(true);
+                self.message_box.expiration_start = None;
+                self.message_box.pos = self.message_box.len() - 1;
                 self.redraw();
             }
             UIEvent::FinishedUIDialog(ref id, ref mut results) if self.overlay.contains_key(id) => {

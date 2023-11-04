@@ -261,6 +261,20 @@ impl Screen<Tty> {
         (self.display.draw_horizontal_segment_fn)(&mut self.grid, stdout, x_start, x_end, y);
     }
 
+    #[inline]
+    pub fn draw_overlay(&mut self, x_start: usize, x_end: usize, y: usize) {
+        let Some(stdout) = self.display.stdout.as_mut() else {
+            return;
+        };
+        (self.display.draw_horizontal_segment_fn)(
+            &mut self.overlay_grid,
+            stdout,
+            x_start,
+            x_end,
+            y,
+        );
+    }
+
     /// On `SIGWNICH` the `State` redraws itself according to the new
     /// terminal size.
     pub fn update_size(&mut self) {

@@ -24,6 +24,8 @@ use std::process::{Command, Stdio};
 
 #[cfg(all(target_os = "linux", feature = "dbus-notifications"))]
 pub use dbus::*;
+use melib::{utils::datetime, UnixTimestamp};
+use smallvec::SmallVec;
 
 use super::*;
 
@@ -293,4 +295,175 @@ fn update_xbiff(path: &str) -> Result<()> {
         std::io::Write::write_all(&mut file, b"z")?;
     }
     Ok(())
+}
+
+#[derive(Debug)]
+/// On-screen-display messages.
+pub struct DisplayMessage {
+    pub timestamp: UnixTimestamp,
+    pub msg: String,
+}
+
+#[derive(Debug)]
+/// Show notifications on [`Screen`].
+pub struct DisplayMessageBox {
+    messages: SmallVec<[DisplayMessage; 8]>,
+    pub expiration_start: Option<UnixTimestamp>,
+    pub active: bool,
+    dirty: bool,
+    pub initialised: bool,
+    pub pos: usize,
+    cached_area: Area,
+    id: ComponentId,
+}
+
+impl DisplayMessageBox {
+    pub fn new(sc: &Screen<Tty>) -> Box<Self> {
+        Box::new(Self {
+            messages: SmallVec::new(),
+            expiration_start: None,
+            pos: 0,
+            active: false,
+            dirty: false,
+            initialised: false,
+            cached_area: sc.area().into_empty(),
+            id: ComponentId::default(),
+        })
+    }
+
+    #[inline]
+    pub fn cached_area(&self) -> Area {
+        self.cached_area
+    }
+}
+
+impl std::ops::Deref for DisplayMessageBox {
+    type Target = SmallVec<[DisplayMessage; 8]>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.messages
+    }
+}
+
+impl std::ops::DerefMut for DisplayMessageBox {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.messages
+    }
+}
+
+impl std::fmt::Display for DisplayMessageBox {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "")
+    }
+}
+
+impl Component for DisplayMessageBox {
+    fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        if let Some(DisplayMessage {
+            ref timestamp,
+            ref msg,
+            ..
+        }) = self.messages.get(self.pos)
+        {
+            let noto_colors = crate::conf::value(context, "status.notification");
+            use crate::melib::text_processing::{Reflow, TextProcessing};
+
+            let box_width = area.width() / 3;
+            if box_width < 10 {
+                self.set_dirty(false);
+                return;
+            }
+
+            let msg_lines = msg.split_lines_reflow(Reflow::All, Some(box_width));
+            let width = msg_lines
+                .iter()
+                .map(|line| line.grapheme_len() + 4)
+                .max()
+                .unwrap_or(0);
+
+            if width == 0 {
+                self.set_dirty(false);
+                return;
+            }
+
+            self.cached_area = area.place_inside(
+                (width, area.height().min(msg_lines.len() + 4)),
+                false,
+                false,
+            );
+            let box_displ_area = create_box(grid, self.cached_area);
+            for row in grid.bounds_iter(box_displ_area) {
+                for c in row {
+                    grid[c]
+                        .set_ch(' ')
+                        .set_fg(noto_colors.fg)
+                        .set_bg(noto_colors.bg)
+                        .set_attrs(noto_colors.attrs);
+                }
+            }
+            let mut lines_no = 0;
+            for (idx, line) in msg_lines
+                .into_iter()
+                .chain(Some(String::new()))
+                .chain(Some(datetime::timestamp_to_string(*timestamp, None, false)))
+                .enumerate()
+            {
+                let (_, y) = grid.write_string(
+                    &line,
+                    noto_colors.fg,
+                    noto_colors.bg,
+                    noto_colors.attrs,
+                    box_displ_area.skip_rows(idx),
+                    Some(0),
+                );
+                lines_no += 1 + y;
+            }
+
+            if self.messages.len() > 1 {
+                grid.write_string(
+                    &if self.pos == 0 {
+                        format!(
+                            "Next: {}",
+                            context.settings.shortcuts.general.info_message_next
+                        )
+                    } else if self.pos + 1 == self.len() {
+                        format!(
+                            "Prev: {}",
+                            context.settings.shortcuts.general.info_message_previous
+                        )
+                    } else {
+                        format!(
+                            "Prev: {} Next: {}",
+                            context.settings.shortcuts.general.info_message_previous,
+                            context.settings.shortcuts.general.info_message_next
+                        )
+                    },
+                    noto_colors.fg,
+                    noto_colors.bg,
+                    noto_colors.attrs,
+                    box_displ_area.skip_rows(lines_no),
+                    Some(0),
+                );
+            }
+        } else {
+            self.cached_area = area.into_empty();
+        }
+        self.set_dirty(false);
+    }
+
+    fn process_event(&mut self, _event: &mut UIEvent, _context: &mut Context) -> bool {
+        false
+    }
+
+    fn is_dirty(&self) -> bool {
+        self.dirty
+    }
+
+    fn set_dirty(&mut self, value: bool) {
+        self.dirty = value;
+    }
+
+    fn id(&self) -> ComponentId {
+        self.id
+    }
 }

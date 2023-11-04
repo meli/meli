@@ -1386,6 +1386,11 @@ impl RowIterator {
         self.row
     }
 
+    #[inline]
+    pub fn cols(&self) -> std::ops::Range<usize> {
+        self.col.clone()
+    }
+
     pub const fn empty(generation: ScreenGeneration) -> Self {
         Self {
             row: 0,
