@@ -132,7 +132,8 @@ impl StatusBar {
         if !context.settings.terminal.use_color() {
             attribute.attrs |= Attr::REVERSE;
         }
-        let (x, y) = grid.write_string(
+        grid.clear_area(area, attribute);
+        let (x, _) = grid.write_string(
             &self.status,
             attribute.fg,
             attribute.bg,
@@ -140,23 +141,9 @@ impl StatusBar {
             area,
             None,
         );
-        for c in grid.row_iter(area, x..(get_x(area.bottom_right()) + 1), y) {
-            grid[c]
-                .set_ch(' ')
-                .set_fg(attribute.fg)
-                .set_bg(attribute.bg)
-                .set_attrs(attribute.attrs);
-        }
         let offset = self.status.find('|').unwrap_or(self.status.len());
-        if y < get_y(area.bottom_right()) + 1 {
-            for x in get_x(area.upper_left())
-                ..std::cmp::min(
-                    get_x(area.upper_left()) + offset,
-                    get_x(area.bottom_right()),
-                )
-            {
-                grid[(x, y)].set_attrs(attribute.attrs | Attr::BOLD);
-            }
+        for c in grid.row_iter(area, offset..(area.width()), 0) {
+            grid[c].set_attrs(attribute.attrs | Attr::BOLD);
         }
         if let Some((
             _,
@@ -180,30 +167,29 @@ impl StatusBar {
                 attribute.fg,
                 attribute.bg,
                 attribute.attrs,
-                area.skip_cols(x + 1).skip_rows(y),
+                area.skip_cols(x + 1),
                 None,
             );
         }
 
-        let (mut x, y) = area.bottom_right();
-        if self.progress_spinner.is_active() {
-            x = x.saturating_sub(1 + self.progress_spinner.width);
-        }
         if self.progress_spinner.is_dirty() {
             self.progress_spinner.draw(
                 grid,
-                area.skip_rows(area.height().saturating_sub(1))
-                    .skip_cols(area.width().saturating_sub(self.progress_spinner.width)),
+                area.skip_cols(area.width().saturating_sub(self.progress_spinner.width)),
                 context,
             );
         }
-        for (idx, c) in self.display_buffer.chars().rev().enumerate() {
-            if let Some(cell) = grid.get_mut(x.saturating_sub(idx).saturating_sub(1), y) {
-                cell.set_ch(c);
-            } else {
-                break;
-            }
-        }
+        let skip = area
+            .width()
+            .saturating_sub(self.progress_spinner.width + self.display_buffer.len() + 1);
+        grid.write_string(
+            &self.display_buffer,
+            attribute.fg,
+            attribute.bg,
+            attribute.attrs,
+            area.skip_cols(skip),
+            None,
+        );
 
         context.dirty_areas.push_back(area);
     }
@@ -244,11 +230,11 @@ impl StatusBar {
             None,
         );
         grid.change_theme(area, command_bar);
-        if let Some(ref mut cell) = grid.get_mut(
-            pos_inc(area.upper_left(), (self.ex_buffer.cursor(), 0)).0,
-            y,
-        ) {
-            cell.set_attrs(command_bar.attrs | Attr::UNDERLINE);
+        if let Some(c) = grid
+            .row_iter(area, self.ex_buffer.cursor()..area.width(), y)
+            .next()
+        {
+            grid[c].set_attrs(command_bar.attrs | Attr::UNDERLINE);
         }
         context.dirty_areas.push_back(area);
     }
@@ -268,11 +254,7 @@ impl Component for StatusBar {
         );
 
         self.dirty = false;
-        self.draw_status_bar(
-            grid,
-            area.skip_rows(total_rows.saturating_sub(self.status_bar_height)),
-            context,
-        );
+        self.draw_status_bar(grid, area.skip_rows(total_rows.saturating_sub(1)), context);
 
         if self.mode != UIMode::Command && !self.is_dirty() {
             return;
@@ -280,7 +262,7 @@ impl Component for StatusBar {
         match self.mode {
             UIMode::Normal => {}
             UIMode::Command => {
-                let area = area.skip_rows(total_rows.saturating_sub(self.status_bar_height + 2));
+                let area = area.nth_row(total_rows.saturating_sub(self.status_bar_height));
                 self.draw_command_bar(grid, area, context);
                 /* don't autocomplete for less than 3 characters */
                 if self.ex_buffer.as_str().split_graphemes().len() <= 2 {
@@ -530,6 +512,7 @@ impl Component for StatusBar {
             _ => {}
         }
     }
+
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         if self.container.process_event(event, context) {
             return true;
@@ -895,9 +878,6 @@ impl Tabbed {
     }
 
     fn draw_tabs(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        let upper_left = area.upper_left();
-        let bottom_right = area.bottom_right();
-
         let tab_bar_attribute = crate::conf::value(context, "tab.bar");
         grid.clear_area(area, tab_bar_attribute);
         if self.children.is_empty() {
@@ -909,62 +889,23 @@ impl Tabbed {
             tab_focused_attribute.attrs |= Attr::REVERSE;
         }
 
-        let mut x = get_x(upper_left);
-        let y: usize = get_y(upper_left);
+        let mut x = 0;
         for (idx, c) in self.children.iter().enumerate() {
             let ThemeAttribute { fg, bg, attrs } = if idx == self.cursor_pos {
                 tab_focused_attribute
             } else {
                 tab_unfocused_attribute
             };
-            let (x_, _y_) = grid.write_string(
-                &format!(" {} ", c),
-                fg,
-                bg,
-                attrs,
-                area.skip_cols(x - get_x(upper_left)),
-                None,
-            );
-            x = x_ + 1;
+            let name = format!(" {c} ");
+            grid.write_string(&name, fg, bg, attrs, area.skip_cols(x), None);
+            x += name.len() + 1;
             if idx == self.pinned.saturating_sub(1) {
                 x += 2;
             }
-            if y != _y_ {
+            if x > area.width() {
                 break;
             }
-            if x > get_x(bottom_right) {
-                x = get_x(bottom_right);
-                break;
-            }
-            grid[(x_, _y_)]
-                .set_fg(tab_bar_attribute.fg)
-                .set_bg(tab_bar_attribute.bg)
-                .set_attrs(tab_bar_attribute.attrs);
         }
-        let (cols, _) = grid.size();
-        let cslice: &mut [Cell] = grid;
-        let cslice_len = cslice.len();
-        for c in cslice[(y * cols) + x.saturating_sub(1)
-            ..std::cmp::min((y * cols) + x.saturating_sub(1), cslice_len)]
-            .iter_mut()
-        {
-            c.set_ch(' ').set_bg(tab_unfocused_attribute.bg);
-        }
-
-        if self.cursor_pos == self.children.len() - 1 {
-            cslice[(y * cols) + x]
-                .set_ch('▍')
-                .set_fg(tab_unfocused_attribute.bg)
-                .set_bg(tab_unfocused_attribute.fg)
-                .set_attrs(tab_unfocused_attribute.attrs);
-        }
-        for c in grid.row_iter(area, x..cols, get_y(upper_left)) {
-            grid[c]
-                .set_fg(tab_bar_attribute.fg)
-                .set_bg(tab_bar_attribute.bg)
-                .set_attrs(tab_bar_attribute.attrs);
-        }
-
         context.dirty_areas.push_back(area);
     }
 
