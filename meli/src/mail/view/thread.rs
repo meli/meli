@@ -1038,9 +1038,12 @@ impl ThreadView {
 
     /// Current position in self.entries (not in drawn entries which might
     /// exclude nonvisible ones)
-    fn current_pos(&self) -> usize {
-        let visibles: Vec<&usize> = self.visible_entries.iter().flat_map(|v| v.iter()).collect();
-        *visibles[self.new_cursor_pos]
+    fn current_pos(&self) -> Option<usize> {
+        self.visible_entries
+            .iter()
+            .flat_map(|v| v.iter())
+            .nth(self.new_cursor_pos)
+            .copied()
     }
 }
 
@@ -1174,12 +1177,14 @@ impl Component for ThreadView {
                 if shortcut!(k == shortcuts[Shortcuts::GENERAL]["open_entry"]) =>
             {
                 if self.entries.len() > 1 {
-                    self.new_expanded_pos = self.current_pos();
-                    self.expanded_pos = self.current_pos();
-                    if matches!(self.focus, ThreadViewFocus::Thread) {
-                        self.focus = ThreadViewFocus::None;
+                    if let Some(new_expanded_pos) = self.current_pos() {
+                        self.new_expanded_pos = new_expanded_pos;
+                        self.expanded_pos = new_expanded_pos;
+                        if matches!(self.focus, ThreadViewFocus::Thread) {
+                            self.focus = ThreadViewFocus::None;
+                        }
+                        self.set_dirty(true);
                     }
-                    self.set_dirty(true);
                 }
                 true
             }
@@ -1220,33 +1225,35 @@ impl Component for ThreadView {
                 if self.entries.is_empty() {
                     return true;
                 }
-                let current_pos = self.current_pos();
-                self.entries[current_pos].hidden = !self.entries[current_pos].hidden;
-                self.entries[current_pos].dirty = true;
-                {
-                    let visible_entries: Vec<&usize> =
-                        self.visible_entries.iter().flat_map(|v| v.iter()).collect();
-                    /* search_old_cursor_pos */
-                    self.new_cursor_pos = (|entries: Vec<&usize>, x: usize| {
-                        let mut low = 0;
-                        let mut high = entries.len() - 1;
-                        while low <= high {
-                            let mid = low + (high - low) / 2;
-                            if *entries[mid] == x {
-                                return mid;
-                            }
-                            if x > *entries[mid] {
-                                low = mid + 1;
-                            } else {
-                                high = mid - 1;
-                            }
-                        }
-                        high + 1 //mid
-                    })(visible_entries, self.cursor_pos);
+                if let Some(current_pos) = self.current_pos() {
+                    self.entries[current_pos].hidden = !self.entries[current_pos].hidden;
+                    self.entries[current_pos].dirty = true;
+                    {
+                        let visible_entries: Vec<&usize> =
+                            self.visible_entries.iter().flat_map(|v| v.iter()).collect();
+                        /* search_old_cursor_pos */
+                        self.new_cursor_pos =
+                            (|entries: Vec<&usize>, x: usize| {
+                                let mut low = 0;
+                                let mut high = entries.len() - 1;
+                                while low <= high {
+                                    let mid = low + (high - low) / 2;
+                                    if *entries[mid] == x {
+                                        return mid;
+                                    }
+                                    if x > *entries[mid] {
+                                        low = mid + 1;
+                                    } else {
+                                        high = mid - 1;
+                                    }
+                                }
+                                high + 1 //mid
+                            })(visible_entries, self.cursor_pos);
+                    }
+                    self.cursor_pos = self.new_cursor_pos;
+                    self.recalc_visible_entries();
+                    self.set_dirty(true);
                 }
-                self.cursor_pos = self.new_cursor_pos;
-                self.recalc_visible_entries();
-                self.set_dirty(true);
                 true
             }
             UIEvent::Resize | UIEvent::VisibilityChange(true) => {
