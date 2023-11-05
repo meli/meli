@@ -846,15 +846,21 @@ impl Component for StatusBar {
 }
 
 #[derive(Debug)]
+struct HelpView {
+    content: Screen<Virtual>,
+    cursor: (usize, usize),
+    curr_views: ShortcutMaps,
+    search: Option<SearchPattern>,
+}
+
+#[derive(Debug)]
 pub struct Tabbed {
     pinned: usize,
     children: Vec<Box<dyn Component>>,
     cursor_pos: usize,
 
     show_shortcuts: bool,
-    help_screen_cursor: (usize, usize),
-    help_curr_views: ShortcutMaps,
-    help_search: Option<SearchPattern>,
+    help_view: HelpView,
     theme_default: ThemeAttribute,
 
     dirty: bool,
@@ -865,12 +871,15 @@ impl Tabbed {
     pub fn new(children: Vec<Box<dyn Component>>, context: &Context) -> Self {
         let pinned = children.len();
         let mut ret = Tabbed {
-            help_curr_views: children
-                .get(0)
-                .map(|c| c.shortcuts(context))
-                .unwrap_or_default(),
-            help_screen_cursor: (0, 0),
-            help_search: None,
+            help_view: HelpView {
+                content: Screen::<Virtual>::new(),
+                curr_views: children
+                    .get(0)
+                    .map(|c| c.shortcuts(context))
+                    .unwrap_or_default(),
+                cursor: (0, 0),
+                search: None,
+            },
             theme_default: crate::conf::value(context, "theme_default"),
             pinned,
             children,
@@ -879,7 +888,9 @@ impl Tabbed {
             dirty: true,
             id: ComponentId::default(),
         };
-        ret.help_curr_views.extend_shortcuts(ret.shortcuts(context));
+        ret.help_view
+            .curr_views
+            .extend_shortcuts(ret.shortcuts(context));
         ret
     }
 
@@ -971,7 +982,7 @@ impl Tabbed {
         {
             children_maps.move_index(i, children_maps.len().saturating_sub(1));
         }
-        self.help_curr_views = children_maps;
+        self.help_view.curr_views = children_maps;
     }
 }
 
@@ -1002,369 +1013,368 @@ impl Component for Tabbed {
         } else {
             self.children[self.cursor_pos].draw(grid, area, context);
         }
+        let area = area.skip_rows(1);
 
         if (self.show_shortcuts && self.dirty) || must_redraw_shortcuts {
-            /*
-                        let mut children_maps = self.children[self.cursor_pos].shortcuts(context);
-                        children_maps.extend_shortcuts(self.shortcuts(context));
-                        if children_maps.is_empty() {
-                            return;
-                        }
-                        if let Some(i) = children_maps
-                            .get_index_of(Shortcuts::GENERAL)
-                            .filter(|i| i + 1 != children_maps.len())
-                        {
-                            children_maps.move_index(i, children_maps.len().saturating_sub(1));
-                        }
-                        if (children_maps == self.help_curr_views) && must_redraw_shortcuts {
-                            let dialog_area = area.align_inside(
-                                /* add box perimeter padding */
-                                pos_inc(self.help_content.size(), (2, 2)),
-                                /* vertical */
-                                Alignment::Center,
-                                /* horizontal */
-                                Alignment::Center,
-                            );
-                            context.dirty_areas.push_back(dialog_area);
-                            grid.clear_area(dialog_area, self.theme_default);
-                            let inner_area = create_box(grid, dialog_area);
-                            let (x, y) = grid.write_string(
-                                "shortcuts",
-                                self.theme_default.fg,
-                                self.theme_default.bg,
-                                self.theme_default.attrs | Attr::BOLD,
-                                (
-                                    pos_inc(dialog_area.upper_left(), (2, 0)),
-                                    dialog_area.bottom_right(),
-                                ),
-                                None,
-                            );
-                            grid.write_string(
-                                &format!(
-                                    "Press {} to close",
-                                    children_maps[Shortcuts::GENERAL]["toggle_help"]
-                                ),
-                                self.theme_default.fg,
-                                self.theme_default.bg,
-                                self.theme_default.attrs | Attr::ITALICS,
-                                ((x + 2, y), dialog_area.bottom_right()),
-                                None,
-                            );
-                            let (width, height) = self.help_content.size();
-                            let (cols, rows) = (width!(inner_area), height!(inner_area));
+            let mut children_maps = self.children[self.cursor_pos].shortcuts(context);
+            children_maps.extend_shortcuts(self.shortcuts(context));
+            if children_maps.is_empty() {
+                return;
+            }
+            if let Some(i) = children_maps
+                .get_index_of(Shortcuts::GENERAL)
+                .filter(|i| i + 1 != children_maps.len())
+            {
+                children_maps.move_index(i, children_maps.len().saturating_sub(1));
+            }
+            if (children_maps == self.help_view.curr_views) && must_redraw_shortcuts {
+                let dialog_area = area.align_inside(
+                    /* add box perimeter padding */
+                    pos_inc(self.help_view.content.area().size(), (1, 1)),
+                    /* horizontal */
+                    Alignment::Center,
+                    /* vertical */
+                    Alignment::Center,
+                );
+                context.dirty_areas.push_back(dialog_area);
+                grid.clear_area(dialog_area, self.theme_default);
+                let inner_area = create_box(grid, dialog_area);
+                let (x, y) = grid.write_string(
+                    "shortcuts",
+                    self.theme_default.fg,
+                    self.theme_default.bg,
+                    self.theme_default.attrs | Attr::BOLD,
+                    inner_area.skip_cols(2),
+                    None,
+                );
+                grid.write_string(
+                    &format!(
+                        "Press {} to close",
+                        children_maps[Shortcuts::GENERAL]["toggle_help"]
+                    ),
+                    self.theme_default.fg,
+                    self.theme_default.bg,
+                    self.theme_default.attrs | Attr::ITALICS,
+                    inner_area.skip(4 + x, y),
+                    None,
+                );
+                let inner_area = inner_area.skip_rows(y + 1).skip_rows_from_end(1);
+                let (width, height) = self.help_view.content.grid().size();
+                let (cols, rows) = inner_area.size();
 
-                            grid.copy_area(
-                                &self.help_content,
-                                inner_area,
-                                (
-                                    (
-                                        std::cmp::min(
-                                            (width - 1).saturating_sub(cols),
-                                            self.help_screen_cursor.0,
-                                        ),
-                                        std::cmp::min(
-                                            (height - 1).saturating_sub(rows),
-                                            self.help_screen_cursor.1,
-                                        ),
-                                    ),
-                                    (
-                                        std::cmp::min(self.help_screen_cursor.0 + cols, width - 1),
-                                        std::cmp::min(self.help_screen_cursor.1 + rows, height - 1),
-                                    ),
-                                ),
-                            );
-                            if height.wrapping_div(rows + 1) > 0 || width.wrapping_div(cols + 1) > 0 {
-                                context
-                                    .replies
-                                    .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
-                                        ScrollUpdate::Update {
-                                            id: self.id,
-                                            context: ScrollContext {
-                                                shown_lines: std::cmp::min(
-                                                    (height).saturating_sub(rows + 1),
-                                                    self.help_screen_cursor.1,
-                                                ) + rows,
-                                                total_lines: height,
-                                                has_more_lines: false,
-                                            },
-                                        },
-                                    )));
-                                ScrollBar::default().set_show_arrows(true).draw(
-                                    grid,
-                                    (
-                                        pos_inc(
-                                            inner_area.upper_left(),
-                                            (width!(inner_area).saturating_sub(1), 0),
-                                        ),
-                                        inner_area.bottom_right(),
-                                    ),
-                                    context,
-                                    /* position */
-                                    std::cmp::min((height).saturating_sub(rows + 1), self.help_screen_cursor.1),
-                                    /* visible_rows */
-                                    rows,
-                                    /* length */
-                                    height,
-                                );
-                            } else {
-                                context
-                                    .replies
-                                    .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
-                                        ScrollUpdate::End(self.id),
-                                    )));
-                            }
-                            self.dirty = false;
-                            return;
-                        }
-                        let mut max_length = 6;
-                        let mut max_width =
-                            "Press XXXX to close, use COMMAND \"search\" to find shortcuts".len() + 3;
-
-                        let mut max_first_column_width = 3;
-
-                        for (desc, shortcuts) in children_maps.iter() {
-                            max_length += shortcuts.len() + 3;
-                            max_width = std::cmp::max(
-                                max_width,
-                                std::cmp::max(
-                                    desc.len(),
-                                    shortcuts
-                                        .values()
-                                        .map(|v| v.to_string().len() + 5)
-                                        .max()
-                                        .unwrap_or(0),
-                                ),
-                            );
-                            max_first_column_width = std::cmp::max(
-                                max_first_column_width,
-                                shortcuts
-                                    .values()
-                                    .map(|v| v.to_string().len() + 5)
-                                    .max()
-                                    .unwrap_or(0),
-                            );
-                        }
-                        //self.help_content_size = (max_width, max_length + 2);
-                        self.help_content =
-                            CellBuffer::new_with_context(max_width, max_length + 2, None, context);
-                        self.help_content.set_growable(true);
-                        self.help_content.write_string(
-                            "use COMMAND \"search\" to find shortcuts",
-                            self.theme_default.fg,
-                            self.theme_default.bg,
-                            self.theme_default.attrs,
-                            ((2, 1), (max_width.saturating_sub(2), max_length - 1)),
-                            None,
-                        );
-                        let mut idx = 2;
-                        for (desc, shortcuts) in children_maps.iter() {
-                            self.help_content.write_string(
-                                desc,
-                                self.theme_default.fg,
-                                self.theme_default.bg,
-                                self.theme_default.attrs,
-                                ((2, 2 + idx), (max_width.saturating_sub(2), max_length - 1)),
-                                None,
-                            );
-                            idx += 2;
-                            for (k, v) in shortcuts {
-                                let (x, y) = self.help_content.write_string(
-                                    &format!(
-                                        "{: >width$}",
-                                        format!("{}", v),
-                                        width = max_first_column_width
-                                    ),
-                                    self.theme_default.fg,
-                                    self.theme_default.bg,
-                                    self.theme_default.attrs | Attr::BOLD,
-                                    ((2, 2 + idx), (max_width.saturating_sub(2), max_length - 1)),
-                                    None,
-                                );
-                                self.help_content.write_string(
-                                    k,
-                                    self.theme_default.fg,
-                                    self.theme_default.bg,
-                                    self.theme_default.attrs,
-                                    ((x + 2, y), (max_width.saturating_sub(2), max_length - 1)),
-                                    None,
-                                );
-                                idx += 1;
-                            }
-                            idx += 1;
-                        }
-                        self.help_curr_views = children_maps;
-                        let dialog_area = area.align_inside(
-                            area,
-                            /* add box perimeter padding */
-                            pos_inc(self.help_content.size(), (2, 2)),
-                            /* vertical */
-                            Alignment::Center,
-                            /* horizontal */
-                            Alignment::Center,
-                        );
-                        context.dirty_areas.push_back(dialog_area);
-                        grid.clear_area(dialog_area, self.theme_default);
-                        let inner_area = create_box(grid, dialog_area);
-                        let (x, y) = grid.write_string(
-                            "shortcuts",
-                            self.theme_default.fg,
-                            self.theme_default.bg,
-                            self.theme_default.attrs | Attr::BOLD,
-                            (
-                                pos_inc(dialog_area.upper_left(), (2, 0)),
-                                dialog_area.bottom_right(),
+                grid.copy_area(
+                    self.help_view.content.grid(),
+                    inner_area,
+                    self.help_view
+                        .content
+                        .area()
+                        .skip(
+                            std::cmp::min(
+                                (width - 1).saturating_sub(cols),
+                                self.help_view.cursor.0,
                             ),
-                            None,
-                        );
-                        grid.write_string(
-                            &format!(
-                                "Press {} to close",
-                                self.help_curr_views[Shortcuts::GENERAL]["toggle_help"]
+                            std::cmp::min(
+                                (height - 1).saturating_sub(rows),
+                                self.help_view.cursor.1,
                             ),
-                            self.theme_default.fg,
-                            self.theme_default.bg,
-                            self.theme_default.attrs | Attr::ITALICS,
-                            ((x + 2, y), dialog_area.bottom_right()),
-                            None,
-                        );
-                        let (width, height) = self.help_content.size();
-                        let (cols, rows) = (width!(inner_area), height!(inner_area));
-                        if let Some(ref mut search) = self.help_search {
-                            use crate::melib::text_processing::search::KMP;
-                            search.positions = self
-                                .help_content
-                                .kmp_search(&search.pattern)
-                                .into_iter()
-                                .map(|offset| (offset / width, offset % width))
-                                .collect::<Vec<(usize, usize)>>();
-                            let results_attr = crate::conf::value(context, "pager.highlight_search");
-                            let results_current_attr =
-                                crate::conf::value(context, "pager.highlight_search_current");
-                            search.cursor =
-                                std::cmp::min(search.positions.len().saturating_sub(1), search.cursor);
-                            for (i, (y, x)) in search.positions.iter().enumerate() {
-                                for c in self
-                                    .help_content
-                                    .row_iter(area, *x..*x + search.pattern.grapheme_len(), *y)
-                                {
-                                    if i == search.cursor {
-                                        self.help_content[c]
-                                            .set_fg(results_current_attr.fg)
-                                            .set_bg(results_current_attr.bg)
-                                            .set_attrs(results_current_attr.attrs);
-                                    } else {
-                                        self.help_content[c]
-                                            .set_fg(results_attr.fg)
-                                            .set_bg(results_attr.bg)
-                                            .set_attrs(results_attr.attrs);
-                                    }
-                                }
-                            }
-                            if !search.positions.is_empty() {
-                                if let Some(mvm) = search.movement.take() {
-                                    match mvm {
-                                        PageMovement::Home => {
-                                            if self.help_screen_cursor.1 > search.positions[search.cursor].0 {
-                                                self.help_screen_cursor.1 = search.positions[search.cursor].0;
-                                            }
-                                            if self.help_screen_cursor.1 + rows
-                                                < search.positions[search.cursor].0
-                                            {
-                                                self.help_screen_cursor.1 = search.positions[search.cursor].0;
-                                            }
-                                        }
-                                        PageMovement::Up(_) => {
-                                            if self.help_screen_cursor.1 > search.positions[search.cursor].0 {
-                                                self.help_screen_cursor.1 = search.positions[search.cursor].0;
-                                            }
-                                        }
-                                        PageMovement::Down(_) => {
-                                            if self.help_screen_cursor.1 + rows
-                                                < search.positions[search.cursor].0
-                                            {
-                                                self.help_screen_cursor.1 = search.positions[search.cursor].0;
-                                            }
-                                        }
-                                        _ => {}
-                                    }
-                                }
-                            }
-                        }
-                        /* trim cursor if it's bigger than the help screen */
-                        self.help_screen_cursor = (
-                            std::cmp::min((width).saturating_sub(cols), self.help_screen_cursor.0),
-                            std::cmp::min((height).saturating_sub(rows), self.help_screen_cursor.1),
-                        );
-                        if cols == 0 || rows == 0 {
-                            return;
-                        }
+                        )
+                        .take_rows(rows),
+                );
+                if height.wrapping_div(rows + 1) > 0 || width.wrapping_div(cols + 1) > 0 {
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
+                            ScrollUpdate::Update {
+                                id: self.id,
+                                context: ScrollContext {
+                                    shown_lines: std::cmp::min(
+                                        (height).saturating_sub(rows + 1),
+                                        self.help_view.cursor.1,
+                                    ) + rows,
+                                    total_lines: height,
+                                    has_more_lines: false,
+                                },
+                            },
+                        )));
+                    ScrollBar::default().set_show_arrows(true).draw(
+                        grid,
+                        inner_area.nth_col(inner_area.width().saturating_sub(1)),
+                        context,
+                        /* position */
+                        std::cmp::min((height).saturating_sub(rows + 1), self.help_view.cursor.1),
+                        /* visible_rows */
+                        rows,
+                        /* length */
+                        height,
+                    );
+                } else {
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
+                            ScrollUpdate::End(self.id),
+                        )));
+                }
+                self.dirty = false;
+                return;
+            }
+            let mut max_length = 6;
+            let mut max_width =
+                "Press XXXX to close, use COMMAND \"search\" to find shortcuts".len() + 3;
 
-                        /* In this case we will be scrolling, so show the user how to do it */
-                        if height.wrapping_div(rows + 1) > 0 || width.wrapping_div(cols + 1) > 0 {
-                            self.help_content.write_string(
-                                "Use Up, Down, Left, Right to scroll.",
-                                self.theme_default.fg,
-                                self.theme_default.bg,
-                                self.theme_default.attrs | Attr::ITALICS,
-                                ((2, 2), (max_width.saturating_sub(2), max_length - 1)),
-                                None,
-                            );
-                        }
+            let mut max_first_column_width = 3;
 
-                        grid.copy_area(
-                            &self.help_content,
-                            inner_area,
-                            (
-                                (
-                                    std::cmp::min((width - 1).saturating_sub(cols), self.help_screen_cursor.0),
-                                    std::cmp::min((height - 1).saturating_sub(rows), self.help_screen_cursor.1),
-                                ),
-                                (
-                                    std::cmp::min(self.help_screen_cursor.0 + cols, width - 1),
-                                    std::cmp::min(self.help_screen_cursor.1 + rows, height - 1),
-                                ),
-                            ),
-                        );
-                        if height.wrapping_div(rows + 1) > 0 || width.wrapping_div(cols + 1) > 0 {
-                            context
-                                .replies
-                                .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
-                                    ScrollUpdate::Update {
-                                        id: self.id,
-                                        context: ScrollContext {
-                                            shown_lines: std::cmp::min(
-                                                (height).saturating_sub(rows),
-                                                self.help_screen_cursor.1,
-                                            ) + rows,
-                                            total_lines: height,
-                                            has_more_lines: false,
-                                        },
-                                    },
-                                )));
-                                ScrollBar::default().set_show_arrows(true).draw(
-                                    grid,
-            inner_area.skip_cols(inner_area.width().saturating_sub(1)),
-                                    context,
-                                    /* position */
-                                    std::cmp::min((height).saturating_sub(rows), self.help_screen_cursor.1),
-                                    /* visible_rows */
-                                    rows,
-                                    /* length */
-                                    height,
-                                );
+            for (desc, shortcuts) in children_maps.iter() {
+                max_length += shortcuts.len() + 3;
+                max_width = std::cmp::max(
+                    max_width,
+                    std::cmp::max(
+                        desc.len(),
+                        shortcuts
+                            .values()
+                            .map(|v| v.to_string().len() + 5)
+                            .max()
+                            .unwrap_or(0),
+                    ),
+                );
+                max_first_column_width = std::cmp::max(
+                    max_first_column_width,
+                    shortcuts
+                        .values()
+                        .map(|v| v.to_string().len() + 5)
+                        .max()
+                        .unwrap_or(0),
+                );
+            }
+            if !self
+                .help_view
+                .content
+                .resize_with_context(max_width, max_length + 2, context)
+            {
+                self.dirty = false;
+                return;
+            }
+            self.help_view.content.grid_mut().set_growable(true);
+            let help_area = self.help_view.content.area();
+            self.help_view.content.grid_mut().write_string(
+                "use COMMAND \"search\" to find shortcuts",
+                self.theme_default.fg,
+                self.theme_default.bg,
+                self.theme_default.attrs,
+                help_area.skip(2, 1),
+                None,
+            );
+            let mut idx = 2;
+            for (desc, shortcuts) in children_maps.iter() {
+                let help_area = self.help_view.content.area();
+                self.help_view.content.grid_mut().write_string(
+                    desc,
+                    self.theme_default.fg,
+                    self.theme_default.bg,
+                    self.theme_default.attrs,
+                    help_area.skip(2, 2 + idx),
+                    None,
+                );
+                idx += 2;
+                for (k, v) in shortcuts {
+                    let help_area = self.help_view.content.area();
+                    let (x, _) = self.help_view.content.grid_mut().write_string(
+                        &format!(
+                            "{: >width$}",
+                            format!("{}", v),
+                            width = max_first_column_width
+                        ),
+                        self.theme_default.fg,
+                        self.theme_default.bg,
+                        self.theme_default.attrs | Attr::BOLD,
+                        help_area.skip(2, 2 + idx),
+                        None,
+                    );
+                    let help_area = self.help_view.content.area();
+                    self.help_view.content.grid_mut().write_string(
+                        k,
+                        self.theme_default.fg,
+                        self.theme_default.bg,
+                        self.theme_default.attrs,
+                        help_area.skip(x + 4, 2 + idx),
+                        None,
+                    );
+                    idx += 1;
+                }
+                idx += 1;
+            }
+            self.help_view.curr_views = children_maps;
+            let dialog_area = area.align_inside(
+                /* add box perimeter padding */
+                pos_inc(self.help_view.content.area().size(), (1, 1)),
+                /* horizontal */
+                Alignment::Center,
+                /* vertical */
+                Alignment::Center,
+            );
+            context.dirty_areas.push_back(dialog_area);
+            grid.clear_area(dialog_area, self.theme_default);
+            let inner_area = create_box(grid, dialog_area);
+            let (x, y) = grid.write_string(
+                "shortcuts",
+                self.theme_default.fg,
+                self.theme_default.bg,
+                self.theme_default.attrs | Attr::BOLD,
+                inner_area.skip_cols(2),
+                None,
+            );
+            grid.write_string(
+                &format!(
+                    "Press {} to close",
+                    self.help_view.curr_views[Shortcuts::GENERAL]["toggle_help"]
+                ),
+                self.theme_default.fg,
+                self.theme_default.bg,
+                self.theme_default.attrs | Attr::ITALICS,
+                inner_area.skip(4 + x, y),
+                None,
+            );
+            let inner_area = inner_area.skip_rows(y + 1).skip_rows_from_end(1);
+            let (width, height) = self.help_view.content.area().size();
+            let (cols, rows) = inner_area.size();
+            if let Some(ref mut search) = self.help_view.search {
+                use crate::melib::text_processing::search::KMP;
+                search.positions = self
+                    .help_view
+                    .content
+                    .grid()
+                    .kmp_search(&search.pattern)
+                    .into_iter()
+                    .map(|offset| (offset / width, offset % width))
+                    .collect::<Vec<(usize, usize)>>();
+                let results_attr = crate::conf::value(context, "pager.highlight_search");
+                let results_current_attr =
+                    crate::conf::value(context, "pager.highlight_search_current");
+                search.cursor =
+                    std::cmp::min(search.positions.len().saturating_sub(1), search.cursor);
+                for (i, (y, x)) in search.positions.iter().enumerate() {
+                    let area = self.help_view.content.area();
+                    for c in self.help_view.content.grid().row_iter(
+                        area,
+                        *x..*x + search.pattern.grapheme_len(),
+                        *y,
+                    ) {
+                        if i == search.cursor {
+                            self.help_view.content.grid_mut()[c]
+                                .set_fg(results_current_attr.fg)
+                                .set_bg(results_current_attr.bg)
+                                .set_attrs(results_current_attr.attrs);
                         } else {
-                            context
-                                .replies
-                                .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
-                                    ScrollUpdate::End(self.id),
-                                )));
+                            self.help_view.content.grid_mut()[c]
+                                .set_fg(results_attr.fg)
+                                .set_bg(results_attr.bg)
+                                .set_attrs(results_attr.attrs);
                         }
-                        */
+                    }
+                }
+                if !search.positions.is_empty() {
+                    if let Some(mvm) = search.movement.take() {
+                        match mvm {
+                            PageMovement::Home => {
+                                if self.help_view.cursor.1 > search.positions[search.cursor].0 {
+                                    self.help_view.cursor.1 = search.positions[search.cursor].0;
+                                }
+                                if self.help_view.cursor.1 + rows
+                                    < search.positions[search.cursor].0
+                                {
+                                    self.help_view.cursor.1 = search.positions[search.cursor].0;
+                                }
+                            }
+                            PageMovement::Up(_) => {
+                                if self.help_view.cursor.1 > search.positions[search.cursor].0 {
+                                    self.help_view.cursor.1 = search.positions[search.cursor].0;
+                                }
+                            }
+                            PageMovement::Down(_) => {
+                                if self.help_view.cursor.1 + rows
+                                    < search.positions[search.cursor].0
+                                {
+                                    self.help_view.cursor.1 = search.positions[search.cursor].0;
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+            /* trim cursor if it's bigger than the help screen */
+            self.help_view.cursor = (
+                std::cmp::min((width).saturating_sub(cols), self.help_view.cursor.0),
+                std::cmp::min((height).saturating_sub(rows), self.help_view.cursor.1),
+            );
+            if cols == 0 || rows == 0 {
+                return;
+            }
+
+            /* In this case we will be scrolling, so show the user how to do it */
+            if height.wrapping_div(rows + 1) > 0 || width.wrapping_div(cols + 1) > 0 {
+                let help_area = self.help_view.content.area();
+                self.help_view.content.grid_mut().write_string(
+                    "Use Up, Down, Left, Right to scroll.",
+                    self.theme_default.fg,
+                    self.theme_default.bg,
+                    self.theme_default.attrs | Attr::ITALICS,
+                    help_area.skip(2, 2),
+                    None,
+                );
+            }
+
+            grid.copy_area(
+                self.help_view.content.grid(),
+                inner_area,
+                self.help_view
+                    .content
+                    .area()
+                    .skip(
+                        std::cmp::min((width - 1).saturating_sub(cols), self.help_view.cursor.0),
+                        std::cmp::min((height - 1).saturating_sub(rows), self.help_view.cursor.1),
+                    )
+                    .take_rows(std::cmp::min(rows, height - 1)),
+            );
+            if height.wrapping_div(rows + 1) > 0 || width.wrapping_div(cols + 1) > 0 {
+                context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
+                        ScrollUpdate::Update {
+                            id: self.id,
+                            context: ScrollContext {
+                                shown_lines: std::cmp::min(
+                                    (height).saturating_sub(rows),
+                                    self.help_view.cursor.1,
+                                ) + rows,
+                                total_lines: height,
+                                has_more_lines: false,
+                            },
+                        },
+                    )));
+                ScrollBar::default().set_show_arrows(true).draw(
+                    grid,
+                    inner_area.nth_col(inner_area.width().saturating_sub(1)),
+                    context,
+                    /* position */
+                    std::cmp::min((height).saturating_sub(rows), self.help_view.cursor.1),
+                    /* visible_rows */
+                    rows,
+                    /* length */
+                    height,
+                );
+            } else {
+                context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::ScrollUpdate(
+                        ScrollUpdate::End(self.id),
+                    )));
+            }
         }
         self.dirty = false;
     }
+
     fn process_event(&mut self, mut event: &mut UIEvent, context: &mut Context) -> bool {
-        let shortcuts = &self.help_curr_views;
+        let shortcuts = &self.help_view.curr_views;
         match &mut event {
             UIEvent::ConfigReload { old_settings: _ } => {
                 self.theme_default = crate::conf::value(context, "theme_default");
@@ -1460,7 +1470,7 @@ impl Component for Tabbed {
             UIEvent::Action(Action::Listing(ListingAction::Search(pattern)))
                 if self.show_shortcuts =>
             {
-                self.help_search = Some(SearchPattern {
+                self.help_view.search = Some(SearchPattern {
                     pattern: pattern.to_string(),
                     positions: vec![],
                     cursor: 0,
@@ -1469,8 +1479,10 @@ impl Component for Tabbed {
                 self.dirty = true;
                 return true;
             }
-            UIEvent::Input(Key::Char('n')) if self.show_shortcuts && self.help_search.is_some() => {
-                if let Some(ref mut search) = self.help_search {
+            UIEvent::Input(Key::Char('n'))
+                if self.show_shortcuts && self.help_view.search.is_some() =>
+            {
+                if let Some(ref mut search) = self.help_view.search {
                     search.movement = Some(PageMovement::Down(1));
                     search.cursor += 1;
                 } else {
@@ -1481,8 +1493,10 @@ impl Component for Tabbed {
                 self.dirty = true;
                 return true;
             }
-            UIEvent::Input(Key::Char('N')) if self.show_shortcuts && self.help_search.is_some() => {
-                if let Some(ref mut search) = self.help_search {
+            UIEvent::Input(Key::Char('N'))
+                if self.show_shortcuts && self.help_view.search.is_some() =>
+            {
+                if let Some(ref mut search) = self.help_view.search {
                     search.movement = Some(PageMovement::Up(1));
                     search.cursor = search.cursor.saturating_sub(1);
                 } else {
@@ -1493,8 +1507,8 @@ impl Component for Tabbed {
                 self.dirty = true;
                 return true;
             }
-            UIEvent::Input(Key::Esc) if self.show_shortcuts && self.help_search.is_some() => {
-                self.help_search = None;
+            UIEvent::Input(Key::Esc) if self.show_shortcuts && self.help_view.search.is_some() => {
+                self.help_view.search = None;
                 self.dirty = true;
                 return true;
             }
@@ -1516,16 +1530,16 @@ impl Component for Tabbed {
             UIEvent::Input(ref key) if self.show_shortcuts => {
                 match key {
                     _ if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_up"]) => {
-                        self.help_screen_cursor.1 = self.help_screen_cursor.1.saturating_sub(1);
+                        self.help_view.cursor.1 = self.help_view.cursor.1.saturating_sub(1);
                     }
                     _ if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_down"]) => {
-                        self.help_screen_cursor.1 += 1;
+                        self.help_view.cursor.1 += 1;
                     }
                     _ if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_left"]) => {
-                        self.help_screen_cursor.0 = self.help_screen_cursor.0.saturating_sub(1);
+                        self.help_view.cursor.0 = self.help_view.cursor.0.saturating_sub(1);
                     }
                     _ if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_right"]) => {
-                        self.help_screen_cursor.0 += 1;
+                        self.help_view.cursor.0 += 1;
                     }
                     _ => {
                         /* ignore, don't pass to components below the shortcut panel */
