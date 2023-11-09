@@ -503,7 +503,7 @@ impl ImapStream {
                                 && ret[last_line_idx..].starts_with(termination_string)
                             {
                                 if !keep_termination_string {
-                                    ret.splice(last_line_idx.., std::iter::empty::<u8>());
+                                    ret.truncate(last_line_idx);
                                 }
                                 break;
                             } else if termination_string.is_empty() {
