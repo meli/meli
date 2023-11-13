@@ -27,60 +27,6 @@ use melib::{SortField, SortOrder, TagHash, Threads};
 use super::*;
 use crate::{components::PageMovement, jobs::JoinHandle};
 
-macro_rules! digits_of_num {
-    ($num:expr) => {{
-        const GUESS: [usize; 65] = [
-            1, 0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 8, 8,
-            8, 9, 9, 9, 9, 10, 10, 10, 11, 11, 11, 12, 12, 12, 12, 13, 13, 13, 14, 14, 14, 15, 15,
-            15, 15, 16, 16, 16, 17, 17, 17, 18, 18, 18, 18, 19,
-        ];
-        const TENS: [usize; 20] = [
-            1,
-            10,
-            100,
-            1000,
-            10000,
-            100000,
-            1000000,
-            10000000,
-            100000000,
-            1000000000,
-            10000000000,
-            100000000000,
-            1000000000000,
-            10000000000000,
-            100000000000000,
-            1000000000000000,
-            10000000000000000,
-            100000000000000000,
-            1000000000000000000,
-            10000000000000000000,
-        ];
-        const SIZE_IN_BITS: usize = std::mem::size_of::<usize>() * 8;
-
-        let leading_zeros = $num.leading_zeros() as usize;
-        let base_two_digits: usize = SIZE_IN_BITS - leading_zeros;
-        let x = GUESS[base_two_digits];
-        x + if $num >= TENS[x] { 1 } else { 0 }
-    }};
-}
-
-macro_rules! address_list {
-    (($name:expr) as comma_sep_list) => {{
-        let mut ret: String =
-            $name
-                .into_iter()
-                .fold(String::new(), |mut s: String, n: &Address| {
-                    s.extend(n.to_string().chars());
-                    s.push_str(", ");
-                    s
-                });
-        ret.pop();
-        ret.pop();
-        ret
-    }};
-}
-
 macro_rules! row_attr {
     ($color_cache:expr, $even: expr, $unseen:expr, $highlighted:expr, $selected:expr  $(,)*) => {{
         let color_cache = &$color_cache;

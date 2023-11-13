@@ -422,6 +422,45 @@ macro_rules! address_list {
     }};
 }
 
+#[macro_export]
+macro_rules! digits_of_num {
+    ($num:expr) => {{
+        const GUESS: [usize; 65] = [
+            1, 0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 8, 8,
+            8, 9, 9, 9, 9, 10, 10, 10, 11, 11, 11, 12, 12, 12, 12, 13, 13, 13, 14, 14, 14, 15, 15,
+            15, 15, 16, 16, 16, 17, 17, 17, 18, 18, 18, 18, 19,
+        ];
+        const TENS: [usize; 20] = [
+            1,
+            10,
+            100,
+            1000,
+            10000,
+            100000,
+            1000000,
+            10000000,
+            100000000,
+            1000000000,
+            10000000000,
+            100000000000,
+            1000000000000,
+            10000000000000,
+            100000000000000,
+            1000000000000000,
+            10000000000000000,
+            100000000000000000,
+            1000000000000000000,
+            10000000000000000000,
+        ];
+        const SIZE_IN_BITS: usize = std::mem::size_of::<usize>() * 8;
+
+        let leading_zeros = $num.leading_zeros() as usize;
+        let base_two_digits: usize = SIZE_IN_BITS - leading_zeros;
+        let x = GUESS[base_two_digits];
+        x + if $num >= TENS[x] { 1 } else { 0 }
+    }};
+}
+
 macro_rules! column_str {
     (
         struct $name:ident($($t:ty),+)) => {
@@ -1656,6 +1695,52 @@ impl Component for Listing {
                             return true;
                         };
                         self.component.set_movement(PageMovement::Down(amount));
+                        return true;
+                    }
+                    UIEvent::Input(ref key)
+                        if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_right"]) =>
+                    {
+                        let amount = if self.cmd_buf.is_empty() {
+                            1
+                        } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
+                            self.cmd_buf.clear();
+                            self.component.set_modifier_active(false);
+                            context
+                                .replies
+                                .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                            amount
+                        } else {
+                            self.cmd_buf.clear();
+                            self.component.set_modifier_active(false);
+                            context
+                                .replies
+                                .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                            return true;
+                        };
+                        self.component.set_movement(PageMovement::Right(amount));
+                        return true;
+                    }
+                    UIEvent::Input(ref key)
+                        if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_left"]) =>
+                    {
+                        let amount = if self.cmd_buf.is_empty() {
+                            1
+                        } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
+                            self.cmd_buf.clear();
+                            self.component.set_modifier_active(false);
+                            context
+                                .replies
+                                .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                            amount
+                        } else {
+                            self.cmd_buf.clear();
+                            self.component.set_modifier_active(false);
+                            context
+                                .replies
+                                .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                            return true;
+                        };
+                        self.component.set_movement(PageMovement::Left(amount));
                         return true;
                     }
                     UIEvent::Input(ref key)

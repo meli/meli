@@ -241,38 +241,35 @@ impl<const N: usize> DataColumns<N> {
     }
 
     pub fn draw(
-        &self,
+        &mut self,
         grid: &mut CellBuffer,
         top_idx: usize,
         cursor_pos: usize,
         mut bounds: BoundsIterator,
     ) {
-        let mut _relative_x_offset = 0;
-        let mut skip_cols = (0, 0);
         let mut start_col = 0;
         let total_area = bounds.area();
         let height = total_area.height();
-        while _relative_x_offset < self.x_offset && start_col < N {
-            _relative_x_offset += self.widths[start_col] + 2;
-            if self.x_offset <= _relative_x_offset {
-                skip_cols.0 = start_col;
-                skip_cols.1 = _relative_x_offset - self.x_offset;
-                _relative_x_offset = self.x_offset;
+        if self.width_accum > 0 && self.x_offset + total_area.width() > self.width_accum {
+            self.x_offset = self.width_accum.saturating_sub(total_area.width());
+        }
+        let mut x_offset = self.x_offset;
+        for col in 0..N {
+            start_col = col;
+            if x_offset == 0 || self.widths[col] > x_offset {
                 break;
             }
-            start_col += 1;
+            x_offset -= self.widths[col];
+            x_offset = x_offset.saturating_sub(2);
         }
 
-        for col in skip_cols.0..N {
+        for col in start_col..N {
             if bounds.is_empty() {
                 break;
             }
 
-            let mut column_width = self.widths[col];
-            if column_width > bounds.width() {
-                column_width = bounds.width();
-            } else if column_width == 0 {
-                skip_cols.1 = 0;
+            let column_width = self.widths[col];
+            if column_width == 0 {
                 continue;
             }
 
@@ -282,11 +279,11 @@ impl<const N: usize> DataColumns<N> {
                 self.columns[col]
                     .area()
                     .skip_rows(top_idx)
-                    .skip_cols(skip_cols.1)
-                    .take_cols(column_width),
+                    .skip_cols(x_offset)
+                    .take_cols(column_width - x_offset),
             );
-            bounds.add_x(column_width + 2);
-            skip_cols.1 = 0;
+            bounds.add_x(column_width - x_offset + 2);
+            x_offset = 0;
         }
 
         match self.theme_config.theme {

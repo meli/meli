@@ -445,7 +445,20 @@ impl ListingTrait for PlainListing {
                         self.new_cursor_pos.2 = (self.length.saturating_sub(1) / rows) * rows;
                     }
                 }
-                PageMovement::Right(_) | PageMovement::Left(_) => {}
+                PageMovement::Right(amount) => {
+                    self.data_columns.x_offset += amount;
+                    self.data_columns.x_offset = self.data_columns.x_offset.min(
+                        self.data_columns
+                            .widths
+                            .iter()
+                            .map(|w| w + 2)
+                            .sum::<usize>()
+                            .saturating_sub(2),
+                    );
+                }
+                PageMovement::Left(amount) => {
+                    self.data_columns.x_offset = self.data_columns.x_offset.saturating_sub(amount);
+                }
                 PageMovement::Home => {
                     self.new_cursor_pos.2 = 0;
                 }
@@ -788,6 +801,18 @@ impl PlainListing {
         self.rows.clear();
         self.length = 0;
         let mut min_width = (0, 0, 0, 0, 0);
+        #[allow(clippy::type_complexity)]
+        let mut row_widths: (
+            SmallVec<[u8; 1024]>,
+            SmallVec<[u8; 1024]>,
+            SmallVec<[u8; 1024]>,
+            SmallVec<[u8; 1024]>,
+        ) = (
+            SmallVec::new(),
+            SmallVec::new(),
+            SmallVec::new(),
+            SmallVec::new(),
+        );
 
         for i in iter {
             if !context.accounts[&self.cursor_pos.0].contains_key(i) {
@@ -824,6 +849,28 @@ impl PlainListing {
             self.rows.row_attr_cache.insert(self.length, row_attr);
 
             let entry_strings = self.make_entry_string(&envelope, context);
+            row_widths.1.push(
+                entry_strings
+                    .date
+                    .grapheme_width()
+                    .try_into()
+                    .unwrap_or(255),
+            );
+            row_widths.2.push(
+                entry_strings
+                    .from
+                    .grapheme_width()
+                    .try_into()
+                    .unwrap_or(255),
+            );
+            row_widths.3.push(
+                (entry_strings.flag.grapheme_width()
+                    + entry_strings.subject.grapheme_width()
+                    + 1
+                    + entry_strings.tags.grapheme_width())
+                .try_into()
+                .unwrap_or(255),
+            );
             min_width.1 = cmp::max(min_width.1, entry_strings.date.grapheme_width()); /* date */
             min_width.2 = cmp::max(min_width.2, entry_strings.from.grapheme_width()); /* from */
             min_width.3 = cmp::max(
@@ -842,6 +889,9 @@ impl PlainListing {
 
             self.length += 1;
         }
+        row_widths
+            .0
+            .push(digits_of_num!(self.length).try_into().unwrap_or(255));
 
         min_width.0 = self.length.saturating_sub(1).to_string().len();
 
@@ -868,6 +918,10 @@ impl PlainListing {
         _ = self.data_columns.columns[2].resize_with_context(min_width.2, self.rows.len(), context);
         /* subject column */
         _ = self.data_columns.columns[3].resize_with_context(min_width.3, self.rows.len(), context);
+        self.data_columns.segment_tree[0] = row_widths.0.into();
+        self.data_columns.segment_tree[1] = row_widths.1.into();
+        self.data_columns.segment_tree[2] = row_widths.2.into();
+        self.data_columns.segment_tree[3] = row_widths.3.into();
 
         let iter = if self.filter_term.is_empty() {
             Box::new(self.local_collection.iter().cloned())
