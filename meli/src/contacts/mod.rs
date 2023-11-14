@@ -19,6 +19,5 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+pub mod editor;
 pub mod list;
-
-//pub mod editor;

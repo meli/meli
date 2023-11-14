@@ -21,11 +21,9 @@
 
 use super::*;
 
-const OK_CANCEL: &str = "OK    Cancel";
-const OK_OFFSET: usize = 0;
-const OK_LENGTH: usize = "OK".len();
+const OK: &str = "OK";
+const CANCEL: &str = "Cancel";
 const CANCEL_OFFSET: usize = "OK    ".len();
-const CANCEL_LENGTH: usize = "Cancel".len();
 
 #[derive(Debug, Copy, PartialEq, Eq, Clone)]
 enum SelectorCursor {
@@ -114,10 +112,6 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> Component f
         }
 
         let shortcuts = self.shortcuts(context);
-        let mut highlighted_attrs = crate::conf::value(context, "widgets.options.highlighted");
-        if !context.settings.terminal.use_color() {
-            highlighted_attrs.attrs |= Attr::REVERSE;
-        }
         match (event, self.cursor) {
             (UIEvent::Input(Key::Char('\n')), _) if self.single_only => {
                 /* User can only select one entry, so Enter key finalises the selection */
@@ -152,8 +146,8 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> Component f
                 }
                 self.done = true;
                 _ = self.done();
-                context.replies.push_back(self.cancel());
-
+                self.cancel(context);
+                self.set_dirty(true);
                 return false;
             }
             (UIEvent::Input(Key::Char('\n')), SelectorCursor::Cancel) if !self.single_only => {
@@ -211,26 +205,26 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> Component f
                 self.dirty = true;
                 return true;
             }
-            (UIEvent::Input(ref key), SelectorCursor::Entry(c))
+            (UIEvent::Input(ref key), SelectorCursor::Entry(_))
                 if !self.single_only
                     && shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_down"]) =>
             {
                 self.cursor = SelectorCursor::Ok;
-                self.dirty = true;
+                self.set_dirty(true);
                 return true;
             }
             (UIEvent::Input(ref key), SelectorCursor::Ok)
                 if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_right"]) =>
             {
                 self.cursor = SelectorCursor::Cancel;
-                self.dirty = true;
+                self.set_dirty(true);
                 return true;
             }
             (UIEvent::Input(ref key), SelectorCursor::Cancel)
                 if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_left"]) =>
             {
                 self.cursor = SelectorCursor::Ok;
-                self.dirty = true;
+                self.set_dirty(true);
                 return true;
             }
             (UIEvent::Input(ref key), _)
@@ -282,10 +276,6 @@ impl Component for UIConfirmationDialog {
         }
 
         let shortcuts = self.shortcuts(context);
-        let mut highlighted_attrs = crate::conf::value(context, "widgets.options.highlighted");
-        if !context.settings.terminal.use_color() {
-            highlighted_attrs.attrs |= Attr::REVERSE;
-        }
         match (event, self.cursor) {
             (UIEvent::Input(Key::Char('\n')), _) if self.single_only => {
                 /* User can only select one entry, so Enter key finalises the selection */
@@ -294,13 +284,14 @@ impl Component for UIConfirmationDialog {
                     context.replies.push_back(event);
                     self.unrealize(context);
                 }
+                self.set_dirty(true);
                 return true;
             }
             (UIEvent::Input(Key::Char('\n')), SelectorCursor::Entry(c)) if !self.single_only => {
                 /* User can select multiple entries, so Enter key toggles the entry under the
                  * cursor */
                 self.entries[c].1 = !self.entries[c].1;
-                self.dirty = true;
+                self.set_dirty(true);
                 return true;
             }
             (UIEvent::Input(Key::Char('\n')), SelectorCursor::Ok) if !self.single_only => {
@@ -309,6 +300,7 @@ impl Component for UIConfirmationDialog {
                     context.replies.push_back(event);
                     self.unrealize(context);
                 }
+                self.set_dirty(true);
                 return true;
             }
             (UIEvent::Input(Key::Esc), _) => {
@@ -320,8 +312,8 @@ impl Component for UIConfirmationDialog {
                 }
                 self.done = true;
                 _ = self.done();
-                context.replies.push_back(self.cancel());
-
+                self.cancel(context);
+                self.set_dirty(true);
                 return false;
             }
             (UIEvent::Input(Key::Char('\n')), SelectorCursor::Cancel) if !self.single_only => {
@@ -333,6 +325,7 @@ impl Component for UIConfirmationDialog {
                     context.replies.push_back(event);
                     self.unrealize(context);
                 }
+                self.set_dirty(true);
                 return true;
             }
             (UIEvent::Input(ref key), SelectorCursor::Entry(c))
@@ -344,7 +337,7 @@ impl Component for UIConfirmationDialog {
                     self.entries[c - 1].1 = true;
                 }
                 self.cursor = SelectorCursor::Entry(c - 1);
-                self.dirty = true;
+                self.set_dirty(true);
                 return true;
             }
             (UIEvent::Input(ref key), SelectorCursor::Ok)
@@ -353,7 +346,7 @@ impl Component for UIConfirmationDialog {
             {
                 let c = self.entries.len().saturating_sub(1);
                 self.cursor = SelectorCursor::Entry(c);
-                self.dirty = true;
+                self.set_dirty(true);
                 return true;
             }
             (UIEvent::Input(ref key), SelectorCursor::Unfocused)
@@ -363,7 +356,7 @@ impl Component for UIConfirmationDialog {
                     self.entries[0].1 = true;
                 }
                 self.cursor = SelectorCursor::Entry(0);
-                self.dirty = true;
+                self.set_dirty(true);
                 return true;
             }
             (UIEvent::Input(ref key), SelectorCursor::Entry(c))
@@ -376,29 +369,29 @@ impl Component for UIConfirmationDialog {
                     self.entries[c + 1].1 = true;
                 }
                 self.cursor = SelectorCursor::Entry(c + 1);
-                self.dirty = true;
+                self.set_dirty(true);
                 return true;
             }
-            (UIEvent::Input(ref key), SelectorCursor::Entry(c))
+            (UIEvent::Input(ref key), SelectorCursor::Entry(_))
                 if !self.single_only
                     && shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_down"]) =>
             {
                 self.cursor = SelectorCursor::Ok;
-                self.dirty = true;
+                self.set_dirty(true);
                 return true;
             }
             (UIEvent::Input(ref key), SelectorCursor::Ok)
                 if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_right"]) =>
             {
                 self.cursor = SelectorCursor::Cancel;
-                self.dirty = true;
+                self.set_dirty(true);
                 return true;
             }
             (UIEvent::Input(ref key), SelectorCursor::Cancel)
                 if shortcut!(key == shortcuts[Shortcuts::GENERAL]["scroll_left"]) =>
             {
                 self.cursor = SelectorCursor::Ok;
-                self.dirty = true;
+                self.set_dirty(true);
                 return true;
             }
             (UIEvent::Input(ref key), _)
@@ -493,6 +486,11 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
     }
 
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        let mut highlighted_attrs = crate::conf::value(context, "widgets.options.highlighted");
+        if !context.settings.terminal.use_color() {
+            highlighted_attrs.attrs |= Attr::REVERSE;
+        }
+
         let shortcuts = context.settings.shortcuts.general.key_values();
         let navigate_help_string = format!(
             "Navigate options with {} to go down, {} to go up, select with {}",
@@ -504,10 +502,11 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
             self.entry_titles.iter().map(|e| e.len()).max().unwrap_or(0) + 3,
             std::cmp::max(self.title.len(), navigate_help_string.len()) + 3,
         ) + 3;
-        let height = self.entries.len() + {
-            /* padding */
-            3
-        };
+        let height = self.entries.len()
+            // padding
+            + 3
+            // buttons row
+            + if self.single_only { 1 } else { 5 };
         let dialog_area = area.align_inside(
             (width, height),
             self.horizontal_alignment,
@@ -535,54 +534,57 @@ impl<T: PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + S
         );
 
         let inner_area = inner_area.skip_cols(1).skip_rows(1);
-        let width = std::cmp::max(
-            OK_CANCEL.len(),
-            std::cmp::max(
-                self.entry_titles
-                    .iter()
-                    .max_by_key(|e| e.len())
-                    .map(|v| v.len())
-                    .unwrap_or(0),
-                self.title.len(),
-            ),
-        ) + 5;
-        let height = self.entries.len()
-            + if self.single_only {
-                0
-            } else {
-                /* Extra room for buttons Okay/Cancel */
-                2
-            };
+        /* Extra room for buttons Okay/Cancel */
         if self.single_only {
             for (i, e) in self.entry_titles.iter().enumerate() {
-                grid.write_string(
-                    e,
-                    self.theme_default.fg,
-                    self.theme_default.bg,
-                    self.theme_default.attrs,
-                    inner_area.nth_row(i),
-                    None,
-                );
+                let attr = if matches!(self.cursor, SelectorCursor::Entry(e) if e == i) {
+                    highlighted_attrs
+                } else {
+                    self.theme_default
+                };
+                grid.write_string(e, attr.fg, attr.bg, attr.attrs, inner_area.nth_row(i), None);
             }
         } else {
             for (i, e) in self.entry_titles.iter().enumerate() {
+                let attr = if matches!(self.cursor, SelectorCursor::Entry(e) if e == i) {
+                    highlighted_attrs
+                } else {
+                    self.theme_default
+                };
                 grid.write_string(
                     &format!("[{}] {}", if self.entries[i].1 { "x" } else { " " }, e),
-                    self.theme_default.fg,
-                    self.theme_default.bg,
-                    self.theme_default.attrs,
+                    attr.fg,
+                    attr.bg,
+                    attr.attrs,
                     inner_area.nth_row(i),
                     None,
                 );
             }
+            let inner_area = inner_area.nth_row(self.entry_titles.len() + 2).skip_cols(2);
+            let attr = if matches!(self.cursor, SelectorCursor::Ok) {
+                highlighted_attrs
+            } else {
+                self.theme_default
+            };
+            let (x, y) = grid.write_string(
+                OK,
+                attr.fg,
+                attr.bg,
+                attr.attrs | Attr::BOLD,
+                inner_area,
+                None,
+            );
+            let attr = if matches!(self.cursor, SelectorCursor::Cancel) {
+                highlighted_attrs
+            } else {
+                self.theme_default
+            };
             grid.write_string(
-                OK_CANCEL,
-                self.theme_default.fg,
-                self.theme_default.bg,
-                self.theme_default.attrs | Attr::BOLD,
-                inner_area
-                    .nth_row(height - 1)
-                    .skip_cols((width - OK_CANCEL.len()) / 2),
+                CANCEL,
+                attr.fg,
+                attr.bg,
+                attr.attrs,
+                inner_area.skip(CANCEL_OFFSET + x, y),
                 None,
             );
         }
@@ -613,9 +615,11 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send> UIDialog<T>
         })
     }
 
-    fn cancel(&mut self) -> UIEvent {
-        let Self { ref id, .. } = self;
-        UIEvent::CanceledUIDialog(*id)
+    fn cancel(&mut self, context: &mut Context) {
+        context.unrealized.insert(self.id());
+        context
+            .replies
+            .push_back(UIEvent::ComponentUnrealize(self.id()));
     }
 }
 
@@ -640,8 +644,10 @@ impl UIConfirmationDialog {
         })
     }
 
-    fn cancel(&mut self) -> UIEvent {
-        let Self { ref id, .. } = self;
-        UIEvent::CanceledUIDialog(*id)
+    fn cancel(&mut self, context: &mut Context) {
+        context.unrealized.insert(self.id());
+        context
+            .replies
+            .push_back(UIEvent::ComponentUnrealize(self.id()));
     }
 }

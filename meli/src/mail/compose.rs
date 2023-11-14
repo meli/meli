@@ -883,152 +883,139 @@ impl Component for Composer {
             self.update_form(context);
             self.initialized = true;
         }
-        let header_height = self.form.len();
+
         let theme_default = crate::conf::value(context, "theme_default");
+        if self.dirty {
+            grid.clear_area(area, theme_default);
+        }
 
-        let mid = 0;
-        /*
-        let mid = if width > 80 {
-            let width = width - 80;
-            let mid = width / 2;
-
-            if self.dirty {
-                for i in get_y(upper_left)..=get_y(bottom_right) {
-                    //set_and_join_box(grid, (mid, i), VERT_BOUNDARY);
-                    grid[(mid, i)]
-                        .set_fg(theme_default.fg)
-                        .set_bg(theme_default.bg);
-                    //set_and_join_box(grid, (mid + 80, i), VERT_BOUNDARY);
-                    grid[(mid + 80, i)]
-                        .set_fg(theme_default.fg)
-                        .set_bg(theme_default.bg);
-                }
-            }
-            mid
-        } else {
-            0
-        };
-        */
+        let header_height = self.form.len();
 
         let header_area = area
+            .skip_rows(1)
             .take_rows(header_height)
-            .skip_cols(mid + 1)
-            .skip_cols_from_end(mid);
+            .skip_cols(1)
+            .skip_cols_from_end(1);
         let attachments_no = self.draft.attachments().len();
         let attachment_area = area
-            .skip_rows(header_height)
+            .skip_rows(header_height + 1)
             .skip_rows(
                 area.height()
                     .saturating_sub(header_area.height() + 4 + attachments_no),
             )
-            .skip_cols(mid + 1);
+            .skip_cols(1)
+            .skip_cols_from_end(1);
 
         let body_area = area
-            .skip_rows(header_height)
-            .skip_rows_from_end(attachment_area.height());
+            .skip_rows(header_height + 2)
+            .skip_rows_from_end(attachment_area.height())
+            .skip_cols(1)
+            .skip_cols_from_end(1);
 
-        grid.clear_area(area.nth_row(0), crate::conf::value(context, "highlight"));
-        grid.write_string(
-            if self.reply_context.is_some() {
-                "COMPOSING REPLY"
-            } else {
-                "COMPOSING MESSAGE"
-            },
-            crate::conf::value(context, "highlight").fg,
-            crate::conf::value(context, "highlight").bg,
-            crate::conf::value(context, "highlight").attrs,
-            area.nth_row(0),
-            None,
-        );
-
-        /*
-        grid.change_theme(
-            (
-                set_x(pos_dec(header_area.upper_left(), (0, 1)), x),
-                set_y(header_area.bottom_right(), y),
-            ),
-            crate::conf::value(context, "highlight"),
-        );
-
-        grid.clear_area(
-            (
-                pos_dec(upper_left, (0, 1)),
-                set_x(bottom_right, get_x(upper_left) + mid),
-            ),
-            theme_default,
-        );
-
-        grid.clear_area(
-            (
-                (
-                    get_x(bottom_right).saturating_sub(mid),
-                    get_y(upper_left).saturating_sub(1),
-                ),
-                bottom_right,
-            ),
-            theme_default,
-        );
-        */
+        if self.dirty {
+            grid.clear_area(area.nth_row(0), crate::conf::value(context, "highlight"));
+            grid.write_string(
+                if self.reply_context.is_some() {
+                    "COMPOSING REPLY"
+                } else {
+                    "COMPOSING MESSAGE"
+                },
+                crate::conf::value(context, "highlight").fg,
+                crate::conf::value(context, "highlight").bg,
+                crate::conf::value(context, "highlight").attrs,
+                area.nth_row(0),
+                None,
+            );
+        }
 
         /* Regardless of view mode, do the following */
+
+        if self.dirty {
+            match self.cursor {
+                Cursor::Headers => {
+                    grid.change_theme(header_area, theme_default);
+                }
+                Cursor::Body => {
+                    grid.change_theme(
+                        body_area,
+                        ThemeAttribute {
+                            fg: theme_default.fg,
+                            bg: crate::conf::value(context, "highlight").bg,
+                            attrs: if grid.use_color {
+                                crate::conf::value(context, "highlight").attrs
+                            } else {
+                                crate::conf::value(context, "highlight").attrs | Attr::REVERSE
+                            },
+                        },
+                    );
+                }
+                Cursor::Sign | Cursor::Encrypt | Cursor::Attachments => {}
+            }
+        }
+
         self.form.draw(grid, header_area, context);
+
         if let Some(ref mut embedded) = self.embedded {
             let embed_pty = &mut embedded.status;
             let embed_area = area;
             match embed_pty {
                 EmbedStatus::Running(_, _) => {
-                    let mut guard = embed_pty.lock().unwrap();
-                    grid.clear_area(embed_area, theme_default);
+                    if self.dirty {
+                        let mut guard = embed_pty.lock().unwrap();
+                        grid.clear_area(embed_area, theme_default);
 
-                    grid.copy_area(guard.grid.buffer(), embed_area, guard.grid.area());
-                    guard.set_terminal_size((embed_area.width(), embed_area.height()));
-                    context.dirty_areas.push_back(area);
-                    self.dirty = false;
+                        grid.copy_area(guard.grid.buffer(), embed_area, guard.grid.area());
+                        guard.set_terminal_size((embed_area.width(), embed_area.height()));
+                        context.dirty_areas.push_back(embed_area);
+                        self.dirty = false;
+                    }
                     return;
                 }
                 EmbedStatus::Stopped(_, _) => {
-                    let guard = embed_pty.lock().unwrap();
+                    if self.dirty {
+                        let guard = embed_pty.lock().unwrap();
 
-                    grid.copy_area(guard.grid.buffer(), embed_area, guard.grid.buffer().area());
-                    grid.change_colors(embed_area, Color::Byte(8), theme_default.bg);
-                    let our_map: ShortcutMap =
-                        account_settings!(context[self.account_hash].shortcuts.composing)
-                            .key_values();
-                    let mut shortcuts: ShortcutMaps = Default::default();
-                    shortcuts.insert(Shortcuts::COMPOSING, our_map);
-                    let stopped_message: String =
-                        format!("Process with PID {} has stopped.", guard.child_pid);
-                    let stopped_message_2: String = format!(
-                        "-press '{}' (edit shortcut) to re-activate.",
-                        shortcuts[Shortcuts::COMPOSING]["edit"]
-                    );
-                    const STOPPED_MESSAGE_3: &str =
-                        "-press Ctrl-C to forcefully kill it and return to editor.";
-                    let max_len = std::cmp::max(
-                        stopped_message.len(),
-                        std::cmp::max(stopped_message_2.len(), STOPPED_MESSAGE_3.len()),
-                    );
-                    let inner_area = create_box(grid, area.center_inside((max_len + 5, 5)));
-                    grid.clear_area(inner_area, theme_default);
-                    for (i, l) in [
-                        stopped_message.as_str(),
-                        stopped_message_2.as_str(),
-                        STOPPED_MESSAGE_3,
-                    ]
-                    .iter()
-                    .enumerate()
-                    {
-                        grid.write_string(
-                            l,
-                            theme_default.fg,
-                            theme_default.bg,
-                            theme_default.attrs,
-                            inner_area.skip_rows(i),
-                            None, //Some(get_x(inner_area.upper_left())),
+                        grid.copy_area(guard.grid.buffer(), embed_area, guard.grid.buffer().area());
+                        grid.change_colors(embed_area, Color::Byte(8), theme_default.bg);
+                        let our_map: ShortcutMap =
+                            account_settings!(context[self.account_hash].shortcuts.composing)
+                                .key_values();
+                        let mut shortcuts: ShortcutMaps = Default::default();
+                        shortcuts.insert(Shortcuts::COMPOSING, our_map);
+                        let stopped_message: String =
+                            format!("Process with PID {} has stopped.", guard.child_pid);
+                        let stopped_message_2: String = format!(
+                            "-press '{}' (edit shortcut) to re-activate.",
+                            shortcuts[Shortcuts::COMPOSING]["edit"]
                         );
+                        const STOPPED_MESSAGE_3: &str =
+                            "-press Ctrl-C to forcefully kill it and return to editor.";
+                        let max_len = std::cmp::max(
+                            stopped_message.len(),
+                            std::cmp::max(stopped_message_2.len(), STOPPED_MESSAGE_3.len()),
+                        );
+                        let inner_area = create_box(grid, area.center_inside((max_len + 5, 5)));
+                        grid.clear_area(inner_area, theme_default);
+                        for (i, l) in [
+                            stopped_message.as_str(),
+                            stopped_message_2.as_str(),
+                            STOPPED_MESSAGE_3,
+                        ]
+                        .iter()
+                        .enumerate()
+                        {
+                            grid.write_string(
+                                l,
+                                theme_default.fg,
+                                theme_default.bg,
+                                theme_default.attrs,
+                                inner_area.skip_rows(i),
+                                None,
+                            );
+                        }
+                        context.dirty_areas.push_back(area);
+                        self.dirty = false;
                     }
-                    context.dirty_areas.push_back(area);
-                    self.dirty = false;
                     return;
                 }
             }
@@ -1039,51 +1026,13 @@ impl Component for Composer {
         if self.pager.size().0 > body_area.width() {
             self.pager.set_initialised(false);
         }
-        // Force clean pager area, because if body height is less than body_area it will
-        // might leave draw artifacts in the remaining area.
-        grid.clear_area(body_area, theme_default);
-        self.set_dirty(true);
-        self.pager.draw(grid, body_area, context);
-
-        match self.cursor {
-            Cursor::Headers => {
-                /*
-                grid.change_theme(
-                    (
-                        pos_dec(body_area.upper_left(), (1, 0)),
-                        pos_dec(
-                            set_y(body_area.upper_left(), get_y(body_area.bottom_right())),
-                            (1, 0),
-                        ),
-                    ),
-                    theme_default,
-                );
-                */
-            }
-            Cursor::Body => {
-                /*
-                grid.change_theme(
-                    (
-                        pos_dec(body_area.upper_left(), (1, 0)),
-                        pos_dec(
-                            set_y(body_area.upper_left(), get_y(body_area.bottom_right())),
-                            (1, 0),
-                        ),
-                    ),
-                    ThemeAttribute {
-                        fg: theme_default.fg,
-                        bg: crate::conf::value(context, "highlight").bg,
-                        attrs: if grid.use_color {
-                            crate::conf::value(context, "highlight").attrs
-                        } else {
-                            crate::conf::value(context, "highlight").attrs | Attr::REVERSE
-                        },
-                    },
-                );
-                */
-            }
-            Cursor::Sign | Cursor::Encrypt | Cursor::Attachments => {}
+        if self.dirty {
+            // Force clean pager area, because if body height is less than body_area it will
+            // might leave draw artifacts in the remaining area.
+            grid.clear_area(body_area, theme_default);
+            self.pager.set_dirty(true);
         }
+        self.pager.draw(grid, body_area, context);
 
         //if !self.mode.is_edit_attachments() {
         self.draw_attachments(grid, attachment_area, context);
@@ -1125,8 +1074,11 @@ impl Component for Composer {
                 s.draw(grid, body_area, context);
             }
         }
-        self.dirty = false;
-        context.dirty_areas.push_back(area);
+
+        if self.dirty {
+            self.dirty = false;
+            context.dirty_areas.push_back(area);
+        }
     }
 
     fn process_event(&mut self, mut event: &mut UIEvent, context: &mut Context) -> bool {

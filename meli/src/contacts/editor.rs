@@ -24,8 +24,8 @@ use std::collections::HashMap;
 use melib::Card;
 
 use crate::{
-    terminal::*, Action::*, CellBuffer, Component, ComponentId, Context, Field, FormWidget, Key,
-    StatusEvent, TabAction, ThemeAttribute, UIDialog, UIEvent,
+    terminal::*, CellBuffer, Component, ComponentId, Context, Field, FormWidget, Key, StatusEvent,
+    ThemeAttribute, UIDialog, UIEvent,
 };
 
 #[derive(Debug)]
@@ -33,7 +33,6 @@ enum ViewMode {
     ReadOnly,
     Discard(Box<UIDialog<char>>),
     Edit,
-    //New,
 }
 
 #[derive(Debug)]
@@ -44,11 +43,10 @@ pub struct ContactManager {
     mode: ViewMode,
     form: FormWidget<bool>,
     pub account_pos: usize,
-    content: CellBuffer,
+    content: Screen<Virtual>,
     theme_default: ThemeAttribute,
     dirty: bool,
     has_changes: bool,
-
     initialized: bool,
 }
 
@@ -68,7 +66,7 @@ impl ContactManager {
             mode: ViewMode::Edit,
             form: FormWidget::default(),
             account_pos: 0,
-            content: CellBuffer::new_with_context(100, 1, None, context),
+            content: Screen::<Virtual>::new(),
             theme_default,
             dirty: true,
             has_changes: false,
@@ -77,34 +75,38 @@ impl ContactManager {
     }
 
     fn initialize(&mut self, context: &Context) {
-        let (width, _) = self.content.size();
+        if !self.content.resize_with_context(100, 1, context) {
+            return;
+        }
+        let mut area = self.content.area();
 
-        let (x, _) = self.content.write_string(
+        let (x, _) = self.content.grid_mut().write_string(
             "Last edited: ",
             self.theme_default.fg,
             self.theme_default.bg,
             self.theme_default.attrs,
-            ((0, 0), (width - 1, 0)),
+            area,
             None,
         );
-        let (x, y) = self.content.write_string(
+        area = area.skip_cols(x);
+        let (x, y) = self.content.grid_mut().write_string(
             &self.card.last_edited(),
             self.theme_default.fg,
             self.theme_default.bg,
             self.theme_default.attrs,
-            ((x, 0), (width - 1, 0)),
+            area,
             None,
         );
+        area = area.skip(x, y);
 
         if self.card.external_resource() {
             self.mode = ViewMode::ReadOnly;
-            _ = self.content.resize(self.content.size().0, 2, None);
-            self.content.write_string(
+            self.content.grid_mut().write_string(
                 "This contact's origin is external and cannot be edited within meli.",
                 self.theme_default.fg,
                 self.theme_default.bg,
                 self.theme_default.attrs,
-                ((x, y), (width - 1, y)),
+                area,
                 None,
             );
         }
@@ -147,23 +149,15 @@ impl Component for ContactManager {
             self.initialized = true;
         }
 
-        let upper_left = area.upper_left();
-        let bottom_right = area.bottom_right();
-
-        if self.dirty {
-            let (width, _height) = self.content.size();
-
-            grid.clear_area(
-                (upper_left, set_y(bottom_right, get_y(upper_left) + 1)),
-                self.theme_default,
-            );
-            grid.copy_area(&self.content, area, ((0, 0), (width - 1, 0)));
+        if self.is_dirty() {
+            grid.clear_area(area, self.theme_default);
+            grid.copy_area(self.content.grid(), area.skip_rows(2), self.content.area());
             self.dirty = false;
         }
 
         self.form.draw(
             grid,
-            (set_y(upper_left, get_y(upper_left) + 2), bottom_right),
+            area.skip_rows(2 + self.content.area().height()),
             context,
         );
         if let ViewMode::Discard(ref mut selector) = self.mode {
@@ -177,23 +171,27 @@ impl Component for ContactManager {
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         if let UIEvent::ConfigReload { old_settings: _ } = event {
             self.theme_default = crate::conf::value(context, "theme_default");
-            self.content = CellBuffer::new_with_context(100, 1, None, context);
+            self.content.grid_mut().empty();
             self.initialized = false;
             self.set_dirty(true);
         }
         match self.mode {
             ViewMode::Discard(ref mut selector) => {
+                if matches!(event, UIEvent::ComponentUnrealize(ref id) if *id == selector.id()) {
+                    selector.unrealize(context);
+                    self.mode = ViewMode::Edit;
+                    self.set_dirty(true);
+                    return true;
+                }
                 if selector.process_event(event, context) {
                     self.set_dirty(true);
                     return true;
                 }
             }
             ViewMode::Edit => {
-                if let (Some(parent_id), &UIEvent::Input(Key::Esc)) = (self.parent_id, &event) {
+                if matches!(event, UIEvent::Input(Key::Esc)) {
                     if self.can_quit_cleanly(context) {
-                        context
-                            .replies
-                            .push_back(UIEvent::Action(Tab(TabAction::Kill(parent_id))));
+                        self.unrealize(context);
                     }
                     return true;
                 }
@@ -250,11 +248,7 @@ impl Component for ContactManager {
     fn is_dirty(&self) -> bool {
         self.dirty
             || self.form.is_dirty()
-            || if let ViewMode::Discard(ref selector) = self.mode {
-                selector.is_dirty()
-            } else {
-                false
-            }
+            || matches!(self.mode,  ViewMode::Discard(ref selector) if selector.is_dirty())
     }
 
     fn set_dirty(&mut self, value: bool) {
@@ -274,28 +268,31 @@ impl Component for ContactManager {
             return true;
         }
 
-        if let Some(parent_id) = self.parent_id {
+        if matches!(self.mode, ViewMode::Discard(_)) {
+            true
+        } else {
+            let Some(parent_id) = self.parent_id else {
+                return true;
+            };
             /* Play it safe and ask user for confirmation */
             self.mode = ViewMode::Discard(Box::new(UIDialog::new(
                 "this contact has unsaved changes",
                 vec![
-                    ('x', "quit without saving".to_string()),
-                    ('y', "save draft and quit".to_string()),
+                    ('y', "quit without saving".to_string()),
                     ('n', "cancel".to_string()),
                 ],
                 true,
-                Some(Box::new(move |_, results: &[char]| match results[0] {
-                    'x' => Some(UIEvent::Action(Tab(TabAction::Kill(parent_id)))),
-                    'n' => None,
-                    'y' => None,
-                    _ => None,
+                Some(Box::new(move |id, results: &[char]| {
+                    if matches!(results.first(), Some(&'y')) {
+                        Some(UIEvent::ComponentUnrealize(parent_id))
+                    } else {
+                        Some(UIEvent::ComponentUnrealize(id))
+                    }
                 })),
                 context,
             )));
             self.set_dirty(true);
             false
-        } else {
-            true
         }
     }
 }

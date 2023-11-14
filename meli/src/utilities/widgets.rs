@@ -24,7 +24,7 @@ use std::{borrow::Cow, collections::HashMap, time::Duration};
 use super::*;
 use crate::melib::text_processing::TextProcessing;
 
-#[derive(Debug, PartialEq, Eq, Default)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
 enum FormFocus {
     #[default]
     Fields,
@@ -350,17 +350,27 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> Component for 
         if self.is_dirty() {
             let theme_default = crate::conf::value(context, "theme_default");
 
-            grid.clear_area(area.take_rows(self.layout.len()), theme_default);
+            grid.clear_area(area, theme_default);
             let label_attrs = crate::conf::value(context, "widgets.form.label");
+            let mut highlighted = crate::conf::value(context, "highlight");
+            if !context.settings.terminal.use_color() {
+                highlighted.attrs |= Attr::REVERSE;
+            }
 
             for (i, k) in self.layout.iter().enumerate().rev() {
+                let theme_attr = if i == self.cursor && self.focus == FormFocus::Fields {
+                    grid.change_theme(area.nth_row(i), highlighted);
+                    highlighted
+                } else {
+                    label_attrs
+                };
                 let v = self.fields.get_mut(k).unwrap();
                 /* Write field label */
                 grid.write_string(
                     k.as_ref(),
-                    label_attrs.fg,
-                    label_attrs.bg,
-                    label_attrs.attrs,
+                    theme_attr.fg,
+                    theme_attr.bg,
+                    theme_attr.attrs,
                     area.nth_row(i).skip_cols(1),
                     None,
                 );
@@ -370,47 +380,28 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> Component for 
                     area.nth_row(i).skip_cols(self.field_name_max_length + 3),
                     context,
                 );
+                grid.change_theme(area.nth_row(i), theme_attr);
 
                 /* Highlight if necessary */
-                if i == self.cursor {
-                    if self.focus == FormFocus::Fields {
-                        let mut field_attrs =
-                            crate::conf::value(context, "widgets.form.highlighted");
-                        if !context.settings.terminal.use_color() {
-                            field_attrs.attrs |= Attr::REVERSE;
-                        }
-                        for row in grid
-                            .bounds_iter(area.nth_row(i).take_cols(area.width().saturating_sub(1)))
-                        {
-                            for c in row {
-                                grid[c]
-                                    .set_fg(field_attrs.fg)
-                                    .set_bg(field_attrs.bg)
-                                    .set_attrs(field_attrs.attrs);
-                            }
-                        }
-                    }
-                    if self.focus == FormFocus::TextInput {
-                        v.draw_cursor(
-                            grid,
-                            area.nth_row(i).skip_cols(self.field_name_max_length + 3),
-                            area.nth_row(i + 1)
-                                .skip_cols(self.field_name_max_length + 3),
-                            context,
-                        );
-                    }
+                if i == self.cursor && self.focus == FormFocus::TextInput {
+                    v.draw_cursor(
+                        grid,
+                        area.nth_row(i).skip_cols(self.field_name_max_length + 3),
+                        area.nth_row(i + 1)
+                            .skip_cols(self.field_name_max_length + 3),
+                        context,
+                    );
                 }
             }
 
             let length = self.layout.len();
 
-            grid.clear_area(area.skip_rows(length).take_rows(length + 2), theme_default);
             if !self.hide_buttons {
                 self.buttons
-                    .draw(grid, area.nth_row(length + 3).skip_cols(1), context);
+                    .draw(grid, area.skip_rows(length + 3).skip_cols(1), context);
             }
             if length + 4 < area.height() {
-                grid.clear_area(area.skip_rows(length + 3), theme_default);
+                grid.clear_area(area.skip_rows(length + 3 + 1), theme_default);
             }
             self.set_dirty(false);
             context.dirty_areas.push_back(area);
@@ -623,7 +614,7 @@ where
                         theme_default.bg
                     },
                     Attr::BOLD,
-                    area.skip_cols(len).take_cols(cur_len + len),
+                    area.skip_cols(len),
                     None,
                 );
                 len += cur_len + 3;

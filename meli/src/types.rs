@@ -154,7 +154,6 @@ pub enum UIEvent {
     Contacts(ContactEvent),
     Compose(ComposeEvent),
     FinishedUIDialog(ComponentId, UIMessage),
-    CanceledUIDialog(ComponentId),
     IntraComm {
         from: ComponentId,
         to: ComponentId,
