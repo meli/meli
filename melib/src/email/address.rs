@@ -306,6 +306,30 @@ impl Address {
             Self::Group(g) => g.display_name.display_bytes(&g.raw),
         }
     }
+
+    /// Returns a type that prints addresses suitably for UI display, e.g.
+    /// without quotes.
+    ///
+    /// ## Example
+    ///
+    /// ```rust
+    /// # use melib::email::Address;
+    /// let addr = Address::new(
+    ///     Some("Jörg T. Doe".to_string()),
+    ///     "joerg@example.com".to_string(),
+    /// );
+    /// assert_eq!(
+    ///     addr.to_string().as_str(),
+    ///     r#""Jörg T. Doe" <joerg@example.com>"#
+    /// );
+    /// assert_eq!(
+    ///     addr.display().to_string().as_str(),
+    ///     "Jörg T. Doe <joerg@example.com>"
+    /// );
+    /// ```
+    pub fn display(&self) -> UIAddress {
+        UIAddress(self)
+    }
 }
 
 impl Eq for Address {}
@@ -349,6 +373,7 @@ impl std::fmt::Display for Address {
                 }
                 d => write!(f, "{} <{}>", d, m.address_spec.display(&m.raw)),
             },
+            Self::Mailbox(m) => write!(f, "{}", m.address_spec.display(&m.raw)),
             Self::Group(g) => {
                 let attachment_strings: Vec<String> =
                     g.mailbox_list.iter().map(|a| format!("{}", a)).collect();
@@ -359,7 +384,6 @@ impl std::fmt::Display for Address {
                     attachment_strings.join(", ")
                 )
             }
-            Self::Mailbox(m) => write!(f, "{}", m.address_spec.display(&m.raw)),
         }
     }
 }
@@ -390,6 +414,34 @@ impl TryFrom<&str> for Address {
 
     fn try_from(val: &str) -> Result<Self> {
         Ok(parser::address::address(val.as_bytes())?.1)
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+#[repr(transparent)]
+pub struct UIAddress<'a>(&'a Address);
+
+impl std::fmt::Display for UIAddress<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self.0 {
+            Address::Mailbox(m) if m.display_name.length > 0 => write!(
+                f,
+                "{} <{}>",
+                m.display_name.display(&m.raw),
+                m.address_spec.display(&m.raw)
+            ),
+            Address::Mailbox(m) => write!(f, "{}", m.address_spec.display(&m.raw)),
+            Address::Group(g) => {
+                let attachment_strings: Vec<String> =
+                    g.mailbox_list.iter().map(|a| format!("{}", a)).collect();
+                write!(
+                    f,
+                    "{}: {}",
+                    g.display_name.display(&g.raw),
+                    attachment_strings.join(", ")
+                )
+            }
+        }
     }
 }
 
