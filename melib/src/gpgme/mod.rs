@@ -1188,12 +1188,8 @@ unsafe impl Sync for Data {}
 impl Drop for Data {
     #[inline]
     fn drop(&mut self) {
-        if !self.inner.as_ptr().is_null() {
-            match self.kind {
-                DataKind::Memory => unsafe {
-                    call!(self.lib, gpgme_data_release)(self.inner.as_mut())
-                },
-            }
+        match self.kind {
+            DataKind::Memory => unsafe { call!(self.lib, gpgme_data_release)(self.inner.as_mut()) },
         }
     }
 }

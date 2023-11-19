@@ -57,7 +57,7 @@ pub fn edit_config() -> Result<()> {
         })?;
     let config_path = crate::conf::get_config_file()?;
 
-    let mut cmd = Command::new(&editor);
+    let mut cmd = Command::new(editor);
 
     let mut handle = &mut cmd;
     for c in crate::conf::get_included_configs(config_path)? {

@@ -78,7 +78,7 @@ impl std::fmt::Display for JobManager {
 }
 
 impl JobManager {
-    const HEADERS: [&str; 5] = ["id", "desc", "started", "finished", "succeeded"];
+    const HEADERS: [&'static str; 5] = ["id", "desc", "started", "finished", "succeeded"];
 
     pub fn new(context: &Context) -> Self {
         let theme_default = crate::conf::value(context, "theme_default");

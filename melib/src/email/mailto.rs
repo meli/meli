@@ -40,7 +40,7 @@ pub struct Mailto {
 }
 
 impl Mailto {
-    pub const IGNORE_HEADERS: &[HeaderName] = &[
+    pub const IGNORE_HEADERS: &'static [HeaderName] = &[
         HeaderName::FROM,
         HeaderName::DATE,
         HeaderName::MESSAGE_ID,
@@ -97,7 +97,7 @@ impl Mailto {
         HeaderName::USER_AGENT,
     ];
 
-    pub const MAILTO_CHARSET: &AsciiSet = &CONTROLS
+    pub const MAILTO_CHARSET: &'static AsciiSet = &CONTROLS
         .add(b' ')
         .add(b'"')
         .add(b'"')

@@ -1899,7 +1899,7 @@ impl Component for Composer {
                 );
 
                 let f = create_temp_file(
-                    self.draft.to_edit_string().as_str().as_bytes(),
+                    self.draft.to_edit_string().as_bytes(),
                     None,
                     None,
                     Some("eml"),

@@ -61,8 +61,8 @@ pub mod html_escape {
     }
 
     impl HtmlEntity {
-        pub const ALL: [&str; 4] = ["&lt;", "&gt;", "&amp;", "&quot;"];
-        pub const GLYPHS: [&str; 4] = ["<", ">", "&", "\""];
+        pub const ALL: [&'static str; 4] = ["&lt;", "&gt;", "&amp;", "&quot;"];
+        pub const GLYPHS: [&'static str; 4] = ["<", ">", "&", "\""];
 
         pub const fn glyph(self) -> char {
             match self {

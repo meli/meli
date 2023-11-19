@@ -975,7 +975,7 @@ impl MailBackend for ImapType {
             }
             let ret: Result<()> = ImapResponse::try_from(response.as_slice())?.into();
             ret?;
-            let new_hash = MailboxHash::from_bytes(path.as_str().as_bytes());
+            let new_hash = MailboxHash::from_bytes(path.as_bytes());
             uid_store.mailboxes.lock().await.clear();
             Ok((
                 new_hash,
@@ -1141,7 +1141,7 @@ impl MailBackend for ImapType {
                     .read_response(&mut response, RequiredResponses::empty())
                     .await?;
             }
-            let new_hash = MailboxHash::from_bytes(new_path.as_str().as_bytes());
+            let new_hash = MailboxHash::from_bytes(new_path.as_bytes());
             let ret: Result<()> = ImapResponse::try_from(response.as_slice())?.into();
             ret?;
             uid_store.mailboxes.lock().await.clear();

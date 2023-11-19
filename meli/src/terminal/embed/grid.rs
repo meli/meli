@@ -265,7 +265,7 @@ impl EmbedGrid {
             ref mut scroll_region,
             ref mut terminal_size,
             ref mut alternate_screen,
-            ref mut state,
+            state: _,
             ref mut fg_color,
             ref mut bg_color,
             ref mut attrs,
@@ -347,8 +347,7 @@ impl EmbedGrid {
             };
         }
 
-        #[allow(clippy::redundant_locals)]
-        let mut state = state;
+        let mut state = &mut self.state;
         match (byte, &mut state) {
             (b'\x1b', State::Normal) => {
                 *state = State::ExpectingControlChar;
