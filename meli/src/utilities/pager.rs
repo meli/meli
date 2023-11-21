@@ -22,7 +22,7 @@
 use melib::text_processing::{LineBreakText, Truncate};
 
 use super::*;
-use crate::terminal::embed::EmbedGrid;
+use crate::terminal::embedded::EmbeddedGrid;
 
 /// A pager for text.
 /// `Pager` holds its own content in its own `CellBuffer` and when `draw` is
@@ -50,7 +50,7 @@ pub struct Pager {
     /// total height? Used to decide whether to accept `scroll_down` key
     /// events.
     rows_lt_height: bool,
-    filtered_content: Option<(String, Result<EmbedGrid>)>,
+    filtered_content: Option<(String, Result<EmbeddedGrid>)>,
     text_lines: Vec<String>,
     line_breaker: LineBreakText,
     movement: Option<PageMovement>,
@@ -181,7 +181,7 @@ impl Pager {
     }
 
     pub fn filter(&mut self, cmd: &str) {
-        let _f = |bin: &str, text: &str| -> Result<EmbedGrid> {
+        let _f = |bin: &str, text: &str| -> Result<EmbeddedGrid> {
             use std::{
                 io::Write,
                 process::{Command, Stdio},
@@ -201,7 +201,7 @@ impl Pager {
                 .chain_err_summary(|| "Failed to wait on filter")?
                 .stdout;
             let mut dev_null = std::fs::File::open("/dev/null")?;
-            let mut embedded = EmbedGrid::new();
+            let mut embedded = EmbeddedGrid::new();
             embedded.set_terminal_size((80, 20));
 
             for b in out {
@@ -210,7 +210,7 @@ impl Pager {
             Ok(embedded)
         };
         let buf = _f(cmd, &self.text);
-        if let Some((width, height)) = buf.as_ref().ok().map(EmbedGrid::terminal_size) {
+        if let Some((width, height)) = buf.as_ref().ok().map(EmbeddedGrid::terminal_size) {
             self.width = width;
             self.height = height;
         }

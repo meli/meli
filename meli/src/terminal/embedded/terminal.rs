@@ -19,6 +19,26 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+//! An `xterm`-compliant terminal, for running terminal applications inside
+//! *meli*.
+//!
+//! ## API
+//!
+//! This module provides:
+//!
+//! - [`Terminal`]:
+//!   * a struct containing the PID of the child process that talks to this
+//!     pseudoterminal.
+//!   * a [`std::fs::File`] handle to the child process's standard input stream.
+//!   * an [`EmbeddedGrid`] which is a wrapper over
+//!     [`CellBuffer`](crate::CellBuffer) along with the properties needed to
+//!     maintain a proper state machine that keeps track of ongoing escape code
+//!     operations.
+//!
+//! ## Creation
+//!
+//! To create a [`Terminal`], see [`create_pty`](super::create_pty).
+
 use melib::{
     error::{Error, Result},
     text_processing::wcwidth,
@@ -26,7 +46,11 @@ use melib::{
 use nix::sys::wait::{waitpid, WaitPidFlag, WaitStatus};
 
 use super::*;
-use crate::terminal::{cells::*, Area, Color, Screen, Virtual};
+use crate::terminal::{
+    cells::*,
+    embedded::escape_codes::{EscCode, State},
+    Area, Color, Screen, Virtual,
+};
 
 #[derive(Debug, Default, Clone, Copy)]
 #[repr(u8)]
@@ -36,72 +60,33 @@ pub enum ScreenBuffer {
     Alternate,
 }
 
-/// `EmbedGrid` manages the terminal grid state of the embed process.
-///
-/// The embed process sends bytes to the master end (see super mod) and
-/// interprets them in a state machine stored in `State`. Escape codes are
-/// translated as changes to the grid, eg changes in a cell's colors.
-///
-/// The main process copies the grid whenever the actual terminal is redrawn.
-#[derive(Debug, Clone)]
-pub struct EmbedGrid {
-    cursor: (usize, usize),
-    /// `[top;bottom]`
-    scroll_region: ScrollRegion,
-    pub alternate_screen: Box<Screen<Virtual>>,
-    pub state: State,
-    /// (width, height)
-    terminal_size: (usize, usize),
-    initialized: bool,
-    fg_color: Color,
-    bg_color: Color,
-    attrs: Attr,
-    /// Store the fg/bg color when highlighting the cell where the cursor is so
-    /// that it can be restored afterwards
-    prev_fg_color: Option<Color>,
-    prev_bg_color: Option<Color>,
-    prev_attrs: Option<Attr>,
-
-    cursor_key_mode: bool, // (DECCKM)
-    show_cursor: bool,
-    origin_mode: bool,
-    auto_wrap_mode: bool,
-    /// If next grapheme should be placed in the next line
-    /// This should be reset whenever the cursor value changes
-    wrap_next: bool,
-    /// Store state in case a multi-byte character is encountered
-    codepoints: CodepointBuf,
-    pub normal_screen: Box<Screen<Virtual>>,
-    screen_buffer: ScreenBuffer,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CodepointBuf {
+    None,
+    TwoCodepoints(u8),
+    ThreeCodepoints(u8, Option<u8>),
+    FourCodepoints(u8, Option<u8>, Option<u8>),
 }
 
 #[derive(Debug)]
-pub struct EmbedTerminal {
-    pub grid: EmbedGrid,
+pub struct Terminal {
+    pub grid: EmbeddedGrid,
     stdin: std::fs::File,
-    /// Pid of the embed process
+    /// Pid of the embedded process
     pub child_pid: nix::unistd::Pid,
 }
 
-impl std::io::Write for EmbedTerminal {
+impl std::io::Write for Terminal {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        /*
-
-                 Key            Normal     Application
-                 -------------+----------+-------------
-                 Cursor Up    | CSI A    | SS3 A
-                 Cursor Down  | CSI B    | SS3 B
-                 Cursor Right | CSI C    | SS3 C
-                 Cursor Left  | CSI D    | SS3 D
-                 -------------+----------+-------------
-
-                   Key        Normal     Application
-                   ---------+----------+-------------
-                   Home     | CSI H    | SS3 H
-                   End      | CSI F    | SS3 F
-                   ---------+----------+-------------
-
-        */
+        //  Key            Normal     Application
+        //  -------------+----------+-------------
+        //  Cursor Up    | CSI A    | SS3 A
+        //  Cursor Down  | CSI B    | SS3 B
+        //  Cursor Right | CSI C    | SS3 C
+        //  Cursor Left  | CSI D    | SS3 D
+        //  Home         | CSI H    | SS3 H
+        //  End          | CSI F    | SS3 F
+        //  -------------+----------+-------------
         if self.grid.cursor_key_mode {
             match buf {
                 &[0x1b, 0x5b, b'A']
@@ -129,10 +114,10 @@ impl std::io::Write for EmbedTerminal {
     }
 }
 
-impl EmbedTerminal {
+impl Terminal {
     pub fn new(stdin: std::fs::File, child_pid: nix::unistd::Pid) -> Self {
-        EmbedTerminal {
-            grid: EmbedGrid::new(),
+        Self {
+            grid: EmbeddedGrid::new(),
             stdin,
             child_pid,
         }
@@ -146,8 +131,8 @@ impl EmbedTerminal {
             ws_xpixel: 0,
             ws_ypixel: 0,
         };
-        let master_fd = self.stdin.as_raw_fd();
-        let _ = unsafe { set_window_size(master_fd, &winsize) };
+        let frontend_fd = self.stdin.as_raw_fd();
+        let _ = unsafe { set_window_size(frontend_fd, &winsize) };
         let _ = nix::sys::signal::kill(self.child_pid, nix::sys::signal::SIGWINCH);
     }
 
@@ -177,20 +162,72 @@ impl EmbedTerminal {
         } = self;
         grid.process_byte(stdin, byte);
     }
+
+    #[inline]
+    /// Helper function to get every byte written to `pty_fd` and process it in
+    /// the terminal state machine.
+    pub fn forward_pty_translate_escape_codes(pty: Arc<Mutex<Self>>, pty_fd: std::fs::File) {
+        let mut bytes_iter = pty_fd.bytes();
+        //log::trace!("waiting for bytes");
+        while let Some(Ok(byte)) = bytes_iter.next() {
+            //log::trace!("got a byte? {:?}", byte as char);
+            /* Drink deep, and descend. */
+            pty.lock().unwrap().process_byte(byte);
+        }
+    }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum CodepointBuf {
-    None,
-    TwoCodepoints(u8),
-    ThreeCodepoints(u8, Option<u8>),
-    FourCodepoints(u8, Option<u8>, Option<u8>),
+/// `EmbeddedGrid` manages the terminal grid state of the embedded process.
+///
+/// The embedded process sends bytes to the frontend end (see super mod) and
+/// interprets them in a state machine stored in `State`. Escape codes are
+/// translated as changes to the grid, eg changes in a cell's colors.
+///
+/// The main process copies the grid whenever the actual terminal is redrawn.
+#[derive(Debug, Clone)]
+pub struct EmbeddedGrid {
+    cursor: (usize, usize),
+    /// `[top;bottom]`
+    scroll_region: ScrollRegion,
+    pub alternate_screen: Box<Screen<Virtual>>,
+    pub state: State,
+    /// (width, height)
+    terminal_size: (usize, usize),
+    initialized: bool,
+    fg_color: Color,
+    bg_color: Color,
+    attrs: Attr,
+    /// Store the fg/bg color when highlighting the cell where the cursor is so
+    /// that it can be restored afterwards
+    prev_fg_color: Option<Color>,
+    prev_bg_color: Option<Color>,
+    prev_attrs: Option<Attr>,
+
+    cursor_key_mode: bool, // (DECCKM)
+    show_cursor: bool,
+    origin_mode: bool,
+    auto_wrap_mode: bool,
+    /// If next grapheme should be placed in the next line
+    /// This should be reset whenever the cursor value changes
+    wrap_next: bool,
+    /// Store state in case a multi-byte character is encountered
+    codepoints: CodepointBuf,
+    pub normal_screen: Box<Screen<Virtual>>,
+    screen_buffer: ScreenBuffer,
+    dirty: bool,
 }
 
-impl EmbedGrid {
+impl Default for EmbeddedGrid {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl EmbeddedGrid {
+    #[inline]
     pub fn new() -> Self {
         let normal_screen = Box::new(Screen::<Virtual>::new());
-        EmbedGrid {
+        Self {
             cursor: (0, 0),
             scroll_region: ScrollRegion {
                 top: 0,
@@ -216,9 +253,21 @@ impl EmbedGrid {
             codepoints: CodepointBuf::None,
             normal_screen,
             screen_buffer: ScreenBuffer::Normal,
+            dirty: true,
         }
     }
 
+    #[inline]
+    pub fn set_dirty(&mut self, value: bool) {
+        self.dirty = value;
+    }
+
+    #[inline]
+    pub const fn is_dirty(&self) -> bool {
+        self.dirty
+    }
+
+    #[inline]
     pub fn buffer(&self) -> &CellBuffer {
         match self.screen_buffer {
             ScreenBuffer::Normal => self.normal_screen.grid(),
@@ -226,6 +275,7 @@ impl EmbedGrid {
         }
     }
 
+    #[inline]
     pub fn buffer_mut(&mut self) -> &mut CellBuffer {
         match self.screen_buffer {
             ScreenBuffer::Normal => self.normal_screen.grid_mut(),
@@ -250,20 +300,22 @@ impl EmbedGrid {
         self.wrap_next = false;
     }
 
+    #[inline]
     pub const fn terminal_size(&self) -> (usize, usize) {
         self.terminal_size
     }
 
+    #[inline]
     pub const fn area(&self) -> Area {
         match self.screen_buffer {
             ScreenBuffer::Normal => self.normal_screen.area(),
-            _ => self.alternate_screen.area(),
+            ScreenBuffer::Alternate => self.alternate_screen.area(),
         }
     }
 
     pub fn process_byte(&mut self, stdin: &mut std::fs::File, byte: u8) {
         let area = self.area();
-        let EmbedGrid {
+        let EmbeddedGrid {
             ref mut cursor,
             ref mut scroll_region,
             ref mut terminal_size,
@@ -284,6 +336,7 @@ impl EmbedGrid {
             ref mut screen_buffer,
             ref mut normal_screen,
             initialized: _,
+            ref mut dirty,
         } = self;
         let mut grid = normal_screen.grid_mut();
 
@@ -370,6 +423,7 @@ impl EmbedGrid {
                 //log::trace!("{}", EscCode::from((&(*state), byte)));
                 if cursor.1 == scroll_region.bottom {
                     grid.scroll_up(scroll_region, scroll_region.top, 1);
+                    *dirty = true;
                 } else {
                     cursor.1 += 1;
                 }
@@ -385,6 +439,7 @@ impl EmbedGrid {
                         grid[(x, y)] = Cell::default();
                     }
                 }
+                *dirty = true;
                 *state = State::Normal;
             }
             (b'K', State::ExpectingControlChar) => {
@@ -393,6 +448,7 @@ impl EmbedGrid {
                 for x in cursor.0..terminal_size.0 {
                     grid[(x, cursor.1)] = Cell::default();
                 }
+                *dirty = true;
                 *state = State::Normal;
             }
             (_, State::ExpectingControlChar) => {
@@ -432,6 +488,7 @@ impl EmbedGrid {
                 if cursor.1 + 1 < terminal_size.1 || !is_alternate {
                     if cursor.1 == scroll_region.bottom && is_alternate {
                         grid.scroll_up(scroll_region, cursor.1, 1);
+                        *dirty = true;
                     } else {
                         increase_cursor_y!();
                     }
@@ -549,6 +606,7 @@ impl EmbedGrid {
                         }
                     }
                 }
+                *dirty = true;
                 increase_cursor_x!();
             }
             (b'u', State::Csi) => {
@@ -566,6 +624,7 @@ impl EmbedGrid {
                 grid[cursor_val!()].set_fg(Color::Default);
                 grid[cursor_val!()].set_bg(Color::Default);
                 grid[cursor_val!()].set_attrs(Attr::DEFAULT);
+                *dirty = true;
                 *state = State::Normal;
             }
             (b'C', State::Csi) => {
@@ -599,6 +658,7 @@ impl EmbedGrid {
                         grid[cursor_val!()].set_fg(Color::Black);
                         grid[cursor_val!()].set_bg(Color::White);
                         grid[cursor_val!()].set_attrs(Attr::DEFAULT);
+                        *dirty = true;
                     }
                     b"1047" | b"1049" => {
                         *screen_buffer = ScreenBuffer::Alternate;
@@ -639,6 +699,7 @@ impl EmbedGrid {
                         } else {
                             grid[cursor_val!()].set_attrs(*attrs);
                         }
+                        *dirty = true;
                     }
                     b"1047" | b"1049" => {
                         *screen_buffer = ScreenBuffer::Normal;
@@ -670,6 +731,7 @@ impl EmbedGrid {
                     )),
                     Default::default(),
                 );
+                *dirty = true;
                 //log::trace!("{}", EscCode::from((&(*state), byte)));
                 *state = State::Normal;
             }
@@ -680,6 +742,7 @@ impl EmbedGrid {
                 for x in cursor.0..terminal_size.0 {
                     grid[(x, cursor.1)] = Cell::default();
                 }
+                *dirty = true;
                 *state = State::Normal;
             }
             (b'L', State::Csi) | (b'L', State::Csi1(_)) => {
@@ -695,6 +758,7 @@ impl EmbedGrid {
                 grid.scroll_down(scroll_region, cursor.1, n);
 
                 //log::trace!("{}", EscCode::from((&(*state), byte)));
+                *dirty = true;
                 *state = State::Normal;
             }
             (b'M', State::Csi) | (b'M', State::Csi1(_)) => {
@@ -710,6 +774,7 @@ impl EmbedGrid {
                 grid.scroll_up(scroll_region, cursor.1, n);
 
                 //log::trace!("{}", EscCode::from((&(*state), byte)));
+                *dirty = true;
                 *state = State::Normal;
             }
             (b'A', State::Csi) => {
@@ -731,6 +796,7 @@ impl EmbedGrid {
                 for x in cursor.0..terminal_size.0 {
                     grid[(x, cursor.1)] = Cell::default();
                 }
+                *dirty = true;
                 *state = State::Normal;
             }
             (b'K', State::Csi1(buf)) if buf.as_ref() == b"1" => {
@@ -740,6 +806,7 @@ impl EmbedGrid {
                     grid[(x, cursor.1)] = Cell::default();
                 }
                 //log::trace!("{}", EscCode::from((&(*state), byte)));
+                *dirty = true;
                 *state = State::Normal;
             }
             (b'K', State::Csi1(buf)) if buf.as_ref() == b"2" => {
@@ -756,6 +823,7 @@ impl EmbedGrid {
                     area.take_cols(terminal_size.0).take_rows(terminal_size.1),
                     Default::default(),
                 );
+                *dirty = true;
                 *state = State::Normal;
             }
             (b'J', State::Csi1(ref buf)) if buf.as_ref() == b"0" => {
@@ -770,6 +838,7 @@ impl EmbedGrid {
                     Default::default(),
                 );
                 //log::trace!("{}", EscCode::from((&(*state), byte)));
+                *dirty = true;
                 *state = State::Normal;
             }
             (b'J', State::Csi1(ref buf)) if buf.as_ref() == b"1" => {
@@ -781,6 +850,7 @@ impl EmbedGrid {
                     Default::default(),
                 );
                 //log::trace!("{}", EscCode::from((&(*state), byte)));
+                *dirty = true;
                 *state = State::Normal;
             }
             (b'J', State::Csi1(ref buf)) if buf.as_ref() == b"2" => {
@@ -789,6 +859,7 @@ impl EmbedGrid {
 
                 grid.clear_area(area, Default::default());
                 //log::trace!("{}", EscCode::from((&(*state), byte)));
+                *dirty = true;
                 *state = State::Normal;
             }
             (b'X', State::Csi1(ref buf)) => {
@@ -812,6 +883,7 @@ impl EmbedGrid {
                     ctr += 1;
                 }
                 //log::trace!("Erased {} Character(s)", ps);
+                *dirty = true;
                 *state = State::Normal;
             }
             (b't', State::Csi1(buf)) => {
@@ -997,6 +1069,7 @@ impl EmbedGrid {
                 //    "Delete {} Character(s) with cursor at {:?}  ",
                 //    offset, cursor
                 //);
+                *dirty = true;
                 *state = State::Normal;
             }
             (b'd', State::Csi1(_)) | (b'd', State::Csi) => {
@@ -1133,6 +1206,7 @@ impl EmbedGrid {
                 grid[cursor_val!()].set_fg(*fg_color);
                 grid[cursor_val!()].set_bg(*bg_color);
                 grid[cursor_val!()].set_attrs(*attrs);
+                *dirty = true;
                 *state = State::Normal;
             }
             (b'm', State::Csi2(ref buf1, ref buf2)) => {
@@ -1244,6 +1318,7 @@ impl EmbedGrid {
                 grid[cursor_val!()].set_fg(*fg_color);
                 grid[cursor_val!()].set_bg(*bg_color);
                 grid[cursor_val!()].set_attrs(*attrs);
+                *dirty = true;
                 *state = State::Normal;
             }
             (c, State::Csi1(ref mut buf)) if c.is_ascii_digit() || c == b' ' => {
@@ -1346,6 +1421,7 @@ impl EmbedGrid {
                     Color::Default
                 };
                 grid[cursor_val!()].set_fg(*fg_color);
+                *dirty = true;
                 *state = State::Normal;
             }
             (b'm', State::Csi3(ref buf1, ref buf2, ref buf3))
@@ -1361,6 +1437,7 @@ impl EmbedGrid {
                     Color::Default
                 };
                 grid[cursor_val!()].set_bg(*bg_color);
+                *dirty = true;
                 *state = State::Normal;
             }
             (c, State::Csi3(_, _, ref mut buf)) if c.is_ascii_digit() => {
@@ -1429,6 +1506,7 @@ impl EmbedGrid {
                     _ => Color::Default,
                 };
                 grid[cursor_val!()].set_fg(*fg_color);
+                *dirty = true;
                 *state = State::Normal;
             }
             (
@@ -1452,6 +1530,7 @@ impl EmbedGrid {
                     _ => Color::Default,
                 };
                 grid[cursor_val!()].set_bg(*bg_color);
+                *dirty = true;
                 *state = State::Normal;
             }
             (
@@ -1474,6 +1553,7 @@ impl EmbedGrid {
                     _ => Color::Default,
                 };
                 grid[cursor_val!()].set_fg(*fg_color);
+                *dirty = true;
                 *state = State::Normal;
             }
             (
@@ -1496,6 +1576,7 @@ impl EmbedGrid {
                     _ => Color::Default,
                 };
                 grid[cursor_val!()].set_bg(*bg_color);
+                *dirty = true;
                 *state = State::Normal;
             }
             (b'q', State::Csi1(buf))
@@ -1610,11 +1691,5 @@ impl EmbedGrid {
                 *state = State::Normal;
             }
         }
-    }
-}
-
-impl Default for EmbedGrid {
-    fn default() -> Self {
-        Self::new()
     }
 }

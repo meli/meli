@@ -301,7 +301,7 @@ impl Drop for State {
                 log::warn!("Failed to wait on subprocess {}: {}", child.id(), err);
             }
         }
-        if let Some(ForkType::Embed(child_pid)) = self.child.take() {
+        if let Some(ForkType::Embedded(child_pid)) = self.child.take() {
             /* Try wait, we don't want to block */
             if let Err(e) = waitpid(child_pid, Some(WaitPidFlag::WNOHANG)) {
                 log::warn!("Failed to wait on subprocess {}: {}", child_pid, e);

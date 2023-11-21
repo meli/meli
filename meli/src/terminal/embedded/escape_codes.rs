@@ -19,179 +19,9 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::{
-    ffi::{CString, OsStr},
-    os::unix::{
-        ffi::OsStrExt,
-        io::{AsRawFd, FromRawFd, IntoRawFd},
-    },
-};
-
-use melib::{error::*, log};
-#[cfg(not(target_os = "macos"))]
-use nix::{
-    fcntl::{open, OFlag},
-    pty::{grantpt, posix_openpt, ptsname, unlockpt},
-    sys::stat,
-};
-use nix::{
-    ioctl_none_bad, ioctl_write_ptr_bad,
-    libc::{STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO},
-    pty::Winsize,
-    unistd::{dup2, fork, ForkResult},
-};
 use smallvec::SmallVec;
 
-mod grid;
-
-#[cfg(not(target_os = "macos"))]
-use std::path::Path;
-use std::{
-    convert::TryFrom,
-    io::{Read, Write},
-    sync::{Arc, Mutex},
-};
-
-pub use grid::{EmbedGrid, EmbedTerminal, ScreenBuffer};
-// ioctl request code to "Make the given terminal the controlling terminal of the calling
-// process"
-use libc::TIOCSCTTY;
-// ioctl request code to set window size of pty:
-use libc::TIOCSWINSZ;
-
-// Macro generated function that calls ioctl to set window size of slave pty end
-ioctl_write_ptr_bad!(set_window_size, TIOCSWINSZ, Winsize);
-
-ioctl_none_bad!(set_controlling_terminal, TIOCSCTTY);
-
-pub fn create_pty(
-    width: usize,
-    height: usize,
-    command: String,
-) -> Result<Arc<Mutex<EmbedTerminal>>> {
-    #[cfg(not(target_os = "macos"))]
-    let (master_fd, slave_name) = {
-        // Open a new PTY master
-        let master_fd = posix_openpt(OFlag::O_RDWR)?;
-
-        // Allow a slave to be generated for it
-        grantpt(&master_fd)?;
-        unlockpt(&master_fd)?;
-
-        // Get the name of the slave
-        let slave_name = unsafe { ptsname(&master_fd) }?;
-
-        {
-            let winsize = Winsize {
-                ws_row: <u16>::try_from(height).unwrap(),
-                ws_col: <u16>::try_from(width).unwrap(),
-                ws_xpixel: 0,
-                ws_ypixel: 0,
-            };
-
-            let master_fd = master_fd.as_raw_fd();
-            unsafe { set_window_size(master_fd, &winsize)? };
-        }
-        (master_fd, slave_name)
-    };
-    #[cfg(target_os = "macos")]
-    let (master_fd, slave_fd) = {
-        let winsize = Winsize {
-            ws_row: <u16>::try_from(height).unwrap(),
-            ws_col: <u16>::try_from(width).unwrap(),
-            ws_xpixel: 0,
-            ws_ypixel: 0,
-        };
-
-        let ends = nix::pty::openpty(Some(&winsize), None)?;
-        (ends.master, ends.slave)
-    };
-
-    let child_pid = match unsafe { fork()? } {
-        ForkResult::Child => {
-            #[cfg(not(target_os = "macos"))]
-            /* Open slave end for pseudoterminal */
-            let slave_fd = open(Path::new(&slave_name), OFlag::O_RDWR, stat::Mode::empty())?;
-
-            // assign stdin, stdout, stderr to the tty
-            dup2(slave_fd, STDIN_FILENO).unwrap();
-            dup2(slave_fd, STDOUT_FILENO).unwrap();
-            dup2(slave_fd, STDERR_FILENO).unwrap();
-            /* Become session leader */
-            nix::unistd::setsid().unwrap();
-            match unsafe { set_controlling_terminal(slave_fd) } {
-                Ok(c) if c < 0 => {
-                    log::error!(
-                        "Could not execute `{command}`: ioctl(fd, TIOCSCTTY, NULL) returned {c}",
-                    );
-                    std::process::exit(c);
-                }
-                Ok(_) => {}
-                Err(err) => {
-                    log::error!(
-                        "Could not execute `{command}`: ioctl(fd, TIOCSCTTY, NULL) returned {err}",
-                    );
-                    std::process::exit(-1);
-                }
-            }
-            /* Find posix sh location, because POSIX shell is not always at /bin/sh */
-            let path_var = std::process::Command::new("getconf")
-                .args(["PATH"])
-                .output()?
-                .stdout;
-            for mut p in std::env::split_paths(&OsStr::from_bytes(&path_var[..])) {
-                p.push("sh");
-                if p.exists() {
-                    if let Err(e) = nix::unistd::execv(
-                        &CString::new(p.as_os_str().as_bytes()).unwrap(),
-                        &[
-                            &CString::new("sh").unwrap(),
-                            &CString::new("-c").unwrap(),
-                            &CString::new(command.as_bytes()).unwrap(),
-                        ],
-                    ) {
-                        log::error!("Could not execute `{command}`: {e}");
-                        std::process::exit(-1);
-                    }
-                }
-            }
-            log::error!(
-                "Could not execute `{command}`: did not find the standard POSIX sh shell in PATH \
-                 = {}",
-                String::from_utf8_lossy(&path_var),
-            );
-            std::process::exit(-1);
-        }
-        ForkResult::Parent { child } => child,
-    };
-
-    let stdin = unsafe { std::fs::File::from_raw_fd(master_fd.as_raw_fd()) };
-    let mut embed_grid = EmbedTerminal::new(stdin, child_pid);
-    embed_grid.set_terminal_size((width, height));
-    let grid = Arc::new(Mutex::new(embed_grid));
-    let grid_ = grid.clone();
-
-    std::thread::Builder::new()
-        .spawn(move || {
-            let master_fd = master_fd.into_raw_fd();
-            let master_file = unsafe { std::fs::File::from_raw_fd(master_fd) };
-            forward_pty_translate_escape_codes(master_file, grid_);
-        })
-        .unwrap();
-    Ok(grid)
-}
-
-fn forward_pty_translate_escape_codes(pty_fd: std::fs::File, grid: Arc<Mutex<EmbedTerminal>>) {
-    let mut bytes_iter = pty_fd.bytes();
-    //log::trace!("waiting for bytes");
-    while let Some(Ok(byte)) = bytes_iter.next() {
-        //log::trace!("got a byte? {:?}", byte as char);
-        /* Drink deep, and descend. */
-        grid.lock().unwrap().process_byte(byte);
-    }
-}
-
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub enum State {
     ExpectingControlChar,
     G0,                      // Designate G0 Character Set
@@ -223,11 +53,12 @@ pub enum State {
         SmallVec<[u8; 8]>,
     ),
     CsiQ(SmallVec<[u8; 8]>),
+    #[default]
     Normal,
 }
 
-/* Used for debugging */
-struct EscCode<'a>(&'a State, u8);
+/// Used for debugging escape codes.
+pub struct EscCode<'a>(pub &'a State, pub u8);
 
 impl<'a> From<(&'a mut State, u8)> for EscCode<'a> {
     fn from(val: (&mut State, u8)) -> EscCode {

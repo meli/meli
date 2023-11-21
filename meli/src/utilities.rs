@@ -1493,7 +1493,7 @@ impl Component for Tabbed {
             _ => {}
         }
         let c = self.cursor_pos;
-        if let UIEvent::Input(_) | UIEvent::CmdInput(_) | UIEvent::EmbedInput(_) = event {
+        if let UIEvent::Input(_) | UIEvent::CmdInput(_) | UIEvent::EmbeddedInput(_) = event {
             self.children[c].process_event(event, context)
         } else {
             self.children[c].process_event(event, context)

@@ -33,8 +33,8 @@ path = "src/smtp_conn.rs"
 required-features = ["melib/smtp"]
 
 [[bin]]
-name = "embed"
-path = "src/embed.rs"
+name = "embedded"
+path = "src/embedded.rs"
 
 [[bin]]
 name = "managesieve-client"
@@ -43,8 +43,8 @@ required-features = ["melib/imap"]
 
 [dependencies]
 crossbeam = { version = "^0.8" }
-meli = { version = "0.8.2" }
-melib = { version = "0.8.2", features = ["debug-tracing", "unicode-algorithms"] }
+meli = { path = "../meli", version = "0.8" }
+melib = { path = "../melib", version = "0.8", features = ["debug-tracing", "unicode-algorithms"] }
 nix = { version = "^0.24", default-features = false }
 signal-hook = { version = "^0.3", default-features = false, features = ["iterator"] }
 signal-hook-registry = { version = "1.2.0", default-features = false }

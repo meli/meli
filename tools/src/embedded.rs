@@ -6,7 +6,7 @@ use std::{
 };
 
 use meli::{
-    terminal::{embed::*, *},
+    terminal::{embedded::*, *},
     *,
 };
 use nix::sys::wait::WaitStatus;
@@ -53,20 +53,20 @@ fn notify(
 }
 
 #[derive(Debug)]
-enum EmbedStatus {
-    Stopped(Arc<Mutex<EmbedTerminal>>),
-    Running(Arc<Mutex<EmbedTerminal>>),
+enum EmbeddedPty {
+    Stopped(Arc<Mutex<Terminal>>),
+    Running(Arc<Mutex<Terminal>>),
 }
 
-impl EmbedStatus {
+impl EmbeddedPty {
     #[inline(always)]
     fn is_stopped(&self) -> bool {
         matches!(self, Self::Stopped(_))
     }
 }
 
-impl std::ops::Deref for EmbedStatus {
-    type Target = Arc<Mutex<EmbedTerminal>>;
+impl std::ops::Deref for EmbeddedPty {
+    type Target = Arc<Mutex<Terminal>>;
 
     fn deref(&self) -> &Self::Target {
         match self {
@@ -75,7 +75,7 @@ impl std::ops::Deref for EmbedStatus {
     }
 }
 
-impl std::ops::DerefMut for EmbedStatus {
+impl std::ops::DerefMut for EmbeddedPty {
     fn deref_mut(&mut self) -> &mut Self::Target {
         match self {
             Self::Stopped(ref mut e) | Self::Running(ref mut e) => e,
@@ -84,21 +84,19 @@ impl std::ops::DerefMut for EmbedStatus {
 }
 
 #[derive(Debug)]
-struct EmbedContainer {
+struct EmbeddedContainer {
     command: String,
-    embed_area: Area,
-    embed: Option<EmbedStatus>,
+    embedded_pty: Option<EmbeddedPty>,
     id: ComponentId,
     dirty: bool,
     log_file: File,
 }
 
-impl EmbedContainer {
+impl EmbeddedContainer {
     fn new(command: String) -> Box<Self> {
         Box::new(Self {
             command,
-            embed: None,
-            embed_area: ((0, 0), (80, 20)),
+            embedded_pty: None,
             dirty: true,
             log_file: File::open(".embed.out").unwrap(),
             id: ComponentId::default(),
@@ -106,48 +104,32 @@ impl EmbedContainer {
     }
 }
 
-impl std::fmt::Display for EmbedContainer {
+impl std::fmt::Display for EmbeddedContainer {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(fmt, "embed")
+        write!(fmt, "embedded_pty")
     }
 }
 
-impl Component for EmbedContainer {
+impl Component for EmbeddedContainer {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        if let Some(ref mut embed_pty) = self.embed {
-            let embed_area = area;
+        if let Some(ref mut embedded_pty_pty) = self.embedded_pty {
             let theme_default = crate::conf::value(context, "theme_default");
-            match embed_pty {
-                EmbedStatus::Running(_) => {
-                    let mut guard = embed_pty.lock().unwrap();
-                    grid.clear_area(embed_area, theme_default);
+            match embedded_pty_pty {
+                EmbeddedPty::Running(_) => {
+                    let mut guard = embedded_pty_pty.lock().unwrap();
+                    grid.clear_area(area, theme_default);
 
-                    grid.copy_area(
-                        guard.grid.buffer(),
-                        embed_area,
-                        ((0, 0), pos_dec(guard.grid.terminal_size, (1, 1))),
-                    );
-                    guard.set_terminal_size((embed_area.width(), embed_area.height()));
+                    grid.copy_area(guard.grid.buffer(), area, guard.grid.area());
+                    guard.set_terminal_size((area.width(), area.height()));
+                    guard.grid.set_dirty(false);
                     context.dirty_areas.push_back(area);
                     self.dirty = false;
-                    return;
                 }
-                EmbedStatus::Stopped(_) => {
-                    let guard = embed_pty.lock().unwrap();
+                EmbeddedPty::Stopped(_) => {
+                    let mut guard = embedded_pty_pty.lock().unwrap();
 
-                    grid.copy_area(
-                        guard.grid.buffer(),
-                        embed_area,
-                        ((0, 0), pos_dec(guard.grid.terminal_size, (1, 1))),
-                    );
-
-                    grid.change_theme(
-                        embed_area,
-                        ThemeAttribute {
-                            fg: Color::Byte(8),
-                            ..theme_default
-                        },
-                    );
+                    grid.copy_area(guard.grid.buffer(), area, guard.grid.buffer().area());
+                    grid.change_colors(area, Color::Byte(8), theme_default.bg);
                     let stopped_message: String =
                         format!("Process with PID {} has stopped.", guard.child_pid);
                     let stopped_message_2: String = "-press 'e' to re-activate.".to_string();
@@ -157,19 +139,7 @@ impl Component for EmbedContainer {
                         stopped_message.len(),
                         std::cmp::max(stopped_message_2.len(), STOPPED_MESSAGE_3.len()),
                     );
-                    let inner_area = create_box(
-                        grid,
-                        (
-                            pos_inc(area.upper_left(), (1, 0)),
-                            pos_inc(
-                                area.upper_left(),
-                                (
-                                    std::cmp::min(max_len + 5, area.width()),
-                                    std::cmp::min(5, area.height()),
-                                ),
-                            ),
-                        ),
-                    );
+                    let inner_area = create_box(grid, area.center_inside((max_len + 5, 5)));
                     grid.clear_area(inner_area, theme_default);
                     for (i, l) in [
                         stopped_message.as_str(),
@@ -184,33 +154,34 @@ impl Component for EmbedContainer {
                             theme_default.fg,
                             theme_default.bg,
                             theme_default.attrs,
-                            (
-                                pos_inc((0, i), inner_area.upper_left()),
-                                inner_area.bottom_right(),
-                            ),
-                            Some(get_x(inner_area.upper_left())),
+                            inner_area.skip_rows(i),
+                            None,
                         );
                     }
+                    context.dirty_areas.push_back(area);
+                    guard.grid.set_dirty(false);
+                    self.dirty = false;
                 }
             }
+            return;
         } else {
             let theme_default = crate::conf::value(context, "theme_default");
             grid.clear_area(area, theme_default);
-            self.embed_area = (area.upper_left(), area.bottom_right());
-            match create_pty(
-                self.embed_area.width(),
-                self.embed_area.height(),
-                self.command.clone(),
-            ) {
-                Ok(embed) => {
-                    //embed.lock().unwrap().set_log_file(self.log_file.take());
-                    self.embed = Some(EmbedStatus::Running(embed));
+            match create_pty(area.width(), area.height(), self.command.clone()) {
+                Ok(embedded_pty) => {
+                    //embedded_pty.lock().unwrap().set_log_file(self.log_file.take());
+                    self.embedded_pty = Some(EmbeddedPty::Running(embedded_pty));
                     self.set_dirty(true);
                     context
                         .replies
-                        .push_back(UIEvent::ChangeMode(UIMode::Embed));
-                    context.replies.push_back(UIEvent::Fork(ForkType::Embed(
-                        self.embed.as_ref().unwrap().lock().unwrap().child_pid,
+                        .push_back(UIEvent::ChangeMode(UIMode::Embedded));
+                    context.replies.push_back(UIEvent::Fork(ForkType::Embedded(
+                        self.embedded_pty
+                            .as_ref()
+                            .unwrap()
+                            .lock()
+                            .unwrap()
+                            .child_pid,
                     )));
                 }
                 Err(err) => {
@@ -228,11 +199,11 @@ impl Component for EmbedContainer {
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         match event {
-            UIEvent::EmbedInput((Key::Ctrl('z'), _)) => {
-                self.embed.as_ref().unwrap().lock().unwrap().stop();
-                match self.embed.take() {
-                    Some(EmbedStatus::Running(e)) | Some(EmbedStatus::Stopped(e)) => {
-                        self.embed = Some(EmbedStatus::Stopped(e));
+            UIEvent::EmbeddedInput((Key::Ctrl('z'), _)) => {
+                self.embedded_pty.as_ref().unwrap().lock().unwrap().stop();
+                match self.embedded_pty.take() {
+                    Some(EmbeddedPty::Running(e)) | Some(EmbeddedPty::Stopped(e)) => {
+                        self.embedded_pty = Some(EmbeddedPty::Stopped(e));
                     }
                     _ => {}
                 }
@@ -241,18 +212,18 @@ impl Component for EmbedContainer {
                     .push_back(UIEvent::ChangeMode(UIMode::Normal));
                 self.set_dirty(true);
             }
-            UIEvent::EmbedInput((ref k, ref b)) => {
+            UIEvent::EmbeddedInput((ref k, ref b)) => {
                 let _ = self
                     .log_file
                     .write_all(format!("{} bytes {:?}", k, b).as_bytes());
                 let _ = self.log_file.flush();
-                if let Some(ref mut embed) = self.embed {
-                    let mut embed_guard = embed.lock().unwrap();
-                    if embed_guard.write_all(b).is_err() {
-                        match embed_guard.is_active() {
+                if let Some(ref mut embedded_pty) = self.embedded_pty {
+                    let mut embedded_pty_guard = embedded_pty.lock().unwrap();
+                    if embedded_pty_guard.write_all(b).is_err() {
+                        match embedded_pty_guard.is_active() {
                             Ok(WaitStatus::Exited(_, exit_code)) => {
-                                drop(embed_guard);
-                                _ = self.embed.take();
+                                drop(embedded_pty_guard);
+                                _ = self.embedded_pty.take();
                                 if exit_code != 0 {
                                     context.replies.push_back(UIEvent::Notification(
                                         None,
@@ -273,11 +244,11 @@ impl Component for EmbedContainer {
                             #[cfg(any(target_os = "linux", target_os = "android"))]
                             Ok(WaitStatus::PtraceEvent(_, _, _))
                             | Ok(WaitStatus::PtraceSyscall(_)) => {
-                                drop(embed_guard);
-                                match self.embed.take() {
-                                    Some(EmbedStatus::Running(e))
-                                    | Some(EmbedStatus::Stopped(e)) => {
-                                        self.embed = Some(EmbedStatus::Stopped(e));
+                                drop(embedded_pty_guard);
+                                match self.embedded_pty.take() {
+                                    Some(EmbeddedPty::Running(e))
+                                    | Some(EmbeddedPty::Stopped(e)) => {
+                                        self.embedded_pty = Some(EmbeddedPty::Stopped(e));
                                     }
                                     _ => {}
                                 }
@@ -288,11 +259,11 @@ impl Component for EmbedContainer {
                                 return true;
                             }
                             Ok(WaitStatus::Stopped(_, _)) => {
-                                drop(embed_guard);
-                                match self.embed.take() {
-                                    Some(EmbedStatus::Running(e))
-                                    | Some(EmbedStatus::Stopped(e)) => {
-                                        self.embed = Some(EmbedStatus::Stopped(e));
+                                drop(embedded_pty_guard);
+                                match self.embedded_pty.take() {
+                                    Some(EmbeddedPty::Running(e))
+                                    | Some(EmbeddedPty::Stopped(e)) => {
+                                        self.embedded_pty = Some(EmbeddedPty::Stopped(e));
                                     }
                                     _ => {}
                                 }
@@ -305,11 +276,11 @@ impl Component for EmbedContainer {
                             Ok(WaitStatus::Continued(_)) | Ok(WaitStatus::StillAlive) => {
                                 context
                                     .replies
-                                    .push_back(UIEvent::EmbedInput((k.clone(), b.to_vec())));
+                                    .push_back(UIEvent::EmbeddedInput((k.clone(), b.to_vec())));
                                 return true;
                             }
                             Ok(WaitStatus::Signaled(_, signal, _)) => {
-                                drop(embed_guard);
+                                drop(embedded_pty_guard);
                                 context.replies.push_back(UIEvent::Notification(
                                     None,
                                     format!("Subprocess was killed by {} signal", signal),
@@ -317,21 +288,21 @@ impl Component for EmbedContainer {
                                         melib::error::ErrorKind::External,
                                     )),
                                 ));
-                                self.embed = None;
+                                self.embedded_pty = None;
                                 context
                                     .replies
                                     .push_back(UIEvent::ChangeMode(UIMode::Normal));
                             }
                             Err(err) => {
                                 context.replies.push_back(UIEvent::Notification(
-                                    Some("Embed editor crashed.".to_string()),
+                                    Some("Embedded editor crashed.".to_string()),
                                     format!("Subprocess has exited with reason {}", &err),
                                     Some(NotificationType::Error(
                                         melib::error::ErrorKind::External,
                                     )),
                                 ));
-                                drop(embed_guard);
-                                self.embed = None;
+                                drop(embedded_pty_guard);
+                                self.embedded_pty = None;
                                 context
                                     .replies
                                     .push_back(UIEvent::ChangeMode(UIMode::Normal));
@@ -345,26 +316,33 @@ impl Component for EmbedContainer {
             UIEvent::Resize => {
                 self.set_dirty(true);
             }
-            UIEvent::Input(Key::Char('e')) if self.embed.is_some() => {
-                self.embed.as_ref().unwrap().lock().unwrap().wake_up();
-                match self.embed.take() {
-                    Some(EmbedStatus::Running(e)) | Some(EmbedStatus::Stopped(e)) => {
-                        self.embed = Some(EmbedStatus::Running(e));
+            UIEvent::Input(Key::Char('e')) if self.embedded_pty.is_some() => {
+                self.embedded_pty
+                    .as_ref()
+                    .unwrap()
+                    .lock()
+                    .unwrap()
+                    .wake_up();
+                match self.embedded_pty.take() {
+                    Some(EmbeddedPty::Running(e)) | Some(EmbeddedPty::Stopped(e)) => {
+                        self.embedded_pty = Some(EmbeddedPty::Running(e));
                     }
                     _ => {}
                 }
                 context
                     .replies
-                    .push_back(UIEvent::ChangeMode(UIMode::Embed));
+                    .push_back(UIEvent::ChangeMode(UIMode::Embedded));
                 self.set_dirty(true);
                 return true;
             }
             UIEvent::Input(Key::Ctrl('c'))
-                if self.embed.is_some() && self.embed.as_ref().unwrap().is_stopped() =>
+                if self.embedded_pty.is_some()
+                    && self.embedded_pty.as_ref().unwrap().is_stopped() =>
             {
-                match self.embed.take() {
-                    Some(EmbedStatus::Running(embed)) | Some(EmbedStatus::Stopped(embed)) => {
-                        let guard = embed.lock().unwrap();
+                match self.embedded_pty.take() {
+                    Some(EmbeddedPty::Running(embedded_pty))
+                    | Some(EmbeddedPty::Stopped(embedded_pty)) => {
+                        let guard = embedded_pty.lock().unwrap();
                         guard.wake_up();
                         guard.terminate();
                     }
@@ -411,12 +389,12 @@ fn main() -> std::io::Result<()> {
     let signals = &[
         /* Catch SIGWINCH to handle terminal resizing */
         signal_hook::consts::SIGWINCH,
-        /* Catch SIGCHLD to handle embed applications status change */
+        /* Catch SIGCHLD to handle embedded applications status change */
         signal_hook::consts::SIGCHLD,
     ];
     let quit_key: Key = Key::Char('q');
 
-    let window = EmbedContainer::new(command);
+    let window = EmbeddedContainer::new(command);
     let signal_recvr = notify(signals, sender.clone())?;
     let mut state = meli::State::new(Some(Default::default()), sender, receiver.clone()).unwrap();
     let status_bar = Box::new(StatusBar::new(&state.context, window));
@@ -444,7 +422,7 @@ fn main() -> std::io::Result<()> {
                         }
                     }
                     match r.unwrap() {
-                        ThreadEvent::Input((Key::Ctrl('z'), _)) if state.mode != UIMode::Embed => {
+                        ThreadEvent::Input((Key::Ctrl('z'), _)) if state.mode != UIMode::Embedded => {
                             state.switch_to_main_screen();
                             //_thread_handler.join().expect("Couldn't join on the associated thread");
                             let self_pid = nix::unistd::Pid::this();
@@ -460,8 +438,8 @@ fn main() -> std::io::Result<()> {
                             state.update_size();
                             state.render();
                             state.redraw();
-                            if state.mode == UIMode::Embed {
-                                state.rcv_event(UIEvent::EmbedInput(raw_input));
+                            if state.mode == UIMode::Embedded {
+                                state.rcv_event(UIEvent::EmbeddedInput(raw_input));
                                 state.redraw();
                             }
                         },
@@ -508,8 +486,8 @@ fn main() -> std::io::Result<()> {
                                         },
                                     }
                                 },
-                                UIMode::Embed => {
-                                    state.rcv_event(UIEvent::EmbedInput((k,r)));
+                                UIMode::Embedded => {
+                                    state.rcv_event(UIEvent::EmbeddedInput((k,r)));
                                     state.redraw();
                                 },
                                 UIMode::Fork => {
@@ -556,7 +534,7 @@ fn main() -> std::io::Result<()> {
                             }
                         },
                         signal_hook::consts::SIGCHLD => {
-                            state.rcv_event(UIEvent::EmbedInput((Key::Null, vec![0])));
+                            state.rcv_event(UIEvent::EmbeddedInput((Key::Null, vec![0])));
                             state.redraw();
 
                         }

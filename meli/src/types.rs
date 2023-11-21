@@ -98,8 +98,8 @@ impl From<UIEvent> for ThreadEvent {
 pub enum ForkType {
     /// Already finished fork, we only want to restore input/output
     Finished,
-    /// Embed pty
-    Embed(Pid),
+    /// Embedded pty
+    Embedded(Pid),
     Generic(std::process::Child),
     NewDraft(File, std::process::Child),
 }
@@ -131,7 +131,7 @@ pub enum UIEvent {
     Input(Key),
     CmdInput(Key),
     InsertInput(Key),
-    EmbedInput((Key, Vec<u8>)),
+    EmbeddedInput((Key, Vec<u8>)),
     Resize,
     Fork(ForkType),
     ChangeMailbox(usize),
@@ -189,8 +189,8 @@ impl From<RefreshEvent> for UIEvent {
 pub enum UIMode {
     Normal,
     Insert,
-    /// Forward input to an embed pseudoterminal.
-    Embed,
+    /// Forward input to an embedded pseudoterminal.
+    Embedded,
     Command,
     Fork,
 }
@@ -205,7 +205,7 @@ impl std::fmt::Display for UIMode {
                 UIMode::Insert => "INSERT",
                 UIMode::Command => "COMMAND",
                 UIMode::Fork => "FORK",
-                UIMode::Embed => "EMBED",
+                UIMode::Embedded => "EMBEDDED",
             }
         )
     }

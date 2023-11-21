@@ -37,7 +37,7 @@ use melib::{
 use nix::sys::wait::WaitStatus;
 
 use super::*;
-use crate::{accounts::JobRequest, jobs::JoinHandle, terminal::embed::EmbedTerminal};
+use crate::{accounts::JobRequest, jobs::JoinHandle, terminal::embedded::Terminal};
 
 #[cfg(feature = "gpgme")]
 pub mod gpg;
@@ -57,39 +57,39 @@ enum Cursor {
 }
 
 #[derive(Debug)]
-enum EmbedStatus {
-    Stopped(Arc<Mutex<EmbedTerminal>>, File),
-    Running(Arc<Mutex<EmbedTerminal>>, File),
+struct EmbeddedPty {
+    running: bool,
+    terminal: Arc<Mutex<Terminal>>,
+    file: File,
 }
 
-impl EmbedStatus {
-    #[inline(always)]
+impl EmbeddedPty {
+    #[inline]
     fn is_stopped(&self) -> bool {
-        matches!(self, Self::Stopped(_, _))
+        !self.running
+    }
+
+    #[inline]
+    fn is_dirty(&self) -> bool {
+        std::ops::Deref::deref(self)
+            .try_lock()
+            .ok()
+            .map_or(true, |e| e.grid.is_dirty())
     }
 }
 
-impl std::ops::Deref for EmbedStatus {
-    type Target = Arc<Mutex<EmbedTerminal>>;
+impl std::ops::Deref for EmbeddedPty {
+    type Target = Arc<Mutex<Terminal>>;
 
     fn deref(&self) -> &Self::Target {
-        match self {
-            Self::Stopped(ref e, _) | Self::Running(ref e, _) => e,
-        }
+        &self.terminal
     }
 }
 
-impl std::ops::DerefMut for EmbedStatus {
+impl std::ops::DerefMut for EmbeddedPty {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        match self {
-            Self::Stopped(ref mut e, _) | Self::Running(ref mut e, _) => e,
-        }
+        &mut self.terminal
     }
-}
-
-#[derive(Debug)]
-struct Embedded {
-    status: EmbedStatus,
 }
 
 #[derive(Debug)]
@@ -105,8 +105,8 @@ pub struct Composer {
 
     mode: ViewMode,
 
-    embedded: Option<Embedded>,
-    embed_dimensions: (usize, usize),
+    embedded_pty: Option<EmbeddedPty>,
+    embedded_dimensions: (usize, usize),
     #[cfg(feature = "gpgme")]
     gpg_state: gpg::GpgComposeState,
     dirty: bool,
@@ -123,7 +123,7 @@ enum ViewMode {
     //    widget: EditAttachments,
     //},
     Edit,
-    Embed,
+    EmbeddedPty,
     SelectRecipients(UIDialog<Address>),
     #[cfg(feature = "gpgme")]
     SelectEncryptKey(bool, gpg::KeySelection),
@@ -185,8 +185,8 @@ impl Composer {
             gpg_state: gpg::GpgComposeState::default(),
             dirty: true,
             has_changes: false,
-            embedded: None,
-            embed_dimensions: (80, 20),
+            embedded_pty: None,
+            embedded_dimensions: (80, 20),
             initialized: false,
             id: ComponentId::default(),
         }
@@ -955,72 +955,71 @@ impl Component for Composer {
 
         self.form.draw(grid, header_area, context);
 
-        if let Some(ref mut embedded) = self.embedded {
-            let embed_pty = &mut embedded.status;
-            let embed_area = area;
-            match embed_pty {
-                EmbedStatus::Running(_, _) => {
-                    if self.dirty {
-                        let mut guard = embed_pty.lock().unwrap();
-                        grid.clear_area(embed_area, theme_default);
+        if let Some(ref mut embedded_pty) = self.embedded_pty {
+            let embedded_area = area;
+            if embedded_pty.is_dirty() {
+                if embedded_pty.running {
+                    let mut guard = embedded_pty.lock().unwrap();
+                    grid.clear_area(embedded_area, theme_default);
 
-                        grid.copy_area(guard.grid.buffer(), embed_area, guard.grid.area());
-                        guard.set_terminal_size((embed_area.width(), embed_area.height()));
-                        context.dirty_areas.push_back(embed_area);
-                        self.dirty = false;
-                    }
-                    return;
-                }
-                EmbedStatus::Stopped(_, _) => {
-                    if self.dirty {
-                        let guard = embed_pty.lock().unwrap();
+                    grid.copy_area(guard.grid.buffer(), embedded_area, guard.grid.area());
+                    guard.set_terminal_size((embedded_area.width(), embedded_area.height()));
+                    guard.grid.set_dirty(false);
+                    context.dirty_areas.push_back(embedded_area);
+                    self.dirty = false;
+                } else {
+                    let mut guard = embedded_pty.lock().unwrap();
 
-                        grid.copy_area(guard.grid.buffer(), embed_area, guard.grid.buffer().area());
-                        grid.change_colors(embed_area, Color::Byte(8), theme_default.bg);
-                        let our_map: ShortcutMap =
-                            account_settings!(context[self.account_hash].shortcuts.composing)
-                                .key_values();
-                        let mut shortcuts: ShortcutMaps = Default::default();
-                        shortcuts.insert(Shortcuts::COMPOSING, our_map);
-                        let stopped_message: String =
-                            format!("Process with PID {} has stopped.", guard.child_pid);
-                        let stopped_message_2: String = format!(
-                            "-press '{}' (edit shortcut) to re-activate.",
-                            shortcuts[Shortcuts::COMPOSING]["edit"]
+                    grid.copy_area(
+                        guard.grid.buffer(),
+                        embedded_area,
+                        guard.grid.buffer().area(),
+                    );
+                    grid.change_colors(embedded_area, Color::Byte(8), theme_default.bg);
+                    let our_map: ShortcutMap =
+                        account_settings!(context[self.account_hash].shortcuts.composing)
+                            .key_values();
+                    let mut shortcuts: ShortcutMaps = Default::default();
+                    shortcuts.insert(Shortcuts::COMPOSING, our_map);
+                    let stopped_message: String =
+                        format!("Process with PID {} has stopped.", guard.child_pid);
+                    let stopped_message_2: String = format!(
+                        "-press '{}' (edit shortcut) to re-activate.",
+                        shortcuts[Shortcuts::COMPOSING]["edit"]
+                    );
+                    const STOPPED_MESSAGE_3: &str =
+                        "-press Ctrl-C to forcefully kill it and return to editor.";
+                    let max_len = std::cmp::max(
+                        stopped_message.len(),
+                        std::cmp::max(stopped_message_2.len(), STOPPED_MESSAGE_3.len()),
+                    );
+                    let inner_area = create_box(grid, area.center_inside((max_len + 5, 5)));
+                    grid.clear_area(inner_area, theme_default);
+                    for (i, l) in [
+                        stopped_message.as_str(),
+                        stopped_message_2.as_str(),
+                        STOPPED_MESSAGE_3,
+                    ]
+                    .iter()
+                    .enumerate()
+                    {
+                        grid.write_string(
+                            l,
+                            theme_default.fg,
+                            theme_default.bg,
+                            theme_default.attrs,
+                            inner_area.skip_rows(i),
+                            None,
                         );
-                        const STOPPED_MESSAGE_3: &str =
-                            "-press Ctrl-C to forcefully kill it and return to editor.";
-                        let max_len = std::cmp::max(
-                            stopped_message.len(),
-                            std::cmp::max(stopped_message_2.len(), STOPPED_MESSAGE_3.len()),
-                        );
-                        let inner_area = create_box(grid, area.center_inside((max_len + 5, 5)));
-                        grid.clear_area(inner_area, theme_default);
-                        for (i, l) in [
-                            stopped_message.as_str(),
-                            stopped_message_2.as_str(),
-                            STOPPED_MESSAGE_3,
-                        ]
-                        .iter()
-                        .enumerate()
-                        {
-                            grid.write_string(
-                                l,
-                                theme_default.fg,
-                                theme_default.bg,
-                                theme_default.attrs,
-                                inner_area.skip_rows(i),
-                                None,
-                            );
-                        }
-                        context.dirty_areas.push_back(area);
-                        self.dirty = false;
                     }
-                    return;
+                    context.dirty_areas.push_back(area);
+                    guard.grid.set_dirty(false);
+                    self.dirty = false;
                 }
+                return;
             }
         } else {
-            self.embed_dimensions = (area.width(), area.height());
+            self.embedded_dimensions = (area.width(), area.height());
         }
 
         if self.pager.size().0 > body_area.width() {
@@ -1038,7 +1037,7 @@ impl Component for Composer {
         self.draw_attachments(grid, attachment_area, context);
         //}
         match self.mode {
-            ViewMode::Edit | ViewMode::Embed => {}
+            ViewMode::Edit | ViewMode::EmbeddedPty => {}
             //ViewMode::EditAttachments { ref mut widget } => {
             //    let inner_area = create_box(grid, area);
             //    (EditAttachmentsRefMut {
@@ -1502,40 +1501,33 @@ impl Component for Composer {
                 ));
                 return true;
             }
-            UIEvent::EmbedInput((Key::Ctrl('z'), _)) => {
-                self.embedded
-                    .as_ref()
-                    .unwrap()
-                    .status
-                    .lock()
-                    .unwrap()
-                    .stop();
-                match self.embedded.take() {
-                    Some(Embedded {
-                        status: EmbedStatus::Running(e, f),
-                    })
-                    | Some(Embedded {
-                        status: EmbedStatus::Stopped(e, f),
-                    }) => {
-                        self.embedded = Some(Embedded {
-                            status: EmbedStatus::Stopped(e, f),
-                        });
-                    }
-                    _ => {}
+            UIEvent::EmbeddedInput((Key::Ctrl('z'), _)) => {
+                self.embedded_pty.as_ref().unwrap().lock().unwrap().stop();
+                if let Some(EmbeddedPty {
+                    running: _,
+                    terminal,
+                    file,
+                }) = self.embedded_pty.take()
+                {
+                    self.embedded_pty = Some(EmbeddedPty {
+                        running: false,
+                        terminal,
+                        file,
+                    });
                 }
                 context
                     .replies
                     .push_back(UIEvent::ChangeMode(UIMode::Normal));
                 self.set_dirty(true);
             }
-            UIEvent::EmbedInput((ref k, ref b)) => {
-                if let Some(ref mut embed) = self.embedded {
-                    let mut embed_guard = embed.status.lock().unwrap();
-                    if embed_guard.write_all(b).is_err() {
-                        match embed_guard.is_active() {
+            UIEvent::EmbeddedInput((ref k, ref b)) => {
+                if let Some(ref mut embedded) = self.embedded_pty {
+                    let mut embedded_guard = embedded.lock().unwrap();
+                    if embedded_guard.write_all(b).is_err() {
+                        match embedded_guard.is_active() {
                             Ok(WaitStatus::Exited(_, exit_code)) => {
-                                drop(embed_guard);
-                                let embedded = self.embedded.take();
+                                drop(embedded_guard);
+                                let embedded_pty = self.embedded_pty.take();
                                 if exit_code != 0 {
                                     context.replies.push_back(UIEvent::Notification(
                                         None,
@@ -1547,9 +1539,11 @@ impl Component for Composer {
                                             melib::error::ErrorKind::External,
                                         )),
                                     ));
-                                } else if let Some(Embedded {
-                                    status: EmbedStatus::Running(_, file),
-                                }) = embedded
+                                } else if let Some(EmbeddedPty {
+                                    running: true,
+                                    file,
+                                    ..
+                                }) = embedded_pty
                                 {
                                     self.update_from_file(file, context);
                                 }
@@ -1563,19 +1557,18 @@ impl Component for Composer {
                             #[cfg(any(target_os = "linux", target_os = "android"))]
                             Ok(WaitStatus::PtraceEvent(_, _, _))
                             | Ok(WaitStatus::PtraceSyscall(_)) => {
-                                drop(embed_guard);
-                                match self.embedded.take() {
-                                    Some(Embedded {
-                                        status: EmbedStatus::Running(e, f),
-                                    })
-                                    | Some(Embedded {
-                                        status: EmbedStatus::Stopped(e, f),
-                                    }) => {
-                                        self.embedded = Some(Embedded {
-                                            status: EmbedStatus::Stopped(e, f),
-                                        });
-                                    }
-                                    _ => {}
+                                drop(embedded_guard);
+                                if let Some(EmbeddedPty {
+                                    running: _,
+                                    terminal,
+                                    file,
+                                }) = self.embedded_pty.take()
+                                {
+                                    self.embedded_pty = Some(EmbeddedPty {
+                                        running: false,
+                                        terminal,
+                                        file,
+                                    });
                                 }
                                 self.mode = ViewMode::Edit;
                                 context
@@ -1585,19 +1578,18 @@ impl Component for Composer {
                                 return true;
                             }
                             Ok(WaitStatus::Stopped(_, _)) => {
-                                drop(embed_guard);
-                                match self.embedded.take() {
-                                    Some(Embedded {
-                                        status: EmbedStatus::Running(e, f),
-                                    })
-                                    | Some(Embedded {
-                                        status: EmbedStatus::Stopped(e, f),
-                                    }) => {
-                                        self.embedded = Some(Embedded {
-                                            status: EmbedStatus::Stopped(e, f),
-                                        });
-                                    }
-                                    _ => {}
+                                drop(embedded_guard);
+                                if let Some(EmbeddedPty {
+                                    running: _,
+                                    terminal,
+                                    file,
+                                }) = self.embedded_pty.take()
+                                {
+                                    self.embedded_pty = Some(EmbeddedPty {
+                                        running: false,
+                                        terminal,
+                                        file,
+                                    });
                                 }
                                 self.mode = ViewMode::Edit;
                                 context
@@ -1609,13 +1601,13 @@ impl Component for Composer {
                             Ok(WaitStatus::Continued(_)) | Ok(WaitStatus::StillAlive) => {
                                 context
                                     .replies
-                                    .push_back(UIEvent::EmbedInput((k.clone(), b.to_vec())));
-                                drop(embed_guard);
+                                    .push_back(UIEvent::EmbeddedInput((k.clone(), b.to_vec())));
+                                drop(embedded_guard);
                                 self.set_dirty(true);
                                 return true;
                             }
                             Ok(WaitStatus::Signaled(_, signal, _)) => {
-                                drop(embed_guard);
+                                drop(embedded_guard);
                                 context.replies.push_back(UIEvent::Notification(
                                     None,
                                     format!("Subprocess was killed by {} signal", signal),
@@ -1624,7 +1616,7 @@ impl Component for Composer {
                                     )),
                                 ));
                                 self.initialized = false;
-                                self.embedded = None;
+                                self.embedded_pty = None;
                                 self.mode = ViewMode::Edit;
                                 context
                                     .replies
@@ -1632,15 +1624,15 @@ impl Component for Composer {
                             }
                             Err(err) => {
                                 context.replies.push_back(UIEvent::Notification(
-                                    Some("Embed editor crashed.".to_string()),
+                                    Some("Embedded editor crashed.".to_string()),
                                     format!("Subprocess has exited with reason {}", &err),
                                     Some(NotificationType::Error(
                                         melib::error::ErrorKind::External,
                                     )),
                                 ));
-                                drop(embed_guard);
+                                drop(embedded_guard);
                                 self.initialized = false;
-                                self.embedded = None;
+                                self.embedded_pty = None;
                                 self.mode = ViewMode::Edit;
                                 context
                                     .replies
@@ -1745,53 +1737,43 @@ impl Component for Composer {
                 return true;
             }
             UIEvent::Input(ref key)
-                if self.embedded.is_some()
+                if self.embedded_pty.is_some()
                     && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["edit"]) =>
             {
-                self.embedded
-                    .as_ref()
-                    .unwrap()
-                    .status
-                    .lock()
-                    .unwrap()
-                    .wake_up();
-                match self.embedded.take() {
-                    Some(Embedded {
-                        status: EmbedStatus::Running(e, f),
-                    })
-                    | Some(Embedded {
-                        status: EmbedStatus::Stopped(e, f),
-                    }) => {
-                        self.embedded = Some(Embedded {
-                            status: EmbedStatus::Running(e, f),
-                        });
-                    }
-                    _ => {}
+                if let Some(EmbeddedPty {
+                    running: _,
+                    terminal,
+                    file,
+                }) = self.embedded_pty.take()
+                {
+                    terminal.lock().unwrap().wake_up();
+                    self.embedded_pty = Some(EmbeddedPty {
+                        running: true,
+                        terminal,
+                        file,
+                    });
                 }
-                self.mode = ViewMode::Embed;
+                self.mode = ViewMode::EmbeddedPty;
                 context
                     .replies
-                    .push_back(UIEvent::ChangeMode(UIMode::Embed));
+                    .push_back(UIEvent::ChangeMode(UIMode::Embedded));
                 self.set_dirty(true);
                 return true;
             }
             UIEvent::Input(Key::Ctrl('c'))
-                if self.embedded.is_some()
-                    && self.embedded.as_ref().unwrap().status.is_stopped() =>
+                if self.embedded_pty.is_some()
+                    && self.embedded_pty.as_ref().unwrap().is_stopped() =>
             {
-                match self.embedded.take() {
-                    Some(Embedded {
-                        status: EmbedStatus::Running(embed, file),
-                    })
-                    | Some(Embedded {
-                        status: EmbedStatus::Stopped(embed, file),
-                    }) => {
-                        let guard = embed.lock().unwrap();
-                        guard.wake_up();
-                        guard.terminate();
-                        self.update_from_file(file, context);
-                    }
-                    _ => {}
+                if let Some(EmbeddedPty {
+                    running: _,
+                    terminal,
+                    file,
+                }) = self.embedded_pty.take()
+                {
+                    let guard = terminal.lock().unwrap();
+                    guard.wake_up();
+                    guard.terminate();
+                    self.update_from_file(file, context);
                 }
                 context.replies.push_back(UIEvent::Notification(
                     None,
@@ -1857,30 +1839,31 @@ impl Component for Composer {
                     }
                 };
 
-                if *account_settings!(context[self.account_hash].composing.embed) {
-                    match crate::terminal::embed::create_pty(
-                        self.embed_dimensions.0,
-                        self.embed_dimensions.1,
+                if *account_settings!(context[self.account_hash].composing.embedded_pty) {
+                    match crate::terminal::embedded::create_pty(
+                        self.embedded_dimensions.0,
+                        self.embedded_dimensions.1,
                         [editor, f.path().display().to_string()].join(" "),
                     ) {
-                        Ok(embed) => {
-                            self.embedded = Some(Embedded {
-                                status: EmbedStatus::Running(embed, f),
+                        Ok(terminal) => {
+                            self.embedded_pty = Some(EmbeddedPty {
+                                running: true,
+                                terminal,
+                                file: f,
                             });
                             self.set_dirty(true);
                             context
                                 .replies
-                                .push_back(UIEvent::ChangeMode(UIMode::Embed));
-                            context.replies.push_back(UIEvent::Fork(ForkType::Embed(
-                                self.embedded
+                                .push_back(UIEvent::ChangeMode(UIMode::Embedded));
+                            context.replies.push_back(UIEvent::Fork(ForkType::Embedded(
+                                self.embedded_pty
                                     .as_ref()
                                     .unwrap()
-                                    .status
                                     .lock()
                                     .unwrap()
                                     .child_pid,
                             )));
-                            self.mode = ViewMode::Embed;
+                            self.mode = ViewMode::EmbeddedPty;
                         }
                         Err(err) => {
                             context.replies.push_back(UIEvent::Notification(
@@ -2157,7 +2140,14 @@ impl Component for Composer {
 
     fn is_dirty(&self) -> bool {
         match self.mode {
-            ViewMode::Embed => true,
+            ViewMode::EmbeddedPty => {
+                self.dirty
+                    || self
+                        .embedded_pty
+                        .as_ref()
+                        .map(EmbeddedPty::is_dirty)
+                        .unwrap_or(false)
+            }
             //ViewMode::EditAttachments { ref widget } => {
             //    widget.dirty
             //        || widget.buttons.is_dirty()
@@ -2206,7 +2196,14 @@ impl Component for Composer {
             ViewMode::WaitingForSendResult(ref mut widget, _) => {
                 widget.set_dirty(value);
             }
-            ViewMode::Edit | ViewMode::Embed => {}
+            ViewMode::Edit => {}
+            ViewMode::EmbeddedPty => {
+                if let Some(pty) = self.embedded_pty.as_ref() {
+                    if let Ok(mut guard) = pty.try_lock() {
+                        guard.grid.set_dirty(value);
+                    }
+                }
+            }
         }
         //if let ViewMode::EditAttachments { ref mut widget } = self.mode {
         //    (EditAttachmentsRefMut {

@@ -46,9 +46,10 @@ pub struct ComposingSettings {
         alias = "editor_cmd"
     )]
     pub editor_command: Option<String>,
-    /// Embed editor (for terminal interfaces) instead of forking and waiting.
-    #[serde(default = "false_val")]
-    pub embed: bool,
+    /// Embedded editor (for terminal interfaces) instead of forking and
+    /// waiting.
+    #[serde(default = "false_val", alias = "embed")]
+    pub embedded_pty: bool,
     /// Set "format=flowed" in plain text attachments.
     /// Default: true
     #[serde(default = "true_val", alias = "format-flowed")]
@@ -116,7 +117,7 @@ impl Default for ComposingSettings {
         ComposingSettings {
             send_mail: SendMail::ShellCommand("false".into()),
             editor_command: None,
-            embed: false,
+            embedded_pty: false,
             format_flowed: true,
             insert_user_agent: true,
             default_header_values: HashMap::default(),

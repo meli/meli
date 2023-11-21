@@ -33,7 +33,7 @@ pub mod position;
 pub mod cells;
 #[macro_use]
 pub mod keys;
-pub mod embed;
+pub mod embedded;
 pub mod text_editing;
 
 use std::io::{BufRead, Write};

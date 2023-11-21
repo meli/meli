@@ -151,7 +151,7 @@ fn run_app(opt: Opt) -> Result<()> {
     let signals = &[
         /* Catch SIGWINCH to handle terminal resizing */
         signal_hook::consts::SIGWINCH,
-        /* Catch SIGCHLD to handle embed applications status change */
+        /* Catch SIGCHLD to handle embedded applications status change */
         signal_hook::consts::SIGCHLD,
     ];
 
@@ -217,7 +217,7 @@ fn run_app(opt: Opt) -> Result<()> {
                         }
                     }
                     match r.unwrap() {
-                        ThreadEvent::Input((Key::Ctrl('z'), _)) if state.mode != UIMode::Embed => {
+                        ThreadEvent::Input((Key::Ctrl('z'), _)) if state.mode != UIMode::Embedded => {
                             state.switch_to_main_screen();
                             //_thread_handler.join().expect("Couldn't join on the associated thread");
                             let self_pid = nix::unistd::Pid::this();
@@ -233,8 +233,8 @@ fn run_app(opt: Opt) -> Result<()> {
                             state.update_size();
                             state.render();
                             state.redraw();
-                            if state.mode == UIMode::Embed {
-                                state.rcv_event(UIEvent::EmbedInput(raw_input));
+                            if state.mode == UIMode::Embedded {
+                                state.rcv_event(UIEvent::EmbeddedInput(raw_input));
                                 state.redraw();
                             }
                         },
@@ -286,8 +286,8 @@ fn run_app(opt: Opt) -> Result<()> {
                                         },
                                     }
                                 },
-                                UIMode::Embed => {
-                                    state.rcv_event(UIEvent::EmbedInput((k,r)));
+                                UIMode::Embedded => {
+                                    state.rcv_event(UIEvent::EmbeddedInput((k,r)));
                                     state.redraw();
                                 },
                                 UIMode::Fork => {
@@ -333,7 +333,7 @@ fn run_app(opt: Opt) -> Result<()> {
                             }
                         },
                         signal_hook::consts::SIGCHLD => {
-                            state.rcv_event(UIEvent::EmbedInput((Key::Null, vec![0])));
+                            state.rcv_event(UIEvent::EmbeddedInput((Key::Null, vec![0])));
                             state.redraw();
 
                         }
