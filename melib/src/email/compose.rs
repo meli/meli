@@ -286,7 +286,10 @@ impl Draft {
         }
 
         ret.push('\n');
-        ret.push_str(&self.body);
+        for line in self.body.lines() {
+            ret.push_str(line);
+            ret.push('\n');
+        }
 
         ret
     }
