@@ -76,6 +76,7 @@ and editor of your choice to replace the defaults.
 - `cargo install --git https://git.meli.delivery/meli/meli.git meli`
 - [Download and install pre-built debian package, static linux binary](https://github.com/meli/meli/releases/ "github releases for meli"), or
 - Install with [Nix](https://search.nixos.org/packages?show=meli&query=meli&from=0&size=30&sort=relevance&channel=unstable#disabled "nixos package search results for 'meli'").
+
 ## Documentation
 
 See a comprehensive tour of `meli` in the manual page [`meli(7)`](./meli/docs/meli.7).
@@ -123,6 +124,11 @@ Some functionality is held behind "feature gates", or compile-time flags. The fo
 - `jmap` provides support for connecting to a jmap server and use it as a mail backend (on by default)
 - `sqlite3` provides support for builting fast search indexes in local sqlite3 databases (on by default)
 - `cli-docs` includes the manpage documentation compiled by either `mandoc` or `man` binary to plain text in `meli`'s command line. Embedded documentation can be viewed with the subcommand `meli man [PAGE]` (on by default).
+- `regexp` provides experimental support for theming some e-mail fields based
+  on regular expressions.
+  It uses the `pcre2` library.
+  Since it's actual use in the code is very limited, it is not recommended to use this (off by default).
+- `static` and `*-static` bundle C libraries in dependencies so that you don't need them installed in your system (on by default).
 
 ### Build Debian package (*deb*)
 

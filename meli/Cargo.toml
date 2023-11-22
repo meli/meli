@@ -4,7 +4,6 @@ version = "0.8.2"
 authors = ["Manos Pitsidianakis <manos@pitsidianak.is>"]
 edition = "2021"
 rust-version = "1.65.0"
-
 license = "GPL-3.0-or-later"
 readme = "README.md"
 description = "terminal mail client"
@@ -30,13 +29,12 @@ flate2 = { version = "1", optional = true }
 futures = "0.3.5"
 indexmap = { version = "^1.6", features = ["serde-1"] }
 libc = { version = "0.2.125", default-features = false, features = ["extra_traits"] }
+libz-sys = { version = "1.1", features = ["static"], optional = true }
 linkify = { version = "^0.8", default-features = false }
 melib = { path = "../melib", version = "0.8.2" }
 nix = { version = "^0.24", default-features = false }
 notify = { version = "4.0.1", default-features = false } # >:c
 num_cpus = "1.12.0"
-pcre2 = { version = "0.2.3", optional = true }
-
 serde = "1.0.71"
 serde_derive = "1.0.71"
 serde_json = "1.0"
@@ -48,6 +46,12 @@ svg_crate = { version = "^0.13", optional = true, package = "svg" }
 termion = { version = "1.5.1", default-features = false }
 toml = { version = "0.5.6", default-features = false, features = ["preserve_order"] }
 xdg = "2.1.0"
+
+[dependencies.pcre2]
+# An [env] entry in .cargo/config.toml should force a static build instead of
+# looking for a system library.
+version = "0.2.3"
+optional = true
 
 [target.'cfg(target_os="linux")'.dependencies]
 notify-rust = { version = "^4", default-features = false, features = ["dbus"], optional = true }
@@ -65,23 +69,25 @@ regex = "1"
 tempfile = "3.3"
 
 [features]
-default = ["sqlite3", "notmuch", "smtp", "dbus-notifications", "gpgme", "cli-docs", "jmap", "text-processing"]
+default = ["sqlite3", "notmuch", "smtp", "dbus-notifications", "gpgme", "cli-docs", "jmap", "text-processing", "static"]
 notmuch = ["melib/notmuch"]
 jmap = ["melib/jmap"]
 sqlite3 = ["melib/sqlite3"]
 smtp = ["melib/smtp"]
 smtp-trace = ["smtp", "melib/smtp-trace"]
-regexp = ["pcre2"]
-dbus-notifications = ["notify-rust"]
-cli-docs = ["flate2"]
-svgscreenshot = ["svg_crate"]
+regexp = ["dep:pcre2"]
+dbus-notifications = ["dep:notify-rust"]
+cli-docs = ["dep:flate2"]
+svgscreenshot = ["dep:svg_crate"]
 text-processing = ["melib/unicode-algorithms"]
 gpgme = ["melib/gpgme"]
 # Static / vendoring features.
 tls-static = ["melib/tls-static"]
 http-static = ["melib/http-static"]
 sqlite3-static = ["melib/sqlite3-static"]
-static = ["tls-static", "http-static", "sqlite3-static"]
+dbus-static = ["dep:notify-rust", "notify-rust/d_vendored"]
+libz-static = ["dep:libz-sys", "libz-sys/static"]
+static = ["tls-static", "http-static", "sqlite3-static", "dbus-static", "libz-static"]
 
 # Print tracing logs as meli runs in stderr
 # enable for debug tracing logs: build with --features=debug-tracing and export MELI_DEBUG_STDERR
