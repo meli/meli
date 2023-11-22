@@ -1,6 +1,6 @@
 [package]
 name = "melib"
-version = "0.8.3"
+version = "0.8.4"
 authors = ["Manos Pitsidianakis <manos@pitsidianak.is>"]
 edition = "2021"
 build = "build.rs"
