@@ -286,9 +286,14 @@ impl Draft {
         }
 
         ret.push('\n');
+        let mut pop_lf = false;
         for line in self.body.lines() {
             ret.push_str(line);
             ret.push('\n');
+            pop_lf = true;
+        }
+        if pop_lf && !self.body.ends_with('\n') {
+            ret.pop();
         }
 
         ret
@@ -420,9 +425,16 @@ fn print_attachment(ret: &mut String, a: AttachmentBuilder) {
             }
         }
         Text { .. } => {
-            for line in a.build().into_raw().lines() {
+            let mut pop_crlf = false;
+            let raw = a.build().into_raw();
+            for line in raw.lines() {
                 ret.push_str(line);
                 ret.push_str("\r\n");
+                pop_crlf = true;
+            }
+            if pop_crlf && !raw.ends_with("\r\n") {
+                ret.pop();
+                ret.pop();
             }
         }
         Multipart {
@@ -448,9 +460,16 @@ fn print_attachment(ret: &mut String, a: AttachmentBuilder) {
             ));
             ret.push_str("Content-Disposition: attachment\r\n");
             ret.push_str("\r\n");
-            for line in String::from_utf8_lossy(a.raw()).lines() {
+            let mut pop_crlf = false;
+            let raw = String::from_utf8_lossy(a.raw());
+            for line in raw.lines() {
                 ret.push_str(line);
                 ret.push_str("\r\n");
+                pop_crlf = true;
+            }
+            if pop_crlf && !raw.ends_with("\r\n") {
+                ret.pop();
+                ret.pop();
             }
         }
         PGPSignature => {
@@ -461,9 +480,16 @@ fn print_attachment(ret: &mut String, a: AttachmentBuilder) {
             ret.push_str("Content-Description: Digital signature\r\n");
             ret.push_str("Content-Disposition: inline\r\n");
             ret.push_str("\r\n");
-            for line in String::from_utf8_lossy(a.raw()).lines() {
+            let mut pop_crlf = false;
+            let raw = String::from_utf8_lossy(a.raw());
+            for line in raw.lines() {
                 ret.push_str(line);
                 ret.push_str("\r\n");
+                pop_crlf = true;
+            }
+            if pop_crlf && !raw.ends_with("\r\n") {
+                ret.pop();
+                ret.pop();
             }
         }
         _ => {
@@ -490,16 +516,26 @@ fn print_attachment(ret: &mut String, a: AttachmentBuilder) {
                 content_transfer_encoding
             ));
             ret.push_str("\r\n");
+            let mut pop_crlf = false;
             if content_transfer_encoding == ContentTransferEncoding::Base64 {
                 for line in BASE64_MIME.encode(a.raw()).trim().lines() {
                     ret.push_str(line);
                     ret.push_str("\r\n");
                 }
             } else {
-                for line in String::from_utf8_lossy(a.raw()).lines() {
+                let raw = String::from_utf8_lossy(a.raw());
+                for line in raw.lines() {
                     ret.push_str(line);
                     ret.push_str("\r\n");
+                    pop_crlf = true;
                 }
+                if raw.ends_with("\r\n") {
+                    pop_crlf = false;
+                }
+            }
+            if pop_crlf {
+                ret.pop();
+                ret.pop();
             }
         }
     }
