@@ -22,11 +22,6 @@ path = "src/main.rs"
 name = "meli"
 path = "src/lib.rs"
 
-[[bin]]
-name = "managesieve-client"
-path = "src/managesieve.rs"
-required-features = ["melib/imap"]
-
 [dependencies]
 async-task = "^4.2.0"
 bitflags = { version = "2.4", features = ["serde"] }

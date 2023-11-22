@@ -19,13 +19,6 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-extern crate linkify;
-extern crate meli;
-extern crate melib;
-extern crate serde_derive;
-extern crate serde_json;
-extern crate smallvec;
-extern crate termion;
 
 use futures::executor::block_on;
 use meli::*;

@@ -1,6 +1,6 @@
 extern crate melib;
 
-use melib::{backends::ImapType, futures, smol, AccountSettings, BackendEventConsumer, Result};
+use melib::{futures, imap::ImapType, smol, AccountSettings, BackendEventConsumer, Result};
 
 /// Opens an interactive shell on an IMAP server. Suggested use is with
 /// rlwrap(1)
