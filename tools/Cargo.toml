@@ -41,7 +41,7 @@ crossbeam = { version = "^0.8" }
 meli = { version = "0.7" }
 melib = { version = "0.7", features = ["debug-tracing", "unicode-algorithms"] }
 nix = { version = "^0.24", default-features = false }
-signal-hook = { version = "^0.3", default-features = false }
+signal-hook = { version = "^0.3", default-features = false, features = ["iterator"] }
 signal-hook-registry = { version = "1.2.0", default-features = false }
 
 [features]
