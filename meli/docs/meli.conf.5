@@ -25,32 +25,75 @@
 .Nd configuration file for the
 .Xr meli 1
 terminal e-mail client
+.\"
+.\"
+.\"
+.\"
+.\"
 .Sh SYNOPSIS
 .Pa $XDG_CONFIG_HOME/meli/config.toml
+.\"
+.\"
+.\"
+.\"
+.\"
 .Sh DESCRIPTION
-Configuration for meli is written in TOML which has a few things to consider (quoting the spec):
-.Pp
+Configuration for
+.Sy meli
+is written in
+.Tn TOML
+which has a few things to consider (quoting the specification):
+.sp
 .Bl -bullet -compact
 .It
-TOML is case sensitive.
+.Tn TOML
+is case sensitive.
 .It
-A TOML file must be a valid UTF-8 encoded Unicode document.
+A
+.Tn TOML
+file must be a valid
+.Tn UTF-8
+encoded Unicode document.
 .It
-Whitespace means tab (0x09) or space (0x20).
+White-space means
+.Sy tab
+.Pq Li 0x09
+or
+.Sy space
+.Pq Li 0x20 Ns
+\&.
 .It
-Newline means LF (0x0A) or CRLF (0x0D 0x0A).
+Newline means
+.Sy LF
+.Pq Li 0x0A
+or
+.Sy CRLF
+.Pq Li 0x0D 0x0A Ns
+\&.
 .El
-.Pp
-Refer to TOML documentation for valid TOML syntax.
 .sp
-Though not part of TOML syntax,
+Refer to
+.Tn TOML
+documentation for valid
+.Tn TOML
+syntax.
+.sp
+Though not part of
+.Tn TOML
+syntax,
 .Nm
 can have nested configuration files by using the following
 .Xr m4 1
 include macro:
+.sp
 .Dl include(\&"/path/to/file\&")
+.\"
+.\"
+.\"
+.\"
+.\"
 .Sh SECTIONS
-The top level sections of the config are:
+The top level sections of the configuration are:
 .Bl -bullet -compact
 .It
 accounts
@@ -71,9 +114,16 @@ terminal
 .It
 log
 .El
+.\"
+.\"
+.\"
+.\"
+.\"
 .Sh EXAMPLES
-example configuration
-.sp
+An example configuration:
+.\"
+.\"
+.\"
 .Bd -literal
 # Setting up a Maildir account
 [accounts.account-name]
@@ -123,27 +173,47 @@ set_seen = 'n'
 [terminal]
 theme = "light"
 .Ed
-.Pp
+.\"
+.\"
+.\"
+.sp
 Available options are listed below.
 Default values are shown in parentheses.
+.\"
+.\"
+.\"
+.\"
+.\"
 .Sh ACCOUNTS
 Default values are shown in parentheses.
 .Bl -tag -width 36n
 .It Ic root_mailbox Ar String
-The backend-specific path of the root_mailbox, usually INBOX.
+The backend-specific path of the root_mailbox, usually
+.Sy INBOX Ns
+\&.
 .It Ic format Ar String Op maildir mbox imap notmuch jmap
 The format of the mail backend.
 .It Ic subscribed_mailboxes Ar [String,]
 An array of mailbox paths to display in the UI.
-Paths are relative to the root mailbox (eg "INBOX/Sent", not "Sent").
+Paths are relative to the root mailbox (e.g.
+.Sy INBOX/Sent Ns
+, not
+.Sy Sent Ns
+).
 The glob wildcard
 .Em \&*
 can be used to match every mailbox name and path.
 .It Ic identity Ar String
-Your e-mail address that is inserted in the From: headers of outgoing mail.
+Your e-mail address that is inserted in the
+.Li From Ns
+:
+headers of outgoing mail.
 .It Ic extra_identities Ar [String,]
 Extra e-mail address identities.
-When replying to an e-mail addressed to one of these identities, the From: header will be adjusted to its value instead of the default identity.
+When replying to an e-mail addressed to one of these identities, the
+.Li From Ns
+:
+header will be adjusted to its value instead of the default identity.
 .El
 .TS
 allbox tab(:);
@@ -156,26 +226,43 @@ plain:shows one row per mail, regardless of threading
 .Bl -tag -width 36n
 .It Ic display_name Ar String
 .Pq Em optional
-A name which can be combined with your address: "Name <email@example.com>".
+A name which can be combined with your address:
+.Qq Li Name <email@example.com> Ns
+\&.
 .It Ic read_only Ar boolean
 Attempt to not make any changes to this account.
 .Pq Em false
 .It Ic manual_refresh Ar boolean
 .Pq Em optional
-If true, do not monitor account for changes (you can use shortcut listing.refresh)
+If true, do not monitor account for changes
+.Po
+you can use shortcut
+.Li listing.refresh
+.Pc Ns
+\&.
 .Pq Em false
 .It Ic refresh_command Ar String
 .Pq Em optional
-command to execute when manually refreshing (shortcut listing.refresh)
+command to execute when manually refreshing
+.Po
+shortcut
+.Li listing.refresh
+.Pc
 .Pq Em None
 .It Ic search_backend Ar String
 .Pq Em optional
 Choose which search backend to use.
-Available options are 'none' and 'sqlite3'
-.Pq Em "sqlite3"
+Available options are
+.Qq Li none
+and
+.Qq Li sqlite3 Ns
+\&.
+.Pq Qq sqlite3
 .It Ic vcard_folder Ar String
 .Pq Em optional
-Folder that contains .vcf files.
+Folder that contains
+.Sy .vcf
+files.
 They are parsed and imported read-only.
 .It Ic mutt_alias_file Ar String
 .Pq Em optional
@@ -191,11 +278,14 @@ Its format is described below in
 \&.
 .El
 .Ss notmuch only
-notmuch is supported by loading the dynamic library libnotmuch.
+notmuch is supported by loading the dynamic library
+.Sy libnotmuch Ns
+\&.
 If its location is missing from your library paths, you must add it yourself.
 Alternatively, you can specify its path by using a setting.
-.Pp
-notmuch mailboxes are virtual, since they are defined by user-given notmuch queries.
+.sp
+notmuch mailboxes are virtual, since they are defined by user-given notmuch
+queries.
 You must explicitly state the mailboxes you want in the
 .Ic mailboxes
 field and set the
@@ -203,8 +293,9 @@ field and set the
 property to each of them.
 To create a tree hierarchy with virtual mailboxes, define the
 .Ar parent
-property to a mailbox as the name of the parent mailbox you have used in your configuration.
-.Pp
+property to a mailbox as the name of the parent mailbox you have used in your
+configuration.
+.sp
 Account properties:
 .Bl -tag -width 36n
 .It Ic root_mailbox
@@ -212,21 +303,33 @@ points to the directory which contains the
 .Pa .notmuch/
 subdirectory.
 .It Ic library_file_path Ar Path
-Use an arbitrary location of libnotmuch by specifying its full filesystem path.
+Use an arbitrary location of
+.Sy libnotmuch
+by specifying its full filesystem path.
 .Pq Em optional
 .El
 Mailbox properties:
 .Bl -tag -width 36n
 .It Ic query Ar String
-The notmuch query that defines what content this virtual mailbox has.
+The
+.Sy notmuch
+query that defines what content this virtual mailbox has.
 Refer to
 .Xr notmuch-search-terms 7
-for notmuch's search syntax.
+for
+.Sy notmuch Ns
+\&'s search syntax.
 .It Ic parent Ar String
-If you wish to build a mailbox hierarchy, define the name of a parent mailbox you have used in your configuration.
+If you wish to build a mailbox hierarchy, define the name of a parent mailbox
+you have used in your configuration.
 .Pq Em optional
 .El
+.sp
 Example:
+.sp
+.\"
+.\"
+.\"
 .Bd -literal
 [accounts.notmuch]
 format = "notmuch"
@@ -239,8 +342,12 @@ format = "notmuch"
   "Archives" = {  query="tag:archived", subscribe = true }
   "Archives/2019" = {  query="tag:archived date:01-2019..12-2019", parent="Archives", subscribe = true }
 .Ed
+.\"
+.\"
+.\"
 .Ss IMAP only
-IMAP specific options are:
+.Tn IMAP
+specific options are:
 .Bl -tag -width 36n
 .It Ic server_hostname Ar String
 example:
@@ -259,73 +366,149 @@ The port to connect to
 .Pq Em 143 \" default value
 .It Ic use_starttls Ar boolean
 .Pq Em optional
-If port is 993 and use_starttls is unspecified, it becomes false by default.
+If port is
+.Li 993
+and
+.Qq Li use_starttls
+is unspecified, it becomes false by default.
 .Pq Em true \" default value
 .It Ic use_tls Ar boolean
 .Pq Em optional
-Connect with TLS (or upgrade from plain connection to TLS if STARTTLS is set).
+Connect with
+.Tn TLS
+.Po
+or upgrade from plain connection to
+.Tn TLS
+if
+.Tn STARTTLS
+is set.
+.Pc
 .Pq Em true \" default value
 .It Ic danger_accept_invalid_certs Ar boolean
 .Pq Em optional
-Do not validate TLS certificates.
+Do not validate
+.Tn TLS
+certificates.
 .Pq Em false \" default value
 .It Ic use_idle Ar boolean
 .Pq Em optional
-Use IDLE extension \" default value
-.Pq Em true
+Use
+.Tn IDLE
+extension.
+.Pq Em true \" default value
 .It Ic use_condstore Ar boolean
 .Pq Em optional
-Use CONDSTORE extension \" default value
-.Pq Em true
+Use
+.Tn CONDSTORE
+extension.
+.Pq Em true \" default value
 .It Ic use_deflate Ar boolean
 .Pq Em optional
-Use COMPRESS=DEFLATE extension (if built with DEFLATE support) \" default value
-.Pq Em true
+Use
+.Tn COMPRESS=DEFLATE
+extension
+.Po if built with
+.Tn DEFLATE
+support
+.Pc
+.Pq Em true \" default value
 .It Ic use_oauth2 Ar boolean
 .Pq Em optional
-Use OAUTH2 authentication.
+Use
+.Tn OAUTH2
+authentication.
 Can only be used with
 .Ic server_password_command
-which should return a base64-encoded OAUTH2 token ready to be passed to IMAP.
-For help on setup with Gmail, see Gmail section below.
+which should return a base64-encoded
+.Tn OAUTH2
+token ready to be passed to
+.Tn IMAP Ns
+\&.
+For help on setup with
+.Tn Gmail Ns
+, see
+.Tn Gmail
+section below.
 .Pq Em false \" default value
 .It Ic timeout Ar integer
 .Pq Em optional
 Timeout to use for server connections in seconds.
-A timeout of 0 seconds means there's no timeout.
+A timeout of
+.Li 0
+seconds means there is no timeout.
 .Pq Em 16 \" default value
 .El
 .Ss Gmail
-Gmail has non-standard IMAP behaviors that need to be worked around.
+.Tn Gmail
+has non-standard
+.Tn IMAP
+behaviors that need to be worked around.
 .Ss Gmail - sending mail
 Option
 .Ic store_sent_mail
-should be disabled since Gmail auto-saves sent mail by its own.
+should be disabled since
+.Tn Gmail
+auto-saves sent mail by its own.
 .Ss Gmail OAUTH2
-To use OAUTH2, you must go through a process to register your own private "application" with Google that can use OAUTH2 tokens.
-For convenience in the meli repository under the
+To use
+.Tn OAUTH2 Ns
+, you must go through a process to register your own private
+.Qq application
+with
+.Tn Google
+that can use
+.Tn OAUTH2
+tokens.
+For convenience in the
+.Sy meli
+repository under the
 .Pa contrib/
-directory you can find a python3 file named oauth2.py to generate and request the appropriate data to perform OAUTH2 authentication.
+directory you can find a
+.Sy python3
+file named
+.Li oauth2.py
+to generate and request the appropriate data to perform
+.Tn OAUTH2
+authentication.
+.sp
 Steps:
 .Bl -bullet -compact
 .It
-In Google APIs, create a custom OAuth client ID and note down the Client ID and Client Secret.
-You may need to create a consent screen; follow the steps described in the website.
+In
+.Tn Google API Ns
+s, create a custom OAuth client ID and note down the Client ID and Client
+Secret.
+You may need to create a consent screen; follow the steps described in the
+website.
 .It
-Run the oauth2.py script as follows (after adjusting binary paths and credentials):
+Run the
+.Li oauth2.py
+script as follows
+.Pq after adjusting binary paths and credentials Ns
+:
+.sp
 .Cm python3 oauth2.py --user=xxx@gmail.com --client_id=1038[...].apps.googleusercontent.com --client_secret=VWFn8LIKAMC-MsjBMhJeOplZ --generate_oauth2_token
 and follow the instructions.
 Note down the refresh token.
 .It
 In
 .Ic server_password_command
-enter a command like this (after adjusting binary paths and credentials):
+enter a command like this
+.Pq after adjusting binary paths and credentials Ns
+:
+.sp
 .Cm TOKEN=$(python3 oauth2.py --user=xxx@gmail.com --quiet --client_id=1038[...].apps.googleusercontent.com --client_secret=VWFn8LIKAMC-MsjBMhJeOplZ --refresh_token=1/Yzm6MRy4q1xi7Dx2DuWXNgT6s37OrP_DW_IoyTum4YA) && python3 oauth2.py --user=xxx@gmail.com --generate_oauth2_string --quiet --access_token=$TOKEN
 .It
-On startup, meli should evaluate this command which if successful must only return a base64-encoded token ready to be passed to IMAP.
+On startup,
+.Sy meli
+should evaluate this command which if successful must only return a
+.Tn base64 Ns
+-encoded token ready to be passed to
+.Tn IMAP.
 .El
 .Ss JMAP only
-JMAP specific options
+.Tn JMAP
+specific options
 .Bl -tag -width 36n
 .It Ic server_url Ar String
 example:
@@ -338,17 +521,26 @@ Server username
 Server password
 .It Ic danger_accept_invalid_certs Ar boolean
 .Pq Em optional
-Do not validate TLS certificates.
+Do not validate
+.Tn TLS
+certificates.
 .Pq Em false \" default value
 .El
 .Ss mbox only
-mbox specific options
+.Tn mbox
+specific options:
 .Bl -tag -width 36n
 .It Ic prefer_mbox_type Ar String
 .Pq Em optional
-Prefer specific mbox format reader for each message.
-Default is mboxcl2 format.
-If the preferred format fails, the message is retried with mboxrd and then if it fails again there's a recover attempt, which discards the invalid message.
+Prefer specific
+.Tn mbox
+format reader for each message.
+Default is
+.Qq Li mboxcl2
+format.
+If the preferred format fails, the message is retried with mboxrd and then if
+it fails again there is a recover attempt, which discards the invalid message.
+.sp
 Valid values
 .Bl -bullet -compact
 .It
@@ -364,19 +556,27 @@ Valid values
 .El
 .Pq Em auto \" default value
 .El
-To set multiple mailboxes, you have to explicitly state the mailboxes you want in the
+To set multiple mailboxes, you have to explicitly state the mailboxes you want
+in the
 .Ic mailboxes
 field and set the
 .Ar path
 property to each of them.
 Example:
+.\"
+.\"
+.\"
 .Bd -literal
 [accounts.mbox]
 format = "mbox"
 mailboxes."Python mailing list" = { path = "~/.mail/python.mbox", subscribe = true, autoload = true }
 .Ed
+.\"
+.\"
+.\"
 .Ss NNTP
-NNTP specific options
+.Tn NNTP
+specific options
 .Bl -tag -width 36n
 .It Ic server_hostname Ar String
 example:
@@ -387,11 +587,13 @@ Server username
 Server password
 .It Ic require_auth Ar bool
 .Pq Em optional
-require authentication in every case \" default value
-.Pq Em true
+require authentication in every case
+.Pq Em true \" default value
 .It Ic use_tls Ar boolean
 .Pq Em optional
-Connect with TLS.
+Connect with
+.Tn TLS Ns
+\&.
 .Pq Em false \" default value
 .It Ic server_port Ar number
 .Pq Em optional
@@ -399,11 +601,15 @@ The port to connect to
 .Pq Em 119 \" default value
 .It Ic danger_accept_invalid_certs Ar boolean
 .Pq Em optional
-Do not validate TLS certificates.
+Do not validate
+.Tn TLS
+certificates.
 .Pq Em false \" default value
 .It Ic store_flags_locally Ar boolean
 .Pq Em optional
-Store seen status locally in an sqlite3 database.
+Store seen status locally in an
+.Sy sqlite3
+database.
 .Pq Em true \" default value
 .El
 .Pp
@@ -411,25 +617,41 @@ You have to explicitly state the groups you want to see in the
 .Ic mailboxes
 field.
 Example:
+.\"
+.\"
+.\"
 .Bd -literal
 [accounts.sicpm.mailboxes]
   "sic.all" = {}
 .Ed
+.\"
+.\"
+.\"
 .Pp
-To submit articles directly to the NNTP server, you must set the special value
+To submit articles directly to the
+.Tn NNTP
+server, you must set the special value
 .Em server_submission
 in the
 .Ic send_mail
 field.
 Example:
+.\"
+.\"
+.\"
 .Bd -literal
 composing.send_mail = "server_submission"
 .Ed
+.\"
+.\"
+.\"
 .Ss MAILBOXES
 .Bl -tag -width 36n
 .It Ic alias Ar String
 .Pq Em optional
-Show a different name for this mailbox in the UI
+Show a different name for this mailbox in the
+.Tn UI Ns
+\&.
 .It Ic autoload Ar boolean
 .Pq Em optional
 Load this mailbox on startup
@@ -440,11 +662,11 @@ Collapse this mailbox subtree in menu.
 .Pq Em false \" default value
 .It Ic subscribe Ar boolean
 .Pq Em optional
-Watch this mailbox for updates
+Watch this mailbox for updates.
 .Pq Em true \" default value
 .It Ic ignore Ar boolean
 .Pq Em optional
-Silently insert updates for this mailbox, if any
+Silently insert updates for this mailbox, if any.
 .Pq Em false \" default value
 .It Ic usage Ar boolean
 .Pq Em optional
@@ -470,7 +692,9 @@ Valid values are:
 .Ar Trash
 .El
 otherwise usage is inferred from the mailbox title.
-If for example your Sent folder is not named "Sent", you must explicitly set it.
+If for example your Sent folder is not named
+.Qq Li Sent Ns
+, you must explicitly set it.
 .It Ic conf_override Ar boolean
 .Pq Em optional
 Override global settings for this mailbox.
@@ -480,15 +704,24 @@ and the account options
 .Em identity Ns
 \&.
 Example:
+.\"
+.\"
+.\"
 .Bd -literal
 [accounts."imap.example.com".mailboxes]
   "INBOX" = { index_style = "plain" }
   "INBOX/Lists/devlist" = { autoload = false, pager = { filter = "pygmentize -l diff -f 256"} }
 .Ed
+.\"
+.\"
+.\"
 .It Ic sort_order Ar unsigned integer
 .Pq Em optional
 Override sort order on the sidebar for this mailbox.
 Example:
+.\"
+.\"
+.\"
 .Bd -literal
 [accounts."imap.example.com".mailboxes]
   "INBOX" = { index_style = "plain" }
@@ -496,18 +729,38 @@ Example:
   "INBOX/Drafts" = { sort_order = 1 }
   "INBOX/Lists" = { sort_order = 2 }
 .Ed
+.\"
+.\"
+.\"
 .It Ic encoding Ar String
 .Pq Em optional
-Override the default utf-8 charset for the mailbox name.
-Useful only for mUTF-7 mailboxes.
+Override the default
+.Tn UTF-8
+charset for the mailbox name.
+Useful only for
+.Tn UTF-7
+mailboxes.
 .Pq Em "utf7", "utf-7", "utf8", "utf-8" \" default value
 .El
+.\"
+.\"
+.\"
+.\"
+.\"
 .Sh COMPOSING
 Composing specific options.
 Default values are shown in parentheses.
 .Bl -tag -width 36n
 .It Ic send_mail Ar String|SmtpServerConf
-Command to pipe new mail to (exit code must be 0 for success) or settings for an SMTP server connection.
+Command to pipe new mail to
+.Po
+exit code must be
+.Li 0
+for success
+.Pc
+or settings for an
+.Tn SMTP
+server connection.
 See section
 .Sx SMTP Connections
 for its fields.
@@ -515,19 +768,33 @@ for its fields.
 Command to launch editor.
 Can have arguments.
 Draft filename is given as the last argument.
-If it's missing, the environment variable $EDITOR is looked up.
-.It Ic embed Ar boolean
+If it's missing, the environment variable
+.Ev EDITOR
+is looked up.
+.It Ic embedded_pty Ar boolean
 .Pq Em optional
-Embed editor within meli.
-Editor must be xterm compliant.
+Embedded editor within
+.Sy meli Ns
+\&.
+Editor must be
+.Sy xterm
+compliant.
 .Pq Em false \" default value
 .It Ic format_flowed Ar boolean
 .Pq Em optional
-Set format=flowed [RFC3676] in text/plain attachments.
+Set
+.Li format=flowed
+.Bq RFC3676
+in
+.Li text/plain
+attachments.
 .Pq Em true \" default value
 .It Ic insert_user_agent Ar boolean
 .Pq Em optional
-Add meli User-Agent header in new drafts
+Add
+.Sy meli
+.Li User-Agent
+header in new drafts.
 .Pq Em true \" default value
 .It Ic default_header_values Ar hash table String[String]
 .Pq Em optional
@@ -535,18 +802,24 @@ Default header values used when creating a new draft.
 .Pq Em [] \" default value
 .It Ic wrap_header_preamble Ar Option<(String, String)>
 .Pq Em optional
-Wrap header preample when editing a draft in an editor.
-This allows you to write non-plain text email without the preamble creating syntax errors.
+Wrap header pre-ample when editing a draft in an editor.
+This allows you to write non-plain text email without the preamble creating
+syntax errors.
 They are stripped when you return from the editor.
 The values should be a two element array of strings, a prefix and suffix.
-This can be useful when for example you're writing Markdown; you can set the value to
+This can be useful when for example you're writing Markdown; you can set the
+value to
 .Em ["<!--",\ "-->"]
-which wraps the headers in an HTML comment.
+which wraps the headers in an
+.Tn HTML
+comment.
 .Pq Em None \" default value
 .It Ic store_sent_mail Ar boolean
 .Pq Em optional
 Store sent mail after successful submission.
-This setting is meant to be disabled for non-standard behaviour in gmail, which auto-saves sent mail on its own.
+This setting is meant to be disabled for non-standard behaviour in
+.Tn Gmail Ns
+, which auto-saves sent mail on its own.
 .Pq Em true \" default value
 .It Ic attribution_format_string Ar String
 .Pq Em optional
@@ -569,7 +842,11 @@ with the replied envelope's date.
 .Pq Em "On %a, %0e %b %Y %H:%M, %+f wrote:%n" \" default value
 .It Ic attribution_use_posix_locale Ar boolean
 .Pq Em optional
-Whether the strftime call for the attribution string uses the POSIX locale instead of the user's active locale.
+Whether the
+.Xr strftime 3
+call for the attribution string uses the
+.Tn POSIX
+locale instead of the user's active locale.
 .Pq Em true \" default value
 .It Ic forward_as_attachment Ar boolean or "ask"
 .Pq Em optional
@@ -582,29 +859,42 @@ Alternative lists of reply prefixes (etc. ["Re:", "RE:", ...]) to strip.
 .It Ic reply_prefix Ar String
 .Pq Em optional
 The prefix to use in reply subjects.
-The de facto prefix is "Re:".
+The default prefix is "Re:".
 .Pq Em `Re:` \" default value
 .Pp
 RFC 2822, "Internet Message Format" has this to say on the matter:
+.\"
+.\"
+.\"
 .Bd -literal -offset indent -compact
 When used in a reply, the field body MAY start with the string "Re: " (from
 the Latin "res", in the matter of) followed by the contents of the "Subject:"
 field body of the original message.
 .Ed
+.\"
+.\"
+.\"
 .It Ic custom_compose_hooks Ar [{ name = String, command = String }]
 .Pq Em optional
 Custom compose-hooks that run shell scripts.
 compose-hooks run before submitting an e-mail.
 They perform draft validation and/or transformations.
-If a custom hook exits with an error status or prints output to stdout and stderr, it will show up in the UI as a notification.
-.Pp
+If a custom hook exits with an error status or prints output to stdout and
+stderr, it will show up in the UI as a notification.
+.sp
 Example:
+.\"
+.\"
+.\"
 .Bd -literal
 [composing]
 editor_cmd = '~/.local/bin/vim +/^$'
 embed = true
 custom_compose_hooks = [ { name ="spellcheck", command="aspell --mode email --dont-suggest --ignore-case list" }]
 .Ed
+.\"
+.\"
+.\"
 .It Ic disabled_compose_hooks Ar [String]
 .Pq Em optional
 Disabled compose-hooks.
@@ -615,18 +905,39 @@ The currently available hooks are:
 .Bl -bullet -compact
 .It
 .Ic past-date-warn
-— Warn if Date header value is far in the past or future.
+— Warn if
+.Li Date
+header value is far in the past or future.
 .It
 .Ic important-header-warn
-— Warn if important headers (From, Date, To, Cc, Bcc) are missing or invalid.
+— Warn if important headers
+.Po
+.Li From Ns
+,
+.Li Date Ns
+,
+.Li To Ns
+,
+.Li Cc Ns
+,
+.Li Bcc
+.Pc
+are missing or invalid.
 .It
 .Ic missing-attachment-warn
-— Warn if Subject, draft body mention attachments but they are missing.
+— Warn if
+.Li Subject Ns
+or draft body mention attachments but they are missing.
 .It
 .Ic empty-draft-warn
 — Warn if draft has no subject and no body.
 .El
 .El
+.\"
+.\"
+.\"
+.\"
+.\"
 .Sh SHORTCUTS
 Default values are shown in parentheses.
 Shortcuts can take the following values:
@@ -675,19 +986,31 @@ The headings before each list indicate the map key of the shortcut list.
 For example for the first list titled
 .Em general
 the configuration is typed as follows:
+.\"
+.\"
+.\"
 .Bd -literal
 [shortcuts.general]
 next_tab = 'T'
 .Ed
+.\"
+.\"
+.\"
 .sp
 and for
 .Em listing Ns
 :
+.\"
+.\"
+.\"
 .Bd -literal
 [shortcuts.listing]
 open_entry = "Enter"
 exit_entry = 'i'
 .Ed
+.\"
+.\"
+.\"
 .sp
 .Pp
 .Em general
@@ -695,28 +1018,28 @@ exit_entry = 'i'
 .It Ic toggle_help
 Toggle help and shortcuts view.
 .Pq Em \&? \" default value
-.It Ic quit
-Quit meli.
-.Pq Ql Em q \" default value
 .It Ic enter_command_mode
 Enter
 .Em COMMAND
 mode.
-.Pq Ql Em \&: \" default value
-.It Ic next_tab
-Go to next tab.
-.Pq Em T \" default value
+.Pq Em \&: \" default value
+.It Ic quit
+Quit meli.
+.Pq Em q \" default value
 .It Ic go_to_tab
 Go to the
 .Em n Ns
 th tab
 .Pq Em M-n
+.It Ic next_tab
+Go to the next tab.
+.Pq Em T \" default value
 .It Ic scroll_right
 Generic scroll right (catch-all setting)
-.Pq Em Right \" default value
+.Pq Em l \" default value
 .It Ic scroll_left
 Generic scroll left (catch-all setting)
-.Pq Em Left \" default value
+.Pq Em h \" default value
 .It Ic scroll_up
 Generic scroll up (catch-all setting)
 .Pq Em k \" default value
@@ -736,16 +1059,14 @@ Go to first page.
 (catch-all setting)
 .Pq Em Home \" default value
 .It Ic end_page
-Go to last page.
-(catch-all setting)
+Go to last page. (catch-all setting)
 .Pq Em End \" default value
 .It Ic open_entry
-Open list entry.
-(catch-all setting)
+Open list entry. (catch-all setting)
 .Pq Em Enter \" default value
 .It Ic info_message_next
-Show next info message, if any
-.Pq Ql Em M-> \" default value
+Show next info message, if any.
+.Pq Em M-> \" default value
 .It Ic info_message_previous
 Show previous info message, if any.
 .Pq Em M-< \" default value
@@ -823,10 +1144,12 @@ Increase sidebar width.
 Decrease sidebar width.
 .Pq Em C-d \" default value
 .It Ic next_entry
-When reading a mail item, change focus on next entry according to the current sorting.
+When reading a mail item, change focus on next entry according to the current
+sorting.
 .Pq Em C-n \" default value
 .It Ic previous_entry
-When reading a mail item, change focus on previous entry according to the current sorting.
+When reading a mail item, change focus on previous entry according to the
+current sorting.
 .Pq Em C-p \" default value
 .It Ic toggle_menu_visibility
 Toggle visibility of side menu in mail list.
@@ -911,7 +1234,9 @@ Change field focus.
 .sp
 .Em envelope-view
 .Pp
-To select an attachment, type its index (you will see the typed result in the command buffer on the bottom right of the status line), then issue the corresponding command.
+To select an attachment, type its index (you will see the typed result in the
+command buffer on the bottom right of the status line), then issue the
+corresponding command.
 .Bl -tag -width 36n
 .It Ic add_addresses_to_contacts Ns
 Select addresses from envelope to add to contacts.
@@ -956,7 +1281,8 @@ Expand extra headers (References and others)
 .Pq Em h \" default value
 .It Ic toggle_url_mode
 Toggles url open mode.
-When active, it prepends an index next to each url that you can select by typing the index and open by issuing
+When active, it prepends an index next to each url that you can select by
+typing the index and open by issuing
 .Ic go_to_url
 .Pq Em u \" default value
 .It Ic view_raw_source
@@ -998,6 +1324,11 @@ Toggle between horizontal and vertical layout.
 .Pq Em Space \" default value
 .El
 .sp
+.\"
+.\"
+.\"
+.\"
+.\"
 .Sh NOTIFICATIONS
 Default values are shown in parentheses.
 .Bl -tag -width 36n
@@ -1027,6 +1358,11 @@ Play theme sound in notifications if possible.
 Play sound file in notifications if possible.
 .Pq Em none \" default value
 .El
+.\"
+.\"
+.\"
+.\"
+.\"
 .Sh PAGER
 Default values are shown in parentheses.
 .Bl -tag -width 36n
@@ -1060,11 +1396,19 @@ Minimum text width in columns.
 .Pq Em 80 \" default value
 .It Ic auto_choose_multipart_alternative Ar boolean
 .Pq Em optional
-Choose `text/html` alternative if `text/plain` is empty in `multipart/alternative` attachments.
+Choose
+.Li text/html
+alternative if
+.Li text/plain
+is empty in
+.Li multipart/alternative
+attachments.
 .Pq Em true \" default value
 .It Ic show_date_in_my_timezone Ar boolean
 .Pq Em optional
-Show Date: in local timezone
+Show
+.Li Date Ns
+: in local timezone
 .Pq Em true \" default value
 .It Ic url_launcher Ar String
 .Pq Em optional
@@ -1073,24 +1417,36 @@ The URL will be given as the first argument of the command.
 .Pq Em xdg-open \" default value
 .It Ic show_extra_headers Ar [String]
 .Pq Em optional
-Extra headers to display, if present, in the default header preamble of the pager.
+Extra headers to display, if present, in the default header preamble of the
+pager.
 This setting is useful especially when used per-folder or per-account.
 For example, if you use
-.Ql rss2email
+.Sy rss2email
 .Pq See Xr r2e 1
 the e-mail you will receive will have the
-.Ql X-RSS-Feed
+.Sy X-RSS-Feed
 header by default.
 You can show them only in the folder where you keep your feed items:
 .Pp
+.\"
+.\"
+.\"
 .Bd -literal -compact
 [accounts."personal".mailboxes]
 INBOX = {}
 "INBOX/Sent" = { sort_order=0 }
 "INBOX/Feeds" = { pager.show_extra_headers = ["X-RSS-Feed"] }
 .Ed
+.\"
+.\"
+.\"
 .Pq Em empty \" default value
 .El
+.\"
+.\"
+.\"
+.\"
+.\"
 .Sh LISTING
 Default values are shown in parentheses.
 .Bl -tag -width 36n
@@ -1100,7 +1456,9 @@ Default values are shown in parentheses.
 .Pq Em true \" default value
 .It Ic datetime_fmt Ar String
 .Pq Em optional
-Datetime formatting passed verbatim to strftime(3).
+Datetime formatting passed verbatim to
+.Xr strftime 3 Ns
+\&.
 .Pq Em \&%Y-\&%m-\&%d \&%T \" default value
 .It Ic recent_dates Ar Boolean
 .Pq Em optional
@@ -1116,27 +1474,38 @@ For query syntax see
 .Pq Em None \" default value
 .Pp
 Example:
+.\"
+.\"
+.\"
 .Bd -literal
 filter = "not flags:seen" # show only unseen messages
 .Ed
+.\"
+.\"
+.\"
 .It Ic index_style Ar String
 Sets the way mailboxes are displayed.
 .It Ic sidebar_mailbox_tree_has_sibling Ar String
 .Pq Em optional
-Sets the string to print in the mailbox tree for a level where its root has a sibling.
+Sets the string to print in the mailbox tree for a level where its root has a
+sibling.
 See example below for a clear explanation and examples.
 .It Ic sidebar_mailbox_tree_no_sibling Ar String
 .Pq Em optional
-Sets the string to print in the mailbox tree for a level where its root has no sibling.
+Sets the string to print in the mailbox tree for a level where its root has no
+sibling.
 .It Ic sidebar_mailbox_tree_has_sibling_leaf Ar String
 .Pq Em optional
-Sets the string to print in the mailbox tree for a leaf level where its root has a sibling.
+Sets the string to print in the mailbox tree for a leaf level where its root
+has a sibling.
 .It Ic sidebar_mailbox_tree_no_sibling_leaf Ar String
 .Pq Em optional
-Sets the string to print in the mailbox tree for a leaf level where its root has no sibling.
+Sets the string to print in the mailbox tree for a leaf level where its root
+has no sibling.
 .It Ic sidebar_divider Ar char
 .Pq Em optional
-Sets the character to print as the divider between the accounts list and the message list.
+Sets the character to print as the divider between the accounts list and the
+message list.
 .It Ic sidebar_ratio Ar Integer
 .Pq Em optional
 This is the width of the right container to the entire screen width.
@@ -1154,11 +1523,13 @@ Flag to show if thread entry has been selected.
 Flag to show if thread entry contains attachments.
 .Pq Em "📎" \" default value
 .It Ic thread_subject_pack Ar bool
-Should threads with differentiating Subjects show a list of those subjects on the entry title?
+Should threads with differentiating Subjects show a list of those subjects on
+the entry title?
 .Pq Em "true" \" default value
 .It Ic threaded_repeat_identical_from_values Ar bool
 In threaded listing style, repeat identical From column values within a thread.
-Not repeating adds empty space in the From column which might result in less visual clutter.
+Not repeating adds empty space in the From column which might result in less
+visual clutter.
 .Pq Em "false" \" default value
 .It Ic relative_menu_indices Ar bool
 Show relative indices in menu mailboxes to quickly help with jumping to them.
@@ -1173,15 +1544,24 @@ Start app with sidebar hidden.
 .Ss Examples of sidebar mailbox tree customization
 The default values
 .sp
+.\"
+.\"
+.\"
 .Bd -literal
  has_sibling = " "
  no_sibling = " ";
  has_sibling_leaf = " "
  no_sibling_leaf = " "
 .Ed
+.\"
+.\"
+.\"
 .sp
 render a mailbox tree like the following:
 .sp
+.\"
+.\"
+.\"
 .Bd -literal
 0  Inbox 3
 1   Archive
@@ -1193,16 +1573,28 @@ render a mailbox tree like the following:
 7   Spam
 8   Trash
 .Ed
+.\"
+.\"
+.\"
 .sp
 Other possible trees:
 .sp
+.\"
+.\"
+.\"
 .Bd -literal
 has_sibling = " ┃"
 no_sibling = "  "
 has_sibling_leaf = " ┣━"
 no_sibling_leaf = " ┗━"
 .Ed
+.\"
+.\"
+.\"
 .sp
+.\"
+.\"
+.\"
 .Bd -literal
 0  Inbox 3
 1   ┣━Archive
@@ -1214,16 +1606,28 @@ no_sibling_leaf = " ┗━"
 7   ┣━Spam
 8   ┗━Trash
 .Ed
+.\"
+.\"
+.\"
 .sp
 A completely ASCII one:
 .sp
+.\"
+.\"
+.\"
 .Bd -literal
 has_sibling = " |"
 no_sibling = "  "
 has_sibling_leaf = " |\\_"
 no_sibling_leaf = " \\_"
 .Ed
+.\"
+.\"
+.\"
 .sp
+.\"
+.\"
+.\"
 .Bd -literal
 0  Inbox 3
 1   |\\_Archive
@@ -1235,7 +1639,15 @@ no_sibling_leaf = " \\_"
 7   |\\_Spam
 8    \\_Trash
 .Ed
+.\"
+.\"
+.\"
 .sp
+.\"
+.\"
+.\"
+.\"
+.\"
 .Sh TAGS
 Default values are shown in parentheses.
 .Bl -tag -width 36n
@@ -1249,6 +1661,9 @@ Hide tags (not the tagged messages themselves)
 .sp
 Example:
 .sp
+.\"
+.\"
+.\"
 .Bd -literal
 [tags]
 # valid inputs: #HHHHHH, #ABC -> #AABBCC, XTERM_NAME, 0-255 byte
@@ -1259,6 +1674,11 @@ colors = { signed="#Ff6600", replied="DeepSkyBlue4", draft="#f00", replied="8" }
   # per mailbox override:
   "INBOX" = {  tags.ignore_tags=["inbox", ] }
 .Ed
+.\"
+.\"
+.\"
+.\"
+.\"
 .Sh PGP
 Default values are shown in parentheses.
 .Bl -tag -width 36n
@@ -1336,6 +1756,11 @@ Possible mechanisms:
 .Em local
 .El
 .El
+.\"
+.\"
+.\"
+.\"
+.\"
 .Sh TERMINAL
 Default values are shown in parentheses.
 .Bl -tag -width 36n
@@ -1345,7 +1770,7 @@ Theme name to use.
 .Pq Em dark \" default value
 .It Ic ascii_drawing Ar boolean
 .Pq Em optional
-If true, box drawing will be done with ascii characters.
+If true, box drawing will be done with ASCII characters.
 .Pq Em false \" default value
 .It Ic use_color Ar boolean
 .Pq Em optional
@@ -1353,7 +1778,8 @@ If false, no ANSI colors are used.
 .Pq Em true \" default value
 .It Ic window_title Ar String
 .Pq Em optional
-Set window title in xterm compatible terminals An empty string means no window title is set.
+Set window title in xterm compatible terminals An empty string means no window
+title is set.
 .Pq Em "meli" \" default value
 .It Ic file_picker_command Ar String
 .Pq Em optional
@@ -1363,10 +1789,15 @@ Used with
 when composing new mail.
 .Pq Em None \" default value
 .It Ic themes Ar hash table String[String[Attribute]]
-Define UI themes.
+Define
+.Tn UI
+themes.
 See
 .Xr meli-themes 5
 for details.
+.\"
+.\"
+.\"
 .Bd -literal
 [terminal]
 theme = "themeB"
@@ -1380,6 +1811,9 @@ theme = "themeB"
 [terminal.themes.themeC]
 \&...
 .Ed
+.\"
+.\"
+.\"
 .It Ic use_mouse Ar bool
 Use mouse events.
 This will disable text selection, but you will be able to resize some widgets.
@@ -1391,11 +1825,16 @@ This setting can be toggled with
 String to show in status bar if mouse is active.
 .Pq Em 🖱️ \" default value
 .It Ic progress_spinner_sequence Ar Either \&< Integer, ProgressSpinner \&>
-Choose between 37 built in sequences (integers between 0-36) or define your own list of strings for the progress spinner animation.
+Choose between 37 built in sequences (integers between 0-36) or define your own
+list of strings for the progress spinner animation.
 Set to an empty array to disable the progress spinner.
 .Pq Em 20 \" default value
-.Pp
-Builtin sequences are:
+.sp
+Built-in sequences are:
+.sp
+.\"
+.\"
+.\"
 .Bd -literal
 0   ["-", "\\", "|", "/"]
 1   ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
@@ -1435,8 +1874,12 @@ Builtin sequences are:
 35  [ "[    ]", "[=   ]", "[==  ]", "[=== ]", "[ ===]", "[  ==]", "[   =]", "[    ]", "[   =]", "[  ==]", "[ ===]", "[====]", "[=== ]", "[==  ]", "[=   ]" ]
 36  ["🌑 ", "🌒 ", "🌓 ", "🌔 ", "🌕 ", "🌖 ", "🌗 ", "🌘 "]
 .Ed
-.Pp
-Or, define an array of strings each consisting of a frame in the progress sequence indicator for a custom spinner:
+.\"
+.\"
+.\"
+.sp
+Or, define an array of strings each consisting of a frame in the progress
+sequence indicator for a custom spinner:
 .Bl -tag -width 36n
 .It Ic interval_ms Ar u64
 .Pq Em optional
@@ -1447,10 +1890,21 @@ The animation frames.
 .El
 .Pp
 Example:
+.\"
+.\"
+.\"
 .Bd -literal
 progress_spinner_sequence = { interval_ms = 150, frames = [ "-", "=", "≡" ] }
 .Ed
+.\"
+.\"
+.\"
 .El
+.\"
+.\"
+.\"
+.\"
+.\"
 .Sh LOG
 Default values are shown in parentheses.
 .Bl -tag -width 36n
@@ -1486,6 +1940,11 @@ to
 \&.
 .Pq Em INFO \" default value
 .El
+.\"
+.\"
+.\"
+.\"
+.\"
 .Sh SMTP Connections
 Default values are shown in parentheses.
 .Bl -tag -width 36n
@@ -1498,20 +1957,24 @@ server port
 address to set as sender in SMTP transactions
 .Pq Em none \" default value
 .It Ic auth Ar SmtpAuth
-SMTP server authentication.
+.Tn SMTP
+server authentication.
 See
 .Sx SmtpAuth
 subsection.
 .It Ic security Ar SmtpSecurity
 .Pq Em optional
-gpg binary name or file location to use
+.Sy gpg
+binary name or file location to use.
 .Po see \" default value
 .Sx SmtpSecurity
 subsection
 .Pc
 .It Ic extensions Ar SmtpExtensions
 .Pq Em optional
-set support for SMTP extensions if they are advertised by the server
+set support for
+.Tn SMTP
+extensions if they are advertised by the server.
 .Po see \" default value
 .Sx SmtpExtensions
 subsection
@@ -1522,43 +1985,66 @@ subsection
 .It Ic type Ar "none" | "auto" | "xoauth2"
 .El
 .Pp
-For type "auto":
+For type
+.Qq auto Ns
+:
 .Bl -tag -width 36n
 .It Ic username Ar String
 .It Ic password Ar SmtpPassword
 .It Ic require_auth Ar bool
 .Pq Em optional
-require authentication in every case
+require authentication in every case.
 .Pq Em true \" default value
 .El
 .sp
-For type "xoauth2":
+For type
+.Qq xoauth2 Ns
+:
 .Bl -tag -width 36n
 .It Ic token_command Ar String
-Command to evaluate that returns an XOAUTH2 token.
+Command to evaluate that returns an
+.Tn XOAUTH2
+token.
 .It Ic require_auth Ar bool
 .Pq Em optional
-require authentication in every case
+require authentication in every case.
 .Pq Em true \" default value
 .El
 .sp
 Examples:
+.\"
+.\"
+.\"
 .Bd -literal
 auth = { type = "auto", username = "user", password = { type = "raw", value = "hunter2" } }
 .Ed
+.\"
+.\"
+.\"
 .Bd -literal
 auth = { type = "auto", username = "user", password = "hunter2" }
 .Ed
+.\"
+.\"
+.\"
 .Bd -literal
 auth = { type = "none" }
 .Ed
 .sp
-For Gmail (see
+For
+.Tn Gmail
+(see
 .Sx Gmail OAUTH2
 for details on the authentication token command):
+.\"
+.\"
+.\"
 .Bd -literal
 auth = { type = "xoauth2", token_command = "TOKEN=$(python3 oauth2.py --user=xxx@gmail.com --quiet --client_id=1038[...].apps.googleusercontent.com --client_secret=[..] --refresh_token=[..] && python3 oauth2.py --user=xxx@gmail.com --generate_oauth2_string --quiet --access_token=$TOKEN" }
 .Ed
+.\"
+.\"
+.\"
 .Ss SmtpPassword
 .Bl -tag -width 36n
 .It Ic type Ar "raw" | "command_evaluation"
@@ -1567,12 +2053,21 @@ Either a raw password string, or command to execute.
 .El
 .sp
 Examples:
+.\"
+.\"
+.\"
 .Bd -literal
 password = { type = "raw", value = "hunter2" }
 .Ed
+.\"
+.\"
+.\"
 .Bd -literal
 password = { type = "command_eval", value = "gpg2 --no-tty -q -d ~/.passwords/user.gpg" }
 .Ed
+.\"
+.\"
+.\"
 .Ss SmtpSecurity
 Default security type is
 .Em auto Ns
@@ -1580,16 +2075,20 @@ Default security type is
 .Bl -tag -width 36n
 .It Ic type Ar "none" | "auto" | "starttls" | "tls"
 .It Ic danger_accept_invalid_certs Ar bool
-Accept invalid SSL/TLS certificates
+Accept invalid
+.Tn SSL
+/
+.Tn TLS
+certificates
 .Pq Em false \" default value
 .El
 .Ss SmtpExtensions
 .Bl -tag -width 36n
 .It Ic pipelining Ar bool
-rfc2920
+RFC2920
 .Pq Em true \" default value
 .It Ic chunking Ar bool
-rfc3030
+RFC3030
 .Pq Em true \" default value
 .It Ic prdr Ar bool
 draft-hall-prdr-00
@@ -1598,16 +2097,24 @@ draft-hall-prdr-00
 RFC3461
 .Pq Em FAILURE \" default value
 .El
+.\"
+.\"
+.\"
+.\"
+.\"
 .Sh SEE ALSO
 .Xr meli 1 ,
 .Xr meli-themes 5
 .Sh CONFORMING TO
-TOML Standard v.0.5.0 https://toml.io/en/v0.5.0
+.Tn TOML
+Standard
+.Li v.0.5.0
+.Lk https://toml.io/en/v0.5.0
 .Sh AUTHORS
 Copyright 2017-2019
-.An Manos Pitsidianakis Aq epilys@nessuent.xyz
+.An Manos Pitsidianakis Aq manos@pitsidianak.is
 Released under the GPL, version 3 or greater.
 This software carries no warranty of any kind.
 (See COPYING for full copyright and warranty notices.)
 .Pp
-.Aq https://meli.delivery
+.Lk https://meli.delivery
