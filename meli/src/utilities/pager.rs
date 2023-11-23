@@ -537,17 +537,19 @@ impl Component for Pager {
             if !search.positions.is_empty() {
                 if let Some(mvm) = search.movement.take() {
                     match mvm {
-                        PageMovement::Up(_) => {
+                        SearchMovement::First | SearchMovement::Last => {
+                            self.cursor.1 = search.positions[search.cursor].0;
+                        }
+                        SearchMovement::Previous => {
                             if self.cursor.1 > search.positions[search.cursor].0 {
                                 self.cursor.1 = search.positions[search.cursor].0;
                             }
                         }
-                        PageMovement::Down(_) => {
-                            if self.cursor.1 + height < search.positions[search.cursor].0 {
+                        SearchMovement::Next => {
+                            if self.cursor.1 + rows < search.positions[search.cursor].0 {
                                 self.cursor.1 = search.positions[search.cursor].0;
                             }
                         }
-                        _ => {}
                     }
                 }
             }
@@ -767,24 +769,30 @@ impl Component for Pager {
                     pattern: pattern.to_string(),
                     positions: vec![],
                     cursor: 0,
-                    movement: Some(PageMovement::Home),
+                    movement: Some(SearchMovement::First),
                 });
                 self.initialised = false;
                 self.dirty = true;
                 return true;
             }
-            UIEvent::Input(Key::Char('n')) if self.search.is_some() => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["next_search_result"])
+                    && self.search.is_some() =>
+            {
                 if let Some(ref mut search) = self.search {
-                    search.movement = Some(PageMovement::Down(1));
+                    search.movement = Some(SearchMovement::Next);
                     search.cursor += 1;
                     self.initialised = false;
                     self.dirty = true;
                     return true;
                 }
             }
-            UIEvent::Input(Key::Char('N')) if self.search.is_some() => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["previous_search_result"])
+                    && self.search.is_some() =>
+            {
                 if let Some(ref mut search) = self.search {
-                    search.movement = Some(PageMovement::Up(1));
+                    search.movement = Some(SearchMovement::Previous);
                     search.cursor = search.cursor.saturating_sub(1);
                     self.initialised = false;
                     self.dirty = true;

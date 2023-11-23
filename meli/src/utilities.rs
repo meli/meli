@@ -51,12 +51,21 @@ use indexmap::IndexMap;
 pub use self::tables::*;
 use crate::{components::ExtendShortcutsMaps, jobs::JobId, melib::text_processing::TextProcessing};
 
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
+pub enum SearchMovement {
+    Previous,
+    #[default]
+    Next,
+    First,
+    Last,
+}
+
 #[derive(Default, Debug, Clone)]
 pub struct SearchPattern {
     pattern: String,
     positions: Vec<(usize, usize)>,
     cursor: usize,
-    movement: Option<PageMovement>,
+    movement: Option<SearchMovement>,
 }
 
 /// Status bar.
@@ -1215,7 +1224,7 @@ impl Component for Tabbed {
                 if !search.positions.is_empty() {
                     if let Some(mvm) = search.movement.take() {
                         match mvm {
-                            PageMovement::Home => {
+                            SearchMovement::First => {
                                 if self.help_view.cursor.1 > search.positions[search.cursor].0 {
                                     self.help_view.cursor.1 = search.positions[search.cursor].0;
                                 }
@@ -1225,12 +1234,12 @@ impl Component for Tabbed {
                                     self.help_view.cursor.1 = search.positions[search.cursor].0;
                                 }
                             }
-                            PageMovement::Up(_) => {
+                            SearchMovement::Previous => {
                                 if self.help_view.cursor.1 > search.positions[search.cursor].0 {
                                     self.help_view.cursor.1 = search.positions[search.cursor].0;
                                 }
                             }
-                            PageMovement::Down(_) => {
+                            SearchMovement::Next => {
                                 if self.help_view.cursor.1 + rows
                                     < search.positions[search.cursor].0
                                 {
@@ -1415,16 +1424,18 @@ impl Component for Tabbed {
                     pattern: pattern.to_string(),
                     positions: vec![],
                     cursor: 0,
-                    movement: Some(PageMovement::Home),
+                    movement: Some(SearchMovement::First),
                 });
                 self.dirty = true;
                 return true;
             }
-            UIEvent::Input(Key::Char('n'))
-                if self.show_shortcuts && self.help_view.search.is_some() =>
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["next_search_result"])
+                    && self.show_shortcuts
+                    && self.help_view.search.is_some() =>
             {
                 if let Some(ref mut search) = self.help_view.search {
-                    search.movement = Some(PageMovement::Down(1));
+                    search.movement = Some(SearchMovement::Next);
                     search.cursor += 1;
                 } else {
                     unsafe {
@@ -1434,11 +1445,13 @@ impl Component for Tabbed {
                 self.dirty = true;
                 return true;
             }
-            UIEvent::Input(Key::Char('N'))
-                if self.show_shortcuts && self.help_view.search.is_some() =>
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Shortcuts::GENERAL]["previous_search_result"])
+                    && self.show_shortcuts
+                    && self.help_view.search.is_some() =>
             {
                 if let Some(ref mut search) = self.help_view.search {
-                    search.movement = Some(PageMovement::Up(1));
+                    search.movement = Some(SearchMovement::Previous);
                     search.cursor = search.cursor.saturating_sub(1);
                 } else {
                     unsafe {
