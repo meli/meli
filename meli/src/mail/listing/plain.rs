@@ -1537,6 +1537,12 @@ impl Component for PlainListing {
 
                 self.set_dirty(true);
             }
+            UIEvent::EnvelopeRemove(ref env_hash, _) => {
+                if self.rows.contains_env(*env_hash) {
+                    self.refresh_mailbox(context, false);
+                    self.set_dirty(true);
+                }
+            }
             UIEvent::EnvelopeUpdate(ref env_hash) => {
                 let account = &context.accounts[&self.cursor_pos.0];
                 if !account.collection.contains_key(env_hash)
