@@ -29,7 +29,7 @@ use std::{
 
 use melib::{
     email::attachment_types::ContentType, list_management, mailto::Mailto, parser::BytesExt,
-    utils::datetime, Card, Draft, HeaderName, SpecialUsageMailbox,
+    utils::datetime, Card, Draft, FlagOp, HeaderName, SpecialUsageMailbox,
 };
 use smallvec::SmallVec;
 
@@ -310,32 +310,16 @@ impl Component for MailView {
             {
                 let account = &mut context.accounts[&coordinates.0];
                 if !account.collection.get_env(coordinates.2).is_seen() {
-                    let job = account.backend.write().unwrap().set_flags(
+                    if let Err(err) = account.set_flags(
                         coordinates.2.into(),
                         coordinates.1,
-                        smallvec::smallvec![(Ok(Flag::SEEN), true)],
-                    );
-                    match job {
-                        Ok(fut) => {
-                            let handle = account
-                                .main_loop_handler
-                                .job_executor
-                                .spawn_specialized("set_flags".into(), fut);
-                            account.insert_job(
-                                handle.job_id,
-                                JobRequest::SetFlags {
-                                    env_hashes: coordinates.2.into(),
-                                    handle,
-                                },
-                            );
-                        }
-                        Err(err) => {
-                            context.replies.push_back(UIEvent::StatusEvent(
-                                StatusEvent::DisplayMessage(format!(
-                                    "Could not set message as seen: {err}",
-                                )),
-                            ));
-                        }
+                        smallvec::smallvec![FlagOp::Set(Flag::SEEN)],
+                    ) {
+                        context.replies.push_back(UIEvent::StatusEvent(
+                            StatusEvent::DisplayMessage(format!(
+                                "Could not set message as seen: {err}",
+                            )),
+                        ));
                     }
                 }
             }

@@ -809,10 +809,10 @@ impl MailBackend for MaildirType {
         &mut self,
         env_hashes: EnvelopeHashBatch,
         mailbox_hash: MailboxHash,
-        flags: SmallVec<[(std::result::Result<Flag, String>, bool); 8]>,
+        flags: SmallVec<[FlagOp; 8]>,
     ) -> ResultFuture<()> {
         let hash_index = self.hash_indexes.clone();
-        if flags.iter().any(|(f, _)| f.is_err()) {
+        if flags.iter().any(|op| op.is_tag()) {
             return Err(Error::new("Maildir doesn't support tags."));
         }
 
@@ -841,8 +841,10 @@ impl MailBackend for MaildirType {
                     .ok_or_else(|| Error::new(format!("Invalid email filename: {:?}", path)))?
                     + 3;
                 let mut new_name: String = path[..idx].to_string();
-                for (f, value) in flags.iter() {
-                    env_flags.set(*f.as_ref().unwrap(), *value);
+                for op in flags.iter() {
+                    if let FlagOp::Set(f) | FlagOp::UnSet(f) = op {
+                        env_flags.set(*f, op.as_bool());
+                    }
                 }
 
                 if !(env_flags & Flag::DRAFT).is_empty() {
@@ -867,9 +869,9 @@ impl MailBackend for MaildirType {
                 hash_index.entry(env_hash).or_default().modified =
                     Some(PathMod::Path(new_name.clone()));
 
-                debug!("renaming {:?} to {:?}", path, new_name);
+                log::debug!("renaming {:?} to {:?}", path, new_name);
                 fs::rename(path, &new_name)?;
-                debug!("success in rename");
+                log::debug!("success in rename");
             }
             Ok(())
         }))

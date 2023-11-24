@@ -25,6 +25,7 @@ use imap_codec::imap_types::{
     sequence::SequenceSet,
     status::StatusDataItemName,
 };
+use indexmap::IndexSet;
 
 use super::*;
 
@@ -173,7 +174,7 @@ impl ImapConnection {
                 for f in keywords {
                     let hash = TagHash::from_bytes(f.as_bytes());
                     tag_lck.entry(hash).or_insert_with(|| f.to_string());
-                    env.tags_mut().push(hash);
+                    env.tags_mut().insert(hash);
                 }
             }
         }
@@ -266,7 +267,7 @@ impl ImapConnection {
                     != &tags
                         .iter()
                         .map(|t| TagHash::from_bytes(t.as_bytes()))
-                        .collect::<SmallVec<[TagHash; 8]>>()
+                        .collect::<IndexSet<TagHash>>()
             {
                 env_lck.entry(env_hash).and_modify(|entry| {
                     entry.inner.set_flags(flags);
@@ -466,7 +467,7 @@ impl ImapConnection {
                     for f in keywords {
                         let hash = TagHash::from_bytes(f.as_bytes());
                         tag_lck.entry(hash).or_insert_with(|| f.to_string());
-                        env.tags_mut().push(hash);
+                        env.tags_mut().insert(hash);
                     }
                 }
             }
@@ -556,7 +557,7 @@ impl ImapConnection {
                         != &tags
                             .iter()
                             .map(|t| TagHash::from_bytes(t.as_bytes()))
-                            .collect::<SmallVec<[TagHash; 8]>>()
+                            .collect::<IndexSet<TagHash>>()
                 {
                     env_lck.entry(env_hash).and_modify(|entry| {
                         entry.inner.set_flags(flags);

@@ -701,7 +701,7 @@ impl MailBackend for ImapType {
         &mut self,
         env_hashes: EnvelopeHashBatch,
         mailbox_hash: MailboxHash,
-        flags: SmallVec<[(std::result::Result<Flag, String>, bool); 8]>,
+        flags: SmallVec<[FlagOp; 8]>,
     ) -> ResultFuture<()> {
         let connection = self.connection.clone();
         let uid_store = self.uid_store.clone();
@@ -724,7 +724,7 @@ impl MailBackend for ImapType {
             let mut conn = connection.lock().await;
             conn.select_mailbox(mailbox_hash, &mut response, false)
                 .await?;
-            if flags.iter().any(|(_, b)| *b) {
+            if flags.iter().any(<bool>::from) {
                 /* Set flags/tags to true */
                 let mut set_seen = false;
                 let command = {
@@ -734,28 +734,25 @@ impl MailBackend for ImapType {
                         cmd = format!("{},{}", cmd, uid);
                     }
                     cmd = format!("{} +FLAGS (", cmd);
-                    for (f, v) in flags.iter() {
-                        if !*v {
-                            continue;
-                        }
-                        match f {
-                            Ok(flag) if *flag == Flag::REPLIED => {
+                    for op in flags.iter().filter(|op| <bool>::from(*op)) {
+                        match op {
+                            FlagOp::Set(flag) if *flag == Flag::REPLIED => {
                                 cmd.push_str("\\Answered ");
                             }
-                            Ok(flag) if *flag == Flag::FLAGGED => {
+                            FlagOp::Set(flag) if *flag == Flag::FLAGGED => {
                                 cmd.push_str("\\Flagged ");
                             }
-                            Ok(flag) if *flag == Flag::TRASHED => {
+                            FlagOp::Set(flag) if *flag == Flag::TRASHED => {
                                 cmd.push_str("\\Deleted ");
                             }
-                            Ok(flag) if *flag == Flag::SEEN => {
+                            FlagOp::Set(flag) if *flag == Flag::SEEN => {
                                 cmd.push_str("\\Seen ");
                                 set_seen = true;
                             }
-                            Ok(flag) if *flag == Flag::DRAFT => {
+                            FlagOp::Set(flag) if *flag == Flag::DRAFT => {
                                 cmd.push_str("\\Draft ");
                             }
-                            Ok(_) => {
+                            FlagOp::Set(_) => {
                                 log::error!(
                                     "Application error: more than one flag bit set in set_flags: \
                                      {:?}",
@@ -768,12 +765,13 @@ impl MailBackend for ImapType {
                                 ))
                                 .set_kind(crate::ErrorKind::Bug));
                             }
-                            Err(tag) => {
+                            FlagOp::SetTag(tag) => {
                                 let hash = TagHash::from_bytes(tag.as_bytes());
                                 tag_lck.entry(hash).or_insert_with(|| tag.to_string());
                                 cmd.push_str(tag);
                                 cmd.push(' ');
                             }
+                            _ => {}
                         }
                     }
                     // pop last space
@@ -794,7 +792,7 @@ impl MailBackend for ImapType {
                     }
                 }
             }
-            if flags.iter().any(|(_, b)| !*b) {
+            if flags.iter().any(|b| !<bool>::from(b)) {
                 let mut set_unseen = false;
                 /* Set flags/tags to false */
                 let command = {
@@ -803,28 +801,25 @@ impl MailBackend for ImapType {
                         cmd = format!("{},{}", cmd, uid);
                     }
                     cmd = format!("{} -FLAGS (", cmd);
-                    for (f, v) in flags.iter() {
-                        if *v {
-                            continue;
-                        }
-                        match f {
-                            Ok(flag) if *flag == Flag::REPLIED => {
+                    for op in flags.iter().filter(|op| !<bool>::from(*op)) {
+                        match op {
+                            FlagOp::UnSet(flag) if *flag == Flag::REPLIED => {
                                 cmd.push_str("\\Answered ");
                             }
-                            Ok(flag) if *flag == Flag::FLAGGED => {
+                            FlagOp::UnSet(flag) if *flag == Flag::FLAGGED => {
                                 cmd.push_str("\\Flagged ");
                             }
-                            Ok(flag) if *flag == Flag::TRASHED => {
+                            FlagOp::UnSet(flag) if *flag == Flag::TRASHED => {
                                 cmd.push_str("\\Deleted ");
                             }
-                            Ok(flag) if *flag == Flag::SEEN => {
+                            FlagOp::UnSet(flag) if *flag == Flag::SEEN => {
                                 cmd.push_str("\\Seen ");
                                 set_unseen = true;
                             }
-                            Ok(flag) if *flag == Flag::DRAFT => {
+                            FlagOp::UnSet(flag) if *flag == Flag::DRAFT => {
                                 cmd.push_str("\\Draft ");
                             }
-                            Ok(_) => {
+                            FlagOp::UnSet(_) => {
                                 log::error!(
                                     "Application error: more than one flag bit set in set_flags: \
                                      {:?}",
@@ -836,12 +831,14 @@ impl MailBackend for ImapType {
                                     flags
                                 )));
                             }
-                            Err(tag) => {
+                            FlagOp::UnSetTag(tag) => {
                                 cmd.push_str(tag);
                                 cmd.push(' ');
                             }
+                            _ => {}
                         }
                     }
+                    // [ref:TODO] there should be a check that cmd is not empty here.
                     // pop last space
                     cmd.pop();
                     cmd.push(')');
@@ -872,7 +869,7 @@ impl MailBackend for ImapType {
         let flag_future = self.set_flags(
             env_hashes,
             mailbox_hash,
-            smallvec::smallvec![(Ok(Flag::TRASHED), true)],
+            smallvec::smallvec![FlagOp::Set(Flag::TRASHED)],
         )?;
         let connection = self.connection.clone();
         Ok(Box::pin(async move {
@@ -1811,7 +1808,7 @@ async fn fetch_hlpr(state: &mut FetchState) -> Result<Vec<Envelope>> {
                             for f in keywords {
                                 let hash = TagHash::from_bytes(f.as_bytes());
                                 tag_lck.entry(hash).or_insert_with(|| f.to_string());
-                                env.tags_mut().push(hash);
+                                env.tags_mut().insert(hash);
                             }
                         }
                     }

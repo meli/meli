@@ -101,7 +101,7 @@ impl<'m> Message<'m> {
         for tag in tags {
             let num = TagHash::from_bytes(tag.as_bytes());
             tag_lock.entry(num).or_insert(tag);
-            env.tags_mut().push(num);
+            env.tags_mut().insert(num);
         }
         unsafe {
             use crate::email::parser::address::rfc2822address_list;

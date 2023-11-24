@@ -116,6 +116,7 @@ use imap_codec::imap_types::{
     fetch::{MacroOrMessageDataItemNames, MessageDataItemName, Section},
     flag::Flag as ImapCodecFlag,
 };
+use indexmap::IndexSet;
 use smallvec::SmallVec;
 
 use crate::{
@@ -287,7 +288,7 @@ pub struct Envelope {
     pub thread: ThreadNodeHash,
     pub flags: Flag,
     pub has_attachments: bool,
-    pub tags: SmallVec<[TagHash; 8]>,
+    pub tags: IndexSet<TagHash>,
 }
 
 impl std::fmt::Debug for Envelope {
@@ -330,7 +331,7 @@ impl Envelope {
             thread: ThreadNodeHash::null(),
             has_attachments: false,
             flags: Flag::default(),
-            tags: SmallVec::new(),
+            tags: IndexSet::new(),
         }
     }
 
@@ -851,11 +852,11 @@ impl Envelope {
         self.has_attachments
     }
 
-    pub fn tags(&self) -> &SmallVec<[TagHash; 8]> {
+    pub fn tags(&self) -> &IndexSet<TagHash> {
         &self.tags
     }
 
-    pub fn tags_mut(&mut self) -> &mut SmallVec<[TagHash; 8]> {
+    pub fn tags_mut(&mut self) -> &mut IndexSet<TagHash> {
         &mut self.tags
     }
 }

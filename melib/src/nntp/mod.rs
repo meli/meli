@@ -438,7 +438,7 @@ impl MailBackend for NntpType {
         &mut self,
         env_hashes: EnvelopeHashBatch,
         mailbox_hash: MailboxHash,
-        flags: SmallVec<[(std::result::Result<Flag, String>, bool); 8]>,
+        flags: SmallVec<[FlagOp; 8]>,
     ) -> ResultFuture<()> {
         let uid_store = self.uid_store.clone();
         Ok(Box::pin(async move {
@@ -461,11 +461,11 @@ impl MailBackend for NntpType {
             let fsets = &uid_store.mailboxes.lock().await[&mailbox_hash];
             let store_lck = uid_store.store.lock().await;
             if let Some(s) = store_lck.as_ref() {
-                for (flag, on) in flags {
-                    if let Ok(f) = flag {
+                for op in flags {
+                    if let FlagOp::Set(f) | FlagOp::UnSet(f) = op {
                         for (env_hash, uid) in &uids {
                             let mut current_val = s.flags(*env_hash, mailbox_hash, *uid)?;
-                            current_val.set(f, on);
+                            current_val.set(f, <bool>::from(&op));
                             if !current_val.intersects(Flag::SEEN) {
                                 fsets.unseen.lock().unwrap().insert_new(*env_hash);
                             } else {

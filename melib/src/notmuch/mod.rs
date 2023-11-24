@@ -850,7 +850,7 @@ impl MailBackend for NotmuchDb {
         &mut self,
         env_hashes: EnvelopeHashBatch,
         _mailbox_hash: MailboxHash,
-        flags: SmallVec<[(std::result::Result<Flag, String>, bool); 8]>,
+        flags: SmallVec<[FlagOp; 8]>,
     ) -> ResultFuture<()> {
         let database = Self::new_connection(
             self.path.as_path(),
@@ -906,32 +906,29 @@ impl MailBackend for NotmuchDb {
                     }};
                 }
 
-                for (f, v) in flags.iter() {
-                    let value = *v;
-                    debug!(&f);
-                    debug!(&value);
-                    match f {
-                        Ok(Flag::DRAFT) if value => add_tag!(b"draft\0"),
-                        Ok(Flag::DRAFT) => remove_tag!(b"draft\0"),
-                        Ok(Flag::FLAGGED) if value => add_tag!(b"flagged\0"),
-                        Ok(Flag::FLAGGED) => remove_tag!(b"flagged\0"),
-                        Ok(Flag::PASSED) if value => add_tag!(b"passed\0"),
-                        Ok(Flag::PASSED) => remove_tag!(b"passed\0"),
-                        Ok(Flag::REPLIED) if value => add_tag!(b"replied\0"),
-                        Ok(Flag::REPLIED) => remove_tag!(b"replied\0"),
-                        Ok(Flag::SEEN) if value => remove_tag!(b"unread\0"),
-                        Ok(Flag::SEEN) => add_tag!(b"unread\0"),
-                        Ok(Flag::TRASHED) if value => add_tag!(b"trashed\0"),
-                        Ok(Flag::TRASHED) => remove_tag!(b"trashed\0"),
-                        Ok(_) => debug!("flags is {:?} value = {}", f, value),
-                        Err(tag) if value => {
+                for op in flags.iter() {
+                    match op {
+                        FlagOp::Set(Flag::DRAFT) => add_tag!(b"draft\0"),
+                        FlagOp::UnSet(Flag::DRAFT) => remove_tag!(b"draft\0"),
+                        FlagOp::Set(Flag::FLAGGED) => add_tag!(b"flagged\0"),
+                        FlagOp::UnSet(Flag::FLAGGED) => remove_tag!(b"flagged\0"),
+                        FlagOp::Set(Flag::PASSED) => add_tag!(b"passed\0"),
+                        FlagOp::UnSet(Flag::PASSED) => remove_tag!(b"passed\0"),
+                        FlagOp::Set(Flag::REPLIED) => add_tag!(b"replied\0"),
+                        FlagOp::UnSet(Flag::REPLIED) => remove_tag!(b"replied\0"),
+                        FlagOp::Set(Flag::SEEN) => remove_tag!(b"unread\0"),
+                        FlagOp::UnSet(Flag::SEEN) => add_tag!(b"unread\0"),
+                        FlagOp::Set(Flag::TRASHED) => add_tag!(b"trashed\0"),
+                        FlagOp::UnSet(Flag::TRASHED) => remove_tag!(b"trashed\0"),
+                        FlagOp::SetTag(tag) => {
                             let c_tag = CString::new(tag.as_str()).unwrap();
                             add_tag!(&c_tag.as_ref());
                         }
-                        Err(tag) => {
+                        FlagOp::UnSetTag(tag) => {
                             let c_tag = CString::new(tag.as_str()).unwrap();
                             remove_tag!(&c_tag.as_ref());
                         }
+                        _ => debug!("flag_op is {:?}", op),
                     }
                 }
 
@@ -943,8 +940,8 @@ impl MailBackend for NotmuchDb {
                     *p = msg_id.into();
                 }
             }
-            for (f, v) in flags.iter() {
-                if let (Err(tag), true) = (f, v) {
+            for op in flags.iter() {
+                if let FlagOp::SetTag(tag) = op {
                     let hash = TagHash::from_bytes(tag.as_bytes());
                     tag_index.write().unwrap().insert(hash, tag.to_string());
                 }

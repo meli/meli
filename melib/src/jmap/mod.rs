@@ -29,7 +29,7 @@ use std::{
 };
 
 use futures::{lock::Mutex as FutureMutex, Stream};
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 use isahc::{config::RedirectPolicy, AsyncReadResponseExt, HttpClient};
 use serde_json::{json, Value};
 use smallvec::SmallVec;
@@ -209,7 +209,7 @@ pub struct Store {
 impl Store {
     pub fn add_envelope(&self, obj: EmailObject) -> Envelope {
         let mut flags = Flag::default();
-        let mut labels: SmallVec<[TagHash; 8]> = SmallVec::new();
+        let mut labels: IndexSet<TagHash> = IndexSet::new();
         let mut tag_lck = self.collection.tag_index.write().unwrap();
         for t in obj.keywords().keys() {
             match t.as_str() {
@@ -229,7 +229,7 @@ impl Store {
                 _ => {
                     let tag_hash = TagHash::from_bytes(t.as_bytes());
                     tag_lck.entry(tag_hash).or_insert_with(|| t.to_string());
-                    labels.push(tag_hash);
+                    labels.insert(tag_hash);
                 }
             }
         }
@@ -240,7 +240,7 @@ impl Store {
         drop(tag_lck);
         let mut ret: Envelope = obj.into();
         ret.set_flags(flags);
-        ret.tags_mut().append(&mut labels);
+        ret.tags_mut().extend(labels);
 
         let mut id_store_lck = self.id_store.lock().unwrap();
         let mut reverse_id_store_lck = self.reverse_id_store.lock().unwrap();
@@ -760,7 +760,7 @@ impl MailBackend for JmapType {
         &mut self,
         env_hashes: EnvelopeHashBatch,
         mailbox_hash: MailboxHash,
-        flags: SmallVec<[(std::result::Result<Flag, String>, bool); 8]>,
+        flags: SmallVec<[FlagOp; 8]>,
     ) -> ResultFuture<()> {
         let store = self.store.clone();
         let connection = self.connection.clone();
@@ -769,9 +769,9 @@ impl MailBackend for JmapType {
             let mut ids: Vec<Id<EmailObject>> = Vec::with_capacity(env_hashes.rest.len() + 1);
             let mut id_map: IndexMap<Id<EmailObject>, EnvelopeHash> = IndexMap::default();
             let mut update_keywords: IndexMap<String, Value> = IndexMap::default();
-            for (flag, value) in flags.iter() {
-                match flag {
-                    Ok(f) => {
+            for op in flags.iter() {
+                match op {
+                    FlagOp::Set(f) => {
                         update_keywords.insert(
                             format!(
                                 "keywords/{}",
@@ -785,22 +785,31 @@ impl MailBackend for JmapType {
                                     _ => continue, // [ref:VERIFY]
                                 }
                             ),
-                            if *value {
-                                serde_json::json!(true)
-                            } else {
-                                serde_json::json!(null)
-                            },
+                            serde_json::json!(true),
                         );
                     }
-                    Err(t) => {
+                    FlagOp::UnSet(f) => {
                         update_keywords.insert(
-                            format!("keywords/{}", t),
-                            if *value {
-                                serde_json::json!(true)
-                            } else {
-                                serde_json::json!(null)
-                            },
+                            format!(
+                                "keywords/{}",
+                                match *f {
+                                    Flag::DRAFT => "$draft",
+                                    Flag::FLAGGED => "$flagged",
+                                    Flag::SEEN => "$seen",
+                                    Flag::REPLIED => "$answered",
+                                    Flag::TRASHED => "$junk",
+                                    Flag::PASSED => "$passed",
+                                    _ => continue, // [ref:VERIFY]
+                                }
+                            ),
+                            serde_json::json!(null),
                         );
+                    }
+                    FlagOp::SetTag(t) => {
+                        update_keywords.insert(format!("keywords/{}", t), serde_json::json!(true));
+                    }
+                    FlagOp::UnSetTag(t) => {
+                        update_keywords.insert(format!("keywords/{}", t), serde_json::json!(null));
                     }
                 }
             }
@@ -866,14 +875,9 @@ impl MailBackend for JmapType {
 
             {
                 let mut tag_index_lck = store.collection.tag_index.write().unwrap();
-                for (flag, value) in flags.iter() {
-                    match flag {
-                        Ok(_) => {}
-                        Err(t) => {
-                            if *value {
-                                tag_index_lck.insert(TagHash::from_bytes(t.as_bytes()), t.clone());
-                            }
-                        }
+                for op in flags.iter() {
+                    if let FlagOp::SetTag(t) = op {
+                        tag_index_lck.insert(TagHash::from_bytes(t.as_bytes()), t.clone());
                     }
                 }
                 drop(tag_index_lck);

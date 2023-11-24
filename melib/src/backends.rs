@@ -320,6 +320,37 @@ impl Deref for BackendEventConsumer {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum FlagOp {
+    Set(Flag),
+    SetTag(String),
+    UnSet(Flag),
+    UnSetTag(String),
+}
+
+impl From<&FlagOp> for bool {
+    fn from(val: &FlagOp) -> Self {
+        matches!(val, FlagOp::Set(_) | FlagOp::SetTag(_))
+    }
+}
+
+impl FlagOp {
+    #[inline]
+    pub fn is_flag(&self) -> bool {
+        matches!(self, Self::Set(_) | Self::UnSet(_))
+    }
+
+    #[inline]
+    pub fn is_tag(&self) -> bool {
+        matches!(self, Self::SetTag(_) | Self::UnSetTag(_))
+    }
+
+    #[inline]
+    pub fn as_bool(&self) -> bool {
+        self.into()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct MailBackendCapabilities {
     pub is_async: bool,
@@ -376,7 +407,7 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
         &mut self,
         env_hashes: EnvelopeHashBatch,
         mailbox_hash: MailboxHash,
-        flags: SmallVec<[(std::result::Result<Flag, String>, bool); 8]>,
+        flags: SmallVec<[FlagOp; 8]>,
     ) -> ResultFuture<()>;
 
     fn delete_messages(

@@ -246,7 +246,7 @@ impl ImapConnection {
                         for f in keywords {
                             let hash = TagHash::from_bytes(f.as_bytes());
                             tag_lck.entry(hash).or_insert_with(|| f.to_string());
-                            env.tags_mut().push(hash);
+                            env.tags_mut().insert(hash);
                         }
                     }
                     mailbox.exists.lock().unwrap().insert_new(env.hash());
@@ -379,7 +379,7 @@ impl ImapConnection {
                                 for f in keywords {
                                     let hash = TagHash::from_bytes(f.as_bytes());
                                     tag_lck.entry(hash).or_insert_with(|| f.to_string());
-                                    env.tags_mut().push(hash);
+                                    env.tags_mut().insert(hash);
                                 }
                             }
                             mailbox.exists.lock().unwrap().insert_new(env.hash());

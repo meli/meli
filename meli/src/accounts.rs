@@ -61,6 +61,8 @@ use crate::{
     MainLoopHandler, StatusEvent, ThreadEvent,
 };
 
+mod backend_ops;
+
 #[macro_export]
 macro_rules! try_recv_timeout {
     ($oneshot:expr) => {{
@@ -242,6 +244,7 @@ pub enum JobRequest {
     },
     SetFlags {
         env_hashes: EnvelopeHashBatch,
+        flags: SmallVec<[FlagOp; 8]>,
         handle: JoinHandle<Result<()>>,
     },
     SaveMessage {
@@ -325,7 +328,13 @@ impl std::fmt::Debug for JobRequest {
             }
             JobRequest::IsOnline { .. } => write!(f, "JobRequest::IsOnline"),
             JobRequest::Refresh { .. } => write!(f, "JobRequest::Refresh"),
-            JobRequest::SetFlags { .. } => write!(f, "JobRequest::SetFlags"),
+            JobRequest::SetFlags {
+                env_hashes, flags, ..
+            } => f
+                .debug_struct(stringify!(JobRequest::SetFlags))
+                .field("env_hashes", &env_hashes)
+                .field("flags", &flags)
+                .finish(),
             JobRequest::SaveMessage { .. } => write!(f, "JobRequest::SaveMessage"),
             JobRequest::DeleteMessages { .. } => write!(f, "JobRequest::DeleteMessages"),
             JobRequest::CreateMailbox { .. } => write!(f, "JobRequest::CreateMailbox"),
@@ -356,11 +365,14 @@ impl std::fmt::Display for JobRequest {
             JobRequest::Fetch { .. } => write!(f, "Mailbox fetch"),
             JobRequest::IsOnline { .. } => write!(f, "Online status check"),
             JobRequest::Refresh { .. } => write!(f, "Refresh mailbox"),
-            JobRequest::SetFlags { env_hashes, .. } => write!(
+            JobRequest::SetFlags {
+                env_hashes, flags, ..
+            } => write!(
                 f,
-                "Set flags for {} message{}",
+                "Set flags for {} message{}: {:?}",
                 env_hashes.len(),
-                if env_hashes.len() == 1 { "" } else { "s" }
+                if env_hashes.len() == 1 { "" } else { "s" },
+                flags
             ),
             JobRequest::SaveMessage { .. } => write!(f, "Save message"),
             JobRequest::DeleteMessages { env_hashes, .. } => write!(
@@ -777,42 +789,7 @@ impl Account {
                         );
                     }
                     #[cfg(feature = "sqlite3")]
-                    if self.settings.conf.search_backend == crate::conf::SearchBackend::Sqlite3 {
-                        match crate::sqlite3::remove(old_hash).map(|_| {
-                            crate::sqlite3::insert(
-                                (*envelope).clone(),
-                                self.backend.clone(),
-                                self.name.clone(),
-                            )
-                        }) {
-                            Err(err) => {
-                                log::error!(
-                                    "Failed to update envelope {} in cache: {}",
-                                    envelope.message_id_display(),
-                                    err
-                                );
-                            }
-                            Ok(job) => {
-                                let handle = self
-                                    .main_loop_handler
-                                    .job_executor
-                                    .spawn_blocking("sqlite3::update".into(), job);
-                                self.insert_job(
-                                    handle.job_id,
-                                    JobRequest::Generic {
-                                        name: format!(
-                                            "Update envelope {} in sqlite3 cache",
-                                            envelope.message_id_display()
-                                        )
-                                        .into(),
-                                        handle,
-                                        log_level: LogLevel::TRACE,
-                                        on_finish: None,
-                                    },
-                                );
-                            }
-                        }
-                    }
+                    self.update_cached_env(*envelope.clone(), Some(old_hash));
                     self.collection.update(old_hash, *envelope, mailbox_hash);
                     return Some(EnvelopeUpdate(old_hash));
                 }
@@ -833,43 +810,18 @@ impl Account {
                             entry.set_flags(flags);
                         });
                     #[cfg(feature = "sqlite3")]
-                    if self.settings.conf.search_backend == crate::conf::SearchBackend::Sqlite3 {
-                        match crate::sqlite3::remove(env_hash).map(|_| {
-                            crate::sqlite3::insert(
-                                self.collection.envelopes.read().unwrap()[&env_hash].clone(),
-                                self.backend.clone(),
-                                self.name.clone(),
-                            )
-                        }) {
-                            Ok(job) => {
-                                let handle = self
-                                    .main_loop_handler
-                                    .job_executor
-                                    .spawn_blocking("sqlite3::remove".into(), job);
-                                self.insert_job(
-                                    handle.job_id,
-                                    JobRequest::Generic {
-                                        name: format!(
-                                            "Update envelope {} in sqlite3 cache",
-                                            self.collection.envelopes.read().unwrap()[&env_hash]
-                                                .message_id_display()
-                                        )
-                                        .into(),
-                                        handle,
-                                        log_level: LogLevel::TRACE,
-                                        on_finish: None,
-                                    },
-                                );
-                            }
-                            Err(err) => {
-                                log::error!(
-                                    "Failed to update envelope {} in cache: {}",
-                                    self.collection.envelopes.read().unwrap()[&env_hash]
-                                        .message_id_display(),
-                                    err
-                                );
-                            }
-                        }
+                    if let Some(env) = {
+                        let temp = self
+                            .collection
+                            .envelopes
+                            .read()
+                            .unwrap()
+                            .get(&env_hash)
+                            .cloned();
+
+                        temp
+                    } {
+                        self.update_cached_env(env, None);
                     }
                     self.collection.update_flags(env_hash, mailbox_hash);
                     return Some(EnvelopeUpdate(env_hash));
@@ -880,43 +832,18 @@ impl Account {
                         return Some(EnvelopeRename(old_hash, new_hash));
                     }
                     #[cfg(feature = "sqlite3")]
-                    if self.settings.conf.search_backend == crate::conf::SearchBackend::Sqlite3 {
-                        match crate::sqlite3::remove(old_hash).map(|_| {
-                            crate::sqlite3::insert(
-                                self.collection.envelopes.read().unwrap()[&new_hash].clone(),
-                                self.backend.clone(),
-                                self.name.clone(),
-                            )
-                        }) {
-                            Err(err) => {
-                                log::error!(
-                                    "Failed to update envelope {} in cache: {}",
-                                    &self.collection.envelopes.read().unwrap()[&new_hash]
-                                        .message_id_display(),
-                                    err
-                                );
-                            }
-                            Ok(job) => {
-                                let handle = self
-                                    .main_loop_handler
-                                    .job_executor
-                                    .spawn_blocking("sqlite3::rename".into(), job);
-                                self.insert_job(
-                                    handle.job_id,
-                                    JobRequest::Generic {
-                                        name: format!(
-                                            "Update envelope {} in sqlite3 cache",
-                                            self.collection.envelopes.read().unwrap()[&new_hash]
-                                                .message_id_display()
-                                        )
-                                        .into(),
-                                        handle,
-                                        log_level: LogLevel::TRACE,
-                                        on_finish: None,
-                                    },
-                                );
-                            }
-                        }
+                    if let Some(env) = {
+                        let temp = self
+                            .collection
+                            .envelopes
+                            .read()
+                            .unwrap()
+                            .get(&new_hash)
+                            .cloned();
+
+                        temp
+                    } {
+                        self.update_cached_env(env, Some(old_hash));
                     }
                     return Some(EnvelopeRename(old_hash, new_hash));
                 }
@@ -1952,8 +1879,12 @@ impl Account {
                         }
                     }
                 }
-                JobRequest::SetFlags { ref mut handle, .. } => {
-                    if let Ok(Some(Err(err))) = handle.chan.try_recv() {
+                JobRequest::SetFlags {
+                    ref mut handle,
+                    ref env_hashes,
+                    ref flags,
+                } => match handle.chan.try_recv() {
+                    Ok(Some(Err(err))) => {
                         self.main_loop_handler
                             .job_executor
                             .set_job_success(job_id, false);
@@ -1964,7 +1895,50 @@ impl Account {
                                 Some(crate::types::NotificationType::Error(err.kind)),
                             )));
                     }
-                }
+                    Ok(Some(Ok(()))) => {
+                        for env_hash in env_hashes.iter() {
+                            if !self.collection.contains_key(&env_hash) {
+                                continue;
+                            }
+                            let mut env_lck = self.collection.envelopes.write().unwrap();
+                            env_lck.entry(env_hash).and_modify(|entry| {
+                                for op in flags.iter() {
+                                    match op {
+                                        FlagOp::Set(f) => {
+                                            let mut flags = entry.flags();
+                                            flags.set(*f, true);
+                                            entry.set_flags(flags);
+                                        }
+                                        FlagOp::UnSet(f) => {
+                                            let mut flags = entry.flags();
+                                            flags.set(*f, false);
+                                            entry.set_flags(flags);
+                                        }
+                                        FlagOp::SetTag(t) => {
+                                            entry
+                                                .tags_mut()
+                                                .insert(TagHash::from_bytes(t.as_bytes()));
+                                        }
+                                        FlagOp::UnSetTag(t) => {
+                                            entry
+                                                .tags_mut()
+                                                .remove(&TagHash::from_bytes(t.as_bytes()));
+                                        }
+                                    }
+                                }
+                            });
+                            #[cfg(feature = "sqlite3")]
+                            if let Some(env) = env_lck.get(&env_hash).cloned() {
+                                drop(env_lck);
+                                self.update_cached_env(env, None);
+                            }
+
+                            self.main_loop_handler
+                                .send(ThreadEvent::UIEvent(UIEvent::EnvelopeUpdate(env_hash)));
+                        }
+                    }
+                    _ => {}
+                },
                 JobRequest::SaveMessage {
                     ref mut handle,
                     ref bytes,

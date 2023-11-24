@@ -31,7 +31,8 @@ use std::{
 
 use futures::future::try_join_all;
 use melib::{
-    backends::EnvelopeHashBatch, mbox::MboxMetadata, utils::datetime, Address, UnixTimestamp,
+    backends::EnvelopeHashBatch, mbox::MboxMetadata, utils::datetime, Address, FlagOp,
+    UnixTimestamp,
 };
 use smallvec::SmallVec;
 
@@ -505,99 +506,47 @@ pub trait MailListingTrait: ListingTrait {
             let account = &mut context.accounts[&account_hash];
             match a {
                 ListingAction::SetSeen => {
-                    let job = account.backend.write().unwrap().set_flags(
+                    if let Err(err) = account.set_flags(
                         env_hashes.clone(),
                         mailbox_hash,
-                        smallvec::smallvec![(Ok(Flag::SEEN), true)],
-                    );
-                    match job {
-                        Err(err) => {
-                            context.replies.push_back(UIEvent::StatusEvent(
-                                StatusEvent::DisplayMessage(err.to_string()),
-                            ));
-                        }
-                        Ok(fut) => {
-                            let handle = account
-                                .main_loop_handler
-                                .job_executor
-                                .spawn_specialized("set_seen".into(), fut);
-                            account.insert_job(
-                                handle.job_id,
-                                JobRequest::SetFlags { env_hashes, handle },
-                            );
-                        }
+                        smallvec::smallvec![FlagOp::Set(Flag::SEEN)],
+                    ) {
+                        context.replies.push_back(UIEvent::StatusEvent(
+                            StatusEvent::DisplayMessage(err.to_string()),
+                        ));
                     }
                 }
                 ListingAction::SetUnseen => {
-                    let job = account.backend.write().unwrap().set_flags(
+                    if let Err(err) = account.set_flags(
                         env_hashes.clone(),
                         mailbox_hash,
-                        smallvec::smallvec![(Ok(Flag::SEEN), false)],
-                    );
-                    match job {
-                        Err(err) => {
-                            context.replies.push_back(UIEvent::StatusEvent(
-                                StatusEvent::DisplayMessage(err.to_string()),
-                            ));
-                        }
-                        Ok(fut) => {
-                            let handle = account
-                                .main_loop_handler
-                                .job_executor
-                                .spawn_specialized("set_unseen".into(), fut);
-                            account.insert_job(
-                                handle.job_id,
-                                JobRequest::SetFlags { env_hashes, handle },
-                            );
-                        }
-                    }
-                }
-                ListingAction::Tag(Remove(ref tag_str)) => {
-                    let job = account.backend.write().unwrap().set_flags(
-                        env_hashes.clone(),
-                        mailbox_hash,
-                        smallvec::smallvec![(Err(tag_str.to_string()), false)],
-                    );
-                    match job {
-                        Err(err) => {
-                            context.replies.push_back(UIEvent::StatusEvent(
-                                StatusEvent::DisplayMessage(err.to_string()),
-                            ));
-                        }
-                        Ok(fut) => {
-                            let handle = account
-                                .main_loop_handler
-                                .job_executor
-                                .spawn_specialized("remove_tag".into(), fut);
-                            account.insert_job(
-                                handle.job_id,
-                                JobRequest::SetFlags { env_hashes, handle },
-                            );
-                        }
+                        smallvec::smallvec![FlagOp::UnSet(Flag::SEEN)],
+                    ) {
+                        context.replies.push_back(UIEvent::StatusEvent(
+                            StatusEvent::DisplayMessage(err.to_string()),
+                        ));
                     }
                 }
                 ListingAction::Tag(Add(ref tag_str)) => {
-                    let job = account.backend.write().unwrap().set_flags(
+                    if let Err(err) = account.set_flags(
                         env_hashes.clone(),
                         mailbox_hash,
-                        smallvec::smallvec![(Err(tag_str.to_string()), true)],
-                    );
-                    match job {
-                        Err(err) => {
-                            context.replies.push_back(UIEvent::StatusEvent(
-                                StatusEvent::DisplayMessage(err.to_string()),
-                            ));
-                        }
-                        Ok(fut) => {
-                            let handle = account
-                                .main_loop_handler
-                                .job_executor
-                                .spawn_specialized("add_tag".into(), fut);
-                            account.insert_job(
-                                handle.job_id,
-                                JobRequest::SetFlags { env_hashes, handle },
-                            );
-                        }
+                        smallvec::smallvec![FlagOp::SetTag(tag_str.into())],
+                    ) {
+                        context.replies.push_back(UIEvent::StatusEvent(
+                            StatusEvent::DisplayMessage(err.to_string()),
+                        ));
+                    }
+                }
+                ListingAction::Tag(Remove(ref tag_str)) => {
+                    if let Err(err) = account.set_flags(
+                        env_hashes.clone(),
+                        mailbox_hash,
+                        smallvec::smallvec![FlagOp::UnSetTag(tag_str.into())],
+                    ) {
+                        context.replies.push_back(UIEvent::StatusEvent(
+                            StatusEvent::DisplayMessage(err.to_string()),
+                        ));
                     }
                 }
                 ListingAction::Delete => {
