@@ -233,8 +233,8 @@ impl<T> RowsState<T> {
 //mod conversations;
 //pub use self::conversations::*;
 
-//mod compact;
-//pub use self::compact::*;
+mod compact;
+pub use self::compact::*;
 
 //mod thread;
 //pub use self::thread::*;
@@ -922,7 +922,7 @@ pub trait ListingTrait: Component {
 
 #[derive(Debug)]
 pub enum ListingComponent {
-    //Compact(Box<CompactListing>),
+    Compact(Box<CompactListing>),
     //Conversations(Box<ConversationsListing>),
     Offline(Box<OfflineListing>),
     Plain(Box<PlainListing>),
@@ -935,7 +935,7 @@ impl std::ops::Deref for ListingComponent {
 
     fn deref(&self) -> &Self::Target {
         match &self {
-            //Compact(ref l) => l.as_ref(),
+            Compact(ref l) => l.as_ref(),
             //Conversations(ref l) => l.as_ref(),
             Offline(ref l) => l.as_ref(),
             Plain(ref l) => l.as_ref(),
@@ -947,7 +947,7 @@ impl std::ops::Deref for ListingComponent {
 impl std::ops::DerefMut for ListingComponent {
     fn deref_mut(&mut self) -> &mut (dyn MailListingTrait + 'static) {
         match self {
-            //Compact(l) => l.as_mut(),
+            Compact(l) => l.as_mut(),
             //Conversations(l) => l.as_mut(),
             Offline(l) => l.as_mut(),
             Plain(l) => l.as_mut(),
@@ -959,7 +959,7 @@ impl std::ops::DerefMut for ListingComponent {
 impl ListingComponent {
     fn id(&self) -> ComponentId {
         match self {
-            //Compact(l) => l.as_component().id(),
+            Compact(l) => l.as_component().id(),
             //Conversations(l) => l.as_component().id(),
             Offline(l) => l.as_component().id(),
             Plain(l) => l.as_component().id(),
@@ -1036,7 +1036,7 @@ pub struct Listing {
 impl std::fmt::Display for Listing {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self.component {
-            //Compact(ref l) => write!(f, "{}", l),
+            Compact(ref l) => write!(f, "{}", l),
             //Conversations(ref l) => write!(f, "{}", l),
             Offline(ref l) => write!(f, "{}", l),
             Plain(ref l) => write!(f, "{}", l),
@@ -2439,7 +2439,7 @@ impl Component for Listing {
         ret.insert(
             self.component.id(),
             match &self.component {
-                //Compact(l) => l.as_component(),
+                Compact(l) => l.as_component(),
                 //Conversations(l) => l.as_component(),
                 Offline(l) => l.as_component(),
                 Plain(l) => l.as_component(),
@@ -2455,7 +2455,7 @@ impl Component for Listing {
         ret.insert(
             self.component.id(),
             match &mut self.component {
-                //Compact(l) => l.as_component_mut(),
+                Compact(l) => l.as_component_mut(),
                 //Conversations(l) => l.as_component_mut(),
                 Offline(l) => l.as_component_mut(),
                 Plain(l) => l.as_component_mut(),
@@ -3091,61 +3091,54 @@ impl Listing {
         !matches!(self.component.focus(), Focus::EntryFullscreen) && self.menu_visibility
     }
 
-    fn set_style(&mut self, _new_style: IndexStyle, context: &mut Context) {
-        if matches!(self.component, Plain(_)) {
-            return;
-        }
-        let coordinates = self.component.coordinates();
-        self.component = Plain(PlainListing::new(self.id, coordinates));
+    fn set_style(&mut self, new_style: IndexStyle, context: &mut Context) {
+        let old = match new_style {
+            IndexStyle::Conversations | IndexStyle::Threaded | IndexStyle::Plain => {
+                if matches!(self.component, Plain(_)) {
+                    return;
+                }
+                let coordinates = self.component.coordinates();
+                std::mem::replace(
+                    &mut self.component,
+                    Plain(PlainListing::new(self.id, coordinates)),
+                )
+            }
+            //IndexStyle::Threaded => {
+            //    return;
+            //    //if matches!(self.component, Threaded(_)) {
+            //    //    return;
+            //    //}
+            //    //let coordinates = self.component.coordinates();
+            //    //std::mem::replace(
+            //    //    &mut self.component,
+            //    //    Threaded(ThreadListing::new(self.id, coordinates,
+            //    // context)),        //)
+            //}
+            IndexStyle::Compact => {
+                if matches!(self.component, Compact(_)) {
+                    return;
+                }
+                let coordinates = self.component.coordinates();
+                std::mem::replace(
+                    &mut self.component,
+                    Compact(CompactListing::new(self.id, coordinates)),
+                )
+            } //IndexStyle::Conversations => {
+              //    return;
+              //    //if matches!(self.component, Conversations(_)) {
+              //    //    return;
+              //    //}
+              //    //let coordinates = self.component.coordinates();
+              //    //std::mem::replace(
+              //    //    &mut self.component,
+              //    //    Conversations(ConversationsListing::new(self.id,
+              //    // coordinates)),
+              //}
+        };
         self.component
             .process_event(&mut UIEvent::VisibilityChange(true), context);
-        //let old = match new_style {
-        //    IndexStyle::Plain => {
-        //        if matches!(self.component, Plain(_)) {
-        //            return;
-        //        }
-        //        let coordinates = self.component.coordinates();
-        //        std::mem::replace(
-        //            &mut self.component,
-        //            Plain(PlainListing::new(self.id, coordinates)),
-        //        )
-        //    }
-        //    IndexStyle::Threaded => {
-        //        return;
-        //        //if matches!(self.component, Threaded(_)) {
-        //        //    return;
-        //        //}
-        //        //let coordinates = self.component.coordinates();
-        //        //std::mem::replace(
-        //        //    &mut self.component,
-        //        //    Threaded(ThreadListing::new(self.id, coordinates,
-        // context)),        //)
-        //    }
-        //    IndexStyle::Compact => {
-        //        return;
-        //        //if matches!(self.component, Compact(_)) {
-        //        //    return;
-        //        //}
-        //        //let coordinates = self.component.coordinates();
-        //        //std::mem::replace(
-        //        //    &mut self.component,
-        //        //    Compact(CompactListing::new(self.id, coordinates)),
-        //        //)
-        //    }
-        //    IndexStyle::Conversations => {
-        //        return;
-        //        //if matches!(self.component, Conversations(_)) {
-        //        //    return;
-        //        //}
-        //        //let coordinates = self.component.coordinates();
-        //        //std::mem::replace(
-        //        //    &mut self.component,
-        //        //    Conversations(ConversationsListing::new(self.id,
-        // coordinates)),        //)
-        //    }
-        //};
-        //old.unrealize(context);
-        //self.component.realize(self.id.into(), context);
+        old.unrealize(context);
+        self.component.realize(self.id.into(), context);
     }
 }
 

@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::{cmp, iter::FromIterator};
+use std::iter::FromIterator;
 
 use melib::{Address, SortField, SortOrder, ThreadNode};
 
@@ -141,6 +141,8 @@ pub struct PlainListing {
 
     #[allow(clippy::type_complexity)]
     search_job: Option<(String, JoinHandle<Result<SmallVec<[EnvelopeHash; 512]>>>)>,
+    #[allow(clippy::type_complexity)]
+    select_job: Option<(String, JoinHandle<Result<SmallVec<[EnvelopeHash; 512]>>>)>,
     filter_term: String,
     filtered_selection: Vec<EnvelopeHash>,
     filtered_order: HashMap<EnvelopeHash, usize>,
@@ -286,6 +288,7 @@ impl MailListingTrait for PlainListing {
                     },
                     context,
                 );
+                self.set_focus(Focus::Entry, context);
             }
         }
     }
@@ -359,9 +362,7 @@ impl ListingTrait for PlainListing {
     }
 
     fn highlight_line(&mut self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context) {
-        let i = if let Some(i) = self.get_env_under_cursor(idx) {
-            i
-        } else {
+        let Some(i) = self.get_env_under_cursor(idx) else {
             // self.length == 0
             return;
         };
@@ -579,8 +580,7 @@ impl ListingTrait for PlainListing {
             }
         }
         if !self.filtered_selection.is_empty() {
-            self.new_cursor_pos.2 =
-                std::cmp::min(self.filtered_selection.len() - 1, self.cursor_pos.2);
+            self.new_cursor_pos.2 = self.cursor_pos.2.min(self.filtered_selection.len() - 1);
         } else {
             _ = self.data_columns.columns[0].resize_with_context(0, 0, context);
         }
@@ -683,6 +683,7 @@ impl PlainListing {
             local_collection: Vec::new(),
             filter_term: String::new(),
             search_job: None,
+            select_job: None,
             filtered_selection: Vec::new(),
             filtered_order: HashMap::default(),
             data_columns: DataColumns::default(),
@@ -824,7 +825,7 @@ impl PlainListing {
                 );
                 log::debug!("{:#?}", context.accounts);
 
-                panic!();
+                continue;
             }
             let envelope: EnvelopeRef = context.accounts[&self.cursor_pos.0].collection.get_env(i);
             use melib::search::QueryTrait;
@@ -849,6 +850,9 @@ impl PlainListing {
             self.rows.row_attr_cache.insert(self.length, row_attr);
 
             let entry_strings = self.make_entry_string(&envelope, context);
+            row_widths
+                .0
+                .push(digits_of_num!(self.length).try_into().unwrap_or(255));
             row_widths.1.push(
                 entry_strings
                     .date
@@ -871,10 +875,9 @@ impl PlainListing {
                 .try_into()
                 .unwrap_or(255),
             );
-            min_width.1 = cmp::max(min_width.1, entry_strings.date.grapheme_width()); /* date */
-            min_width.2 = cmp::max(min_width.2, entry_strings.from.grapheme_width()); /* from */
-            min_width.3 = cmp::max(
-                min_width.3,
+            min_width.1 = min_width.1.max(entry_strings.date.grapheme_width()); /* date */
+            min_width.2 = min_width.2.max(entry_strings.from.grapheme_width()); /* from */
+            min_width.3 = min_width.3.max(
                 entry_strings.flag.grapheme_width()
                     + entry_strings.subject.grapheme_width()
                     + 1
@@ -889,9 +892,6 @@ impl PlainListing {
 
             self.length += 1;
         }
-        row_widths
-            .0
-            .push(digits_of_num!(self.length).try_into().unwrap_or(255));
 
         min_width.0 = self.length.saturating_sub(1).to_string().len();
 
@@ -1276,6 +1276,51 @@ impl PlainListing {
         }
         *self.rows.entries.get_mut(idx).unwrap() = ((thread_hash, env_hash), strings);
     }
+
+    fn select(
+        &mut self,
+        search_term: &str,
+        results: Result<SmallVec<[EnvelopeHash; 512]>>,
+        context: &mut Context,
+    ) {
+        let account = &context.accounts[&self.cursor_pos.0];
+        match results {
+            Ok(results) => {
+                let threads = account.collection.get_threads(self.cursor_pos.1);
+                for env_hash in results {
+                    if !account.collection.contains_key(&env_hash) {
+                        continue;
+                    }
+                    let env_thread_node_hash = account.collection.get_env(env_hash).thread();
+                    if !threads.thread_nodes.contains_key(&env_thread_node_hash) {
+                        continue;
+                    }
+                    let thread =
+                        threads.find_group(threads.thread_nodes[&env_thread_node_hash].group);
+                    if self.rows.all_threads.contains(&thread) {
+                        self.rows
+                            .selection
+                            .entry(env_hash)
+                            .and_modify(|entry| *entry = true);
+                    }
+                }
+            }
+            Err(err) => {
+                self.cursor_pos.2 = 0;
+                self.new_cursor_pos.2 = 0;
+                let message = format!(
+                    "Encountered an error while searching for `{}`: {}.",
+                    search_term, &err
+                );
+                log::error!("{}", message);
+                context.replies.push_back(UIEvent::Notification(
+                    Some("Could not perform search".to_string()),
+                    message,
+                    Some(crate::types::NotificationType::Error(err.kind)),
+                ));
+            }
+        }
+    }
 }
 
 impl Component for PlainListing {
@@ -1363,8 +1408,8 @@ impl Component for PlainListing {
                             }
                         }
                         PageMovement::Down(amount) => {
-                            for c in self.cursor_pos.2
-                                ..std::cmp::min(self.length, self.cursor_pos.2 + amount + 1)
+                            for c in
+                                self.cursor_pos.2..self.length.min(self.cursor_pos.2 + amount + 1)
                             {
                                 if let Some(env_hash) = self.get_env_under_cursor(c) {
                                     self.rows.update_selection_with_env(
@@ -1382,8 +1427,7 @@ impl Component for PlainListing {
                             }
                             if modifier == Modifier::Intersection {
                                 for c in (0..self.cursor_pos.2).chain(
-                                    (std::cmp::min(self.length, self.cursor_pos.2 + amount) + 1)
-                                        ..self.length,
+                                    self.length.min(self.cursor_pos.2 + amount) + 1..self.length,
                                 ) {
                                     if let Some(env_hash) = self.get_env_under_cursor(c) {
                                         self.rows
@@ -1394,7 +1438,7 @@ impl Component for PlainListing {
                         }
                         PageMovement::PageDown(multiplier) => {
                             for c in self.cursor_pos.2
-                                ..std::cmp::min(self.cursor_pos.2 + rows * multiplier, self.length)
+                                ..self.length.min(self.cursor_pos.2 + rows * multiplier)
                             {
                                 if let Some(env_hash) = self.get_env_under_cursor(c) {
                                     self.rows.update_selection_with_env(
@@ -1412,10 +1456,8 @@ impl Component for PlainListing {
                             }
                             if modifier == Modifier::Intersection {
                                 for c in (0..self.cursor_pos.2).chain(
-                                    (std::cmp::min(
-                                        self.cursor_pos.2 + rows * multiplier,
-                                        self.length,
-                                    ) + 1)..self.length,
+                                    self.length.min(self.cursor_pos.2 + rows * multiplier) + 1
+                                        ..self.length,
                                 ) {
                                     if let Some(env_hash) = self.get_env_under_cursor(c) {
                                         self.rows
@@ -1514,8 +1556,6 @@ impl Component for PlainListing {
             if self.length == 0 && self.dirty {
                 grid.clear_area(area, self.color_cache.theme_default);
                 context.dirty_areas.push_back(area);
-                self.dirty = false;
-                return;
             }
         }
         self.dirty = false;
@@ -1724,6 +1764,35 @@ impl Component for PlainListing {
                     }
                 };
                 self.set_dirty(true);
+                return true;
+            }
+            UIEvent::Action(Action::Listing(Select(ref search_term))) if !self.unfocused() => {
+                match context.accounts[&self.cursor_pos.0].search(
+                    search_term,
+                    self.sort,
+                    self.cursor_pos.1,
+                ) {
+                    Ok(job) => {
+                        let mut handle = context.accounts[&self.cursor_pos.0]
+                            .main_loop_handler
+                            .job_executor
+                            .spawn_specialized("select_by_search".into(), job);
+                        if let Ok(Some(search_result)) = try_recv_timeout!(&mut handle.chan) {
+                            self.select(search_term, search_result, context);
+                        } else {
+                            self.select_job = Some((search_term.to_string(), handle));
+                        }
+                    }
+                    Err(err) => {
+                        context.replies.push_back(UIEvent::Notification(
+                            Some("Could not perform search".to_string()),
+                            err.to_string(),
+                            Some(crate::types::NotificationType::Error(err.kind)),
+                        ));
+                    }
+                };
+                self.set_dirty(true);
+                return true;
             }
             UIEvent::StatusEvent(StatusEvent::JobFinished(ref job_id))
                 if self
@@ -1747,6 +1816,21 @@ impl Component for PlainListing {
                 }
                 self.set_dirty(true);
             }
+            UIEvent::StatusEvent(StatusEvent::JobFinished(ref job_id))
+                if self
+                    .select_job
+                    .as_ref()
+                    .map(|(_, j)| j == job_id)
+                    .unwrap_or(false) =>
+            {
+                let (search_term, mut handle) = self.select_job.take().unwrap();
+                match handle.chan.try_recv() {
+                    Err(_) => { /* search was canceled */ }
+                    Ok(None) => { /* something happened, perhaps a worker thread panicked */ }
+                    Ok(Some(results)) => self.select(&search_term, results, context),
+                }
+                self.set_dirty(true);
+            }
             _ => {}
         }
         false
@@ -1755,8 +1839,8 @@ impl Component for PlainListing {
     fn is_dirty(&self) -> bool {
         self.force_draw
             || match self.focus {
-                Focus::None => self.dirty,
-                Focus::Entry | Focus::EntryFullscreen => false,
+                Focus::None | Focus::Entry => self.dirty,
+                Focus::EntryFullscreen => false,
             }
     }
 

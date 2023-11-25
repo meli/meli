@@ -95,7 +95,7 @@ impl std::fmt::Debug for CellBuffer {
 }
 
 impl CellBuffer {
-    pub const MAX_SIZE: usize = 1_000_000;
+    pub const MAX_SIZE: usize = 100_000_000;
 
     pub fn nil(area: Area) -> Self {
         Self {

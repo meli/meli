@@ -19,13 +19,13 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::{cmp, collections::BTreeMap, convert::TryInto, iter::FromIterator};
+use std::{collections::BTreeMap, convert::TryInto, iter::FromIterator};
 
 use indexmap::IndexSet;
-use melib::{SortField, SortOrder, TagHash, Threads};
+use melib::{Address, SortField, SortOrder, TagHash, Threads};
 
 use super::*;
-use crate::{components::PageMovement, jobs::JoinHandle};
+use crate::{components::PageMovement, jobs::JoinHandle, segment_tree::SegmentTree};
 
 macro_rules! row_attr {
     ($color_cache:expr, $even: expr, $unseen:expr, $highlighted:expr, $selected:expr  $(,)*) => {{
@@ -230,11 +230,10 @@ impl MailListingTrait for CompactListing {
         match context.accounts[&self.cursor_pos.0].load(self.cursor_pos.1) {
             Ok(()) => {}
             Err(_) => {
+                self.length = 0;
                 let message: String =
                     context.accounts[&self.cursor_pos.0][&self.cursor_pos.1].status();
-                self.data_columns.columns[0].resize_with_context(message.len(), 1, context);
-                self.length = 0;
-                {
+                if self.data_columns.columns[0].resize_with_context(message.len(), 1, context) {
                     let area = self.data_columns.columns[0].area();
                     self.data_columns.columns[0].grid_mut().write_string(
                         message.as_str(),
@@ -243,8 +242,8 @@ impl MailListingTrait for CompactListing {
                         self.color_cache.theme_default.attrs,
                         area,
                         None,
-                    )
-                };
+                    );
+                }
                 return;
             }
         }
@@ -265,13 +264,15 @@ impl MailListingTrait for CompactListing {
             Box::new(roots.into_iter()) as Box<dyn Iterator<Item = ThreadHash>>,
         );
 
-        if !force && old_cursor_pos == self.new_cursor_pos {
-            self.kick_parent(self.parent, ListingMessage::UpdateView, context);
-        } else if self.unfocused() {
-            if let Some((thread_hash, env_hash)) = self
-                .get_thread_under_cursor(self.cursor_pos.2)
-                .and_then(|thread| self.rows.thread_to_env.get(&thread).map(|e| (thread, e[0])))
-            {
+        if let Some((thread_hash, env_hash)) = self
+            .get_thread_under_cursor(self.cursor_pos.2)
+            .and_then(|thread| self.rows.thread_to_env.get(&thread).map(|e| (thread, e[0])))
+        {
+            if !force && old_cursor_pos == self.new_cursor_pos {
+                self.kick_parent(self.parent, ListingMessage::UpdateView, context);
+            } else if self.unfocused() {
+                self.force_draw = true;
+                self.dirty = true;
                 self.kick_parent(
                     self.parent,
                     ListingMessage::OpenEntryUnderCursor {
@@ -293,9 +294,10 @@ impl MailListingTrait for CompactListing {
         items: Box<dyn Iterator<Item = ThreadHash>>,
     ) {
         let account = &context.accounts[&self.cursor_pos.0];
-
         let threads = account.collection.get_threads(self.cursor_pos.1);
+
         self.rows.clear();
+        self.length = 0;
         // Use account settings only if no sortcmd has been used
         if !self.sortcmd {
             self.sort = context.accounts[&self.cursor_pos.0].settings.account.order
@@ -350,7 +352,7 @@ impl MailListingTrait for CompactListing {
                 );
                 log::debug!("{:#?}", context.accounts);
 
-                panic!();
+                continue;
             }
             let root_envelope: EnvelopeRef = context.accounts[&self.cursor_pos.0]
                 .collection
@@ -447,24 +449,19 @@ impl MailListingTrait for CompactListing {
             /* subject */
             row_widths.3.push(
                 (entry_strings.flag.grapheme_width()
-                    + 1
                     + entry_strings.subject.grapheme_width()
                     + 1
-                    + entry_strings.tags.grapheme_width()
-                    + 16)
-                    .try_into()
-                    .unwrap_or(255),
+                    + entry_strings.tags.grapheme_width())
+                .try_into()
+                .unwrap_or(255),
             );
-            min_width.1 = cmp::max(min_width.1, entry_strings.date.grapheme_width()); /* date */
-            min_width.2 = cmp::max(min_width.2, entry_strings.from.grapheme_width()); /* from */
-            min_width.3 = cmp::max(
-                min_width.3,
+            min_width.1 = min_width.1.max(entry_strings.date.grapheme_width()); /* date */
+            min_width.2 = min_width.2.max(entry_strings.from.grapheme_width()); /* from */
+            min_width.3 = min_width.3.max(
                 entry_strings.flag.grapheme_width()
-                    + 1
                     + entry_strings.subject.grapheme_width()
                     + 1
-                    + entry_strings.tags.grapheme_width()
-                    + 16,
+                    + entry_strings.tags.grapheme_width(),
             ); /* subject */
             self.rows.insert_thread(
                 thread,
@@ -484,7 +481,7 @@ impl MailListingTrait for CompactListing {
 
         self.data_columns.elasticities[0].set_rigid();
         self.data_columns.elasticities[1].set_rigid();
-        self.data_columns.elasticities[2].set_grow(5, Some(35));
+        self.data_columns.elasticities[2].set_grow(15, Some(35));
         self.data_columns.elasticities[3].set_rigid();
         self.data_columns
             .cursor_config
@@ -498,17 +495,16 @@ impl MailListingTrait for CompactListing {
             .set_even_odd_theme(self.color_cache.even, self.color_cache.odd);
 
         /* index column */
-        self.data_columns.columns[0].resize_with_context(min_width.0, self.rows.len(), context);
-        self.data_columns.segment_tree[0] = row_widths.0.into();
-
+        _ = self.data_columns.columns[0].resize_with_context(min_width.0, self.rows.len(), context);
         /* date column */
-        self.data_columns.columns[1].resize_with_context(min_width.1, self.rows.len(), context);
-        self.data_columns.segment_tree[1] = row_widths.1.into();
+        _ = self.data_columns.columns[1].resize_with_context(min_width.1, self.rows.len(), context);
         /* from column */
-        self.data_columns.columns[2].resize_with_context(min_width.2, self.rows.len(), context);
-        self.data_columns.segment_tree[2] = row_widths.2.into();
+        _ = self.data_columns.columns[2].resize_with_context(min_width.2, self.rows.len(), context);
         /* subject column */
-        self.data_columns.columns[3].resize_with_context(min_width.3, self.rows.len(), context);
+        _ = self.data_columns.columns[3].resize_with_context(min_width.3, self.rows.len(), context);
+        self.data_columns.segment_tree[0] = row_widths.0.into();
+        self.data_columns.segment_tree[1] = row_widths.1.into();
+        self.data_columns.segment_tree[2] = row_widths.2.into();
         self.data_columns.segment_tree[3] = row_widths.3.into();
 
         self.rows_drawn = SegmentTree::from(
@@ -516,16 +512,11 @@ impl MailListingTrait for CompactListing {
                 .take(self.rows.len())
                 .collect::<SmallVec<_>>(),
         );
-        debug_assert!(self.rows_drawn.array.len() == self.rows.len());
-        self.draw_rows(
-            context,
-            0,
-            std::cmp::min(80, self.rows.len().saturating_sub(1)),
-        );
+        debug_assert_eq!(self.rows_drawn.array.len(), self.rows.len());
+        self.draw_rows(context, 0, 80.min(self.rows.len().saturating_sub(1)));
         if self.length == 0 && self.filter_term.is_empty() {
             let message: String = account[&self.cursor_pos.1].status();
-            self.data_columns.columns[0].resize_with_context(message.len(), 1, context);
-            {
+            if self.data_columns.columns[0].resize_with_context(message.len(), 1, context) {
                 let area = self.data_columns.columns[0].area();
                 self.data_columns.columns[0].grid_mut().write_string(
                     &message,
@@ -534,8 +525,8 @@ impl MailListingTrait for CompactListing {
                     self.color_cache.theme_default.attrs,
                     area,
                     None,
-                )
-            };
+                );
+            }
         }
     }
 }
@@ -637,8 +628,6 @@ impl ListingTrait for CompactListing {
         {
             self.refresh_mailbox(context, false);
         }
-        let upper_left = area.upper_left();
-        let bottom_right = area.bottom_right();
         if self.length == 0 {
             grid.clear_area(area, self.color_cache.theme_default);
 
@@ -679,7 +668,20 @@ impl ListingTrait for CompactListing {
                         self.new_cursor_pos.2 = (self.length.saturating_sub(1) / rows) * rows;
                     }
                 }
-                PageMovement::Right(_) | PageMovement::Left(_) => {}
+                PageMovement::Right(amount) => {
+                    self.data_columns.x_offset += amount;
+                    self.data_columns.x_offset = self.data_columns.x_offset.min(
+                        self.data_columns
+                            .widths
+                            .iter()
+                            .map(|w| w + 2)
+                            .sum::<usize>()
+                            .saturating_sub(2),
+                    );
+                }
+                PageMovement::Left(amount) => {
+                    self.data_columns.x_offset = self.data_columns.x_offset.saturating_sub(amount);
+                }
                 PageMovement::Home => {
                     self.new_cursor_pos.2 = 0;
                 }
@@ -689,11 +691,15 @@ impl ListingTrait for CompactListing {
             }
         }
 
+        if self.force_draw {
+            grid.clear_area(area, self.color_cache.theme_default);
+        }
+
         let prev_page_no = (self.cursor_pos.2).wrapping_div(rows);
         let page_no = (self.new_cursor_pos.2).wrapping_div(rows);
 
         let top_idx = page_no * rows;
-        let end_idx = cmp::min(self.length.saturating_sub(1), top_idx + rows - 1);
+        let end_idx = self.length.saturating_sub(1).min(top_idx + rows - 1);
         self.draw_rows(context, top_idx, end_idx);
 
         /* If cursor position has changed, remove the highlight from the previous
@@ -727,11 +733,11 @@ impl ListingTrait for CompactListing {
             self.cursor_pos.2 = self.new_cursor_pos.2;
         }
 
+        if !self.force_draw {
+            grid.clear_area(area, self.color_cache.theme_default);
+        }
         /* Page_no has changed, so draw new page */
-        _ = self
-            .data_columns
-            .recalc_widths((area.width(), area.height()), top_idx);
-        grid.clear_area(area, self.color_cache.theme_default);
+        _ = self.data_columns.recalc_widths(area.size(), top_idx);
         /* copy table columns */
         self.data_columns
             .draw(grid, top_idx, self.cursor_pos.2, grid.bounds_iter(area));
@@ -754,11 +760,13 @@ impl ListingTrait for CompactListing {
 
         /* clear gap if available height is more than count of entries */
         if top_idx + rows > self.length {
-            grid.clear_area(
-                area.skip_rows(top_idx + rows - self.length),
+            grid.change_theme(
+                area.skip_rows(self.length - top_idx),
                 self.color_cache.theme_default,
             );
         }
+
+        self.force_draw = false;
         context.dirty_areas.push_back(area);
     }
 
@@ -799,10 +807,9 @@ impl ListingTrait for CompactListing {
                 self.sort,
                 &context.accounts[&self.cursor_pos.0].collection.envelopes,
             );
-            self.new_cursor_pos.2 =
-                std::cmp::min(self.filtered_selection.len() - 1, self.cursor_pos.2);
+            self.new_cursor_pos.2 = self.cursor_pos.2.min(self.filtered_selection.len() - 1);
         } else {
-            self.data_columns.columns[0].resize_with_context(0, 0, context);
+            _ = self.data_columns.columns[0].resize_with_context(0, 0, context);
         }
         self.redraw_threads_list(
             context,
@@ -891,10 +898,9 @@ impl std::fmt::Display for CompactListing {
 }
 
 impl CompactListing {
-    pub const DESCRIPTION: &'static str = "compact listing";
     pub fn new(parent: ComponentId, coordinates: (AccountHash, MailboxHash)) -> Box<Self> {
         Box::new(CompactListing {
-            cursor_pos: (coordinates.0, MailboxHash::default(), 0),
+            cursor_pos: (AccountHash::default(), MailboxHash::default(), 0),
             new_cursor_pos: (coordinates.0, coordinates.1, 0),
             length: 0,
             sort: (Default::default(), Default::default()),
@@ -1332,6 +1338,7 @@ impl CompactListing {
             self.data_columns.columns[3].area().width(),
         );
 
+        let columns = &mut self.data_columns.columns;
         for (idx, ((_thread_hash, root_env_hash), strings)) in self
             .rows
             .entries
@@ -1349,12 +1356,12 @@ impl CompactListing {
                 //);
                 //debug!("{:#?}", context.accounts);
 
-                panic!();
+                continue;
             }
             let row_attr = self.rows.row_attr_cache[&idx];
             let (x, _) = {
-                let area = self.data_columns.columns[0].area().nth_row(idx);
-                self.data_columns.columns[0].grid_mut().write_string(
+                let area = columns[0].area().nth_row(idx);
+                columns[0].grid_mut().write_string(
                     &idx.to_string(),
                     row_attr.fg,
                     row_attr.bg,
@@ -1363,14 +1370,17 @@ impl CompactListing {
                     None,
                 )
             };
-            for x in x..min_width.0 {
-                self.data_columns.columns[0].grid_mut()[(x, idx)]
+            for c in {
+                let area = columns[0].area();
+                columns[0].grid_mut().row_iter(area, x..min_width.0, idx)
+            } {
+                columns[0].grid_mut()[c]
                     .set_bg(row_attr.bg)
                     .set_attrs(row_attr.attrs);
             }
             let (x, _) = {
-                let area = self.data_columns.columns[1].area().nth_row(idx);
-                self.data_columns.columns[1].grid_mut().write_string(
+                let area = columns[1].area().nth_row(idx);
+                columns[1].grid_mut().write_string(
                     &strings.date,
                     row_attr.fg,
                     row_attr.bg,
@@ -1379,14 +1389,17 @@ impl CompactListing {
                     None,
                 )
             };
-            for x in x..min_width.1 {
-                self.data_columns.columns[1].grid_mut()[(x, idx)]
+            for c in {
+                let area = columns[1].area();
+                columns[1].grid_mut().row_iter(area, x..min_width.1, idx)
+            } {
+                columns[1].grid_mut()[c]
                     .set_bg(row_attr.bg)
                     .set_attrs(row_attr.attrs);
             }
             let (x, _) = {
-                let area = self.data_columns.columns[2].area().nth_row(idx);
-                self.data_columns.columns[2].grid_mut().write_string(
+                let area = columns[2].area().nth_row(idx);
+                columns[2].grid_mut().write_string(
                     &strings.from,
                     row_attr.fg,
                     row_attr.bg,
@@ -1395,29 +1408,27 @@ impl CompactListing {
                     None,
                 )
             };
+            for c in {
+                let area = columns[2].area();
+                columns[2].grid_mut().row_iter(area, x..min_width.2, idx)
+            } {
+                columns[2].grid_mut()[c]
+                    .set_bg(row_attr.bg)
+                    .set_attrs(row_attr.attrs)
+                    .set_ch(' ');
+            }
             #[cfg(feature = "regexp")]
             {
                 for text_formatter in crate::conf::text_format_regexps(context, "listing.from") {
-                    let t = self.data_columns.columns[2]
-                        .grid_mut()
-                        .insert_tag(text_formatter.tag);
+                    let t = columns[2].grid_mut().insert_tag(text_formatter.tag);
                     for (start, end) in text_formatter.regexp.find_iter(strings.from.as_str()) {
-                        self.data_columns.columns[2].grid_mut().set_tag(
-                            t,
-                            (start, idx),
-                            (end, idx),
-                        );
+                        columns[2].grid_mut().set_tag(t, (start, idx), (end, idx));
                     }
                 }
             }
-            for x in x..min_width.2 {
-                self.data_columns.columns[2].grid_mut()[(x, idx)]
-                    .set_bg(row_attr.bg)
-                    .set_attrs(row_attr.attrs);
-            }
             let (x, _) = {
-                let area = self.data_columns.columns[3].area().nth_row(idx);
-                self.data_columns.columns[3].grid_mut().write_string(
+                let area = columns[3].area().nth_row(idx);
+                columns[3].grid_mut().write_string(
                     &strings.flag,
                     row_attr.fg,
                     row_attr.bg,
@@ -1426,69 +1437,92 @@ impl CompactListing {
                     None,
                 )
             };
-            let (x, _) = self.data_columns.columns[3].grid_mut().write_string(
-                &strings.subject,
-                row_attr.fg,
-                row_attr.bg,
-                row_attr.attrs,
-                self.data_columns.columns[3]
-                    .area()
-                    .nth_row(idx)
-                    .skip_cols(x),
-                None,
-            );
+            let x = {
+                let area = columns[3].area().nth_row(idx).skip_cols(x);
+                columns[3]
+                    .grid_mut()
+                    .write_string(
+                        &strings.subject,
+                        row_attr.fg,
+                        row_attr.bg,
+                        row_attr.attrs,
+                        area,
+                        None,
+                    )
+                    .0
+                    + x
+            };
             #[cfg(feature = "regexp")]
             {
                 for text_formatter in crate::conf::text_format_regexps(context, "listing.subject") {
-                    let t = self.data_columns.columns[3]
-                        .grid_mut()
-                        .insert_tag(text_formatter.tag);
+                    let t = columns[3].grid_mut().insert_tag(text_formatter.tag);
                     for (start, end) in text_formatter.regexp.find_iter(strings.subject.as_str()) {
-                        self.data_columns.columns[3].grid_mut().set_tag(
-                            t,
-                            (start, idx),
-                            (end, idx),
-                        );
+                        columns[3].grid_mut().set_tag(t, (start, idx), (end, idx));
                     }
                 }
             }
-            let x = {
-                let mut x = x + 1;
-                for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
-                    let color = color.unwrap_or(self.color_cache.tag_default.bg);
-                    let (_x, _) = self.data_columns.columns[3].grid_mut().write_string(
-                        t,
-                        self.color_cache.tag_default.fg,
-                        color,
-                        self.color_cache.tag_default.attrs,
-                        self.data_columns.columns[3]
-                            .area()
-                            .nth_row(idx)
-                            .skip_cols(x + 1),
-                        None,
-                    );
-                    self.data_columns.columns[3].grid_mut()[(x, idx)].set_bg(color);
-                    if _x < min_width.3 {
-                        self.data_columns.columns[3].grid_mut()[(_x, idx)]
-                            .set_bg(color)
-                            .set_keep_bg(true);
-                    }
-                    for x in (x + 1).._x {
-                        self.data_columns.columns[3].grid_mut()[(x, idx)]
-                            .set_keep_fg(true)
-                            .set_keep_bg(true)
-                            .set_keep_attrs(true);
-                    }
-                    self.data_columns.columns[3].grid_mut()[(x, idx)].set_keep_bg(true);
-                    x = _x + 1;
+            let mut x = x + 1;
+            for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
+                let color = color.unwrap_or(self.color_cache.tag_default.bg);
+                let _x = {
+                    let area = columns[3].area().nth_row(idx).skip_cols(x + 1);
+                    columns[3]
+                        .grid_mut()
+                        .write_string(
+                            t,
+                            self.color_cache.tag_default.fg,
+                            color,
+                            self.color_cache.tag_default.attrs,
+                            area,
+                            None,
+                        )
+                        .0
+                        + x
+                        + 1
+                };
+                for c in {
+                    let area = columns[3].area();
+                    columns[3].grid_mut().row_iter(area, x..(x + 1), idx)
+                } {
+                    columns[3].grid_mut()[c].set_bg(color);
                 }
-                x
-            };
-            for x in x..min_width.3 {
-                self.data_columns.columns[3].grid_mut()[(x, idx)]
-                    .set_ch(' ')
-                    .set_bg(row_attr.bg)
-                    .set_attrs(row_attr.attrs);
+                for c in {
+                    let area = columns[3].area();
+                    columns[3].grid_mut().row_iter(area, _x..(_x + 1), idx)
+                } {
+                    columns[3].grid_mut()[c].set_bg(color).set_keep_bg(true);
+                }
+                for c in {
+                    let area = columns[3].area();
+                    columns[3].grid_mut().row_iter(area, (x + 1)..(_x + 1), idx)
+                } {
+                    columns[3].grid_mut()[c]
+                        .set_keep_fg(true)
+                        .set_keep_bg(true)
+                        .set_keep_attrs(true);
+                }
+                for c in {
+                    let area = columns[3].area();
+                    columns[3].grid_mut().row_iter(area, x..(x + 1), idx)
+                } {
+                    columns[3].grid_mut()[c].set_keep_bg(true);
+                }
+                x = _x + 2;
+            }
+        }
+        if self.length == 0 && self.filter_term.is_empty() {
+            let account = &context.accounts[&self.cursor_pos.0];
+            let message: String = account[&self.cursor_pos.1].status();
+            if self.data_columns.columns[0].resize_with_context(message.len(), 1, context) {
+                let area = self.data_columns.columns[0].area();
+                self.data_columns.columns[0].grid_mut().write_string(
+                    message.as_str(),
+                    self.color_cache.theme_default.fg,
+                    self.color_cache.theme_default.bg,
+                    self.color_cache.theme_default.attrs,
+                    area,
+                    None,
+                );
             }
         }
     }
@@ -1550,7 +1584,7 @@ impl Component for CompactListing {
             return;
         }
 
-        if !self.unfocused() {
+        if matches!(self.focus, Focus::None) {
             let mut area = area;
             if !self.filter_term.is_empty() {
                 let (x, y) = grid.write_string(
@@ -1563,24 +1597,15 @@ impl Component for CompactListing {
                     self.color_cache.theme_default.bg,
                     self.color_cache.theme_default.attrs,
                     area,
-                    None,
+                    Some(0),
                 );
-                let default_cell = {
-                    let mut ret = Cell::with_char(' ');
-                    ret.set_fg(self.color_cache.theme_default.fg)
-                        .set_bg(self.color_cache.theme_default.bg)
-                        .set_attrs(self.color_cache.theme_default.attrs);
-                    ret
-                };
-                for row in grid.bounds_iter(area.nth_row(y).skip_cols(x)) {
-                    for c in row {
-                        grid[c] = default_cell;
-                    }
-                }
+
+                grid.clear_area(area.skip(x, y).nth_row(y), self.color_cache.theme_default);
                 context.dirty_areas.push_back(area);
 
                 area = area.skip_rows(y + 1);
             }
+
             let rows = area.height();
 
             if let Some(modifier) = self.modifier_command.take() {
@@ -1633,8 +1658,8 @@ impl Component for CompactListing {
                             }
                         }
                         PageMovement::Down(amount) => {
-                            for c in self.cursor_pos.2
-                                ..std::cmp::min(self.length, self.cursor_pos.2 + amount + 1)
+                            for c in
+                                self.cursor_pos.2..self.length.min(self.cursor_pos.2 + amount + 1)
                             {
                                 if let Some(thread) = self.get_thread_under_cursor(c) {
                                     self.rows.update_selection_with_thread(
@@ -1652,8 +1677,7 @@ impl Component for CompactListing {
                             }
                             if modifier == Modifier::Intersection {
                                 for c in (0..self.cursor_pos.2).chain(
-                                    (std::cmp::min(self.length, self.cursor_pos.2 + amount) + 1)
-                                        ..self.length,
+                                    self.length.min(self.cursor_pos.2 + amount) + 1..self.length,
                                 ) {
                                     if let Some(thread) = self.get_thread_under_cursor(c) {
                                         self.rows
@@ -1664,10 +1688,7 @@ impl Component for CompactListing {
                         }
                         PageMovement::PageDown(multiplier) => {
                             for c in self.cursor_pos.2
-                                ..std::cmp::min(
-                                    self.cursor_pos.2 + rows * multiplier + 1,
-                                    self.length,
-                                )
+                                ..self.length.min(self.cursor_pos.2 + rows * multiplier + 1)
                             {
                                 if let Some(thread) = self.get_thread_under_cursor(c) {
                                     self.rows.update_selection_with_thread(
@@ -1685,10 +1706,8 @@ impl Component for CompactListing {
                             }
                             if modifier == Modifier::Intersection {
                                 for c in (0..self.cursor_pos.2).chain(
-                                    (std::cmp::min(
-                                        self.cursor_pos.2 + rows * multiplier,
-                                        self.length,
-                                    ) + 1)..self.length,
+                                    self.length.min(self.cursor_pos.2 + rows * multiplier) + 1
+                                        ..self.length,
                                 ) {
                                     if let Some(thread) = self.get_thread_under_cursor(c) {
                                         self.rows
@@ -1772,13 +1791,11 @@ impl Component for CompactListing {
                 self.draw_list(grid, area, context);
             }
         } else {
+            self.view_area = area.into();
             if self.length == 0 && self.dirty {
                 grid.clear_area(area, self.color_cache.theme_default);
                 context.dirty_areas.push_back(area);
-                return;
             }
-
-            self.view_area = area.into();
         }
         self.dirty = false;
     }
@@ -1787,6 +1804,11 @@ impl Component for CompactListing {
         let shortcuts = self.shortcuts(context);
 
         match (&event, self.focus) {
+            (UIEvent::VisibilityChange(true), _) => {
+                self.force_draw = true;
+                self.set_dirty(true);
+                return true;
+            }
             (UIEvent::Input(ref k), Focus::Entry)
                 if shortcut!(k == shortcuts[Shortcuts::LISTING]["focus_right"]) =>
             {
@@ -2019,6 +2041,7 @@ impl Component for CompactListing {
                     }
                 };
                 self.set_dirty(true);
+                return true;
             }
             UIEvent::Action(Action::Listing(Select(ref search_term))) if !self.unfocused() => {
                 match context.accounts[&self.cursor_pos.0].search(
@@ -2046,6 +2069,7 @@ impl Component for CompactListing {
                     }
                 };
                 self.set_dirty(true);
+                return true;
             }
             UIEvent::StatusEvent(StatusEvent::JobFinished(ref job_id))
                 if self
@@ -2090,11 +2114,11 @@ impl Component for CompactListing {
     }
 
     fn is_dirty(&self) -> bool {
-        match self.focus {
-            Focus::None => self.dirty,
-            Focus::Entry => self.dirty,
-            Focus::EntryFullscreen => false,
-        }
+        self.force_draw
+            || match self.focus {
+                Focus::None | Focus::Entry => self.dirty,
+                Focus::EntryFullscreen => false,
+            }
     }
 
     fn set_dirty(&mut self, value: bool) {
