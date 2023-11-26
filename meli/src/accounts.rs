@@ -1207,15 +1207,15 @@ impl Account {
         if let Some(mailbox_hash) = saved_at {
             Ok(mailbox_hash)
         } else {
-            let file = crate::types::create_temp_file(bytes, None, None, Some("eml"), false);
-            log::trace!("message saved in {}", file.path.display());
+            let file = crate::types::File::create_temp_file(bytes, None, None, Some("eml"), false)?;
+            log::trace!("message saved in {}", file.path().display());
             log::info!(
                 "Message was stored in {} so that you can restore it manually.",
-                file.path.display()
+                file.path().display()
             );
             Err(Error::new(format!(
                 "Message was stored in {} so that you can restore it manually.",
-                file.path.display()
+                file.path().display()
             ))
             .set_summary("Could not save in any mailbox"))
         }
@@ -1958,22 +1958,33 @@ impl Account {
                             .job_executor
                             .set_job_success(job_id, false);
                         log::error!("Could not save message: {err}");
-                        let file =
-                            crate::types::create_temp_file(bytes, None, None, Some("eml"), false);
-                        log::debug!("message saved in {}", file.path.display());
-                        log::info!(
-                            "Message was stored in {} so that you can restore it manually.",
-                            file.path.display()
-                        );
-                        self.main_loop_handler
-                            .send(ThreadEvent::UIEvent(UIEvent::Notification(
-                                Some(format!("{}: could not save message", &self.name)),
-                                format!(
+                        match crate::types::File::create_temp_file(
+                            bytes,
+                            None,
+                            None,
+                            Some("eml"),
+                            false,
+                        ) {
+                            Ok(file) => {
+                                log::debug!("message saved in {}", file.path().display());
+                                log::info!(
                                     "Message was stored in {} so that you can restore it manually.",
-                                    file.path.display()
-                                ),
-                                Some(crate::types::NotificationType::Info),
-                            )));
+                                    file.path().display()
+                                );
+                                self.main_loop_handler.send(ThreadEvent::UIEvent(
+                                    UIEvent::Notification(
+                                        Some(format!("{}: could not save message", &self.name)),
+                                        format!(
+                                            "Message was stored in {} so that you can restore it \
+                                             manually.",
+                                            file.path().display()
+                                        ),
+                                        Some(crate::types::NotificationType::Info),
+                                    ),
+                                ));
+                            }
+                            Err(err) => log::error!("Could not save message: {err}"),
+                        }
                     }
                 }
                 JobRequest::SendMessage => {}

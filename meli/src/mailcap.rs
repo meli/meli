@@ -34,7 +34,7 @@ use melib::{email::Attachment, log, text_processing::GlobMatch, Error, Result};
 
 use crate::{
     state::Context,
-    types::{create_temp_file, ForkType, UIEvent},
+    types::{File, ForkType, UIEvent},
 };
 
 pub struct MailcapEntry {
@@ -165,31 +165,34 @@ impl MailcapEntry {
                     .map(|arg| match *arg {
                         "%s" => {
                             needs_stdin = false;
-                            let _f = create_temp_file(
+                            let _f = File::create_temp_file(
                                 &a.decode(Default::default()),
                                 None,
                                 None,
                                 None,
                                 true,
-                            );
+                            )?;
                             let p = _f.path().display().to_string();
                             f = Some(_f);
-                            p
+                            Ok(p)
                         }
-                        "%t" => a.content_type().to_string(),
+                        "%t" => Ok(a.content_type().to_string()),
                         param if param.starts_with("%{") && param.ends_with('}') => {
                             let param = &param["%{".len()..param.len() - 1];
-                            if let Some(v) = params.iter().find(|(k, _)| *k == param.as_bytes()) {
-                                String::from_utf8_lossy(v.1).into()
-                            } else if param == "charset" {
-                                String::from("utf-8")
-                            } else {
-                                String::new()
-                            }
+                            Ok(
+                                if let Some(v) = params.iter().find(|(k, _)| *k == param.as_bytes())
+                                {
+                                    String::from_utf8_lossy(v.1).into()
+                                } else if param == "charset" {
+                                    String::from("utf-8")
+                                } else {
+                                    String::new()
+                                },
+                            )
                         }
-                        a => a.to_string(),
+                        a => Ok(a.to_string()),
                     })
-                    .collect::<Vec<String>>();
+                    .collect::<Result<Vec<String>>>()?;
                 let cmd_string = format!("{} {}", cmd, args.join(" "));
                 log::trace!("Executing: sh -c \"{}\"", cmd_string.replace('"', "\\\""));
                 if copiousoutput {

@@ -173,31 +173,36 @@ impl Component for HtmlView {
                 command
             };
             if let Some(command) = command {
-                let p = create_temp_file(&self.bytes, None, None, Some("html"), true);
                 context
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::UpdateSubStatus(
                         command.to_string(),
                     )));
-                let exec_cmd =
-                    super::desktop_exec_to_command(&command, p.path.display().to_string(), false);
+                match File::create_temp_file(&self.bytes, None, None, Some("html"), true).and_then(
+                    |p| {
+                        let exec_cmd = super::desktop_exec_to_command(
+                            &command,
+                            p.path().display().to_string(),
+                            false,
+                        );
 
-                match Command::new("sh")
-                    .args(["-c", &exec_cmd])
-                    .stdin(Stdio::piped())
-                    .stdout(Stdio::piped())
-                    .spawn()
-                {
-                    Ok(child) => {
+                        Ok((
+                            p,
+                            Command::new("sh")
+                                .args(["-c", &exec_cmd])
+                                .stdin(Stdio::piped())
+                                .stdout(Stdio::piped())
+                                .spawn()?,
+                        ))
+                    },
+                ) {
+                    Ok((p, child)) => {
                         context.temp_files.push(p);
                         context.children.push(child);
                     }
                     Err(err) => {
                         context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(format!(
-                                "Failed to start `{}`: {}",
-                                &exec_cmd, err
-                            )),
+                            StatusEvent::DisplayMessage(format!("Failed to start {err}",)),
                         ));
                     }
                 }

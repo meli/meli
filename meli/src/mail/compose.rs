@@ -841,8 +841,12 @@ To: {}
     }
 
     fn update_from_file(&mut self, file: File, context: &mut Context) -> bool {
-        let result = file.read_to_string();
-        match self.draft.update(result.as_str()) {
+        match file.read_to_string().and_then(|res| {
+            self.draft.update(res.as_str()).map_err(|err| {
+                self.draft.set_body(res);
+                err
+            })
+        }) {
             Ok(has_changes) => {
                 self.has_changes = has_changes;
                 true
@@ -850,13 +854,9 @@ To: {}
             Err(err) => {
                 context.replies.push_back(UIEvent::Notification(
                     Some("Could not parse draft headers correctly.".to_string()),
-                    format!(
-                        "{}\nThe invalid text has been set as the body of your draft",
-                        &err
-                    ),
+                    format!("{err}\nThe invalid text has been set as the body of your draft",),
                     Some(NotificationType::Error(melib::error::ErrorKind::None)),
                 ));
-                self.draft.set_body(result);
                 self.has_changes = true;
                 false
             }
@@ -1898,13 +1898,24 @@ impl Component for Composer {
                         .clone(),
                 );
 
-                let f = create_temp_file(
+                let f = match File::create_temp_file(
                     self.draft.to_edit_string().as_bytes(),
                     None,
                     None,
                     Some("eml"),
                     true,
-                );
+                ) {
+                    Ok(f) => f,
+                    Err(err) => {
+                        context.replies.push_back(UIEvent::Notification(
+                            None,
+                            err.to_string(),
+                            Some(NotificationType::Error(err.kind)),
+                        ));
+                        self.set_dirty(true);
+                        return true;
+                    }
+                };
 
                 if *account_settings!(context[self.account_hash].composing.embed) {
                     match crate::terminal::embed::create_pty(
@@ -1966,8 +1977,12 @@ impl Component for Composer {
                     }
                 }
                 context.replies.push_back(UIEvent::Fork(ForkType::Finished));
-                let result = f.read_to_string();
-                match self.draft.update(result.as_str()) {
+                match f.read_to_string().and_then(|res| {
+                    self.draft.update(res.as_str()).map_err(|err| {
+                        self.draft.set_body(res);
+                        err
+                    })
+                }) {
                     Ok(has_changes) => {
                         self.has_changes = has_changes;
                     }
@@ -1975,12 +1990,10 @@ impl Component for Composer {
                         context.replies.push_back(UIEvent::Notification(
                             Some("Could not parse draft headers correctly.".to_string()),
                             format!(
-                                "{}\nThe invalid text has been set as the body of your draft",
-                                &err
+                                "{err}\nThe invalid text has been set as the body of your draft",
                             ),
                             Some(NotificationType::Error(melib::error::ErrorKind::None)),
                         ));
-                        self.draft.set_body(result);
                         self.has_changes = true;
                     }
                 }
@@ -1998,15 +2011,21 @@ impl Component for Composer {
                         ));
                         return false;
                     }
-                    let f = create_temp_file(&[], None, None, None, true);
-                    match Command::new("sh")
-                        .args(["-c", command])
-                        .stdin(Stdio::null())
-                        .stdout(Stdio::from(f.file()))
-                        .spawn()
-                        .and_then(|child| Ok(child.wait_with_output()?.stderr))
+                    match File::create_temp_file(&[], None, None, None, true)
+                        .and_then(|f| {
+                            let std_file = f.as_std_file()?;
+                            Ok((
+                                f,
+                                Command::new("sh")
+                                    .args(["-c", command])
+                                    .stdin(Stdio::null())
+                                    .stdout(Stdio::from(std_file))
+                                    .spawn()?,
+                            ))
+                        })
+                        .and_then(|(f, child)| Ok((f, child.wait_with_output()?.stderr)))
                     {
-                        Ok(stderr) => {
+                        Ok((f, stderr)) => {
                             if !stderr.is_empty() {
                                 context.replies.push_back(UIEvent::StatusEvent(
                                     StatusEvent::DisplayMessage(format!(
@@ -2016,7 +2035,7 @@ impl Component for Composer {
                                 ));
                             }
                             let attachment =
-                                match melib::email::compose::attachment_from_file(f.path()) {
+                                match melib::email::compose::attachment_from_file(&f.path()) {
                                     Ok(a) => a,
                                     Err(err) => {
                                         context.replies.push_back(UIEvent::Notification(
@@ -2548,7 +2567,7 @@ pub fn send_draft_async(
                 ))))
                 .unwrap();
         } else if !store_sent_mail && is_ok {
-            let f = create_temp_file(message.as_bytes(), None, None, Some("eml"), false);
+            let f = File::create_temp_file(message.as_bytes(), None, None, Some("eml"), false)?;
             log::info!(
                 "store_sent_mail is false; stored sent mail to {}",
                 f.path().display()

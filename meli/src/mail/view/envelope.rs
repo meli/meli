@@ -1532,33 +1532,36 @@ impl Component for EnvelopeView {
                             let attachment_type = attachment.mime_type();
                             let filename = attachment.filename();
                             if let Ok(command) = query_default_app(&attachment_type) {
-                                let p = create_temp_file(
+                                match File::create_temp_file(
                                     &attachment.decode(Default::default()),
                                     filename.as_deref(),
                                     None,
                                     None,
                                     true,
-                                );
-                                let exec_cmd = desktop_exec_to_command(
-                                    &command,
-                                    p.path.display().to_string(),
-                                    false,
-                                );
-                                match Command::new("sh")
-                                    .args(["-c", &exec_cmd])
-                                    .stdin(Stdio::piped())
-                                    .stdout(Stdio::piped())
-                                    .spawn()
-                                {
-                                    Ok(child) => {
+                                )
+                                .and_then(|p| {
+                                    let exec_cmd = desktop_exec_to_command(
+                                        &command,
+                                        p.path().display().to_string(),
+                                        false,
+                                    );
+                                    Ok((
+                                        p,
+                                        Command::new("sh")
+                                            .args(["-c", &exec_cmd])
+                                            .stdin(Stdio::piped())
+                                            .stdout(Stdio::piped())
+                                            .spawn()?,
+                                    ))
+                                }) {
+                                    Ok((p, child)) => {
                                         context.temp_files.push(p);
                                         context.children.push(child);
                                     }
                                     Err(err) => {
                                         context.replies.push_back(UIEvent::StatusEvent(
                                             StatusEvent::DisplayMessage(format!(
-                                                "Failed to start `{}`: {}",
-                                                &exec_cmd, err
+                                                "Failed to execute command: {err}"
                                             )),
                                         ));
                                     }
