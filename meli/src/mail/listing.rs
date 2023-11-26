@@ -20,7 +20,7 @@
  */
 
 use std::{
-    collections::{BTreeSet, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     convert::TryFrom,
     fs::File,
     future::Future,
@@ -488,7 +488,7 @@ column_str!(struct SubjectString(String));
 column_str!(struct FlagString(String));
 column_str!(struct TagString(String, SmallVec<[Option<Color>; 8]>));
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 struct MailboxMenuEntry {
     depth: usize,
     indentation: u32,
@@ -496,6 +496,7 @@ struct MailboxMenuEntry {
     visible: bool,
     collapsed: bool,
     mailbox_hash: MailboxHash,
+    index_style: Option<IndexStyle>,
 }
 
 #[derive(Debug)]
@@ -1196,6 +1197,12 @@ impl Component for Listing {
                             }
                         })
                         .collect::<_>();
+                    let previous_index_styles: BTreeMap<MailboxHash, IndexStyle> = self.accounts
+                        [account_index]
+                        .entries
+                        .iter()
+                        .filter_map(|e| Some((e.mailbox_hash, e.index_style?)))
+                        .collect::<_>();
                     self.accounts[account_index].entries = context.accounts[&*account_hash]
                         .list_mailboxes()
                         .into_iter()
@@ -1215,6 +1222,7 @@ impl Component for Listing {
                             } else {
                                 previous_collapsed_mailboxes.contains(&f.hash)
                             },
+                            index_style: previous_index_styles.get(&f.hash).copied(),
                         })
                         .collect::<_>();
                     self.menu.grid_mut().empty();
@@ -1245,6 +1253,12 @@ impl Component for Listing {
                         }
                     })
                     .collect::<_>();
+                let previous_index_styles: BTreeMap<MailboxHash, IndexStyle> = self.accounts
+                    [account_index]
+                    .entries
+                    .iter()
+                    .filter_map(|e| Some((e.mailbox_hash, e.index_style?)))
+                    .collect::<_>();
                 self.accounts[account_index].entries = context.accounts[&*account_hash]
                     .list_mailboxes()
                     .into_iter()
@@ -1260,6 +1274,7 @@ impl Component for Listing {
                         mailbox_hash: f.hash,
                         visible: true,
                         collapsed: previous_collapsed_mailboxes.contains(&f.hash),
+                        index_style: previous_index_styles.get(&f.hash).copied(),
                     })
                     .collect::<_>();
                 let mut fallback = 0;
@@ -1595,19 +1610,19 @@ impl Component for Listing {
                 match event {
                     UIEvent::Action(ref action) => match action {
                         Action::Listing(ListingAction::SetPlain) => {
-                            self.set_style(IndexStyle::Plain, context);
+                            self.set_index_style(IndexStyle::Plain, context);
                             return true;
                         }
                         Action::Listing(ListingAction::SetThreaded) => {
-                            self.set_style(IndexStyle::Threaded, context);
+                            self.set_index_style(IndexStyle::Threaded, context);
                             return true;
                         }
                         Action::Listing(ListingAction::SetCompact) => {
-                            self.set_style(IndexStyle::Compact, context);
+                            self.set_index_style(IndexStyle::Compact, context);
                             return true;
                         }
                         Action::Listing(ListingAction::SetConversations) => {
-                            self.set_style(IndexStyle::Conversations, context);
+                            self.set_index_style(IndexStyle::Conversations, context);
                             return true;
                         }
                         Action::Listing(ListingAction::Import(file_path, mailbox_path)) => {
@@ -2489,6 +2504,7 @@ impl Listing {
                         mailbox_hash: f.hash,
                         visible: true,
                         collapsed: a[&f.hash].conf.collapsed,
+                        index_style: a[&f.hash].conf.conf_override().listing.index_style,
                     })
                     .collect::<_>();
 
@@ -2677,6 +2693,7 @@ impl Listing {
                 mailbox_hash,
                 visible: _,
                 collapsed,
+                index_style: _,
             },
         ) in self.accounts[aidx].entries.iter().enumerate()
         {
@@ -3011,6 +3028,12 @@ impl Listing {
                 }
             })
             .collect::<_>();
+        let previous_index_styles: BTreeMap<MailboxHash, IndexStyle> = self.accounts
+            [self.cursor_pos.account]
+            .entries
+            .iter()
+            .filter_map(|e| Some((e.mailbox_hash, e.index_style?)))
+            .collect::<_>();
         self.accounts[self.cursor_pos.account].entries = context.accounts[self.cursor_pos.account]
             .list_mailboxes()
             .into_iter()
@@ -3032,13 +3055,17 @@ impl Listing {
                 } else {
                     previous_collapsed_mailboxes.contains(&f.hash)
                 },
+                index_style: previous_index_styles.get(&f.hash).copied(),
             })
             .collect::<_>();
         match self.cursor_pos.menu {
             MenuEntryCursor::Mailbox(idx) => {
-                /* Account might have no mailboxes yet if it's offline */
-                if let Some(MailboxMenuEntry { mailbox_hash, .. }) =
-                    self.accounts[self.cursor_pos.account].entries.get(idx)
+                // Account might have no mailboxes yet if it's offline
+                if let Some(MailboxMenuEntry {
+                    mailbox_hash,
+                    index_style,
+                    ..
+                }) = self.accounts[self.cursor_pos.account].entries.get(idx)
                 {
                     self.component
                         .process_event(&mut UIEvent::VisibilityChange(false), context);
@@ -3046,9 +3073,10 @@ impl Listing {
                         .set_coordinates((account_hash, *mailbox_hash));
                     self.component.refresh_mailbox(context, true);
 
-                    let index_style =
-                        mailbox_settings!(context[account_hash][mailbox_hash].listing.index_style);
-                    self.set_style(*index_style, context);
+                    // Check if per-mailbox configuration overrides general configuration
+                    let index_style_override =
+                        *mailbox_settings!(context[account_hash][mailbox_hash].listing.index_style);
+                    self.set_index_style(index_style.unwrap_or(index_style_override), context);
                 } else if !matches!(self.component, ListingComponent::Offline(_)) {
                     self.component.unrealize(context);
                     self.component =
@@ -3095,7 +3123,7 @@ impl Listing {
         !matches!(self.component.focus(), Focus::EntryFullscreen) && self.menu_visibility
     }
 
-    fn set_style(&mut self, new_style: IndexStyle, context: &mut Context) {
+    fn set_index_style(&mut self, new_style: IndexStyle, context: &mut Context) {
         let old = match new_style {
             IndexStyle::Conversations | IndexStyle::Threaded | IndexStyle::Plain => {
                 if matches!(self.component, Plain(_)) {
@@ -3139,6 +3167,11 @@ impl Listing {
               //    // coordinates)),
               //}
         };
+        if let MenuEntryCursor::Mailbox(idx) = self.cursor_pos.menu {
+            if let Some(mbox_entry) = self.accounts[self.cursor_pos.account].entries.get_mut(idx) {
+                mbox_entry.index_style = Some(new_style);
+            }
+        }
         self.component
             .process_event(&mut UIEvent::VisibilityChange(true), context);
         old.unrealize(context);
