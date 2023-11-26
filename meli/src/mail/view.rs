@@ -327,11 +327,12 @@ impl Component for MailView {
         } else if let MailViewState::Error { ref err } = self.state {
             grid.clear_area(area, self.theme_default);
             context.dirty_areas.push_back(area);
-            context.replies.push_back(UIEvent::Notification(
-                Some("Failed to open e-mail".to_string()),
-                err.to_string(),
-                Some(NotificationType::Error(err.kind)),
-            ));
+            context.replies.push_back(UIEvent::Notification {
+                title: Some("Failed to open e-mail".into()),
+                source: None,
+                body: err.to_string().into(),
+                kind: Some(NotificationType::Error(err.kind)),
+            });
             log::error!("Failed to open envelope: {err}");
             self.init_futures(context);
             return;
@@ -575,11 +576,12 @@ impl Component for MailView {
                                                 err
                                             );
                                             log::error!("{err_string}");
-                                            context.replies.push_back(UIEvent::Notification(
-                                                Some("Failed to open e-mail".to_string()),
-                                                err_string,
-                                                Some(NotificationType::Error(err.kind)),
-                                            ));
+                                            context.replies.push_back(UIEvent::Notification {
+                                                title: Some("Failed to open e-mail".into()),
+                                                source: None,
+                                                body: err_string.into(),
+                                                kind: Some(NotificationType::Error(err.kind)),
+                                            });
                                         }
                                     }
                                 }

@@ -144,14 +144,15 @@ impl EnvelopeView {
                 });
             match command_obj {
                 Err(err) => {
-                    main_loop_handler.send(ThreadEvent::UIEvent(UIEvent::Notification(
-                        Some(format!(
-                            "Failed to start html filter process: {}",
-                            filter_invocation,
-                        )),
-                        err.to_string(),
-                        Some(NotificationType::Error(melib::ErrorKind::External)),
-                    )));
+                    main_loop_handler.send(ThreadEvent::UIEvent(UIEvent::Notification {
+                        title: Some(
+                            format!("Failed to start html filter process: {}", filter_invocation,)
+                                .into(),
+                        ),
+                        source: None,
+                        body: err.to_string().into(),
+                        kind: Some(NotificationType::Error(melib::ErrorKind::External)),
+                    }));
                     // [ref:FIXME]: add `v` configurable shortcut
                     let comment = Some(format!(
                         "Failed to start html filter process: `{}`. Press `v` to open in web \
@@ -1385,20 +1386,24 @@ impl Component for EnvelopeView {
                 }
                 match save_attachment(&path, &self.mail.bytes) {
                     Err(err) => {
-                        context.replies.push_back(UIEvent::Notification(
-                            Some(format!("Failed to create file at {}", path.display())),
-                            err.to_string(),
-                            Some(NotificationType::Error(melib::ErrorKind::External)),
-                        ));
+                        context.replies.push_back(UIEvent::Notification {
+                            title: Some(
+                                format!("Failed to create file at {}", path.display()).into(),
+                            ),
+                            source: None,
+                            body: err.to_string().into(),
+                            kind: Some(NotificationType::Error(melib::ErrorKind::External)),
+                        });
                         log::error!("Failed to create file at {}: {err}", path.display());
                         return true;
                     }
                     Ok(()) => {
-                        context.replies.push_back(UIEvent::Notification(
-                            None,
-                            format!("Saved at {}", &path.display()),
-                            Some(NotificationType::Info),
-                        ));
+                        context.replies.push_back(UIEvent::Notification {
+                            title: None,
+                            source: None,
+                            body: format!("Saved at {}", &path.display()).into(),
+                            kind: Some(NotificationType::Info),
+                        });
                     }
                 }
 
@@ -1423,19 +1428,23 @@ impl Component for EnvelopeView {
                     }
                     match save_attachment(&path, &u.decode(Default::default())) {
                         Err(err) => {
-                            context.replies.push_back(UIEvent::Notification(
-                                Some(format!("Failed to create file at {}", path.display())),
-                                err.to_string(),
-                                Some(NotificationType::Error(melib::ErrorKind::External)),
-                            ));
+                            context.replies.push_back(UIEvent::Notification {
+                                title: Some(
+                                    format!("Failed to create file at {}", path.display()).into(),
+                                ),
+                                source: None,
+                                body: err.to_string().into(),
+                                kind: Some(NotificationType::Error(melib::ErrorKind::External)),
+                            });
                             log::error!("Failed to create file at {}: {err}", path.display());
                         }
                         Ok(()) => {
-                            context.replies.push_back(UIEvent::Notification(
-                                None,
-                                format!("Saved at {}", path.display()),
-                                Some(NotificationType::Info),
-                            ));
+                            context.replies.push_back(UIEvent::Notification {
+                                title: None,
+                                source: None,
+                                body: format!("Saved at {}", path.display()).into(),
+                                kind: Some(NotificationType::Info),
+                            });
                         }
                     }
                 } else if a_i == 0 {
@@ -1448,20 +1457,24 @@ impl Component for EnvelopeView {
                     }
                     match save_attachment(&path, &self.mail.bytes) {
                         Err(err) => {
-                            context.replies.push_back(UIEvent::Notification(
-                                Some(format!("Failed to create file at {}", path.display())),
-                                err.to_string(),
-                                Some(NotificationType::Error(melib::ErrorKind::External)),
-                            ));
+                            context.replies.push_back(UIEvent::Notification {
+                                title: Some(
+                                    format!("Failed to create file at {}", path.display()).into(),
+                                ),
+                                source: None,
+                                body: err.to_string().into(),
+                                kind: Some(NotificationType::Error(melib::ErrorKind::External)),
+                            });
                             log::error!("Failed to create file at {}: {err}", path.display());
                             return true;
                         }
                         Ok(()) => {
-                            context.replies.push_back(UIEvent::Notification(
-                                None,
-                                format!("Saved at {}", &path.display()),
-                                Some(NotificationType::Info),
-                            ));
+                            context.replies.push_back(UIEvent::Notification {
+                                title: None,
+                                source: None,
+                                body: format!("Saved at {}", &path.display()).into(),
+                                kind: Some(NotificationType::Info),
+                            });
                         }
                     }
 
@@ -1651,11 +1664,12 @@ impl Component for EnvelopeView {
                         context.children.push(child);
                     }
                     Err(err) => {
-                        context.replies.push_back(UIEvent::Notification(
-                            Some(format!("Failed to launch {:?}", url_launcher)),
-                            err.to_string(),
-                            Some(NotificationType::Error(melib::ErrorKind::External)),
-                        ));
+                        context.replies.push_back(UIEvent::Notification {
+                            title: Some(format!("Failed to launch {:?}", url_launcher).into()),
+                            source: None,
+                            body: err.to_string().into(),
+                            kind: Some(NotificationType::Error(melib::ErrorKind::External)),
+                        });
                     }
                 }
                 return true;

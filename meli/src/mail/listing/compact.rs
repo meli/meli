@@ -1563,11 +1563,12 @@ impl CompactListing {
                     search_term, &err
                 );
                 log::error!("{}", message);
-                context.replies.push_back(UIEvent::Notification(
-                    Some("Could not perform search".to_string()),
-                    message,
-                    Some(crate::types::NotificationType::Error(err.kind)),
-                ));
+                context.replies.push_back(UIEvent::Notification {
+                    title: Some("Could not perform search".into()),
+                    source: None,
+                    body: message.into(),
+                    kind: Some(crate::types::NotificationType::Error(err.kind)),
+                });
             }
         }
     }
@@ -2033,11 +2034,12 @@ impl Component for CompactListing {
                         self.search_job = Some((filter_term.to_string(), handle));
                     }
                     Err(err) => {
-                        context.replies.push_back(UIEvent::Notification(
-                            Some("Could not perform search".to_string()),
-                            err.to_string(),
-                            Some(crate::types::NotificationType::Error(err.kind)),
-                        ));
+                        context.replies.push_back(UIEvent::Notification {
+                            title: Some("Could not perform search".into()),
+                            source: None,
+                            body: err.to_string().into(),
+                            kind: Some(crate::types::NotificationType::Error(err.kind)),
+                        });
                     }
                 };
                 self.set_dirty(true);
@@ -2061,11 +2063,12 @@ impl Component for CompactListing {
                         }
                     }
                     Err(err) => {
-                        context.replies.push_back(UIEvent::Notification(
-                            Some("Could not perform search".to_string()),
-                            err.to_string(),
-                            Some(crate::types::NotificationType::Error(err.kind)),
-                        ));
+                        context.replies.push_back(UIEvent::Notification {
+                            title: Some("Could not perform search".into()),
+                            source: None,
+                            body: err.to_string().into(),
+                            kind: Some(crate::types::NotificationType::Error(err.kind)),
+                        });
                     }
                 };
                 self.set_dirty(true);
@@ -2084,11 +2087,12 @@ impl Component for CompactListing {
                     Ok(None) => { /* something happened, perhaps a worker thread panicked */ }
                     Ok(Some(Ok(results))) => self.filter(filter_term, results, context),
                     Ok(Some(Err(err))) => {
-                        context.replies.push_back(UIEvent::Notification(
-                            Some("Could not perform search".to_string()),
-                            err.to_string(),
-                            Some(crate::types::NotificationType::Error(err.kind)),
-                        ));
+                        context.replies.push_back(UIEvent::Notification {
+                            title: Some("Could not perform search".into()),
+                            source: None,
+                            body: err.to_string().into(),
+                            kind: Some(crate::types::NotificationType::Error(err.kind)),
+                        });
                     }
                 }
                 self.set_dirty(true);

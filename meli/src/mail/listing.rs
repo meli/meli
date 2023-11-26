@@ -780,21 +780,24 @@ pub trait MailListingTrait: ListingTrait {
                             handle,
                             on_finish: Some(CallbackFn(Box::new(move |context: &mut Context| {
                                 context.replies.push_back(match receiver.try_recv() {
-                                    Err(_) | Ok(None) => UIEvent::Notification(
-                                        Some("Could not export mbox".to_string()),
-                                        "Job was canceled.".to_string(),
-                                        Some(NotificationType::Info),
-                                    ),
-                                    Ok(Some(Err(err))) => UIEvent::Notification(
-                                        Some("Could not export mbox".to_string()),
-                                        err.to_string(),
-                                        Some(NotificationType::Error(err.kind)),
-                                    ),
-                                    Ok(Some(Ok(path))) => UIEvent::Notification(
-                                        Some("Succesfully exported mbox".to_string()),
-                                        format!("Wrote to file {}", path.display()),
-                                        Some(NotificationType::Info),
-                                    ),
+                                    Err(_) | Ok(None) => UIEvent::Notification {
+                                        title: Some("Could not export mbox".into()),
+                                        source: None,
+                                        body: "Job was canceled.".into(),
+                                        kind: Some(NotificationType::Info),
+                                    },
+                                    Ok(Some(Err(err))) => UIEvent::Notification {
+                                        title: Some("Could not export mbox".into()),
+                                        source: None,
+                                        body: err.to_string().into(),
+                                        kind: Some(NotificationType::Error(err.kind)),
+                                    },
+                                    Ok(Some(Ok(path))) => UIEvent::Notification {
+                                        title: Some("Succesfully exported mbox".into()),
+                                        source: None,
+                                        body: format!("Wrote to file {}", path.display()).into(),
+                                        kind: Some(NotificationType::Info),
+                                    },
                                 });
                             }))),
                             log_level: LogLevel::INFO,
@@ -1827,11 +1830,12 @@ impl Component for Listing {
                         if let MenuEntryCursor::Mailbox(idx) = self.cursor_pos.menu {
                             if let Some(&mailbox_hash) = account.mailboxes_order.get(idx) {
                                 if let Err(err) = account.refresh(mailbox_hash) {
-                                    context.replies.push_back(UIEvent::Notification(
-                                        Some("Could not refresh.".to_string()),
-                                        err.to_string(),
-                                        Some(NotificationType::Error(err.kind)),
-                                    ));
+                                    context.replies.push_back(UIEvent::Notification {
+                                        title: Some("Could not refresh.".into()),
+                                        source: None,
+                                        body: err.to_string().into(),
+                                        kind: Some(NotificationType::Error(err.kind)),
+                                    });
                                 }
                             }
                         }

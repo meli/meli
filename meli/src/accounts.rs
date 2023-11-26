@@ -932,16 +932,18 @@ impl Account {
                         return Some(UIEvent::MailboxUpdate((self.hash, mailbox_hash)));
                     }
 
-                    return Some(Notification(
-                        Some(format!("new e-mail from: {}", from)),
-                        format!(
+                    return Some(Notification {
+                        title: Some(format!("new e-mail from: {}", from).into()),
+                        body: format!(
                             "{}\n{} {}",
                             subject,
                             self.name,
                             self.mailbox_entries[&mailbox_hash].name()
-                        ),
-                        Some(crate::types::NotificationType::NewMail),
-                    ));
+                        )
+                        .into(),
+                        source: None,
+                        kind: Some(crate::types::NotificationType::NewMail),
+                    });
                 }
                 RefreshEventKind::Remove(env_hash) => {
                     if !self.collection.contains_key(&env_hash) {
@@ -987,21 +989,13 @@ impl Account {
                         let j = self.active_jobs.remove(&job_id);
                         drop(j);
                     }
-                    /*
-                    context
-                        .1
-                        .send(ThreadEvent::UIEvent(UIEvent::Notification(
-                            Some(format!("{} watcher exited with error", &self.name)),
-                            e.to_string(),
-                            Some(crate::types::NotificationType::Error(err.kind)),
-                        )));
-                    */
                     self.watch();
-                    return Some(Notification(
-                        Some("Account watch failed".into()),
-                        err.to_string(),
-                        Some(crate::types::NotificationType::Error(err.kind)),
-                    ));
+                    return Some(Notification {
+                        title: Some("Account watch failed".into()),
+                        body: err.to_string().into(),
+                        kind: Some(crate::types::NotificationType::Error(err.kind)),
+                        source: Some(err),
+                    });
                 }
                 RefreshEventKind::MailboxCreate(_new_mailbox) => {}
                 RefreshEventKind::MailboxDelete(_mailbox_hash) => {}
@@ -1699,11 +1693,14 @@ impl Account {
                         if let Err(err) = mailboxes.and_then(|mailboxes| self.init(mailboxes)) {
                             if err.kind.is_authentication() {
                                 self.main_loop_handler.send(ThreadEvent::UIEvent(
-                                    UIEvent::Notification(
-                                        Some(format!("{}: authentication error", &self.name)),
-                                        err.to_string(),
-                                        Some(crate::types::NotificationType::Error(err.kind)),
-                                    ),
+                                    UIEvent::Notification {
+                                        title: Some(
+                                            format!("{}: authentication error", &self.name).into(),
+                                        ),
+                                        source: None,
+                                        body: err.to_string().into(),
+                                        kind: Some(crate::types::NotificationType::Error(err.kind)),
+                                    },
                                 ));
                                 self.is_online.set_err(err);
                                 self.main_loop_handler.send(ThreadEvent::UIEvent(
@@ -1771,11 +1768,14 @@ impl Account {
                                 .job_executor
                                 .set_job_success(job_id, false);
                             self.main_loop_handler.send(ThreadEvent::UIEvent(
-                                UIEvent::Notification(
-                                    Some(format!("{}: could not fetch mailbox", &self.name)),
-                                    err.to_string(),
-                                    Some(crate::types::NotificationType::Error(err.kind)),
-                                ),
+                                UIEvent::Notification {
+                                    title: Some(
+                                        format!("{}: could not fetch mailbox", &self.name).into(),
+                                    ),
+                                    source: None,
+                                    body: err.to_string().into(),
+                                    kind: Some(crate::types::NotificationType::Error(err.kind)),
+                                },
                             ));
                             self.mailbox_entries
                                 .entry(mailbox_hash)
@@ -1895,11 +1895,12 @@ impl Account {
                             .job_executor
                             .set_job_success(job_id, false);
                         self.main_loop_handler
-                            .send(ThreadEvent::UIEvent(UIEvent::Notification(
-                                Some(format!("{}: could not set flag", &self.name)),
-                                err.to_string(),
-                                Some(crate::types::NotificationType::Error(err.kind)),
-                            )));
+                            .send(ThreadEvent::UIEvent(UIEvent::Notification {
+                                title: Some(format!("{}: could not set flag", &self.name).into()),
+                                source: None,
+                                body: err.to_string().into(),
+                                kind: Some(crate::types::NotificationType::Error(err.kind)),
+                            }));
                     }
                     Ok(Some(Ok(()))) => {
                         for env_hash in env_hashes.iter() {
@@ -1972,15 +1973,20 @@ impl Account {
                                     file.path().display()
                                 );
                                 self.main_loop_handler.send(ThreadEvent::UIEvent(
-                                    UIEvent::Notification(
-                                        Some(format!("{}: could not save message", &self.name)),
-                                        format!(
+                                    UIEvent::Notification {
+                                        title: Some(
+                                            format!("{}: could not save message", &self.name)
+                                                .into(),
+                                        ),
+                                        source: None,
+                                        body: format!(
                                             "Message was stored in {} so that you can restore it \
                                              manually.",
                                             file.path().display()
-                                        ),
-                                        Some(crate::types::NotificationType::Info),
-                                    ),
+                                        )
+                                        .into(),
+                                        kind: Some(crate::types::NotificationType::Info),
+                                    },
                                 ));
                             }
                             Err(err) => log::error!("Could not save message: {err}"),
@@ -1994,11 +2000,12 @@ impl Account {
                             .job_executor
                             .set_job_success(job_id, false);
                         self.main_loop_handler
-                            .send(ThreadEvent::UIEvent(UIEvent::Notification(
-                                Some("Could not send message".to_string()),
-                                err.to_string(),
-                                Some(crate::types::NotificationType::Error(err.kind)),
-                            )));
+                            .send(ThreadEvent::UIEvent(UIEvent::Notification {
+                                title: Some("Could not send message".into()),
+                                source: None,
+                                body: err.to_string().into(),
+                                kind: Some(crate::types::NotificationType::Error(err.kind)),
+                            }));
                     }
                 }
                 JobRequest::DeleteMessages { ref mut handle, .. } => {
@@ -2007,11 +2014,14 @@ impl Account {
                             .job_executor
                             .set_job_success(job_id, false);
                         self.main_loop_handler
-                            .send(ThreadEvent::UIEvent(UIEvent::Notification(
-                                Some(format!("{}: could not delete message", &self.name)),
-                                err.to_string(),
-                                Some(crate::types::NotificationType::Error(err.kind)),
-                            )));
+                            .send(ThreadEvent::UIEvent(UIEvent::Notification {
+                                title: Some(
+                                    format!("{}: could not delete message", &self.name).into(),
+                                ),
+                                source: None,
+                                body: err.to_string().into(),
+                                kind: Some(crate::types::NotificationType::Error(err.kind)),
+                            }));
                     }
                 }
                 JobRequest::CreateMailbox {
@@ -2026,14 +2036,18 @@ impl Account {
                                     .job_executor
                                     .set_job_success(job_id, false);
                                 self.main_loop_handler.send(ThreadEvent::UIEvent(
-                                    UIEvent::Notification(
-                                        Some(format!(
-                                            "{}: could not create mailbox {}",
-                                            &self.name, path
-                                        )),
-                                        err.to_string(),
-                                        Some(crate::types::NotificationType::Error(err.kind)),
-                                    ),
+                                    UIEvent::Notification {
+                                        title: Some(
+                                            format!(
+                                                "{}: could not create mailbox {}",
+                                                &self.name, path
+                                            )
+                                            .into(),
+                                        ),
+                                        source: None,
+                                        body: err.to_string().into(),
+                                        kind: Some(crate::types::NotificationType::Error(err.kind)),
+                                    },
                                 ));
                             }
                             Ok((mailbox_hash, mut mailboxes)) => {
@@ -2114,11 +2128,14 @@ impl Account {
                                 .job_executor
                                 .set_job_success(job_id, false);
                             self.main_loop_handler.send(ThreadEvent::UIEvent(
-                                UIEvent::Notification(
-                                    Some(format!("{}: could not delete mailbox", &self.name)),
-                                    err.to_string(),
-                                    Some(crate::types::NotificationType::Error(err.kind)),
-                                ),
+                                UIEvent::Notification {
+                                    title: Some(
+                                        format!("{}: could not delete mailbox", &self.name).into(),
+                                    ),
+                                    source: None,
+                                    body: err.to_string().into(),
+                                    kind: Some(crate::types::NotificationType::Error(err.kind)),
+                                },
                             ));
                         }
                         Ok(Some(Ok(mut mailboxes))) => {
@@ -2167,11 +2184,15 @@ impl Account {
                             // [ref:FIXME] remove from settings as well
 
                             self.main_loop_handler.send(ThreadEvent::UIEvent(
-                                UIEvent::Notification(
-                                    Some(format!("{}: mailbox deleted successfully", &self.name)),
-                                    String::new(),
-                                    Some(crate::types::NotificationType::Info),
-                                ),
+                                UIEvent::Notification {
+                                    title: Some(
+                                        format!("{}: mailbox deleted successfully", &self.name)
+                                            .into(),
+                                    ),
+                                    source: None,
+                                    body: "".into(),
+                                    kind: Some(crate::types::NotificationType::Info),
+                                },
                             ));
                         }
                     }
@@ -2186,26 +2207,34 @@ impl Account {
                                 .job_executor
                                 .set_job_success(job_id, false);
                             self.main_loop_handler.send(ThreadEvent::UIEvent(
-                                UIEvent::Notification(
-                                    Some(format!(
-                                        "{}: could not set mailbox permissions",
-                                        &self.name
-                                    )),
-                                    err.to_string(),
-                                    Some(crate::types::NotificationType::Error(err.kind)),
-                                ),
+                                UIEvent::Notification {
+                                    title: Some(
+                                        format!(
+                                            "{}: could not set mailbox permissions",
+                                            &self.name
+                                        )
+                                        .into(),
+                                    ),
+                                    source: None,
+                                    body: err.to_string().into(),
+                                    kind: Some(crate::types::NotificationType::Error(err.kind)),
+                                },
                             ));
                         }
                         Ok(Some(Ok(_))) => {
                             self.main_loop_handler.send(ThreadEvent::UIEvent(
-                                UIEvent::Notification(
-                                    Some(format!(
-                                        "{}: mailbox permissions set successfully",
-                                        &self.name
-                                    )),
-                                    String::new(),
-                                    Some(crate::types::NotificationType::Info),
-                                ),
+                                UIEvent::Notification {
+                                    title: Some(
+                                        format!(
+                                            "{}: mailbox permissions set successfully",
+                                            &self.name
+                                        )
+                                        .into(),
+                                    ),
+                                    source: None,
+                                    body: "".into(),
+                                    kind: Some(crate::types::NotificationType::Info),
+                                },
                             ));
                         }
                     }
@@ -2223,14 +2252,18 @@ impl Account {
                                 .job_executor
                                 .set_job_success(job_id, false);
                             self.main_loop_handler.send(ThreadEvent::UIEvent(
-                                UIEvent::Notification(
-                                    Some(format!(
-                                        "{}: could not set mailbox subscription",
-                                        &self.name
-                                    )),
-                                    err.to_string(),
-                                    Some(crate::types::NotificationType::Error(err.kind)),
-                                ),
+                                UIEvent::Notification {
+                                    title: Some(
+                                        format!(
+                                            "{}: could not set mailbox subscription",
+                                            &self.name
+                                        )
+                                        .into(),
+                                    ),
+                                    source: None,
+                                    body: err.to_string().into(),
+                                    kind: Some(crate::types::NotificationType::Error(err.kind)),
+                                },
                             ));
                         }
                         Ok(Some(Ok(()))) if self.mailbox_entries.contains_key(mailbox_hash) => {
@@ -2243,16 +2276,20 @@ impl Account {
                                 let _ = m.ref_mailbox.set_is_subscribed(*new_value);
                             });
                             self.main_loop_handler.send(ThreadEvent::UIEvent(
-                                UIEvent::Notification(
-                                    Some(format!(
-                                        "{}: `{}` has been {}subscribed.",
-                                        &self.name,
-                                        self.mailbox_entries[mailbox_hash].name(),
-                                        if *new_value { "" } else { "un" }
-                                    )),
-                                    String::new(),
-                                    Some(crate::types::NotificationType::Info),
-                                ),
+                                UIEvent::Notification {
+                                    title: Some(
+                                        format!(
+                                            "{}: `{}` has been {}subscribed.",
+                                            &self.name,
+                                            self.mailbox_entries[mailbox_hash].name(),
+                                            if *new_value { "" } else { "un" }
+                                        )
+                                        .into(),
+                                    ),
+                                    source: None,
+                                    body: "".into(),
+                                    kind: Some(crate::types::NotificationType::Info),
+                                },
                             ));
                         }
                         Ok(Some(Ok(()))) => {}
@@ -2269,11 +2306,14 @@ impl Account {
                                 .set_job_success(job_id, false);
                             // [ref:TODO]: relaunch watch job with ratelimit for failure
                             self.main_loop_handler.send(ThreadEvent::UIEvent(
-                                UIEvent::Notification(
-                                    Some(format!("{}: watch thread failed", &self.name)),
-                                    err.to_string(),
-                                    Some(crate::types::NotificationType::Error(err.kind)),
-                                ),
+                                UIEvent::Notification {
+                                    title: Some(
+                                        format!("{}: watch thread failed", &self.name).into(),
+                                    ),
+                                    source: None,
+                                    body: err.to_string().into(),
+                                    kind: Some(crate::types::NotificationType::Error(err.kind)),
+                                },
                             ));
                         }
                     }
@@ -2290,21 +2330,25 @@ impl Account {
                                 .job_executor
                                 .set_job_success(job_id, false);
                             self.main_loop_handler.send(ThreadEvent::UIEvent(
-                                UIEvent::Notification(
-                                    Some(format!("{}: {} failed", &self.name, name,)),
-                                    err.to_string(),
-                                    Some(crate::types::NotificationType::Error(err.kind)),
-                                ),
+                                UIEvent::Notification {
+                                    title: Some(format!("{}: {} failed", &self.name, name,).into()),
+                                    source: None,
+                                    body: err.to_string().into(),
+                                    kind: Some(crate::types::NotificationType::Error(err.kind)),
+                                },
                             ));
                         }
                         Ok(Some(Ok(()))) if on_finish.is_none() => {
                             if log_level <= LogLevel::INFO {
                                 self.main_loop_handler.send(ThreadEvent::UIEvent(
-                                    UIEvent::Notification(
-                                        Some(format!("{}: {} succeeded", &self.name, name,)),
-                                        String::new(),
-                                        Some(crate::types::NotificationType::Info),
-                                    ),
+                                    UIEvent::Notification {
+                                        title: Some(
+                                            format!("{}: {} succeeded", &self.name, name,).into(),
+                                        ),
+                                        source: None,
+                                        body: "".into(),
+                                        kind: Some(crate::types::NotificationType::Info),
+                                    },
                                 ));
                             }
                         }

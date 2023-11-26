@@ -373,11 +373,7 @@ impl Component for MailboxManager {
                                                 .to_string(),
                                         ))
                                     {
-                                        context.replies.push_back(UIEvent::Notification(
-                                            None,
-                                            err.to_string(),
-                                            Some(crate::types::NotificationType::Error(err.kind)),
-                                        ));
+                                        context.replies.push_back(UIEvent::Notification { title: None, source: None, body: err.to_string().into(), kind: Some(crate::types::NotificationType::Error(err.kind)), });
                                     }
                                 }
                                 MailboxAction::Unsubscribe => {
@@ -389,11 +385,7 @@ impl Component for MailboxManager {
                                                 .to_string(),
                                         ))
                                     {
-                                        context.replies.push_back(UIEvent::Notification(
-                                            None,
-                                            err.to_string(),
-                                            Some(crate::types::NotificationType::Error(err.kind)),
-                                        ));
+                                        context.replies.push_back(UIEvent::Notification { title: None, source: None, body: err.to_string().into(), kind: Some(crate::types::NotificationType::Error(err.kind)), });
                                     }
                                 }
                             }

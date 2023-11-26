@@ -61,14 +61,15 @@ impl HtmlView {
                 .spawn();
             match command_obj {
                 Err(err) => {
-                    context.replies.push_back(UIEvent::Notification(
-                        Some(format!(
-                            "Failed to start html filter process: {}",
-                            filter_invocation,
-                        )),
-                        err.to_string(),
-                        Some(NotificationType::Error(melib::ErrorKind::External)),
-                    ));
+                    context.replies.push_back(UIEvent::Notification {
+                        title: Some(
+                            format!("Failed to start html filter process: {}", filter_invocation,)
+                                .into(),
+                        ),
+                        source: None,
+                        body: err.to_string().into(),
+                        kind: Some(NotificationType::Error(melib::ErrorKind::External)),
+                    });
                     String::from_utf8_lossy(&bytes).to_string()
                 }
                 Ok(mut html_filter) => {
@@ -108,11 +109,12 @@ impl HtmlView {
 
             display_text
         } else {
-            context.replies.push_back(UIEvent::Notification(
-                Some("Failed to find any application to use as html filter".to_string()),
-                String::new(),
-                Some(NotificationType::Error(melib::error::ErrorKind::None)),
-            ));
+            context.replies.push_back(UIEvent::Notification {
+                title: Some("Failed to find any application to use as html filter".into()),
+                source: None,
+                body: "".into(),
+                kind: Some(NotificationType::Error(melib::error::ErrorKind::None)),
+            });
             String::from_utf8_lossy(&bytes).to_string()
         };
         if body.count_attachments() > 1 {

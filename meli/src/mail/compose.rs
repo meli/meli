@@ -843,11 +843,14 @@ To: {}
                 true
             }
             Err(err) => {
-                context.replies.push_back(UIEvent::Notification(
-                    Some("Could not parse draft headers correctly.".to_string()),
-                    format!("{err}\nThe invalid text has been set as the body of your draft",),
-                    Some(NotificationType::Error(melib::error::ErrorKind::None)),
-                ));
+                context.replies.push_back(UIEvent::Notification {
+                    title: Some("Could not parse draft headers correctly.".into()),
+                    source: None,
+                    body:
+                        format!("{err}\nThe invalid text has been set as the body of your draft",)
+                            .into(),
+                    kind: Some(NotificationType::Error(melib::error::ErrorKind::None)),
+                });
                 self.has_changes = true;
                 false
             }
@@ -1209,11 +1212,12 @@ impl Component for Composer {
                             );
                         }
                         Err(err) => {
-                            context.replies.push_back(UIEvent::Notification(
-                                None,
-                                err.to_string(),
-                                Some(NotificationType::Error(err.kind)),
-                            ));
+                            context.replies.push_back(UIEvent::Notification {
+                                title: None,
+                                source: None,
+                                body: err.to_string().into(),
+                                kind: Some(NotificationType::Error(err.kind)),
+                            });
                             save_draft(
                                 self.draft.clone().finalise().unwrap().as_bytes(),
                                 context,
@@ -1355,11 +1359,12 @@ impl Component for Composer {
                     }) {
                     Err(err) | Ok(Some(Err(err))) => {
                         self.mode = ViewMode::Edit;
-                        context.replies.push_back(UIEvent::Notification(
-                            None,
-                            err.to_string(),
-                            Some(NotificationType::Error(err.kind)),
-                        ));
+                        context.replies.push_back(UIEvent::Notification {
+                            title: None,
+                            source: None,
+                            body: err.to_string().into(),
+                            kind: Some(NotificationType::Error(err.kind)),
+                        });
                         self.set_dirty(true);
                     }
                     Ok(None) | Ok(Some(Ok(()))) => {
@@ -1482,11 +1487,12 @@ impl Component for Composer {
                         })
                         .collect::<Vec<_>>()
                     {
-                        context.replies.push_back(UIEvent::Notification(
-                            None,
-                            err.to_string(),
-                            None,
-                        ));
+                        context.replies.push_back(UIEvent::Notification {
+                            title: None,
+                            source: None,
+                            body: err.to_string().into(),
+                            kind: None,
+                        });
                     }
                 }
                 self.mode = ViewMode::Send(UIConfirmationDialog::new(
@@ -1529,16 +1535,17 @@ impl Component for Composer {
                                 drop(embedded_guard);
                                 let embedded_pty = self.embedded_pty.take();
                                 if exit_code != 0 {
-                                    context.replies.push_back(UIEvent::Notification(
-                                        None,
-                                        format!(
-                                            "Subprocess has exited with exit code {}",
-                                            exit_code
-                                        ),
-                                        Some(NotificationType::Error(
+                                    context.replies.push_back(UIEvent::Notification {
+                                        title: None,
+                                        source: None,
+                                        body: format!(
+                                            "Subprocess has exited with exit code {exit_code}",
+                                        )
+                                        .into(),
+                                        kind: Some(NotificationType::Error(
                                             melib::error::ErrorKind::External,
                                         )),
-                                    ));
+                                    });
                                 } else if let Some(EmbeddedPty {
                                     running: true,
                                     file,
@@ -1608,13 +1615,15 @@ impl Component for Composer {
                             }
                             Ok(WaitStatus::Signaled(_, signal, _)) => {
                                 drop(embedded_guard);
-                                context.replies.push_back(UIEvent::Notification(
-                                    None,
-                                    format!("Subprocess was killed by {} signal", signal),
-                                    Some(NotificationType::Error(
+                                context.replies.push_back(UIEvent::Notification {
+                                    title: None,
+                                    source: None,
+                                    body: format!("Subprocess was killed by {signal} signal")
+                                        .into(),
+                                    kind: Some(NotificationType::Error(
                                         melib::error::ErrorKind::External,
                                     )),
-                                ));
+                                });
                                 self.initialized = false;
                                 self.embedded_pty = None;
                                 self.mode = ViewMode::Edit;
@@ -1623,13 +1632,14 @@ impl Component for Composer {
                                     .push_back(UIEvent::ChangeMode(UIMode::Normal));
                             }
                             Err(err) => {
-                                context.replies.push_back(UIEvent::Notification(
-                                    Some("Embedded editor crashed.".to_string()),
-                                    format!("Subprocess has exited with reason {}", &err),
-                                    Some(NotificationType::Error(
+                                context.replies.push_back(UIEvent::Notification {
+                                    title: Some("Embedded editor crashed.".into()),
+                                    source: None,
+                                    body: format!("Subprocess has exited with reason {err}").into(),
+                                    kind: Some(NotificationType::Error(
                                         melib::error::ErrorKind::External,
                                     )),
-                                ));
+                                });
                                 drop(embedded_guard);
                                 self.initialized = false;
                                 self.embedded_pty = None;
@@ -1674,11 +1684,12 @@ impl Component for Composer {
                         self.mode = ViewMode::SelectEncryptKey(false, widget);
                     }
                     Err(err) => {
-                        context.replies.push_back(UIEvent::Notification(
-                            Some("Could not list keys.".to_string()),
-                            format!("libgpgme error: {}", &err),
-                            Some(NotificationType::Error(melib::error::ErrorKind::External)),
-                        ));
+                        context.replies.push_back(UIEvent::Notification {
+                            title: Some("Could not list keys.".into()),
+                            source: None,
+                            body: format!("libgpgme error: {err}").into(),
+                            kind: Some(NotificationType::Error(melib::error::ErrorKind::External)),
+                        });
                     }
                 }
                 self.set_dirty(true);
@@ -1714,11 +1725,12 @@ impl Component for Composer {
                         self.mode = ViewMode::SelectEncryptKey(true, widget);
                     }
                     Err(err) => {
-                        context.replies.push_back(UIEvent::Notification(
-                            Some("Could not list keys.".to_string()),
-                            format!("libgpgme error: {}", &err),
-                            Some(NotificationType::Error(melib::error::ErrorKind::External)),
-                        ));
+                        context.replies.push_back(UIEvent::Notification {
+                            title: Some("Could not list keys.".into()),
+                            source: None,
+                            body: format!("libgpgme error: {err}").into(),
+                            kind: Some(NotificationType::Error(melib::error::ErrorKind::External)),
+                        });
                     }
                 }
                 self.set_dirty(true);
@@ -1775,11 +1787,12 @@ impl Component for Composer {
                     guard.terminate();
                     self.update_from_file(file, context);
                 }
-                context.replies.push_back(UIEvent::Notification(
-                    None,
-                    "Subprocess was killed by SIGTERM signal".to_string(),
-                    Some(NotificationType::Error(melib::error::ErrorKind::External)),
-                ));
+                context.replies.push_back(UIEvent::Notification {
+                    title: None,
+                    source: None,
+                    body: "Subprocess was killed by SIGTERM signal".into(),
+                    kind: Some(NotificationType::Error(melib::error::ErrorKind::External)),
+                });
                 self.initialized = false;
                 self.mode = ViewMode::Edit;
                 context
@@ -1800,13 +1813,15 @@ impl Component for Composer {
                 } else {
                     match std::env::var("EDITOR") {
                         Err(err) => {
-                            context.replies.push_back(UIEvent::Notification(
-                                Some(err.to_string()),
-                                "$EDITOR is not set. You can change an envvar's value with setenv \
-                                 or set composing.editor_command setting in your configuration."
-                                    .to_string(),
-                                Some(NotificationType::Error(melib::error::ErrorKind::None)),
-                            ));
+                            context.replies.push_back(UIEvent::Notification {
+                                title: Some(err.to_string().into()),
+                                source: None,
+                                body: "$EDITOR is not set. You can change an envvar's value with \
+                                       setenv or set composing.editor_command setting in your \
+                                       configuration."
+                                    .into(),
+                                kind: Some(NotificationType::Error(melib::error::ErrorKind::None)),
+                            });
                             self.set_dirty(true);
                             return true;
                         }
@@ -1829,11 +1844,12 @@ impl Component for Composer {
                 ) {
                     Ok(f) => f,
                     Err(err) => {
-                        context.replies.push_back(UIEvent::Notification(
-                            None,
-                            err.to_string(),
-                            Some(NotificationType::Error(err.kind)),
-                        ));
+                        context.replies.push_back(UIEvent::Notification {
+                            title: None,
+                            source: None,
+                            body: err.to_string().into(),
+                            kind: Some(NotificationType::Error(err.kind)),
+                        });
                         self.set_dirty(true);
                         return true;
                     }
@@ -1866,11 +1882,16 @@ impl Component for Composer {
                             self.mode = ViewMode::EmbeddedPty;
                         }
                         Err(err) => {
-                            context.replies.push_back(UIEvent::Notification(
-                                Some(format!("Failed to create pseudoterminal: {}", err)),
-                                err.to_string(),
-                                Some(NotificationType::Error(melib::error::ErrorKind::External)),
-                            ));
+                            context.replies.push_back(UIEvent::Notification {
+                                title: Some(
+                                    format!("Failed to create pseudoterminal: {}", err).into(),
+                                ),
+                                source: None,
+                                body: err.to_string().into(),
+                                kind: Some(NotificationType::Error(
+                                    melib::error::ErrorKind::External,
+                                )),
+                            });
                         }
                     }
                     self.set_dirty(true);
@@ -1896,11 +1917,12 @@ impl Component for Composer {
                         let _ = child.wait();
                     }
                     Err(err) => {
-                        context.replies.push_back(UIEvent::Notification(
-                            Some(format!("Failed to execute {}: {}", editor, err)),
-                            err.to_string(),
-                            Some(NotificationType::Error(melib::error::ErrorKind::External)),
-                        ));
+                        context.replies.push_back(UIEvent::Notification {
+                            title: Some(format!("Failed to execute {}: {}", editor, err).into()),
+                            source: None,
+                            body: err.to_string().into(),
+                            kind: Some(NotificationType::Error(melib::error::ErrorKind::External)),
+                        });
                         context.replies.push_back(UIEvent::Fork(ForkType::Finished));
                         context.restore_input();
                         self.set_dirty(true);
@@ -1918,13 +1940,15 @@ impl Component for Composer {
                         self.has_changes = has_changes;
                     }
                     Err(err) => {
-                        context.replies.push_back(UIEvent::Notification(
-                            Some("Could not parse draft headers correctly.".to_string()),
-                            format!(
+                        context.replies.push_back(UIEvent::Notification {
+                            title: Some("Could not parse draft headers correctly.".into()),
+                            source: None,
+                            body: format!(
                                 "{err}\nThe invalid text has been set as the body of your draft",
-                            ),
-                            Some(NotificationType::Error(melib::error::ErrorKind::None)),
-                        ));
+                            )
+                            .into(),
+                            kind: Some(NotificationType::Error(melib::error::ErrorKind::None)),
+                        });
                         self.has_changes = true;
                     }
                 }
@@ -1935,11 +1959,12 @@ impl Component for Composer {
             UIEvent::Action(ref a) => match a {
                 Action::Compose(ComposeAction::AddAttachmentPipe(ref command)) => {
                     if command.is_empty() {
-                        context.replies.push_back(UIEvent::Notification(
-                            None,
-                            format!("pipe command value is invalid: {}", command),
-                            Some(NotificationType::Error(melib::error::ErrorKind::None)),
-                        ));
+                        context.replies.push_back(UIEvent::Notification {
+                            title: None,
+                            source: None,
+                            body: format!("pipe command value is invalid: {command}").into(),
+                            kind: Some(NotificationType::Error(melib::error::ErrorKind::None)),
+                        });
                         return false;
                     }
                     match File::create_temp_file(&[], None, None, None, true)
@@ -1969,13 +1994,14 @@ impl Component for Composer {
                                 match melib::email::compose::attachment_from_file(&f.path()) {
                                     Ok(a) => a,
                                     Err(err) => {
-                                        context.replies.push_back(UIEvent::Notification(
-                                            Some("could not add attachment".to_string()),
-                                            err.to_string(),
-                                            Some(NotificationType::Error(
+                                        context.replies.push_back(UIEvent::Notification {
+                                            title: Some("could not add attachment".into()),
+                                            source: None,
+                                            body: err.to_string().into(),
+                                            kind: Some(NotificationType::Error(
                                                 melib::error::ErrorKind::None,
                                             )),
-                                        ));
+                                        });
                                         self.set_dirty(true);
                                         return true;
                                     }
@@ -1986,11 +2012,15 @@ impl Component for Composer {
                             return true;
                         }
                         Err(err) => {
-                            context.replies.push_back(UIEvent::Notification(
-                                None,
-                                format!("could not execute pipe command {}: {}", command, &err),
-                                Some(NotificationType::Error(melib::error::ErrorKind::External)),
-                            ));
+                            context.replies.push_back(UIEvent::Notification {
+                                title: None,
+                                source: None,
+                                body: format!("could not execute pipe command {command}: {err}")
+                                    .into(),
+                                kind: Some(NotificationType::Error(
+                                    melib::error::ErrorKind::External,
+                                )),
+                            });
                             self.set_dirty(true);
                             return true;
                         }
@@ -2000,11 +2030,12 @@ impl Component for Composer {
                     let attachment = match melib::email::compose::attachment_from_file(path) {
                         Ok(a) => a,
                         Err(err) => {
-                            context.replies.push_back(UIEvent::Notification(
-                                Some("could not add attachment".to_string()),
-                                err.to_string(),
-                                Some(NotificationType::Error(melib::error::ErrorKind::None)),
-                            ));
+                            context.replies.push_back(UIEvent::Notification {
+                                title: Some("could not add attachment".into()),
+                                source: None,
+                                body: err.to_string().into(),
+                                kind: Some(NotificationType::Error(melib::error::ErrorKind::None)),
+                            });
                             self.set_dirty(true);
                             return true;
                         }
@@ -2022,13 +2053,14 @@ impl Component for Composer {
                     {
                         cmd.as_str()
                     } else {
-                        context.replies.push_back(UIEvent::Notification(
-                            None,
-                            "You haven't defined any command to launch in \
-                             [terminal.file_picker_command]."
+                        context.replies.push_back(UIEvent::Notification {
+                            title: None,
+                            source: None,
+                            body: "You haven't defined any command to launch in \
+                                   [terminal.file_picker_command]."
                                 .into(),
-                            Some(NotificationType::Error(melib::error::ErrorKind::None)),
-                        ));
+                            kind: Some(NotificationType::Error(melib::error::ErrorKind::None)),
+                        });
                         self.set_dirty(true);
                         return true;
                     };
@@ -2057,27 +2089,36 @@ impl Component for Composer {
                                         self.has_changes = true;
                                     }
                                     Err(err) => {
-                                        context.replies.push_back(UIEvent::Notification(
-                                            Some(format!(
-                                                "could not add attachment: {}",
-                                                String::from_utf8_lossy(path)
-                                            )),
-                                            err.to_string(),
-                                            Some(NotificationType::Error(
+                                        context.replies.push_back(UIEvent::Notification {
+                                            title: Some(
+                                                format!(
+                                                    "could not add attachment: {}",
+                                                    String::from_utf8_lossy(path)
+                                                )
+                                                .into(),
+                                            ),
+                                            source: None,
+                                            body: err.to_string().into(),
+                                            kind: Some(NotificationType::Error(
                                                 melib::error::ErrorKind::None,
                                             )),
-                                        ));
+                                        });
                                     }
                                 };
                             }
                         }
                         Err(err) => {
                             let command = command.to_string();
-                            context.replies.push_back(UIEvent::Notification(
-                                Some(format!("Failed to execute {}: {}", command, err)),
-                                err.to_string(),
-                                Some(NotificationType::Error(melib::error::ErrorKind::External)),
-                            ));
+                            context.replies.push_back(UIEvent::Notification {
+                                title: Some(
+                                    format!("Failed to execute {}: {}", command, err).into(),
+                                ),
+                                source: None,
+                                body: err.to_string().into(),
+                                kind: Some(NotificationType::Error(
+                                    melib::error::ErrorKind::External,
+                                )),
+                            });
                             context.restore_input();
                             self.set_dirty(true);
                             return true;
@@ -2409,21 +2450,24 @@ pub fn save_draft(
             kind,
             ..
         }) => {
-            context.replies.push_back(UIEvent::Notification(
-                details.map(|s| s.into()),
-                summary.to_string(),
-                Some(NotificationType::Error(kind)),
-            ));
+            context.replies.push_back(UIEvent::Notification {
+                title: details,
+                source: None,
+                body: summary,
+                kind: Some(NotificationType::Error(kind)),
+            });
         }
         Ok(mailbox_hash) => {
-            context.replies.push_back(UIEvent::Notification(
-                Some("Message saved".into()),
-                format!(
+            context.replies.push_back(UIEvent::Notification {
+                title: Some("Message saved".into()),
+                source: None,
+                body: format!(
                     "Message saved in `{}`",
                     &context.accounts[&account_hash].mailbox_entries[&mailbox_hash].name
-                ),
-                Some(NotificationType::Info),
-            ));
+                )
+                .into(),
+                kind: Some(NotificationType::Info),
+            });
         }
     }
 }

@@ -19,7 +19,6 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-
 use futures::executor::block_on;
 use meli::*;
 use melib::{imap::managesieve::ManageSieveConnection, Result, *};

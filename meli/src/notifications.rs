@@ -68,7 +68,13 @@ mod dbus {
                 return false;
             }
 
-            if let UIEvent::Notification(ref title, ref body, ref kind) = event {
+            if let UIEvent::Notification {
+                ref title,
+                source: _,
+                ref body,
+                ref kind,
+            } = event
+            {
                 if !self.rate_limit.tick() {
                     return false;
                 }
@@ -77,7 +83,7 @@ mod dbus {
                 let mut notification = notify_rust::Notification::new();
                 notification
                     .appname("meli")
-                    .summary(title.as_ref().map(String::as_str).unwrap_or("meli"))
+                    .summary(title.as_ref().map(<_>::as_ref).unwrap_or("meli"))
                     .body(&escape_str(body));
                 match *kind {
                     Some(NotificationType::NewMail) => {
@@ -191,7 +197,13 @@ impl Component for NotificationCommand {
     fn draw(&mut self, _grid: &mut CellBuffer, _area: Area, _context: &mut Context) {}
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
-        if let UIEvent::Notification(ref title, ref body, ref kind) = event {
+        if let UIEvent::Notification {
+            ref title,
+            source: _,
+            ref body,
+            ref kind,
+        } = event
+        {
             if context.settings.notifications.enable {
                 if *kind == Some(NotificationType::NewMail) {
                     if let Some(ref path) = context.settings.notifications.xbiff_file_path {
@@ -211,8 +223,8 @@ impl Component for NotificationCommand {
                 if let Some(ref bin) = script {
                     match Command::new(bin)
                         .arg(&kind.map(|k| k.to_string()).unwrap_or_default())
-                        .arg(title.as_ref().map(String::as_str).unwrap_or("meli"))
-                        .arg(body)
+                        .arg(title.as_ref().map(<_>::as_ref).unwrap_or("meli"))
+                        .arg(body.as_ref())
                         .stdin(Stdio::piped())
                         .stdout(Stdio::piped())
                         .spawn()

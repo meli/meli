@@ -185,11 +185,12 @@ impl Component for EmbeddedContainer {
                     )));
                 }
                 Err(err) => {
-                    context.replies.push_back(UIEvent::Notification(
-                        Some(format!("Failed to create pseudoterminal: {}", err)),
-                        err.to_string(),
-                        Some(NotificationType::Error(melib::error::ErrorKind::External)),
-                    ));
+                    context.replies.push_back(UIEvent::Notification {
+                        title: Some("Failed to create pseudoterminal".into()),
+                        source: None,
+                        body: err.to_string().into(),
+                        kind: Some(NotificationType::Error(melib::error::ErrorKind::External)),
+                    });
                 }
             }
         }
@@ -225,16 +226,17 @@ impl Component for EmbeddedContainer {
                                 drop(embedded_pty_guard);
                                 _ = self.embedded_pty.take();
                                 if exit_code != 0 {
-                                    context.replies.push_back(UIEvent::Notification(
-                                        None,
-                                        format!(
-                                            "Subprocess has exited with exit code {}",
-                                            exit_code
-                                        ),
-                                        Some(NotificationType::Error(
+                                    context.replies.push_back(UIEvent::Notification {
+                                        title: None,
+                                        source: None,
+                                        body: format!(
+                                            "Subprocess has exited with exit code {exit_code}",
+                                        )
+                                        .into(),
+                                        kind: Some(NotificationType::Error(
                                             melib::error::ErrorKind::External,
                                         )),
-                                    ));
+                                    });
                                 }
                                 self.set_dirty(true);
                                 context
@@ -281,26 +283,29 @@ impl Component for EmbeddedContainer {
                             }
                             Ok(WaitStatus::Signaled(_, signal, _)) => {
                                 drop(embedded_pty_guard);
-                                context.replies.push_back(UIEvent::Notification(
-                                    None,
-                                    format!("Subprocess was killed by {} signal", signal),
-                                    Some(NotificationType::Error(
+                                context.replies.push_back(UIEvent::Notification {
+                                    title: None,
+                                    source: None,
+                                    body: format!("Subprocess was killed by {signal} signal")
+                                        .into(),
+                                    kind: Some(NotificationType::Error(
                                         melib::error::ErrorKind::External,
                                     )),
-                                ));
+                                });
                                 self.embedded_pty = None;
                                 context
                                     .replies
                                     .push_back(UIEvent::ChangeMode(UIMode::Normal));
                             }
                             Err(err) => {
-                                context.replies.push_back(UIEvent::Notification(
-                                    Some("Embedded editor crashed.".to_string()),
-                                    format!("Subprocess has exited with reason {}", &err),
-                                    Some(NotificationType::Error(
+                                context.replies.push_back(UIEvent::Notification {
+                                    title: Some("Embedded editor crashed.".into()),
+                                    source: None,
+                                    body: format!("Subprocess has exited with reason {err}").into(),
+                                    kind: Some(NotificationType::Error(
                                         melib::error::ErrorKind::External,
                                     )),
-                                ));
+                                });
                                 drop(embedded_pty_guard);
                                 self.embedded_pty = None;
                                 context
@@ -348,11 +353,12 @@ impl Component for EmbeddedContainer {
                     }
                     _ => {}
                 }
-                context.replies.push_back(UIEvent::Notification(
-                    None,
-                    "Subprocess was killed by SIGTERM signal".to_string(),
-                    Some(NotificationType::Error(melib::error::ErrorKind::External)),
-                ));
+                context.replies.push_back(UIEvent::Notification {
+                    title: None,
+                    source: None,
+                    body: "Subprocess was killed by SIGTERM signal".into(),
+                    kind: Some(NotificationType::Error(melib::error::ErrorKind::External)),
+                });
                 context
                     .replies
                     .push_back(UIEvent::ChangeMode(UIMode::Normal));

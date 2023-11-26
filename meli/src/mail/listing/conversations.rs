@@ -1476,11 +1476,7 @@ impl Component for ConversationsListing {
                             self.search_job = Some((filter_term.to_string(), handle));
                         }
                         Err(err) => {
-                            context.replies.push_back(UIEvent::Notification(
-                                Some("Could not perform search".to_string()),
-                                err.to_string(),
-                                Some(crate::types::NotificationType::Error(err.kind)),
-                            ));
+                            context.replies.push_back(UIEvent::Notification { title: Some("Could not perform search".into()), source: None, body: err.to_string().into(), kind: Some(crate::types::NotificationType::Error(err.kind)), });
                         }
                     };
                     self.set_dirty(true);
@@ -1522,11 +1518,7 @@ impl Component for ConversationsListing {
                     Ok(None) => { /* something happened, perhaps a worker thread panicked */ }
                     Ok(Some(Ok(results))) => self.filter(filter_term, results, context),
                     Ok(Some(Err(err))) => {
-                        context.replies.push_back(UIEvent::Notification(
-                            Some("Could not perform search".to_string()),
-                            err.to_string(),
-                            Some(crate::types::NotificationType::Error(err.kind)),
-                        ));
+                        context.replies.push_back(UIEvent::Notification { title: Some("Could not perform search".into()), source: None, body: err.to_string().into(), kind: Some(crate::types::NotificationType::Error(err.kind)), });
                     }
                 }
                 self.set_dirty(true);

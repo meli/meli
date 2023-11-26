@@ -491,7 +491,7 @@ impl State {
             } = &mut *self.context;
 
             if let Some(notification) = accounts[&account_hash].reload(event, mailbox_hash) {
-                if let UIEvent::Notification(_, _, _) = notification {
+                if matches!(notification, UIEvent::Notification { .. }) {
                     self.rcv_event(UIEvent::MailboxUpdate((account_hash, mailbox_hash)));
                 }
                 self.rcv_event(notification);
@@ -775,11 +775,12 @@ impl State {
                 {
                     a
                 } else {
-                    self.context.replies.push_back(UIEvent::Notification(
-                        None,
-                        format!("Account {} was not found.", account_name),
-                        Some(NotificationType::Error(ErrorKind::None)),
-                    ));
+                    self.context.replies.push_back(UIEvent::Notification {
+                        title: None,
+                        source: None,
+                        body: format!("Account {account_name} was not found.").into(),
+                        kind: Some(NotificationType::Error(ErrorKind::None)),
+                    });
                     return;
                 };
                 if *self.context.accounts[account_index]
@@ -788,14 +789,15 @@ impl State {
                     .search_backend()
                     != crate::conf::SearchBackend::Sqlite3
                 {
-                    self.context.replies.push_back(UIEvent::Notification(
-                        None,
-                        format!(
-                            "Account {} doesn't have an sqlite3 search backend.",
-                            account_name
-                        ),
-                        Some(NotificationType::Error(ErrorKind::None)),
-                    ));
+                    self.context.replies.push_back(UIEvent::Notification {
+                        title: None,
+                        source: None,
+                        body: format!(
+                            "Account {account_name} doesn't have an sqlite3 search backend.",
+                        )
+                        .into(),
+                        kind: Some(NotificationType::Error(ErrorKind::None)),
+                    });
                     return;
                 }
                 match crate::sqlite3::index(&mut self.context, account_index) {
@@ -814,29 +816,32 @@ impl State {
                                 log_level: LogLevel::INFO,
                             },
                         );
-                        self.context.replies.push_back(UIEvent::Notification(
-                            None,
-                            "Message index rebuild started.".to_string(),
-                            Some(NotificationType::Info),
-                        ));
+                        self.context.replies.push_back(UIEvent::Notification {
+                            title: None,
+                            source: None,
+                            body: "Message index rebuild started.".into(),
+                            kind: Some(NotificationType::Info),
+                        });
                     }
                     Err(err) => {
-                        self.context.replies.push_back(UIEvent::Notification(
-                            Some("Message index rebuild failed".to_string()),
-                            err.to_string(),
-                            Some(NotificationType::Error(err.kind)),
-                        ));
+                        self.context.replies.push_back(UIEvent::Notification {
+                            title: Some("Message index rebuild failed".into()),
+                            source: None,
+                            body: err.to_string().into(),
+                            kind: Some(NotificationType::Error(err.kind)),
+                        });
                     }
                 }
             }
             #[cfg(not(feature = "sqlite3"))]
             AccountAction(_, ReIndex) => {
-                self.context.replies.push_back(UIEvent::Notification(
-                    None,
-                    "Message index rebuild failed: meli is not built with sqlite3 support."
+                self.context.replies.push_back(UIEvent::Notification {
+                    title: None,
+                    source: None,
+                    body: "Message index rebuild failed: meli is not built with sqlite3 support."
                         .to_string(),
-                    Some(NotificationType::Error(ErrorKind::None)),
-                ));
+                    kind: Some(NotificationType::Error(ErrorKind::None)),
+                });
             }
             AccountAction(ref account_name, PrintAccountSetting(ref setting)) => {
                 let path = setting.split('.').collect::<SmallVec<[&str; 16]>>();
@@ -855,11 +860,12 @@ impl State {
                         ),
                     ));
                 } else {
-                    self.context.replies.push_back(UIEvent::Notification(
-                        None,
-                        format!("Account {} was not found.", account_name),
-                        Some(NotificationType::Error(ErrorKind::None)),
-                    ));
+                    self.context.replies.push_back(UIEvent::Notification {
+                        title: None,
+                        source: None,
+                        body: format!("Account {account_name} was not found.").into(),
+                        kind: Some(NotificationType::Error(ErrorKind::None)),
+                    });
                 }
             }
             PrintSetting(ref setting) => {

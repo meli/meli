@@ -424,11 +424,12 @@ impl Component for SVGScreenshotFilter {
             .unwrap()
             .write_all(&res)
             .unwrap();
-        context.replies.push_back(UIEvent::Notification(
-            Some("Screenshot saved".into()),
-            format!("Screenshot saved to {}", filename),
-            None,
-        ));
+        context.replies.push_back(UIEvent::Notification {
+            title: Some("Screenshot saved".into()),
+            source: None,
+            body: format!("Screenshot saved to {filename}").into(),
+            kind: None,
+        });
     }
     fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {
         if let UIEvent::Input(Key::F(6)) = event {

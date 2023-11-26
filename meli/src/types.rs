@@ -41,6 +41,7 @@ use std::{borrow::Cow, sync::Arc};
 pub use helpers::*;
 use melib::{
     backends::{AccountHash, BackendEvent, MailboxHash},
+    error::Error,
     EnvelopeHash, RefreshEvent, ThreadHash,
 };
 use nix::unistd::Pid;
@@ -137,7 +138,12 @@ pub enum UIEvent {
     ChangeMailbox(usize),
     ChangeMode(UIMode),
     Command(String),
-    Notification(Option<String>, String, Option<NotificationType>),
+    Notification {
+        title: Option<Cow<'static, str>>,
+        source: Option<Error>,
+        body: Cow<'static, str>,
+        kind: Option<NotificationType>,
+    },
     Action(Action),
     StatusEvent(StatusEvent),
     MailboxUpdate((AccountHash, MailboxHash)), // (account_idx, mailbox_idx)
