@@ -1,28 +1,60 @@
 # meli [![GitHub license](https://img.shields.io/github/license/meli/meli)](https://github.com/meli/meli/blob/master/COPYING) [![Crates.io](https://img.shields.io/crates/v/meli)](https://crates.io/crates/meli) [![IRC channel](https://img.shields.io/badge/irc.oftc.net-%23meli-blue)](ircs://irc.oftc.net:6697/%23meli)
 
-**BSD/Linux terminal email client with support for multiple accounts and Maildir / mbox / notmuch / IMAP / JMAP / NNTP (usenet).**
+**BSD/Linux terminal email client with support for multiple accounts and Maildir / mbox / notmuch / IMAP / JMAP / NNTP (Usenet).**
 
-Community links:
-[mailing lists](https://lists.meli.delivery/) | `#meli` on OFTC IRC | Report bugs and/or feature requests in [meli's issue tracker](https://git.meli.delivery/meli/meli/issues "meli gitea issue tracker")
+* [mailing lists](https://lists.meli.delivery/) | `#meli` on OFTC IRC
+* Main repository: <https://git.meli.delivery/meli/meli> Report bugs and/or feature requests in [meli's issue tracker](https://git.meli.delivery/meli/meli/issues "meli gitea issue tracker")
+* Official mirrors:
+  - <https://codeberg.org/epilys/meli>
+  - <https://github.com/meli/meli>
 
-Main repository: <https://git.meli.delivery/meli/meli>
+## Install
 
-Official mirrors: <https://github.com/meli/meli>
+- Try an [old online interactive web demo](https://meli.delivery/wasm2.html "online interactive web demo") powered by WebAssembly
+- Pre-built binaries for [pkgsrc](https://pkgsrc.se/mail/meli) and [openbsd ports](https://openports.pl/path/mail/meli).
+- `cargo install meli` or `cargo install --git https://git.meli.delivery/meli/meli.git meli`
+- [Download and install pre-built debian package, static linux binary](https://github.com/meli/meli/releases/ "github releases for meli"), or
+- Install with [Nix](https://search.nixos.org/packages?show=meli&query=meli&from=0&size=30&sort=relevance&channel=unstable#disabled "nixos package search results for 'meli'").
+
+## Quick start
+
+<table>
+<tr><td>
+
+```shell
+# Create configuration file in ${XDG_CONFIG_HOME}/meli/config.toml:
+$ meli create-config
+# Edit configuration in ${EDITOR} or ${VISUAL}:
+$ meli edit-config
+# Optionally, install manual pages if installed via cargo:
+$ meli install-man
+# Ready to go.
+$ meli
+```
+
+</td><td>
+
+See a comprehensive tour of `meli` in the manual page [`meli(7)`](./meli/docs/meli.7).
+
+See also the [Quickstart tutorial](https://meli.delivery/documentation.html#quick-start) online.
+
+After installing `meli`, see `meli(1)`, `meli.conf(5)`, `meli(7)` and `meli-themes(5)` for documentation. Sample configuration and theme files can be found in the `meli/docs/samples/` subdirectory. Manual pages are also [hosted online](https://meli.delivery/documentation.html "meli documentation"). `meli` by default looks for a configuration file in this location: `${XDG_CONFIG_HOME}/meli/config.toml`
+
+You can run meli with arbitrary configuration files by setting the `${MELI_CONFIG}` environment variable to their locations, i.e.:
+
+```sh
+MELI_CONFIG=./test_config cargo run
+```
+
+</td></tr>
+</table>
+
+See [`meli(7)`](./meli/docs/meli.7) for an extensive tutorial and [`meli.conf(5)`](./meli/docs/meli.conf.5) for all configuration values.
 
 | | | |
 :---:|:---:|:---:
 ![Main view screenshot](./meli/docs/screenshots/main.webp "mail meli view screenshot")  |  ![Compact main view screenshot](./meli/docs/screenshots/compact.webp "compact main view screenshot") | ![Compose with embed terminal editor screenshot](./meli/docs/screenshots/compose.webp "composing view screenshot")
 Main view             |  Compact main view | Compose with embed terminal editor
-
-## Description
-
-meli aims for configurability, extensibility with sane defaults, and modern
-practices. It is a mail client for both casual and power users of the terminal.
-
-A variety of email workflows and software stacks should be usable with meli.
-Integrate e-mail storage, sync, tagging system, SMTP client, contact management
-and editor of your choice to replace the defaults.
-
 
 ### Supported E-mail backends
 
@@ -30,24 +62,22 @@ and editor of your choice to replace the defaults.
 |:------------:|:----------------|
 | IMAP         | full            |
 | Maildir      | full            |
-| notmuch      | full*           |
+| notmuch      | full[^0]        |
 | mbox         | read-only       |
 | JMAP         | functional      |
 | NNTP / Usenet| functional      |
 
+[^0]: there's no support for searching through all email directly, you'd have to
+      create a mailbox with a notmuch query that returns everything and search
+      inside that mailbox.
 
-* there's no support for searching through all email directly, you'd have to
-  create a mailbox with a notmuch query that returns everything and search
-  inside that mailbox.
-
-### E-mail Submission backends
---------------------------
+### E-mail submission backends
 
 - SMTP
 - Pipe to shell script
-- Server-side submission
+- Server-side submission when supported
 
-### Non-exhaustive List of Features
+### Non-exhaustive list of features
 
 - TLS
 - email threading support
@@ -70,13 +100,6 @@ and editor of your choice to replace the defaults.
 - GPG signing, encryption, signing + encryption
 - GPG signature verification
 
-## Install
-- Try an [online interactive web demo](https://meli.delivery/wasm2.html "online interactive web demo") powered by WebAssembly
-- Pre-built binaries for [pkgsrc](https://pkgsrc.se/mail/meli) and [openbsd ports](https://openports.pl/path/mail/meli).
-- `cargo install --git https://git.meli.delivery/meli/meli.git meli`
-- [Download and install pre-built debian package, static linux binary](https://github.com/meli/meli/releases/ "github releases for meli"), or
-- Install with [Nix](https://search.nixos.org/packages?show=meli&query=meli&from=0&size=30&sort=relevance&channel=unstable#disabled "nixos package search results for 'meli'").
-
 ## Documentation
 
 See a comprehensive tour of `meli` in the manual page [`meli(7)`](./meli/docs/meli.7).
@@ -87,9 +110,9 @@ After installing `meli`, see `meli(1)`, `meli.conf(5)`, `meli(7)` and `meli-them
 Sample configuration and theme files can be found in the `meli/docs/samples/` subdirectory.
 Manual pages are also [hosted online](https://meli.delivery/documentation.html "meli documentation").
 
-`meli` by default looks for a configuration file in this location: `$XDG_CONFIG_HOME/meli/config.toml`
+`meli` by default looks for a configuration file in this location: `${XDG_CONFIG_HOME}/meli/config.toml`
 
-You can run meli with arbitrary configuration files by setting the `$MELI_CONFIG` environment variable to their locations, i.e.:
+You can run meli with arbitrary configuration files by setting the `${MELI_CONFIG}` environment variable to their locations, i.e.:
 
 ```sh
 MELI_CONFIG=./test_config cargo run
@@ -110,7 +133,7 @@ Information on how to get it on your system can be found here: <https://doc.rust
 
 With Cargo available, the project can be built with `make` and the resulting binary will then be found under `target/release/meli`.
 Run `make install` to install the binary and man pages.
-This requires root, so I suggest you override the default paths and install it in your `$HOME`: `make PREFIX=$HOME/.local install`.
+This requires root, so I suggest you override the default paths and install it in your `$HOME`: `make PREFIX=${HOME}/.local install`.
 
 You can build and run `meli` with one command: `cargo run --release`.
 
