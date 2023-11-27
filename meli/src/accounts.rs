@@ -244,6 +244,7 @@ pub enum JobRequest {
     },
     SetFlags {
         env_hashes: EnvelopeHashBatch,
+        mailbox_hash: MailboxHash,
         flags: SmallVec<[FlagOp; 8]>,
         handle: JoinHandle<Result<()>>,
     },
@@ -329,10 +330,14 @@ impl std::fmt::Debug for JobRequest {
             JobRequest::IsOnline { .. } => write!(f, "JobRequest::IsOnline"),
             JobRequest::Refresh { .. } => write!(f, "JobRequest::Refresh"),
             JobRequest::SetFlags {
-                env_hashes, flags, ..
+                env_hashes,
+                mailbox_hash,
+                flags,
+                ..
             } => f
                 .debug_struct(stringify!(JobRequest::SetFlags))
                 .field("env_hashes", &env_hashes)
+                .field("mailbox_hash", &mailbox_hash)
                 .field("flags", &flags)
                 .finish(),
             JobRequest::SaveMessage { .. } => write!(f, "JobRequest::SaveMessage"),
@@ -1882,6 +1887,7 @@ impl Account {
                 JobRequest::SetFlags {
                     ref mut handle,
                     ref env_hashes,
+                    ref mailbox_hash,
                     ref flags,
                 } => match handle.chan.try_recv() {
                     Ok(Some(Err(err))) => {
@@ -1936,8 +1942,11 @@ impl Account {
                             self.main_loop_handler
                                 .send(ThreadEvent::UIEvent(UIEvent::EnvelopeUpdate(env_hash)));
                         }
+                        for env_hash in env_hashes.iter() {
+                            self.collection.update_flags(env_hash, *mailbox_hash);
+                        }
                     }
-                    _ => {}
+                    Err(_) | Ok(None) => {}
                 },
                 JobRequest::SaveMessage {
                     ref mut handle,

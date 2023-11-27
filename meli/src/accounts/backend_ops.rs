@@ -44,6 +44,7 @@ impl Account {
             job_id,
             JobRequest::SetFlags {
                 env_hashes,
+                mailbox_hash,
                 flags,
                 handle,
             },
