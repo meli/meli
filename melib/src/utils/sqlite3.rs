@@ -45,7 +45,10 @@ pub fn open_db(db_path: PathBuf) -> Result<Connection> {
     if !db_path.exists() {
         return Err(Error::new("Database doesn't exist"));
     }
-    Connection::open(&db_path).map_err(|e| Error::new(e.to_string()))
+    Ok(Connection::open(&db_path).and_then(|db| {
+        rusqlite::vtab::array::load_module(&db)?;
+        Ok(db)
+    })?)
 }
 
 pub fn open_or_create_db(
@@ -66,7 +69,8 @@ pub fn open_or_create_db(
                 db_path.display()
             );
         }
-        let conn = Connection::open(&db_path).map_err(|e| Error::new(e.to_string()))?;
+        let conn = Connection::open(&db_path)?;
+        rusqlite::vtab::array::load_module(&conn)?;
         if set_mode {
             use std::os::unix::fs::PermissionsExt;
             let file = std::fs::File::open(&db_path)?;

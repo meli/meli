@@ -857,6 +857,12 @@ impl MailBackend for ImapType {
                     }
                 }
             }
+            #[cfg(feature = "sqlite3")]
+            if *uid_store.keep_offline_cache.lock().unwrap() {
+                let mut cache_handle = cache::Sqlite3Cache::get(uid_store.clone())?;
+                let res = cache_handle.update_flags(env_hashes, mailbox_hash, flags);
+                log::trace!("update_flags in cache: {:?}", res);
+            }
             Ok(())
         }))
     }

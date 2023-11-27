@@ -92,6 +92,13 @@ pub trait ImapCache: Send + std::fmt::Debug {
         identifier: std::result::Result<UID, EnvelopeHash>,
         mailbox_hash: MailboxHash,
     ) -> Result<Option<Vec<u8>>>;
+
+    fn update_flags(
+        &mut self,
+        env_hashes: EnvelopeHashBatch,
+        mailbox_hash: MailboxHash,
+        flags: SmallVec<[FlagOp; 8]>,
+    ) -> Result<()>;
 }
 
 pub trait ImapCacheReset: Send + std::fmt::Debug {
@@ -108,7 +115,7 @@ pub mod sqlite3_m {
     use super::*;
     use crate::utils::sqlite3::{
         self,
-        rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput},
+        rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, Value},
         Connection, DatabaseDescription,
     };
 
@@ -150,6 +157,12 @@ pub mod sqlite3_m {
         ),
         version: 3,
     };
+
+    impl From<EnvelopeHash> for Value {
+        fn from(env_hash: EnvelopeHash) -> Self {
+            (env_hash.0 as i64).into()
+        }
+    }
 
     impl ToSql for ModSequence {
         fn to_sql(&self) -> rusqlite::Result<ToSqlOutput> {
@@ -539,6 +552,67 @@ pub mod sqlite3_m {
             Ok(())
         }
 
+        fn update_flags(
+            &mut self,
+            env_hashes: EnvelopeHashBatch,
+            mailbox_hash: MailboxHash,
+            flags: SmallVec<[FlagOp; 8]>,
+        ) -> Result<()> {
+            if self.mailbox_state(mailbox_hash)?.is_none() {
+                return Err(Error::new("Mailbox is not in cache").set_kind(ErrorKind::Bug));
+            }
+            let Self {
+                ref mut connection,
+                ref uid_store,
+                loaded_mailboxes: _,
+            } = self;
+            let tx = connection.transaction()?;
+            let values =
+                std::rc::Rc::new(env_hashes.iter().map(Value::from).collect::<Vec<Value>>());
+
+            let mut stmt =
+                tx.prepare("SELECT uid, envelope FROM envelopes WHERE hash IN rarray(?1);")?;
+            let rows = stmt
+                .query_map([values], |row| Ok((row.get(0)?, row.get(1)?)))?
+                .filter_map(|r| r.ok())
+                .collect::<Vec<(UID, Envelope)>>();
+            drop(stmt);
+            let mut stmt = tx.prepare(
+                "UPDATE envelopes SET envelope = ?1 WHERE mailbox_hash = ?2 AND uid = ?3;",
+            )?;
+            for (uid, mut env) in rows {
+                for op in flags.iter() {
+                    match op {
+                        FlagOp::UnSet(flag) | FlagOp::Set(flag) => {
+                            let mut f = env.flags();
+                            f.set(*flag, op.as_bool());
+                            env.set_flags(f);
+                        }
+                        FlagOp::UnSetTag(tag) | FlagOp::SetTag(tag) => {
+                            let hash = TagHash::from_bytes(tag.as_bytes());
+                            if op.as_bool() {
+                                env.tags_mut().insert(hash);
+                            } else {
+                                env.tags_mut().remove(&hash);
+                            }
+                        }
+                    }
+                }
+                stmt.execute(sqlite3::params![&env, mailbox_hash, uid as Sqlite3UID])?;
+                uid_store
+                    .envelopes
+                    .lock()
+                    .unwrap()
+                    .entry(env.hash())
+                    .and_modify(|entry| {
+                        entry.inner = env;
+                    });
+            }
+            drop(stmt);
+            tx.commit()?;
+            Ok(())
+        }
+
         fn update(
             &mut self,
             mailbox_hash: MailboxHash,
@@ -827,6 +901,15 @@ pub mod default_m {
             _identifier: std::result::Result<UID, EnvelopeHash>,
             _mailbox_hash: MailboxHash,
         ) -> Result<Option<Vec<u8>>> {
+            Err(Error::new("melib is not built with any imap cache").set_kind(ErrorKind::Bug))
+        }
+
+        fn update_flags(
+            &mut self,
+            _env_hashes: EnvelopeHashBatch,
+            _mailbox_hash: MailboxHash,
+            _flags: SmallVec<[FlagOp; 8]>,
+        ) -> Result<()> {
             Err(Error::new("melib is not built with any imap cache").set_kind(ErrorKind::Bug))
         }
     }

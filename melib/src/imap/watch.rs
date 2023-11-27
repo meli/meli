@@ -102,11 +102,6 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
                     mailbox_hash,
                     kind: RefreshEventKind::Rescan,
                 });
-                /*
-                uid_store.uid_index.lock().unwrap().clear();
-                uid_store.hash_index.lock().unwrap().clear();
-                uid_store.byte_cache.lock().unwrap().clear();
-                */
             }
         } else {
             uidvalidities.insert(mailbox_hash, select_response.uidvalidity);

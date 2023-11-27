@@ -38,7 +38,7 @@ impl Account {
         let handle = self
             .main_loop_handler
             .job_executor
-            .spawn_specialized("set_unseen".into(), fut);
+            .spawn_specialized("set_flags".into(), fut);
         let job_id = handle.job_id;
         self.insert_job(
             job_id,
