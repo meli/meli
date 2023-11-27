@@ -1,7 +1,7 @@
 Source: meli
 Section: mail
 Priority: optional
-Maintainer: Manos Pitsidianakis <epilys@nessuent.xyz>
+Maintainer: Manos Pitsidianakis <manos@pitsidianak.is>
 Build-Depends: debhelper (>=11~), mandoc (>=1.14.4-1), quilt, libsqlite3-dev
 Standards-Version: 4.1.4
 Homepage: https://meli.delivery
