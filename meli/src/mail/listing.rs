@@ -236,8 +236,8 @@ impl<T> RowsState<T> {
 mod compact;
 pub use self::compact::*;
 
-//mod thread;
-//pub use self::thread::*;
+mod thread;
+pub use self::thread::*;
 
 mod plain;
 pub use self::plain::*;
@@ -411,7 +411,7 @@ macro_rules! address_list {
         let mut ret: String =
             $name
                 .into_iter()
-                .fold(String::new(), |mut s: String, n: &Address| {
+                .fold(String::new(), |mut s: String, n: &melib::Address| {
                     s.extend(n.display().to_string().chars());
                     s.push_str(", ");
                     s
@@ -930,7 +930,7 @@ pub enum ListingComponent {
     //Conversations(Box<ConversationsListing>),
     Offline(Box<OfflineListing>),
     Plain(Box<PlainListing>),
-    //Threaded(Box<ThreadListing>),
+    Threaded(Box<ThreadListing>),
 }
 use crate::ListingComponent::*;
 
@@ -943,7 +943,7 @@ impl std::ops::Deref for ListingComponent {
             //Conversations(ref l) => l.as_ref(),
             Offline(ref l) => l.as_ref(),
             Plain(ref l) => l.as_ref(),
-            //Threaded(ref l) => l.as_ref(),
+            Threaded(ref l) => l.as_ref(),
         }
     }
 }
@@ -955,7 +955,7 @@ impl std::ops::DerefMut for ListingComponent {
             //Conversations(l) => l.as_mut(),
             Offline(l) => l.as_mut(),
             Plain(l) => l.as_mut(),
-            //Threaded(l) => l.as_mut(),
+            Threaded(l) => l.as_mut(),
         }
     }
 }
@@ -967,7 +967,7 @@ impl ListingComponent {
             //Conversations(l) => l.as_component().id(),
             Offline(l) => l.as_component().id(),
             Plain(l) => l.as_component().id(),
-            //Threaded(l) => l.as_component().id(),
+            Threaded(l) => l.as_component().id(),
         }
     }
 }
@@ -1044,7 +1044,7 @@ impl std::fmt::Display for Listing {
             //Conversations(ref l) => write!(f, "{}", l),
             Offline(ref l) => write!(f, "{}", l),
             Plain(ref l) => write!(f, "{}", l),
-            //Threaded(ref l) => write!(f, "{}", l),
+            Threaded(ref l) => write!(f, "{}", l),
         }
     }
 }
@@ -2461,7 +2461,7 @@ impl Component for Listing {
                 //Conversations(l) => l.as_component(),
                 Offline(l) => l.as_component(),
                 Plain(l) => l.as_component(),
-                //Threaded(l) => l.as_component(),
+                Threaded(l) => l.as_component(),
             },
         );
 
@@ -2477,7 +2477,7 @@ impl Component for Listing {
                 //Conversations(l) => l.as_component_mut(),
                 Offline(l) => l.as_component_mut(),
                 Plain(l) => l.as_component_mut(),
-                //Threaded(l) => l.as_component_mut(),
+                Threaded(l) => l.as_component_mut(),
             },
         );
 
@@ -3124,7 +3124,7 @@ impl Listing {
 
     fn set_index_style(&mut self, new_style: IndexStyle, context: &mut Context) {
         let old = match new_style {
-            IndexStyle::Conversations | IndexStyle::Threaded | IndexStyle::Plain => {
+            IndexStyle::Conversations | IndexStyle::Plain => {
                 if matches!(self.component, Plain(_)) {
                     return;
                 }
@@ -3134,17 +3134,16 @@ impl Listing {
                     Plain(PlainListing::new(self.id, coordinates)),
                 )
             }
-            //IndexStyle::Threaded => {
-            //    return;
-            //    //if matches!(self.component, Threaded(_)) {
-            //    //    return;
-            //    //}
-            //    //let coordinates = self.component.coordinates();
-            //    //std::mem::replace(
-            //    //    &mut self.component,
-            //    //    Threaded(ThreadListing::new(self.id, coordinates,
-            //    // context)),        //)
-            //}
+            IndexStyle::Threaded => {
+                if matches!(self.component, Threaded(_)) {
+                    return;
+                }
+                let coordinates = self.component.coordinates();
+                std::mem::replace(
+                    &mut self.component,
+                    Threaded(ThreadListing::new(self.id, coordinates, context)),
+                )
+            }
             IndexStyle::Compact => {
                 if matches!(self.component, Compact(_)) {
                     return;

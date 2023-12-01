@@ -21,7 +21,7 @@
 
 use std::iter::FromIterator;
 
-use melib::{Address, SortField, SortOrder, ThreadNode};
+use melib::{SortField, SortOrder, ThreadNode};
 
 use super::{EntryStrings, *};
 use crate::{components::PageMovement, jobs::JoinHandle};
@@ -339,8 +339,6 @@ impl ListingTrait for PlainListing {
             self.cursor_pos.2 += 1;
             self.new_cursor_pos.2 += 1;
             self.set_focus(Focus::Entry, context);
-            self.cursor_pos.2 -= 1;
-            self.new_cursor_pos.2 -= 1;
         }
     }
 
@@ -356,8 +354,6 @@ impl ListingTrait for PlainListing {
             self.cursor_pos.2 -= 1;
             self.new_cursor_pos.2 -= 1;
             self.set_focus(Focus::Entry, context);
-            self.cursor_pos.2 += 1;
-            self.new_cursor_pos.2 += 1;
         }
     }
 
@@ -478,8 +474,8 @@ impl ListingTrait for PlainListing {
 
         let top_idx = page_no * rows;
 
-        /* If cursor position has changed, remove the highlight from the previous
-         * position and apply it in the new one. */
+        // If cursor position has changed, remove the highlight from the previous
+        // position and apply it in the new one.
         if self.cursor_pos.2 != self.new_cursor_pos.2 && prev_page_no == page_no {
             let old_cursor_pos = self.cursor_pos;
             self.cursor_pos = self.new_cursor_pos;
@@ -619,12 +615,10 @@ impl ListingTrait for PlainListing {
     fn set_focus(&mut self, new_value: Focus, context: &mut Context) {
         match new_value {
             Focus::None => {
-                //self.view .process_event(&mut UIEvent::VisibilityChange(false), context);
                 self.dirty = true;
-                /* If self.rows.row_updates is not empty and we exit a thread, the row_update
-                 * events will be performed but the list will not be drawn.
-                 * So force a draw in any case.
-                 */
+                // If self.rows.row_updates is not empty and we exit a thread, the row_update
+                // events will be performed but the list will not be drawn.
+                // So force a draw in any case.
                 self.force_draw = true;
             }
             Focus::Entry => {

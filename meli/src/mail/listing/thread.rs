@@ -24,7 +24,7 @@ use std::{cmp, convert::TryInto, iter::FromIterator};
 use melib::{SortField, SortOrder, ThreadNode, Threads};
 
 use super::*;
-use crate::components::PageMovement;
+use crate::{components::PageMovement, jobs::JoinHandle};
 
 macro_rules! row_attr {
     ($color_cache:expr, $even: expr, $unseen:expr, $highlighted:expr, $selected:expr  $(,)*) => {{
@@ -139,11 +139,12 @@ pub struct ThreadListing {
     color_cache: ColorCache,
 
     #[allow(clippy::type_complexity)]
-    search_job: Option<(
-        String,
-        crate::jobs::JoinHandle<Result<SmallVec<[EnvelopeHash; 512]>>>,
-    )>,
-
+    search_job: Option<(String, JoinHandle<Result<SmallVec<[EnvelopeHash; 512]>>>)>,
+    #[allow(clippy::type_complexity)]
+    _select_job: Option<(String, JoinHandle<Result<SmallVec<[EnvelopeHash; 512]>>>)>,
+    filter_term: String,
+    filtered_selection: Vec<EnvelopeHash>,
+    _filtered_order: HashMap<EnvelopeHash, usize>,
     data_columns: DataColumns<5>,
     rows: RowsState<(ThreadHash, EnvelopeHash)>,
     seen_cache: IndexMap<EnvelopeHash, bool>,
@@ -213,17 +214,17 @@ impl MailListingTrait for ThreadListing {
         match context.accounts[&self.cursor_pos.0].load(self.cursor_pos.1) {
             Ok(_) => {}
             Err(_) => {
+                self.length = 0;
                 let message: String =
                     context.accounts[&self.cursor_pos.0][&self.cursor_pos.1].status();
-                self.data_columns.columns[0] =
-                    CellBuffer::new_with_context(message.len(), 1, None, context);
-                self.length = 0;
-                self.data_columns.columns[0].write_string(
+                _ = self.data_columns.columns[0].resize_with_context(message.len(), 1, context);
+                let area = self.data_columns.columns[0].area();
+                self.data_columns.columns[0].grid_mut().write_string(
                     message.as_str(),
                     self.color_cache.theme_default.fg,
                     self.color_cache.theme_default.bg,
                     self.color_cache.theme_default.attrs,
-                    ((0, 0), (message.len().saturating_sub(1), 0)),
+                    area,
                     None,
                 );
                 return;
@@ -256,14 +257,14 @@ impl MailListingTrait for ThreadListing {
         self.rows.clear();
         if threads.len() == 0 {
             let message: String = account[&self.cursor_pos.1].status();
-            self.data_columns.columns[0] =
-                CellBuffer::new_with_context(message.len(), 1, None, context);
-            self.data_columns.columns[0].write_string(
+            _ = self.data_columns.columns[0].resize_with_context(message.len(), 1, context);
+            let area = self.data_columns.columns[0].area();
+            self.data_columns.columns[0].grid_mut().write_string(
                 message.as_str(),
                 self.color_cache.theme_default.fg,
                 self.color_cache.theme_default.bg,
                 self.color_cache.theme_default.attrs,
-                ((0, 0), (message.len() - 1, 0)),
+                area,
                 None,
             );
             return;
@@ -401,7 +402,7 @@ impl MailListingTrait for ThreadListing {
 
         self.data_columns.elasticities[0].set_rigid();
         self.data_columns.elasticities[1].set_rigid();
-        self.data_columns.elasticities[2].set_grow(5, Some(35));
+        self.data_columns.elasticities[2].set_grow(15, Some(35));
         self.data_columns.elasticities[3].set_rigid();
         self.data_columns.elasticities[4].set_rigid();
         self.data_columns
@@ -415,23 +416,20 @@ impl MailListingTrait for ThreadListing {
             .theme_config
             .set_even_odd_theme(self.color_cache.even, self.color_cache.odd);
 
-        /* index column */
-        self.data_columns.columns[0] =
-            CellBuffer::new_with_context(min_width.0, self.rows.len(), None, context);
-
-        /* date column */
-        self.data_columns.columns[1] =
-            CellBuffer::new_with_context(min_width.1, self.rows.len(), None, context);
-        /* from column */
-        self.data_columns.columns[2] =
-            CellBuffer::new_with_context(min_width.2, self.rows.len(), None, context);
+        // index column
+        _ = self.data_columns.columns[0].resize_with_context(min_width.0, self.rows.len(), context);
+        self.data_columns.segment_tree[0] = row_widths.0.into();
+        // date column
+        _ = self.data_columns.columns[1].resize_with_context(min_width.1, self.rows.len(), context);
+        self.data_columns.segment_tree[1] = row_widths.1.into();
+        // from column
+        _ = self.data_columns.columns[2].resize_with_context(min_width.2, self.rows.len(), context);
         self.data_columns.segment_tree[2] = row_widths.2.into();
-        /* flags column */
-        self.data_columns.columns[3] =
-            CellBuffer::new_with_context(min_width.3, self.rows.len(), None, context);
-        /* subject column */
-        self.data_columns.columns[4] =
-            CellBuffer::new_with_context(min_width.4, self.rows.len(), None, context);
+        // flags column
+        _ = self.data_columns.columns[3].resize_with_context(min_width.3, self.rows.len(), context);
+        self.data_columns.segment_tree[3] = row_widths.3.into();
+        // subject column
+        _ = self.data_columns.columns[4].resize_with_context(min_width.4, self.rows.len(), context);
         self.data_columns.segment_tree[4] = row_widths.4.into();
 
         self.draw_rows(
@@ -455,8 +453,8 @@ impl ListingTrait for ThreadListing {
             self.force_draw = true;
             self.dirty = true;
             self.cursor_pos.2 += 1;
+            self.new_cursor_pos.2 += 1;
             self.set_focus(Focus::Entry, context);
-            self.cursor_pos.2 -= 1;
         }
     }
 
@@ -470,8 +468,8 @@ impl ListingTrait for ThreadListing {
             self.force_draw = true;
             self.dirty = true;
             self.cursor_pos.2 -= 1;
+            self.new_cursor_pos.2 -= 1;
             self.set_focus(Focus::Entry, context);
-            self.cursor_pos.2 += 1;
         }
     }
 
@@ -489,17 +487,21 @@ impl ListingTrait for ThreadListing {
         {
             self.refresh_mailbox(context, false);
         }
-        let upper_left = area.upper_left();
-        let bottom_right = area.bottom_right();
         if self.length == 0 {
             grid.clear_area(area, self.color_cache.theme_default);
+            grid.copy_area(
+                self.data_columns.columns[0].grid(),
+                area,
+                self.data_columns.columns[0].area(),
+            );
             context.dirty_areas.push_back(area);
             return;
         }
-        let rows = get_y(bottom_right) - get_y(upper_left) + 1;
+        let rows = area.height();
         if rows == 0 {
             return;
         }
+
         if let Some(mvm) = self.movement.take() {
             match mvm {
                 PageMovement::Up(amount) => {
@@ -524,7 +526,20 @@ impl ListingTrait for ThreadListing {
                         self.new_cursor_pos.2 = (self.length.saturating_sub(1) / rows) * rows;
                     }
                 }
-                PageMovement::Right(_) | PageMovement::Left(_) => {}
+                PageMovement::Right(amount) => {
+                    self.data_columns.x_offset += amount;
+                    self.data_columns.x_offset = self.data_columns.x_offset.min(
+                        self.data_columns
+                            .widths
+                            .iter()
+                            .map(|w| w + 2)
+                            .sum::<usize>()
+                            .saturating_sub(2),
+                    );
+                }
+                PageMovement::Left(amount) => {
+                    self.data_columns.x_offset = self.data_columns.x_offset.saturating_sub(amount);
+                }
                 PageMovement::Home => {
                     self.new_cursor_pos.2 = 0;
                 }
@@ -534,18 +549,23 @@ impl ListingTrait for ThreadListing {
             }
         }
 
+        if self.force_draw {
+            grid.clear_area(area, self.color_cache.theme_default);
+        }
+
         let prev_page_no = (self.cursor_pos.2).wrapping_div(rows);
         let page_no = (self.new_cursor_pos.2).wrapping_div(rows);
 
         let top_idx = page_no * rows;
 
-        /* If cursor position has changed, remove the highlight from the previous
-         * position and apply it in the new one. */
+        // If cursor position has changed, remove the highlight from the previous
+        // position and apply it in the new one.
         if self.cursor_pos.2 != self.new_cursor_pos.2 && prev_page_no == page_no {
             let old_cursor_pos = self.cursor_pos;
             self.cursor_pos = self.new_cursor_pos;
             if *account_settings!(context[self.cursor_pos.0].listing.relative_list_indices) {
                 self.draw_relative_numbers(grid, area, top_idx);
+                context.dirty_areas.push_back(area);
             }
             for &(idx, highlight) in &[(old_cursor_pos.2, false), (self.new_cursor_pos.2, true)] {
                 if idx >= self.length {
@@ -554,20 +574,13 @@ impl ListingTrait for ThreadListing {
                 let new_area = area.nth_row(idx % rows);
                 self.data_columns
                     .draw(grid, idx, self.cursor_pos.2, grid.bounds_iter(new_area));
-                if let Some(env_hash) = self.get_env_under_cursor(idx) {
-                    let row_attr = row_attr!(
-                        self.color_cache,
-                        idx % 2 == 0,
-                        !self.seen_cache[&env_hash],
-                        highlight,
-                        self.rows.selection[&env_hash]
-                    );
+                if highlight {
+                    let row_attr = row_attr!(self.color_cache, idx % 2 == 0, false, true, false);
                     grid.change_theme(new_area, row_attr);
+                } else if let Some(row_attr) = self.rows.row_attr_cache.get(&idx) {
+                    grid.change_theme(new_area, *row_attr);
                 }
                 context.dirty_areas.push_back(new_area);
-            }
-            if *account_settings!(context[self.cursor_pos.0].listing.relative_list_indices) {
-                context.dirty_areas.push_back(area);
             }
             if !self.force_draw {
                 return;
@@ -576,71 +589,60 @@ impl ListingTrait for ThreadListing {
             self.cursor_pos = self.new_cursor_pos;
         }
 
-        /* Page_no has changed, so draw new page */
         if self.new_cursor_pos.2 >= self.length {
             self.new_cursor_pos.2 = self.length - 1;
             self.cursor_pos.2 = self.new_cursor_pos.2;
         }
+
+        if !self.force_draw {
+            grid.clear_area(area, self.color_cache.theme_default);
+        }
+
         self.draw_rows(
             context,
             top_idx,
-            cmp::min(self.length.saturating_sub(1), top_idx + rows - 1),
+            self.length.saturating_sub(1).min(top_idx + rows - 1),
         );
 
-        _ = self
-            .data_columns
-            .recalc_widths((area.width(), area.height()), top_idx);
-        grid.clear_area(area, self.color_cache.theme_default);
-        /* copy table columns */
+        // Page_no has changed, so draw new page
+        _ = self.data_columns.recalc_widths(area.size(), top_idx);
+        // copy table columns
         self.data_columns
             .draw(grid, top_idx, self.cursor_pos.2, grid.bounds_iter(area));
         if *account_settings!(context[self.cursor_pos.0].listing.relative_list_indices) {
             self.draw_relative_numbers(grid, area, top_idx);
         }
-        /* apply each row colors separately */
-        for idx in top_idx..(top_idx + area.height()) {
-            if let Some(env_hash) = self.get_env_under_cursor(idx) {
-                let row_attr = row_attr!(
-                    self.color_cache,
-                    idx % 2 == 0,
-                    !self.seen_cache[&env_hash],
-                    self.cursor_pos.2 == idx,
-                    self.rows.selection[&env_hash]
-                );
-                grid.change_theme(area.nth_row(idx % rows), row_attr);
+        // apply each row colors separately
+        for i in top_idx..(top_idx + area.height()) {
+            if let Some(row_attr) = self.rows.row_attr_cache.get(&i) {
+                grid.change_theme(area.nth_row(i % rows), *row_attr);
             }
         }
 
-        if let Some(env_hash) = self.get_env_under_cursor(self.cursor_pos.2) {
-            /* highlight cursor */
-            let row_attr = row_attr!(
-                self.color_cache,
-                self.cursor_pos.2 % 2 == 0,
-                !self.seen_cache[&env_hash],
-                true, // because self.cursor_pos.2 == idx,
-                self.rows.selection[&env_hash]
-            );
-            grid.change_theme(area.nth_row(self.cursor_pos.2 % rows), row_attr);
-        }
+        // highlight cursor
+        let row_attr = row_attr!(
+            self.color_cache,
+            self.cursor_pos.2 % 2 == 0,
+            false,
+            true,
+            false
+        );
+        grid.change_theme(area.nth_row(self.cursor_pos.2 % rows), row_attr);
 
-        /* clear gap if available height is more than count of entries */
+        // clear gap if available height is more than count of entries
         if top_idx + rows > self.length {
-            grid.clear_area(
-                (
-                    pos_inc(upper_left, (0, self.length - top_idx)),
-                    bottom_right,
-                ),
+            grid.change_theme(
+                area.skip_rows(self.length - top_idx),
                 self.color_cache.theme_default,
             );
         }
+
+        self.force_draw = false;
         context.dirty_areas.push_back(area);
     }
 
     fn highlight_line(&mut self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context) {
-        let env_hash = if let Some(i) = self.get_env_under_cursor(idx) {
-            i
-        } else {
-            // self.length == 0
+        let Some(env_hash) = self.get_env_under_cursor(idx) else {
             return;
         };
 
@@ -655,13 +657,26 @@ impl ListingTrait for ThreadListing {
             self.cursor_pos.2 == idx,
             self.rows.selection[&env_hash],
         );
-        for row in grid.bounds_iter(area) {
-            for c in row {
-                grid[c]
-                    .set_fg(row_attr.fg)
-                    .set_bg(row_attr.bg)
-                    .set_attrs(row_attr.attrs);
-            }
+
+        let x = self.data_columns.widths[0]
+            + self.data_columns.widths[1]
+            + self.data_columns.widths[2]
+            + 3 * 2;
+
+        for c in grid.row_iter(area, 0..area.width(), 0) {
+            grid[c]
+                .set_fg(row_attr.fg)
+                .set_bg(row_attr.bg)
+                .set_attrs(row_attr.attrs);
+        }
+
+        grid.copy_area(
+            self.data_columns.columns[3].grid(),
+            area.skip_cols(x),
+            self.data_columns.columns[3].area().nth_row(idx),
+        );
+        for c in grid.row_iter(area, x..area.width(), 0) {
+            grid[c].set_bg(row_attr.bg).set_attrs(row_attr.attrs);
         }
     }
 
@@ -707,10 +722,9 @@ impl ListingTrait for ThreadListing {
         match new_value {
             Focus::None => {
                 self.dirty = true;
-                /* If self.rows.row_updates is not empty and we exit a thread, the row_update
-                 * events will be performed but the list will not be drawn.
-                 * So force a draw in any case.
-                 */
+                // If self.rows.row_updates is not empty and we exit a thread, the row_update
+                // events will be performed but the list will not be drawn.
+                // So force a draw in any case.
                 self.force_draw = true;
             }
             Focus::Entry => {
@@ -720,7 +734,6 @@ impl ListingTrait for ThreadListing {
                 {
                     self.force_draw = true;
                     self.dirty = true;
-
                     self.kick_parent(
                         self.parent,
                         ListingMessage::OpenEntryUnderCursor {
@@ -774,7 +787,11 @@ impl ThreadListing {
             data_columns: DataColumns::default(),
             rows: RowsState::default(),
             seen_cache: IndexMap::default(),
+            filter_term: String::new(),
             search_job: None,
+            _select_job: None,
+            filtered_selection: Vec::new(),
+            _filtered_order: HashMap::default(),
             dirty: true,
             force_draw: true,
             focus: Focus::None,
@@ -786,20 +803,6 @@ impl ThreadListing {
             parent,
             id: ComponentId::default(),
         })
-    }
-
-    fn highlight_line_self(&mut self, _idx: usize, _context: &Context) {
-        /*
-        if self.length == 0 {
-            return;
-        }
-
-        let env_hash = self.get_env_under_cursor(idx, context);
-        let envelope: EnvelopeRef = context.accounts[&self.cursor_pos.0]
-            .collection
-            .get_env(env_hash);
-
-        */
     }
 
     fn make_thread_entry(
@@ -816,7 +819,7 @@ impl ThreadListing {
         let has_visible_parent = has_parent && !is_root;
         let show_subject = thread_node.show_subject();
 
-        let mut s = String::new();
+        let mut subject = String::new();
 
         // Do not print any indentation if entry is a root but it has a parent that is
         // missing AND it has no siblings; therefore there's no point in
@@ -825,34 +828,34 @@ impl ThreadListing {
         if !(is_root && has_parent && !has_sibling) {
             for i in 0..indent {
                 if indentations.len() > i && indentations[i] {
-                    s.push('│');
+                    subject.push('│');
                 } else if indentations.len() > i {
-                    s.push(' ');
+                    subject.push(' ');
                 }
                 if i > 0 {
-                    s.push(' ');
+                    subject.push(' ');
                 }
             }
         }
 
         if indent > 0 && ((has_sibling || has_visible_parent) || is_root) {
             if has_sibling && has_visible_parent {
-                s.push('├');
+                subject.push('├');
             } else if has_sibling {
-                s.push('┬');
+                subject.push('┬');
             } else if has_parent && is_root {
-                s.push('─');
+                subject.push('─');
             } else {
-                s.push('└');
+                subject.push('└');
             }
-            s.push('─');
-            s.push('>');
+            subject.push('─');
+            subject.push('>');
         }
 
         if show_subject {
-            s.push_str(&envelope.subject());
+            subject.push_str(&envelope.subject());
         }
-        s
+        subject
     }
 
     fn get_env_under_cursor(&self, cursor: usize) -> Option<EnvelopeHash> {
@@ -861,7 +864,7 @@ impl ThreadListing {
 
     fn make_entry_string(&self, e: &Envelope, context: &Context) -> EntryStrings {
         let mut tags = String::new();
-        let mut colors: SmallVec<[_; 8]> = SmallVec::new();
+        let mut colors = SmallVec::new();
         let account = &context.accounts[&self.cursor_pos.0];
         if account.backend_capabilities.supports_tags {
             let tags_lck = account.collection.tag_index.read().unwrap();
@@ -901,7 +904,53 @@ impl ThreadListing {
         EntryStrings {
             date: DateString(self.format_date(context, e.date())),
             subject: SubjectString(subject),
-            flag: FlagString((if e.has_attachments() { "📎" } else { "" }).to_string()),
+            flag: FlagString(format!(
+                "{selected}{unseen}{attachments}{whitespace}",
+                selected = if self.rows.selection.get(&e.hash()).cloned().unwrap_or(false) {
+                    mailbox_settings!(
+                        context[self.cursor_pos.0][&self.cursor_pos.1]
+                            .listing
+                            .selected_flag
+                    )
+                    .as_ref()
+                    .map(|s| s.as_str())
+                    .unwrap_or(super::DEFAULT_SELECTED_FLAG)
+                } else {
+                    ""
+                },
+                unseen = if !e.is_seen() {
+                    mailbox_settings!(
+                        context[self.cursor_pos.0][&self.cursor_pos.1]
+                            .listing
+                            .unseen_flag
+                    )
+                    .as_ref()
+                    .map(|s| s.as_str())
+                    .unwrap_or(super::DEFAULT_UNSEEN_FLAG)
+                } else {
+                    ""
+                },
+                attachments = if e.has_attachments() {
+                    mailbox_settings!(
+                        context[self.cursor_pos.0][&self.cursor_pos.1]
+                            .listing
+                            .attachment_flag
+                    )
+                    .as_ref()
+                    .map(|s| s.as_str())
+                    .unwrap_or(super::DEFAULT_ATTACHMENT_FLAG)
+                } else {
+                    ""
+                },
+                whitespace = if self.rows.selection.get(&e.hash()).cloned().unwrap_or(false)
+                    || !e.is_seen()
+                    || e.has_attachments()
+                {
+                    " "
+                } else {
+                    ""
+                },
+            )),
             from: FromString(address_list!((e.from()) as comma_sep_list)),
             tags: TagString(tags, colors),
         }
@@ -913,11 +962,11 @@ impl ThreadListing {
         }
         debug_assert!(end >= start);
         let min_width = (
-            self.data_columns.columns[0].size().0,
-            self.data_columns.columns[1].size().0,
-            self.data_columns.columns[2].size().0,
-            self.data_columns.columns[3].size().0,
-            self.data_columns.columns[4].size().0,
+            self.data_columns.columns[0].area().width(),
+            self.data_columns.columns[1].area().width(),
+            self.data_columns.columns[2].area().width(),
+            self.data_columns.columns[3].area().width(),
+            self.data_columns.columns[4].area().width(),
         );
 
         for (idx, ((_thread_hash, env_hash), strings)) in self
@@ -929,15 +978,7 @@ impl ThreadListing {
             .take(end - start + 1)
         {
             if !context.accounts[&self.cursor_pos.0].contains_key(*env_hash) {
-                //debug!("key = {}", root_env_hash);
-                //debug!(
-                //    "name = {} {}",
-                //    account[&self.cursor_pos.1].name(),
-                //    context.accounts[&self.cursor_pos.0].name()
-                //);
-                //debug!("{:#?}", context.accounts);
-
-                panic!();
+                continue;
             }
             let row_attr = row_attr!(
                 self.color_cache,
@@ -946,120 +987,153 @@ impl ThreadListing {
                 self.cursor_pos.2 == idx,
                 self.rows.selection[env_hash]
             );
-            if !*account_settings!(context[self.cursor_pos.0].listing.relative_list_indices) {
-                let (x, _) = self.data_columns.columns[0].write_string(
-                    &idx.to_string(),
+            {
+                let area = self.data_columns.columns[0].area();
+                if !*account_settings!(context[self.cursor_pos.0].listing.relative_list_indices) {
+                    let (x, _) = self.data_columns.columns[0].grid_mut().write_string(
+                        &idx.to_string(),
+                        row_attr.fg,
+                        row_attr.bg,
+                        row_attr.attrs,
+                        area.nth_row(idx),
+                        None,
+                    );
+                    for x in x..min_width.0 {
+                        self.data_columns.columns[0].grid_mut()[(x, idx)]
+                            .set_bg(row_attr.bg)
+                            .set_attrs(row_attr.attrs);
+                    }
+                }
+            }
+            {
+                let area = self.data_columns.columns[1].area();
+                let (x, _) = self.data_columns.columns[1].grid_mut().write_string(
+                    &strings.date,
                     row_attr.fg,
                     row_attr.bg,
                     row_attr.attrs,
-                    ((0, idx), (min_width.0, idx)),
+                    area.nth_row(idx),
                     None,
                 );
-                for x in x..min_width.0 {
-                    self.data_columns.columns[0][(x, idx)]
+                for x in x..min_width.1 {
+                    self.data_columns.columns[1].grid_mut()[(x, idx)]
                         .set_bg(row_attr.bg)
                         .set_attrs(row_attr.attrs);
                 }
             }
-            let (x, _) = self.data_columns.columns[1].write_string(
-                &strings.date,
-                row_attr.fg,
-                row_attr.bg,
-                row_attr.attrs,
-                ((0, idx), (min_width.1, idx)),
-                None,
-            );
-            for x in x..min_width.1 {
-                self.data_columns.columns[1][(x, idx)]
-                    .set_bg(row_attr.bg)
-                    .set_attrs(row_attr.attrs);
-            }
-            let (x, _) = self.data_columns.columns[2].write_string(
-                &strings.from,
-                row_attr.fg,
-                row_attr.bg,
-                row_attr.attrs,
-                ((0, idx), (min_width.2, idx)),
-                None,
-            );
-            #[cfg(feature = "regexp")]
             {
-                for text_formatter in crate::conf::text_format_regexps(context, "listing.from") {
-                    let t = self.data_columns.columns[2].insert_tag(text_formatter.tag);
-                    for (start, end) in text_formatter.regexp.find_iter(strings.from.as_str()) {
-                        self.data_columns.columns[2].set_tag(t, (start, idx), (end, idx));
+                let area = self.data_columns.columns[2].area();
+                let (x, _) = self.data_columns.columns[2].grid_mut().write_string(
+                    &strings.from,
+                    row_attr.fg,
+                    row_attr.bg,
+                    row_attr.attrs,
+                    area.nth_row(idx),
+                    None,
+                );
+                #[cfg(feature = "regexp")]
+                {
+                    for text_formatter in crate::conf::text_format_regexps(context, "listing.from")
+                    {
+                        let t = self.data_columns.columns[2]
+                            .grid_mut()
+                            .insert_tag(text_formatter.tag);
+                        for (start, end) in text_formatter.regexp.find_iter(strings.from.as_str()) {
+                            self.data_columns.columns[2].grid_mut().set_tag(
+                                t,
+                                (start, idx),
+                                (end, idx),
+                            );
+                        }
                     }
                 }
+                for x in x..min_width.2 {
+                    self.data_columns.columns[2].grid_mut()[(x, idx)]
+                        .set_bg(row_attr.bg)
+                        .set_attrs(row_attr.attrs);
+                }
             }
-            for x in x..min_width.2 {
-                self.data_columns.columns[2][(x, idx)]
-                    .set_bg(row_attr.bg)
-                    .set_attrs(row_attr.attrs);
-            }
-            let (x, _) = self.data_columns.columns[3].write_string(
-                &strings.flag,
-                row_attr.fg,
-                row_attr.bg,
-                row_attr.attrs,
-                ((0, idx), (min_width.3, idx)),
-                None,
-            );
-            for x in x..min_width.3 {
-                self.data_columns.columns[3][(x, idx)]
-                    .set_bg(row_attr.bg)
-                    .set_attrs(row_attr.attrs);
-            }
-            let (x, _) = self.data_columns.columns[4].write_string(
-                &strings.subject,
-                row_attr.fg,
-                row_attr.bg,
-                row_attr.attrs,
-                ((0, idx), (min_width.4, idx)),
-                None,
-            );
-            #[cfg(feature = "regexp")]
             {
-                for text_formatter in crate::conf::text_format_regexps(context, "listing.subject") {
-                    let t = self.data_columns.columns[4].insert_tag(text_formatter.tag);
-                    for (start, end) in text_formatter.regexp.find_iter(strings.subject.as_str()) {
-                        self.data_columns.columns[4].set_tag(t, (start, idx), (end, idx));
-                    }
+                let area = self.data_columns.columns[3].area();
+                let (x, _) = self.data_columns.columns[3].grid_mut().write_string(
+                    &strings.flag,
+                    row_attr.fg,
+                    row_attr.bg,
+                    row_attr.attrs,
+                    area.nth_row(idx),
+                    None,
+                );
+                for x in x..min_width.3 {
+                    self.data_columns.columns[3].grid_mut()[(x, idx)]
+                        .set_bg(row_attr.bg)
+                        .set_attrs(row_attr.attrs);
                 }
             }
-            let x = {
-                let mut x = x + 1;
-                for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
-                    let color = color.unwrap_or(self.color_cache.tag_default.bg);
-                    let (_x, _) = self.data_columns.columns[4].write_string(
-                        t,
-                        self.color_cache.tag_default.fg,
-                        color,
-                        self.color_cache.tag_default.attrs,
-                        ((x + 1, idx), (min_width.4, idx)),
-                        None,
-                    );
-                    self.data_columns.columns[4][(x, idx)].set_bg(color);
-                    if _x < min_width.4 {
-                        self.data_columns.columns[4][(_x, idx)]
-                            .set_bg(color)
-                            .set_keep_bg(true);
+            {
+                let area = self.data_columns.columns[4].area();
+                let (x, _) = self.data_columns.columns[4].grid_mut().write_string(
+                    &strings.subject,
+                    row_attr.fg,
+                    row_attr.bg,
+                    row_attr.attrs,
+                    area.nth_row(idx),
+                    None,
+                );
+                #[cfg(feature = "regexp")]
+                {
+                    for text_formatter in
+                        crate::conf::text_format_regexps(context, "listing.subject")
+                    {
+                        let t = self.data_columns.columns[4]
+                            .grid_mut()
+                            .insert_tag(text_formatter.tag);
+                        for (start, end) in
+                            text_formatter.regexp.find_iter(strings.subject.as_str())
+                        {
+                            self.data_columns.columns[4].grid_mut().set_tag(
+                                t,
+                                (start, idx),
+                                (end, idx),
+                            );
+                        }
                     }
-                    for x in (x + 1).._x {
-                        self.data_columns.columns[4][(x, idx)]
-                            .set_keep_fg(true)
-                            .set_keep_bg(true)
-                            .set_keep_attrs(true);
-                    }
-                    self.data_columns.columns[4][(x, idx)].set_keep_bg(true);
-                    x = _x + 1;
                 }
-                x
-            };
-            for x in x..min_width.4 {
-                self.data_columns.columns[4][(x, idx)]
-                    .set_ch(' ')
-                    .set_bg(row_attr.bg)
-                    .set_attrs(row_attr.attrs);
+                let x = {
+                    let mut x = x + 1;
+                    let area = self.data_columns.columns[4].area();
+                    for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
+                        let color = color.unwrap_or(self.color_cache.tag_default.bg);
+                        let (_x, _) = self.data_columns.columns[4].grid_mut().write_string(
+                            t,
+                            self.color_cache.tag_default.fg,
+                            color,
+                            self.color_cache.tag_default.attrs,
+                            area.nth_row(idx).skip_cols(x + 1),
+                            None,
+                        );
+                        self.data_columns.columns[4].grid_mut()[(x, idx)].set_bg(color);
+                        if _x < min_width.4 {
+                            self.data_columns.columns[4].grid_mut()[(_x, idx)]
+                                .set_bg(color)
+                                .set_keep_bg(true);
+                        }
+                        for x in (x + 1).._x {
+                            self.data_columns.columns[4].grid_mut()[(x, idx)]
+                                .set_keep_fg(true)
+                                .set_keep_bg(true)
+                                .set_keep_attrs(true);
+                        }
+                        self.data_columns.columns[4].grid_mut()[(x, idx)].set_keep_bg(true);
+                        x = _x + 1;
+                    }
+                    x
+                };
+                for x in x..min_width.4 {
+                    self.data_columns.columns[4].grid_mut()[(x, idx)]
+                        .set_ch(' ')
+                        .set_bg(row_attr.bg)
+                        .set_attrs(row_attr.attrs);
+                }
             }
         }
     }
@@ -1068,8 +1142,8 @@ impl ThreadListing {
         let account = &context.accounts[&self.cursor_pos.0];
 
         if !account.contains_key(env_hash) {
-            /* The envelope has been renamed or removed, so wait for the appropriate
-             * event to arrive */
+            // The envelope has been renamed or removed, so wait for the appropriate
+            // event to arrive
             return;
         }
         let envelope: EnvelopeRef = account.collection.get_env(env_hash);
@@ -1091,26 +1165,16 @@ impl ThreadListing {
             &mut strings.subject,
         );
         let columns = &mut self.data_columns.columns;
-        let min_width = (
-            columns[0].size().0,
-            columns[1].size().0,
-            columns[2].size().0,
-            columns[3].size().0,
-            columns[4].size().0,
-        );
-
-        columns[0].clear_area(((0, idx), (min_width.0, idx)), row_attr);
-        columns[1].clear_area(((0, idx), (min_width.1, idx)), row_attr);
-        columns[2].clear_area(((0, idx), (min_width.2, idx)), row_attr);
-        columns[3].clear_area(((0, idx), (min_width.3, idx)), row_attr);
-        columns[4].clear_area(((0, idx), (min_width.4, idx)), row_attr);
+        for n in 0..=4 {
+            let area = columns[n].area().nth_row(idx);
+            columns[0].grid_mut().clear_area(area, row_attr);
+        }
 
         *self.rows.entries.get_mut(idx).unwrap() = ((thread_hash, env_hash), strings);
     }
 
     fn draw_relative_numbers(&mut self, grid: &mut CellBuffer, area: Area, top_idx: usize) {
-        let width = self.data_columns.columns[0].size().0;
-        let upper_left = area.upper_left();
+        let width = self.data_columns.columns[0].area().width();
         for i in 0..area.height() {
             let row_attr = if let Some(env_hash) = self.get_env_under_cursor(top_idx + i) {
                 row_attr!(
@@ -1124,16 +1188,13 @@ impl ThreadListing {
                 row_attr!(self.color_cache, (top_idx + i) % 2 == 0, false, true, false)
             };
 
-            self.data_columns.columns[0].clear_area(((0, i), (width - 1, i + 1)), row_attr);
+            let idx_col_area = self.data_columns.columns[0].area();
+            self.data_columns.columns[0]
+                .grid_mut()
+                .clear_area(idx_col_area, row_attr);
 
-            grid.clear_area(
-                (
-                    pos_inc(upper_left, (0, i)),
-                    pos_inc(upper_left, (width - 1, i + 1)),
-                ),
-                row_attr,
-            );
-            self.data_columns.columns[0].write_string(
+            grid.clear_area(area.nth_row(i).take_cols(width), row_attr);
+            self.data_columns.columns[0].grid_mut().write_string(
                 &if self.new_cursor_pos.2.saturating_sub(top_idx) == i {
                     self.new_cursor_pos.2.to_string()
                 } else {
@@ -1144,7 +1205,7 @@ impl ThreadListing {
                 row_attr.fg,
                 row_attr.bg,
                 row_attr.attrs,
-                ((0, i), (width, i + 1)),
+                idx_col_area.nth_row(i),
                 None,
             );
 
@@ -1159,10 +1220,7 @@ impl ThreadListing {
                 row_attr.fg,
                 row_attr.bg,
                 row_attr.attrs,
-                (
-                    pos_inc(upper_left, (0, i)),
-                    pos_inc(upper_left, (width, i + 1)),
-                ),
+                area.nth_row(i).take_cols(width),
                 None,
             );
         }
@@ -1176,267 +1234,235 @@ impl Component for ThreadListing {
             return;
         }
 
-        let (upper_left, bottom_right) = area;
-        let rows = get_y(bottom_right) - get_y(upper_left) + 1;
-
-        if let Some(modifier) = self.modifier_command.take() {
-            if let Some(mvm) = self.movement.as_ref() {
-                match mvm {
-                    PageMovement::Up(amount) => {
-                        for c in
-                            self.new_cursor_pos.2.saturating_sub(*amount)..=self.new_cursor_pos.2
-                        {
-                            if let Some(env_hash) = self.get_env_under_cursor(c) {
-                                self.rows.update_selection_with_env(
-                                    env_hash,
-                                    match modifier {
-                                        Modifier::SymmetricDifference => |e: &mut bool| *e = !*e,
-                                        Modifier::Union => |e: &mut bool| *e = true,
-                                        Modifier::Difference => |e: &mut bool| *e = false,
-                                        Modifier::Intersection => |_: &mut bool| {},
-                                    },
-                                );
-                            }
-                        }
-                        if modifier == Modifier::Intersection {
-                            for c in (0..self.new_cursor_pos.2.saturating_sub(*amount))
-                                .chain((self.new_cursor_pos.2 + 2)..self.length)
-                            {
-                                if let Some(env_hash) = self.get_env_under_cursor(c) {
-                                    self.rows
-                                        .update_selection_with_env(env_hash, |e| *e = false);
-                                }
-                            }
-                        }
-                    }
-                    PageMovement::PageUp(multiplier) => {
-                        for c in self.new_cursor_pos.2.saturating_sub(rows * multiplier)
-                            ..=self.new_cursor_pos.2
-                        {
-                            if let Some(env_hash) = self.get_env_under_cursor(c) {
-                                self.rows.update_selection_with_env(
-                                    env_hash,
-                                    match modifier {
-                                        Modifier::SymmetricDifference => |e: &mut bool| *e = !*e,
-                                        Modifier::Union => |e: &mut bool| *e = true,
-                                        Modifier::Difference => |e: &mut bool| *e = false,
-                                        Modifier::Intersection => |_: &mut bool| {},
-                                    },
-                                );
-                            }
-                        }
-                    }
-                    PageMovement::Down(amount) => {
-                        for c in self.new_cursor_pos.2
-                            ..std::cmp::min(self.length, self.new_cursor_pos.2 + amount + 1)
-                        {
-                            if let Some(env_hash) = self.get_env_under_cursor(c) {
-                                self.rows.update_selection_with_env(
-                                    env_hash,
-                                    match modifier {
-                                        Modifier::SymmetricDifference => |e: &mut bool| *e = !*e,
-                                        Modifier::Union => |e: &mut bool| *e = true,
-                                        Modifier::Difference => |e: &mut bool| *e = false,
-                                        Modifier::Intersection => |_: &mut bool| {},
-                                    },
-                                );
-                            }
-                        }
-                        if modifier == Modifier::Intersection {
-                            for c in (0..self.new_cursor_pos.2).chain(
-                                (std::cmp::min(self.length, self.new_cursor_pos.2 + amount + 1) + 1)
-                                    ..self.length,
-                            ) {
-                                if let Some(env_hash) = self.get_env_under_cursor(c) {
-                                    self.rows
-                                        .update_selection_with_env(env_hash, |e| *e = false);
-                                }
-                            }
-                        }
-                    }
-                    PageMovement::PageDown(multiplier) => {
-                        for c in self.new_cursor_pos.2
-                            ..std::cmp::min(
-                                self.new_cursor_pos.2 + rows * multiplier + 1,
-                                self.length,
-                            )
-                        {
-                            if let Some(env_hash) = self.get_env_under_cursor(c) {
-                                self.rows.update_selection_with_env(
-                                    env_hash,
-                                    match modifier {
-                                        Modifier::SymmetricDifference => |e: &mut bool| *e = !*e,
-                                        Modifier::Union => |e: &mut bool| *e = true,
-                                        Modifier::Difference => |e: &mut bool| *e = false,
-                                        Modifier::Intersection => |_: &mut bool| {},
-                                    },
-                                );
-                            }
-                        }
-                        if modifier == Modifier::Intersection {
-                            for c in (0..self.new_cursor_pos.2).chain(
-                                (std::cmp::min(
-                                    self.new_cursor_pos.2 + rows * multiplier + 1,
-                                    self.length,
-                                ) + 1)..self.length,
-                            ) {
-                                if let Some(env_hash) = self.get_env_under_cursor(c) {
-                                    self.rows
-                                        .update_selection_with_env(env_hash, |e| *e = false);
-                                }
-                            }
-                        }
-                    }
-                    PageMovement::Right(_) | PageMovement::Left(_) => {}
-                    PageMovement::Home => {
-                        for c in 0..=self.new_cursor_pos.2 {
-                            if let Some(env_hash) = self.get_env_under_cursor(c) {
-                                self.rows.update_selection_with_env(
-                                    env_hash,
-                                    match modifier {
-                                        Modifier::SymmetricDifference => |e: &mut bool| *e = !*e,
-                                        Modifier::Union => |e: &mut bool| *e = true,
-                                        Modifier::Difference => |e: &mut bool| *e = false,
-                                        Modifier::Intersection => |_: &mut bool| {},
-                                    },
-                                );
-                            }
-                        }
-                        if modifier == Modifier::Intersection {
-                            for c in (self.new_cursor_pos.2 + 1)..self.length {
-                                if let Some(env_hash) = self.get_env_under_cursor(c) {
-                                    self.rows
-                                        .update_selection_with_env(env_hash, |e| *e = false);
-                                }
-                            }
-                        }
-                    }
-                    PageMovement::End => {
-                        for c in self.new_cursor_pos.2..self.length {
-                            if let Some(env_hash) = self.get_env_under_cursor(c) {
-                                self.rows.update_selection_with_env(
-                                    env_hash,
-                                    match modifier {
-                                        Modifier::SymmetricDifference => |e: &mut bool| *e = !*e,
-                                        Modifier::Union => |e: &mut bool| *e = true,
-                                        Modifier::Difference => |e: &mut bool| *e = false,
-                                        Modifier::Intersection => |_: &mut bool| {},
-                                    },
-                                );
-                            }
-                        }
-                        if modifier == Modifier::Intersection {
-                            for c in 0..self.new_cursor_pos.2 {
-                                if let Some(env_hash) = self.get_env_under_cursor(c) {
-                                    self.rows
-                                        .update_selection_with_env(env_hash, |e| *e = false);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            self.force_draw = true;
-        }
-
-        if !self.rows.row_updates.is_empty() {
-            let page_no = (self.new_cursor_pos.2).wrapping_div(rows);
-            let top_idx = page_no * rows;
-
-            while let Some(env_hash) = self.rows.row_updates.pop() {
-                self.update_line(context, env_hash);
-                let row: usize = self.rows.env_order[&env_hash];
-
-                self.force_draw |= row >= top_idx && row < top_idx + rows;
-            }
-            if self.force_draw {
-                /* Draw the entire list */
-                self.draw_list(grid, area, context);
-                self.force_draw = false;
-            }
-        }
-
         if !self.is_dirty() {
             return;
         }
 
-        if !self.unfocused() {
-            self.dirty = false;
-            /* Draw the entire list */
-            self.draw_list(grid, area, context);
+        if matches!(self.focus, Focus::None) {
+            let mut area = area;
+            if !self.filter_term.is_empty() {
+                let (x, y) = grid.write_string(
+                    &format!(
+                        "{} results for `{}` (Press ESC to exit)",
+                        self.filtered_selection.len(),
+                        self.filter_term
+                    ),
+                    self.color_cache.theme_default.fg,
+                    self.color_cache.theme_default.bg,
+                    self.color_cache.theme_default.attrs,
+                    area,
+                    Some(0),
+                );
+
+                grid.clear_area(area.skip(x, y).nth_row(y), self.color_cache.theme_default);
+                context.dirty_areas.push_back(area);
+
+                area = area.skip_rows(y + 1);
+            }
+
+            let rows = area.height();
+
+            if let Some(modifier) = self.modifier_command.take() {
+                if let Some(mvm) = self.movement.as_ref() {
+                    match mvm {
+                        PageMovement::Up(amount) => {
+                            for c in self.cursor_pos.2.saturating_sub(*amount)..=self.cursor_pos.2 {
+                                if let Some(env_hash) = self.get_env_under_cursor(c) {
+                                    self.rows.update_selection_with_env(
+                                        env_hash,
+                                        match modifier {
+                                            Modifier::SymmetricDifference => {
+                                                |e: &mut bool| *e = !*e
+                                            }
+                                            Modifier::Union => |e: &mut bool| *e = true,
+                                            Modifier::Difference => |e: &mut bool| *e = false,
+                                            Modifier::Intersection => |_: &mut bool| {},
+                                        },
+                                    );
+                                }
+                            }
+                            if modifier == Modifier::Intersection {
+                                for c in (0..self.cursor_pos.2.saturating_sub(*amount))
+                                    .chain((self.cursor_pos.2 + 2)..self.length)
+                                {
+                                    if let Some(env_hash) = self.get_env_under_cursor(c) {
+                                        self.rows
+                                            .update_selection_with_env(env_hash, |e| *e = false);
+                                    }
+                                }
+                            }
+                        }
+                        PageMovement::PageUp(multiplier) => {
+                            for c in self.cursor_pos.2.saturating_sub(rows * multiplier)
+                                ..=self.cursor_pos.2
+                            {
+                                if let Some(env_hash) = self.get_env_under_cursor(c) {
+                                    self.rows.update_selection_with_env(
+                                        env_hash,
+                                        match modifier {
+                                            Modifier::SymmetricDifference => {
+                                                |e: &mut bool| *e = !*e
+                                            }
+                                            Modifier::Union => |e: &mut bool| *e = true,
+                                            Modifier::Difference => |e: &mut bool| *e = false,
+                                            Modifier::Intersection => |_: &mut bool| {},
+                                        },
+                                    );
+                                }
+                            }
+                        }
+                        PageMovement::Down(amount) => {
+                            for c in
+                                self.cursor_pos.2..self.length.min(self.cursor_pos.2 + amount + 1)
+                            {
+                                if let Some(env_hash) = self.get_env_under_cursor(c) {
+                                    self.rows.update_selection_with_env(
+                                        env_hash,
+                                        match modifier {
+                                            Modifier::SymmetricDifference => {
+                                                |e: &mut bool| *e = !*e
+                                            }
+                                            Modifier::Union => |e: &mut bool| *e = true,
+                                            Modifier::Difference => |e: &mut bool| *e = false,
+                                            Modifier::Intersection => |_: &mut bool| {},
+                                        },
+                                    );
+                                }
+                            }
+                            if modifier == Modifier::Intersection {
+                                for c in (0..self.cursor_pos.2).chain(
+                                    self.length.min(self.cursor_pos.2 + amount) + 1..self.length,
+                                ) {
+                                    if let Some(env_hash) = self.get_env_under_cursor(c) {
+                                        self.rows
+                                            .update_selection_with_env(env_hash, |e| *e = false);
+                                    }
+                                }
+                            }
+                        }
+                        PageMovement::PageDown(multiplier) => {
+                            for c in self.cursor_pos.2
+                                ..self.length.min(self.cursor_pos.2 + rows * multiplier)
+                            {
+                                if let Some(env_hash) = self.get_env_under_cursor(c) {
+                                    self.rows.update_selection_with_env(
+                                        env_hash,
+                                        match modifier {
+                                            Modifier::SymmetricDifference => {
+                                                |e: &mut bool| *e = !*e
+                                            }
+                                            Modifier::Union => |e: &mut bool| *e = true,
+                                            Modifier::Difference => |e: &mut bool| *e = false,
+                                            Modifier::Intersection => |_: &mut bool| {},
+                                        },
+                                    );
+                                }
+                            }
+                            if modifier == Modifier::Intersection {
+                                for c in (0..self.cursor_pos.2).chain(
+                                    self.length.min(self.cursor_pos.2 + rows * multiplier) + 1
+                                        ..self.length,
+                                ) {
+                                    if let Some(env_hash) = self.get_env_under_cursor(c) {
+                                        self.rows
+                                            .update_selection_with_env(env_hash, |e| *e = false);
+                                    }
+                                }
+                            }
+                        }
+                        PageMovement::Right(_) | PageMovement::Left(_) => {}
+                        PageMovement::Home => {
+                            for c in 0..=self.cursor_pos.2 {
+                                if let Some(env_hash) = self.get_env_under_cursor(c) {
+                                    self.rows.update_selection_with_env(
+                                        env_hash,
+                                        match modifier {
+                                            Modifier::SymmetricDifference => {
+                                                |e: &mut bool| *e = !*e
+                                            }
+                                            Modifier::Union => |e: &mut bool| *e = true,
+                                            Modifier::Difference => |e: &mut bool| *e = false,
+                                            Modifier::Intersection => |_: &mut bool| {},
+                                        },
+                                    );
+                                }
+                            }
+                            if modifier == Modifier::Intersection {
+                                for c in (self.cursor_pos.2)..self.length {
+                                    if let Some(env_hash) = self.get_env_under_cursor(c) {
+                                        self.rows
+                                            .update_selection_with_env(env_hash, |e| *e = false);
+                                    }
+                                }
+                            }
+                        }
+                        PageMovement::End => {
+                            for c in self.cursor_pos.2..self.length {
+                                if let Some(env_hash) = self.get_env_under_cursor(c) {
+                                    self.rows.update_selection_with_env(
+                                        env_hash,
+                                        match modifier {
+                                            Modifier::SymmetricDifference => {
+                                                |e: &mut bool| *e = !*e
+                                            }
+                                            Modifier::Union => |e: &mut bool| *e = true,
+                                            Modifier::Difference => |e: &mut bool| *e = false,
+                                            Modifier::Intersection => |_: &mut bool| {},
+                                        },
+                                    );
+                                }
+                            }
+                            if modifier == Modifier::Intersection {
+                                for c in 0..self.cursor_pos.2 {
+                                    if let Some(env_hash) = self.get_env_under_cursor(c) {
+                                        self.rows
+                                            .update_selection_with_env(env_hash, |e| *e = false);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                self.force_draw = true;
+            }
+
+            if !self.rows.row_updates.is_empty() {
+                let page_no = (self.new_cursor_pos.2).wrapping_div(rows);
+                let top_idx = page_no * rows;
+
+                while let Some(env_hash) = self.rows.row_updates.pop() {
+                    self.update_line(context, env_hash);
+                    let row: usize = self.rows.env_order[&env_hash];
+                    let envelope: EnvelopeRef = context.accounts[&self.cursor_pos.0]
+                        .collection
+                        .get_env(env_hash);
+                    let row_attr = row_attr!(
+                        self.color_cache,
+                        row % 2 == 0,
+                        !envelope.is_seen(),
+                        false,
+                        self.rows.selection[&env_hash]
+                    );
+                    self.rows.row_attr_cache.insert(row, row_attr);
+                    self.force_draw |= row >= top_idx && row < top_idx + rows;
+                }
+                if self.force_draw {
+                    /* Draw the entire list */
+                    self.draw_list(grid, area, context);
+                    self.force_draw = false;
+                }
+            } else {
+                /* Draw the entire list */
+                self.draw_list(grid, area, context);
+            }
         } else {
-            self.cursor_pos = self.new_cursor_pos;
-            let upper_left = area.upper_left();
-            let bottom_right = area.bottom_right();
+            self.view_area = area.into();
             if self.length == 0 && self.dirty {
                 grid.clear_area(area, self.color_cache.theme_default);
                 context.dirty_areas.push_back(area);
-                return;
             }
-
-            /* Render the mail body in a pager, basically copy what HSplit does */
-            let total_rows = get_y(bottom_right) - get_y(upper_left);
-            let pager_ratio = *mailbox_settings!(
-                context[self.cursor_pos.0][&self.cursor_pos.1]
-                    .pager
-                    .pager_ratio
-            );
-
-            let bottom_entity_rows = (pager_ratio * total_rows) / 100;
-
-            if bottom_entity_rows > total_rows {
-                grid.clear_area(area, self.color_cache.theme_default);
-                context.dirty_areas.push_back(area);
-                return;
-            }
-
-            let idx = self.cursor_pos.2;
-
-            /* Mark message as read */
-            let must_highlight = {
-                if let Some(env_hash) = self.get_env_under_cursor(idx) {
-                    let account = &context.accounts[&self.cursor_pos.0];
-                    let envelope: EnvelopeRef = account.collection.get_env(env_hash);
-                    envelope.is_seen()
-                } else {
-                    false
-                }
-            };
-
-            if must_highlight {
-                self.highlight_line_self(idx, context);
-            }
-
-            let mid = get_y(upper_left) + total_rows - bottom_entity_rows;
-            self.draw_list(
-                grid,
-                (
-                    upper_left,
-                    (get_x(bottom_right), get_y(upper_left) + mid - 1),
-                ),
-                context,
-            );
-            if self.length == 0 {
-                self.dirty = false;
-                return;
-            }
-            {
-                if get_x(upper_left) > 0 && grid[(get_x(upper_left) - 1, mid)].ch() == VERT_BOUNDARY
-                {
-                    grid[(get_x(upper_left) - 1, mid)].set_ch(LIGHT_VERTICAL_AND_RIGHT);
-                }
-
-                for i in get_x(upper_left)..=get_x(bottom_right) {
-                    grid[(i, mid)].set_ch(HORZ_BOUNDARY);
-                }
-                context
-                    .dirty_areas
-                    .push_back((set_y(upper_left, mid), set_y(bottom_right, mid)));
-            }
-
-            self.view_area = (set_y(upper_left, mid + 1), bottom_right).into();
-            self.dirty = false;
         }
+        self.dirty = false;
     }
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
@@ -1613,7 +1639,12 @@ impl Component for ThreadListing {
                             self.search_job = Some((filter_term.to_string(), handle));
                         }
                         Err(err) => {
-                            context.replies.push_back(UIEvent::Notification { title: Some("Could not perform search".into()), source: None, body: err.to_string().into(), kind: Some(crate::types::NotificationType::Error(err.kind)), });
+                            context.replies.push_back(UIEvent::Notification {
+                                title: Some("Could not perform search".into()),
+                                source: None,
+                                body: err.to_string().into(),
+                                kind: Some(crate::types::NotificationType::Error(err.kind)),
+                            });
                         }
                     };
                     self.set_dirty(true);
@@ -1634,7 +1665,12 @@ impl Component for ThreadListing {
                     Ok(None) => { /* something happened, perhaps a worker thread panicked */ }
                     Ok(Some(Ok(results))) => self.filter(filter_term, results, context),
                     Ok(Some(Err(err))) => {
-                        context.replies.push_back(UIEvent::Notification { title: Some("Could not perform search".into()), source: None, body: err.to_string().into(), kind: Some(crate::types::NotificationType::Error(err.kind)), });
+                        context.replies.push_back(UIEvent::Notification {
+                            title: Some("Could not perform search".into()),
+                            source: None,
+                            body: err.to_string().into(),
+                            kind: Some(crate::types::NotificationType::Error(err.kind)),
+                        });
                     }
                 }
                 self.set_dirty(true);
