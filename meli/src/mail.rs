@@ -30,7 +30,6 @@ use melib::{
 
 use super::*;
 use crate::{
-    boundaries::*,
     melib::text_processing::{TextProcessing, Truncate},
     uuid::Uuid,
 };

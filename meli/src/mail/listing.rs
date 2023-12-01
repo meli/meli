@@ -1347,7 +1347,6 @@ impl Component for Listing {
                             // Need to clear gap between sidebar and listing component, if any.
                             self.dirty = true;
                         }
-                        self.set_dirty(matches!(new_value, Focus::EntryFullscreen));
                     }
                     Some(ListingMessage::UpdateView) => {
                         self.view.set_dirty(true);
