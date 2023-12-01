@@ -330,6 +330,56 @@ impl Address {
     pub fn display(&self) -> UIAddress {
         UIAddress(self)
     }
+
+    /// Returns a type that prints the names of addresses (or the e-mail part,
+    /// if the name is missing) suitably for UI display, e.g. without
+    /// quotes.
+    ///
+    /// ## Example
+    ///
+    /// ```rust
+    /// # use melib::email::Address;
+    /// let addr = Address::new(
+    ///     Some("Jörg T. Doe".to_string()),
+    ///     "joerg@example.com".to_string(),
+    /// );
+    /// assert_eq!(
+    ///     addr.to_string().as_str(),
+    ///     r#""Jörg T. Doe" <joerg@example.com>"#
+    /// );
+    /// assert_eq!(addr.display_name().to_string().as_str(), "Jörg T. Doe");
+    /// ```
+    pub fn display_name(&self) -> UINameAddress {
+        UINameAddress(self)
+    }
+
+    /// Formats a slice of `Address`es with their `Address::display` method,
+    /// separated by comma or `separator` if passed.
+    pub fn display_slice(slice: &[Self]) -> String {
+        match slice.get(0) {
+            None => String::new(),
+            Some(f) if slice.len() == 1 => f.display().to_string(),
+            Some(_) => slice
+                .iter()
+                .map(|a| a.display().to_string())
+                .collect::<Vec<String>>()
+                .join(", "),
+        }
+    }
+
+    /// Formats a slice of `Address`es with their `Address::display_name`
+    /// method, separated by comma or `separator` if passed.
+    pub fn display_name_slice(slice: &[Self]) -> String {
+        match slice.get(0) {
+            None => String::new(),
+            Some(f) if slice.len() == 1 => f.display_name().to_string(),
+            Some(_) => slice
+                .iter()
+                .map(|a| a.display_name().to_string())
+                .collect::<Vec<String>>()
+                .join(", "),
+        }
+    }
 }
 
 impl Eq for Address {}
@@ -433,7 +483,32 @@ impl std::fmt::Display for UIAddress<'_> {
             Address::Mailbox(m) => write!(f, "{}", m.address_spec.display(&m.raw)),
             Address::Group(g) => {
                 let attachment_strings: Vec<String> =
-                    g.mailbox_list.iter().map(|a| format!("{}", a)).collect();
+                    g.mailbox_list.iter().map(|a| Self(a).to_string()).collect();
+                write!(
+                    f,
+                    "{}: {}",
+                    g.display_name.display(&g.raw),
+                    attachment_strings.join(", ")
+                )
+            }
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+#[repr(transparent)]
+pub struct UINameAddress<'a>(&'a Address);
+
+impl std::fmt::Display for UINameAddress<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self.0 {
+            Address::Mailbox(m) if m.display_name.length > 0 => {
+                write!(f, "{}", m.display_name.display(&m.raw),)
+            }
+            Address::Mailbox(m) => write!(f, "{}", m.address_spec.display(&m.raw)),
+            Address::Group(g) => {
+                let attachment_strings: Vec<String> =
+                    g.mailbox_list.iter().map(|a| Self(a).to_string()).collect();
                 write!(
                     f,
                     "{}: {}",
