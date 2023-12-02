@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::{borrow::Cow, cmp};
+use std::borrow::Cow;
 
 use indexmap::IndexMap;
 
@@ -146,118 +146,160 @@ impl JobManager {
         self.min_width = [hdr!(0), hdr!(1), hdr!(2), hdr!(3), hdr!(4)];
 
         for c in self.entries.values() {
-            /* title */
-            self.min_width[0] = cmp::max(self.min_width[0], c.id.to_string().len());
-            /* desc */
-            self.min_width[1] = cmp::max(self.min_width[1], c.desc.len());
+            // title
+            self.min_width[0] = self.min_width[0].max(c.id.to_string().len());
+            // desc
+            self.min_width[1] = self.min_width[1].max(c.desc.len());
         }
         self.min_width[2] = "1970-01-01 00:00:00".len();
         self.min_width[3] = self.min_width[2];
 
-        /* name column */
-        self.data_columns.columns[0] =
-            CellBuffer::new_with_context(self.min_width[0], self.length, None, context);
-        /* path column */
-        self.data_columns.columns[1] =
-            CellBuffer::new_with_context(self.min_width[1], self.length, None, context);
-        /* size column */
-        self.data_columns.columns[2] =
-            CellBuffer::new_with_context(self.min_width[2], self.length, None, context);
-        /* subscribed column */
-        self.data_columns.columns[3] =
-            CellBuffer::new_with_context(self.min_width[3], self.length, None, context);
-        self.data_columns.columns[4] =
-            CellBuffer::new_with_context(self.min_width[4], self.length, None, context);
+        // name column
+        _ = self.data_columns.columns[0].resize_with_context(
+            self.min_width[0],
+            self.length,
+            context,
+        );
+        self.data_columns.columns[0].grid_mut().clear(None);
+        // path column
+        _ = self.data_columns.columns[1].resize_with_context(
+            self.min_width[1],
+            self.length,
+            context,
+        );
+        self.data_columns.columns[1].grid_mut().clear(None);
+        // size column
+        _ = self.data_columns.columns[2].resize_with_context(
+            self.min_width[2],
+            self.length,
+            context,
+        );
+        self.data_columns.columns[2].grid_mut().clear(None);
+        // subscribed column
+        _ = self.data_columns.columns[3].resize_with_context(
+            self.min_width[3],
+            self.length,
+            context,
+        );
+        self.data_columns.columns[3].grid_mut().clear(None);
+        _ = self.data_columns.columns[4].resize_with_context(
+            self.min_width[4],
+            self.length,
+            context,
+        );
+        self.data_columns.columns[4].grid_mut().clear(None);
 
         for (idx, e) in self.entries.values().enumerate() {
-            self.data_columns.columns[0].write_string(
-                &e.id.to_string(),
-                self.theme_default.fg,
-                self.theme_default.bg,
-                self.theme_default.attrs,
-                ((0, idx), (self.min_width[0], idx)),
-                None,
-            );
+            {
+                let area = self.data_columns.columns[0].area().nth_row(idx);
+                self.data_columns.columns[0].grid_mut().write_string(
+                    &e.id.to_string(),
+                    self.theme_default.fg,
+                    self.theme_default.bg,
+                    self.theme_default.attrs,
+                    area,
+                    None,
+                );
+            }
 
-            self.data_columns.columns[1].write_string(
-                &e.desc,
-                self.theme_default.fg,
-                self.theme_default.bg,
-                self.theme_default.attrs,
-                ((0, idx), (self.min_width[1], idx)),
-                None,
-            );
+            {
+                let area = self.data_columns.columns[1].area().nth_row(idx);
+                self.data_columns.columns[1].grid_mut().write_string(
+                    &e.desc,
+                    self.theme_default.fg,
+                    self.theme_default.bg,
+                    self.theme_default.attrs,
+                    area,
+                    None,
+                );
+            }
 
-            self.data_columns.columns[2].write_string(
-                &datetime::timestamp_to_string(e.started, Some(RFC3339_DATETIME_AND_SPACE), true),
-                self.theme_default.fg,
-                self.theme_default.bg,
-                self.theme_default.attrs,
-                ((0, idx), (self.min_width[2], idx)),
-                None,
-            );
-
-            self.data_columns.columns[3].write_string(
-                &if let Some(t) = e.finished {
-                    Cow::Owned(datetime::timestamp_to_string(
-                        t,
+            {
+                let area = self.data_columns.columns[2].area().nth_row(idx);
+                self.data_columns.columns[2].grid_mut().write_string(
+                    &datetime::timestamp_to_string(
+                        e.started,
                         Some(RFC3339_DATETIME_AND_SPACE),
                         true,
-                    ))
-                } else {
-                    Cow::Borrowed("null")
-                },
-                self.theme_default.fg,
-                self.theme_default.bg,
-                self.theme_default.attrs,
-                ((0, idx), (self.min_width[3], idx)),
-                None,
-            );
+                    ),
+                    self.theme_default.fg,
+                    self.theme_default.bg,
+                    self.theme_default.attrs,
+                    area,
+                    None,
+                );
+            }
 
-            self.data_columns.columns[4].write_string(
-                &if e.finished.is_some() {
-                    Cow::Owned(format!("{:?}", e.succeeded))
-                } else {
-                    Cow::Borrowed("-")
-                },
-                self.theme_default.fg,
-                self.theme_default.bg,
-                self.theme_default.attrs,
-                ((0, idx), (self.min_width[4], idx)),
-                None,
-            );
+            {
+                let area = self.data_columns.columns[3].area().nth_row(idx);
+                self.data_columns.columns[3].grid_mut().write_string(
+                    &if let Some(t) = e.finished {
+                        Cow::Owned(datetime::timestamp_to_string(
+                            t,
+                            Some(RFC3339_DATETIME_AND_SPACE),
+                            true,
+                        ))
+                    } else {
+                        Cow::Borrowed("null")
+                    },
+                    self.theme_default.fg,
+                    self.theme_default.bg,
+                    self.theme_default.attrs,
+                    area,
+                    None,
+                );
+            }
+
+            {
+                let area = self.data_columns.columns[4].area().nth_row(idx);
+                self.data_columns.columns[4].grid_mut().write_string(
+                    &if e.finished.is_some() {
+                        Cow::Owned(format!("{:?}", e.succeeded))
+                    } else {
+                        Cow::Borrowed("-")
+                    },
+                    self.theme_default.fg,
+                    self.theme_default.bg,
+                    self.theme_default.attrs,
+                    area,
+                    None,
+                );
+            }
         }
 
         if self.length == 0 {
             let message = "No jobs.".to_string();
-            self.data_columns.columns[0] =
-                CellBuffer::new_with_context(message.len(), self.length, None, context);
-            self.data_columns.columns[0].write_string(
-                &message,
-                self.theme_default.fg,
-                self.theme_default.bg,
-                self.theme_default.attrs,
-                ((0, 0), (message.len() - 1, 0)),
-                None,
-            );
+            if self.data_columns.columns[0].resize_with_context(message.len(), self.length, context)
+            {
+                let area = self.data_columns.columns[0].area();
+                self.data_columns.columns[0].grid_mut().write_string(
+                    &message,
+                    self.theme_default.fg,
+                    self.theme_default.bg,
+                    self.theme_default.attrs,
+                    area,
+                    None,
+                );
+            }
         }
     }
 
     fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        let (upper_left, bottom_right) = area;
-
+        let rows = area.height();
+        if rows == 0 {
+            return;
+        }
         if self.length == 0 {
             grid.clear_area(area, self.theme_default);
 
             grid.copy_area(
-                &self.data_columns.columns[0],
+                self.data_columns.columns[0].grid(),
                 area,
-                ((0, 0), pos_dec(self.data_columns.columns[0].size(), (1, 1))),
+                self.data_columns.columns[0].area(),
             );
             context.dirty_areas.push_back(area);
             return;
         }
-        let rows = get_y(bottom_right) - get_y(upper_left) + 1;
 
         if let Some(mvm) = self.movement.take() {
             match mvm {
@@ -284,7 +326,20 @@ impl JobManager {
                         self.new_cursor_pos = (self.length / rows) * rows;
                     }
                 }
-                PageMovement::Right(_) | PageMovement::Left(_) => {}
+                PageMovement::Right(amount) => {
+                    self.data_columns.x_offset += amount;
+                    self.data_columns.x_offset = self.data_columns.x_offset.min(
+                        self.data_columns
+                            .widths
+                            .iter()
+                            .map(|w| w + 2)
+                            .sum::<usize>()
+                            .saturating_sub(2),
+                    );
+                }
+                PageMovement::Left(amount) => {
+                    self.data_columns.x_offset = self.data_columns.x_offset.saturating_sub(amount);
+                }
                 PageMovement::Home => {
                     self.new_cursor_pos = 0;
                 }
@@ -320,8 +375,8 @@ impl JobManager {
                 )));
         }
 
-        /* If cursor position has changed, remove the highlight from the previous
-         * position and apply it in the new one. */
+        // If cursor position has changed, remove the highlight from the previous
+        // position and apply it in the new one.
         if self.cursor_pos != self.new_cursor_pos && prev_page_no == page_no {
             let old_cursor_pos = self.cursor_pos;
             self.cursor_pos = self.new_cursor_pos;
@@ -348,27 +403,21 @@ impl JobManager {
             self.new_cursor_pos = self.length - 1;
             self.cursor_pos = self.new_cursor_pos;
         }
-        /* Page_no has changed, so draw new page */
+        // Page_no has changed, so draw new page
         _ = self
             .data_columns
             .recalc_widths((area.width(), area.height()), top_idx);
         grid.clear_area(area, self.theme_default);
-        /* copy table columns */
+        // copy table columns
         self.data_columns
             .draw(grid, top_idx, self.cursor_pos, grid.bounds_iter(area));
 
-        /* highlight cursor */
+        // highlight cursor
         grid.change_theme(area.nth_row(self.cursor_pos % rows), self.highlight_theme);
 
-        /* clear gap if available height is more than count of entries */
+        // clear gap if available height is more than count of entries
         if top_idx + rows > self.length {
-            grid.clear_area(
-                (
-                    pos_inc(upper_left, (0, self.length - top_idx)),
-                    bottom_right,
-                ),
-                self.theme_default,
-            );
+            grid.change_theme(area.skip_rows(self.length - top_idx), self.theme_default);
         }
         context.dirty_areas.push_back(area);
     }
@@ -382,45 +431,43 @@ impl Component for JobManager {
         if !self.initialized {
             self.initialize(context);
         }
-        let area = area.nth_row(0);
-        // Draw column headers.
-        grid.clear_area(area, self.theme_default);
-        let mut x_offset = 0;
-        let (upper_left, bottom_right) = area;
-        for (i, (h, w)) in Self::HEADERS.iter().zip(self.min_width).enumerate() {
-            grid.write_string(
-                h,
-                self.theme_default.fg,
-                self.theme_default.bg,
-                self.theme_default.attrs | Attr::BOLD,
-                (pos_inc(upper_left, (x_offset, 0)), bottom_right),
-                None,
-            );
-            if self.sort_col as usize == i {
-                use SortOrder::*;
-                let arrow = match (grid.ascii_drawing, self.sort_order) {
-                    (true, Asc) => DataColumns::<5>::ARROW_UP_ASCII,
-                    (true, Desc) => DataColumns::<5>::ARROW_DOWN_ASCII,
-                    (false, Asc) => DataColumns::<5>::ARROW_UP,
-                    (false, Desc) => DataColumns::<5>::ARROW_DOWN,
-                };
+        if self.dirty {
+            let area = area.nth_row(0);
+            // Draw column headers.
+            grid.clear_area(area, self.theme_default);
+            let mut x_offset = 0;
+            for (i, (h, w)) in Self::HEADERS.iter().zip(self.min_width).enumerate() {
                 grid.write_string(
-                    arrow,
+                    h,
                     self.theme_default.fg,
                     self.theme_default.bg,
-                    self.theme_default.attrs,
-                    (pos_inc(upper_left, (x_offset + h.len(), 0)), bottom_right),
+                    self.theme_default.attrs | Attr::BOLD,
+                    area.skip_cols(x_offset),
                     None,
                 );
+                if self.sort_col as usize == i {
+                    use SortOrder::*;
+                    let arrow = match (grid.ascii_drawing, self.sort_order) {
+                        (true, Asc) => DataColumns::<5>::ARROW_UP_ASCII,
+                        (true, Desc) => DataColumns::<5>::ARROW_DOWN_ASCII,
+                        (false, Asc) => DataColumns::<5>::ARROW_UP,
+                        (false, Desc) => DataColumns::<5>::ARROW_DOWN,
+                    };
+                    grid.write_string(
+                        arrow,
+                        self.theme_default.fg,
+                        self.theme_default.bg,
+                        self.theme_default.attrs,
+                        area.skip_cols(x_offset + h.len()),
+                        None,
+                    );
+                }
+                x_offset += w + 2;
             }
-            x_offset += w + 2;
+            context.dirty_areas.push_back(area);
         }
-        context.dirty_areas.push_back(area);
 
-        // Draw entry rows.
-        if let Some(area) = area.skip_rows(1) {
-            self.draw_list(grid, area, context);
-        }
+        self.draw_list(grid, area.skip_rows(1), context);
         self.dirty = false;
     }
 

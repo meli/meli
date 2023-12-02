@@ -2302,10 +2302,10 @@ impl Component for Listing {
                 return true;
             }
             UIEvent::Action(Action::Tab(ManageJobs)) => {
-                //let mgr = JobManager::new(context);
-                //context
-                //    .replies
-                //    .push_back(UIEvent::Action(Tab(New(Some(Box::new(mgr))))));
+                let mgr = JobManager::new(context);
+                context
+                    .replies
+                    .push_back(UIEvent::Action(Tab(New(Some(Box::new(mgr))))));
                 return true;
             }
             UIEvent::Action(Action::Compose(ComposeAction::Mailto(ref mailto))) => {
