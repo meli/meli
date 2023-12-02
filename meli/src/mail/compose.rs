@@ -42,8 +42,8 @@ use crate::{accounts::JobRequest, jobs::JoinHandle, terminal::embedded::Terminal
 #[cfg(feature = "gpgme")]
 pub mod gpg;
 
-//pub mod edit_attachments;
-//use edit_attachments::*;
+pub mod edit_attachments;
+use edit_attachments::*;
 
 pub mod hooks;
 
@@ -119,9 +119,9 @@ pub struct Composer {
 #[derive(Debug)]
 enum ViewMode {
     Discard(ComponentId, UIDialog<char>),
-    //EditAttachments {
-    //    widget: EditAttachments,
-    //},
+    EditAttachments {
+        widget: EditAttachments,
+    },
     Edit,
     EmbeddedPty,
     SelectRecipients(UIDialog<Address>),
@@ -132,13 +132,15 @@ enum ViewMode {
 }
 
 impl ViewMode {
+    #[inline]
     fn is_edit(&self) -> bool {
         matches!(self, ViewMode::Edit)
     }
 
-    //fn is_edit_attachments(&self) -> bool {
-    //    matches!(self, ViewMode::EditAttachments { .. })
-    //}
+    #[inline]
+    fn is_edit_attachments(&self) -> bool {
+        matches!(self, ViewMode::EditAttachments { .. })
+    }
 }
 
 impl std::fmt::Display for Composer {
@@ -1036,19 +1038,22 @@ impl Component for Composer {
         }
         self.pager.draw(grid, body_area, context);
 
-        //if !self.mode.is_edit_attachments() {
-        self.draw_attachments(grid, attachment_area, context);
-        //}
+        if !self.mode.is_edit_attachments() {
+            self.draw_attachments(grid, attachment_area, context);
+        }
         match self.mode {
             ViewMode::Edit | ViewMode::EmbeddedPty => {}
-            //ViewMode::EditAttachments { ref mut widget } => {
-            //    let inner_area = create_box(grid, area);
-            //    (EditAttachmentsRefMut {
-            //        inner: widget,
-            //        draft: &mut self.draft,
-            //    })
-            //    .draw(grid, inner_area, context);
-            //}
+            ViewMode::EditAttachments { ref mut widget } => {
+                let inner_area = area.center_inside((
+                    area.width().saturating_sub(2),
+                    area.height().saturating_sub(2),
+                ));
+                (EditAttachmentsRefMut {
+                    inner: widget,
+                    draft: &mut self.draft,
+                })
+                .draw(grid, inner_area, context);
+            }
             ViewMode::Send(ref mut s) => {
                 s.draw(grid, body_area, context);
             }
@@ -1147,22 +1152,23 @@ impl Component for Composer {
                     return true;
                 }
             }
-            //(ViewMode::EditAttachments { ref mut widget }, _) => {
-            //    if (EditAttachmentsRefMut {
-            //        inner: widget,
-            //        draft: &mut self.draft,
-            //    })
-            //    .process_event(event, context)
-            //    {
-            //        if matches!(
-            //            widget.buttons.result(),
-            //            Some(FormButtonActions::Cancel | FormButtonActions::Accept)
-            //        ) { self.mode = ViewMode::Edit;
-            //        }
-            //        self.set_dirty(true);
-            //        return true;
-            //    }
-            //}
+            (ViewMode::EditAttachments { ref mut widget }, _) => {
+                if (EditAttachmentsRefMut {
+                    inner: widget,
+                    draft: &mut self.draft,
+                })
+                .process_event(event, context)
+                {
+                    if matches!(
+                        widget.buttons.result(),
+                        Some(FormButtonActions::Cancel | FormButtonActions::Accept)
+                    ) {
+                        self.mode = ViewMode::Edit;
+                    }
+                    self.set_dirty(true);
+                    return true;
+                }
+            }
             (ViewMode::Send(ref selector), UIEvent::FinishedUIDialog(id, result))
                 if selector.id() == *id =>
             {
@@ -1741,9 +1747,9 @@ impl Component for Composer {
                     && self.cursor == Cursor::Attachments
                     && shortcut!(key == shortcuts[Shortcuts::COMPOSING]["edit"]) =>
             {
-                //self.mode = ViewMode::EditAttachments {
-                //    widget: EditAttachments::new(Some(self.account_hash)),
-                //};
+                self.mode = ViewMode::EditAttachments {
+                    widget: EditAttachments::new(Some(self.account_hash)),
+                };
                 self.set_dirty(true);
 
                 return true;
@@ -2189,13 +2195,13 @@ impl Component for Composer {
                         .map(EmbeddedPty::is_dirty)
                         .unwrap_or(false)
             }
-            //ViewMode::EditAttachments { ref widget } => {
-            //    widget.dirty
-            //        || widget.buttons.is_dirty()
-            //        || self.dirty
-            //        || self.pager.is_dirty()
-            //        || self.form.is_dirty()
-            //}
+            ViewMode::EditAttachments { ref widget } => {
+                widget.dirty
+                    || widget.buttons.is_dirty()
+                    || self.dirty
+                    || self.pager.is_dirty()
+                    || self.form.is_dirty()
+            }
             ViewMode::Edit => self.dirty || self.pager.is_dirty() || self.form.is_dirty(),
             ViewMode::Discard(_, ref widget) => {
                 widget.is_dirty() || self.pager.is_dirty() || self.form.is_dirty()
@@ -2245,14 +2251,14 @@ impl Component for Composer {
                     }
                 }
             }
+            ViewMode::EditAttachments { ref mut widget } => {
+                (EditAttachmentsRefMut {
+                    inner: widget,
+                    draft: &mut self.draft,
+                })
+                .set_dirty(value);
+            }
         }
-        //if let ViewMode::EditAttachments { ref mut widget } = self.mode {
-        //    (EditAttachmentsRefMut {
-        //        inner: widget,
-        //        draft: &mut self.draft,
-        //    })
-        //    .set_dirty(value);
-        //}
     }
 
     fn kill(&mut self, uuid: ComponentId, context: &mut Context) {

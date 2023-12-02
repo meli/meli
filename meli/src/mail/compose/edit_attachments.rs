@@ -152,44 +152,34 @@ impl Component for EditAttachmentsRefMut<'_, '_> {
                     } else {
                         theme_default.bg
                     };
-                    if let Some(name) = a.content_type().name() {
-                        grid.write_string(
-                            &format!(
+                    grid.write_string(
+                        &if let Some(name) = a.content_type().name() {
+                            format!(
                                 "[{}] \"{}\", {} {}",
                                 i,
                                 name,
                                 a.content_type(),
                                 melib::BytesDisplay(a.raw.len())
-                            ),
-                            theme_default.fg,
-                            bg,
-                            theme_default.attrs,
-                            (pos_inc(area.upper_left(), (0, 1 + i)), area.bottom_right()),
-                            None,
-                        );
-                    } else {
-                        grid.write_string(
-                            &format!(
+                            )
+                        } else {
+                            format!(
                                 "[{}] {} {}",
                                 i,
                                 a.content_type(),
                                 melib::BytesDisplay(a.raw.len())
-                            ),
-                            theme_default.fg,
-                            bg,
-                            theme_default.attrs,
-                            (pos_inc(area.upper_left(), (0, 1 + i)), area.bottom_right()),
-                            None,
-                        );
-                    }
+                            )
+                        },
+                        theme_default.fg,
+                        bg,
+                        theme_default.attrs,
+                        area.skip(2, 2 + i),
+                        None,
+                    );
                 }
             }
             self.inner.buttons.draw(
                 grid,
-                (
-                    pos_inc(area.upper_left(), (0, 1 + self.draft.attachments().len())),
-                    area.bottom_right(),
-                ),
+                area.skip_rows(3 + self.draft.attachments().len()),
                 context,
             );
             self.set_dirty(false);
