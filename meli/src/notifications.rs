@@ -245,7 +245,7 @@ impl Component for NotificationCommand {
                             message = body.replace('"', "'"),
                             title = title
                                 .as_ref()
-                                .map(String::as_str)
+                                .map(<_>::as_ref)
                                 .unwrap_or("meli")
                                 .replace('"', "'"),
                             subtitle = kind
