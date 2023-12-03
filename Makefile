@@ -35,13 +35,13 @@ MANDIR ?= ${EXPANDED_PREFIX}/share/man
 
 # Installation parameters
 DOCS_SUBDIR ?= meli/docs/
-MANPAGES ?= meli.1 meli.conf.5 meli-themes.5
+MANPAGES ?= meli.1 meli.conf.5 meli-themes.5 meli.7
 FEATURES ?= --features "${MELI_FEATURES}"
 
-MANPATHS != ACCUM="";for m in `manpath 2> /dev/null | tr ':' ' '`; do if [ -d "$${m}" ]; then REAL_PATH=`cd $${m} && pwd` ACCUM="$${ACCUM}:$${REAL_PATH}";fi;done;echo -n $${ACCUM} | sed 's/^://'
-VERSION != sed -n "s/^version\s*=\s*\"\(.*\)\"/\1/p" Cargo.toml
-GIT_COMMIT != git show-ref -s --abbrev HEAD
-DATE != date -I
+MANPATHS != ACCUM="";for m in `manpath 2> /dev/null | tr ':' ' '`; do if [ -d "$${m}" ]; then REAL_PATH=`cd $${m} && pwd` ACCUM="$${ACCUM}:$${REAL_PATH}";fi;done;echo $${ACCUM}'\c' | sed 's/^://'
+VERSION = `grep -m1 version meli/Cargo.toml | head -n1 | cut -d'"' -f 2 | head -n1`
+GIT_COMMIT = `git show-ref -s --abbrev HEAD`
+DATE = `date -I`
 
 # Output parameters
 BOLD ?= `[ -z $${TERM} ] && echo "" || tput bold`
@@ -50,6 +50,7 @@ ANSI_RESET ?= `[ -z $${TERM} ] && echo "" || tput sgr0`
 CARGO_COLOR ?= `[ -z $${NO_COLOR+x} ] && echo "" || echo "--color=never "`
 RED ?= `[ -z $${NO_COLOR+x} ] && ([ -z $${TERM} ] && echo "" || tput setaf 1) || echo ""`
 GREEN ?= `[ -z $${NO_COLOR+x} ] && ([ -z $${TERM} ] && echo "" || tput setaf 2) || echo ""`
+YELLOW ?= `[ -z $${NO_COLOR+x} ] && ([ -z $${TERM} ] && echo "" || tput setaf 3) || echo ""`
 
 .PHONY: meli
 meli: check-deps
@@ -57,12 +58,12 @@ meli: check-deps
 
 .PHONY: help
 help:
-	@echo "For a quick start, build and install locally:\n ${BOLD}${GREEN}PREFIX=~/.local make install${ANSI_RESET}\n"
+	@echo "For a quick start, build and install locally:\n\n${BOLD}${GREEN}make PREFIX=~/.local install${ANSI_RESET}\n"
 	@echo "Available subcommands:"
 	@echo " - ${BOLD}meli${ANSI_RESET} (builds meli with optimizations in \$$CARGO_TARGET_DIR)"
 	@echo " - ${BOLD}install${ANSI_RESET} (installs binary in \$$BINDIR and documentation to \$$MANDIR)"
 	@echo " - ${BOLD}uninstall${ANSI_RESET}"
-	@echo "Secondary subcommands:"
+	@echo "\nSecondary subcommands:"
 	@echo " - ${BOLD}clean${ANSI_RESET} (cleans build artifacts)"
 	@echo " - ${BOLD}check-deps${ANSI_RESET} (checks dependencies)"
 	@echo " - ${BOLD}install-bin${ANSI_RESET} (installs binary to \$$BINDIR)"
@@ -75,24 +76,26 @@ help:
 	@echo " - ${BOLD}build-rustdoc${ANSI_RESET} (builds rustdoc documentation for all packages in \$$CARGO_TARGET_DIR)"
 	@echo "\nENVIRONMENT variables of interest:"
 	@echo "* PREFIX = ${UNDERLINE}${EXPANDED_PREFIX}${ANSI_RESET}"
-	@echo -n "* MELI_FEATURES = ${UNDERLINE}"
-	@[ -z $${MELI_FEATURES+x} ] && echo -n "unset" || echo -n ${MELI_FEATURES}
+	@echo "* MELI_FEATURES = ${UNDERLINE}\n"
+	@[ -z $${MELI_FEATURES+x} ] && echo "unset\c" || echo ${MELI_FEATURES}'\c'
 	@echo ${ANSI_RESET}
 	@echo "* BINDIR = ${UNDERLINE}${BINDIR}${ANSI_RESET}"
 	@echo "* MANDIR = ${UNDERLINE}${MANDIR}${ANSI_RESET}"
-	@echo -n "* MANPATH = ${UNDERLINE}"
-	@[ $${MANPATH+x} ] && echo -n $${MANPATH} || echo -n "unset"
+	@echo "* MANPATH = ${UNDERLINE}\c"
+	@[ $${MANPATH+x} ] && echo $${MANPATH}'\c' || echo "unset\c"
 	@echo ${ANSI_RESET}
 	@echo "* (cleaned) output of manpath(1) = ${UNDERLINE}${MANPATHS}${ANSI_RESET}"
-	@echo -n "* NO_MAN ${UNDERLINE}"
-	@[ $${NO_MAN+x} ] && echo -n "set" || echo -n "unset"
+	@echo "* NO_MAN ${UNDERLINE}\c"
+	@[ $${NO_MAN+x} ] && echo "set\c" || echo "unset\c"
 	@echo ${ANSI_RESET}
-	@echo -n "* NO_COLOR ${UNDERLINE}"
-	@[ $${NO_COLOR+x} ] && echo -n "set" || echo -n "unset"
+	@echo "* NO_COLOR ${UNDERLINE}\c"
+	@[ $${NO_COLOR+x} ] && echo "set\c" || echo "unset\c"
 	@echo ${ANSI_RESET}
 	@echo "* CARGO_BIN = ${UNDERLINE}${CARGO_BIN}${ANSI_RESET}"
 	@echo "* CARGO_ARGS = ${UNDERLINE}${CARGO_ARGS}${ANSI_RESET}"
 	@echo "* MIN_RUSTC = ${UNDERLINE}${MIN_RUSTC}${ANSI_RESET}"
+	@echo "* VERSION = ${UNDERLINE}${VERSION}${ANSI_RESET}"
+	@echo "* GIT_COMMIT = ${UNDERLINE}${GIT_COMMIT}${ANSI_RESET}"
 	@#@echo "* CARGO_COLOR = ${CARGO_COLOR}"
 
 .PHONY: check
@@ -133,24 +136,25 @@ distclean: clean
 .PHONY: uninstall
 uninstall:
 	rm -f $(DESTDIR)${BINDIR}/meli
-	-rm $(DESTDIR)${MANDIR}/man1/meli.1.gz
-	-rm $(DESTDIR)${MANDIR}/man5/meli.conf.5.gz
-	-rm $(DESTDIR)${MANDIR}/man5/meli-themes.5.gz
+	for MANPAGE in ${MANPAGES}; do \
+			SECTION=`echo $${MANPAGE} | rev | cut -d "." -f 1`; \
+			MANPAGEPATH="${DESTDIR}${MANDIR}/man$${SECTION}/$${MANPAGE}.gz"; \
+			rm -f "$${MANAGEPATH}"
+	; done
 
 .PHONY: install-doc
 install-doc:
 	@(if [ -z $${NO_MAN+x} ]; then \
-		mkdir -p $(DESTDIR)${MANDIR}/man1 ; \
-		mkdir -p $(DESTDIR)${MANDIR}/man5 ; \
 		echo " - ${BOLD}Installing manpages to ${ANSI_RESET}${DESTDIR}${MANDIR}:" ; \
 		for MANPAGE in ${MANPAGES}; do \
 			SECTION=`echo $${MANPAGE} | rev | cut -d "." -f 1`; \
+			mkdir -p $(DESTDIR)${MANDIR}/man$${SECTION} ; \
 			MANPAGEPATH=${DESTDIR}${MANDIR}/man$${SECTION}/$${MANPAGE}.gz; \
 			echo "  * installing $${MANPAGE} → ${GREEN}$${MANPAGEPATH}${ANSI_RESET}"; \
 			gzip -n < ${DOCS_SUBDIR}$${MANPAGE} > $${MANPAGEPATH} \
 		; done ; \
 	(case ":${MANPATHS}:" in \
-	*:${DESTDIR}${MANDIR}:*) echo -n "";; \
+	*:${DESTDIR}${MANDIR}:*) echo "\c";; \
 	*) echo "\n${RED}${BOLD}WARNING${ANSI_RESET}: ${UNDERLINE}Path ${DESTDIR}${MANDIR} is not contained in your MANPATH variable or the output of \`manpath\` command.${ANSI_RESET} \`man\` might fail finding the installed manpages. Consider adding it if necessary.\nMANPATH variable / output of \`manpath\`: ${MANPATHS}" ;; \
 	esac) ; \
 	else echo "NO_MAN is defined, so no documentation is going to be installed." ; fi)
@@ -160,7 +164,7 @@ install-bin: meli
 	@mkdir -p $(DESTDIR)${BINDIR}
 	@echo " - ${BOLD}Installing binary to ${ANSI_RESET}${GREEN}${DESTDIR}${BINDIR}/meli${ANSI_RESET}"
 	@case ":${PATH}:" in \
-	*:${DESTDIR}${BINDIR}:*) echo -n "";; \
+	*:${DESTDIR}${BINDIR}:*) echo "\n";; \
 	*) echo "\n${RED}${BOLD}WARNING${ANSI_RESET}: ${UNDERLINE}Path ${DESTDIR}${BINDIR} is not contained in your PATH variable.${ANSI_RESET} Consider adding it if necessary.\nPATH variable: ${PATH}";; \
 	esac
 	@mkdir -p $(DESTDIR)${BINDIR}
@@ -201,3 +205,12 @@ check-tagrefs:
 		else \
 				$(TAGREF_BIN);\
 		fi)
+
+.PHONY: test-makefile
+test-makefile:
+	@$(PRINTF) "Checking that current version is detected. "
+	@([ ! -z "${VERSION}" ] && $(PRINTF) "${GREEN}OK${ANSI_RESET}\n") || $(PRINTF) "${RED}ERROR${ANSI_RESET}\nVERSION env var is empty, check its definition.\n" 1>&2
+	@$(PRINTF) "Checking that 'date -I' works on this platform. "
+	@export DATEVAL=$$(printf "%s" ${DATE} | wc -c | tr -d "[:blank:]" 2>&1); ([ "$${DATEVAL}" = "10" ] && $(PRINTF) "${GREEN}OK${ANSI_RESET}\n") || $(PRINTF) "${RED}ERROR${ANSI_RESET}\n'date -I' does not produce a YYYY-MM-DD output on this platform.\n" 1>&2
+	@$(PRINTF) "Checking that the git commit SHA can be detected. "
+	@([ ! -z "$(GIT_COMMIT)" ] && $(PRINTF) "${GREEN}OK${ANSI_RESET}\n") || $(PRINTF) "${YELLOW}WARN${ANSI_RESET}\nGIT_COMMIT env var is empty.\n" 1>&2
