@@ -790,7 +790,9 @@ mod tests {
 
     #[test]
     fn test_datetime_rfcs() {
-        if unsafe { libc::setlocale(libc::LC_ALL, b"\0".as_ptr() as *const i8) }.is_null() {
+        if unsafe { libc::setlocale(libc::LC_ALL, b"\0".as_ptr() as *const core::ffi::c_char) }
+            .is_null()
+        {
             eprintln!("Unable to set locale.");
         }
         /* Some tests were lazily stolen from https://rachelbythebay.com/w/2013/06/11/time/ */
