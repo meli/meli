@@ -21,7 +21,7 @@
 
 use std::iter::FromIterator;
 
-use melib::{SortField, SortOrder, ThreadNode};
+use melib::{Address, SortField, SortOrder, ThreadNode};
 
 use super::{EntryStrings, *};
 use crate::{components::PageMovement, jobs::JoinHandle};
@@ -783,7 +783,7 @@ impl PlainListing {
                     ""
                 },
             )),
-            from: FromString(address_list!((e.from()) as comma_sep_list)),
+            from: FromString(Address::display_name_slice(e.from())),
             tags: TagString(tags, colors),
         }
     }

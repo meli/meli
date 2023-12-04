@@ -21,7 +21,7 @@
 
 use std::{cmp, convert::TryInto, iter::FromIterator};
 
-use melib::{SortField, SortOrder, ThreadNode, Threads};
+use melib::{Address, SortField, SortOrder, ThreadNode, Threads};
 
 use super::*;
 use crate::{components::PageMovement, jobs::JoinHandle};
@@ -951,7 +951,7 @@ impl ThreadListing {
                     ""
                 },
             )),
-            from: FromString(address_list!((e.from()) as comma_sep_list)),
+            from: FromString(Address::display_name_slice(e.from())),
             tags: TagString(tags, colors),
         }
     }

@@ -1074,7 +1074,7 @@ impl CompactListing {
                     ""
                 },
             )),
-            from: FromString(address_list!((from) as comma_sep_list)),
+            from: FromString(Address::display_name_slice(from)),
             tags: TagString(tags_string, colors),
         }
     }

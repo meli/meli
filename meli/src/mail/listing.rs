@@ -404,25 +404,6 @@ pub struct EntryStrings {
 }
 
 #[macro_export]
-/// Creates a comma separated list `String` out of an
-/// [`Address`](melib::Address) iterable.
-macro_rules! address_list {
-    (($name:expr) as comma_sep_list) => {{
-        let mut ret: String =
-            $name
-                .into_iter()
-                .fold(String::new(), |mut s: String, n: &melib::Address| {
-                    s.extend(n.display().to_string().chars());
-                    s.push_str(", ");
-                    s
-                });
-        ret.pop();
-        ret.pop();
-        ret
-    }};
-}
-
-#[macro_export]
 macro_rules! digits_of_num {
     ($num:expr) => {{
         const GUESS: [usize; 65] = [
