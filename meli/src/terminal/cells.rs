@@ -389,6 +389,9 @@ impl CellBuffer {
     /// See `BoundsIterator` documentation.
     pub fn bounds_iter(&self, area: Area) -> BoundsIterator {
         debug_assert_eq!(self.generation(), area.generation());
+        if area.is_empty() {
+            return BoundsIterator::empty(self.generation());
+        }
 
         BoundsIterator {
             width: area.width(),
@@ -416,7 +419,7 @@ impl CellBuffer {
         }
         let row = area.offset().1 + relative_row;
 
-        if row < self.rows {
+        if row < self.rows && !area.is_empty() {
             let col = std::cmp::min(self.cols.saturating_sub(1), area.offset().0 + bounds.start)
                 ..(std::cmp::min(self.cols, area.offset().0 + bounds.end));
             let area = area
@@ -556,7 +559,7 @@ impl CellBuffer {
             return dest.upper_left();
         }
 
-        if grid_src.is_empty() || self.is_empty() {
+        if grid_src.is_empty() || self.is_empty() || dest.is_empty() || src.is_empty() {
             return dest.upper_left();
         }
 
@@ -635,6 +638,9 @@ impl CellBuffer {
         debug_assert_eq!(area.generation(), self.generation());
         if area.generation() != self.generation() {
             // [ref:TODO] log error
+            return (0, 0);
+        }
+        if area.is_empty() {
             return (0, 0);
         }
         let mut bounds = self.size();
@@ -1349,6 +1355,16 @@ impl BoundsIterator {
         self.cols.0 = self.cols.0.min(self.cols.1);
         self.area = self.area.skip_cols(x);
     }
+
+    pub const fn empty(generation: ScreenGeneration) -> Self {
+        Self {
+            width: 0,
+            height: 0,
+            rows: 0..0,
+            cols: (0, 0),
+            area: Area::new_empty(generation),
+        }
+    }
 }
 
 impl Iterator for BoundsIterator {
@@ -1369,6 +1385,9 @@ impl Iterator for BoundsIterator {
 impl Iterator for RowIterator {
     type Item = (usize, usize);
     fn next(&mut self) -> Option<Self::Item> {
+        if self.area.is_empty() {
+            return None;
+        }
         let x = self.col.next()?;
         self.area = self.area.skip_cols(1);
         Some((x, self.row))
