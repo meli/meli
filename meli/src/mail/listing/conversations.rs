@@ -22,7 +22,7 @@
 use std::{collections::BTreeMap, iter::FromIterator};
 
 use indexmap::IndexSet;
-use melib::{SortField, SortOrder, TagHash, Threads};
+use melib::{Address, SortField, SortOrder, TagHash, Threads};
 
 use super::*;
 use crate::{components::PageMovement, jobs::JoinHandle};
@@ -460,11 +460,8 @@ impl ListingTrait for ConversationsListing {
         {
             self.refresh_mailbox(context, false);
         }
-        let upper_left = area.upper_left();
-        let bottom_right = area.bottom_right();
         if let Err(message) = self.error.as_ref() {
             grid.clear_area(area, self.color_cache.theme_default);
-
             grid.write_string(
                 message,
                 self.color_cache.theme_default.fg,
@@ -476,7 +473,7 @@ impl ListingTrait for ConversationsListing {
             context.dirty_areas.push_back(area);
             return;
         }
-        let rows = (get_y(bottom_right) - get_y(upper_left) + 1) / 3;
+        let rows = area.height() / 3;
         if rows == 0 {
             return;
         }
@@ -519,8 +516,8 @@ impl ListingTrait for ConversationsListing {
 
         let top_idx = page_no * rows;
 
-        /* If cursor position has changed, remove the highlight from the previous
-         * position and apply it in the new one. */
+        // If cursor position has changed, remove the highlight from the previous
+        // position and apply it in the new one.
         if self.cursor_pos.2 != self.new_cursor_pos.2 && prev_page_no == page_no {
             let old_cursor_pos = self.cursor_pos;
             self.cursor_pos = self.new_cursor_pos;
@@ -544,12 +541,12 @@ impl ListingTrait for ConversationsListing {
         }
 
         grid.clear_area(area, self.color_cache.theme_default);
-        /* Page_no has changed, so draw new page */
+        // Page_no has changed, so draw new page
         self.draw_rows(grid, area, context, top_idx);
 
         self.highlight_line(
             grid,
-            area.skip_rows(3 * (self.cursor_pos.2 % rows)).take_rows(2),
+            area.skip_rows(3 * (self.cursor_pos.2 % rows)).take_rows(3),
             self.cursor_pos.2,
             context,
         );
@@ -639,10 +636,9 @@ impl ListingTrait for ConversationsListing {
         match new_value {
             Focus::None => {
                 self.dirty = true;
-                /* If self.rows.row_updates is not empty and we exit a thread, the row_update
-                 * events will be performed but the list will not be drawn.
-                 * So force a draw in any case.
-                 */
+                // If self.rows.row_updates is not empty and we exit a thread, the row_update
+                // events will be performed but the list will not be drawn. So force a draw in
+                // any case.
                 self.force_draw = true;
             }
             Focus::Entry => {
@@ -797,7 +793,7 @@ impl ConversationsListing {
                 if thread.has_attachments() { "📎" } else { "" },
                 if thread.snoozed() { "💤" } else { "" }
             )),
-            from: FromString(address_list!((from) as comma_sep_list)),
+            from: FromString(Address::display_name_slice(from).to_string()),
             tags: TagString(tags_string, colors),
         }
     }
@@ -885,6 +881,7 @@ impl ConversationsListing {
             if !context.accounts[&self.cursor_pos.0].contains_key(*root_env_hash) {
                 continue;
             }
+            let area = area.skip_rows(3 * (idx - top_idx)).take_rows(3);
             let thread = threads.thread_ref(*thread_hash);
 
             let row_attr = row_attr!(
@@ -893,17 +890,20 @@ impl ConversationsListing {
                 self.cursor_pos.2 == idx,
                 self.rows.is_thread_selected(*thread_hash)
             );
-            /* draw flags */
-            let (x, _) = grid.write_string(
+            // draw flags
+            let (mut x, _) = grid.write_string(
                 &strings.flag,
                 row_attr.fg,
                 row_attr.bg,
                 row_attr.attrs,
-                area.skip_rows(idx),
+                area,
                 None,
             );
-            for c in grid.row_iter(area, x..(x + 3), idx) {
-                grid[c].set_bg(row_attr.bg);
+            if !strings.flag.is_empty() {
+                for c in grid.row_iter(area, x..(x + 3), 0) {
+                    grid[c].set_bg(row_attr.bg);
+                }
+                x += 3;
             }
             let subject_attr = row_attr!(
                 subject,
@@ -912,53 +912,50 @@ impl ConversationsListing {
                 self.cursor_pos.2 == idx,
                 self.rows.is_thread_selected(*thread_hash)
             );
-            /* draw subject */
-            let (mut x, subject_overflowed) = grid.write_string(
+            // draw subject
+            let (x_, subject_overflowed) = grid.write_string(
                 &strings.subject,
                 subject_attr.fg,
                 subject_attr.bg,
                 subject_attr.attrs,
-                area.skip(idx, x),
+                area.skip_cols(x),
                 None,
             );
+            x += x_;
             let mut subject_overflowed = subject_overflowed > 0;
             for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
                 if subject_overflowed {
                     break;
                 };
+                let area = area.skip_cols(x).take_cols(t.grapheme_width() + 2);
                 let color = color.unwrap_or(self.color_cache.tag_default.bg);
                 let (_x, _y) = grid.write_string(
                     t,
                     self.color_cache.tag_default.fg,
                     color,
                     self.color_cache.tag_default.attrs,
-                    area.skip(idx, x + 1),
+                    area.skip_cols(1),
                     None,
                 );
                 if _y > 0 {
                     subject_overflowed = true;
                     break;
                 }
-                grid[set_x(upper_left, x)].set_bg(color);
-                if _x <= get_x(bottom_right) {
-                    grid[set_x(upper_left, _x)].set_bg(color).set_keep_bg(true);
-                }
-                for x in (x + 1).._x {
-                    grid[set_x(upper_left, x)]
+                for c in grid.row_iter(area, 0..area.width(), 0) {
+                    grid[c]
                         .set_keep_fg(true)
-                        .set_keep_bg(true);
+                        .set_bg(color)
+                        .set_keep_bg(true)
+                        .set_attrs(self.color_cache.tag_default.attrs);
                 }
-                grid[set_x(upper_left, x)].set_keep_bg(true);
-                x = _x + 1;
+                x += _x + 2;
             }
             if !subject_overflowed {
-                for x in x..get_x(bottom_right) {
-                    grid[set_x(upper_left, x)]
-                        .set_ch(' ')
-                        .set_fg(row_attr.fg)
-                        .set_bg(row_attr.bg);
+                for c in grid.row_iter(area, x..area.width(), 0) {
+                    grid[c].set_ch(' ').set_fg(row_attr.fg).set_bg(row_attr.bg);
                 }
             }
+            // Next line, draw date
             let date_attr = row_attr!(
                 date,
                 self.color_cache,
@@ -966,25 +963,21 @@ impl ConversationsListing {
                 self.cursor_pos.2 == idx,
                 self.rows.is_thread_selected(*thread_hash)
             );
-            upper_left.1 += 1;
-            if upper_left.1 >= bottom_right.1 {
-                return;
+            x = 0;
+            x += grid
+                .write_string(
+                    &strings.date,
+                    date_attr.fg,
+                    date_attr.bg,
+                    date_attr.attrs,
+                    area.skip(x, 1),
+                    None,
+                )
+                .0;
+            for c in grid.row_iter(area, x..(x + 4), 1) {
+                grid[c].set_ch('▁').set_fg(row_attr.fg).set_bg(row_attr.bg);
             }
-            /* Next line, draw date */
-            let (x, _) = grid.write_string(
-                &strings.date,
-                date_attr.fg,
-                date_attr.bg,
-                date_attr.attrs,
-                (upper_left, bottom_right),
-                None,
-            );
-            for x in x..(x + 4) {
-                grid[set_x(upper_left, x)]
-                    .set_ch('▁')
-                    .set_fg(row_attr.fg)
-                    .set_bg(row_attr.bg);
-            }
+            x += 4;
             let from_attr = row_attr!(
                 from,
                 self.color_cache,
@@ -992,25 +985,20 @@ impl ConversationsListing {
                 self.cursor_pos.2 == idx,
                 self.rows.is_thread_selected(*thread_hash)
             );
-            /* draw from */
-            let (x, _) = grid.write_string(
-                &strings.from,
-                from_attr.fg,
-                from_attr.bg,
-                from_attr.attrs,
-                (set_x(upper_left, x + 4), bottom_right),
-                None,
-            );
+            // draw from
+            x += grid
+                .write_string(
+                    &strings.from,
+                    from_attr.fg,
+                    from_attr.bg,
+                    from_attr.attrs,
+                    area.skip(x, 1),
+                    None,
+                )
+                .0;
 
-            for x in x..get_x(bottom_right) {
-                grid[set_x(upper_left, x)]
-                    .set_ch('▁')
-                    .set_fg(row_attr.fg)
-                    .set_bg(row_attr.bg);
-            }
-            upper_left.1 += 2;
-            if upper_left.1 >= bottom_right.1 {
-                return;
+            for c in grid.row_iter(area, x..area.width(), 1) {
+                grid[c].set_ch('▁').set_fg(row_attr.fg).set_bg(row_attr.bg);
             }
         }
     }
@@ -1027,7 +1015,6 @@ impl Component for ConversationsListing {
             return;
         }
 
-        let (upper_left, bottom_right) = area;
         {
             let mut area = area;
 
@@ -1042,24 +1029,18 @@ impl Component for ConversationsListing {
                     self.color_cache.theme_default.bg,
                     self.color_cache.theme_default.attrs,
                     area,
-                    Some(get_x(upper_left)),
+                    Some(0),
                 );
-                for c in grid.row_iter(area, x..(get_x(bottom_right) + 1), y) {
+                for c in grid.row_iter(area, x..area.width(), y) {
                     grid[c] = Cell::default();
                 }
 
-                grid.clear_area(
-                    ((x, y), set_y(bottom_right, y)),
-                    self.color_cache.theme_default,
-                );
-                context
-                    .dirty_areas
-                    .push_back((upper_left, set_y(bottom_right, y + 1)));
+                grid.clear_area(area.skip(x, y), self.color_cache.theme_default);
+                context.dirty_areas.push_back(area.nth_row(0));
 
-                area = (set_y(upper_left, y + 1), bottom_right);
+                area = area.skip_rows(1);
             }
-            let (upper_left, bottom_right) = area;
-            let rows = (get_y(bottom_right) - get_y(upper_left) + 1) / 3;
+            let rows = area.height() / 3;
             if let Some(modifier) = self.modifier_command.take() {
                 if let Some(mvm) = self.movement.as_ref() {
                     match mvm {
@@ -1231,8 +1212,7 @@ impl Component for ConversationsListing {
             }
 
             if !self.rows.row_updates.is_empty() {
-                /* certain rows need to be updated (eg an unseen message was just set seen)
-                 */
+                // certain rows need to be updated (eg an unseen message was just set seen)
                 while let Some(row) = self.rows.row_updates.pop() {
                     self.update_line(context, row);
                     let row: usize = self.rows.env_order[&row];
@@ -1240,23 +1220,20 @@ impl Component for ConversationsListing {
                     let page_no = (self.cursor_pos.2).wrapping_div(rows);
 
                     let top_idx = page_no * rows;
-                    /* Update row only if it's currently visible */
+                    // Update row only if it's currently visible
                     if row >= top_idx && row < top_idx + rows {
-                        let area = (
-                            set_y(upper_left, get_y(upper_left) + (3 * (row % rows))),
-                            set_y(bottom_right, get_y(upper_left) + (3 * (row % rows) + 2)),
-                        );
+                        let area = area.skip_rows(3 * (row % rows)).take_rows(3);
                         self.highlight_line(grid, area, row, context);
                         context.dirty_areas.push_back(area);
                     }
                 }
                 if self.force_draw {
-                    /* Draw the entire list */
+                    // Draw the entire list
                     self.draw_list(grid, area, context);
                     self.force_draw = false;
                 }
             } else {
-                /* Draw the entire list */
+                // Draw the entire list
                 self.draw_list(grid, area, context);
             }
         }
@@ -1267,14 +1244,8 @@ impl Component for ConversationsListing {
                 return;
             }
 
-            let entry_area = (
-                set_x(upper_left, get_x(upper_left) + area.width() / 3 + 2),
-                bottom_right,
-            );
-            let gap_area = (
-                pos_dec(entry_area.upper_left(), (1, 0)),
-                entry_area.bottom_right(),
-            );
+            let entry_area = area.skip_cols(1 + area.width() / 3);
+            let gap_area = area.nth_col(area.width() / 3);
             grid.clear_area(gap_area, self.color_cache.theme_default);
             context.dirty_areas.push_back(gap_area);
             self.view_area = entry_area.into();
@@ -1415,23 +1386,21 @@ impl Component for ConversationsListing {
                         return true;
                     }
                     Action::Listing(ToggleThreadSnooze) if !self.unfocused() => {
-                        /*
-                        if let Some(thread) = self.get_thread_under_cursor(self.cursor_pos.2) {
-                            let account = &mut context.accounts[&self.cursor_pos.0];
-                            account
-                                .collection
-                                .threads
-                                .write()
-                                .unwrap()
-                                .entry(self.cursor_pos.1)
-                                .and_modify(|threads| {
-                                    let is_snoozed = threads.thread_ref(thread).snoozed();
-                                    threads.thread_ref_mut(thread).set_snoozed(!is_snoozed);
-                                });
-                            self.rows.row_updates.push(thread);
-                            self.refresh_mailbox(context, false);
-                        }
-                        */
+                        //if let Some(thread) = self.get_thread_under_cursor(self.cursor_pos.2) {
+                        //    let account = &mut context.accounts[&self.cursor_pos.0];
+                        //    account
+                        //        .collection
+                        //        .threads
+                        //        .write()
+                        //        .unwrap()
+                        //        .entry(self.cursor_pos.1)
+                        //        .and_modify(|threads| {
+                        //            let is_snoozed = threads.thread_ref(thread).snoozed();
+                        //            threads.thread_ref_mut(thread).set_snoozed(!is_snoozed);
+                        //        });
+                        //    self.rows.row_updates.push(thread);
+                        //    self.refresh_mailbox(context, false);
+                        //}
                         return true;
                     }
                     _ => {}
@@ -1476,7 +1445,12 @@ impl Component for ConversationsListing {
                             self.search_job = Some((filter_term.to_string(), handle));
                         }
                         Err(err) => {
-                            context.replies.push_back(UIEvent::Notification { title: Some("Could not perform search".into()), source: None, body: err.to_string().into(), kind: Some(crate::types::NotificationType::Error(err.kind)), });
+                            context.replies.push_back(UIEvent::Notification {
+                                title: Some("Could not perform search".into()),
+                                source: None,
+                                body: err.to_string().into(),
+                                kind: Some(crate::types::NotificationType::Error(err.kind)),
+                            });
                         }
                     };
                     self.set_dirty(true);
@@ -1518,7 +1492,12 @@ impl Component for ConversationsListing {
                     Ok(None) => { /* something happened, perhaps a worker thread panicked */ }
                     Ok(Some(Ok(results))) => self.filter(filter_term, results, context),
                     Ok(Some(Err(err))) => {
-                        context.replies.push_back(UIEvent::Notification { title: Some("Could not perform search".into()), source: None, body: err.to_string().into(), kind: Some(crate::types::NotificationType::Error(err.kind)), });
+                        context.replies.push_back(UIEvent::Notification {
+                            title: Some("Could not perform search".into()),
+                            source: None,
+                            body: err.to_string().into(),
+                            kind: Some(crate::types::NotificationType::Error(err.kind)),
+                        });
                     }
                 }
                 self.set_dirty(true);

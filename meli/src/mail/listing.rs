@@ -230,8 +230,8 @@ impl<T> RowsState<T> {
     }
 }
 
-//mod conversations;
-//pub use self::conversations::*;
+mod conversations;
+pub use self::conversations::*;
 
 mod compact;
 pub use self::compact::*;
@@ -927,7 +927,7 @@ pub trait ListingTrait: Component {
 #[derive(Debug)]
 pub enum ListingComponent {
     Compact(Box<CompactListing>),
-    //Conversations(Box<ConversationsListing>),
+    Conversations(Box<ConversationsListing>),
     Offline(Box<OfflineListing>),
     Plain(Box<PlainListing>),
     Threaded(Box<ThreadListing>),
@@ -940,7 +940,7 @@ impl std::ops::Deref for ListingComponent {
     fn deref(&self) -> &Self::Target {
         match &self {
             Compact(ref l) => l.as_ref(),
-            //Conversations(ref l) => l.as_ref(),
+            Conversations(ref l) => l.as_ref(),
             Offline(ref l) => l.as_ref(),
             Plain(ref l) => l.as_ref(),
             Threaded(ref l) => l.as_ref(),
@@ -952,7 +952,7 @@ impl std::ops::DerefMut for ListingComponent {
     fn deref_mut(&mut self) -> &mut (dyn MailListingTrait + 'static) {
         match self {
             Compact(l) => l.as_mut(),
-            //Conversations(l) => l.as_mut(),
+            Conversations(l) => l.as_mut(),
             Offline(l) => l.as_mut(),
             Plain(l) => l.as_mut(),
             Threaded(l) => l.as_mut(),
@@ -964,7 +964,7 @@ impl ListingComponent {
     fn id(&self) -> ComponentId {
         match self {
             Compact(l) => l.as_component().id(),
-            //Conversations(l) => l.as_component().id(),
+            Conversations(l) => l.as_component().id(),
             Offline(l) => l.as_component().id(),
             Plain(l) => l.as_component().id(),
             Threaded(l) => l.as_component().id(),
@@ -1041,7 +1041,7 @@ impl std::fmt::Display for Listing {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self.component {
             Compact(ref l) => write!(f, "{}", l),
-            //Conversations(ref l) => write!(f, "{}", l),
+            Conversations(ref l) => write!(f, "{}", l),
             Offline(ref l) => write!(f, "{}", l),
             Plain(ref l) => write!(f, "{}", l),
             Threaded(ref l) => write!(f, "{}", l),
@@ -2458,7 +2458,7 @@ impl Component for Listing {
             self.component.id(),
             match &self.component {
                 Compact(l) => l.as_component(),
-                //Conversations(l) => l.as_component(),
+                Conversations(l) => l.as_component(),
                 Offline(l) => l.as_component(),
                 Plain(l) => l.as_component(),
                 Threaded(l) => l.as_component(),
@@ -2474,7 +2474,7 @@ impl Component for Listing {
             self.component.id(),
             match &mut self.component {
                 Compact(l) => l.as_component_mut(),
-                //Conversations(l) => l.as_component_mut(),
+                Conversations(l) => l.as_component_mut(),
                 Offline(l) => l.as_component_mut(),
                 Plain(l) => l.as_component_mut(),
                 Threaded(l) => l.as_component_mut(),
@@ -3124,7 +3124,7 @@ impl Listing {
 
     fn set_index_style(&mut self, new_style: IndexStyle, context: &mut Context) {
         let old = match new_style {
-            IndexStyle::Conversations | IndexStyle::Plain => {
+            IndexStyle::Plain => {
                 if matches!(self.component, Plain(_)) {
                     return;
                 }
@@ -3153,17 +3153,17 @@ impl Listing {
                     &mut self.component,
                     Compact(CompactListing::new(self.id, coordinates)),
                 )
-            } //IndexStyle::Conversations => {
-              //    return;
-              //    //if matches!(self.component, Conversations(_)) {
-              //    //    return;
-              //    //}
-              //    //let coordinates = self.component.coordinates();
-              //    //std::mem::replace(
-              //    //    &mut self.component,
-              //    //    Conversations(ConversationsListing::new(self.id,
-              //    // coordinates)),
-              //}
+            }
+            IndexStyle::Conversations => {
+                if matches!(self.component, Conversations(_)) {
+                    return;
+                }
+                let coordinates = self.component.coordinates();
+                std::mem::replace(
+                    &mut self.component,
+                    Conversations(ConversationsListing::new(self.id, coordinates)),
+                )
+            }
         };
         if let MenuEntryCursor::Mailbox(idx) = self.cursor_pos.menu {
             if let Some(mbox_entry) = self.accounts[self.cursor_pos.account].entries.get_mut(idx) {
