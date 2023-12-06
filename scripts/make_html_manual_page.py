@@ -51,17 +51,18 @@ def clear_line(signum, frame):
 
 signal.signal(signal.SIGWINCH, clear_line)
 
-TEMPLATES = [
+MIRRORS = [
     "http://linux.die.net/man/%S/%N",
     "http://man7.org/linux/man-pages/man%S/%N.%S.html",
     "http://manpages.debian.org/stable/%N.%S.en.html",
+    "http://man.bsd.lv/%N.%S",
     "http://man.archlinux.org/man/%N.%S",
     "http://man.voidlinux.org/%N.%S",
-    "http://man.bsd.lv/%N.%S",
     "http://man.bsd.lv/OpenBSD-7.0/%N.%S",
     "http://man.bsd.lv/FreeBSD-13.0/%N.%S",
     "http://man.bsd.lv/POSIX-2013/%N.%S",  # last resorts
     "http://man.bsd.lv/UNIX-7/%N.%S",
+    "https://www.unix.com/man-page/mojave/%S/%N/",
 ]
 
 
@@ -135,11 +136,11 @@ def give_me_head(url, url_, name, section):
     conn = http.client.HTTPSConnection(o.hostname, timeout=6)
     conn.request(HTTPMethod.HEAD, o.path)
     response = conn.getresponse()
-    if (
-        response.status == HTTPStatus.FOUND
-        or response.status == HTTPStatus.TEMPORARY_REDIRECT
-        or response.status == HTTPStatus.PERMANENT_REDIRECT
-        or response.status == HTTPStatus.MOVED_PERMANENTLY
+    if response.status in (
+        HTTPStatus.FOUND,
+        HTTPStatus.TEMPORARY_REDIRECT,
+        HTTPStatus.PERMANENT_REDIRECT,
+        HTTPStatus.MOVED_PERMANENTLY,
     ):
         # print("for ", url_, "following redirect", response.status)
         give_me_head.redirects += 1
@@ -219,7 +220,7 @@ if __name__ == "__main__":
         type=bool,
         help="find external manpages and hyperlink to them",
         required=False,
-        default=False,
+        default=True,
     )
     parser.add_argument(
         "--no-tty",
@@ -227,6 +228,13 @@ if __name__ == "__main__":
         required=False,
         default=False,
         action="store_true",
+    )
+    parser.add_argument(
+        "--include-refs",
+        type=str,
+        help="comma separated list of manpages to relatively hyperlink",
+        required=False,
+        default="",
     )
     parser.add_argument(
         "--exclude-refs",
@@ -242,16 +250,28 @@ if __name__ == "__main__":
         required=False,
         default="mandoc",
     )
+    parser.add_argument(
+        "--no-css",
+        type=bool,
+        help="don't prepend <style> element",
+        required=False,
+        action="store_true",
+        default=False,
+    )
 
     args = parser.parse_args()
     if args.exclude_refs:
         args.exclude_refs = [s.strip() for s in args.exclude_refs.split(",")]
+    if args.include_refs:
+        args.include_refs = [s.strip() for s in args.include_refs.split(",")]
     if not args.output:
         args.output = Path.cwd() / (Path(args.page).name + ".html")
     if not args.name:
         args.name = Path(args.page).name
 
-    manpage = open(args.page, "r", encoding="utf-8").read()
+    manpage = None
+    with open(args.page, "r", encoding="utf-8") as f:
+        manpage = f.read()
     if args.refs:
         refs_url = ',man="%N\t%S"'
     else:
@@ -312,8 +332,8 @@ if __name__ == "__main__":
                         )
                         continue
                     found = False
-                    for url in TEMPLATES:
-                        add_progress(1.0 / (len(TEMPLATES) * 1.0))
+                    for url in MIRRORS:
+                        add_progress(1.0 / (len(MIRRORS) * 1.0))
                         if found:
                             continue
                         draw_progress(
@@ -330,6 +350,19 @@ if __name__ == "__main__":
                         except Exception as exc:
                             if "handshake operation timed out" not in str(exc):
                                 print(f"got {exc} for url {url_}")
+                    if (
+                        not found
+                        and args.include_refs
+                        and (
+                            name in args.include_refs
+                            or f"{name}.{section}" in args.include_refs
+                        )
+                    ):
+                        link["href"] = ""
+                        draw_progress(
+                            total,
+                            status=f"{name}.{section}: Excluding ref because it was not found online and is not in --include-refs list. Leaving it empty.",
+                        )
                 else:
                     add_progress()
                     draw_progress(total)
@@ -343,35 +376,36 @@ if __name__ == "__main__":
             target["id"] = id_
 
     with open(args.output, "w", encoding="utf-8") as f:
-        f.write(
+        if not args.no_css:
+            f.write(
+                """
+            <style>
+            code.Ic, code.Li, code.Cm, code.Nm, kbd.manpage-kbd{
+                display: inline-block;
+            }
+            kbd {
+              background-color: #eee;
+              border-radius: 3px;
+              border: 1px solid #b4b4b4;
+              box-shadow:
+                0 1px 1px rgba(0, 0, 0, 0.2),
+                0 2px 0 0 rgba(255, 255, 255, 0.7) inset;
+              color: #333;
+              display: inline-block;
+              font-size: 0.85em;
+              font-weight: 700;
+              line-height: 1;
+              padding: 2px 4px;
+              white-space: nowrap;
+            }
+            code {
+              background-color: #eee;
+              border-radius: 3px;
+              font-family: courier, monospace;
+              padding: 0 3px;
+            }
+            </style>
             """
-        <style>
-        code.Ic, code.Li, code.Cm, code.Nm, kbd.manpage-kbd{
-            display: inline-block;
-        }
-        kbd {
-          background-color: #eee;
-          border-radius: 3px;
-          border: 1px solid #b4b4b4;
-          box-shadow:
-            0 1px 1px rgba(0, 0, 0, 0.2),
-            0 2px 0 0 rgba(255, 255, 255, 0.7) inset;
-          color: #333;
-          display: inline-block;
-          font-size: 0.85em;
-          font-weight: 700;
-          line-height: 1;
-          padding: 2px 4px;
-          white-space: nowrap;
-        }
-        code {
-          background-color: #eee;
-          border-radius: 3px;
-          font-family: courier, monospace;
-          padding: 0 3px;
-        }
-        </style>
-        """
-        )
+            )
         f.write(soup.prettify())
     print("Written to ", args.output)
