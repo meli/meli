@@ -1530,13 +1530,9 @@ impl Component for EnvelopeView {
                 context
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                let body_text = &self.body_text;
                 let links = &self.links;
                 let (_kind, url) = {
-                    if let Some(l) = links
-                        .get(lidx)
-                        .and_then(|l| Some((l.kind, body_text.get(l.start..l.end)?)))
-                    {
+                    if let Some(l) = links.get(lidx).map(|l| (l.kind, l.value.as_str())) {
                         l
                     } else {
                         context.replies.push_back(UIEvent::StatusEvent(

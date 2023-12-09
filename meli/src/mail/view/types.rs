@@ -73,11 +73,12 @@ pub enum LinkKind {
     Email,
 }
 
-#[derive(Eq, PartialEq, Copy, Clone, Debug)]
+#[derive(Eq, PartialEq, Clone, Debug)]
 pub struct Link {
     pub start: usize,
     pub end: usize,
-    pub kind: self::LinkKind,
+    pub value: String,
+    pub kind: LinkKind,
 }
 
 #[derive(Debug, Default)]
@@ -169,21 +170,16 @@ impl ViewOptions {
                 *links = finder
                     .links(&text)
                     .filter_map(|l| {
-                        if *l.kind() == linkify::LinkKind::Url {
-                            Some(Link {
-                                start: l.start(),
-                                end: l.end(),
-                                kind: LinkKind::Url,
-                            })
-                        } else if *l.kind() == linkify::LinkKind::Email {
-                            Some(Link {
-                                start: l.start(),
-                                end: l.end(),
-                                kind: LinkKind::Email,
-                            })
-                        } else {
-                            None
-                        }
+                        Some(Link {
+                            start: l.start(),
+                            end: l.end(),
+                            value: l.as_str().to_string(),
+                            kind: match l.kind() {
+                                linkify::LinkKind::Url => LinkKind::Url,
+                                linkify::LinkKind::Email => LinkKind::Email,
+                                _ => return None,
+                            },
+                        })
                     })
                     .collect::<Vec<Link>>();
             }
