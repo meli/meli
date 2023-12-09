@@ -1,5 +1,14 @@
 # Development
 
+## use `.git-blame-ignore-revs` file _optional_
+
+Use this file to ignore formatting commits from `git-blame`.
+It needs to be set up per project because `git-blame` will fail if it's missing.
+
+```sh
+git config blame.ignoreRevsFile .git-blame-ignore-revs
+```
+
 ## Testing
 
 How to run specific tests:
