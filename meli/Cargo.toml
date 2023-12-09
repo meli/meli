@@ -85,8 +85,8 @@ gpgme = ["melib/gpgme"]
 tls-static = ["melib/tls-static"]
 http-static = ["melib/http-static"]
 sqlite3-static = ["melib/sqlite3-static"]
-dbus-static = ["dep:notify-rust", "notify-rust/d_vendored"]
-libz-static = ["dep:libz-sys", "libz-sys/static"]
+dbus-static = ["dep:notify-rust", "notify-rust?/d_vendored"]
+libz-static = ["dep:libz-sys", "libz-sys?/static"]
 static = ["tls-static", "http-static", "sqlite3-static", "dbus-static", "libz-static"]
 
 # Print tracing logs as meli runs in stderr
