@@ -52,7 +52,7 @@ pub fn pos_dec(p: Pos, dec: (usize, usize)) -> Pos {
     (p.0.saturating_sub(dec.0), p.1.saturating_sub(dec.1))
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum Alignment {
     /// Stretch to fill all space if possible, center if no meaningful way to
     /// stretch.

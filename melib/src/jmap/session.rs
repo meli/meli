@@ -29,7 +29,7 @@ use crate::jmap::{
     IdentityObject,
 };
 
-#[derive(Deserialize, Serialize, Debug, Clone, Default)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Session {
     pub capabilities: IndexMap<String, CapabilitiesObject>,
@@ -52,7 +52,7 @@ impl Object for Session {
     const NAME: &'static str = stringify!(Session);
 }
 
-#[derive(Deserialize, Serialize, Clone, Default, Debug)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CapabilitiesObject {
     #[serde(default)]

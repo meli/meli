@@ -21,7 +21,7 @@
 
 use crate::utils::parsec::*;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RuleBlock(pub Vec<Rule>);
 
 /*
@@ -40,7 +40,7 @@ pub struct RuleBlock(pub Vec<Rule>);
           ; "eq" means "equal to", the C operator "==".
           ; "ne" means "not equal to", the C operator "!=".
 */
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ActionCommand {
     Keep,
     Fileinto { mailbox: String },
@@ -48,7 +48,7 @@ pub enum ActionCommand {
     Discard,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ControlCommand {
     Stop,
     Require(Vec<String>),
@@ -59,27 +59,27 @@ pub enum ControlCommand {
     },
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Rule {
     Block(RuleBlock),
     Action(ActionCommand),
     Control(ControlCommand),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AddressOperator {
     All,
     Localpart,
     Domain,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum IntegerOperator {
     Over,
     Under,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 /// RFC 5231 Sieve Email Filtering: Relational Extension
 pub enum RelationalMatch {
     /// "gt" means "greater than", the C operator ">".
@@ -96,7 +96,7 @@ pub enum RelationalMatch {
     Ne,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MatchOperator {
     Is,
     Matches,
@@ -105,7 +105,7 @@ pub enum MatchOperator {
     Value(RelationalMatch),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CharacterOperator {
     /// i;octet,
     Octet,
@@ -113,7 +113,7 @@ pub enum CharacterOperator {
     AsciiCasemap,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ZoneRule {
     /// "year"      => the year, "0000" .. "9999".
     Year,
@@ -158,7 +158,7 @@ pub enum ZoneRule {
     Weekday,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ConditionRule {
     /// Logical OR operation.
     AnyOf(Vec<ConditionRule>),

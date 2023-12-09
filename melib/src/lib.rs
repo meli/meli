@@ -192,7 +192,7 @@ pub extern crate smallvec;
 pub extern crate smol;
 pub extern crate uuid;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Clone, Copy, Debug)]
 #[repr(transparent)]
 pub struct BytesDisplay(pub usize);
 

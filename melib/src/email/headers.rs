@@ -82,7 +82,7 @@ impl<'a> Borrow<dyn HeaderKey + 'a> for HeaderName {
 ///
 /// Except for the above, indexing will also panic if index is out of range or
 /// header key is not present in the map.
-#[derive(Debug, Default, PartialEq, Eq, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub struct HeaderMap(indexmap::IndexMap<HeaderName, String>);
 
 impl std::ops::Index<usize> for HeaderMap {

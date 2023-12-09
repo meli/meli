@@ -48,7 +48,7 @@ pub mod html_escape {
     /// ```
     ///
     /// Source: <https://www.w3.org/MarkUp/html-spec/html-spec_9.html#SEC9.7.1>
-    #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
     pub enum HtmlEntity {
         /// Less than sign
         Lt,
@@ -161,14 +161,14 @@ macro_rules! declare_u64_hash {
 
 /* Sorting states. */
 
-#[derive(Debug, Default, Clone, PartialEq, Eq, Copy, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub enum SortOrder {
     Asc,
     #[default]
     Desc,
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Eq, Copy, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub enum SortField {
     Subject,
     #[default]

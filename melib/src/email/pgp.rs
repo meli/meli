@@ -140,7 +140,7 @@ pub fn verify_signature(a: &Attachment) -> Result<(Vec<u8>, &Attachment)> {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct DecryptionMetadata {
     pub recipients: Vec<Recipient>,
     pub file_name: Option<String>,
@@ -148,13 +148,13 @@ pub struct DecryptionMetadata {
     pub is_mime: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct Recipient {
     pub keyid: Option<String>,
     pub status: Result<()>,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct SignatureMetadata {
     pub signatures: Vec<Recipient>,
     pub file_name: Option<String>,

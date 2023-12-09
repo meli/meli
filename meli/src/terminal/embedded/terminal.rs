@@ -52,7 +52,7 @@ use crate::terminal::{
     Area, Color, Screen, Virtual,
 };
 
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Clone, Copy, Debug, Default)]
 #[repr(u8)]
 pub enum ScreenBuffer {
     #[default]
@@ -60,7 +60,7 @@ pub enum ScreenBuffer {
     Alternate,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum CodepointBuf {
     None,
     TwoCodepoints(u8),
@@ -184,7 +184,7 @@ impl Terminal {
 /// translated as changes to the grid, eg changes in a cell's colors.
 ///
 /// The main process copies the grid whenever the actual terminal is redrawn.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct EmbeddedGrid {
     cursor: (usize, usize),
     /// `[top;bottom]`

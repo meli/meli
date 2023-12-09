@@ -209,7 +209,7 @@ standards! {
 }
 
 /// Status of field at the moment of writing.
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum Status {
     /// Deprecated,
     Deprecated,

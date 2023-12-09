@@ -51,7 +51,7 @@ use indexmap::IndexMap;
 pub use self::tables::*;
 use crate::{components::ExtendShortcutsMaps, jobs::JobId, melib::text_processing::TextProcessing};
 
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum SearchMovement {
     Previous,
     #[default]
@@ -60,7 +60,7 @@ pub enum SearchMovement {
     Last,
 }
 
-#[derive(Default, Debug, Clone)]
+#[derive(Clone, Debug, Default)]
 pub struct SearchPattern {
     pattern: String,
     positions: Vec<(usize, usize)>,

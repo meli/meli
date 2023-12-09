@@ -110,7 +110,7 @@ impl InputHandler {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct MainLoopHandler {
     pub sender: Sender<ThreadEvent>,
     pub job_executor: Arc<JobExecutor>,

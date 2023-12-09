@@ -43,7 +43,7 @@ use crate::{state::Context, ThemeAttribute};
 ///
 /// See `CellBuffer::scroll_up` and `CellBuffer::scroll_down` for an explanation
 /// of how `xterm` scrolling works.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct ScrollRegion {
     pub top: usize,
     pub bottom: usize,
@@ -59,7 +59,7 @@ pub struct ScrollRegion {
 /// The first index, `Cellbuffer[y]`, corresponds to a row, and thus the y-axis.
 /// The second index, `Cellbuffer[y][x]`, corresponds to a column within a row
 /// and thus the x-axis.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct CellBuffer {
     pub cols: usize,
     pub rows: usize,
@@ -806,7 +806,7 @@ impl std::fmt::Display for CellBuffer {
 /// A single point on a terminal display.
 ///
 /// A `Cell` contains a character and style.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Cell {
     ch: char,
 
@@ -1777,7 +1777,7 @@ impl KMP for CellBuffer {
     }
 }
 
-#[derive(Debug, Default, Copy, Hash, Clone, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 pub struct FormatTag {
     pub fg: Option<Color>,
     pub bg: Option<Color>,
@@ -1817,7 +1817,7 @@ impl FormatTag {
     }
 }
 
-#[derive(Debug, Copy, Hash, Clone, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum WidgetWidth {
     Unset,
     Hold(usize),

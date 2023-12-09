@@ -111,7 +111,7 @@ pub fn quoted_argument(input: &[u8]) -> IResult<&[u8], &str> {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Clone, Copy, Debug)]
 pub struct TokenStream {
     tokens: &'static [TokenAdicity],
 }
@@ -225,7 +225,7 @@ impl TokenStream {
 
 /// `Token` wrapper that defines how many times a token is expected to be
 /// repeated
-#[derive(Debug, Copy, Clone)]
+#[derive(Clone, Copy, Debug)]
 pub enum TokenAdicity {
     ZeroOrOne(Token),
     ZeroOrMore(Token),
@@ -245,7 +245,7 @@ impl TokenAdicity {
 }
 
 /// A token encountered in the UI's command execution bar
-#[derive(Debug, Copy, Clone)]
+#[derive(Clone, Copy, Debug)]
 pub enum Token {
     Literal(&'static str),
     Filepath,

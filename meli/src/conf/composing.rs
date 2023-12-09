@@ -30,7 +30,7 @@ use super::{
 };
 
 /// Settings for writing and sending new e-mail
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComposingSettings {
     /// A command to pipe new emails to
@@ -176,7 +176,7 @@ pub mod strings {
     named_unit_variant!(server_submission);
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum SendMail {
     #[cfg(feature = "smtp")]
@@ -188,7 +188,7 @@ pub enum SendMail {
 
 /// Shell command compose hooks (See
 /// [`crate::mail::compose::hooks::Hook`])
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComposeHook {
     #[serde(deserialize_with = "non_empty_string")]

@@ -114,7 +114,7 @@ impl BackendOp for MaildirOp {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Clone, Debug, Default)]
 pub struct MaildirMailbox {
     hash: MailboxHash,
     name: String,

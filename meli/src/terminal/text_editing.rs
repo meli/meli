@@ -21,7 +21,7 @@
 
 use melib::text_processing::TextProcessing;
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct UText {
     content: String,
     cursor_pos: usize,

@@ -38,7 +38,7 @@ pub struct ManageSieveConnection {
     pub inner: ImapConnection,
 }
 
-#[derive(PartialEq, Eq, Debug, Copy, Clone)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ManageSieveResponse<'a> {
     Ok {
         code: Option<&'a [u8]>,

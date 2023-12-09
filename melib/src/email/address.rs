@@ -29,14 +29,14 @@ use std::{
 
 use super::*;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GroupAddress {
     pub raw: Vec<u8>,
     pub display_name: StrBuilder,
     pub mailbox_list: Vec<Address>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 /**
  * Container for an address.
  *
@@ -100,7 +100,7 @@ impl PartialEq for MailboxAddress {
 /// assert_eq!(addr.get_display_name(), Some("Jörg Doe".to_string()));
 /// assert_eq!(addr.get_email(), "joerg@example.com".to_string());
 /// ```
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub enum Address {
     Mailbox(MailboxAddress),
     Group(GroupAddress),
@@ -467,7 +467,7 @@ impl TryFrom<&str> for Address {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Clone, Copy, Debug)]
 #[repr(transparent)]
 pub struct UIAddress<'a>(&'a Address);
 
@@ -495,7 +495,7 @@ impl std::fmt::Display for UIAddress<'_> {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Clone, Copy, Debug)]
 #[repr(transparent)]
 pub struct UINameAddress<'a>(&'a Address);
 
@@ -521,7 +521,7 @@ impl std::fmt::Display for UINameAddress<'_> {
 }
 
 /// Helper struct to return slices from a struct field on demand.
-#[derive(Clone, Debug, Serialize, Deserialize, Default, PartialEq, Eq, Copy, Hash)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct StrBuilder {
     pub offset: usize,
     pub length: usize,
@@ -550,7 +550,7 @@ impl StrBuilder {
 }
 
 /// `MessageID` is accessed through the `StrBuild` trait.
-#[derive(Clone, Serialize, Deserialize, Default)]
+#[derive(Clone, Default, Deserialize, Serialize)]
 pub struct MessageID(pub Vec<u8>, pub StrBuilder);
 
 impl StrBuild for MessageID {
@@ -617,7 +617,7 @@ impl std::fmt::Debug for MessageID {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct References {
     pub raw: Vec<u8>,
     pub refs: Vec<MessageID>,

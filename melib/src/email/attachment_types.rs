@@ -25,7 +25,7 @@ use crate::email::{
     parser::BytesExt,
 };
 
-#[derive(Clone, Default, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub enum Charset {
     Ascii,
     #[default]
@@ -194,7 +194,7 @@ impl std::fmt::Display for Charset {
     }
 }
 
-#[derive(Clone, Default, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Clone, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub enum MultipartType {
     Alternative,
     Digest,
@@ -242,7 +242,7 @@ impl From<&[u8]> for MultipartType {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub enum ContentType {
     Text {
         kind: Text,
@@ -438,7 +438,7 @@ impl ContentType {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub enum Text {
     Plain,
     Html,
@@ -463,7 +463,7 @@ impl std::fmt::Display for Text {
     }
 }
 
-#[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub enum ContentTransferEncoding {
     #[default]
     _8Bit,
@@ -506,7 +506,7 @@ impl From<&[u8]> for ContentTransferEncoding {
     }
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct ContentDisposition {
     pub kind: ContentDispositionKind,
     pub filename: Option<String>,
@@ -517,7 +517,7 @@ pub struct ContentDisposition {
     pub parameter: Vec<String>,
 }
 
-#[derive(Clone, Default, Debug, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub enum ContentDispositionKind {
     #[default]
     Inline,

@@ -29,7 +29,7 @@ use crate::{
     error::*,
 };
 
-#[derive(Debug, Default, Clone)]
+#[derive(Clone, Debug, Default)]
 pub struct ImapMailbox {
     pub hash: MailboxHash,
     pub imap_path: String,

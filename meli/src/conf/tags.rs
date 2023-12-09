@@ -29,7 +29,7 @@ use serde::{Deserialize, Deserializer};
 use super::DotAddressable;
 use crate::terminal::Color;
 
-#[derive(Default, Debug, Deserialize, Clone, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct TagsSettings {
     #[serde(default, deserialize_with = "tag_color_de")]

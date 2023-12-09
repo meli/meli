@@ -29,7 +29,7 @@ use crate::utils::{
     parsec::*,
 };
 
-#[derive(Debug, PartialEq, Clone, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum Query {
     Before(UnixTimestamp),
     After(UnixTimestamp),

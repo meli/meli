@@ -34,7 +34,7 @@ use termion::{
 
 use super::*;
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Key {
     /// Backspace.
     Backspace,
@@ -80,7 +80,7 @@ pub enum Key {
 }
 
 /// A mouse related event.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum MouseEvent {
     /// A mouse button was pressed.
@@ -109,7 +109,7 @@ impl From<TermionMouseEvent> for MouseEvent {
 }
 
 /// A mouse button.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum MouseButton {
     /// The left mouse button.
@@ -208,7 +208,7 @@ impl PartialEq<Key> for &Key {
     }
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(Eq, PartialEq)]
 /// Keep track of whether we're accepting normal user input or a pasted string.
 enum InputMode {
     Normal,
@@ -426,7 +426,7 @@ impl Serialize for Key {
 
 #[test]
 fn test_key_serde() {
-    #[derive(Debug, Deserialize, PartialEq, Eq)]
+    #[derive(Debug, Deserialize, Eq, PartialEq)]
     struct V {
         k: Key,
     }

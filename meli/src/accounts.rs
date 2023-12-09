@@ -88,7 +88,7 @@ macro_rules! is_variant {
     };
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Clone, Debug, Default)]
 pub enum MailboxStatus {
     Available,
     Failed(Error),
@@ -103,7 +103,7 @@ impl MailboxStatus {
     is_variant! { is_parsing, Parsing(_, _) }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct MailboxEntry {
     pub status: MailboxStatus,
     pub name: String,
@@ -168,7 +168,7 @@ impl MailboxEntry {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Clone, Debug, Default)]
 pub enum IsOnline {
     #[default]
     Uninit,
@@ -461,7 +461,7 @@ impl Drop for Account {
     }
 }
 
-#[derive(Serialize, Debug, Clone, Default)]
+#[derive(Clone, Debug, Default, Serialize)]
 pub struct MailboxNode {
     pub hash: MailboxHash,
     pub depth: usize,

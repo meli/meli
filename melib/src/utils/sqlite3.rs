@@ -26,7 +26,7 @@ pub use rusqlite::{self, params, Connection};
 
 use crate::{error::*, log, Envelope};
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct DatabaseDescription {
     pub name: &'static str,
     pub init_script: Option<&'static str>,

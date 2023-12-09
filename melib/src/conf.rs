@@ -32,7 +32,7 @@ use crate::{
 };
 pub use crate::{SortField, SortOrder};
 
-#[derive(Debug, Serialize, Default, Clone)]
+#[derive(Clone, Debug, Default, Serialize)]
 pub struct AccountSettings {
     pub name: String,
     pub root_mailbox: String,
@@ -102,7 +102,7 @@ impl AccountSettings {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub struct MailboxConf {
     #[serde(alias = "rename")]
@@ -187,7 +187,7 @@ pub mod strings {
     named_unit_variant!(ask);
 }
 
-#[derive(Copy, Default, Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum ToggleFlag {
     #[default]
     Unset,

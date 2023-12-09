@@ -59,7 +59,7 @@ impl<'att> From<Option<Charset>> for DecodeOptions<'att> {
     }
 }
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 /// A struct analogous to [`Attachment`] which can have incomplete and partial
 /// content before being turned into an [`Attachment`] with
 /// [`AttachmentBuilder::build`].
@@ -387,7 +387,7 @@ impl From<AttachmentBuilder> for Attachment {
 }
 
 /// Immutable attachment type.
-#[derive(Clone, Serialize, Deserialize, PartialEq, Hash, Eq)]
+#[derive(Clone, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct Attachment {
     pub content_type: ContentType,
     pub content_transfer_encoding: ContentTransferEncoding,

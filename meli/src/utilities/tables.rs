@@ -28,7 +28,7 @@ use crate::{
     terminal::{Screen, Virtual},
 };
 
-#[derive(Debug, Default, Copy, Clone)]
+#[derive(Clone, Copy, Debug, Default)]
 pub enum ColumnElasticity {
     #[default]
     Rigid,
@@ -65,7 +65,7 @@ impl TableRowFormat {
 }
 */
 
-#[derive(Debug, Default, Clone)]
+#[derive(Clone, Debug, Default)]
 pub struct TableThemeConfig {
     pub theme: TableTheme,
     //pub row_formats: HashMap<usize, SmallVec<[(u8, TableRowFormat); 6]>>,
@@ -83,7 +83,7 @@ impl TableThemeConfig {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub enum TableTheme {
     Single(ThemeAttribute),
     EvenOdd {
@@ -98,7 +98,7 @@ impl Default for TableTheme {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Clone, Debug, Default)]
 pub struct TableCursorConfig {
     pub handle: bool,
     pub theme: TableTheme,
@@ -121,7 +121,7 @@ impl TableCursorConfig {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct DataColumns<const N: usize> {
     pub cursor_config: TableCursorConfig,
     pub theme_config: TableThemeConfig,

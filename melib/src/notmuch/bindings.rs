@@ -80,67 +80,67 @@ pub use self::_notmuch_status as notmuch_status_t;
 pub type notmuch_status_to_string =
     unsafe extern "C" fn(status: notmuch_status_t) -> *const ::std::os::raw::c_char;
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Clone, Copy, Debug)]
 pub struct _notmuch_database {
     _unused: [u8; 0],
 }
 pub type notmuch_database_t = _notmuch_database;
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Clone, Copy, Debug)]
 pub struct _notmuch_query {
     _unused: [u8; 0],
 }
 pub type notmuch_query_t = _notmuch_query;
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Clone, Copy, Debug)]
 pub struct _notmuch_threads {
     _unused: [u8; 0],
 }
 pub type notmuch_threads_t = _notmuch_threads;
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Clone, Copy, Debug)]
 pub struct _notmuch_thread {
     _unused: [u8; 0],
 }
 pub type notmuch_thread_t = _notmuch_thread;
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Clone, Copy, Debug)]
 pub struct _notmuch_messages {
     _unused: [u8; 0],
 }
 pub type notmuch_messages_t = _notmuch_messages;
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Clone, Copy, Debug)]
 pub struct _notmuch_message {
     _unused: [u8; 0],
 }
 pub type notmuch_message_t = _notmuch_message;
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Clone, Copy, Debug)]
 pub struct _notmuch_tags {
     _unused: [u8; 0],
 }
 pub type notmuch_tags_t = _notmuch_tags;
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Clone, Copy, Debug)]
 pub struct _notmuch_directory {
     _unused: [u8; 0],
 }
 pub type notmuch_directory_t = _notmuch_directory;
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Clone, Copy, Debug)]
 pub struct _notmuch_filenames {
     _unused: [u8; 0],
 }
 pub type notmuch_filenames_t = _notmuch_filenames;
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Clone, Copy, Debug)]
 pub struct _notmuch_config_list {
     _unused: [u8; 0],
 }
 pub type notmuch_config_list_t = _notmuch_config_list;
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Clone, Copy, Debug)]
 pub struct _notmuch_indexopts {
     _unused: [u8; 0],
 }
@@ -1636,7 +1636,7 @@ pub type notmuch_message_remove_all_properties_with_prefix =
     ) -> notmuch_status_t;
 
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Clone, Copy, Debug)]
 pub struct _notmuch_string_map_iterator {
     _unused: [u8; 0],
 }

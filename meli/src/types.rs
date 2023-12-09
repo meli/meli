@@ -105,7 +105,7 @@ pub enum ForkType {
     NewDraft(File, std::process::Child),
 }
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NotificationType {
     Info,
     Error(melib::error::ErrorKind),
@@ -191,7 +191,7 @@ impl From<RefreshEvent> for UIEvent {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum UIMode {
     Normal,
     Insert,
@@ -226,7 +226,7 @@ pub mod segment_tree {
 
     use smallvec::SmallVec;
 
-    #[derive(Default, Debug, Clone)]
+    #[derive(Clone, Debug, Default)]
     pub struct SegmentTree {
         pub array: SmallVec<[u8; 1024]>,
         tree: SmallVec<[u8; 1024]>,

@@ -21,7 +21,7 @@
 
 use smallvec::SmallVec;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Clone, Debug, Default)]
 pub enum State {
     ExpectingControlChar,
     G0,                      // Designate G0 Character Set

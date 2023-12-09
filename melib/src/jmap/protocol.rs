@@ -226,7 +226,7 @@ pub async fn get_message(conn: &JmapConnection, ids: &[String]) -> Result<Vec<En
 }
 */
 
-#[derive(Copy, Clone)]
+#[derive(Clone, Copy)]
 pub enum EmailFetchState {
     Start { batch_size: u64 },
     Ongoing { position: u64, batch_size: u64 },

@@ -20,7 +20,7 @@
  */
 
 #[allow(clippy::upper_case_acronyms)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LineBreakClass {
     BK,
     CM,
@@ -123,7 +123,7 @@ impl From<&str> for LineBreakClass {
     }
 }
 
-#[derive(PartialEq, Eq, Debug, Copy, Clone, Default)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum Reflow {
     No,
     All,

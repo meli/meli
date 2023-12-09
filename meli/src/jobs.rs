@@ -110,7 +110,7 @@ pub struct MeliTask {
     timer: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 /// A spawned future's metadata for book-keeping.
 pub struct JobMetadata {
     pub id: JobId,

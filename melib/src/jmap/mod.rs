@@ -115,7 +115,7 @@ pub struct EnvelopeCache {
     // flags: Option<Flag>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct JmapServerConf {
     pub server_url: String,
     pub server_username: String,

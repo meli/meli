@@ -33,7 +33,7 @@ use crate::backends::{MailboxHash, TagHash};
 pub type EnvelopeRef<'g> = RwRef<'g, EnvelopeHash, Envelope>;
 pub type EnvelopeRefMut<'g> = RwRefMut<'g, EnvelopeHash, Envelope>;
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct Collection {
     pub envelopes: Arc<RwLock<HashMap<EnvelopeHash, Envelope>>>,
     pub message_id_index: Arc<RwLock<HashMap<Vec<u8>, EnvelopeHash>>>,

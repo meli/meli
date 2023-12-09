@@ -29,7 +29,7 @@ use crate::{
     error::*,
 };
 
-#[derive(Debug, PartialEq, Hash, Eq, Ord, PartialOrd, Copy, Clone)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct ModSequence(pub std::num::NonZeroU64);
 
 impl TryFrom<i64> for ModSequence {

@@ -43,7 +43,7 @@ struct ThreadEntry {
     mailview: Box<MailView>,
 }
 
-#[derive(Debug, Default, Copy, Clone)]
+#[derive(Clone, Copy, Debug, Default)]
 pub enum ThreadViewFocus {
     #[default]
     None,

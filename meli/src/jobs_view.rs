@@ -32,7 +32,7 @@ use crate::{
     },
 };
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 #[repr(u8)]
 enum Column {
     _0 = 0,

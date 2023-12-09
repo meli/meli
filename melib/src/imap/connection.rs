@@ -77,7 +77,7 @@ macro_rules! imap_trace {
 
 use super::{protocol_parser, Capabilities, ImapServerConf, UIDStore};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum SyncPolicy {
     None,
     /// RFC4549 `Synch Ops for Disconnected IMAP4 Clients` <https://tools.ietf.org/html/rfc4549>
@@ -88,13 +88,13 @@ pub enum SyncPolicy {
     CondstoreQresync,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum ImapProtocol {
     IMAP { extension_use: ImapExtensionUse },
     ManageSieve,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct ImapExtensionUse {
     pub condstore: bool,
     pub idle: bool,
@@ -124,7 +124,7 @@ pub struct ImapStream {
     pub timeout: Option<Duration>,
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MailboxSelection {
     None,
     Select(MailboxHash),

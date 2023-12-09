@@ -25,7 +25,7 @@ use super::*;
 ///
 /// An *Identity* object stores information about an email address or domain the
 /// user may send from.
-#[derive(Deserialize, Serialize, Debug, Clone, Default)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IdentityObject {
     ///  id: `Id` (immutable; server-set)
@@ -107,7 +107,7 @@ impl Method<IdentityObject> for IdentityChanges {
 ///  o  "forbiddenFrom": The user is not allowed to send from the address
 ///     given as the "email" property of the Identity.
 /// ```
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", transparent)]
 pub struct IdentitySet(pub Set<IdentityObject>);
 

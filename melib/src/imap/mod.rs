@@ -100,7 +100,7 @@ pub struct EnvelopeCache {
     flags: Option<Flag>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct ImapServerConf {
     pub server_hostname: String,
     pub server_username: String,
@@ -1589,7 +1589,7 @@ impl ImapType {
     }
 }
 
-#[derive(Debug, PartialEq, Copy, Clone)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum FetchStage {
     InitialFresh,
     InitialCache,

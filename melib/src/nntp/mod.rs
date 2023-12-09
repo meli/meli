@@ -103,7 +103,7 @@ pub static SUPPORTED_CAPABILITIES: &[&str] = &[
     "AUTHINFO USER",
 ];
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct NntpServerConf {
     pub server_hostname: String,
     pub server_username: String,

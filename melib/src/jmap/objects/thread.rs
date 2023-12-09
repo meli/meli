@@ -23,7 +23,7 @@ use std::marker::PhantomData;
 
 use super::*;
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ThreadObject {
     #[serde(default)]
@@ -40,7 +40,7 @@ impl ThreadObject {
     _impl!(get email_ids, email_ids: Vec<Id<EmailObject>>);
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ThreadGet {
     #[serde(flatten)]
@@ -63,7 +63,7 @@ impl ThreadGet {
     }
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ThreadChanges {
     #[serde(flatten)]

@@ -43,7 +43,7 @@ use super::*;
 /// setting this property to `canceled`; if the update succeeds, the
 /// submission was successfully canceled, and the message has not been
 /// delivered to any of the original recipients.
-#[derive(Deserialize, Serialize, Default, Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum UndoStatus {
     /// It may be possible to cancel this submission.
@@ -63,7 +63,7 @@ pub enum UndoStatus {
 /// it SHOULD update the EmailSubmission object each time the status
 /// of any of the recipients changes, even if some recipients are
 /// still being retried.
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeliveryStatusObject {
     /// The SMTP reply string returned for this recipient when the
@@ -125,7 +125,7 @@ pub struct DeliveryStatusObject {
 /// this recipient with Disposition-Type (as per `[RFC8098]`,
 /// Section 3.2.6.2) equal to `displayed`, this property SHOULD be
 /// set to `yes`.
-#[derive(Deserialize, Serialize, Default, Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Displayed {
     /// The recipient's system claims the message content has been displayed to
@@ -153,7 +153,7 @@ pub enum Displayed {
 ///
 /// The server MAY also set this property based on other feedback
 /// channels.
-#[derive(Deserialize, Serialize, Default, Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Delivered {
     /// The message is in a local mail queue and the status will change once it
@@ -177,7 +177,7 @@ pub enum Delivered {
 ///
 /// An *EmailSubmission* object represents the submission of an Email for
 /// delivery to one or more recipients.  It has the following properties:
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EmailSubmissionObject {
     /// accountId: `Id`
@@ -284,7 +284,7 @@ impl Serialize for EmailSubmissionObject {
     }
 }
 
-#[derive(Serialize, Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EmailSubmissionSet {
     #[serde(flatten)]
@@ -343,7 +343,7 @@ impl EmailSubmissionSet {
 }
 
 /// Information for use when sending via SMTP.
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EnvelopeObject {
     /// The email address to use as the return address in the SMTP
@@ -367,7 +367,7 @@ impl Object for EnvelopeObject {
     const NAME: &'static str = "Envelope";
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Address {
     /// The email address being represented by the object.  This is a

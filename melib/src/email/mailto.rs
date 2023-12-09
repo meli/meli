@@ -32,7 +32,7 @@ use crate::{
     utils::percent_encoding::{AsciiSet, CONTROLS},
 };
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Mailto {
     pub address: Vec<Address>,
     pub body: Option<String>,

@@ -92,7 +92,7 @@ extern "C" {
 
 #[cfg(not(target_os = "openbsd"))]
 #[repr(i32)]
-#[derive(Copy, Clone)]
+#[derive(Clone, Copy)]
 #[allow(dead_code)]
 enum LocaleCategoryMask {
     Time = libc::LC_TIME_MASK,
@@ -104,7 +104,7 @@ const _LC_LAST: c_int = 7;
 
 #[cfg(target_os = "openbsd")]
 #[repr(i32)]
-#[derive(Copy, Clone)]
+#[derive(Clone, Copy)]
 #[allow(dead_code)]
 enum LocaleCategoryMask {
     Time = 1 << libc::LC_TIME,
@@ -112,7 +112,7 @@ enum LocaleCategoryMask {
 }
 
 #[repr(i32)]
-#[derive(Copy, Clone)]
+#[derive(Clone, Copy)]
 #[allow(dead_code)]
 enum LocaleCategory {
     Time = libc::LC_TIME,

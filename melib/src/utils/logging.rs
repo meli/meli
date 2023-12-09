@@ -31,7 +31,7 @@ use std::{
 
 use log::{Level, LevelFilter, Log, Metadata, Record};
 
-#[derive(Copy, Clone, Default, Eq, PartialEq, PartialOrd, Hash, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, PartialOrd, Serialize)]
 #[repr(u8)]
 pub enum LogLevel {
     OFF = 0,
@@ -125,7 +125,7 @@ impl std::fmt::Display for LogLevel {
 
 use LogLevel::*;
 
-#[derive(Copy, Clone, Default, Eq, PartialEq, PartialOrd, Hash, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, PartialOrd, Serialize)]
 pub enum Destination {
     File,
     #[default]

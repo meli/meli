@@ -29,7 +29,7 @@ use crate::{
     ShortcutMap, ThemeAttribute, UIDialog,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct ViewSettings {
     pub pager_filter: Option<String>,
     pub html_filter: Option<String>,
@@ -67,13 +67,13 @@ impl Default for ViewSettings {
     }
 }
 
-#[derive(Eq, PartialEq, Copy, Clone, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LinkKind {
     Url,
     Email,
 }
 
-#[derive(Eq, PartialEq, Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Link {
     pub start: usize,
     pub end: usize,
@@ -98,7 +98,7 @@ impl From<&ForceCharset> for Option<Charset> {
     }
 }
 
-#[derive(PartialEq, Eq, Copy, Clone, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Source {
     Decoded,
     Raw,

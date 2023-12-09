@@ -31,7 +31,7 @@ use super::{
     types::{LineBreakClass, Reflow},
 };
 
-#[derive(Default, Debug, Eq, PartialEq, Copy, Clone)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum LineBreakCandidate {
     MandatoryBreak,
     BreakAllowed,
@@ -1205,7 +1205,7 @@ mod segment_tree {
 
     use smallvec::SmallVec;
 
-    #[derive(Default, Debug, Clone)]
+    #[derive(Clone, Debug, Default)]
     pub(super) struct SegmentTree {
         array: SmallVec<[usize; 1024]>,
         tree: SmallVec<[usize; 1024]>,
@@ -1282,7 +1282,7 @@ mod segment_tree {
 /// A lazy stateful iterator for line breaking text. Useful for very long text
 /// where you don't want to linebreak it completely before user requests
 /// specific lines.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct LineBreakText {
     text: String,
     reflow: Reflow,
@@ -1292,7 +1292,7 @@ pub struct LineBreakText {
     state: ReflowState,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 enum ReflowState {
     No {
         cur_index: usize,
@@ -1323,7 +1323,7 @@ impl ReflowState {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 enum LineBreakTextState {
     AtLine {
         cur_index: usize,

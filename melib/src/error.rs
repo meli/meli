@@ -25,7 +25,7 @@ use std::{borrow::Cow, io, result, str, string, sync::Arc};
 
 pub type Result<T> = result::Result<T, Error>;
 
-#[derive(Debug, Copy, PartialEq, Eq, Clone)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NetworkErrorKind {
     /// Unspecified
     None,
@@ -316,7 +316,7 @@ impl From<isahc::http::StatusCode> for NetworkErrorKind {
     }
 }
 
-#[derive(Debug, Copy, PartialEq, Eq, Clone)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum ErrorKind {
     None,
@@ -389,7 +389,7 @@ impl ErrorKind {
     is_variant! { is_value_error, ValueError }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct Error {
     pub summary: Cow<'static, str>,
     pub details: Option<Cow<'static, str>>,

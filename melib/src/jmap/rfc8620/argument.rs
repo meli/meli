@@ -26,7 +26,7 @@ use crate::jmap::{
     rfc8620::{Object, ResultField},
 };
 
-#[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase", untagged)]
 pub enum Argument<T: Clone + PartialEq + Eq + Hash> {
     Value(T),

@@ -484,7 +484,7 @@ pub fn list_mailbox_result(input: &[u8]) -> IResult<&[u8], ImapMailbox> {
     ))
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FetchResponse<'a> {
     pub uid: Option<UID>,
     pub message_sequence_number: MessageSequenceNumber,
@@ -931,7 +931,7 @@ pub fn search_results_raw<'a>(input: &'a [u8]) -> IResult<&'a [u8], &'a [u8]> {
     ))(input)
 }
 
-#[derive(Debug, Default, Eq, PartialEq, Clone)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct SelectResponse {
     pub exists: ImapNum,
     pub recent: ImapNum,
@@ -1382,7 +1382,7 @@ fn eat_whitespace(mut input: &[u8]) -> IResult<&[u8], ()> {
     Ok((input, ()))
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Clone, Debug, Default)]
 pub struct StatusResponse {
     pub mailbox: Option<MailboxHash>,
     pub messages: Option<ImapNum>,

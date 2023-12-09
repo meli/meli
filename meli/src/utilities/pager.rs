@@ -28,7 +28,7 @@ use crate::terminal::embedded::EmbeddedGrid;
 /// `Pager` holds its own content in its own `CellBuffer` and when `draw` is
 /// called, it draws the current view of the text. It is responsible for
 /// scrolling etc.
-#[derive(Default, Debug, Clone)]
+#[derive(Clone, Debug, Default)]
 pub struct Pager {
     text: String,
     cursor: (usize, usize),

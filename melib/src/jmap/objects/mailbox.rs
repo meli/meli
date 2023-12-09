@@ -27,7 +27,7 @@ impl Id<MailboxObject> {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug, Default)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MailboxObject {
     pub id: Id<MailboxObject>,
@@ -47,7 +47,7 @@ impl Object for MailboxObject {
     const NAME: &'static str = "Mailbox";
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JmapRights {
     pub may_add_items: bool,
@@ -77,7 +77,7 @@ impl Default for JmapRights {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MailboxGet {
     #[serde(flatten)]
@@ -108,7 +108,7 @@ impl Method<MailboxObject> for MailboxGet {
 ///
 /// - `mailboxHasEmail`: The Mailbox has at least one Email assigned to it, and
 ///   the `onDestroyRemoveEmails` argument was false.
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MailboxSet {
     #[serde(flatten)]

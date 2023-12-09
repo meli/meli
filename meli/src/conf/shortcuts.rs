@@ -35,7 +35,7 @@ macro_rules! shortcut {
     };
 }
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Shortcuts {
     #[serde(default)]

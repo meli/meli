@@ -26,7 +26,7 @@ use melib::{Error, Result, ToggleFlag};
 use super::{deserializers::non_empty_opt_string, DotAddressable, Themes};
 
 /// Settings for terminal display
-#[derive(Debug, Deserialize, Clone, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct TerminalSettings {
     /// light, dark
@@ -109,7 +109,7 @@ impl DotAddressable for TerminalSettings {
     }
 }
 
-#[derive(Debug, Deserialize, Clone, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum ProgressSpinnerSequence {
     Integer(usize),

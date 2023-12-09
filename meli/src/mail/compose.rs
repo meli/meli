@@ -47,7 +47,7 @@ use edit_attachments::*;
 
 pub mod hooks;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Eq, PartialEq)]
 enum Cursor {
     Headers,
     Body,

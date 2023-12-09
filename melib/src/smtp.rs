@@ -88,7 +88,7 @@ use crate::{
 };
 
 /// Kind of server security (StartTLS/TLS/None) the client should attempt
-#[derive(Debug, Copy, PartialEq, Eq, Clone, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "type")]
 pub enum SmtpSecurity {
     #[serde(alias = "starttls", alias = "STARTTLS")]
@@ -119,7 +119,7 @@ impl Default for SmtpSecurity {
 }
 
 /// Source of user's password for SMTP authentication
-#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "type", content = "value")]
 pub enum Password {
     #[serde(alias = "raw")]
@@ -129,7 +129,7 @@ pub enum Password {
 }
 
 /// Kind of server authentication the client should attempt
-#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "type")]
 pub enum SmtpAuth {
     #[serde(alias = "none")]
@@ -152,7 +152,7 @@ pub enum SmtpAuth {
     // md5, sasl, etc
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize, Default)]
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub struct SmtpAuthType {
     plain: bool,
     login: bool,
@@ -169,7 +169,7 @@ impl SmtpAuth {
 }
 
 /// Server configuration for connecting the SMTP client
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SmtpServerConf {
     pub hostname: String,
     pub port: u16,
@@ -184,7 +184,7 @@ pub struct SmtpServerConf {
 
 //example: "SIZE 52428800", "8BITMIME", "PIPELINING", "CHUNKING", "PRDR",
 /// Configured SMTP extensions to use
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SmtpExtensionSupport {
     #[serde(default = "crate::conf::true_val")]
     pipelining: bool,
@@ -826,7 +826,7 @@ impl SmtpConnection {
 pub type ExpectedReplyCode = Option<(ReplyCode, &'static [ReplyCode])>;
 
 /// Recognized kinds of SMTP reply codes
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ReplyCode {
     /// System status, or system help reply
     _211,
@@ -1006,7 +1006,7 @@ impl TryFrom<&'_ str> for ReplyCode {
 }
 
 /// A single line or multi-line server reply, along with its reply code
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct Reply<'s> {
     pub code: ReplyCode,
     pub lines: SmallVec<[&'s str; 16]>,
@@ -1123,7 +1123,7 @@ mod test {
     use super::*;
 
     const ADDRESS: &str = "localhost:8825";
-    #[derive(Debug, Clone)]
+    #[derive(Clone, Debug)]
     enum Message {
         Helo,
         Mail {
@@ -1147,7 +1147,7 @@ mod test {
 
     type QueuedMail = ((IpAddr, String), Message);
 
-    #[derive(Debug, Clone)]
+    #[derive(Clone, Debug)]
     struct MyHandler {
         mails: Arc<Mutex<Vec<QueuedMail>>>,
         stored: Arc<Mutex<Vec<(String, crate::Envelope)>>>,

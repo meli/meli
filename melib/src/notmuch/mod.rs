@@ -251,7 +251,7 @@ pub struct NotmuchDb {
 unsafe impl Send for NotmuchDb {}
 unsafe impl Sync for NotmuchDb {}
 
-#[derive(Debug, Clone, Default)]
+#[derive(Clone, Debug, Default)]
 struct NotmuchMailbox {
     hash: MailboxHash,
     children: Vec<MailboxHash>,

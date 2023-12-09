@@ -24,7 +24,7 @@ use std::sync::Arc;
 use super::*;
 
 /// `BackendOp` implementor for Imap
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct JmapOp {
     hash: EnvelopeHash,
     connection: Arc<FutureMutex<JmapConnection>>,

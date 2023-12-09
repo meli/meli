@@ -115,7 +115,7 @@ pub mod manpages {
         }
     }
 
-    #[derive(Copy, Clone, Debug)]
+    #[derive(Clone, Copy, Debug)]
     /// Choose manpage
     pub enum ManPages {
         /// meli(1)

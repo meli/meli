@@ -137,7 +137,7 @@ impl Id<EmailObject> {
 //      The date the Email was received by the message store.  This is the
 //      "internal date" in IMAP [RFC3501]./
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EmailObject {
     #[serde(default)]
@@ -211,7 +211,7 @@ impl EmailObject {
     _impl!(get keywords, keywords: IndexMap<String, bool>);
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Header {
     pub name: String,
@@ -228,7 +228,7 @@ where
     Ok(v.into_iter().map(|t| (t.name, t.value)).collect())
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EmailAddress {
     pub email: String,
@@ -332,7 +332,7 @@ impl std::convert::From<EmailObject> for crate::Envelope {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HtmlBody {
     pub blob_id: Id<BlobObject>,
@@ -359,7 +359,7 @@ pub struct HtmlBody {
     pub sub_parts: Vec<Value>,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TextBody {
     pub blob_id: Id<BlobObject>,
@@ -390,7 +390,7 @@ impl Object for EmailObject {
     const NAME: &'static str = "Email";
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EmailQuery {
     #[serde(flatten)]
@@ -419,7 +419,7 @@ impl EmailQuery {
     _impl!(collapse_threads: bool);
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EmailGet {
     #[serde(flatten)]
@@ -461,7 +461,7 @@ impl EmailGet {
     _impl!(max_body_value_bytes: u64);
 }
 
-#[derive(Serialize, Deserialize, Default, Debug)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EmailFilterCondition {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -546,7 +546,7 @@ impl From<EmailFilterCondition> for FilterCondition<EmailFilterCondition, EmailO
     }
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum MessageProperty {
     ThreadId,
@@ -790,7 +790,7 @@ fn test_jmap_query() {
     assert_eq!(*request_no.lock().unwrap(), 1);
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EmailSet {
     #[serde(flatten)]
@@ -807,7 +807,7 @@ impl EmailSet {
     }
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EmailChanges {
     #[serde(flatten)]
@@ -824,7 +824,7 @@ impl EmailChanges {
     }
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EmailQueryChanges {
     #[serde(flatten)]
@@ -843,7 +843,7 @@ impl EmailQueryChanges {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct EmailQueryChangesResponse {
     ///o  The "collapseThreads" argument that was used with "Email/query".
     #[serde(default = "bool_false")]

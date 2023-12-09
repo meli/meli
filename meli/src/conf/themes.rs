@@ -323,7 +323,7 @@ const DEFAULT_KEYS: &[&str] = &[
 ];
 
 /// `ThemeAttributeInner` but with the links resolved.
-#[derive(Debug, PartialEq, Eq, Clone, Default, Copy, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ThemeAttribute {
     pub fg: Color,
@@ -332,7 +332,7 @@ pub struct ThemeAttribute {
 }
 
 /// Holds {fore,back}ground color and terminal attribute values.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ThemeAttributeInner {
     #[serde(default)]
@@ -353,7 +353,7 @@ impl Default for ThemeAttributeInner {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub enum ColorField {
     // Like self, i.e. either Fg or Bg
     LikeSelf,
@@ -376,7 +376,7 @@ impl ThemeLink for Attr {
     type LinkType = ();
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 /// Holds either an actual value or refers to the key name of the attribute that
 /// holds the value.
 enum ThemeValue<T: ThemeLink> {
@@ -501,14 +501,14 @@ impl<'de> Deserialize<'de> for ThemeValue<Color> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct Themes {
     pub light: Theme,
     pub dark: Theme,
     pub other_themes: IndexMap<String, Theme>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct Theme {
     color_aliases: IndexMap<Cow<'static, str>, ThemeValue<Color>>,
     attr_aliases: IndexMap<Cow<'static, str>, ThemeValue<Attr>>,
@@ -533,7 +533,7 @@ mod regexp {
     #[derive(Clone)]
     pub struct RegexpWrapper(pub pcre2::bytes::Regex);
 
-    #[derive(Debug, Clone)]
+    #[derive(Clone, Debug)]
     pub(super) struct TextFormatterSetting {
         pub(super) regexp: RegexpWrapper,
         pub(super) fg: Option<ThemeValue<Color>>,
@@ -542,7 +542,7 @@ mod regexp {
         pub(super) priority: u8,
     }
 
-    #[derive(Debug, Clone)]
+    #[derive(Clone, Debug)]
     pub struct TextFormatter<'r> {
         pub regexp: &'r RegexpWrapper,
         pub tag: FormatTag,
@@ -784,7 +784,7 @@ impl<'de> Deserialize<'de> for Themes {
             #[serde(flatten, default)]
             other_themes: IndexMap<String, ThemeOptions>,
         }
-        #[derive(Deserialize, Default)]
+        #[derive(Default, Deserialize)]
         struct ThemeOptions {
             #[serde(default)]
             color_aliases: IndexMap<Cow<'static, str>, ThemeValue<Color>>,
@@ -797,7 +797,7 @@ impl<'de> Deserialize<'de> for Themes {
             keys: IndexMap<Cow<'static, str>, ThemeAttributeInnerOptions>,
         }
         #[cfg(feature = "regexp")]
-        #[derive(Deserialize, Default)]
+        #[derive(Default, Deserialize)]
         struct RegexpOptions {
             #[serde(default = "false_val")]
             caseless: bool,
@@ -816,7 +816,7 @@ impl<'de> Deserialize<'de> for Themes {
             #[serde(flatten)]
             rest: ThemeAttributeInnerOptions,
         }
-        #[derive(Deserialize, Default)]
+        #[derive(Default, Deserialize)]
         #[serde(deny_unknown_fields)]
         struct ThemeAttributeInnerOptions {
             #[serde(default)]
@@ -1815,7 +1815,7 @@ impl Serialize for Themes {
 
 /* Check Theme linked values for cycles */
 fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
-    #[derive(Hash, Copy, Clone, PartialEq, Eq)]
+    #[derive(Clone, Copy, Eq, Hash, PartialEq)]
     enum Course {
         Fg,
         Bg,

@@ -31,7 +31,7 @@ use uuid::Uuid;
 
 use super::*;
 
-#[derive(Clone, Copy, Eq, Deserialize, Hash, Ord, PartialOrd, PartialEq, Serialize)]
+#[derive(Clone, Copy, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 #[repr(transparent)]
 pub struct ComponentId(Uuid);
 
@@ -98,7 +98,7 @@ impl ExtendShortcutsMaps for ShortcutMaps {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum PageMovement {
     Up(usize),
     Right(usize),
@@ -110,14 +110,14 @@ pub enum PageMovement {
     End,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ScrollContext {
     pub shown_lines: usize,
     pub total_lines: usize,
     pub has_more_lines: bool,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum ScrollUpdate {
     End(ComponentId),
     Update {
@@ -266,7 +266,7 @@ impl Default for ComponentAttr {
     }
 }
 
-#[derive(Eq, PartialEq, Debug, Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ComponentPath {
     pub id: ComponentId,
     pub tail: SmallVec<[ComponentId; 8]>,

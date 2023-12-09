@@ -76,7 +76,7 @@ pub mod bindings;
 use bindings::*;
 pub mod io;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum GpgmeFlag {
     ///"auto-key-retrieve"
     AutoKeyRetrieve,

@@ -40,7 +40,7 @@ pub type StateStdout = termion::screen::AlternateScreen<
 
 type DrawHorizontalSegmentFn = fn(&mut CellBuffer, &mut StateStdout, usize, usize, usize) -> ();
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Hash)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct ScreenGeneration((u64, u64));
 
@@ -478,7 +478,7 @@ impl Screen<Virtual> {
 }
 
 /// An `Area` consists of two points: the upper left and bottom right corners.
-#[derive(Clone, Copy, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Eq, Hash, PartialEq)]
 pub struct Area {
     offset: Pos,
     upper_left: Pos,

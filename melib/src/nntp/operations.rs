@@ -25,7 +25,7 @@ use super::*;
 use crate::{backends::*, error::Error};
 
 /// `BackendOp` implementor for Nntp
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct NntpOp {
     uid: usize,
     mailbox_hash: MailboxHash,

@@ -247,7 +247,7 @@ impl Component for KeySelection {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct GpgComposeState {
     pub sign_mail: ToggleFlag,
     pub encrypt_mail: ToggleFlag,

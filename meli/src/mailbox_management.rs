@@ -26,7 +26,7 @@ use melib::{backends::AccountHash, SortOrder};
 use super::*;
 use crate::{accounts::MailboxEntry, melib::text_processing::TextProcessing};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum MailboxAction {
     Rename,
     Move,
@@ -41,7 +41,7 @@ enum ViewMode {
     Action(UIDialog<MailboxAction>),
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 #[repr(u8)]
 enum Column {
     _0 = 0,

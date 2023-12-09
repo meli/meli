@@ -27,7 +27,7 @@ use super::*;
 use crate::{backends::*, error::Error};
 
 /// `BackendOp` implementor for Imap
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct ImapOp {
     uid: UID,
     mailbox_hash: MailboxHash,

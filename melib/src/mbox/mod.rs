@@ -328,7 +328,7 @@ impl BackendOp for MboxOp {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum MboxMetadata {
     /// Dovecot uses C-Client (ie. UW-IMAP, Pine) compatible headers in mbox
     /// messages to store me
@@ -347,7 +347,7 @@ pub enum MboxMetadata {
 
 /// Choose between "mboxo", "mboxrd", "mboxcl", "mboxcl2". For new mailboxes,
 /// prefer "mboxcl2" which does not alter the mail body.
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum MboxFormat {
     MboxO,
     MboxRd,

@@ -113,7 +113,7 @@ macro_rules! mailbox_settings {
     }};
 }
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct MailUIConf {
     #[serde(default)]
@@ -136,7 +136,7 @@ pub struct MailUIConf {
     pub pgp: PGPSettingsOverride,
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default)]
 pub struct FileMailboxConf {
     #[serde(flatten)]
@@ -158,7 +158,7 @@ impl FileMailboxConf {
 }
 
 use crate::conf::deserializers::extra_settings;
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct FileAccount {
     pub root_mailbox: String,
     pub format: String,
@@ -204,7 +204,7 @@ impl FileAccount {
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct FileSettings {
     pub accounts: IndexMap<String, FileAccount>,
@@ -227,7 +227,7 @@ pub struct FileSettings {
     pub log: LogSettings,
 }
 
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Clone, Debug, Default, Serialize)]
 pub struct AccountConf {
     pub account: AccountSettings,
     pub conf: FileAccount,
@@ -573,7 +573,7 @@ This is required so that you don't accidentally start meli and find out later th
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Clone, Debug, Default, Serialize)]
 pub struct Settings {
     pub accounts: IndexMap<String, AccountConf>,
     pub pager: PagerSettings,
@@ -646,7 +646,7 @@ impl Settings {
     }
 }
 
-#[derive(Copy, Debug, Clone, Hash, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 pub enum IndexStyle {
     Plain,
     Threaded,
@@ -786,7 +786,7 @@ impl Serialize for IndexStyle {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum SearchBackend {
     None,
     #[default]
@@ -1001,7 +1001,7 @@ mod pp {
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct LogSettings {
     #[serde(default)]

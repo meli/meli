@@ -223,7 +223,7 @@ impl Flag {
 /// the raw bytes that describe the email in `bytes`. Its body as an
 /// `melib::email::Attachment` can be parsed on demand
 /// with the `melib::email::Mail::body` method.
-#[derive(Debug, Clone, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct Mail {
     pub envelope: Envelope,
     pub bytes: Vec<u8>,
@@ -267,7 +267,7 @@ crate::declare_u64_hash!(EnvelopeHash);
 ///
 ///To access the email attachments, you need to parse them from the raw email
 /// bytes into an `Attachment` object.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct Envelope {
     // ----- IMAP4rev1 -----
     pub date: String,

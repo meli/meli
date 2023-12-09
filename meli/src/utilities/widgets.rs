@@ -24,7 +24,7 @@ use std::{borrow::Cow, collections::HashMap, time::Duration};
 use super::*;
 use crate::melib::text_processing::TextProcessing;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 enum FormFocus {
     #[default]
     Fields,
@@ -194,7 +194,7 @@ impl std::fmt::Display for Field {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum FormButtonActions {
     Accept,
     Reset,
@@ -662,7 +662,7 @@ where
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AutoCompleteEntry {
     pub entry: String,
     pub description: String,
@@ -703,7 +703,7 @@ impl From<(String, String)> for AutoCompleteEntry {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AutoComplete {
     entries: Vec<AutoCompleteEntry>,
     cursor: usize,
@@ -872,7 +872,7 @@ impl AutoComplete {
     }
 }
 
-#[derive(Default, Copy, Clone)]
+#[derive(Clone, Copy, Default)]
 pub struct ScrollBar {
     pub show_arrows: bool,
 }

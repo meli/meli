@@ -176,7 +176,7 @@ mod dbus {
 }
 
 /// Passes notifications to a user defined shell command
-#[derive(Default, Debug)]
+#[derive(Debug, Default)]
 pub struct NotificationCommand {
     id: ComponentId,
 }

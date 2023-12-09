@@ -22,7 +22,7 @@
 use super::*;
 
 pub trait FilterTrait<T>: Default {}
-#[derive(Serialize, Debug)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 #[serde(untagged)]
 pub enum Filter<F: FilterTrait<OBJ>, OBJ: Object> {
@@ -36,7 +36,7 @@ pub enum Filter<F: FilterTrait<OBJ>, OBJ: Object> {
 impl<F: FilterTrait<OBJ>, OBJ: Object> FilterTrait<OBJ> for Filter<F, OBJ> {}
 impl<F: FilterTrait<OBJ>, OBJ: Object> FilterTrait<OBJ> for FilterCondition<F, OBJ> {}
 
-#[derive(Serialize, Debug)]
+#[derive(Debug, Serialize)]
 pub struct FilterCondition<F: FilterTrait<OBJ>, OBJ: Object> {
     #[serde(flatten)]
     pub cond: F,
@@ -44,7 +44,7 @@ pub struct FilterCondition<F: FilterTrait<OBJ>, OBJ: Object> {
     pub _ph: PhantomData<fn() -> OBJ>,
 }
 
-#[derive(Serialize, Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum FilterOperator {
     And,

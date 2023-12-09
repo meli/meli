@@ -29,7 +29,7 @@ use crate::{
     UnixTimestamp,
 };
 
-#[derive(Debug, Default, Clone)]
+#[derive(Clone, Debug, Default)]
 pub struct NntpMailbox {
     pub(super) hash: MailboxHash,
     pub(super) nntp_path: String,

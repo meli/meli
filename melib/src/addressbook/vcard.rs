@@ -76,7 +76,7 @@ impl<V: VCardVersion> VCard<V> {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Clone, Debug, Default)]
 pub struct ContentLine {
     group: Option<String>,
     params: Vec<String>,

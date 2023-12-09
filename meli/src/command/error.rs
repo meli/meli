@@ -21,7 +21,7 @@
 
 use super::*;
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub enum CommandError {
     Parsing {
         inner: Cow<'static, str>,

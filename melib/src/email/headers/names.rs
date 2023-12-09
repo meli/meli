@@ -50,7 +50,7 @@ bitflags! {
 
 /// Case insensitive owned wrapper for a header name.
 /// As of `RFC5322` it's guaranteed to be ASCII.
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct HeaderName {
     pub(super) inner: Repr<Custom>,
 }
@@ -62,7 +62,7 @@ impl Custom {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub(super) enum Repr<T> {
     Standard(StandardHeader),
     Custom(T),
@@ -78,7 +78,7 @@ impl<T: std::fmt::Display> std::fmt::Display for Repr<T> {
 }
 
 // Used to hijack the Hash impl
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct Custom(pub(super) SmallVec<[u8; 32]>);
 
 /// A possible error when converting a `HeaderName` from another type.
@@ -225,7 +225,7 @@ impl<'de> Deserialize<'de> for HeaderName {
     where
         D: Deserializer<'de>,
     {
-        #[derive(Serialize, Deserialize)]
+        #[derive(Deserialize, Serialize)]
         #[serde(untagged)]
         enum Helper {
             S(String),

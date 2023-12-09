@@ -27,7 +27,7 @@ use super::{
 };
 
 /// Settings for the notifications function.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct NotificationsSettings {
     /// Enable notifications.

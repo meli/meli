@@ -465,7 +465,7 @@ impl SubjectPrefix for &str {
     }
 }
 
-#[derive(Default, Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Thread {
     pub root: ThreadNodeHash,
     pub date: UnixTimestamp,

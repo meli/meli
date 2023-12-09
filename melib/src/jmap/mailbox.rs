@@ -24,7 +24,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use super::*;
 use crate::backends::{LazyCountSet, MailboxPermissions, SpecialUsageMailbox};
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct JmapMailbox {
     pub name: String,
     pub path: String,

@@ -44,7 +44,7 @@ pub mod random;
 
 use super::parser;
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Draft {
     pub headers: HeaderMap,
     pub body: String,

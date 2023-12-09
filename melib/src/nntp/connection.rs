@@ -35,7 +35,7 @@ pub use smol::Async as AsyncWrapper;
 
 use super::{Capabilities, NntpServerConf, UIDStore};
 
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct NntpExtensionUse {
     pub deflate: bool,
 }
@@ -48,7 +48,7 @@ pub struct NntpStream {
     pub supports_submission: bool,
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MailboxSelection {
     None,
     Select(MailboxHash),

@@ -246,7 +246,7 @@ impl Backends {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub enum BackendEvent {
     Notice {
         description: String,
@@ -270,7 +270,7 @@ impl From<Error> for BackendEvent {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub enum RefreshEventKind {
     Update(EnvelopeHash, Box<Envelope>),
     /// Rename(old_hash, new_hash)
@@ -290,7 +290,7 @@ pub enum RefreshEventKind {
     MailboxUnsubscribe(MailboxHash),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct RefreshEvent {
     pub mailbox_hash: MailboxHash,
     pub account_hash: AccountHash,
@@ -320,7 +320,7 @@ impl Deref for BackendEventConsumer {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum FlagOp {
     Set(Flag),
     SetTag(String),
@@ -351,7 +351,7 @@ impl FlagOp {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct MailBackendCapabilities {
     pub is_async: bool,
     pub is_remote: bool,
@@ -362,7 +362,7 @@ pub struct MailBackendCapabilities {
     pub extra_submission_headers: &'static [HeaderName],
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Clone, Copy, Debug)]
 pub enum MailBackendExtensionStatus {
     Unsupported { comment: Option<&'static str> },
     Supported { comment: Option<&'static str> },
@@ -524,7 +524,7 @@ impl BackendOp for ReadOnlyOp {
     }
 }
 
-#[derive(Default, Debug, Copy, Hash, Eq, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub enum SpecialUsageMailbox {
     #[default]
     Normal,
@@ -606,7 +606,7 @@ impl Clone for Mailbox {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct MailboxPermissions {
     pub create_messages: bool,
     pub remove_messages: bool,
@@ -639,7 +639,7 @@ impl std::fmt::Display for MailboxPermissions {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EnvelopeHashBatch {
     pub first: EnvelopeHash,
     pub rest: SmallVec<[EnvelopeHash; 64]>,
@@ -692,7 +692,7 @@ impl EnvelopeHashBatch {
     }
 }
 
-#[derive(Default, Clone)]
+#[derive(Clone, Default)]
 pub struct LazyCountSet {
     pub not_yet_seen: usize,
     pub set: BTreeSet<EnvelopeHash>,

@@ -27,7 +27,7 @@ use smallvec::SmallVec;
 
 use super::{parser, Envelope};
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ListAction<'a> {
     Url(&'a [u8]),
     Email(&'a [u8]),
@@ -75,7 +75,7 @@ impl<'a> ListAction<'a> {
     }
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug, Default)]
 pub struct ListActions<'a> {
     pub id: Option<&'a str>,
     pub archive: Option<&'a str>,

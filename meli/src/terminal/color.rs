@@ -49,7 +49,7 @@ use termion::color::{AnsiValue, Rgb as TermionRgb};
 /// // Basic colors are also 8-bit colors (but not vice-versa).
 /// assert_eq!(red.as_byte(), fancy.as_byte())
 /// ```
-#[derive(Hash, Debug, Copy, Clone, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 pub enum Color {
     Black,
     Red,
@@ -447,7 +447,7 @@ impl<'de> Deserialize<'de> for Color {
 
 #[test]
 fn test_color_de() {
-    #[derive(Debug, Deserialize, PartialEq, Eq)]
+    #[derive(Debug, Deserialize, Eq, PartialEq)]
     struct V {
         k: Color,
     }

@@ -26,7 +26,7 @@ use melib::{Error, Result, ToggleFlag};
 use super::{default_vals::*, deserializers::*, DotAddressable};
 
 /// Settings for the pager function.
-#[derive(Debug, Deserialize, Clone, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PagerSettings {
     /// Number of context lines when going to next page.

@@ -33,7 +33,7 @@ use super::*;
 ///    - `account_id`: `Id`
 ///
 ///       The id of the account to use.
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EmailImport {
     /// accountId: `Id`
@@ -52,7 +52,7 @@ pub struct EmailImport {
     pub emails: IndexMap<Id<EmailObject>, EmailImportObject>,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EmailImportObject {
     /// o  blobId: `Id`
@@ -123,7 +123,7 @@ impl Default for EmailImportObject {
     }
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 #[serde(tag = "type")]
 pub enum EmailImportError {
@@ -164,7 +164,7 @@ pub enum EmailImportError {
     StateMismatch,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EmailImportResponse {
     /// o  accountId: `Id`
@@ -205,7 +205,7 @@ impl std::convert::TryFrom<&RawValue> for EmailImportResponse {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EmailImportResult {
     pub id: Id<EmailObject>,

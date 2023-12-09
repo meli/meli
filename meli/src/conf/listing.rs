@@ -55,7 +55,7 @@ use super::{default_vals::*, DotAddressable, IndexStyle};
 /// const HAS_SIBLING_LEAF: &str = " ├─";
 /// const NO_SIBLING_LEAF: &str = " ╰─";
 /// ```
-#[derive(Debug, Deserialize, Clone, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ListingSettings {
     /// Number of context lines when going to next page.

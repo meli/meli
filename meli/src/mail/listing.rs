@@ -245,14 +245,14 @@ pub use self::plain::*;
 mod offline;
 pub use self::offline::*;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Clone, Copy, Debug)]
 pub enum Focus {
     None,
     Entry,
     EntryFullscreen,
 }
 
-#[derive(Debug, Copy, PartialEq, Eq, Clone, Default)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum Modifier {
     #[default]
     SymmetricDifference,
@@ -469,7 +469,7 @@ column_str!(struct SubjectString(String));
 column_str!(struct FlagString(String));
 column_str!(struct TagString(String, SmallVec<[Option<Color>; 8]>));
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Clone, Copy, Debug)]
 struct MailboxMenuEntry {
     depth: usize,
     indentation: u32,
@@ -953,19 +953,19 @@ impl ListingComponent {
     }
 }
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(Debug, Eq, PartialEq)]
 enum ListingFocus {
     Menu,
     Mailbox,
 }
 
-#[derive(PartialEq, Eq, Copy, Clone, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct CursorPos {
     account: usize,
     menu: MenuEntryCursor,
 }
 
-#[derive(PartialEq, Eq, Copy, Clone, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum MenuEntryCursor {
     Status,
     Mailbox(usize),
@@ -983,7 +983,7 @@ impl std::ops::Sub<MenuEntryCursor> for isize {
     }
 }
 
-#[derive(PartialEq, Eq, Copy, Clone, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ShowMenuScrollbar {
     Never,
     True,
@@ -2637,7 +2637,7 @@ impl Listing {
     /// Print a single account in the menu area.
     fn print_account(&mut self, mut area: Area, aidx: usize, context: &mut Context) -> usize {
         let account_y = self.menu.area().height() - area.height();
-        #[derive(Copy, Debug, Clone)]
+        #[derive(Clone, Copy, Debug)]
         struct Line {
             collapsed: bool,
             depth: usize,
@@ -3158,7 +3158,7 @@ impl Listing {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum ListingMessage {
     FocusUpdate {
         new_value: Focus,
