@@ -128,7 +128,7 @@ For a quick start, build and install locally:
 Available subcommands for `make` are listed with `make help`.
 The Makefile *should* be POSIX portable and not require a specific `make` version.
 
-`meli` requires rust 1.65 and rust's package manager, Cargo.
+`meli` requires rust version 1.68.2 or later and rust's package manager, Cargo.
 Information on how to get it on your system can be found here: <https://doc.rust-lang.org/cargo/getting-started/installation.html>
 
 With Cargo available, the project can be built with `make` and the resulting binary will then be found under `target/release/meli`.

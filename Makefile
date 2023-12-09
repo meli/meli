@@ -19,13 +19,12 @@
 .POSIX:
 .SUFFIXES:
 CARGO_TARGET_DIR ?= target
-MIN_RUSTC ?= 1.65.0
 CARGO_BIN ?= cargo
 TAGREF_BIN ?= tagref
 CARGO_ARGS ?=
 RUSTFLAGS ?= -D warnings -W unreachable-pub -W rust-2021-compatibility
 CARGO_SORT_BIN = cargo-sort
-PRINTF       = /usr/bin/printf
+PRINTF = /usr/bin/printf
 
 # Options
 PREFIX ?= /usr/local
@@ -40,6 +39,7 @@ FEATURES ?= --features "${MELI_FEATURES}"
 
 MANPATHS != ACCUM="";for m in `manpath 2> /dev/null | tr ':' ' '`; do if [ -d "$${m}" ]; then REAL_PATH=`cd $${m} && pwd` ACCUM="$${ACCUM}:$${REAL_PATH}";fi;done;echo $${ACCUM}'\c' | sed 's/^://'
 VERSION = `grep -m1 version meli/Cargo.toml | head -n1 | cut -d'"' -f 2 | head -n1`
+MIN_RUSTC = `grep -m1 rust-version meli/Cargo.toml | head -n1 | cut -d'"' -f 2 | head -n1`
 GIT_COMMIT = `git show-ref -s --abbrev HEAD`
 DATE = `date -I`
 
