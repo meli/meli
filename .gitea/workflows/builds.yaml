@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: EUPL-1.2
 name: Build release binary
 
 env:
@@ -13,6 +14,11 @@ on:
   push:
     tags:
       - v*
+    paths:
+      - 'melib/Cargo.toml'
+      - 'meli/Cargo.toml'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
 
 jobs:
   build:
@@ -42,13 +48,16 @@ jobs:
           #    path: ~/.rustup
           #    key: toolchain-${{ matrix.os }}-${{ matrix.rust }}
           #- if: ${{ steps.cache-rustup.outputs.cache-hit != 'true' }}
-      - name: Install Rust ${{ matrix.rust }}
-        uses: https://github.com/actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: ${{ matrix.rust }}
-          target: ${{ matrix.target }}
-          override: true
+      - id: rustup-setup
+        name: Install rustup and toolchains
+        shell: bash
+        run: |
+          if ! command -v rustup &>/dev/null; then
+            curl --proto '=https' --tlsv1.2 --retry 10 --retry-connrefused --location --silent --show-error --fail "https://sh.rustup.rs" | sh -s -- --default-toolchain none -y
+            source "${HOME}/.cargo/env"
+            echo "${CARGO_HOME:-$HOME/.cargo}/bin" >> $GITHUB_PATH
+            rustup toolchain install --profile minimal ${{ matrix.rust }} --target ${{ matrix.target }}
+          fi
       - name: Configure cargo data directory
         # After this point, all cargo registry and crate data is stored in
         # $GITHUB_WORKSPACE/.cargo_home. This allows us to cache only the files
