@@ -45,6 +45,8 @@ jobs:
             os: ubuntu-latest
             rust: stable
             target: x86_64-unknown-linux-gnu
+    run:
+      working-directory: ./scripts
     steps:
       - uses: https://github.com/actions/checkout@v2
       - id: os-deps
@@ -95,3 +97,7 @@ jobs:
           cargo-sort --check --check-format --grouped --order package,bin,lib,dependencies,features,build-dependencies,dev-dependencies,workspace fuzz
           cargo-sort --check --check-format --grouped --order package,bin,lib,dependencies,features,build-dependencies,dev-dependencies,workspace tools
           cargo-sort --check --check-format --grouped --order package,bin,lib,dependencies,features,build-dependencies,dev-dependencies,workspace --workspace
+      - name: Check debian/changelog is up-to-date.
+        if: success() || failure()
+        run: |
+          ./scripts/check_debian_changelog.sh

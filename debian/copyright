@@ -1,11 +1,11 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: meli
-Source: <https://git.meli.delivery/meli/meli>
+Source: <https://git.meliemail.org/meli/meli>
 #
 # Please double check copyright with the licensecheck(1) command.
 
 Files:     *
-Copyright: 2017-2020 Manos Pitsidianakis
+Copyright: 2017-2023 Manos Pitsidianakis
 License:   GPL-3.0+
 #----------------------------------------------------------------------------
 # License file: COPYING
