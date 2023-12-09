@@ -8,6 +8,10 @@ edition = "2018"
 [package.metadata]
 cargo-fuzz = true
 
+[[bin]]
+name = "envelope_parse"
+path = "fuzz_targets/envelope_parse.rs"
+
 [dependencies]
 libfuzzer-sys = "0.3"
 
@@ -18,7 +22,3 @@ features = ["unicode-algorithms"]
 # Prevent this from interfering with workspaces
 [workspace]
 members = ["."]
-
-[[bin]]
-name = "envelope_parse"
-path = "fuzz_targets/envelope_parse.rs"

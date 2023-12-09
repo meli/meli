@@ -53,21 +53,6 @@ xdg = "2.1.0"
 version = "0.2.3"
 optional = true
 
-[target.'cfg(target_os="linux")'.dependencies]
-notify-rust = { version = "^4", default-features = false, features = ["dbus"], optional = true }
-
-[build-dependencies]
-flate2 = { version = "1", optional = true }
-proc-macro2 = "1.0.37"
-quote = "^1.0"
-regex = "1"
-syn = { version = "1", features = [] }
-
-[dev-dependencies]
-flate2 = { version = "1" }
-regex = "1"
-tempfile = "3.3"
-
 [features]
 default = ["sqlite3", "notmuch", "smtp", "dbus-notifications", "gpgme", "cli-docs", "jmap", "text-processing", "static"]
 notmuch = ["melib/notmuch"]
@@ -92,3 +77,18 @@ static = ["tls-static", "http-static", "sqlite3-static", "dbus-static", "libz-st
 # Print tracing logs as meli runs in stderr
 # enable for debug tracing logs: build with --features=debug-tracing and export MELI_DEBUG_STDERR
 debug-tracing = ["melib/debug-tracing"]
+
+[build-dependencies]
+flate2 = { version = "1", optional = true }
+proc-macro2 = "1.0.37"
+quote = "^1.0"
+regex = "1"
+syn = { version = "1", features = [] }
+
+[dev-dependencies]
+flate2 = { version = "1" }
+regex = "1"
+tempfile = "3.3"
+
+[target.'cfg(target_os="linux")'.dependencies]
+notify-rust = { version = "^4", default-features = false, features = ["dbus"], optional = true }

@@ -10,10 +10,6 @@ homepage = "https://meli.delivery"
 repository = "https://git.meli.delivery/meli/meli.git"
 publish = false
 
-# Prevent this from interfering with workspaces
-[workspace]
-members = ["."]
-
 [[bin]]
 name = "emailparse"
 path = "src/email_parse.rs"
@@ -54,3 +50,7 @@ default = ["debug-tracing"]
 
 # Print tracing logs as meli runs
 debug-tracing = ["meli/debug-tracing"]
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
