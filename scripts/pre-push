@@ -19,6 +19,5 @@
 
 set -euxo pipefail
 
-echo "Testing if debug profile builds..."
-cargo check --all-features
-cargo test --all-features --workspace
+make check
+make lint

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: EUPL-1.2
-name: Run Tests
+name: Run cargo lints
 
 env:
   CARGO_INCREMENTAL: 0
@@ -32,7 +32,7 @@ on:
 
 jobs:
   test:
-    name: Test on ${{ matrix.build }}
+    name: Lint on ${{ matrix.build }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -49,7 +49,7 @@ jobs:
         name: install OS dependencies
         run: |
           apt-get update
-          apt-get install -y libdbus-1-dev pkg-config mandoc libssl-dev make
+          apt-get install -y libdbus-1-dev pkg-config mandoc libssl-dev
           #- id: cache-rustup
           #  name: Cache Rust toolchain
           #  uses: https://github.com/actions/cache@v3
@@ -58,14 +58,14 @@ jobs:
           #    key: toolchain-${{ matrix.os }}-${{ matrix.rust }}
           #- if: ${{ steps.cache-rustup.outputs.cache-hit != 'true' }}
       - id: rustup-setup
-        name: Install rustup and toolchains
+        name: Install Rustup and toolchains
         shell: bash
         run: |
           if ! command -v rustup &>/dev/null; then
             curl --proto '=https' --tlsv1.2 --retry 10 --retry-connrefused --location --silent --show-error --fail "https://sh.rustup.rs" | sh -s -- --default-toolchain none -y
             source "${HOME}/.cargo/env"
             echo "${CARGO_HOME:-$HOME/.cargo}/bin" >> $GITHUB_PATH
-            rustup toolchain install --profile minimal ${{ matrix.rust }} --target ${{ matrix.target }}
+            rustup toolchain install --profile minimal --component clippy,rustfmt ${{ matrix.rust }} --target ${{ matrix.target }}
           fi
       - name: Configure cargo data directory
         # After this point, all cargo registry and crate data is stored in
@@ -89,21 +89,31 @@ jobs:
           target = "${{ matrix.target }}"
           EOF
       - if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }} && matrix.target
-        name: Add test dependencies
+        name: Add lint dependencies
         run: |
-          cargo install --quiet --version 0.9.54 --target "${{ matrix.target }}" cargo-nextest
-      - name: cargo-check
-        run: |
-          cargo check --all-features --all --tests --examples --benches --bins
-      - name: Compile
-        if: success() || failure()
-        run: cargo test --all --no-fail-fast --all-features --no-run --locked
-      - name: cargo test
-        if: success() || failure() # always run even if other steps fail, except when cancelled <https://stackoverflow.com/questions/58858429/how-to-run-a-github-actions-step-even-if-the-previous-step-fails-while-still-f>
-        run: |
-          cargo nextest run --all --no-fail-fast --all-features --future-incompat-report -E 'not (test(smtp::test::test_smtp))'
-          #cargo test --all --no-fail-fast --all-features -- --nocapture --quiet
-      - name: rustdoc build
+          cargo install --quiet --version 1.0.9 --target "${{ matrix.target }}" cargo-sort
+          RUSTFLAGS="" cargo install --locked --target "${{ matrix.target }}" --git https://github.com/dcchut/cargo-derivefmt --rev 2ff93de7fb418180458dd1ba27e5655607c23ab6 --bin cargo-derivefmt
+      - name: rustfmt
         if: success() || failure()
         run: |
-          make build-rustdoc
+          cargo fmt --check --all
+      - name: clippy
+        if: success() || failure()
+        run: |
+          cargo clippy --no-deps --all-features --all --tests --examples --benches --bins
+      - name: cargo-derivefmt melib
+        if: success() || failure()
+        run: |
+          cargo derivefmt --manifest-path ./melib/Cargo.toml
+      - name: cargo-derivefmt meli
+        if: success() || failure()
+        run: |
+          cargo derivefmt --manifest-path ./meli/Cargo.toml
+      - name: cargo-derivefmt fuzz
+        if: success() || failure()
+        run: |
+          cargo derivefmt --manifest-path ./fuzz/Cargo.toml
+      - name: cargo-derivefmt tools
+        if: success() || failure()
+        run: |
+          cargo derivefmt --manifest-path ./tools/Cargo.toml
