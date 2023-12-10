@@ -21,16 +21,6 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.cargo/config.toml'
-  push:
-    paths:
-      - '.gitea/**'
-      - 'melib/Cargo.toml'
-      - 'meli/Cargo.toml'
-      - 'fuzz/Cargo.toml'
-      - 'tool/Cargo.toml'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - '.cargo/config.toml'
 
 jobs:
   manifest_lint:

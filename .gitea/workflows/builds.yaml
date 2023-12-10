@@ -14,11 +14,6 @@ on:
   push:
     tags:
       - v*
-    paths:
-      - 'melib/Cargo.toml'
-      - 'meli/Cargo.toml'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
 
 jobs:
   build:

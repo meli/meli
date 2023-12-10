@@ -20,15 +20,6 @@ on:
       - 'meli/Cargo.toml'
       - 'Cargo.toml'
       - 'Cargo.lock'
-  push:
-    paths:
-      - '.gitea/**'
-      - 'melib/src/**'
-      - 'melib/Cargo.toml'
-      - 'meli/src/**'
-      - 'meli/Cargo.toml'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
 
 jobs:
   test:
