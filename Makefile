@@ -189,7 +189,8 @@ dist:
 
 .PHONY: deb-dist
 deb-dist:
-	@dpkg-buildpackage -b -rfakeroot -us -uc
+	@author=$(grep -m1 authors meli/Cargo.toml | head -n1 | cut -d'"' -f 2 | head -n1)
+	@dpkg-buildpackage -b -rfakeroot -us -uc --build-by="${author}" --release-by="${author}"
 	@echo ${BOLD}${GREEN}Generated${ANSI_RESET}  ../meli_${VERSION}-1_amd64.deb
 
 .PHONY: build-rustdoc
