@@ -82,9 +82,9 @@ jobs:
           mv target/release/* target/ || true
           mv target/meli  artifacts/
       - name: Upload Artifacts
-        uses: https://github.com/actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: ${{ matrix.artifact_name }}
-          path: artifacts
+          path: artifacts/meli
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 30
