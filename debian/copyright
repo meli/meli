@@ -1,6 +1,6 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: meli
-Source: <https://git.meliemail.org/meli/meli>
+Source: https://git.meliemail.org/meli/meli
 #
 # Please double check copyright with the licensecheck(1) command.
 

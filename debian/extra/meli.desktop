@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=meli
+Exec=meli
+Categories=Office;Network;Email;
+Comment=Terminal mail client
+NoDisplay=false
+Terminal=true
+Type=Application

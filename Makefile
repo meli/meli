@@ -130,8 +130,9 @@ clean:
 	-rm -rf ./${CARGO_TARGET_DIR}/
 
 .PHONY: distclean
-distclean: clean
+distclean:
 	@rm -f meli-${VERSION}.tar.gz
+	@rm -rf .pc # rm debian stuff
 
 .PHONY: uninstall
 uninstall:

@@ -1,0 +1,9 @@
+#!/bin/sh
+
+echo "Including output of \`meli -v\` and \`meli compiled-with\`..."
+
+LC_ALL=C meli -v >&3
+
+echo "\nEnabled compile-time features"
+echo "-----------------------------"
+LC_ALL=C meli compiled-with >&3 || true
