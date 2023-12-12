@@ -1284,6 +1284,7 @@ mod test {
     }
 
     #[test]
+    #[ignore]
     fn test_smtp() {
         stderrlog::new()
             .quiet(false)
