@@ -44,6 +44,12 @@ use crate::{
 
 macro_rules! call {
     ($lib:expr, $func:ty) => {{
+        #[cfg(debug_assertions)]
+        debug_assert!(
+            !stringify!($func).starts_with("ffi::"),
+            "{} must be a valid FFI symbol.",
+            stringify!($func)
+        );
         let func: libloading::Symbol<$func> = $lib.get(stringify!($func).as_bytes()).unwrap();
         func
     }};
@@ -52,19 +58,28 @@ macro_rules! call {
 macro_rules! try_call {
     ($lib:expr, $call:expr) => {{
         let status = $call;
-        if status == _notmuch_status_NOTMUCH_STATUS_SUCCESS {
+        if status == $crate::notmuch::ffi::_notmuch_status_NOTMUCH_STATUS_SUCCESS {
             Ok(())
         } else {
             let c_str = call!($lib, notmuch_status_to_string)(status);
-            Err(NotmuchError(
-                CStr::from_ptr(c_str).to_string_lossy().into_owned(),
+            Err($crate::notmuch::NotmuchError(
+                std::ffi::CStr::from_ptr(c_str)
+                    .to_string_lossy()
+                    .into_owned(),
             ))
         }
     }};
 }
 
-pub mod bindings;
-use bindings::*;
+pub mod query;
+use query::{MelibQueryToNotmuchQuery, Query};
+pub mod mailbox;
+use mailbox::NotmuchMailbox;
+pub mod ffi;
+use ffi::{
+    notmuch_database_close, notmuch_database_destroy, notmuch_database_get_revision,
+    notmuch_database_open, notmuch_status_to_string,
+};
 mod message;
 pub use message::*;
 mod tags;
@@ -74,21 +89,20 @@ pub use thread::*;
 
 #[derive(Debug)]
 #[repr(transparent)]
-struct DbPointer(NonNull<notmuch_database_t>);
+struct DbPointer(NonNull<ffi::notmuch_database_t>);
 
 unsafe impl Send for DbPointer {}
 unsafe impl Sync for DbPointer {}
 
 impl DbPointer {
     #[inline]
-    pub(self) fn as_mut(&mut self) -> *mut notmuch_database_t {
+    pub(self) fn as_mut(&mut self) -> *mut ffi::notmuch_database_t {
         unsafe { self.0.as_mut() }
     }
 }
 
 #[derive(Debug)]
 pub struct DbConnection {
-    #[allow(dead_code)]
     pub lib: Arc<libloading::Library>,
     inner: Arc<Mutex<DbPointer>>,
     pub revision_uuid: Arc<RwLock<u64>>,
@@ -219,14 +233,14 @@ impl Drop for DbConnection {
                 self.lib,
                 call!(self.lib, notmuch_database_close)(inner.as_mut())
             ) {
-                debug!(err);
+                log::error!("Could not call C notmuch_database_close: {}", err);
                 return;
             }
             if let Err(err) = try_call!(
                 self.lib,
                 call!(self.lib, notmuch_database_destroy)(inner.as_mut())
             ) {
-                debug!(err);
+                log::error!("Could not call C notmuch_database_destroy: {}", err);
             }
         }
     }
@@ -247,77 +261,6 @@ pub struct NotmuchDb {
     event_consumer: BackendEventConsumer,
     save_messages_to: Option<PathBuf>,
 }
-
-unsafe impl Send for NotmuchDb {}
-unsafe impl Sync for NotmuchDb {}
-
-#[derive(Clone, Debug, Default)]
-struct NotmuchMailbox {
-    hash: MailboxHash,
-    children: Vec<MailboxHash>,
-    parent: Option<MailboxHash>,
-    name: String,
-    path: String,
-    query_str: String,
-    usage: Arc<RwLock<SpecialUsageMailbox>>,
-
-    total: Arc<Mutex<usize>>,
-    unseen: Arc<Mutex<usize>>,
-}
-
-impl BackendMailbox for NotmuchMailbox {
-    fn hash(&self) -> MailboxHash {
-        self.hash
-    }
-
-    fn name(&self) -> &str {
-        self.name.as_str()
-    }
-
-    fn path(&self) -> &str {
-        self.path.as_str()
-    }
-
-    fn clone(&self) -> Mailbox {
-        Box::new(std::clone::Clone::clone(self))
-    }
-
-    fn children(&self) -> &[MailboxHash] {
-        &self.children
-    }
-
-    fn parent(&self) -> Option<MailboxHash> {
-        self.parent
-    }
-
-    fn special_usage(&self) -> SpecialUsageMailbox {
-        *self.usage.read().unwrap()
-    }
-
-    fn permissions(&self) -> MailboxPermissions {
-        MailboxPermissions::default()
-    }
-
-    fn is_subscribed(&self) -> bool {
-        true
-    }
-
-    fn set_is_subscribed(&mut self, _new_val: bool) -> Result<()> {
-        Ok(())
-    }
-
-    fn set_special_usage(&mut self, new_val: SpecialUsageMailbox) -> Result<()> {
-        *self.usage.write()? = new_val;
-        Ok(())
-    }
-
-    fn count(&self) -> Result<(usize, usize)> {
-        Ok((*self.unseen.lock()?, *self.total.lock()?))
-    }
-}
-
-unsafe impl Send for NotmuchMailbox {}
-unsafe impl Sync for NotmuchMailbox {}
 
 impl NotmuchDb {
     #[allow(clippy::new_ret_no_self)]
@@ -546,16 +489,16 @@ impl NotmuchDb {
         lib: Arc<libloading::Library>,
         write: bool,
     ) -> Result<DbConnection> {
-        let path_c = std::ffi::CString::new(path.to_str().unwrap()).unwrap();
+        let path_c = CString::new(path.to_str().unwrap()).unwrap();
         let path_ptr = path_c.as_ptr();
-        let mut database: *mut notmuch_database_t = std::ptr::null_mut();
+        let mut database: *mut ffi::notmuch_database_t = std::ptr::null_mut();
         let status = unsafe {
             call!(lib, notmuch_database_open)(
                 path_ptr,
                 if write {
-                    notmuch_database_mode_t_NOTMUCH_DATABASE_MODE_READ_WRITE
+                    ffi::notmuch_database_mode_t_NOTMUCH_DATABASE_MODE_READ_WRITE
                 } else {
-                    notmuch_database_mode_t_NOTMUCH_DATABASE_MODE_READ_ONLY
+                    ffi::notmuch_database_mode_t_NOTMUCH_DATABASE_MODE_READ_ONLY
                 },
                 std::ptr::addr_of_mut!(database),
             )
@@ -708,7 +651,7 @@ impl MailBackend for NotmuchDb {
             iter: v.into_iter(),
         };
         Ok(Box::pin(async_stream::try_stream! {
-            while let Some(res) = state.fetch().await.map_err(|err| { debug!("fetch err {:?}", &err); err})? {
+            while let Some(res) = state.fetch().await.map_err(|err| { log::debug!("fetch err {:?}", &err); err})? {
                 yield res;
             }
         }))
@@ -864,17 +807,15 @@ impl MailBackend for NotmuchDb {
         Ok(Box::pin(async move {
             let mut index_lck = index.write().unwrap();
             for env_hash in env_hashes.iter() {
-                debug!(&env_hash);
                 let message = match Message::find_message(&database, &index_lck[&env_hash]) {
                     Ok(v) => v,
                     Err(err) => {
-                        debug!("not found {}", err);
+                        log::debug!("not found {}", err);
                         continue;
                     }
                 };
 
-                let tags = debug!(message.tags().collect::<Vec<&CStr>>());
-                //flags.set(f, value);
+                let tags = message.tags().collect::<Vec<&CStr>>();
 
                 macro_rules! cstr {
                     ($l:literal) => {
@@ -928,7 +869,7 @@ impl MailBackend for NotmuchDb {
                             let c_tag = CString::new(tag.as_str()).unwrap();
                             remove_tag!(&c_tag.as_ref());
                         }
-                        _ => debug!("flag_op is {:?}", op),
+                        _ => log::debug!("flag_op is {:?}", op),
                     }
                 }
 
@@ -1083,211 +1024,5 @@ impl BackendOp for NotmuchOp {
         self.bytes = Some(response);
         let ret = Ok(self.bytes.as_ref().unwrap().to_vec());
         Ok(Box::pin(async move { ret }))
-    }
-}
-
-pub struct Query<'s> {
-    #[allow(dead_code)]
-    lib: Arc<libloading::Library>,
-    ptr: *mut notmuch_query_t,
-    query_str: &'s str,
-}
-
-impl<'s> Query<'s> {
-    fn new(database: &DbConnection, query_str: &'s str) -> Result<Self> {
-        let lib: Arc<libloading::Library> = database.lib.clone();
-        let query_cstr = std::ffi::CString::new(query_str)?;
-        let query: *mut notmuch_query_t = unsafe {
-            call!(lib, notmuch_query_create)(
-                database.inner.lock().unwrap().as_mut(),
-                query_cstr.as_ptr(),
-            )
-        };
-        if query.is_null() {
-            return Err(Error::new("Could not create query. Out of memory?"));
-        }
-        Ok(Query {
-            lib,
-            ptr: query,
-            query_str,
-        })
-    }
-
-    fn count(&self) -> Result<u32> {
-        let mut count = 0_u32;
-        unsafe {
-            try_call!(
-                self.lib,
-                call!(self.lib, notmuch_query_count_messages)(
-                    self.ptr,
-                    std::ptr::addr_of_mut!(count)
-                )
-            )
-            .map_err(|err| err.0)?;
-        }
-        Ok(count)
-    }
-
-    fn search(&'s self) -> Result<MessageIterator<'s>> {
-        let mut messages: *mut notmuch_messages_t = std::ptr::null_mut();
-        let status = unsafe {
-            call!(self.lib, notmuch_query_search_messages)(
-                self.ptr,
-                std::ptr::addr_of_mut!(messages),
-            )
-        };
-        if status != 0 {
-            return Err(Error::new(format!(
-                "Search for {} returned {}",
-                self.query_str, status,
-            )));
-        }
-        assert!(!messages.is_null());
-        Ok(MessageIterator {
-            messages,
-            lib: self.lib.clone(),
-            _ph: std::marker::PhantomData,
-            is_from_thread: false,
-        })
-    }
-}
-
-impl Drop for Query<'_> {
-    fn drop(&mut self) {
-        unsafe {
-            call!(self.lib, notmuch_query_destroy)(self.ptr);
-        }
-    }
-}
-
-pub trait MelibQueryToNotmuchQuery {
-    fn query_to_string(&self, ret: &mut String);
-}
-
-impl MelibQueryToNotmuchQuery for crate::search::Query {
-    fn query_to_string(&self, ret: &mut String) {
-        use crate::search::Query::*;
-        match self {
-            Before(timestamp) => {
-                ret.push_str("date:..@");
-                ret.push_str(&timestamp.to_string());
-            }
-            After(timestamp) => {
-                ret.push_str("date:@");
-                ret.push_str(&timestamp.to_string());
-                ret.push_str("..");
-            }
-            Between(a, b) => {
-                ret.push_str("date:@");
-                ret.push_str(&a.to_string());
-                ret.push_str("..@");
-                ret.push_str(&b.to_string());
-            }
-            On(timestamp) => {
-                ret.push_str("date:@");
-                ret.push_str(&timestamp.to_string());
-            }
-            /* * * * */
-            From(s) => {
-                ret.push_str("from:\"");
-                for c in s.chars() {
-                    if c == '"' {
-                        ret.push_str("\\\"");
-                    } else {
-                        ret.push(c);
-                    }
-                }
-                ret.push('"');
-            }
-            To(s) | Cc(s) | Bcc(s) => {
-                ret.push_str("to:\"");
-                for c in s.chars() {
-                    if c == '"' {
-                        ret.push_str("\\\"");
-                    } else {
-                        ret.push(c);
-                    }
-                }
-                ret.push('"');
-            }
-            InReplyTo(_s) | References(_s) | AllAddresses(_s) => {}
-            /* * * * */
-            Body(s) => {
-                ret.push_str("body:\"");
-                for c in s.chars() {
-                    if c == '"' {
-                        ret.push_str("\\\"");
-                    } else {
-                        ret.push(c);
-                    }
-                }
-                ret.push('"');
-            }
-            Subject(s) => {
-                ret.push_str("subject:\"");
-                for c in s.chars() {
-                    if c == '"' {
-                        ret.push_str("\\\"");
-                    } else {
-                        ret.push(c);
-                    }
-                }
-                ret.push('"');
-            }
-            AllText(s) => {
-                ret.push('"');
-                for c in s.chars() {
-                    if c == '"' {
-                        ret.push_str("\\\"");
-                    } else {
-                        ret.push(c);
-                    }
-                }
-                ret.push('"');
-            }
-            /* * * * */
-            Flags(v) => {
-                for f in v {
-                    ret.push_str("tag:\"");
-                    for c in f.chars() {
-                        if c == '"' {
-                            ret.push_str("\\\"");
-                        } else {
-                            ret.push(c);
-                        }
-                    }
-                    ret.push_str("\" ");
-                }
-                if !v.is_empty() {
-                    ret.pop();
-                }
-            }
-            HasAttachment => {
-                ret.push_str("tag:attachment");
-            }
-            And(q1, q2) => {
-                ret.push('(');
-                q1.query_to_string(ret);
-                ret.push_str(") AND (");
-                q2.query_to_string(ret);
-                ret.push(')');
-            }
-            Or(q1, q2) => {
-                ret.push('(');
-                q1.query_to_string(ret);
-                ret.push_str(") OR (");
-                q2.query_to_string(ret);
-                ret.push(')');
-            }
-            Not(q) => {
-                ret.push_str("(NOT (");
-                q.query_to_string(ret);
-                ret.push_str("))");
-            }
-            Answered => todo!(),
-            AnsweredBy { .. } => todo!(),
-            Larger { .. } => todo!(),
-            Smaller { .. } => todo!(),
-        }
     }
 }

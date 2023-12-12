@@ -20,9 +20,13 @@
  */
 
 use super::*;
+use crate::notmuch::ffi::{
+    notmuch_message_get_filename, notmuch_message_get_tags, notmuch_tags_destroy, notmuch_tags_get,
+    notmuch_tags_move_to_next, notmuch_tags_valid,
+};
 
 pub struct TagIterator<'m> {
-    pub tags: *mut notmuch_tags_t,
+    pub tags: *mut ffi::notmuch_tags_t,
     pub message: &'m Message<'m>,
 }
 

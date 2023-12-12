@@ -20,19 +20,28 @@
  */
 
 use super::*;
-use crate::thread::{ThreadHash, ThreadNode, ThreadNodeHash};
+use crate::{
+    notmuch::ffi::{
+        notmuch_database_find_message, notmuch_message_add_tag, notmuch_message_destroy,
+        notmuch_message_get_date, notmuch_message_get_filename, notmuch_message_get_header,
+        notmuch_message_get_message_id, notmuch_message_get_replies, notmuch_message_remove_tag,
+        notmuch_message_tags_to_maildir_flags, notmuch_messages_get, notmuch_messages_move_to_next,
+        notmuch_messages_valid,
+    },
+    thread::{ThreadHash, ThreadNode, ThreadNodeHash},
+};
 
 #[derive(Clone)]
 pub struct Message<'m> {
     pub lib: Arc<libloading::Library>,
-    pub message: *mut notmuch_message_t,
+    pub message: *mut ffi::notmuch_message_t,
     pub is_from_thread: bool,
-    pub _ph: std::marker::PhantomData<&'m notmuch_message_t>,
+    pub _ph: std::marker::PhantomData<&'m ffi::notmuch_message_t>,
 }
 
 impl<'m> Message<'m> {
     pub fn find_message(db: &'m DbConnection, msg_id: &CStr) -> Result<Message<'m>> {
-        let mut message: *mut notmuch_message_t = std::ptr::null_mut();
+        let mut message: *mut ffi::notmuch_message_t = std::ptr::null_mut();
         let lib = db.lib.clone();
         unsafe {
             call!(lib, notmuch_database_find_message)(
@@ -251,7 +260,7 @@ impl Drop for Message<'_> {
 
 pub struct MessageIterator<'query> {
     pub lib: Arc<libloading::Library>,
-    pub messages: *mut notmuch_messages_t,
+    pub messages: *mut ffi::notmuch_messages_t,
     pub is_from_thread: bool,
     pub _ph: std::marker::PhantomData<*const Query<'query>>,
 }

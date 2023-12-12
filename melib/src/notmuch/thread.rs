@@ -19,11 +19,18 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 use super::*;
-use crate::thread::ThreadHash;
+use crate::{
+    notmuch::ffi::{
+        notmuch_thread_destroy, notmuch_thread_get_messages, notmuch_thread_get_newest_date,
+        notmuch_thread_get_thread_id, notmuch_thread_get_total_messages, notmuch_threads_get,
+        notmuch_threads_move_to_next, notmuch_threads_valid,
+    },
+    thread::ThreadHash,
+};
 
 pub struct Thread<'query> {
     pub lib: Arc<libloading::Library>,
-    pub ptr: *mut notmuch_thread_t,
+    pub ptr: *mut ffi::notmuch_thread_t,
     pub _ph: std::marker::PhantomData<*const Query<'query>>,
 }
 
@@ -65,7 +72,7 @@ impl Drop for Thread<'_> {
 
 pub struct ThreadsIterator<'query> {
     pub lib: Arc<libloading::Library>,
-    pub threads: *mut notmuch_threads_t,
+    pub threads: *mut ffi::notmuch_threads_t,
     pub _ph: std::marker::PhantomData<*const Query<'query>>,
 }
 
