@@ -24,6 +24,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use crate::{
     backends::{BackendMailbox, Mailbox, MailboxHash, MailboxPermissions, SpecialUsageMailbox},
     error::Result,
+    notmuch::{DbConnection, Query},
 };
 
 #[derive(Clone, Debug, Default)]
@@ -43,6 +44,14 @@ impl NotmuchMailbox {
     /// Get the actual notmuch query used to build this mailbox.
     pub fn query_value(&self) -> &str {
         &self.query_str
+    }
+
+    /// Query the database to update total and unread message counts.
+    pub fn update_counts(&self, database: &DbConnection) -> Result<()> {
+        *self.total.lock().unwrap() = Query::new(database, &self.query_str)?.count()? as usize;
+        *self.unseen.lock().unwrap() =
+            Query::new(database, &format!("{} tag:unread", self.query_str))?.count()? as usize;
+        Ok(())
     }
 }
 

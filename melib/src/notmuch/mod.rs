@@ -20,7 +20,7 @@
  */
 
 use std::{
-    collections::{hash_map::HashMap, BTreeMap},
+    collections::{hash_map::HashMap, BTreeMap, BTreeSet},
     ffi::{CStr, CString, OsStr},
     io::Read,
     os::unix::ffi::OsStrExt,
@@ -792,7 +792,7 @@ impl MailBackend for NotmuchDb {
     fn set_flags(
         &mut self,
         env_hashes: EnvelopeHashBatch,
-        _mailbox_hash: MailboxHash,
+        mailbox_hash: MailboxHash,
         flags: SmallVec<[FlagOp; 8]>,
     ) -> ResultFuture<()> {
         let database = Self::new_connection(
@@ -802,10 +802,13 @@ impl MailBackend for NotmuchDb {
             true,
         )?;
         let tag_index = self.collection.clone().tag_index;
+        let mailboxes = self.mailboxes.clone();
+        let mailbox_index = self.mailbox_index.clone();
         let index = self.index.clone();
 
         Ok(Box::pin(async move {
             let mut index_lck = index.write().unwrap();
+            let mut has_seen_changes_mailboxes_set = BTreeSet::new();
             for env_hash in env_hashes.iter() {
                 let message = match Message::find_message(&database, &index_lck[&env_hash]) {
                     Ok(v) => v,
@@ -847,7 +850,10 @@ impl MailBackend for NotmuchDb {
                     }};
                 }
 
+                let mut has_seen_changes = false;
                 for op in flags.iter() {
+                    has_seen_changes |=
+                        matches!(op, FlagOp::Set(Flag::SEEN) | FlagOp::UnSet(Flag::SEEN));
                     match op {
                         FlagOp::Set(Flag::DRAFT) => add_tag!(b"draft\0"),
                         FlagOp::UnSet(Flag::DRAFT) => remove_tag!(b"draft\0"),
@@ -880,11 +886,24 @@ impl MailBackend for NotmuchDb {
                 if let Some(p) = index_lck.get_mut(&env_hash) {
                     *p = msg_id.into();
                 }
+
+                if has_seen_changes {
+                    let mailbox_index_lck = mailbox_index.read().unwrap();
+                    has_seen_changes_mailboxes_set.insert(mailbox_hash);
+                    has_seen_changes_mailboxes_set
+                        .extend(mailbox_index_lck.values().flat_map(|hs| hs.iter().cloned()));
+                }
             }
             for op in flags.iter() {
                 if let FlagOp::SetTag(tag) = op {
                     let hash = TagHash::from_bytes(tag.as_bytes());
                     tag_index.write().unwrap().insert(hash, tag.to_string());
+                }
+            }
+            if !has_seen_changes_mailboxes_set.is_empty() {
+                let mailboxes_lck = mailboxes.write().unwrap();
+                for mh in has_seen_changes_mailboxes_set {
+                    mailboxes_lck[&mh].update_counts(&database)?;
                 }
             }
 
