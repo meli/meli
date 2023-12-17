@@ -826,6 +826,7 @@ impl MailBackend for NotmuchDb {
                         continue;
                     }
                 };
+                message.freeze();
 
                 let tags = message.tags().collect::<Vec<&CStr>>();
 
@@ -887,6 +888,8 @@ impl MailBackend for NotmuchDb {
                         _ => log::debug!("flag_op is {:?}", op),
                     }
                 }
+
+                message.thaw();
 
                 /* Update message filesystem path. */
                 message.tags_to_maildir_flags()?;

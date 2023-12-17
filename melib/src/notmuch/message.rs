@@ -19,16 +19,18 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::{marker::PhantomData, ptr::NonNull};
+use std::{cell::Cell, marker::PhantomData, ptr::NonNull};
 
 use super::*;
 use crate::{
     notmuch::ffi::{
-        notmuch_database_find_message, notmuch_message_add_tag, notmuch_message_destroy,
+        _notmuch_status_NOTMUCH_STATUS_READ_ONLY_DATABASE,
+        _notmuch_status_NOTMUCH_STATUS_UNBALANCED_FREEZE_THAW, notmuch_database_find_message,
+        notmuch_message_add_tag, notmuch_message_destroy, notmuch_message_freeze,
         notmuch_message_get_date, notmuch_message_get_filename, notmuch_message_get_header,
         notmuch_message_get_message_id, notmuch_message_get_replies, notmuch_message_remove_tag,
-        notmuch_message_tags_to_maildir_flags, notmuch_messages_get, notmuch_messages_move_to_next,
-        notmuch_messages_valid,
+        notmuch_message_tags_to_maildir_flags, notmuch_message_thaw, notmuch_messages_get,
+        notmuch_messages_move_to_next, notmuch_messages_valid,
     },
     thread::{ThreadHash, ThreadNode, ThreadNodeHash},
 };
@@ -38,6 +40,7 @@ pub struct Message<'m> {
     pub lib: Arc<NotmuchLibrary>,
     pub message: NonNull<ffi::notmuch_message_t>,
     pub is_from_thread: bool,
+    pub freezes: Cell<u8>,
     pub _ph: PhantomData<&'m ffi::notmuch_message_t>,
 }
 
@@ -61,6 +64,7 @@ impl<'m> Message<'m> {
                 ))
             })?,
             is_from_thread: false,
+            freezes: 0.into(),
             _ph: PhantomData,
         })
     }
@@ -254,10 +258,101 @@ impl<'m> Message<'m> {
         let c_str = unsafe { CStr::from_ptr(fs_path) };
         OsStr::from_bytes(c_str.to_bytes())
     }
+
+    /// Freeze the current state of 'message' within the database.
+    ///
+    /// Quoted from `libnotmuch` C header:
+    ///
+    /// > This means that changes to the message state, (via
+    /// > notmuch_message_add_tag, notmuch_message_remove_tag, and
+    /// > notmuch_message_remove_all_tags), will not be committed to the
+    /// > database until the message is thawed with notmuch_message_thaw.
+    /// >
+    /// > Multiple calls to freeze/thaw are valid and these calls will
+    /// > "stack". That is there must be as many calls to thaw as to freeze
+    /// > before a message is actually thawed.
+    /// >
+    /// > The ability to do freeze/thaw allows for safe transactions to
+    /// > change tag values. For example, explicitly setting a message to
+    /// > have a given set of tags might look like this:
+    ///
+    /// ```c
+    /// notmuch_message_freeze (message);
+    ///
+    ///  notmuch_message_remove_all_tags (message);
+    ///
+    ///  for (i = 0; i < NUM_TAGS; i++)
+    ///  notmuch_message_add_tag (message, tags[i]);
+    ///
+    ///  notmuch_message_thaw (message);
+    ///  ```
+    ///
+    /// > With freeze/thaw used like this, the message in the database is
+    /// > guaranteed to have either the full set of original tag values, or
+    /// > the full set of new tag values, but nothing in between.
+    /// >
+    /// > Imagine the example above without freeze/thaw and the operation
+    /// > somehow getting interrupted. This could result in the message being
+    /// > left with no tags if the interruption happened after
+    /// > notmuch_message_remove_all_tags but before notmuch_message_add_tag.
+    /// >
+    /// > Return value:
+    /// >
+    /// > - `NOTMUCH_STATUS_SUCCESS`: Message successfully frozen.
+    /// > - `NOTMUCH_STATUS_READ_ONLY_DATABASE`: Database was opened in
+    /// > read-only
+    /// > mode so message cannot be modified.
+    #[doc(alias = "notmuch_message_freeze")]
+    pub fn freeze(&self) {
+        if _notmuch_status_NOTMUCH_STATUS_READ_ONLY_DATABASE
+            == unsafe { call!(self.lib, notmuch_message_freeze)(self.message.as_ptr()) }
+        {
+            return;
+        }
+        self.freezes.set(self.freezes.get() + 1);
+    }
+
+    /// Thaw the current 'message', synchronizing any changes that may have
+    /// occurred while 'message' was frozen into the notmuch database.
+    ///
+    /// Quoted from `libnotmuch` C header:
+    ///
+    /// > See [`notmuch_message_freeze`](Message::freeze) for an example of how
+    /// > to use this
+    /// > function to safely provide tag changes.
+    /// >
+    /// > Multiple calls to freeze/thaw are valid and these calls with
+    /// > "stack". That is there must be as many calls to thaw as to freeze
+    /// > before a message is actually thawed.
+    /// >
+    /// > Return value:
+    /// >
+    /// > - `NOTMUCH_STATUS_SUCCESS`: Message successfully thawed, (or at least
+    /// > its frozen count has successfully been reduced by 1).
+    /// > - `NOTMUCH_STATUS_UNBALANCED_FREEZE_THAW`: An attempt was made to thaw
+    /// > an unfrozen message. That is, there have been an unbalanced
+    /// > number of calls to `notmuch_message_freeze` and
+    /// > `notmuch_message_thaw`.
+    #[doc(alias = "notmuch_message_thaw")]
+    pub fn thaw(&self) {
+        if self.freezes.get() == 0 {
+            return;
+        }
+
+        if _notmuch_status_NOTMUCH_STATUS_UNBALANCED_FREEZE_THAW
+            == unsafe { call!(self.lib, notmuch_message_thaw)(self.message.as_ptr()) }
+        {
+            return;
+        }
+        self.freezes.set(self.freezes.get() - 1);
+    }
 }
 
 impl Drop for Message<'_> {
     fn drop(&mut self) {
+        while self.freezes.get() > 0 {
+            self.thaw();
+        }
         unsafe { call!(self.lib, notmuch_message_destroy)(self.message.as_ptr()) };
     }
 }
@@ -283,6 +378,7 @@ impl<'q> Iterator for MessageIterator<'q> {
                 lib: self.lib.clone(),
                 message: NonNull::new(message)?,
                 is_from_thread: self.is_from_thread,
+                freezes: 0.into(),
                 _ph: PhantomData,
             })
         } else {
