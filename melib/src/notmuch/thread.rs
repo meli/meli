@@ -22,42 +22,63 @@ use super::*;
 use crate::{
     notmuch::ffi::{
         notmuch_thread_destroy, notmuch_thread_get_messages, notmuch_thread_get_newest_date,
-        notmuch_thread_get_thread_id, notmuch_thread_get_total_messages, notmuch_threads_get,
-        notmuch_threads_move_to_next, notmuch_threads_valid,
+        notmuch_thread_get_thread_id, notmuch_thread_get_total_messages, notmuch_thread_t,
+        notmuch_threads_get, notmuch_threads_move_to_next, notmuch_threads_t,
+        notmuch_threads_valid,
     },
     thread::ThreadHash,
 };
 
 pub struct Thread<'query> {
-    pub lib: Arc<libloading::Library>,
-    pub ptr: *mut ffi::notmuch_thread_t,
+    pub lib: Arc<NotmuchLibrary>,
+    pub inner: NonNull<notmuch_thread_t>,
     pub _ph: std::marker::PhantomData<*const Query<'query>>,
 }
 
 impl<'q> Thread<'q> {
+    #[inline]
     pub fn id(&self) -> ThreadHash {
-        let thread_id = unsafe { call!(self.lib, notmuch_thread_get_thread_id)(self.ptr) };
+        let thread_id = unsafe {
+            // SAFETY:
+            // All pointers used here are NonNull<_> wrapped.
+            call!(self.lib, notmuch_thread_get_thread_id)(self.inner.as_ptr())
+        };
         let c_str = unsafe { CStr::from_ptr(thread_id) };
         ThreadHash::from(c_str.to_bytes())
     }
 
+    #[inline]
     pub fn date(&self) -> crate::UnixTimestamp {
-        (unsafe { call!(self.lib, notmuch_thread_get_newest_date)(self.ptr) }) as u64
+        (unsafe {
+            // SAFETY:
+            // All pointers used here are NonNull<_> wrapped.
+            call!(self.lib, notmuch_thread_get_newest_date)(self.inner.as_ptr())
+        }) as u64
     }
 
+    #[inline]
     pub fn len(&self) -> usize {
-        (unsafe { call!(self.lib, notmuch_thread_get_total_messages)(self.ptr) }) as usize
+        (unsafe {
+            // SAFETY:
+            // All pointers used here are NonNull<_> wrapped.
+            call!(self.lib, notmuch_thread_get_total_messages)(self.inner.as_ptr())
+        }) as usize
     }
 
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
     pub fn iter(&'q self) -> MessageIterator<'q> {
-        let ptr = unsafe { call!(self.lib, notmuch_thread_get_messages)(self.ptr) };
+        let messages = NonNull::new(unsafe {
+            // SAFETY:
+            // All pointers used here are NonNull<_> wrapped.
+            call!(self.lib, notmuch_thread_get_messages)(self.inner.as_ptr())
+        });
         MessageIterator {
             lib: self.lib.clone(),
-            messages: ptr,
+            messages,
             is_from_thread: true,
             _ph: std::marker::PhantomData,
         }
@@ -66,33 +87,54 @@ impl<'q> Thread<'q> {
 
 impl Drop for Thread<'_> {
     fn drop(&mut self) {
-        unsafe { call!(self.lib, notmuch_thread_destroy)(self.ptr) }
+        unsafe {
+            // SAFETY:
+            // All pointers used here are NonNull<_> wrapped.
+            call!(self.lib, notmuch_thread_destroy)(self.inner.as_ptr())
+        }
     }
 }
 
+/// notmuch threads iterator.
+///
+///
+/// Quoting the docs:
+///
+/// > Note that there's no explicit destructor needed for the
+/// > notmuch_threads_t object. (For consistency, we do provide a
+/// > notmuch_threads_destroy function, but there's no good reason
+/// > to call it if the query is about to be destroyed).
+///
+/// So there's no need to implement Drop for this type.
 pub struct ThreadsIterator<'query> {
-    pub lib: Arc<libloading::Library>,
-    pub threads: *mut ffi::notmuch_threads_t,
+    pub lib: Arc<NotmuchLibrary>,
+    pub inner: Option<NonNull<notmuch_threads_t>>,
     pub _ph: std::marker::PhantomData<*const Query<'query>>,
 }
 
 impl<'q> Iterator for ThreadsIterator<'q> {
     type Item = Thread<'q>;
     fn next(&mut self) -> Option<Self::Item> {
-        if self.threads.is_null() {
-            None
-        } else if unsafe { call!(self.lib, notmuch_threads_valid)(self.threads) } == 1 {
-            let thread = unsafe { call!(self.lib, notmuch_threads_get)(self.threads) };
+        let inner = self.inner?;
+        if unsafe { call!(self.lib, notmuch_threads_valid)(inner.as_ptr()) } == 1 {
+            let Some(thread_inner) = NonNull::new(unsafe {
+                // SAFETY:
+                // All pointers used here are NonNull<_> wrapped.
+                call!(self.lib, notmuch_threads_get)(inner.as_ptr())
+            }) else {
+                self.inner = None;
+                return None;
+            };
             unsafe {
-                call!(self.lib, notmuch_threads_move_to_next)(self.threads);
+                call!(self.lib, notmuch_threads_move_to_next)(inner.as_ptr());
             }
             Some(Thread {
                 lib: self.lib.clone(),
-                ptr: thread,
+                inner: thread_inner,
                 _ph: std::marker::PhantomData,
             })
         } else {
-            self.threads = std::ptr::null_mut();
+            self.inner = None;
             None
         }
     }

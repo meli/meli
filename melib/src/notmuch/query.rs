@@ -19,30 +19,31 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::{ffi::CString, ptr::NonNull, sync::Arc};
+use std::{borrow::Cow, ffi::CString, ptr::NonNull, sync::Arc};
 
 use crate::{
-    error::{Error, Result},
+    error::{Error, ErrorKind, Result},
     notmuch::{
         ffi::{
-            self, notmuch_query_count_messages, notmuch_query_create, notmuch_query_destroy,
-            notmuch_query_search_messages, notmuch_status_to_string,
+            notmuch_messages_t, notmuch_query_count_messages, notmuch_query_create,
+            notmuch_query_destroy, notmuch_query_search_messages, notmuch_query_t,
+            notmuch_status_to_string,
         },
-        DbConnection, MessageIterator,
+        DbConnection, MessageIterator, NotmuchLibrary,
     },
 };
 
 pub struct Query<'s> {
-    pub lib: Arc<libloading::Library>,
-    pub ptr: NonNull<ffi::notmuch_query_t>,
+    pub lib: Arc<NotmuchLibrary>,
+    pub ptr: NonNull<notmuch_query_t>,
     pub query_str: &'s str,
 }
 
 impl<'s> Query<'s> {
     pub fn new(database: &DbConnection, query_str: &'s str) -> Result<Self> {
-        let lib: Arc<libloading::Library> = database.lib.clone();
+        let lib: Arc<NotmuchLibrary> = database.lib.clone();
         let query_cstr = CString::new(query_str)?;
-        let query: *mut ffi::notmuch_query_t = unsafe {
+        let query: *mut notmuch_query_t = unsafe {
             call!(lib, notmuch_query_create)(
                 database.inner.lock().unwrap().as_mut(),
                 query_cstr.as_ptr(),
@@ -72,7 +73,7 @@ impl<'s> Query<'s> {
     }
 
     pub fn search(&'s self) -> Result<MessageIterator<'s>> {
-        let mut messages: *mut ffi::notmuch_messages_t = std::ptr::null_mut();
+        let mut messages: *mut notmuch_messages_t = std::ptr::null_mut();
         let status = unsafe {
             call!(self.lib, notmuch_query_search_messages)(
                 self.ptr.as_ptr(),
@@ -85,12 +86,25 @@ impl<'s> Query<'s> {
                 self.query_str, status,
             )));
         }
-        assert!(!messages.is_null());
+        let messages = Some(NonNull::new(messages).ok_or_else(|| {
+            Error::new(format!(
+                "Search for {} failed because of an internal libnotmuch error.",
+                self.query_str
+            ))
+            .set_details(
+                "notmuch_query_search_messages returned status == 0 but the passed `messages` \
+                 pointer argument is NULL.",
+            )
+            .set_kind(ErrorKind::LinkedLibrary(match self.lib.dlpath {
+                Cow::Borrowed(v) => v,
+                Cow::Owned(_) => "user configured path",
+            }))
+        })?);
         Ok(MessageIterator {
             messages,
             lib: self.lib.clone(),
-            _ph: std::marker::PhantomData,
             is_from_thread: false,
+            _ph: std::marker::PhantomData,
         })
     }
 }

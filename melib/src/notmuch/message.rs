@@ -19,6 +19,8 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use std::{marker::PhantomData, ptr::NonNull};
+
 use super::*;
 use crate::{
     notmuch::ffi::{
@@ -33,10 +35,10 @@ use crate::{
 
 #[derive(Clone)]
 pub struct Message<'m> {
-    pub lib: Arc<libloading::Library>,
-    pub message: *mut ffi::notmuch_message_t,
+    pub lib: Arc<NotmuchLibrary>,
+    pub message: NonNull<ffi::notmuch_message_t>,
     pub is_from_thread: bool,
-    pub _ph: std::marker::PhantomData<&'m ffi::notmuch_message_t>,
+    pub _ph: PhantomData<&'m ffi::notmuch_message_t>,
 }
 
 impl<'m> Message<'m> {
@@ -50,29 +52,30 @@ impl<'m> Message<'m> {
                 std::ptr::addr_of_mut!(message),
             )
         };
-        if message.is_null() {
-            return Err(Error::new(format!(
-                "Message with message id {:?} not found in notmuch database.",
-                msg_id
-            )));
-        }
         Ok(Message {
             lib,
-            message,
+            message: NonNull::new(message).ok_or_else(|| {
+                Error::new(format!(
+                    "Message with message id {:?} not found in notmuch database.",
+                    msg_id
+                ))
+            })?,
             is_from_thread: false,
-            _ph: std::marker::PhantomData,
+            _ph: PhantomData,
         })
     }
 
     pub fn env_hash(&self) -> EnvelopeHash {
-        let msg_id = unsafe { call!(self.lib, notmuch_message_get_message_id)(self.message) };
+        let msg_id =
+            unsafe { call!(self.lib, notmuch_message_get_message_id)(self.message.as_ptr()) };
         let c_str = unsafe { CStr::from_ptr(msg_id) };
         EnvelopeHash::from_bytes(c_str.to_bytes_with_nul())
     }
 
     pub fn header(&self, header: &CStr) -> Option<&[u8]> {
-        let header_val =
-            unsafe { call!(self.lib, notmuch_message_get_header)(self.message, header.as_ptr()) };
+        let header_val = unsafe {
+            call!(self.lib, notmuch_message_get_header)(self.message.as_ptr(), header.as_ptr())
+        };
         if header_val.is_null() {
             None
         } else {
@@ -86,12 +89,13 @@ impl<'m> Message<'m> {
     }
 
     pub fn msg_id_cstr(&self) -> &CStr {
-        let msg_id = unsafe { call!(self.lib, notmuch_message_get_message_id)(self.message) };
+        let msg_id =
+            unsafe { call!(self.lib, notmuch_message_get_message_id)(self.message.as_ptr()) };
         unsafe { CStr::from_ptr(msg_id) }
     }
 
     pub fn date(&self) -> crate::UnixTimestamp {
-        (unsafe { call!(self.lib, notmuch_message_get_date)(self.message) }) as u64
+        (unsafe { call!(self.lib, notmuch_message_get_date)(self.message.as_ptr()) }) as u64
     }
 
     pub fn into_envelope(
@@ -173,23 +177,22 @@ impl<'m> Message<'m> {
 
     pub fn replies_iter(&self) -> Option<MessageIterator> {
         if self.is_from_thread {
-            let messages = unsafe { call!(self.lib, notmuch_message_get_replies)(self.message) };
-            if messages.is_null() {
-                None
-            } else {
-                Some(MessageIterator {
-                    lib: self.lib.clone(),
-                    messages,
-                    _ph: std::marker::PhantomData,
-                    is_from_thread: true,
-                })
-            }
+            let messages = Some(NonNull::new(unsafe {
+                call!(self.lib, notmuch_message_get_replies)(self.message.as_ptr())
+            })?);
+            Some(MessageIterator {
+                lib: self.lib.clone(),
+                messages,
+                _ph: PhantomData,
+                is_from_thread: true,
+            })
         } else {
             None
         }
     }
 
     pub fn into_thread_node(&self) -> (ThreadNodeHash, ThreadNode) {
+        let (flags, _) = TagIterator::new(self).collect_flags_and_tags();
         (
             ThreadNodeHash::from(self.msg_id()),
             ThreadNode {
@@ -200,7 +203,7 @@ impl<'m> Message<'m> {
                 date: self.date(),
                 show_subject: true,
                 group: ThreadHash::new(),
-                unseen: false,
+                unseen: !flags.intersects(Flag::SEEN),
             },
         )
     }
@@ -209,7 +212,7 @@ impl<'m> Message<'m> {
         if let Err(err) = unsafe {
             try_call!(
                 self.lib,
-                call!(self.lib, notmuch_message_add_tag)(self.message, tag.as_ptr())
+                call!(self.lib, notmuch_message_add_tag)(self.message.as_ptr(), tag.as_ptr())
             )
         } {
             return Err(Error::new("Could not set tag.").set_source(Some(Arc::new(err))));
@@ -221,7 +224,7 @@ impl<'m> Message<'m> {
         if let Err(err) = unsafe {
             try_call!(
                 self.lib,
-                call!(self.lib, notmuch_message_remove_tag)(self.message, tag.as_ptr())
+                call!(self.lib, notmuch_message_remove_tag)(self.message.as_ptr(), tag.as_ptr())
             )
         } {
             return Err(Error::new("Could not set tag.").set_source(Some(Arc::new(err))));
@@ -237,7 +240,7 @@ impl<'m> Message<'m> {
         if let Err(err) = unsafe {
             try_call!(
                 self.lib,
-                call!(self.lib, notmuch_message_tags_to_maildir_flags)(self.message)
+                call!(self.lib, notmuch_message_tags_to_maildir_flags)(self.message.as_ptr())
             )
         } {
             return Err(Error::new("Could not set flags.").set_source(Some(Arc::new(err))));
@@ -246,7 +249,8 @@ impl<'m> Message<'m> {
     }
 
     pub fn get_filename(&self) -> &OsStr {
-        let fs_path = unsafe { call!(self.lib, notmuch_message_get_filename)(self.message) };
+        let fs_path =
+            unsafe { call!(self.lib, notmuch_message_get_filename)(self.message.as_ptr()) };
         let c_str = unsafe { CStr::from_ptr(fs_path) };
         OsStr::from_bytes(c_str.to_bytes())
     }
@@ -254,35 +258,35 @@ impl<'m> Message<'m> {
 
 impl Drop for Message<'_> {
     fn drop(&mut self) {
-        unsafe { call!(self.lib, notmuch_message_destroy)(self.message) };
+        unsafe { call!(self.lib, notmuch_message_destroy)(self.message.as_ptr()) };
     }
 }
 
 pub struct MessageIterator<'query> {
-    pub lib: Arc<libloading::Library>,
-    pub messages: *mut ffi::notmuch_messages_t,
+    pub lib: Arc<NotmuchLibrary>,
+    pub messages: Option<NonNull<ffi::notmuch_messages_t>>,
     pub is_from_thread: bool,
-    pub _ph: std::marker::PhantomData<*const Query<'query>>,
+    pub _ph: PhantomData<*const Query<'query>>,
 }
 
 impl<'q> Iterator for MessageIterator<'q> {
     type Item = Message<'q>;
+
     fn next(&mut self) -> Option<Self::Item> {
-        if self.messages.is_null() {
-            None
-        } else if unsafe { call!(self.lib, notmuch_messages_valid)(self.messages) } == 1 {
-            let message = unsafe { call!(self.lib, notmuch_messages_get)(self.messages) };
+        let messages = self.messages?;
+        if unsafe { call!(self.lib, notmuch_messages_valid)(messages.as_ptr()) } == 1 {
+            let message = unsafe { call!(self.lib, notmuch_messages_get)(messages.as_ptr()) };
             unsafe {
-                call!(self.lib, notmuch_messages_move_to_next)(self.messages);
+                call!(self.lib, notmuch_messages_move_to_next)(messages.as_ptr());
             }
             Some(Message {
                 lib: self.lib.clone(),
-                message,
+                message: NonNull::new(message)?,
                 is_from_thread: self.is_from_thread,
-                _ph: std::marker::PhantomData,
+                _ph: PhantomData,
             })
         } else {
-            self.messages = std::ptr::null_mut();
+            self.messages = None;
             None
         }
     }

@@ -20,6 +20,7 @@
  */
 
 use std::{
+    borrow::Cow,
     collections::{hash_map::HashMap, BTreeMap, BTreeSet},
     ffi::{CStr, CString, OsStr},
     io::Read,
@@ -50,7 +51,7 @@ macro_rules! call {
             "{} must be a valid FFI symbol.",
             stringify!($func)
         );
-        let func: libloading::Symbol<$func> = $lib.get(stringify!($func).as_bytes()).unwrap();
+        let func: libloading::Symbol<$func> = $lib.inner.get(stringify!($func).as_bytes()).unwrap();
         func
     }};
 }
@@ -102,8 +103,14 @@ impl DbPointer {
 }
 
 #[derive(Debug)]
+pub struct NotmuchLibrary {
+    pub inner: libloading::Library,
+    pub dlpath: Cow<'static, str>,
+}
+
+#[derive(Debug)]
 pub struct DbConnection {
-    pub lib: Arc<libloading::Library>,
+    pub lib: Arc<NotmuchLibrary>,
     inner: Arc<Mutex<DbPointer>>,
     pub revision_uuid: Arc<RwLock<u64>>,
 }
@@ -201,10 +208,9 @@ impl DbConnection {
                         );
                     }
                 }
-                false
-            } else {
-                true
+                return false;
             }
+            true
         });
         Ok(())
     }
@@ -249,7 +255,7 @@ impl Drop for DbConnection {
 #[derive(Debug)]
 pub struct NotmuchDb {
     #[allow(dead_code)]
-    lib: Arc<libloading::Library>,
+    lib: Arc<NotmuchLibrary>,
     revision_uuid: Arc<RwLock<u64>>,
     mailboxes: Arc<RwLock<HashMap<MailboxHash, NotmuchMailbox>>>,
     index: Arc<RwLock<HashMap<EnvelopeHash, CString>>>,
@@ -270,35 +276,38 @@ impl NotmuchDb {
         event_consumer: BackendEventConsumer,
     ) -> Result<Box<dyn MailBackend>> {
         #[cfg(target_os = "linux")]
-        let mut dlpath = "libnotmuch.so.5";
+        let mut dlpath = Cow::Borrowed("libnotmuch.so.5");
         #[cfg(target_os = "macos")]
-        let mut dlpath = "libnotmuch.5.dylib";
+        let mut dlpath = Cow::Borrowed("libnotmuch.5.dylib");
         #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-        let mut dlpath = "libnotmuch.so";
+        let mut dlpath = Cow::Borrowed("libnotmuch.so");
         let mut custom_dlpath = false;
         if let Some(lib_path) = s.extra.get("library_file_path") {
-            dlpath = lib_path.as_str();
+            dlpath = Cow::Owned(lib_path.to_string());
             custom_dlpath = true;
         }
-        let lib = Arc::new(unsafe {
-            match libloading::Library::new(dlpath) {
-                Ok(l) => l,
-                Err(err) => {
-                    if custom_dlpath {
-                        return Err(Error::new(format!(
-                            "Notmuch `library_file_path` setting value `{}` for account {} does \
-                             not exist or is a directory or not a valid library file.",
-                            dlpath, s.name
-                        ))
-                        .set_kind(ErrorKind::Configuration)
-                        .set_source(Some(Arc::new(err))));
-                    } else {
-                        return Err(Error::new("Could not load libnotmuch!")
-                            .set_details(super::NOTMUCH_ERROR_DETAILS)
+        let lib = Arc::new(NotmuchLibrary {
+            inner: unsafe {
+                match libloading::Library::new(dlpath.as_ref()) {
+                    Ok(l) => l,
+                    Err(err) => {
+                        if custom_dlpath {
+                            return Err(Error::new(format!(
+                                "Notmuch `library_file_path` setting value `{}` for account {} \
+                                 does not exist or is a directory or not a valid library file.",
+                                dlpath, s.name
+                            ))
+                            .set_kind(ErrorKind::Configuration)
                             .set_source(Some(Arc::new(err))));
+                        } else {
+                            return Err(Error::new("Could not load libnotmuch!")
+                                .set_details(super::NOTMUCH_ERROR_DETAILS)
+                                .set_source(Some(Arc::new(err))));
+                        }
                     }
                 }
-            }
+            },
+            dlpath,
         });
         let mut path = Path::new(s.root_mailbox.as_str()).expand();
         if !path.exists() {
@@ -486,7 +495,7 @@ impl NotmuchDb {
     fn new_connection(
         path: &Path,
         revision_uuid: Arc<RwLock<u64>>,
-        lib: Arc<libloading::Library>,
+        lib: Arc<NotmuchLibrary>,
         write: bool,
     ) -> Result<DbConnection> {
         let path_c = CString::new(path.to_str().unwrap()).unwrap();
@@ -1030,7 +1039,7 @@ struct NotmuchOp {
     database: Arc<DbConnection>,
     bytes: Option<Vec<u8>>,
     #[allow(dead_code)]
-    lib: Arc<libloading::Library>,
+    lib: Arc<NotmuchLibrary>,
 }
 
 impl BackendOp for NotmuchOp {
