@@ -27,7 +27,7 @@ use super::{EntryStrings, *};
 use crate::{components::PageMovement, jobs::JoinHandle};
 
 macro_rules! row_attr {
-    ($color_cache:expr, $even: expr, $unseen:expr, $highlighted:expr, $selected:expr  $(,)*) => {{
+    ($color_cache:expr, even: $even:expr, unseen: $unseen:expr, highlighted: $highlighted:expr, selected: $selected:expr  $(,)*) => {{
         let color_cache = &$color_cache;
         let even = $even;
         let unseen = $unseen;
@@ -368,10 +368,10 @@ impl ListingTrait for PlainListing {
 
         let row_attr = row_attr!(
             self.color_cache,
-            idx % 2 == 0,
-            !envelope.is_seen(),
-            self.cursor_pos.2 == idx,
-            self.rows.selection[&i]
+            even: idx % 2 == 0,
+            unseen: !envelope.is_seen(),
+            highlighted: self.cursor_pos.2 == idx,
+            selected: self.rows.selection[&i]
         );
 
         let x = self.data_columns.widths[0]
@@ -487,7 +487,7 @@ impl ListingTrait for PlainListing {
                 self.data_columns
                     .draw(grid, idx, self.cursor_pos.2, grid.bounds_iter(new_area));
                 if highlight {
-                    let row_attr = row_attr!(self.color_cache, idx % 2 == 0, false, true, false);
+                    let row_attr = row_attr!(self.color_cache, even: idx % 2 == 0, unseen: false, highlighted: true, selected: false);
                     grid.change_theme(new_area, row_attr);
                 } else if let Some(row_attr) = self.rows.row_attr_cache.get(&idx) {
                     grid.change_theme(new_area, *row_attr);
@@ -523,10 +523,10 @@ impl ListingTrait for PlainListing {
         /* highlight cursor */
         let row_attr = row_attr!(
             self.color_cache,
-            self.cursor_pos.2 % 2 == 0,
-            false,
-            true,
-            false
+            even: self.cursor_pos.2 % 2 == 0,
+            unseen: false,
+            highlighted: true,
+            selected: false
         );
         grid.change_theme(area.nth_row(self.cursor_pos.2 % rows), row_attr);
 
@@ -836,10 +836,10 @@ impl PlainListing {
             }
             let row_attr = row_attr!(
                 self.color_cache,
-                self.length % 2 == 0,
-                !envelope.is_seen(),
-                false,
-                false
+                even: self.length % 2 == 0,
+                unseen: !envelope.is_seen(),
+                highlighted: false,
+                selected: false
             );
             self.rows.row_attr_cache.insert(self.length, row_attr);
 
@@ -1111,10 +1111,10 @@ impl PlainListing {
         let idx = self.rows.env_order[&env_hash];
         let row_attr = row_attr!(
             self.color_cache,
-            idx % 2 == 0,
-            !envelope.is_seen(),
-            false,
-            self.rows.selection[&env_hash]
+            even: idx % 2 == 0,
+            unseen: !envelope.is_seen(),
+            highlighted: false,
+            selected: self.rows.selection[&env_hash]
         );
         self.rows.row_attr_cache.insert(idx, row_attr);
 
@@ -1526,10 +1526,10 @@ impl Component for PlainListing {
                         .get_env(env_hash);
                     let row_attr = row_attr!(
                         self.color_cache,
-                        row % 2 == 0,
-                        !envelope.is_seen(),
-                        false,
-                        self.rows.selection[&env_hash]
+                        even: row % 2 == 0,
+                        unseen: !envelope.is_seen(),
+                        highlighted: false,
+                        selected: self.rows.selection[&env_hash]
                     );
                     self.rows.row_attr_cache.insert(row, row_attr);
                     let page_no = (self.new_cursor_pos.2).wrapping_div(rows);

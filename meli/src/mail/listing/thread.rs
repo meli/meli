@@ -27,7 +27,7 @@ use super::*;
 use crate::{components::PageMovement, jobs::JoinHandle};
 
 macro_rules! row_attr {
-    ($color_cache:expr, $even: expr, $unseen:expr, $highlighted:expr, $selected:expr  $(,)*) => {{
+    ($color_cache:expr, even: $even:expr, unseen: $unseen:expr, highlighted: $highlighted:expr, selected: $selected:expr  $(,)*) => {{
         let color_cache = &$color_cache;
         let even = $even;
         let unseen = $unseen;
@@ -575,7 +575,7 @@ impl ListingTrait for ThreadListing {
                 self.data_columns
                     .draw(grid, idx, self.cursor_pos.2, grid.bounds_iter(new_area));
                 if highlight {
-                    let row_attr = row_attr!(self.color_cache, idx % 2 == 0, false, true, false);
+                    let row_attr = row_attr!(self.color_cache, even: idx % 2 == 0, unseen: false, highlighted: true, selected: false);
                     grid.change_theme(new_area, row_attr);
                 } else if let Some(row_attr) = self.rows.row_attr_cache.get(&idx) {
                     grid.change_theme(new_area, *row_attr);
@@ -622,10 +622,10 @@ impl ListingTrait for ThreadListing {
         // highlight cursor
         let row_attr = row_attr!(
             self.color_cache,
-            self.cursor_pos.2 % 2 == 0,
-            false,
-            true,
-            false
+            even: self.cursor_pos.2 % 2 == 0,
+            unseen: false,
+            highlighted: true,
+            selected: false
         );
         grid.change_theme(area.nth_row(self.cursor_pos.2 % rows), row_attr);
 
@@ -652,10 +652,10 @@ impl ListingTrait for ThreadListing {
 
         let row_attr = row_attr!(
             self.color_cache,
-            idx % 2 == 0,
-            !envelope.is_seen(),
-            self.cursor_pos.2 == idx,
-            self.rows.selection[&env_hash],
+            even: idx % 2 == 0,
+            unseen: !envelope.is_seen(),
+            highlighted: self.cursor_pos.2 == idx,
+            selected: self.rows.selection[&env_hash],
         );
 
         let x = self.data_columns.widths[0]
@@ -982,10 +982,10 @@ impl ThreadListing {
             }
             let row_attr = row_attr!(
                 self.color_cache,
-                idx % 2 == 0,
-                !self.seen_cache[env_hash],
-                self.cursor_pos.2 == idx,
-                self.rows.selection[env_hash]
+                even: idx % 2 == 0,
+                unseen: !self.seen_cache[env_hash],
+                highlighted: self.cursor_pos.2 == idx,
+                selected: self.rows.selection[env_hash]
             );
             {
                 let area = self.data_columns.columns[0].area();
@@ -1151,10 +1151,10 @@ impl ThreadListing {
         let idx = self.rows.env_order[&env_hash];
         let row_attr = row_attr!(
             self.color_cache,
-            idx % 2 == 0,
-            !envelope.is_seen(),
-            false,
-            self.rows.selection[&env_hash]
+            even: idx % 2 == 0,
+            unseen: !envelope.is_seen(),
+            highlighted: false,
+            selected: self.rows.selection[&env_hash]
         );
         self.seen_cache.insert(env_hash, envelope.is_seen());
 
@@ -1179,13 +1179,13 @@ impl ThreadListing {
             let row_attr = if let Some(env_hash) = self.get_env_under_cursor(top_idx + i) {
                 row_attr!(
                     self.color_cache,
-                    (top_idx + i) % 2 == 0,
-                    !self.seen_cache[&env_hash],
-                    self.cursor_pos.2 == (top_idx + i),
-                    self.rows.selection[&env_hash]
+                    even: (top_idx + i) % 2 == 0,
+                    unseen: !self.seen_cache[&env_hash],
+                    highlighted: self.cursor_pos.2 == (top_idx + i),
+                    selected: self.rows.selection[&env_hash]
                 )
             } else {
-                row_attr!(self.color_cache, (top_idx + i) % 2 == 0, false, true, false)
+                row_attr!(self.color_cache, even: (top_idx + i) % 2 == 0, unseen: false, highlighted: true, selected: false)
             };
 
             let idx_col_area = self.data_columns.columns[0].area();
@@ -1438,10 +1438,10 @@ impl Component for ThreadListing {
                         .get_env(env_hash);
                     let row_attr = row_attr!(
                         self.color_cache,
-                        row % 2 == 0,
-                        !envelope.is_seen(),
-                        false,
-                        self.rows.selection[&env_hash]
+                        even: row % 2 == 0,
+                        unseen: !envelope.is_seen(),
+                        highlighted: false,
+                        selected: self.rows.selection[&env_hash]
                     );
                     self.rows.row_attr_cache.insert(row, row_attr);
                     self.force_draw |= row >= top_idx && row < top_idx + rows;

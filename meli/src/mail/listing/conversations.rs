@@ -28,7 +28,7 @@ use super::*;
 use crate::{components::PageMovement, jobs::JoinHandle};
 
 macro_rules! row_attr {
-    ($field:ident, $color_cache:expr, $unseen:expr, $highlighted:expr, $selected:expr  $(,)*) => {{
+    ($field:ident, $color_cache:expr, unseen: $unseen:expr, highlighted: $highlighted:expr, selected: $selected:expr  $(,)*) => {{
         let color_cache = &$color_cache;
         let unseen = $unseen;
         let highlighted = $highlighted;
@@ -65,7 +65,7 @@ macro_rules! row_attr {
             },
         }
     }};
-    ($color_cache:expr, $unseen:expr, $highlighted:expr, $selected:expr  $(,)*) => {{
+    ($color_cache:expr, unseen: $unseen:expr, highlighted: $highlighted:expr, selected: $selected:expr  $(,)*) => {{
         let color_cache = &$color_cache;
         let unseen = $unseen;
         let highlighted = $highlighted;
@@ -886,9 +886,9 @@ impl ConversationsListing {
 
             let row_attr = row_attr!(
                 self.color_cache,
-                thread.unseen() > 0,
-                self.cursor_pos.2 == idx,
-                self.rows.is_thread_selected(*thread_hash)
+                unseen: thread.unseen() > 0,
+                highlighted: self.cursor_pos.2 == idx,
+                selected: self.rows.is_thread_selected(*thread_hash)
             );
             // draw flags
             let (mut x, _) = grid.write_string(
@@ -908,9 +908,9 @@ impl ConversationsListing {
             let subject_attr = row_attr!(
                 subject,
                 self.color_cache,
-                thread.unseen() > 0,
-                self.cursor_pos.2 == idx,
-                self.rows.is_thread_selected(*thread_hash)
+                unseen: thread.unseen() > 0,
+                highlighted: self.cursor_pos.2 == idx,
+                selected: self.rows.is_thread_selected(*thread_hash)
             );
             // draw subject
             let (x_, subject_overflowed) = grid.write_string(
@@ -959,9 +959,9 @@ impl ConversationsListing {
             let date_attr = row_attr!(
                 date,
                 self.color_cache,
-                thread.unseen() > 0,
-                self.cursor_pos.2 == idx,
-                self.rows.is_thread_selected(*thread_hash)
+                unseen: thread.unseen() > 0,
+                highlighted: self.cursor_pos.2 == idx,
+                selected: self.rows.is_thread_selected(*thread_hash)
             );
             x = 0;
             x += grid
@@ -981,9 +981,9 @@ impl ConversationsListing {
             let from_attr = row_attr!(
                 from,
                 self.color_cache,
-                thread.unseen() > 0,
-                self.cursor_pos.2 == idx,
-                self.rows.is_thread_selected(*thread_hash)
+                unseen: thread.unseen() > 0,
+                highlighted: self.cursor_pos.2 == idx,
+                selected: self.rows.is_thread_selected(*thread_hash)
             );
             // draw from
             x += grid
