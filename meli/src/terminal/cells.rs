@@ -35,7 +35,7 @@ use melib::{
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use smallvec::SmallVec;
 
-use super::{position::*, Area, Color, ScreenGeneration};
+use super::{Area, Color, Pos, ScreenGeneration};
 use crate::{state::Context, ThemeAttribute};
 
 /// In a scroll region up and down cursor movements shift the region vertically.
@@ -393,6 +393,16 @@ impl CellBuffer {
             return BoundsIterator::empty(self.generation());
         }
 
+        #[inline(always)]
+        fn get_x(p: Pos) -> usize {
+            p.0
+        }
+
+        #[inline(always)]
+        fn get_y(p: Pos) -> usize {
+            p.1
+        }
+
         BoundsIterator {
             width: area.width(),
             height: area.height(),
@@ -499,20 +509,6 @@ impl CellBuffer {
 
     /// Change foreground and background colors in an `Area`
     pub fn change_colors(&mut self, area: Area, fg_color: Color, bg_color: Color) {
-        if cfg!(feature = "debug-tracing") {
-            let bounds = self.size();
-            let upper_left = area.upper_left();
-            let bottom_right = area.bottom_right();
-            let (x, y) = upper_left;
-            if y > (get_y(bottom_right))
-                || x > get_x(bottom_right)
-                || y >= get_y(bounds)
-                || x >= get_x(bounds)
-            {
-                log::debug!("BUG: Invalid area in change_colors:\n area: {:?}", area);
-                return;
-            }
-        }
         for row in self.bounds_iter(area) {
             for c in row {
                 self[c].set_fg(fg_color).set_bg(bg_color);
@@ -522,20 +518,6 @@ impl CellBuffer {
 
     /// Change [`ThemeAttribute`] in an `Area`
     pub fn change_theme(&mut self, area: Area, theme: ThemeAttribute) {
-        if cfg!(feature = "debug-tracing") {
-            let bounds = self.size();
-            let upper_left = area.upper_left();
-            let bottom_right = area.bottom_right();
-            let (x, y) = upper_left;
-            if y > (get_y(bottom_right))
-                || x > get_x(bottom_right)
-                || y >= get_y(bounds)
-                || x >= get_x(bounds)
-            {
-                log::debug!("BUG: Invalid area in change_theme:\n area: {:?}", area);
-                return;
-            }
-        }
         for row in self.bounds_iter(area) {
             for c in row {
                 self[c]
@@ -561,6 +543,16 @@ impl CellBuffer {
 
         if grid_src.is_empty() || self.is_empty() || dest.is_empty() || src.is_empty() {
             return dest.upper_left();
+        }
+
+        #[inline(always)]
+        fn get_x(p: Pos) -> usize {
+            p.0
+        }
+
+        #[inline(always)]
+        fn get_y(p: Pos) -> usize {
+            p.1
         }
 
         let mut ret = dest.bottom_right();
@@ -643,6 +635,17 @@ impl CellBuffer {
         if area.is_empty() {
             return (0, 0);
         }
+
+        #[inline(always)]
+        fn get_x(p: Pos) -> usize {
+            p.0
+        }
+
+        #[inline(always)]
+        fn get_y(p: Pos) -> usize {
+            p.1
+        }
+
         let mut bounds = self.size();
         let upper_left = area.upper_left();
         let bottom_right = area.bottom_right();
@@ -1706,31 +1709,30 @@ pub mod boundaries {
     /// Returns the inner area of the created box.
     pub fn create_box(grid: &mut CellBuffer, area: Area) -> Area {
         debug_assert_eq!(grid.generation(), area.generation());
-        let upper_left = area.upper_left();
-        let bottom_right = area.bottom_right();
 
         if !grid.ascii_drawing {
-            for x in get_x(upper_left)..get_x(bottom_right) {
-                grid[(x, get_y(upper_left))].set_ch(HORZ_BOUNDARY);
-                grid[(x, get_y(bottom_right))].set_ch(HORZ_BOUNDARY);
+            for (top, bottom) in grid
+                .bounds_iter(area.nth_row(0))
+                .zip(grid.bounds_iter(area.nth_row(area.height().saturating_sub(1))))
+            {
+                for c in top.chain(bottom) {
+                    grid[c].set_ch(HORZ_BOUNDARY);
+                }
             }
 
-            for y in get_y(upper_left)..get_y(bottom_right) {
-                grid[(get_x(upper_left), y)].set_ch(VERT_BOUNDARY);
-                grid[(get_x(bottom_right), y)].set_ch(VERT_BOUNDARY);
+            for (left, right) in grid
+                .bounds_iter(area.nth_col(0))
+                .zip(grid.bounds_iter(area.nth_col(area.width().saturating_sub(1))))
+            {
+                for c in left.chain(right) {
+                    grid[c].set_ch(VERT_BOUNDARY);
+                }
             }
-            set_and_join_box(grid, upper_left, BoxBoundary::Horizontal);
-            set_and_join_box(
-                grid,
-                set_x(upper_left, get_x(bottom_right)),
-                BoxBoundary::Horizontal,
-            );
-            set_and_join_box(
-                grid,
-                set_y(upper_left, get_y(bottom_right)),
-                BoxBoundary::Vertical,
-            );
-            set_and_join_box(grid, bottom_right, BoxBoundary::Vertical);
+
+            set_and_join_box(grid, area.upper_left(), BoxBoundary::Horizontal);
+            set_and_join_box(grid, area.upper_right(), BoxBoundary::Horizontal);
+            set_and_join_box(grid, area.bottom_left(), BoxBoundary::Vertical);
+            set_and_join_box(grid, area.bottom_right(), BoxBoundary::Vertical);
         }
 
         area.skip(1, 1).skip_rows_from_end(1).skip_cols_from_end(1)

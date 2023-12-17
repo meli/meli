@@ -28,8 +28,6 @@ mod color;
 mod screen;
 pub use color::*;
 #[macro_use]
-pub mod position;
-#[macro_use]
 pub mod cells;
 #[macro_use]
 pub mod keys;
@@ -41,7 +39,10 @@ use std::io::{BufRead, Write};
 pub use braille::BraillePixelIter;
 pub use screen::{Area, Screen, ScreenGeneration, StateStdout, Tty, Virtual};
 
-pub use self::{cells::*, keys::*, position::*, text_editing::*};
+pub use self::{cells::*, keys::*, text_editing::*};
+
+/// A type alias for a `(x, y)` position on screen.
+pub type Pos = (usize, usize);
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum Alignment {

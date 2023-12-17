@@ -979,11 +979,14 @@ impl Component for Tabbed {
             }
             if (children_maps == self.help_view.curr_views) && must_redraw_shortcuts {
                 let dialog_area = area.align_inside(
-                    /* add box perimeter padding */
-                    pos_inc(self.help_view.content.area().size(), (1, 1)),
-                    /* horizontal */
+                    // add box perimeter padding
+                    {
+                        let (w, h) = self.help_view.content.area().size();
+                        (w + 1, h + 1)
+                    },
+                    // horizontal
                     Alignment::Center,
-                    /* vertical */
+                    // vertical
                     Alignment::Center,
                 );
                 context.dirty_areas.push_back(dialog_area);
@@ -1154,11 +1157,14 @@ impl Component for Tabbed {
             }
             self.help_view.curr_views = children_maps;
             let dialog_area = area.align_inside(
-                /* add box perimeter padding */
-                pos_inc(self.help_view.content.area().size(), (1, 1)),
-                /* horizontal */
+                // add box perimeter padding
+                {
+                    let (w, h) = self.help_view.content.area().size();
+                    (w + 1, h + 1)
+                },
+                // horizontal
                 Alignment::Center,
-                /* vertical */
+                // vertical
                 Alignment::Center,
             );
             context.dirty_areas.push_back(dialog_area);

@@ -27,9 +27,9 @@ use termion::{clear, cursor, raw::IntoRawMode, screen::AlternateScreen};
 
 use crate::{
     terminal::{
-        cells::CellBuffer, position::*, Alignment, BracketModeEnd, BracketModeStart, Cell, Color,
-        DisableMouse, DisableSGRMouse, EnableMouse, EnableSGRMouse,
-        RestoreWindowTitleIconFromStack, SaveWindowTitleIconToStack,
+        cells::CellBuffer, Alignment, BracketModeEnd, BracketModeStart, Cell, Color, DisableMouse,
+        DisableSGRMouse, EnableMouse, EnableSGRMouse, Pos, RestoreWindowTitleIconFromStack,
+        SaveWindowTitleIconToStack,
     },
     Attr, Context,
 };
@@ -892,6 +892,16 @@ impl Area {
     }
 
     #[inline]
+    pub const fn upper_right(&self) -> Pos {
+        set_x(self.upper_left, get_x(self.bottom_right))
+    }
+
+    #[inline]
+    pub const fn bottom_left(&self) -> Pos {
+        set_y(self.upper_left, get_y(self.bottom_right))
+    }
+
+    #[inline]
     pub const fn offset(&self) -> Pos {
         self.offset
     }
@@ -930,6 +940,31 @@ impl Area {
         self.empty
             || (self.upper_left.0 > self.bottom_right.0 || self.upper_left.1 > self.bottom_right.1)
     }
+}
+
+#[inline(always)]
+const fn pos_inc(p: Pos, inc: (usize, usize)) -> Pos {
+    (p.0 + inc.0, p.1 + inc.1)
+}
+
+#[inline(always)]
+const fn get_x(p: Pos) -> usize {
+    p.0
+}
+
+#[inline(always)]
+const fn get_y(p: Pos) -> usize {
+    p.1
+}
+
+#[inline(always)]
+const fn set_x(p: Pos, new_x: usize) -> Pos {
+    (new_x, p.1)
+}
+
+#[inline(always)]
+const fn set_y(p: Pos, new_y: usize) -> Pos {
+    (p.0, new_y)
 }
 
 #[cfg(test)]
