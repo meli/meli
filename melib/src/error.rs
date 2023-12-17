@@ -321,6 +321,7 @@ impl From<isahc::http::StatusCode> for NetworkErrorKind {
 pub enum ErrorKind {
     None,
     External,
+    LinkedLibrary(&'static str),
     Authentication,
     Configuration,
     /// Protocol error.
@@ -341,26 +342,25 @@ pub enum ErrorKind {
 
 impl std::fmt::Display for ErrorKind {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            fmt,
-            "{}",
-            match self {
-                Self::None => "None",
-                Self::External => "External",
-                Self::Authentication => "Authentication",
-                Self::Bug => "Bug, please report this!",
-                Self::Network(ref inner) => inner.as_str(),
-                Self::ProtocolError => "Protocol error",
-                Self::ProtocolNotSupported =>
-                    "Protocol is not supported. It could be the wrong type or version.",
-                Self::TimedOut => "Timed Out",
-                Self::OSError => "OS Error",
-                Self::Configuration => "Configuration",
-                Self::NotImplemented => "Not implemented",
-                Self::NotSupported => "Not supported",
-                Self::ValueError => "Invalid value",
-            }
-        )
+        match self {
+            Self::None => write!(fmt, "None"),
+            Self::External => write!(fmt, "External"),
+            Self::LinkedLibrary(ref name) => write!(fmt, "Linked library error: {name}"),
+            Self::Authentication => write!(fmt, "Authentication"),
+            Self::Bug => write!(fmt, "Bug, please report this!"),
+            Self::Network(ref inner) => write!(fmt, "{}", inner.as_str()),
+            Self::ProtocolError => write!(fmt, "Protocol error"),
+            Self::ProtocolNotSupported => write!(
+                fmt,
+                "Protocol is not supported. It could be the wrong type or version."
+            ),
+            Self::TimedOut => write!(fmt, "Timed Out"),
+            Self::OSError => write!(fmt, "OS Error"),
+            Self::Configuration => write!(fmt, "Configuration"),
+            Self::NotImplemented => write!(fmt, "Not implemented"),
+            Self::NotSupported => write!(fmt, "Not supported"),
+            Self::ValueError => write!(fmt, "Invalid value"),
+        }
     }
 }
 
@@ -378,6 +378,7 @@ impl ErrorKind {
     is_variant! { is_bug, Bug }
     is_variant! { is_configuration, Configuration }
     is_variant! { is_external, External }
+    is_variant! { is_from_linked_library, LinkedLibrary(_) }
     is_variant! { is_network, Network(_) }
     is_variant! { is_network_down, Network(ref k) if k.is_network_down() }
     is_variant! { is_not_implemented, NotImplemented }
