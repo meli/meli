@@ -31,7 +31,7 @@
 //! `vi`.
 //!
 //! [`UIEvent`] is the type passed around
-//! [`Component`](crate::components::Component)'s when something happens.
+//! [`Component`]'s when something happens.
 
 #[macro_use]
 mod helpers;

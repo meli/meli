@@ -43,6 +43,20 @@ pub use screen::{Area, Screen, ScreenGeneration, StateStdout, Tty, Virtual};
 
 pub use self::{cells::*, keys::*, position::*, text_editing::*};
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum Alignment {
+    /// Stretch to fill all space if possible, center if no meaningful way to
+    /// stretch.
+    Fill,
+    /// Snap to left or top side, leaving space on right or bottom.
+    Start,
+    /// Snap to right or bottom side, leaving space on left or top.
+    End,
+    /// Center natural width of widget inside the allocation.
+    #[default]
+    Center,
+}
+
 /*
  * CSI events we use
  */

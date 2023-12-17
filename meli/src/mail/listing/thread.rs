@@ -125,8 +125,8 @@ macro_rules! row_attr {
     }};
 }
 
-/// A list of all mail ([`Envelope`](melib::Envelope)s) in a `Mailbox`. On `\n`
-/// it opens the [`Envelope`](melib::Envelope) content in a [`MailView`].
+/// A list of all mail ([`Envelope`]s) in a `Mailbox`. On `\n`
+/// it opens the [`Envelope`] content in a [`MailView`].
 #[derive(Debug)]
 pub struct ThreadListing {
     /// (x, y, z): x is accounts, y is mailboxes, z is index inside a mailbox.

@@ -30,14 +30,13 @@
 //!   * a struct containing the PID of the child process that talks to this
 //!     pseudoterminal.
 //!   * a [`std::fs::File`] handle to the child process's standard input stream.
-//!   * an [`EmbeddedGrid`] which is a wrapper over
-//!     [`CellBuffer`](crate::CellBuffer) along with the properties needed to
-//!     maintain a proper state machine that keeps track of ongoing escape code
-//!     operations.
+//!   * an [`EmbeddedGrid`] which is a wrapper over [`CellBuffer`] along with
+//!     the properties needed to maintain a proper state machine that keeps
+//!     track of ongoing escape code operations.
 //!
 //! ## Creation
 //!
-//! To create a [`Terminal`], see [`create_pty`](super::create_pty).
+//! To create a [`Terminal`], see [`create_pty`].
 
 use melib::{
     error::{Error, Result},

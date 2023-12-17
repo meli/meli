@@ -20,8 +20,7 @@
  */
 
 //! Simple type definitions and macro helper for a `(x, y)` position on the
-//! terminal and the areas they define. An [`Area`] consists of two points: the
-//! upper left and bottom right corners.
+//! terminal and the areas they define.
 
 /// A `(x, y)` position on screen.
 pub type Pos = (usize, usize);
@@ -50,18 +49,4 @@ pub fn pos_inc(p: Pos, inc: (usize, usize)) -> Pos {
 #[inline(always)]
 pub fn pos_dec(p: Pos, dec: (usize, usize)) -> Pos {
     (p.0.saturating_sub(dec.0), p.1.saturating_sub(dec.1))
-}
-
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub enum Alignment {
-    /// Stretch to fill all space if possible, center if no meaningful way to
-    /// stretch.
-    Fill,
-    /// Snap to left or top side, leaving space on right or bottom.
-    Start,
-    /// Snap to right or bottom side, leaving space on left or top.
-    End,
-    /// Center natural width of widget inside the allocation.
-    #[default]
-    Center,
 }

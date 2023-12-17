@@ -1606,8 +1606,7 @@ pub mod headers {
         ))
     }
 
-    /// Parse a single header as a ([`HeaderName`](crate::email::HeaderName),
-    /// [`&[u8]`]) tuple.
+    /// Parse a single header as a ([`HeaderName`], [`&[u8]`]) tuple.
     pub fn header_with_val(input: &[u8]) -> IResult<&[u8], (HeaderName, &[u8])> {
         if input.is_empty() {
             return Err(nom::Err::Error(

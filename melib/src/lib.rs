@@ -20,6 +20,7 @@
  */
 
 #![deny(
+    rustdoc::redundant_explicit_links,
     /* groups */
     clippy::correctness,
     clippy::suspicious,

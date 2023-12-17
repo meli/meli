@@ -19,6 +19,8 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#![deny(rustdoc::redundant_explicit_links)]
+
 //!
 //!  This crate contains the frontend stuff of the application. The application
 //! entry way on  `src/bin.rs` creates an event loop and passes input to a

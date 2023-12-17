@@ -27,7 +27,7 @@ use termion::{clear, cursor, raw::IntoRawMode, screen::AlternateScreen};
 
 use crate::{
     terminal::{
-        cells::CellBuffer, position::*, BracketModeEnd, BracketModeStart, Cell, Color,
+        cells::CellBuffer, position::*, Alignment, BracketModeEnd, BracketModeStart, Cell, Color,
         DisableMouse, DisableSGRMouse, EnableMouse, EnableSGRMouse,
         RestoreWindowTitleIconFromStack, SaveWindowTitleIconToStack,
     },
