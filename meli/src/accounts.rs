@@ -1939,12 +1939,11 @@ impl Account {
                                 drop(env_lck);
                                 self.update_cached_env(env, None);
                             }
-
-                            self.main_loop_handler
-                                .send(ThreadEvent::UIEvent(UIEvent::EnvelopeUpdate(env_hash)));
                         }
                         for env_hash in env_hashes.iter() {
                             self.collection.update_flags(env_hash, *mailbox_hash);
+                            self.main_loop_handler
+                                .send(ThreadEvent::UIEvent(UIEvent::EnvelopeUpdate(env_hash)));
                         }
                     }
                     Err(_) | Ok(None) => {}
