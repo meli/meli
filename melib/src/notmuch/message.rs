@@ -212,6 +212,7 @@ impl<'m> Message<'m> {
         )
     }
 
+    #[doc(alias = "notmuch_message_add_tag")]
     pub fn add_tag(&self, tag: &CStr) -> Result<()> {
         if let Err(err) = unsafe {
             try_call!(
@@ -224,6 +225,7 @@ impl<'m> Message<'m> {
         Ok(())
     }
 
+    #[doc(alias = "notmuch_message_remove_tag")]
     pub fn remove_tag(&self, tag: &CStr) -> Result<()> {
         if let Err(err) = unsafe {
             try_call!(
@@ -240,6 +242,7 @@ impl<'m> Message<'m> {
         TagIterator::new(self)
     }
 
+    #[doc(alias = "notmuch_message_tags_to_maildir_flags")]
     pub fn tags_to_maildir_flags(&self) -> Result<()> {
         if let Err(err) = unsafe {
             try_call!(
@@ -252,6 +255,23 @@ impl<'m> Message<'m> {
         Ok(())
     }
 
+    /// Get a filename for the email corresponding to 'message'.
+    ///
+    /// Quoted from `libnotmuch` C header:
+    ///
+    /// > The returned filename is an absolute filename, (the initial
+    /// > component will match `notmuch_database_get_path()`).
+    /// >
+    /// > The returned string belongs to the message so should not be
+    /// > modified or freed by the caller (nor should it be referenced after
+    /// > the message is destroyed).
+    /// >
+    /// > Note: If this message corresponds to multiple files in the mail
+    /// > store, (that is, multiple files contain identical message IDs),
+    /// > this function will arbitrarily return a single one of those
+    /// > filenames. See `notmuch_message_get_filenames` for returning the
+    /// > complete list of filenames.
+    #[doc(alias = "notmuch_message_get_filename")]
     pub fn get_filename(&self) -> &OsStr {
         let fs_path =
             unsafe { call!(self.lib, notmuch_message_get_filename)(self.message.as_ptr()) };
