@@ -1682,8 +1682,9 @@ impl Component for ThreadListing {
 
     fn is_dirty(&self) -> bool {
         match self.focus {
-            Focus::None => self.dirty,
-            Focus::Entry => self.dirty,
+            Focus::None | Focus::Entry => {
+                self.dirty || self.force_draw || !self.rows.row_updates.is_empty()
+            }
             Focus::EntryFullscreen => false,
         }
     }

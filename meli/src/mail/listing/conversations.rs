@@ -1229,11 +1229,21 @@ impl Component for ConversationsListing {
                 }
                 if self.force_draw {
                     // Draw the entire list
+                    let area = if matches!(self.focus, Focus::Entry) {
+                        area.take_cols(area.width() / 3)
+                    } else {
+                        area
+                    };
                     self.draw_list(grid, area, context);
                     self.force_draw = false;
                 }
             } else {
                 // Draw the entire list
+                let area = if matches!(self.focus, Focus::Entry) {
+                    area.take_cols(area.width() / 3)
+                } else {
+                    area
+                };
                 self.draw_list(grid, area, context);
             }
         }
@@ -1510,8 +1520,9 @@ impl Component for ConversationsListing {
 
     fn is_dirty(&self) -> bool {
         match self.focus {
-            Focus::None => self.dirty,
-            Focus::Entry => self.dirty,
+            Focus::None | Focus::Entry => {
+                self.dirty || self.force_draw || !self.rows.row_updates.is_empty()
+            }
             Focus::EntryFullscreen => false,
         }
     }

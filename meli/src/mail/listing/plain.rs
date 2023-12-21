@@ -1835,11 +1835,12 @@ impl Component for PlainListing {
     }
 
     fn is_dirty(&self) -> bool {
-        self.force_draw
-            || match self.focus {
-                Focus::None | Focus::Entry => self.dirty,
-                Focus::EntryFullscreen => false,
+        match self.focus {
+            Focus::None | Focus::Entry => {
+                self.dirty || self.force_draw || !self.rows.row_updates.is_empty()
             }
+            Focus::EntryFullscreen => false,
+        }
     }
 
     fn set_dirty(&mut self, value: bool) {
