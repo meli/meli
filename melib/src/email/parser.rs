@@ -22,6 +22,8 @@
 //! Parsers for email. See submodules.
 #![allow(clippy::type_complexity)]
 
+#[cfg(any(test, doc))]
+use std::backtrace::Backtrace;
 use std::{borrow::Cow, convert::TryFrom, fmt::Write};
 
 use nom::{
@@ -51,27 +53,56 @@ macro_rules! to_str {
         unsafe { std::str::from_utf8_unchecked($l) }
     }};
 }
-#[derive(Eq, PartialEq)]
 pub struct ParsingError<I> {
     pub input: I,
     pub error: Cow<'static, str>,
+    #[cfg(any(test, doc))]
+    pub backtrace: Backtrace,
+}
+
+impl<I: PartialEq> PartialEq for ParsingError<I> {
+    fn eq(&self, other: &Self) -> bool {
+        self.input.eq(&other.input) && self.error.eq(&other.error)
+    }
 }
 
 impl std::fmt::Debug for ParsingError<&'_ [u8]> {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        fmt.debug_struct("ParsingError")
-            .field("input", &to_str!(self.input))
-            .field("error", &self.error)
-            .finish()
+        #[cfg(any(test, doc))]
+        {
+            fmt.debug_struct("ParsingError")
+                .field("input", &to_str!(self.input))
+                .field("error", &self.error)
+                .field("backtrace", &self.backtrace)
+                .finish()
+        }
+        #[cfg(not(any(test, doc)))]
+        {
+            fmt.debug_struct("ParsingError")
+                .field("input", &to_str!(self.input))
+                .field("error", &self.error)
+                .finish()
+        }
     }
 }
 
 impl std::fmt::Debug for ParsingError<&'_ str> {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        fmt.debug_struct("ParsingError")
-            .field("input", &self.input)
-            .field("error", &self.error)
-            .finish()
+        #[cfg(any(test, doc))]
+        {
+            fmt.debug_struct("ParsingError")
+                .field("input", &self.input)
+                .field("error", &self.error)
+                .field("backtrace", &self.backtrace)
+                .finish()
+        }
+        #[cfg(not(any(test, doc)))]
+        {
+            fmt.debug_struct("ParsingError")
+                .field("input", &self.input)
+                .field("error", &self.error)
+                .finish()
+        }
     }
 }
 
@@ -94,6 +125,8 @@ impl<'i> ParsingError<&'i str> {
         ParsingError {
             input: self.input.as_bytes(),
             error: self.error,
+            #[cfg(any(test, doc))]
+            backtrace: self.backtrace,
         }
     }
 }
@@ -103,6 +136,8 @@ impl<I> From<(I, &'static str)> for ParsingError<I> {
         Self {
             input,
             error: error.into(),
+            #[cfg(any(test, doc))]
+            backtrace: Backtrace::capture(),
         }
     }
 }
@@ -112,6 +147,8 @@ impl<I> From<(I, String)> for ParsingError<I> {
         Self {
             input,
             error: error.into(),
+            #[cfg(any(test, doc))]
+            backtrace: Backtrace::capture(),
         }
     }
 }
@@ -121,6 +158,8 @@ impl<I> nom::error::ParseError<I> for ParsingError<I> {
         Self {
             input,
             error: kind.description().to_string().into(),
+            #[cfg(any(test, doc))]
+            backtrace: Backtrace::capture(),
         }
     }
 
@@ -128,6 +167,8 @@ impl<I> nom::error::ParseError<I> for ParsingError<I> {
         Self {
             input,
             error: format!("{}, {}", kind.description(), other.error).into(),
+            #[cfg(any(test, doc))]
+            backtrace: Backtrace::capture(),
         }
     }
 }
@@ -137,6 +178,8 @@ impl<I, E> nom::error::FromExternalError<I, E> for ParsingError<I> {
         Self {
             input,
             error: kind.description().to_string().into(),
+            #[cfg(any(test, doc))]
+            backtrace: Backtrace::capture(),
         }
     }
 }
@@ -145,26 +188,63 @@ impl<I> nom::error::ContextError<I> for ParsingError<I> {}
 
 impl<'i> From<ParsingError<&'i [u8]>> for Error {
     fn from(val: ParsingError<&'i [u8]>) -> Self {
-        Self::new("Parsing error").set_summary(format!(
-            r#"In input: "{}...",
+        Self::new("Parsing error")
+            .set_summary(format!(
+                r#"In input: "{}...",
 Error: {}"#,
-            String::from_utf8_lossy(val.input)
-                .chars()
-                .take(30)
-                .collect::<String>(),
-            val.error
-        ))
+                String::from_utf8_lossy(val.input)
+                    .chars()
+                    .take(30)
+                    .collect::<String>(),
+                val.error
+            ))
+            .set_details({
+                #[cfg(any(test, doc))]
+                {
+                    println!(
+                        "\tInput:\n{}\tError:\n{}\n\tBacktrace:\n{}",
+                        String::from_utf8_lossy(val.input)
+                            .chars()
+                            .take(30)
+                            .collect::<String>(),
+                        val.error,
+                        val.backtrace
+                    );
+                    val.backtrace.to_string()
+                }
+                #[cfg(not(any(test, doc)))]
+                {
+                    ""
+                }
+            })
     }
 }
 
 impl<'i> From<ParsingError<&'i str>> for Error {
     fn from(val: ParsingError<&'i str>) -> Self {
-        Self::new("Parsing error").set_summary(format!(
-            r#"In input: "{}...",
+        Self::new("Parsing error")
+            .set_summary(format!(
+                r#"In input: "{}...",
 Error: {}"#,
-            val.input.chars().take(30).collect::<String>(),
-            val.error
-        ))
+                val.input.chars().take(30).collect::<String>(),
+                val.error
+            ))
+            .set_details({
+                #[cfg(any(test, doc))]
+                {
+                    println!(
+                        "\tInput:\n{}\tError:\n{}\n\tBacktrace:\n{}",
+                        val.input.chars().take(30).collect::<String>(),
+                        val.error,
+                        val.backtrace
+                    );
+                    val.backtrace.to_string()
+                }
+                #[cfg(not(any(test, doc)))]
+                {
+                    ""
+                }
+            })
     }
 }
 
