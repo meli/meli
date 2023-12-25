@@ -515,7 +515,9 @@ impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{}", self.summary)?;
         if let Some(details) = self.details.as_ref() {
-            write!(f, "\n{}", details)?;
+            if !details.trim().is_empty() {
+                write!(f, "\n{}", details)?;
+            }
         }
         if let Some(source) = self.source.as_ref() {
             write!(f, "\nCaused by: {}", source)?;
