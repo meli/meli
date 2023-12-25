@@ -368,16 +368,19 @@ mod tests {
         // Email address: "oh\\no"@example.org; corresponding 'mailto' URI:
 
         // <mailto:%22oh%5C%5Cno%22@example.org>.
+        assert_eq!(
+            mlt!("mailto:%22not%40me%22@example.org").address,
+            vec![addr!(r#""not@me"@example.org"#)]
+        );
 
         // Email address: "\\\"it's\ ugly\\\""@example.org; corresponding
         // 'mailto' URI:
 
         // <mailto:%22%5C%5C%5C%22it's%5C%20ugly%5C%5C%5C%22%22@example.org>.
-        // [ref:FIXME]
-        //assert_eq!(
-        //    mlt!("mailto:%22%5C%5C%5C%22it's%5C%20ugly%5C%5C%5C%22%22@example.org").
-        // address,    vec![addr!(r#"\"it's ugly\"@example.org"#)]
-        //);
+        assert_eq!(
+            mlt!("mailto:%22%5C%5C%5C%22it's%5C%20ugly%5C%5C%5C%22%22@example.org").address,
+            vec![addr!(r#""\\\"it's\ ugly\\\""@example.org"#)]
+        );
 
         // When an email address itself includes an "&" (ampersand) character, that
         // character has to be percent-encoded.  For example, the 'mailto' URI

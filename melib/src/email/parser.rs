@@ -1413,7 +1413,7 @@ pub mod generic {
         if input[0].is_ascii_alphanumeric()
             || [
                 b'!', b'#', b'$', b'%', b'&', b'\'', b'*', b'+', b'-', b'/', b'=', b'?', b'^',
-                b'_', b'`', b'{', b'|', b'}', b'~',
+                b'_', b'`', b'{', b'|', b'}', b'~', b'\\',
             ]
             .contains(&input[0])
         {
