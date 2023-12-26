@@ -237,8 +237,7 @@ impl Composer {
             );
         }
         if *account_settings!(context[account_hash].composing.format_flowed) {
-            ret.pager
-                .set_reflow(melib::text_processing::Reflow::FormatFlowed);
+            ret.pager.set_reflow(melib::text::Reflow::FormatFlowed);
         }
         ret
     }

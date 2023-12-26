@@ -1,5 +1,5 @@
 /*
- * meli - text_processing mod.
+ * meli - text mod.
  *
  * Copyright 2020 Manos Pitsidianakis
  *
@@ -85,11 +85,11 @@ impl KMP for str {
 
 #[cfg(test)]
 mod tests {
-    use crate::text_processing::search::KMP;
+    use crate::text::search::KMP;
 
     #[test]
     fn test_search() {
-        use crate::text_processing::_ALICE_CHAPTER_1;
+        use crate::text::_ALICE_CHAPTER_1;
         for ind in _ALICE_CHAPTER_1.kmp_search("Alice") {
             println!(
                 "{:#?}",

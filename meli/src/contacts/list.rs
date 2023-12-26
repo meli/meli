@@ -21,7 +21,7 @@
 
 use std::cmp;
 
-use melib::{backends::AccountHash, text_processing::TextProcessing, Card, CardId, Draft};
+use melib::{backends::AccountHash, text::TextProcessing, Card, CardId, Draft};
 
 use crate::{
     conf, contacts::editor::ContactManager, shortcut, terminal::*, Action::Tab, Component,

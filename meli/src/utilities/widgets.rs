@@ -22,7 +22,7 @@
 use std::{borrow::Cow, collections::HashMap, time::Duration};
 
 use super::*;
-use crate::melib::text_processing::TextProcessing;
+use crate::melib::text::TextProcessing;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 enum FormFocus {

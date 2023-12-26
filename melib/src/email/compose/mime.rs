@@ -21,7 +21,7 @@
 
 use super::*;
 #[cfg(feature = "text-processing")]
-use crate::text_processing::grapheme_clusters::TextProcessing;
+use crate::text::grapheme_clusters::TextProcessing;
 
 pub fn encode_header(value: &str) -> String {
     let mut ret = String::with_capacity(value.len());

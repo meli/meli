@@ -22,12 +22,12 @@
 #![allow(clippy::needless_range_loop)]
 
 #[cfg(any(feature = "unicode-algorithms", feature = "unicode-algorithms-cached"))]
-include!("src/text_processing/types.rs");
+include!("src/text/types.rs");
 
 fn main() -> Result<(), std::io::Error> {
     #[cfg(any(feature = "unicode-algorithms", feature = "unicode-algorithms-cached"))]
     {
-        const MOD_PATH: &str = "src/text_processing/tables.rs";
+        const MOD_PATH: &str = "src/text/tables.rs";
         println!("cargo:rerun-if-changed=build.rs");
         println!("cargo:rerun-if-changed={}", MOD_PATH);
         /* Line break tables */
@@ -55,8 +55,7 @@ fn main() -> Result<(), std::io::Error> {
             return Ok(());
         }
         if cfg!(feature = "unicode-algorithms-cached") {
-            const CACHED_MODULE: &[u8] =
-                include_bytes!(concat!("./src/text_processing/tables.rs.gz"));
+            const CACHED_MODULE: &[u8] = include_bytes!(concat!("./src/text/tables.rs.gz"));
 
             let mut gz = GzDecoder::new(CACHED_MODULE);
             use flate2::bufread::GzDecoder;
@@ -350,7 +349,7 @@ fn main() -> Result<(), std::io::Error> {
         let mut file = File::create(mod_path)?;
         file.write_all(
             br#"/*
- * meli - text_processing crate.
+ * meli - text crate.
  *
  * Copyright 2017-2020 Manos Pitsidianakis
  *

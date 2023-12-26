@@ -1,5 +1,5 @@
 /*
- * meli - text_processing mod.
+ * meli - text mod.
  *
  * Copyright 2017-2020 Manos Pitsidianakis
  *
@@ -279,7 +279,7 @@ of the house!’ (Which was very likely true.)"#;
 
 #[cfg(test)]
 mod tests {
-    use crate::text_processing::GlobMatch;
+    use crate::text::GlobMatch;
 
     #[test]
     fn test_globmatch() {

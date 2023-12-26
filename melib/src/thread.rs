@@ -53,7 +53,7 @@ use smallvec::SmallVec;
 use uuid::Uuid;
 
 #[cfg(feature = "text-processing")]
-use crate::text_processing::grapheme_clusters::*;
+use crate::text::grapheme_clusters::*;
 
 type Envelopes = Arc<RwLock<HashMap<EnvelopeHash, Envelope>>>;
 

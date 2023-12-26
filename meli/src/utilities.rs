@@ -21,7 +21,7 @@
 
 //! Various useful utilities.
 
-use melib::{text_processing::Reflow, ShellExpandTrait};
+use melib::{text::Reflow, ShellExpandTrait};
 
 pub type AutoCompleteFn = Box<dyn Fn(&Context, &str) -> Vec<AutoCompleteEntry> + Send + Sync>;
 
@@ -49,7 +49,7 @@ use std::collections::HashSet;
 use indexmap::IndexMap;
 
 pub use self::tables::*;
-use crate::{components::ExtendShortcutsMaps, jobs::JobId, melib::text_processing::TextProcessing};
+use crate::{components::ExtendShortcutsMaps, jobs::JobId, melib::text::TextProcessing};
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum SearchMovement {
@@ -1193,7 +1193,7 @@ impl Component for Tabbed {
             let (width, height) = self.help_view.content.area().size();
             let (cols, rows) = inner_area.size();
             if let Some(ref mut search) = self.help_view.search {
-                use crate::melib::text_processing::search::KMP;
+                use crate::melib::text::search::KMP;
                 search.positions = self
                     .help_view
                     .content

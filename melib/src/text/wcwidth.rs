@@ -1,5 +1,5 @@
 /*
- * meli - text_processing crate.
+ * meli - text mod.
  *
  * Copyright 2017-2020 Manos Pitsidianakis
  *
@@ -145,7 +145,7 @@ fn test_wcwidth() {
         &"📎\u{FE0E}".code_points().collect::<Vec<_>>(),
         &[0x1f4ce, 0xfe0e]
     );
-    use crate::text_processing::grapheme_clusters::TextProcessing;
+    use crate::text::grapheme_clusters::TextProcessing;
     assert_eq!("●".grapheme_width(), 1);
     assert_eq!("●📎".grapheme_width(), 3);
     assert_eq!("●\u{FE0E}📎\u{FE0E}".grapheme_width(), 3);

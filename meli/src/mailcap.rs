@@ -30,7 +30,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-use melib::{email::Attachment, log, text_processing::GlobMatch, Error, Result};
+use melib::{email::Attachment, log, text::GlobMatch, Error, Result};
 
 use crate::{
     state::Context,

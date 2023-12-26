@@ -40,7 +40,7 @@
 
 use melib::{
     error::{Error, Result},
-    text_processing::wcwidth,
+    text::wcwidth,
 };
 use nix::sys::wait::{waitpid, WaitPidFlag, WaitStatus};
 

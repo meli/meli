@@ -130,7 +130,7 @@ pub mod dbg {
 }
 
 #[cfg(feature = "text-processing")]
-pub mod text_processing;
+pub mod text;
 
 pub use utils::{
     datetime::UnixTimestamp,

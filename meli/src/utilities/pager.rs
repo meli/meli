@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use melib::text_processing::{LineBreakText, Truncate};
+use melib::text::{LineBreakText, Truncate};
 
 use super::*;
 use crate::terminal::embedded::EmbeddedGrid;
@@ -244,7 +244,7 @@ impl Pager {
             self.height = self.text_lines.len();
             self.width = width;
             if let Some(ref mut search) = self.search {
-                use melib::text_processing::search::KMP;
+                use melib::text::search::KMP;
                 search.positions.clear();
                 for (y, l) in self.text_lines.iter().enumerate() {
                     search.positions.extend(
@@ -294,7 +294,7 @@ impl Pager {
         };
         let new_lines_no = self.text_lines.len() - old_lines_no;
         if let Some(ref mut search) = self.search {
-            use melib::text_processing::search::KMP;
+            use melib::text::search::KMP;
             for (y, l) in self.text_lines.iter().enumerate().skip(old_lines_no) {
                 search.positions.extend(
                     l.kmp_search(&search.pattern)

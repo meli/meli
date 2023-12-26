@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use melib::{text_processing::Truncate, Envelope, Error, Mail, Result};
+use melib::{text::Truncate, Envelope, Error, Mail, Result};
 
 use super::{EnvelopeView, MailView, ViewSettings};
 use crate::{jobs::JoinHandle, mailbox_settings, Component, Context, ShortcutMaps, UIEvent};

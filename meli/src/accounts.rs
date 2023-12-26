@@ -46,7 +46,7 @@ use melib::{
     email::*,
     error::{Error, ErrorKind, Result},
     log,
-    text_processing::GlobMatch,
+    text::GlobMatch,
     thread::Threads,
     AddressBook, Collection, LogLevel, SortField, SortOrder,
 };

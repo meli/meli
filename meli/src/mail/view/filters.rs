@@ -32,7 +32,7 @@ use melib::{
     attachment_types::{ContentType, MultipartType, Text},
     error::*,
     parser::BytesExt,
-    text_processing::Truncate,
+    text::Truncate,
     utils::xdg::query_default_app,
     Attachment, Result,
 };

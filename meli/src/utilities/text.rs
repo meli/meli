@@ -20,7 +20,7 @@
  */
 
 use super::*;
-use crate::melib::text_processing::Truncate;
+use crate::melib::text::Truncate;
 
 pub struct TextField {
     inner: UText,

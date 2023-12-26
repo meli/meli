@@ -21,7 +21,7 @@
 use std::{collections::BTreeMap, io::Write};
 
 use super::*;
-use crate::melib::text_processing::TextProcessing;
+use crate::melib::text::TextProcessing;
 
 #[derive(Debug)]
 pub struct SVGScreenshotFilter {

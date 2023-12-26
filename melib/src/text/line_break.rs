@@ -1,5 +1,5 @@
 /*
- * meli - text_processing crate.
+ * meli - text mod.
  *
  * Copyright 2017-2020 Manos Pitsidianakis
  *
@@ -134,7 +134,7 @@ impl EvenAfterSpaces for str {
 /// Returns positions where breaks can happen
 /// Examples:
 /// ```
-/// use melib::text_processing::{
+/// use melib::text::{
 ///     self,
 ///     line_break::LineBreakCandidateIter,
 ///     LineBreakCandidate::{self, *},
@@ -839,7 +839,7 @@ fn search_table(c: u32, t: &'static [(u32, u32, LineBreakClass)]) -> LineBreakCl
 }
 
 mod alg {
-    use crate::text_processing::{grapheme_clusters::TextProcessing, *};
+    use crate::text::{grapheme_clusters::TextProcessing, *};
 
     fn cost(i: usize, j: usize, width: usize, minima: &[usize], offsets: &[usize]) -> usize {
         let w = offsets[j] + j - offsets[i] - i - 1;
@@ -1805,7 +1805,7 @@ easy to take MORE than nothing.'"#;
             println!("{}", l);
         }
         println!();
-        use crate::text_processing::_ALICE_CHAPTER_1;
+        use crate::text::_ALICE_CHAPTER_1;
         for l in split_lines_reflow(_ALICE_CHAPTER_1, Reflow::FormatFlowed, Some(72)) {
             println!("{}", l);
         }

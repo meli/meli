@@ -30,7 +30,7 @@ use std::{
 
 use melib::{
     log,
-    text_processing::{search::KMP, wcwidth},
+    text::{search::KMP, wcwidth},
 };
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use smallvec::SmallVec;
@@ -1830,7 +1830,7 @@ pub enum WidgetWidth {
 mod tests {
     use crate::terminal::{Screen, Virtual};
 
-    //use melib::text_processing::{Reflow, TextProcessing, _ALICE_CHAPTER_1};
+    //use melib::text::{Reflow, TextProcessing, _ALICE_CHAPTER_1};
 
     #[test]
     fn test_cellbuffer_search() {
