@@ -719,7 +719,7 @@ pub trait MailListingTrait: ListingTrait {
                                     format.append(
                                         &mut file,
                                         bytes.as_slice(),
-                                        env.from().get(0),
+                                        env.from().first(),
                                         Some(env.date()),
                                         (env.flags(), tags),
                                         MboxMetadata::CClient,
@@ -736,7 +736,7 @@ pub trait MailListingTrait: ListingTrait {
                                     format.append(
                                         &mut file,
                                         bytes.as_slice(),
-                                        env.from().get(0),
+                                        env.from().first(),
                                         Some(env.date()),
                                         (env.flags(), tags),
                                         MboxMetadata::CClient,

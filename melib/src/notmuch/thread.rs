@@ -85,6 +85,15 @@ impl<'q> Thread<'q> {
     }
 }
 
+impl<'q> IntoIterator for &'q Thread<'q> {
+    type IntoIter = MessageIterator<'q>;
+    type Item = Message<'q>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
 impl Drop for Thread<'_> {
     fn drop(&mut self) {
         unsafe {

@@ -356,7 +356,7 @@ impl Address {
     /// Formats a slice of `Address`es with their `Address::display` method,
     /// separated by comma or `separator` if passed.
     pub fn display_slice(slice: &[Self]) -> String {
-        match slice.get(0) {
+        match slice.first() {
             None => String::new(),
             Some(f) if slice.len() == 1 => f.display().to_string(),
             Some(_) => slice
@@ -370,7 +370,7 @@ impl Address {
     /// Formats a slice of `Address`es with their `Address::display_name`
     /// method, separated by comma or `separator` if passed.
     pub fn display_name_slice(slice: &[Self]) -> String {
-        match slice.get(0) {
+        match slice.first() {
             None => String::new(),
             Some(f) if slice.len() == 1 => f.display_name().to_string(),
             Some(_) => slice

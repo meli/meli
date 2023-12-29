@@ -177,7 +177,7 @@ impl Component for KeySelection {
                                     move |id: ComponentId, results: &[melib::gpgme::Key]| {
                                         Some(UIEvent::FinishedUIDialog(
                                             id,
-                                            Box::new(results.get(0).cloned()),
+                                            Box::new(results.first().cloned()),
                                         ))
                                     },
                                 )),

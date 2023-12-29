@@ -866,7 +866,7 @@ impl Tabbed {
             help_view: HelpView {
                 content: Screen::<Virtual>::new(),
                 curr_views: children
-                    .get(0)
+                    .first()
                     .map(|c| c.shortcuts(context))
                     .unwrap_or_default(),
                 cursor: (0, 0),

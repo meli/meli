@@ -45,6 +45,13 @@
     clippy::case_sensitive_file_extension_comparisons,
     //clippy::cast_lossless,
     //clippy::cast_ptr_alignment,
+    clippy::large_futures,
+    clippy::waker_clone_wake,
+    clippy::unused_enumerate_index,
+    clippy::unnecessary_fallible_conversions,
+    clippy::struct_field_names,
+    clippy::manual_hash_one,
+    clippy::into_iter_without_iter,
 )]
 #![allow(
     clippy::option_if_let_else,

@@ -865,7 +865,7 @@ impl ThreadView {
 
 impl std::fmt::Display for ThreadView {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        if let Some(e) = self.entries.get(0) {
+        if let Some(e) = self.entries.first() {
             e.mailview.fmt(fmt)
         } else {
             write!(fmt, "view thread")

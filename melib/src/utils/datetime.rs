@@ -124,8 +124,8 @@ enum LocaleCategory {
 struct Locale {
     mask: LocaleCategoryMask,
     category: LocaleCategory,
-    new_locale: libc::locale_t,
-    old_locale: libc::locale_t,
+    new: libc::locale_t,
+    old: libc::locale_t,
 }
 
 #[cfg(target_os = "netbsd")]
@@ -133,19 +133,19 @@ struct Locale {
 struct Locale {
     mask: LocaleCategoryMask,
     category: LocaleCategory,
-    old_locale: *const std::os::raw::c_char,
+    old: *const std::os::raw::c_char,
 }
 
 impl Drop for Locale {
     fn drop(&mut self) {
         #[cfg(not(target_os = "netbsd"))]
         unsafe {
-            let _ = libc::uselocale(self.old_locale);
-            libc::freelocale(self.new_locale);
+            let _ = libc::uselocale(self.old);
+            libc::freelocale(self.new);
         }
         #[cfg(target_os = "netbsd")]
         unsafe {
-            let _ = libc::setlocale(self.category as c_int, self.old_locale);
+            let _ = libc::setlocale(self.category as c_int, self.old);
         }
     }
 }
@@ -160,22 +160,23 @@ impl Locale {
         locale: *const std::os::raw::c_char,
         base: libc::locale_t,
     ) -> Result<Self> {
-        let new_locale = unsafe { libc::newlocale(mask as c_int, locale, base) };
-        if new_locale.is_null() {
+        let new = unsafe { libc::newlocale(mask as c_int, locale, base) };
+        if new.is_null() {
             return Err(nix::Error::last().into());
         }
-        let old_locale = unsafe { libc::uselocale(new_locale) };
-        if old_locale.is_null() {
-            unsafe { libc::freelocale(new_locale) };
+        let old = unsafe { libc::uselocale(new) };
+        if old.is_null() {
+            unsafe { libc::freelocale(new) };
             return Err(nix::Error::last().into());
         }
         Ok(Self {
             mask,
             category,
-            new_locale,
-            old_locale,
+            new,
+            old,
         })
     }
+
     #[cfg(target_os = "netbsd")]
     fn new(
         mask: LocaleCategoryMask,
@@ -183,18 +184,18 @@ impl Locale {
         locale: *const std::os::raw::c_char,
         _base: libc::locale_t,
     ) -> Result<Self> {
-        let old_locale = unsafe { libc::setlocale(category as c_int, std::ptr::null_mut()) };
-        if old_locale.is_null() {
+        let old = unsafe { libc::setlocale(category as c_int, std::ptr::null_mut()) };
+        if old.is_null() {
             return Err(nix::Error::last().into());
         }
-        let new_locale = unsafe { libc::setlocale(category as c_int, locale) };
-        if new_locale.is_null() {
+        let new = unsafe { libc::setlocale(category as c_int, locale) };
+        if new.is_null() {
             return Err(nix::Error::last().into());
         }
         Ok(Locale {
             mask,
             category,
-            old_locale,
+            old,
         })
     }
 }

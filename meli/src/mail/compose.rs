@@ -427,7 +427,7 @@ impl Composer {
                 )
                 .as_ref()
                 .map(|s| s.as_str()),
-                envelope.from().get(0),
+                envelope.from().first(),
                 envelope.date(),
                 *account_settings!(
                     context[ret.account_hash]
@@ -1670,7 +1670,7 @@ impl Component for Composer {
                 )
                 .map_err(|_err| -> Error { "No valid sender address in `From:`".into() })
                 .and_then(|(_, list)| {
-                    list.get(0)
+                    list.first()
                         .cloned()
                         .ok_or_else(|| "No valid sender address in `From:`".into())
                 })
@@ -1711,7 +1711,7 @@ impl Component for Composer {
                 )
                 .map_err(|_err| -> Error { "No valid recipient addresses in `To:`".into() })
                 .and_then(|(_, list)| {
-                    list.get(0)
+                    list.first()
                         .cloned()
                         .ok_or_else(|| "No valid recipient addresses in `To:`".into())
                 })

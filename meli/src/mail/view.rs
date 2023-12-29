@@ -499,7 +499,7 @@ impl Component for MailView {
                                 move |id: ComponentId, result: &[Option<PendingReplyAction>]| {
                                     Some(UIEvent::FinishedUIDialog(
                                         id,
-                                        Box::new(result.get(0).cloned().flatten()),
+                                        Box::new(result.first().cloned().flatten()),
                                     ))
                                 },
                             )),

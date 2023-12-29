@@ -348,11 +348,8 @@ where
     P: Parser<'a, R>,
 {
     move |input| {
-        pre.parse(input).and_then(|(last_input, _)| {
-            parser
-                .parse(last_input)
-                .map(|(rest, result)| (rest, result))
-        })
+        pre.parse(input)
+            .and_then(|(last_input, _)| parser.parse(last_input))
     }
 }
 

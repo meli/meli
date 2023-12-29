@@ -264,7 +264,7 @@ impl std::convert::From<EmailObject> for crate::Envelope {
             env.set_date(std::mem::take(sent_at).as_bytes());
         }
 
-        if let Some(v) = t.message_id.get(0) {
+        if let Some(v) = t.message_id.first() {
             env.set_message_id(v.as_bytes());
         }
         if let Some(ref in_reply_to) = t.in_reply_to {
