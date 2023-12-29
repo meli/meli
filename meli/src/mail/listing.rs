@@ -546,7 +546,7 @@ pub trait MailListingTrait: ListingTrait {
                         ));
                     }
                 }
-                ListingAction::Tag(Add(ref tag_str)) => {
+                ListingAction::Tag(TagAction::Add(ref tag_str)) => {
                     if let Err(err) = account.set_flags(
                         env_hashes.clone(),
                         mailbox_hash,
@@ -557,7 +557,7 @@ pub trait MailListingTrait: ListingTrait {
                         ));
                     }
                 }
-                ListingAction::Tag(Remove(ref tag_str)) => {
+                ListingAction::Tag(TagAction::Remove(ref tag_str)) => {
                     if let Err(err) = account.set_flags(
                         env_hashes.clone(),
                         mailbox_hash,

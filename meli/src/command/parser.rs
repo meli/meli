@@ -101,6 +101,7 @@ pub fn listing_action(input: &[u8]) -> IResult<&[u8], Result<Action, CommandErro
         open_in_new_tab,
         export_mbox,
         _tag,
+        flag,
     ))(input)
 }
 
@@ -152,6 +153,133 @@ pub fn parse_command(input: &[u8]) -> Result<Action, CommandError> {
     ))(input)
     .map_err(|err| err.into())
     .and_then(|(_, v)| v)
+}
+
+/// Set/unset a flag.
+///
+/// # Example
+///
+/// ```
+/// # use meli::{melib::Flag, command::{Action,ListingAction, FlagAction, parser}};
+///
+/// let (rest, parsed) = parser::flag(b"flag set junk").unwrap();
+/// assert_eq!(rest, b"");
+/// assert!(
+///     matches!(
+///         parsed,
+///         Ok(Action::Listing(ListingAction::Flag(FlagAction::Set(
+///             Flag::TRASHED
+///         ))))
+///     ),
+///     "{:?}",
+///     parsed
+/// );
+///
+/// let (rest, parsed) = parser::flag(b"flag unset junk").unwrap();
+/// assert_eq!(rest, b"");
+/// assert!(
+///     matches!(
+///         parsed,
+///         Ok(Action::Listing(ListingAction::Flag(FlagAction::Unset(
+///             Flag::TRASHED
+///         ))))
+///     ),
+///     "{:?}",
+///     parsed
+/// );
+///
+/// let (rest, parsed) = parser::flag(b"flag set draft").unwrap();
+/// assert_eq!(rest, b"");
+/// assert!(
+///     matches!(
+///         parsed,
+///         Ok(Action::Listing(ListingAction::Flag(FlagAction::Set(
+///             Flag::DRAFT
+///         ))))
+///     ),
+///     "{:?}",
+///     parsed
+/// );
+///
+/// let (rest, parsed) = parser::flag(b"flag set xunk").unwrap();
+/// assert_eq!(rest, b"");
+/// assert_eq!(
+///     &parsed.unwrap_err().to_string(),
+///     "Bad value/argument: xunk is not a valid flag name. Possible values are: passed, replied, \
+///      seen or read, junk or trash or trashed, draft and flagged."
+/// );
+/// ```
+pub fn flag<'a>(input: &'a [u8]) -> IResult<&'a [u8], Result<Action, CommandError>> {
+    use melib::Flag;
+
+    fn parse_flag(s: &str) -> Option<Flag> {
+        match s {
+            o if o.eq_ignore_ascii_case("passed") => Some(Flag::PASSED),
+            o if o.eq_ignore_ascii_case("replied") => Some(Flag::REPLIED),
+            o if o.eq_ignore_ascii_case("seen") => Some(Flag::SEEN),
+            o if o.eq_ignore_ascii_case("read") => Some(Flag::SEEN),
+            o if o.eq_ignore_ascii_case("junk") => Some(Flag::TRASHED),
+            o if o.eq_ignore_ascii_case("trash") => Some(Flag::TRASHED),
+            o if o.eq_ignore_ascii_case("trashed") => Some(Flag::TRASHED),
+            o if o.eq_ignore_ascii_case("draft") => Some(Flag::DRAFT),
+            o if o.eq_ignore_ascii_case("flagged") => Some(Flag::FLAGGED),
+            _ => None,
+        }
+    }
+
+    preceded(
+        tag("flag"),
+        alt((
+            |input: &'a [u8]| -> IResult<&'a [u8], Result<Action, CommandError>> {
+                let mut check = arg_init! { min_arg:2, max_arg: 2, flag};
+                let (input, _) = tag("set")(input.trim())?;
+                arg_chk!(start check, input);
+                let (input, _) = is_a(" ")(input)?;
+                arg_chk!(inc check, input);
+                let (input, flag) = quoted_argument(input.trim())?;
+                arg_chk!(finish check, input);
+                let (input, _) = eof(input)?;
+                let Some(flag) = parse_flag(flag) else {
+                    return Ok((
+                        b"",
+                        Err(CommandError::BadValue {
+                            inner: format!(
+                                "{flag} is not a valid flag name. Possible values are: passed, \
+                                 replied, seen or read, junk or trash or trashed, draft and \
+                                 flagged."
+                            )
+                            .into(),
+                        }),
+                    ));
+                };
+                Ok((input, Ok(Listing(Flag(FlagAction::Set(flag))))))
+            },
+            |input: &'a [u8]| -> IResult<&'a [u8], Result<Action, CommandError>> {
+                let mut check = arg_init! { min_arg:2, max_arg: 2, flag};
+                let (input, _) = tag("unset")(input.trim())?;
+                arg_chk!(start check, input);
+                let (input, _) = is_a(" ")(input)?;
+                arg_chk!(inc check, input);
+                let (input, flag) = quoted_argument(input.trim())?;
+                arg_chk!(finish check, input);
+                let (input, _) = eof(input)?;
+                let Some(flag) = parse_flag(flag) else {
+                    return Ok((
+                        b"",
+                        Err(CommandError::BadValue {
+                            inner: format!(
+                                "{flag} is not a valid flag name. Possible values are: passed, \
+                                 replied, seen or read, junk or trash or trashed, draft and \
+                                 flagged."
+                            )
+                            .into(),
+                        }),
+                    ));
+                };
+                Ok((input, Ok(Listing(Flag(FlagAction::Unset(flag))))))
+            },
+        )),
+    )(input.trim())
 }
 
 pub fn set(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
@@ -708,6 +836,19 @@ pub fn add_addresses_to_contacts(input: &[u8]) -> IResult<&[u8], Result<Action, 
     let (input, _) = eof(input)?;
     Ok((input, Ok(View(AddAddressesToContacts))))
 }
+
+/// Set/unset a tag.
+///
+/// # Example
+///
+/// ```
+/// # use meli::command::{Action,ListingAction, TagAction, parser::_tag};
+///
+/// let (rest, parsed) = _tag(b"tag add newsletters").unwrap();
+/// println!("parsed is {:?}", parsed);
+/// assert_eq!(rest, b"");
+/// assert!(matches!(parsed, Ok(Action::Listing(ListingAction::Tag(TagAction::Add(ref tagname)))) if tagname == "newsletters"), "{:?}", parsed);
+/// ```
 pub fn _tag<'a>(input: &'a [u8]) -> IResult<&'a [u8], Result<Action, CommandError>> {
     preceded(
         tag("tag"),
@@ -721,7 +862,7 @@ pub fn _tag<'a>(input: &'a [u8]) -> IResult<&'a [u8], Result<Action, CommandErro
                 let (input, tag) = quoted_argument(input.trim())?;
                 arg_chk!(finish check, input);
                 let (input, _) = eof(input)?;
-                Ok((input, Ok(Listing(Tag(Add(tag.to_string()))))))
+                Ok((input, Ok(Listing(Tag(TagAction::Add(tag.to_string()))))))
             },
             |input: &'a [u8]| -> IResult<&'a [u8], Result<Action, CommandError>> {
                 let mut check = arg_init! { min_arg:2, max_arg: 2, tag};
@@ -732,11 +873,12 @@ pub fn _tag<'a>(input: &'a [u8]) -> IResult<&'a [u8], Result<Action, CommandErro
                 let (input, tag) = quoted_argument(input.trim())?;
                 arg_chk!(finish check, input);
                 let (input, _) = eof(input)?;
-                Ok((input, Ok(Listing(Tag(Remove(tag.to_string()))))))
+                Ok((input, Ok(Listing(Tag(TagAction::Remove(tag.to_string()))))))
             },
         )),
     )(input.trim())
 }
+
 pub fn print_account_setting(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
     let mut check = arg_init! { min_arg:2, max_arg: 2, print};
     let (input, _) = tag("print")(input.trim())?;

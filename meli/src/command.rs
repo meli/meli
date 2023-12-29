@@ -55,10 +55,11 @@ pub use crate::actions::{
     AccountAction::{self, *},
     Action::{self, *},
     ComposeAction::{self, *},
+    FlagAction,
     ListingAction::{self, *},
     MailingListAction::{self, *},
     TabAction::{self, *},
-    TagAction::{self, *},
+    TagAction,
     ViewAction::{self, *},
 };
 

@@ -23,9 +23,15 @@
 
 use std::path::PathBuf;
 
-use melib::{email::mailto::Mailto, SortField, SortOrder};
+use melib::{email::mailto::Mailto, Flag, SortField, SortOrder};
 
 use crate::components::{Component, ComponentId};
+
+#[derive(Debug)]
+pub enum FlagAction {
+    Set(Flag),
+    Unset(Flag),
+}
 
 #[derive(Debug)]
 pub enum TagAction {
@@ -52,6 +58,7 @@ pub enum ListingAction {
     Delete,
     OpenInNewTab,
     Tag(TagAction),
+    Flag(FlagAction),
     ToggleThreadSnooze,
 }
 
