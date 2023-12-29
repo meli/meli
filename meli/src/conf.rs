@@ -439,18 +439,16 @@ impl FileSettings {
 
     pub fn validate(path: PathBuf, interactive: bool, clear_extras: bool) -> Result<Self> {
         let s = pp::pp(&path)?;
-        let map: toml::map::Map<String, toml::value::Value> =
-            toml::from_str(&s).map_err(|err| {
-                Error::new(format!(
-                    "{}:\nConfig file is invalid TOML: {}",
-                    path.display(),
-                    err
-                ))
-            })?;
-        /*
-         * Check that a global composing option is set and return a user-friendly
-         * error message because the default serde one is confusing.
-         */
+        let map: toml::value::Table = toml::from_str(&s).map_err(|err| {
+            Error::new(format!(
+                "{}: Config file is invalid TOML; {}",
+                path.display(),
+                err
+            ))
+        })?;
+
+        // Check that a global composing option is set and return a user-friendly
+        // error message because the default serde one is confusing.
         if !map.contains_key("composing") {
             let err_msg = r#"You must set a global `composing` option. If you override `composing` in each account, you can use a dummy global like follows:
 
@@ -484,7 +482,7 @@ This is required so that you don't accidentally start meli and find out later th
         }
         let mut s: FileSettings = toml::from_str(&s).map_err(|err| {
             Error::new(format!(
-                "{}:\nConfig file contains errors: {}",
+                "{}: Config file contains errors; {}",
                 path.display(),
                 err
             ))

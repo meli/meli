@@ -196,6 +196,7 @@ pub extern crate futures;
 #[allow(unused_imports)]
 #[macro_use]
 pub extern crate indexmap;
+pub extern crate serde_path_to_error;
 pub extern crate smallvec;
 pub extern crate smol;
 pub extern crate uuid;

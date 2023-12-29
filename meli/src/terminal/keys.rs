@@ -439,11 +439,23 @@ fn test_key_serde() {
             );
         };
         ($s:literal, err $v:literal) => {
+            test_key!($s, err $v, "^")
+        };
+        ($s:literal, err $v:literal, $extra:literal) => {
             assert_eq!(
                 toml::from_str::<V>(std::concat!("k = \"", $s, "\""))
                     .unwrap_err()
                     .to_string(),
-                $v.to_string()
+                std::concat!(
+                    "TOML parse error at line 1, column 5\n  |\n1 | k = \"",
+                    $s,
+                    "\"\n  |     ",
+                    $extra,
+                    "^^^^\n",
+                    $v,
+                    '\n',
+                )
+                .to_string()
             );
         };
     }
@@ -468,9 +480,9 @@ fn test_key_serde() {
     test_key!("M-a", ok  Key::Alt('a') );
     test_key!("F1", ok  Key::F(1) );
     test_key!("F12", ok  Key::F(12) );
-    test_key!("C-V", err "`V` should be a lowercase and alphanumeric character instead. for key `k` at line 1 column 5");
-    test_key!("M-V", err "`V` should be a lowercase and alphanumeric character instead. for key `k` at line 1 column 5");
-    test_key!("F13", err "`13` should be a number 1 <= n <= 12 instead. for key `k` at line 1 column 5");
-    test_key!("Fc", err "`c` should be a number 1 <= n <= 12 instead. for key `k` at line 1 column 5");
-    test_key!("adsfsf", err "Cannot derive shortcut from `adsfsf`. Please consult the manual for valid key inputs. for key `k` at line 1 column 5");
+    test_key!("C-V", err "`V` should be a lowercase and alphanumeric character instead.");
+    test_key!("M-V", err "`V` should be a lowercase and alphanumeric character instead.");
+    test_key!("F13", err "`13` should be a number 1 <= n <= 12 instead.");
+    test_key!("Fc", err "`c` should be a number 1 <= n <= 12 instead.", "");
+    test_key!("adsfsf", err "Cannot derive shortcut from `adsfsf`. Please consult the manual for valid key inputs.", "^^^^");
 }

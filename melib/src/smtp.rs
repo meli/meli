@@ -191,7 +191,7 @@ pub struct SmtpExtensionSupport {
     #[serde(default = "crate::conf::true_val")]
     chunking: bool,
     /// [RFC 6152: SMTP Service Extension for 8-bit MIME Transport](https://www.rfc-editor.org/rfc/rfc6152)
-    #[serde(default = "crate::conf::true_val")]
+    #[serde(alias = "8bitmime", default = "crate::conf::true_val")]
     _8bitmime: bool,
     /// Essentially, the PRDR extension to SMTP allows (but does not require) an
     /// SMTP server to issue multiple responses after a message has been

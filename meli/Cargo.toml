@@ -44,7 +44,7 @@ smallvec = { version = "^1.5.0", features = ["serde"] }
 structopt = { version = "0.3.14", default-features = false }
 svg_crate = { version = "^0.13", optional = true, package = "svg" }
 termion = { version = "1.5.1", default-features = false }
-toml = { version = "0.5.6", default-features = false, features = ["preserve_order"] }
+toml = { version = "0.8", default-features = false, features = ["display","preserve_order","parse"] }
 xdg = "2.1.0"
 
 [dependencies.pcre2]

@@ -460,20 +460,32 @@ fn test_color_de() {
             );
         };
         ($s:literal, err $v:literal) => {
+            test_color!($s, err $v, "")
+        };
+        ($s:literal, err $v:literal, $extra:literal) => {
             assert_eq!(
                 toml::from_str::<V>(std::concat!("k = \"", $s, "\""))
                     .unwrap_err()
                     .to_string(),
-                $v.to_string()
+                std::concat!(
+                    "TOML parse error at line 1, column 5\n  |\n1 | k = \"",
+                    $s,
+                    "\"\n  |     ",
+                    $extra,
+                    "^^^^^^\n",
+                    $v,
+                    '\n',
+                )
+                .to_string()
             );
         };
     }
     test_color!("#Ff6600", ok Color::Rgb(255, 102, 0));
     test_color!("#2E3440", ok Color::Rgb(46, 52, 64));
     test_color!("#f60", ok Color::Rgb(255, 102, 0));
-    test_color!("#gb0", err "invalid `color` value for key `k` at line 1 column 1");
+    test_color!("#gb0", err "invalid `color` value");
     test_color!("Olive", ok Color::Byte(3));
-    test_color!("Oafahifdave", err "invalid `color` value for key `k` at line 1 column 1");
+    test_color!("Oafahifdave", err "invalid `color` value", "^^^^^^^");
 }
 
 impl Serialize for Color {
