@@ -287,34 +287,34 @@ pub enum JobRequest {
 impl Drop for JobRequest {
     fn drop(&mut self) {
         match self {
-            JobRequest::Generic { handle, .. } |
-            JobRequest::IsOnline { handle, .. } |
-            JobRequest::Refresh { handle, .. } |
-            JobRequest::SetFlags { handle, .. } |
-            JobRequest::SaveMessage { handle, .. } |
+            Self::Generic { handle, .. } |
+            Self::IsOnline { handle, .. } |
+            Self::Refresh { handle, .. } |
+            Self::SetFlags { handle, .. } |
+            Self::SaveMessage { handle, .. } |
             //JobRequest::RenameMailbox,
-            JobRequest::SetMailboxPermissions { handle, .. } |
-            JobRequest::SetMailboxSubscription { handle, .. } |
-            JobRequest::Watch { handle, .. } |
-            JobRequest::SendMessageBackground { handle, .. } => {
+            Self::SetMailboxPermissions { handle, .. } |
+            Self::SetMailboxSubscription { handle, .. } |
+            Self::Watch { handle, .. } |
+            Self::SendMessageBackground { handle, .. } => {
                 handle.cancel();
             }
-            JobRequest::DeleteMessages { handle, .. } => {
+            Self::DeleteMessages { handle, .. } => {
                 handle.cancel();
             }
-            JobRequest::CreateMailbox { handle, .. } => {
+            Self::CreateMailbox { handle, .. } => {
                 handle.cancel();
             }
-            JobRequest::DeleteMailbox { handle, .. } => {
+            Self::DeleteMailbox { handle, .. } => {
                 handle.cancel();
             }
-            JobRequest::Fetch { handle, .. } => {
+            Self::Fetch { handle, .. } => {
                 handle.cancel();
             }
-            JobRequest::Mailboxes { handle, .. } => {
+            Self::Mailboxes { handle, .. } => {
                 handle.cancel();
             }
-            JobRequest::SendMessage => {}
+            Self::SendMessage => {}
         }
     }
 }
@@ -322,14 +322,14 @@ impl Drop for JobRequest {
 impl std::fmt::Debug for JobRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            JobRequest::Generic { name, .. } => write!(f, "JobRequest::Generic({})", name),
-            JobRequest::Mailboxes { .. } => write!(f, "JobRequest::Mailboxes"),
-            JobRequest::Fetch { mailbox_hash, .. } => {
+            Self::Generic { name, .. } => write!(f, "JobRequest::Generic({})", name),
+            Self::Mailboxes { .. } => write!(f, "JobRequest::Mailboxes"),
+            Self::Fetch { mailbox_hash, .. } => {
                 write!(f, "JobRequest::Fetch({})", mailbox_hash)
             }
-            JobRequest::IsOnline { .. } => write!(f, "JobRequest::IsOnline"),
-            JobRequest::Refresh { .. } => write!(f, "JobRequest::Refresh"),
-            JobRequest::SetFlags {
+            Self::IsOnline { .. } => write!(f, "JobRequest::IsOnline"),
+            Self::Refresh { .. } => write!(f, "JobRequest::Refresh"),
+            Self::SetFlags {
                 env_hashes,
                 mailbox_hash,
                 flags,
@@ -340,22 +340,22 @@ impl std::fmt::Debug for JobRequest {
                 .field("mailbox_hash", &mailbox_hash)
                 .field("flags", &flags)
                 .finish(),
-            JobRequest::SaveMessage { .. } => write!(f, "JobRequest::SaveMessage"),
-            JobRequest::DeleteMessages { .. } => write!(f, "JobRequest::DeleteMessages"),
-            JobRequest::CreateMailbox { .. } => write!(f, "JobRequest::CreateMailbox"),
-            JobRequest::DeleteMailbox { mailbox_hash, .. } => {
+            Self::SaveMessage { .. } => write!(f, "JobRequest::SaveMessage"),
+            Self::DeleteMessages { .. } => write!(f, "JobRequest::DeleteMessages"),
+            Self::CreateMailbox { .. } => write!(f, "JobRequest::CreateMailbox"),
+            Self::DeleteMailbox { mailbox_hash, .. } => {
                 write!(f, "JobRequest::DeleteMailbox({})", mailbox_hash)
             }
             //JobRequest::RenameMailbox,
-            JobRequest::SetMailboxPermissions { .. } => {
+            Self::SetMailboxPermissions { .. } => {
                 write!(f, "JobRequest::SetMailboxPermissions")
             }
-            JobRequest::SetMailboxSubscription { .. } => {
+            Self::SetMailboxSubscription { .. } => {
                 write!(f, "JobRequest::SetMailboxSubscription")
             }
-            JobRequest::Watch { .. } => write!(f, "JobRequest::Watch"),
-            JobRequest::SendMessage => write!(f, "JobRequest::SendMessage"),
-            JobRequest::SendMessageBackground { .. } => {
+            Self::Watch { .. } => write!(f, "JobRequest::Watch"),
+            Self::SendMessage => write!(f, "JobRequest::SendMessage"),
+            Self::SendMessageBackground { .. } => {
                 write!(f, "JobRequest::SendMessageBackground")
             }
         }
@@ -365,12 +365,12 @@ impl std::fmt::Debug for JobRequest {
 impl std::fmt::Display for JobRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            JobRequest::Generic { name, .. } => write!(f, "{}", name),
-            JobRequest::Mailboxes { .. } => write!(f, "Get mailbox list"),
-            JobRequest::Fetch { .. } => write!(f, "Mailbox fetch"),
-            JobRequest::IsOnline { .. } => write!(f, "Online status check"),
-            JobRequest::Refresh { .. } => write!(f, "Refresh mailbox"),
-            JobRequest::SetFlags {
+            Self::Generic { name, .. } => write!(f, "{}", name),
+            Self::Mailboxes { .. } => write!(f, "Get mailbox list"),
+            Self::Fetch { .. } => write!(f, "Mailbox fetch"),
+            Self::IsOnline { .. } => write!(f, "Online status check"),
+            Self::Refresh { .. } => write!(f, "Refresh mailbox"),
+            Self::SetFlags {
                 env_hashes, flags, ..
             } => write!(
                 f,
@@ -379,20 +379,20 @@ impl std::fmt::Display for JobRequest {
                 if env_hashes.len() == 1 { "" } else { "s" },
                 flags
             ),
-            JobRequest::SaveMessage { .. } => write!(f, "Save message"),
-            JobRequest::DeleteMessages { env_hashes, .. } => write!(
+            Self::SaveMessage { .. } => write!(f, "Save message"),
+            Self::DeleteMessages { env_hashes, .. } => write!(
                 f,
                 "Delete {} message{}",
                 env_hashes.len(),
                 if env_hashes.len() == 1 { "" } else { "s" }
             ),
-            JobRequest::CreateMailbox { path, .. } => write!(f, "Create mailbox {}", path),
-            JobRequest::DeleteMailbox { .. } => write!(f, "Delete mailbox"),
+            Self::CreateMailbox { path, .. } => write!(f, "Create mailbox {}", path),
+            Self::DeleteMailbox { .. } => write!(f, "Delete mailbox"),
             //JobRequest::RenameMailbox,
-            JobRequest::SetMailboxPermissions { .. } => write!(f, "Set mailbox permissions"),
-            JobRequest::SetMailboxSubscription { .. } => write!(f, "Set mailbox subscription"),
-            JobRequest::Watch { .. } => write!(f, "Background watch"),
-            JobRequest::SendMessageBackground { .. } | JobRequest::SendMessage => {
+            Self::SetMailboxPermissions { .. } => write!(f, "Set mailbox permissions"),
+            Self::SetMailboxSubscription { .. } => write!(f, "Set mailbox subscription"),
+            Self::Watch { .. } => write!(f, "Background watch"),
+            Self::SendMessageBackground { .. } | Self::SendMessage => {
                 write!(f, "Sending message")
             }
         }
@@ -404,7 +404,7 @@ impl JobRequest {
     is_variant! { is_online, IsOnline { .. } }
 
     pub fn is_fetch(&self, mailbox_hash: MailboxHash) -> bool {
-        matches!(self, JobRequest::Fetch {
+        matches!(self, Self::Fetch {
                  mailbox_hash: h, ..
              } if *h == mailbox_hash)
     }
@@ -578,7 +578,7 @@ impl Account {
             }
         }
 
-        Ok(Account {
+        Ok(Self {
             hash,
             name,
             is_online: if !backend.capabilities().is_remote {
@@ -1590,7 +1590,7 @@ impl Account {
                         *retries *= 2;
                     }
                     Some(Duration::from_millis(
-                        oldval * (4 * melib::utils::random::random_u8() as u64),
+                        oldval * (4 * u64::from(melib::utils::random::random_u8())),
                     ))
                 } else {
                     None
@@ -2531,11 +2531,9 @@ fn build_mailboxes_order(
                 .collect::<SmallVec<[_; 8]>>()
                 .into_iter()
                 .peekable();
+            indentation <<= 1;
             if has_sibling {
-                indentation <<= 1;
                 indentation |= 1;
-            } else {
-                indentation <<= 1;
             }
             while let Some(i) = iter.next() {
                 let c = &mut node.children[i];

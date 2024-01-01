@@ -321,7 +321,7 @@ impl MailListingTrait for ThreadListing {
                 prev_group = threads.find_group(thread_node.group);
 
                 let mut entry_strings = self.make_entry_string(&envelope, context);
-                entry_strings.subject = SubjectString(ThreadListing::make_thread_entry(
+                entry_strings.subject = SubjectString(Self::make_thread_entry(
                     &envelope,
                     indentation,
                     thread_node_hash,
@@ -775,9 +775,9 @@ impl ThreadListing {
     pub fn new(
         parent: ComponentId,
         coordinates: (AccountHash, MailboxHash),
-        context: &mut Context,
+        context: &Context,
     ) -> Box<Self> {
-        Box::new(ThreadListing {
+        Box::new(Self {
             cursor_pos: (coordinates.0, MailboxHash::default(), 0),
             new_cursor_pos: (coordinates.0, coordinates.1, 0),
             length: 0,

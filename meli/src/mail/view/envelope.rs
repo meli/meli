@@ -87,7 +87,7 @@ impl EnvelopeView {
     ) -> Self {
         let view_settings = view_settings.unwrap_or_default();
         let body = Box::new(AttachmentBuilder::new(&mail.bytes).build());
-        let mut ret = EnvelopeView {
+        let mut ret = Self {
             pager: pager.unwrap_or_default(),
             subview,
             dirty: true,
@@ -221,7 +221,7 @@ impl EnvelopeView {
                         }
                     }
                     for a in parts {
-                        EnvelopeView::attachment_to_display_helper(
+                        Self::attachment_to_display_helper(
                             a,
                             main_loop_handler,
                             active_jobs,
@@ -271,7 +271,7 @@ impl EnvelopeView {
                                 job_id: handle.job_id,
                                 display: {
                                     let mut v = vec![];
-                                    EnvelopeView::attachment_to_display_helper(
+                                    Self::attachment_to_display_helper(
                                         &parts[0],
                                         main_loop_handler,
                                         active_jobs,
@@ -288,7 +288,7 @@ impl EnvelopeView {
                                 inner: Box::new(a.clone()),
                                 display: {
                                     let mut v = vec![];
-                                    EnvelopeView::attachment_to_display_helper(
+                                    Self::attachment_to_display_helper(
                                         &parts[0],
                                         main_loop_handler,
                                         active_jobs,
@@ -342,7 +342,7 @@ impl EnvelopeView {
                 }
                 _ => {
                     for a in parts {
-                        EnvelopeView::attachment_to_display_helper(
+                        Self::attachment_to_display_helper(
                             a,
                             main_loop_handler,
                             active_jobs,
@@ -1269,7 +1269,7 @@ impl Component for EnvelopeView {
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
                 if let Some(attachment) = self.open_attachment(lidx, context) {
-                    if let Ok(()) = crate::mailcap::MailcapEntry::execute(attachment, context) {
+                    if crate::mailcap::MailcapEntry::execute(attachment, context).is_ok() {
                         self.set_dirty(true);
                     } else {
                         context.replies.push_back(UIEvent::StatusEvent(
@@ -1411,7 +1411,7 @@ impl Component for EnvelopeView {
                         ContentType::MessageRfc822 => {
                             match Mail::new(attachment.body().to_vec(), Some(Flag::SEEN)) {
                                 Ok(wrapper) => {
-                                    self.subview = Some(Box::new(EnvelopeView::new(
+                                    self.subview = Some(Box::new(Self::new(
                                         wrapper,
                                         None,
                                         None,

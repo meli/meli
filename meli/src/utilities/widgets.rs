@@ -49,8 +49,8 @@ impl std::fmt::Debug for Field {
 }
 
 impl Default for Field {
-    fn default() -> Field {
-        Field::Text(TextField::default())
+    fn default() -> Self {
+        Self::Text(TextField::default())
     }
 }
 
@@ -253,8 +253,8 @@ impl<T: 'static + std::fmt::Debug + Copy + Default + Send + Sync> FormWidget<T> 
         action: (Cow<'static, str>, T),
         cursor_up_shortcut: Key,
         cursor_down_shortcut: Key,
-    ) -> FormWidget<T> {
-        FormWidget {
+    ) -> Self {
+        Self {
             buttons: ButtonWidget::new(action),
             focus: FormFocus::Fields,
             hide_buttons: false,
@@ -556,8 +556,8 @@ impl<T> ButtonWidget<T>
 where
     T: 'static + std::fmt::Debug + Copy + Default + Send + Sync,
 {
-    pub fn new(init_val: (Cow<'static, str>, T)) -> ButtonWidget<T> {
-        ButtonWidget {
+    pub fn new(init_val: (Cow<'static, str>, T)) -> Self {
+        Self {
             layout: vec![init_val.0.clone()],
             buttons: vec![init_val].into_iter().collect(),
             result: None,
@@ -676,7 +676,7 @@ impl AutoCompleteEntry {
 
 impl From<String> for AutoCompleteEntry {
     fn from(val: String) -> Self {
-        AutoCompleteEntry {
+        Self {
             entry: val,
             description: String::new(),
         }
@@ -686,7 +686,7 @@ impl From<String> for AutoCompleteEntry {
 impl From<&(&str, &str, TokenStream)> for AutoCompleteEntry {
     fn from(val: &(&str, &str, TokenStream)) -> Self {
         let (a, b, _) = val;
-        AutoCompleteEntry {
+        Self {
             entry: a.to_string(),
             description: b.to_string(),
         }
@@ -696,7 +696,7 @@ impl From<&(&str, &str, TokenStream)> for AutoCompleteEntry {
 impl From<(String, String)> for AutoCompleteEntry {
     fn from(val: (String, String)) -> Self {
         let (a, b) = val;
-        AutoCompleteEntry {
+        Self {
             entry: a,
             description: b,
         }
@@ -731,7 +731,7 @@ impl Component for AutoComplete {
         }
         let page_no = (self.cursor.saturating_sub(1)).wrapping_div(rows);
         let top_idx = page_no * rows;
-        let x_offset = if rows < self.entries.len() { 1 } else { 0 };
+        let x_offset = usize::from(rows < self.entries.len());
 
         grid.clear_area(area, crate::conf::value(context, "theme_default"));
         let width = self
@@ -817,7 +817,7 @@ impl Component for AutoComplete {
 
 impl AutoComplete {
     pub fn new(entries: Vec<AutoCompleteEntry>) -> Box<Self> {
-        let mut ret = AutoComplete {
+        let mut ret = Self {
             entries: Vec::new(),
             cursor: 0,
             dirty: true,
@@ -1102,7 +1102,7 @@ impl ProgressSpinner {
             theme_attr.attrs |= Attr::REVERSE;
         }
         theme_attr.attrs |= Attr::BOLD;
-        ProgressSpinner {
+        Self {
             timer,
             stage: 0,
             kind: Ok(kind),

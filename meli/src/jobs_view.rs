@@ -110,7 +110,7 @@ impl JobManager {
         }
     }
 
-    fn initialize(&mut self, context: &mut Context) {
+    fn initialize(&mut self, context: &Context) {
         self.set_dirty(true);
 
         let mut entries = (*context.main_loop_handler.job_executor.jobs.lock().unwrap()).clone();

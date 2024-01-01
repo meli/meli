@@ -55,7 +55,7 @@ pub struct TerminalSettings {
 
 impl Default for TerminalSettings {
     fn default() -> Self {
-        TerminalSettings {
+        Self {
             theme: "dark".to_string(),
             themes: Themes::default(),
             ascii_drawing: false,

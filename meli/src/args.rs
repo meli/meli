@@ -179,10 +179,10 @@ pub mod manpages {
             };
 
             for (p, dir) in [
-                (ManPages::Main, "man1"),
-                (ManPages::Conf, "man5"),
-                (ManPages::Themes, "man5"),
-                (ManPages::Guide, "man7"),
+                (Self::Main, "man1"),
+                (Self::Conf, "man5"),
+                (Self::Themes, "man5"),
+                (Self::Guide, "man7"),
             ] {
                 let text = crate::subcommands::man(p, true)?;
                 path.push(dir);

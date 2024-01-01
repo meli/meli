@@ -54,7 +54,7 @@ impl EditAttachments {
         let mut buttons = ButtonWidget::new(("Go Back".into(), FormButtonActions::Cancel));
         buttons.set_focus(true);
         buttons.set_cursor(1);
-        EditAttachments {
+        Self {
             account_hash,
             mode: EditAttachmentMode::Overview,
             buttons,

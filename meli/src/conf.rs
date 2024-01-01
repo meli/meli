@@ -279,7 +279,7 @@ impl From<FileAccount> for AccountConf {
         };
 
         let mailbox_confs = x.mailboxes.clone();
-        AccountConf {
+        Self {
             account: acc,
             conf_override: x.conf_override.clone(),
             conf: x,
@@ -393,7 +393,7 @@ define(`include', `builtin_include(substr($1,1,decr(decr(len($1)))))dnl')dnl
     file.read_to_string(&mut contents)?;
 
     let mut handle = Command::new("m4")
-        .current_dir(conf_path.parent().unwrap_or(Path::new("/")))
+        .current_dir(conf_path.parent().unwrap_or_else(|| Path::new("/")))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -407,7 +407,7 @@ define(`include', `builtin_include(substr($1,1,decr(decr(len($1)))))dnl')dnl
 }
 
 impl FileSettings {
-    pub fn new() -> Result<FileSettings> {
+    pub fn new() -> Result<Self> {
         let config_path = get_config_file()?;
         if !config_path.exists() {
             let path_string = config_path.display().to_string();
@@ -429,12 +429,12 @@ impl FileSettings {
                 ));
             }
             #[cfg(test)]
-            return Ok(FileSettings::default());
+            return Ok(Self::default());
             #[cfg(not(test))]
             return Err(Error::new("No configuration file found."));
         }
 
-        FileSettings::validate(config_path, true, false)
+        Self::validate(config_path, true, false)
     }
 
     pub fn validate(path: PathBuf, interactive: bool, clear_extras: bool) -> Result<Self> {
@@ -467,11 +467,11 @@ This is required so that you don't accidentally start meli and find out later th
                 };
                 if ask.run() {
                     let mut file = OpenOptions::new().append(true).open(&path)?;
-                    file.write_all("[composing]\nsend_mail = 'false'\n".as_bytes())
+                    file.write_all(b"[composing]\nsend_mail = 'false'\n")
                         .map_err(|err| {
                             Error::new(format!("Could not append to {}: {}", path.display(), err))
                         })?;
-                    return FileSettings::validate(path, interactive, clear_extras);
+                    return Self::validate(path, interactive, clear_extras);
                 }
             }
             return Err(Error::new(format!(
@@ -480,7 +480,7 @@ This is required so that you don't accidentally start meli and find out later th
                 path.display()
             )));
         }
-        let mut s: FileSettings = toml::from_str(&s).map_err(|err| {
+        let mut s: Self = toml::from_str(&s).map_err(|err| {
             Error::new(format!(
                 "{}: Config file contains errors; {}",
                 path.display(),
@@ -588,7 +588,7 @@ pub struct Settings {
 }
 
 impl Settings {
-    pub fn new() -> Result<Settings> {
+    pub fn new() -> Result<Self> {
         let fs = FileSettings::new()?;
         let mut s: IndexMap<String, AccountConf> = IndexMap::new();
 
@@ -605,7 +605,7 @@ impl Settings {
             _logger.change_log_dest(log_path.into());
         }
 
-        Ok(Settings {
+        Ok(Self {
             accounts: s,
             pager: fs.pager,
             listing: fs.listing,
@@ -620,7 +620,7 @@ impl Settings {
         })
     }
 
-    pub fn without_accounts() -> Result<Settings> {
+    pub fn without_accounts() -> Result<Self> {
         let fs = FileSettings::new()?;
         let mut _logger = StderrLogger::new(fs.log.maximum_level);
 
@@ -628,7 +628,7 @@ impl Settings {
             _logger.change_log_dest(log_path.into());
         }
 
-        Ok(Settings {
+        Ok(Self {
             accounts: IndexMap::new(),
             pager: fs.pager,
             listing: fs.listing,
@@ -761,10 +761,10 @@ impl<'de> Deserialize<'de> for IndexStyle {
     {
         let s = <String>::deserialize(deserializer)?;
         match s.as_str() {
-            "Plain" | "plain" => Ok(IndexStyle::Plain),
-            "Threaded" | "threaded" => Ok(IndexStyle::Threaded),
-            "Compact" | "compact" => Ok(IndexStyle::Compact),
-            "Conversations" | "conversations" => Ok(IndexStyle::Conversations),
+            "Plain" | "plain" => Ok(Self::Plain),
+            "Threaded" | "threaded" => Ok(Self::Threaded),
+            "Compact" | "compact" => Ok(Self::Compact),
+            "Conversations" | "conversations" => Ok(Self::Conversations),
             _ => Err(de::Error::custom("invalid `index_style` value")),
         }
     }
@@ -776,10 +776,10 @@ impl Serialize for IndexStyle {
         S: Serializer,
     {
         match self {
-            IndexStyle::Plain => serializer.serialize_str("plain"),
-            IndexStyle::Threaded => serializer.serialize_str("threaded"),
-            IndexStyle::Compact => serializer.serialize_str("compact"),
-            IndexStyle::Conversations => serializer.serialize_str("conversations"),
+            Self::Plain => serializer.serialize_str("plain"),
+            Self::Threaded => serializer.serialize_str("threaded"),
+            Self::Compact => serializer.serialize_str("compact"),
+            Self::Conversations => serializer.serialize_str("conversations"),
         }
     }
 }
@@ -805,15 +805,15 @@ impl<'de> Deserialize<'de> for SearchBackend {
                 if sqlite3.eq_ignore_ascii_case("sqlite3")
                     || sqlite3.eq_ignore_ascii_case("sqlite") =>
             {
-                Ok(SearchBackend::Sqlite3)
+                Ok(Self::Sqlite3)
             }
             none if none.eq_ignore_ascii_case("none")
                 || none.eq_ignore_ascii_case("nothing")
                 || none.is_empty() =>
             {
-                Ok(SearchBackend::None)
+                Ok(Self::None)
             }
-            auto if auto.eq_ignore_ascii_case("auto") => Ok(SearchBackend::Auto),
+            auto if auto.eq_ignore_ascii_case("auto") => Ok(Self::Auto),
             _ => Err(de::Error::custom("invalid `search_backend` value")),
         }
     }
@@ -826,9 +826,9 @@ impl Serialize for SearchBackend {
     {
         match self {
             #[cfg(feature = "sqlite3")]
-            SearchBackend::Sqlite3 => serializer.serialize_str("sqlite3"),
-            SearchBackend::None => serializer.serialize_str("none"),
-            SearchBackend::Auto => serializer.serialize_str("auto"),
+            Self::Sqlite3 => serializer.serialize_str("sqlite3"),
+            Self::None => serializer.serialize_str("none"),
+            Self::Auto => serializer.serialize_str("auto"),
         }
     }
 }
@@ -1332,7 +1332,7 @@ send_mail = 'false'
                 .append(true)
                 .open(&path)?;
             file.write_all(content.as_bytes())?;
-            Ok(ConfigFile { path, file })
+            Ok(Self { path, file })
         }
     }
 
@@ -1350,7 +1350,7 @@ send_mail = 'false'
     ));
     new_file
         .file
-        .write_all("[composing]\nsend_mail = 'false'\n".as_bytes())
+        .write_all(b"[composing]\nsend_mail = 'false'\n")
         .unwrap();
     let err = FileSettings::validate(new_file.path.clone(), false, true).unwrap_err();
     assert_eq!(

@@ -192,7 +192,7 @@ use melib::HeaderName;
                     #(#attrs_tokens)*
                     impl Default for #override_ident {
                         fn default() -> Self {
-                            #override_ident {
+                            Self {
                                 #(#field_idents: None),*
                             }
                         }

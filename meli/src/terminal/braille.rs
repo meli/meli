@@ -145,7 +145,7 @@ pub struct BraillePixelIter {
 
 impl From<&[u16]> for BraillePixelIter {
     fn from(from: &[u16]) -> Self {
-        BraillePixelIter {
+        Self {
             columns: [
                 Braille16bitColumn {
                     bitmaps: (

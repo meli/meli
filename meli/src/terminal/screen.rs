@@ -45,7 +45,7 @@ type DrawHorizontalSegmentFn = fn(&mut CellBuffer, &mut StateStdout, usize, usiz
 pub struct ScreenGeneration((u64, u64));
 
 impl ScreenGeneration {
-    pub const NIL: ScreenGeneration = Self((0, 0));
+    pub const NIL: Self = Self((0, 0));
 
     #[inline]
     pub fn next(self) -> Self {
@@ -234,7 +234,7 @@ impl Screen<Tty> {
         Self::init(Tty {
             stdout: None,
             mouse: false,
-            draw_horizontal_segment_fn: Screen::draw_horizontal_segment,
+            draw_horizontal_segment_fn: Self::draw_horizontal_segment,
         })
     }
 
@@ -328,7 +328,10 @@ impl Screen<Tty> {
     }
 
     pub fn switch_to_alternate_screen(&mut self, context: &crate::Context) {
-        let mut stdout = BufWriter::with_capacity(240 * 80, Box::new(std::io::stdout()) as _);
+        let mut stdout = BufWriter::with_capacity(
+            240 * 80,
+            Box::new(std::io::stdout()) as Box<dyn std::io::Write>,
+        );
 
         write!(
             &mut stdout,

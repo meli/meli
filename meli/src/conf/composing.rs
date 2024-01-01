@@ -115,7 +115,7 @@ pub struct ComposingSettings {
 
 impl Default for ComposingSettings {
     fn default() -> Self {
-        ComposingSettings {
+        Self {
             send_mail: SendMail::ShellCommand("false".into()),
             editor_command: None,
             embedded_pty: false,
@@ -296,9 +296,9 @@ impl<'de> Deserialize<'de> for SendMail {
 
         match <SendMailInner>::deserialize(deserializer) {
             #[cfg(feature = "smtp")]
-            Ok(SendMailInner::Smtp(v)) => Ok(SendMail::Smtp(v)),
-            Ok(SendMailInner::ServerSubmission) => Ok(SendMail::ServerSubmission),
-            Ok(SendMailInner::ShellCommand(v)) => Ok(SendMail::ShellCommand(v)),
+            Ok(SendMailInner::Smtp(v)) => Ok(Self::Smtp(v)),
+            Ok(SendMailInner::ServerSubmission) => Ok(Self::ServerSubmission),
+            Ok(SendMailInner::ShellCommand(v)) => Ok(Self::ShellCommand(v)),
             Err(_err) => Err(de::Error::custom(SENDMAIL_ERR_HELP)),
         }
     }

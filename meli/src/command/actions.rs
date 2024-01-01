@@ -143,10 +143,10 @@ impl Action {
     pub fn needs_confirmation(&self) -> bool {
         matches!(
             self,
-            Action::Listing(ListingAction::Delete)
-                | Action::MailingListAction(_)
-                | Action::Mailbox(_, _)
-                | Action::Quit
+            Self::Listing(ListingAction::Delete)
+                | Self::MailingListAction(_)
+                | Self::Mailbox(_, _)
+                | Self::Quit
         )
     }
 }

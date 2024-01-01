@@ -387,37 +387,37 @@ enum ThemeValue<T: ThemeLink> {
 
 impl From<&'static str> for ThemeValue<Color> {
     fn from(from: &'static str) -> Self {
-        ThemeValue::Link(from.into(), ColorField::LikeSelf)
+        Self::Link(from.into(), ColorField::LikeSelf)
     }
 }
 
 impl From<&'static str> for ThemeValue<Attr> {
     fn from(from: &'static str) -> Self {
-        ThemeValue::Link(from.into(), ())
+        Self::Link(from.into(), ())
     }
 }
 
 impl From<Color> for ThemeValue<Color> {
     fn from(from: Color) -> Self {
-        ThemeValue::Value(from)
+        Self::Value(from)
     }
 }
 
 impl From<Attr> for ThemeValue<Attr> {
     fn from(from: Attr) -> Self {
-        ThemeValue::Value(from)
+        Self::Value(from)
     }
 }
 
 impl Default for ThemeValue<Color> {
     fn default() -> Self {
-        ThemeValue::Value(Color::Default)
+        Self::Value(Color::Default)
     }
 }
 
 impl Default for ThemeValue<Attr> {
     fn default() -> Self {
-        ThemeValue::Value(Attr::DEFAULT)
+        Self::Value(Attr::DEFAULT)
     }
 }
 
@@ -428,11 +428,11 @@ impl<'de> Deserialize<'de> for ThemeValue<Attr> {
     {
         if let Ok(s) = <String>::deserialize(deserializer) {
             if let Some(stripped) = s.strip_prefix('$') {
-                Ok(ThemeValue::Alias(stripped.to_string().into()))
+                Ok(Self::Alias(stripped.to_string().into()))
             } else if let Ok(c) = Attr::from_string_de::<'de, D, String>(s.clone()) {
-                Ok(ThemeValue::Value(c))
+                Ok(Self::Value(c))
             } else {
-                Ok(ThemeValue::Link(s.into(), ()))
+                Ok(Self::Link(s.into(), ()))
             }
         } else {
             Err(de::Error::custom("invalid theme attribute value"))
@@ -446,9 +446,9 @@ impl Serialize for ThemeValue<Attr> {
         S: Serializer,
     {
         match self {
-            ThemeValue::Value(s) => s.serialize(serializer),
-            ThemeValue::Alias(s) => format!("${}", s).serialize(serializer),
-            ThemeValue::Link(s, ()) => serializer.serialize_str(s.as_ref()),
+            Self::Value(s) => s.serialize(serializer),
+            Self::Alias(s) => format!("${}", s).serialize(serializer),
+            Self::Link(s, ()) => serializer.serialize_str(s.as_ref()),
         }
     }
 }
@@ -459,15 +459,11 @@ impl Serialize for ThemeValue<Color> {
         S: Serializer,
     {
         match self {
-            ThemeValue::Value(s) => s.serialize(serializer),
-            ThemeValue::Alias(s) => format!("${}", s).serialize(serializer),
-            ThemeValue::Link(s, ColorField::LikeSelf) => serializer.serialize_str(s.as_ref()),
-            ThemeValue::Link(s, ColorField::Fg) => {
-                serializer.serialize_str(format!("{}.fg", s).as_ref())
-            }
-            ThemeValue::Link(s, ColorField::Bg) => {
-                serializer.serialize_str(format!("{}.bg", s).as_ref())
-            }
+            Self::Value(s) => s.serialize(serializer),
+            Self::Alias(s) => format!("${}", s).serialize(serializer),
+            Self::Link(s, ColorField::LikeSelf) => serializer.serialize_str(s.as_ref()),
+            Self::Link(s, ColorField::Fg) => serializer.serialize_str(format!("{}.fg", s).as_ref()),
+            Self::Link(s, ColorField::Bg) => serializer.serialize_str(format!("{}.bg", s).as_ref()),
         }
     }
 }
@@ -479,21 +475,21 @@ impl<'de> Deserialize<'de> for ThemeValue<Color> {
     {
         if let Ok(s) = <String>::deserialize(deserializer) {
             if let Some(stripped) = s.strip_prefix('$') {
-                Ok(ThemeValue::Alias(stripped.to_string().into()))
+                Ok(Self::Alias(stripped.to_string().into()))
             } else if let Ok(c) = Color::from_string_de::<'de, D>(s.clone()) {
-                Ok(ThemeValue::Value(c))
+                Ok(Self::Value(c))
             } else if s.ends_with(".fg") {
-                Ok(ThemeValue::Link(
+                Ok(Self::Link(
                     s[..s.len() - 3].to_string().into(),
                     ColorField::Fg,
                 ))
             } else if s.ends_with(".bg") {
-                Ok(ThemeValue::Link(
+                Ok(Self::Link(
                     s[..s.len() - 3].to_string().into(),
                     ColorField::Bg,
                 ))
             } else {
-                Ok(ThemeValue::Link(s.into(), ColorField::LikeSelf))
+                Ok(Self::Link(s.into(), ColorField::LikeSelf))
             }
         } else {
             Err(de::Error::custom("invalid theme color value"))
@@ -569,7 +565,7 @@ mod regexp {
     impl Eq for RegexpWrapper {}
 
     impl PartialEq for RegexpWrapper {
-        fn eq(&self, other: &RegexpWrapper) -> bool {
+        fn eq(&self, other: &Self) -> bool {
             self.0.as_str().eq(other.0.as_str())
         }
     }
@@ -827,7 +823,7 @@ impl<'de> Deserialize<'de> for Themes {
             attrs: Option<ThemeValue<Attr>>,
         }
 
-        let mut ret = Themes::default();
+        let mut ret = Self::default();
         let mut s = <ThemesOptions>::deserialize(deserializer)?;
         for tk in s.other_themes.keys() {
             ret.other_themes.insert(tk.clone(), ret.dark.clone());
@@ -1217,10 +1213,10 @@ impl Themes {
     }
     pub fn validate(&self) -> Result<()> {
         let hash_set: HashSet<&'static str> = DEFAULT_KEYS.iter().copied().collect();
-        Themes::validate_keys("light", &self.light, &hash_set)?;
-        Themes::validate_keys("dark", &self.dark, &hash_set)?;
+        Self::validate_keys("light", &self.light, &hash_set)?;
+        Self::validate_keys("dark", &self.dark, &hash_set)?;
         for (name, t) in self.other_themes.iter() {
-            Themes::validate_keys(name, t, &hash_set)?;
+            Self::validate_keys(name, t, &hash_set)?;
         }
         if let Err(err) = is_cyclic(&self.light) {
             return Err(Error::new(format!("light theme contains a cycle: {}", err)));
@@ -1288,7 +1284,7 @@ impl std::fmt::Display for Themes {
 
 impl Default for Themes {
     #[allow(clippy::needless_update)]
-    fn default() -> Themes {
+    fn default() -> Self {
         let mut light = IndexMap::default();
         let mut dark = IndexMap::default();
         let other_themes = IndexMap::default();
@@ -1734,7 +1730,7 @@ impl Default for Themes {
 
         add!("pager.highlight_search", light = { fg: Color::White, bg: Color::Byte(6) /* Teal */, attrs: Attr::BOLD }, dark = { fg: Color::White, bg: Color::Byte(6) /* Teal */, attrs: Attr::BOLD });
         add!("pager.highlight_search_current", light = { fg: Color::White, bg: Color::Byte(17) /* NavyBlue */, attrs: Attr::BOLD }, dark = { fg: Color::White, bg: Color::Byte(17) /* NavyBlue */, attrs: Attr::BOLD });
-        Themes {
+        Self {
             light: Theme {
                 keys: light,
                 attr_aliases: Default::default(),
@@ -2085,7 +2081,7 @@ fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
 fn test_theme_parsing() {
     /* MUST SUCCEED: default themes should be valid */
     let def = Themes::default();
-    assert!(def.validate().is_ok());
+    def.validate().unwrap();
     /* MUST SUCCEED: new user theme `hunter2`, theme `dark` has user
      * redefinitions */
     const TEST_STR: &str = r#"[dark]
@@ -2121,27 +2117,27 @@ fn test_theme_parsing() {
         ),
         Color::Byte(15), // White
     );
-    assert!(parsed.validate().is_ok());
+    parsed.validate().unwrap();
     /* MUST FAIL: theme `dark` contains a cycle */
     const HAS_CYCLE: &str = r#"[dark]
 "mail.listing.compact.even" = { fg = "mail.listing.compact.odd" }
 "mail.listing.compact.odd" = { fg = "mail.listing.compact.even" }
 "#;
     let parsed: Themes = toml::from_str(HAS_CYCLE).unwrap();
-    assert!(parsed.validate().is_err());
+    parsed.validate().unwrap_err();
     /* MUST FAIL: theme `dark` contains an invalid key */
     const HAS_INVALID_KEYS: &str = r#"[dark]
 "asdfsafsa" = { fg = "Black" }
 "#;
     let parsed: std::result::Result<Themes, _> = toml::from_str(HAS_INVALID_KEYS);
-    assert!(parsed.is_err());
+    parsed.unwrap_err();
     /* MUST SUCCEED: alias $Jebediah resolves to a valid color */
     const TEST_ALIAS_STR: &str = r##"[dark]
 color_aliases= { "Jebediah" = "#b4da55" }
 "mail.listing.tag_default" = { fg = "$Jebediah" }
 "##;
     let parsed: Themes = toml::from_str(TEST_ALIAS_STR).unwrap();
-    assert!(parsed.validate().is_ok());
+    parsed.validate().unwrap();
     assert_eq!(
         unlink_fg(
             &parsed.dark,
@@ -2156,42 +2152,42 @@ color_aliases= { "Jebediah" = "#b4da55" }
 "mail.listing.tag_default" = { fg = "$Jebedia" }
 "##;
     let parsed: Themes = toml::from_str(TEST_INVALID_ALIAS_STR).unwrap();
-    assert!(parsed.validate().is_err());
+    parsed.validate().unwrap_err();
     /* MUST FAIL: Color alias $Jebediah is defined as itself */
     const TEST_CYCLIC_ALIAS_STR: &str = r#"[dark]
 color_aliases= { "Jebediah" = "$Jebediah" }
 "mail.listing.tag_default" = { fg = "$Jebediah" }
 "#;
     let parsed: Themes = toml::from_str(TEST_CYCLIC_ALIAS_STR).unwrap();
-    assert!(parsed.validate().is_err());
+    parsed.validate().unwrap_err();
     /* MUST FAIL: Attr alias $Jebediah is defined as itself */
     const TEST_CYCLIC_ALIAS_ATTR_STR: &str = r#"[dark]
 attr_aliases= { "Jebediah" = "$Jebediah" }
 "mail.listing.tag_default" = { attrs = "$Jebediah" }
 "#;
     let parsed: Themes = toml::from_str(TEST_CYCLIC_ALIAS_ATTR_STR).unwrap();
-    assert!(parsed.validate().is_err());
+    parsed.validate().unwrap_err();
     /* MUST FAIL: alias $Jebediah resolves to a cycle */
     const TEST_CYCLIC_ALIAS_STR_2: &str = r#"[dark]
 color_aliases= { "Jebediah" = "$JebediahJr", "JebediahJr" = "mail.listing.tag_default" }
 "mail.listing.tag_default" = { fg = "$Jebediah" }
 "#;
     let parsed: Themes = toml::from_str(TEST_CYCLIC_ALIAS_STR_2).unwrap();
-    assert!(parsed.validate().is_err());
+    parsed.validate().unwrap_err();
     /* MUST SUCCEED: alias $Jebediah resolves to a key's field */
     const TEST_CYCLIC_ALIAS_STR_3: &str = r#"[dark]
 color_aliases= { "Jebediah" = "$JebediahJr", "JebediahJr" = "mail.listing.tag_default.bg" }
 "mail.listing.tag_default" = { fg = "$Jebediah", bg = "Black" }
 "#;
     let parsed: Themes = toml::from_str(TEST_CYCLIC_ALIAS_STR_3).unwrap();
-    assert!(parsed.validate().is_ok());
+    parsed.validate().unwrap();
     /* MUST FAIL: alias $Jebediah resolves to an invalid key */
     const TEST_INVALID_LINK_KEY_FIELD_STR: &str = r#"[dark]
 color_aliases= { "Jebediah" = "$JebediahJr", "JebediahJr" = "mail.listing.tag_default.attrs" }
 "mail.listing.tag_default" = { fg = "$Jebediah", bg = "Black" }
 "#;
     let parsed: Themes = toml::from_str(TEST_INVALID_LINK_KEY_FIELD_STR).unwrap();
-    assert!(parsed.validate().is_err());
+    parsed.validate().unwrap_err();
 }
 
 #[test]

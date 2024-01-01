@@ -114,7 +114,7 @@ impl StatusBar {
             None => {}
         }
 
-        StatusBar {
+        Self {
             container,
             status: String::with_capacity(256),
             status_message: String::with_capacity(256),
@@ -812,9 +812,12 @@ impl Component for StatusBar {
 
     fn children(&self) -> IndexMap<ComponentId, &dyn Component> {
         let mut ret = IndexMap::default();
-        ret.insert(self.container.id(), &self.container as _);
-        ret.insert(self.ex_buffer.id(), &self.ex_buffer as _);
-        ret.insert(self.progress_spinner.id(), &self.progress_spinner as _);
+        ret.insert(self.container.id(), &self.container as &dyn Component);
+        ret.insert(self.ex_buffer.id(), &self.ex_buffer as &dyn Component);
+        ret.insert(
+            self.progress_spinner.id(),
+            &self.progress_spinner as &dyn Component,
+        );
         ret
     }
 
@@ -862,7 +865,7 @@ pub struct Tabbed {
 impl Tabbed {
     pub fn new(children: Vec<Box<dyn Component>>, context: &Context) -> Self {
         let pinned = children.len();
-        let mut ret = Tabbed {
+        let mut ret = Self {
             help_view: HelpView {
                 content: Screen::<Virtual>::new(),
                 curr_views: children
@@ -1565,7 +1568,7 @@ impl Component for Tabbed {
     fn children(&self) -> IndexMap<ComponentId, &dyn Component> {
         let mut ret = IndexMap::default();
         for c in &self.children {
-            ret.insert(c.id(), c as _);
+            ret.insert(c.id(), c as &dyn Component);
         }
         ret
     }

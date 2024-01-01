@@ -503,7 +503,7 @@ Alternatives(&[to_stream!(One(Literal("add-attachment")), One(Filepath)), to_str
 /// Get command suggestions for input
 pub fn command_completion_suggestions(input: &str) -> Vec<String> {
     use crate::melib::ShellExpandTrait;
-    let mut sugg = Default::default();
+    let mut sugg: HashSet<String> = Default::default();
     for (_tags, _desc, tokens, _) in COMMAND_COMPLETION.iter() {
         let _m = tokens.matches(&mut &(*input), &mut sugg);
         if _m.is_empty() {
@@ -528,17 +528,15 @@ mod tests {
         let mut input = "sort".to_string();
         macro_rules! match_input {
             ($input:expr) => {{
-                let mut sugg = Default::default();
-                let mut vec = vec![];
+                let mut sugg: HashSet<String> = Default::default();
                 //print!("{}", $input);
                 for (_tags, _desc, tokens, _) in COMMAND_COMPLETION.iter() {
-                    //println!("{:?}, {:?}, {:?}", _tags, _desc, tokens);
-                    let m = tokens.matches(&mut $input.as_str(), &mut sugg);
-                    if !m.is_empty() {
-                        vec.push(tokens);
-                        //print!("{:?} ", desc);
-                        //println!(" result = {:#?}\n\n", m);
-                    }
+                    //    //println!("{:?}, {:?}, {:?}", _tags, _desc, tokens);
+                    let _ = tokens.matches(&mut $input.as_str(), &mut sugg);
+                    //    if !m.is_empty() {
+                    //        //print!("{:?} ", desc);
+                    //        //println!(" result = {:#?}\n\n", m);
+                    //    }
                 }
                 //println!("suggestions = {:#?}", sugg);
                 sugg.into_iter()
@@ -587,7 +585,7 @@ mod tests {
             match io::stdin().read_line(&mut input) {
                 Ok(_n) => {
                     println!("Input is {:?}", input.as_str().trim());
-                    let mut sugg = Default::default();
+                    let mut sugg: HashSet<String> = Default::default();
                     let mut vec = vec![];
                     //print!("{}", input);
                     for (_tags, _desc, tokens, _) in COMMAND_COMPLETION.iter() {

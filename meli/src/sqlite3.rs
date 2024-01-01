@@ -216,7 +216,7 @@ pub async fn insert(
                     .unwrap_or_default(),
                 envelope.field_references_to_string(),
                 i64::from(envelope.flags().bits()),
-                if envelope.has_attachments() { 1 } else { 0 },
+                i32::from(envelope.has_attachments()),
                 body,
                 envelope.date().to_be_bytes().to_vec()
             ],
@@ -253,7 +253,7 @@ pub fn remove(env_hash: EnvelopeHash) -> Result<()> {
     Ok(())
 }
 
-pub fn index(context: &mut crate::state::Context, account_index: usize) -> ResultFuture<()> {
+pub fn index(context: &crate::state::Context, account_index: usize) -> ResultFuture<()> {
     let account = &context.accounts[account_index];
     let (acc_name, acc_mutex, backend_mutex): (String, Arc<RwLock<_>>, Arc<_>) = (
         account.name().to_string(),
@@ -325,7 +325,7 @@ pub fn index(context: &mut crate::state::Context, account_index: usize) -> Resul
                                 .unwrap_or_default(),
                             e.field_references_to_string(),
                             i64::from(e.flags().bits()),
-                            if e.has_attachments() { 1 } else { 0 },
+                            i32::from(e.has_attachments()),
                             body,
                             e.date().to_be_bytes().to_vec()
                         ],

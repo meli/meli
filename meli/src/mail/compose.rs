@@ -134,12 +134,12 @@ enum ViewMode {
 impl ViewMode {
     #[inline]
     fn is_edit(&self) -> bool {
-        matches!(self, ViewMode::Edit)
+        matches!(self, Self::Edit)
     }
 
     #[inline]
     fn is_edit_attachments(&self) -> bool {
-        matches!(self, ViewMode::EditAttachments { .. })
+        matches!(self, Self::EditAttachments { .. })
     }
 }
 
@@ -169,7 +169,7 @@ impl Composer {
         pager.set_show_scrollbar(true);
         let mut form = FormWidget::default();
         form.set_cursor(2);
-        Composer {
+        Self {
             reply_context: None,
             account_hash: AccountHash::default(),
             cursor: Cursor::Headers,
@@ -195,9 +195,9 @@ impl Composer {
     }
 
     pub fn with_account(account_hash: AccountHash, context: &Context) -> Self {
-        let mut ret = Composer {
+        let mut ret = Self {
             account_hash,
-            ..Composer::new(context)
+            ..Self::new(context)
         };
 
         // Add user's custom hooks.
@@ -248,7 +248,7 @@ impl Composer {
         bytes: &[u8],
         context: &Context,
     ) -> Result<Self> {
-        let mut ret = Composer::with_account(account_hash, context);
+        let mut ret = Self::with_account(account_hash, context);
         // Add user's custom hooks.
         for hook in account_settings!(context[account_hash].composing.custom_compose_hooks)
             .iter()
@@ -273,10 +273,10 @@ impl Composer {
     pub fn reply_to(
         coordinates @ (account_hash, _, _): (AccountHash, MailboxHash, EnvelopeHash),
         reply_body: String,
-        context: &mut Context,
+        context: &Context,
         reply_to_all: bool,
     ) -> Self {
-        let mut ret = Composer::with_account(account_hash, context);
+        let mut ret = Self::with_account(account_hash, context);
         // Add user's custom hooks.
         for hook in account_settings!(context[account_hash].composing.custom_compose_hooks)
             .iter()
@@ -451,9 +451,9 @@ impl Composer {
     pub fn reply_to_select(
         coordinates @ (account_hash, _, _): (AccountHash, MailboxHash, EnvelopeHash),
         reply_body: String,
-        context: &mut Context,
+        context: &Context,
     ) -> Self {
-        let mut ret = Composer::reply_to(coordinates, reply_body, context, false);
+        let mut ret = Self::reply_to(coordinates, reply_body, context, false);
         let account = &context.accounts[&account_hash];
         let parent_message = account.collection.get_env(coordinates.2);
         /* If message is from a mailing list and we detect a List-Post header, ask
@@ -499,17 +499,17 @@ impl Composer {
     pub fn reply_to_author(
         coordinates: (AccountHash, MailboxHash, EnvelopeHash),
         reply_body: String,
-        context: &mut Context,
+        context: &Context,
     ) -> Self {
-        Composer::reply_to(coordinates, reply_body, context, false)
+        Self::reply_to(coordinates, reply_body, context, false)
     }
 
     pub fn reply_to_all(
         coordinates: (AccountHash, MailboxHash, EnvelopeHash),
         reply_body: String,
-        context: &mut Context,
+        context: &Context,
     ) -> Self {
-        Composer::reply_to(coordinates, reply_body, context, true)
+        Self::reply_to(coordinates, reply_body, context, true)
     }
 
     pub fn forward(
@@ -517,9 +517,9 @@ impl Composer {
         bytes: &[u8],
         env: &Envelope,
         as_attachment: bool,
-        context: &mut Context,
+        context: &Context,
     ) -> Self {
-        let mut composer = Composer::with_account(coordinates.0, context);
+        let mut composer = Self::with_account(coordinates.0, context);
         let mut draft: Draft = Draft::default();
         draft.set_header(HeaderName::SUBJECT, format!("Fwd: {}", env.subject()));
         let preamble = format!(
@@ -1171,7 +1171,7 @@ impl Component for Composer {
             (ViewMode::Send(ref selector), UIEvent::FinishedUIDialog(id, result))
                 if selector.id() == *id =>
             {
-                if let Some(true) = result.downcast_ref::<bool>() {
+                if matches!(result.downcast_ref::<bool>(), Some(true)) {
                     self.update_draft();
                     match send_draft_async(
                         #[cfg(feature = "gpgme")]
@@ -1481,7 +1481,8 @@ impl Component for Composer {
                         ..
                     } = self;
 
-                    for err in hooks
+                    // Collect errors in a vector because filter_map borrows context
+                    let errors = hooks
                         .iter_mut()
                         .filter_map(|h| {
                             if let Err(err) = h(context, draft) {
@@ -1490,8 +1491,8 @@ impl Component for Composer {
                                 None
                             }
                         })
-                        .collect::<Vec<_>>()
-                    {
+                        .collect::<Vec<_>>();
+                    for err in errors {
                         context.replies.push_back(UIEvent::Notification {
                             title: None,
                             source: None,
@@ -2479,7 +2480,7 @@ pub fn save_draft(
 
 pub fn send_draft_async(
     #[cfg(feature = "gpgme")] gpg_state: gpg::GpgComposeState,
-    context: &mut Context,
+    context: &Context,
     account_hash: AccountHash,
     mut draft: Draft,
     mailbox_type: SpecialUsageMailbox,
@@ -2642,7 +2643,7 @@ hello world.
         let envelope =
             Envelope::from_bytes(raw_mail.as_bytes(), None).expect("Could not parse mail");
         let tempdir = tempfile::tempdir().unwrap();
-        let mut context = Context::new_mock(&tempdir);
+        let context = Context::new_mock(&tempdir);
         let account_hash = context.accounts[0].hash();
         let mailbox_hash = MailboxHash::default();
         let envelope_hash = envelope.hash();
@@ -2652,7 +2653,7 @@ hello world.
         let composer = Composer::reply_to(
             (account_hash, mailbox_hash, envelope_hash),
             String::new(),
-            &mut context,
+            &context,
             false,
         );
         assert_eq!(
@@ -2681,7 +2682,7 @@ hello world.
         let composer = Composer::reply_to(
             (account_hash, mailbox_hash, envelope_hash),
             String::new(),
-            &mut context,
+            &context,
             false,
         );
         assert_eq!(

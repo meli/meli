@@ -49,7 +49,7 @@ mod dbus {
 
     impl DbusNotifications {
         pub fn new(context: &Context) -> Self {
-            DbusNotifications {
+            Self {
                 rate_limit: RateLimit::new(
                     1000,
                     1000,
@@ -183,7 +183,7 @@ pub struct NotificationCommand {
 
 impl NotificationCommand {
     pub fn new() -> Self {
-        NotificationCommand::default()
+        Self::default()
     }
 }
 
@@ -213,12 +213,13 @@ impl Component for NotificationCommand {
                     }
                 }
 
-                let mut script = context.settings.notifications.script.as_ref();
-                if *kind == Some(NotificationType::NewMail)
+                let script = if *kind == Some(NotificationType::NewMail)
                     && context.settings.notifications.new_mail_script.is_some()
                 {
-                    script = context.settings.notifications.new_mail_script.as_ref();
-                }
+                    context.settings.notifications.new_mail_script.as_ref()
+                } else {
+                    context.settings.notifications.script.as_ref()
+                };
 
                 if let Some(ref bin) = script {
                     match Command::new(bin)

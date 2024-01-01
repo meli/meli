@@ -144,7 +144,7 @@ impl<const N: usize> Default for DataColumns<N> {
             for elem in &mut data[..] {
                 elem.write(cl());
             }
-            let ptr = &data as *const [MaybeUninit<T>; N];
+            let ptr = std::ptr::addr_of!(data);
             unsafe { (ptr as *const [T; N]).read() }
         }
 

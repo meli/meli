@@ -60,7 +60,7 @@ impl Account {
     pub(super) fn update_cached_env(&mut self, env: Envelope, old_hash: Option<EnvelopeHash>) {
         if self.settings.conf.search_backend == crate::conf::SearchBackend::Sqlite3 {
             let msg_id = env.message_id_display().to_string();
-            match crate::sqlite3::remove(old_hash.unwrap_or(env.hash()))
+            match crate::sqlite3::remove(old_hash.unwrap_or_else(|| env.hash()))
                 .map(|_| crate::sqlite3::insert(env, self.backend.clone(), self.name.clone()))
             {
                 Ok(job) => {

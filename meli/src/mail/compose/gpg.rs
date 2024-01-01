@@ -53,7 +53,7 @@ impl KeySelection {
         local: bool,
         pattern: String,
         allow_remote_lookup: ToggleFlag,
-        context: &mut Context,
+        context: &Context,
     ) -> Result<Self> {
         use melib::gpgme::*;
         let mut ctx = Context::new()?;
@@ -69,7 +69,7 @@ impl KeySelection {
             .spawn_specialized("gpg::keylist".into(), job);
         let mut progress_spinner = ProgressSpinner::new(8, context);
         progress_spinner.start();
-        Ok(KeySelection::LoadingKeys {
+        Ok(Self::LoadingKeys {
             handle,
             secret,
             local,
@@ -83,11 +83,11 @@ impl KeySelection {
 impl Component for KeySelection {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         match self {
-            KeySelection::LoadingKeys {
+            Self::LoadingKeys {
                 ref mut progress_spinner,
                 ..
             } => progress_spinner.draw(grid, area.center_inside((2, 2)), context),
-            KeySelection::Error { ref err, .. } => {
+            Self::Error { ref err, .. } => {
                 let theme_default = crate::conf::value(context, "theme_default");
                 grid.write_string(
                     &err.to_string(),
@@ -98,13 +98,13 @@ impl Component for KeySelection {
                     Some(0),
                 );
             }
-            KeySelection::Loaded { ref mut widget, .. } => widget.draw(grid, area, context),
+            Self::Loaded { ref mut widget, .. } => widget.draw(grid, area, context),
         }
     }
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         match self {
-            KeySelection::LoadingKeys {
+            Self::LoadingKeys {
                 ref mut progress_spinner,
                 ref mut handle,
                 secret,
@@ -131,10 +131,10 @@ impl Component for KeySelection {
                                         Ok(w) => {
                                             *self = w;
                                         }
-                                        Err(err) => *self = KeySelection::Error { err, id },
+                                        Err(err) => *self = Self::Error { err, id },
                                     }
                                 } else if !*local && allow_remote_lookup.is_ask() {
-                                    *self = KeySelection::Error {
+                                    *self = Self::Error {
                                         err: Error::new(format!(
                                             "No keys found for {}, perform remote lookup?",
                                             pattern
@@ -142,12 +142,12 @@ impl Component for KeySelection {
                                         id,
                                     }
                                 } else {
-                                    *self = KeySelection::Error {
+                                    *self = Self::Error {
                                         err: Error::new(format!("No keys found for {}.", pattern)),
                                         id,
                                     }
                                 }
-                                if let KeySelection::Error { ref err, .. } = self {
+                                if let Self::Error { ref err, .. } = self {
                                     context.replies.push_back(UIEvent::StatusEvent(
                                         StatusEvent::DisplayMessage(err.to_string()),
                                     ));
@@ -184,10 +184,10 @@ impl Component for KeySelection {
                                 context,
                             ));
                             widget.set_dirty(true);
-                            *self = KeySelection::Loaded { widget, keys };
+                            *self = Self::Loaded { widget, keys };
                         }
                         Ok(Some(Err(err))) => {
-                            *self = KeySelection::Error {
+                            *self = Self::Error {
                                 err,
                                 id: ComponentId::default(),
                             };
@@ -197,30 +197,30 @@ impl Component for KeySelection {
                 }
                 _ => progress_spinner.process_event(event, context),
             },
-            KeySelection::Error { .. } => false,
-            KeySelection::Loaded { ref mut widget, .. } => widget.process_event(event, context),
+            Self::Error { .. } => false,
+            Self::Loaded { ref mut widget, .. } => widget.process_event(event, context),
         }
     }
 
     fn is_dirty(&self) -> bool {
         match self {
-            KeySelection::LoadingKeys {
+            Self::LoadingKeys {
                 ref progress_spinner,
                 ..
             } => progress_spinner.is_dirty(),
-            KeySelection::Error { .. } => true,
-            KeySelection::Loaded { ref widget, .. } => widget.is_dirty(),
+            Self::Error { .. } => true,
+            Self::Loaded { ref widget, .. } => widget.is_dirty(),
         }
     }
 
     fn set_dirty(&mut self, value: bool) {
         match self {
-            KeySelection::LoadingKeys {
+            Self::LoadingKeys {
                 ref mut progress_spinner,
                 ..
             } => progress_spinner.set_dirty(value),
-            KeySelection::Error { .. } => {}
-            KeySelection::Loaded { ref mut widget, .. } => widget.set_dirty(value),
+            Self::Error { .. } => {}
+            Self::Loaded { ref mut widget, .. } => widget.set_dirty(value),
         }
     }
 
@@ -228,21 +228,19 @@ impl Component for KeySelection {
 
     fn shortcuts(&self, context: &Context) -> ShortcutMaps {
         match self {
-            KeySelection::LoadingKeys { .. } | KeySelection::Error { .. } => {
-                ShortcutMaps::default()
-            }
-            KeySelection::Loaded { ref widget, .. } => widget.shortcuts(context),
+            Self::LoadingKeys { .. } | Self::Error { .. } => ShortcutMaps::default(),
+            Self::Loaded { ref widget, .. } => widget.shortcuts(context),
         }
     }
 
     fn id(&self) -> ComponentId {
         match self {
-            KeySelection::LoadingKeys {
+            Self::LoadingKeys {
                 ref progress_spinner,
                 ..
             } => progress_spinner.id(),
-            KeySelection::Error { ref id, .. } => *id,
-            KeySelection::Loaded { ref widget, .. } => widget.id(),
+            Self::Error { ref id, .. } => *id,
+            Self::Loaded { ref widget, .. } => widget.id(),
         }
     }
 }
@@ -258,7 +256,7 @@ pub struct GpgComposeState {
 
 impl Default for GpgComposeState {
     fn default() -> Self {
-        GpgComposeState {
+        Self {
             sign_mail: ToggleFlag::Unset,
             encrypt_mail: ToggleFlag::Unset,
             encrypt_keys: vec![],

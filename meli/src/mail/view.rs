@@ -94,7 +94,7 @@ impl MailView {
         initialize_now: bool,
         context: &mut Context,
     ) -> Self {
-        let mut ret = MailView {
+        let mut ret = Self {
             coordinates,
             dirty: true,
             contact_selector: None,

@@ -41,7 +41,7 @@ impl std::fmt::Display for AccountStatus {
 }
 
 impl AccountStatus {
-    pub fn new(account_pos: usize, theme_default: ThemeAttribute) -> AccountStatus {
+    pub fn new(account_pos: usize, theme_default: ThemeAttribute) -> Self {
         let default_cell = {
             let mut ret = Cell::with_char(' ');
             ret.set_fg(theme_default.fg)
@@ -54,7 +54,7 @@ impl AccountStatus {
         content.grid_mut().set_growable(true);
         _ = content.resize(80, 20);
 
-        AccountStatus {
+        Self {
             cursor: (0, 0),
             account_pos,
             content,

@@ -39,7 +39,7 @@ impl std::fmt::Debug for TextField {
 }
 
 impl Default for TextField {
-    fn default() -> TextField {
+    fn default() -> Self {
         Self {
             inner: UText::new(String::with_capacity(256)),
             autocomplete: None,

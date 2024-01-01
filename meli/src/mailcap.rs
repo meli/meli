@@ -24,7 +24,6 @@
 //! Implements [RFC 1524 A User Agent Configuration Mechanism For Multimedia
 //! Mail Format Information](https://www.rfc-editor.org/rfc/inline-errata/rfc1524.html)
 use std::{
-    collections::HashMap,
     io::{Read, Write},
     path::PathBuf,
     process::{Command, Stdio},
@@ -77,7 +76,6 @@ impl MailcapEntry {
             }
         }
 
-        let mut hash_map = HashMap::new();
         let mut content = String::new();
 
         std::fs::File::open(mailcap_path.as_path())?.read_to_string(&mut content)?;
@@ -111,13 +109,12 @@ impl MailcapEntry {
                         }
                     }
 
-                    result = Some(MailcapEntry {
+                    result = Some(Self {
                         command: cmd.to_string(),
                         copiousoutput,
                     });
                     break;
                 }
-                hash_map.insert(key.to_string(), cmd.to_string());
             } else {
                 let mut parts_iter = l.split(';');
                 let key = parts_iter.next().unwrap();
@@ -134,25 +131,23 @@ impl MailcapEntry {
                         }
                     }
 
-                    result = Some(MailcapEntry {
+                    result = Some(Self {
                         command: cmd.to_string(),
                         copiousoutput,
                     });
                     break;
                 }
-                hash_map.insert(key.to_string(), cmd.to_string());
             }
         }
 
         match result {
             None => Err(Error::new("Not found")),
-            Some(MailcapEntry {
+            Some(Self {
                 command,
                 copiousoutput,
             }) => {
                 let parts = split_command!(command);
                 let (cmd, args) = (parts[0], &parts[1..]);
-                let mut f = None;
                 let mut needs_stdin = true;
                 let params = a.parameters();
                 /* [ref:TODO]: See mailcap(5)
@@ -173,7 +168,6 @@ impl MailcapEntry {
                                 true,
                             )?;
                             let p = _f.path().display().to_string();
-                            f = Some(_f);
                             Ok(p)
                         }
                         "%t" => Ok(a.content_type().to_string()),

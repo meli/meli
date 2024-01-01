@@ -88,7 +88,7 @@ impl ContactList {
                 index: i,
             })
             .collect();
-        ContactList {
+        Self {
             accounts,
             cursor_pos: 0,
             new_cursor_pos: 0,
@@ -112,13 +112,13 @@ impl ContactList {
     }
 
     pub fn for_account(pos: usize, context: &Context) -> Self {
-        ContactList {
+        Self {
             account_pos: pos,
             ..Self::new(context)
         }
     }
 
-    fn initialize(&mut self, context: &mut Context) {
+    fn initialize(&mut self, context: &Context) {
         self.data_columns.clear();
         let account = &context.accounts[self.account_pos];
         let book = &account.address_book;
@@ -274,7 +274,7 @@ impl ContactList {
         grid: &mut CellBuffer,
         area: Area,
         a: &AccountMenuEntry,
-        context: &mut Context,
+        context: &Context,
     ) {
         let width = area.width();
         let must_highlight_account: bool = self.account_pos == a.index;

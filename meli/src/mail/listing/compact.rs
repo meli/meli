@@ -899,7 +899,7 @@ impl std::fmt::Display for CompactListing {
 
 impl CompactListing {
     pub fn new(parent: ComponentId, coordinates: (AccountHash, MailboxHash)) -> Box<Self> {
-        Box::new(CompactListing {
+        Box::new(Self {
             cursor_pos: (AccountHash::default(), MailboxHash::default(), 0),
             new_cursor_pos: (coordinates.0, coordinates.1, 0),
             length: 0,

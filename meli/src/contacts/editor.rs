@@ -59,7 +59,7 @@ impl std::fmt::Display for ContactManager {
 impl ContactManager {
     pub fn new(context: &Context) -> Self {
         let theme_default: ThemeAttribute = crate::conf::value(context, "theme_default");
-        ContactManager {
+        Self {
             id: ComponentId::default(),
             parent_id: None,
             card: Card::new(),
@@ -227,14 +227,14 @@ impl Component for ContactManager {
                         }
                     }
                     self.set_dirty(true);
-                    if let UIEvent::InsertInput(_) = event {
+                    if matches!(event, UIEvent::InsertInput(_)) {
                         self.has_changes = true;
                     }
                     return true;
                 }
             }
             ViewMode::ReadOnly => {
-                if let &mut UIEvent::Input(Key::Esc) = event {
+                if matches!(event, UIEvent::Input(Key::Esc)) {
                     if self.can_quit_cleanly(context) {
                         self.unrealize(context);
                     }

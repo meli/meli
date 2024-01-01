@@ -667,7 +667,7 @@ impl std::fmt::Display for PlainListing {
 
 impl PlainListing {
     pub fn new(parent: ComponentId, coordinates: (AccountHash, MailboxHash)) -> Box<Self> {
-        Box::new(PlainListing {
+        Box::new(Self {
             cursor_pos: (AccountHash::default(), MailboxHash::default(), 0),
             new_cursor_pos: (coordinates.0, coordinates.1, 0),
             length: 0,

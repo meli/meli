@@ -117,12 +117,12 @@ pub enum NotificationType {
 impl std::fmt::Display for NotificationType {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match *self {
-            NotificationType::Info => write!(f, "info"),
-            NotificationType::Error(melib::error::ErrorKind::None) => write!(f, "error"),
-            NotificationType::Error(kind) => write!(f, "error: {}", kind),
-            NotificationType::NewMail => write!(f, "new mail"),
-            NotificationType::SentMail => write!(f, "sent mail"),
-            NotificationType::Saved => write!(f, "saved"),
+            Self::Info => write!(f, "info"),
+            Self::Error(melib::error::ErrorKind::None) => write!(f, "error"),
+            Self::Error(kind) => write!(f, "error: {}", kind),
+            Self::NewMail => write!(f, "new mail"),
+            Self::SentMail => write!(f, "sent mail"),
+            Self::Saved => write!(f, "saved"),
         }
     }
 }
@@ -187,7 +187,7 @@ impl std::fmt::Debug for CallbackFn {
 
 impl From<RefreshEvent> for UIEvent {
     fn from(event: RefreshEvent) -> Self {
-        UIEvent::RefreshEvent(Box::new(event))
+        Self::RefreshEvent(Box::new(event))
     }
 }
 
@@ -207,11 +207,11 @@ impl std::fmt::Display for UIMode {
             f,
             "{}",
             match *self {
-                UIMode::Normal => "NORMAL",
-                UIMode::Insert => "INSERT",
-                UIMode::Command => "COMMAND",
-                UIMode::Fork => "FORK",
-                UIMode::Embedded => "EMBEDDED",
+                Self::Normal => "NORMAL",
+                Self::Insert => "INSERT",
+                Self::Command => "COMMAND",
+                Self::Fork => "FORK",
+                Self::Embedded => "EMBEDDED",
             }
         )
     }
@@ -233,15 +233,15 @@ pub mod segment_tree {
     }
 
     impl From<SmallVec<[u8; 1024]>> for SegmentTree {
-        fn from(val: SmallVec<[u8; 1024]>) -> SegmentTree {
-            SegmentTree::new(val)
+        fn from(val: SmallVec<[u8; 1024]>) -> Self {
+            Self::new(val)
         }
     }
 
     impl SegmentTree {
-        pub fn new(val: SmallVec<[u8; 1024]>) -> SegmentTree {
+        pub fn new(val: SmallVec<[u8; 1024]>) -> Self {
             if val.is_empty() {
-                return SegmentTree {
+                return Self {
                     array: val.clone(),
                     tree: val,
                 };
@@ -262,7 +262,7 @@ pub mod segment_tree {
                 segment_tree[i] = std::cmp::max(segment_tree[2 * i], segment_tree[2 * i + 1]);
             }
 
-            SegmentTree {
+            Self {
                 array: val,
                 tree: segment_tree,
             }
@@ -348,7 +348,7 @@ pub struct RateLimit {
 
 impl RateLimit {
     pub fn new(reqs: u64, millis: u64, job_executor: Arc<JobExecutor>) -> Self {
-        RateLimit {
+        Self {
             last_tick: std::time::Instant::now(),
             timer: job_executor.create_timer(
                 std::time::Duration::from_secs(0),

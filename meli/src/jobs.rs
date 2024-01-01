@@ -176,7 +176,7 @@ impl JobExecutor {
     /// A queue that holds scheduled tasks.
     pub fn new(sender: Sender<ThreadEvent>) -> Self {
         // Create a queue.
-        let mut ret = JobExecutor {
+        let mut ret = Self {
             global_queue: Arc::new(Injector::new()),
             workers: vec![],
             parkers: vec![],
@@ -306,7 +306,7 @@ impl JobExecutor {
         )
     }
 
-    pub fn create_timer(self: Arc<JobExecutor>, interval: Duration, value: Duration) -> Timer {
+    pub fn create_timer(self: Arc<Self>, interval: Duration, value: Duration) -> Timer {
         let timer = TimerPrivate {
             interval,
             cancel: Arc::new(Mutex::new(false)),

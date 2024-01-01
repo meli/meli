@@ -160,7 +160,7 @@ impl Context {
     }
 
     pub fn is_online_idx(&mut self, account_pos: usize) -> Result<()> {
-        let Context {
+        let Self {
             ref mut accounts,
             ref mut replies,
             ..
@@ -241,7 +241,7 @@ impl Context {
         let accounts = accounts.into_iter().map(|acc| (acc.hash(), acc)).collect();
         let working = Arc::new(());
         let control = Arc::downgrade(&working);
-        Context {
+        Self {
             accounts,
             settings,
             dirty_areas: VecDeque::with_capacity(0),
@@ -410,7 +410,7 @@ impl State {
                 Screen::draw_horizontal_segment_no_color
             });
         let message_box = DisplayMessageBox::new(&screen);
-        let mut s = State {
+        let mut s = Self {
             screen,
             child: None,
             mode: UIMode::Normal,
@@ -703,7 +703,7 @@ impl State {
     }
 
     pub fn can_quit_cleanly(&mut self) -> bool {
-        let State {
+        let Self {
             ref mut components,
             ref context,
             ..
@@ -800,7 +800,7 @@ impl State {
                     });
                     return;
                 }
-                match crate::sqlite3::index(&mut self.context, account_index) {
+                match crate::sqlite3::index(&self.context, account_index) {
                     Ok(job) => {
                         let handle = self
                             .context
@@ -928,7 +928,7 @@ impl State {
                             ));
 
                             self.overlay.insert(new.id(), new);
-                        } else if let Action::ReloadConfiguration = action {
+                        } else if matches!(action, Action::ReloadConfiguration) {
                             match Settings::new().and_then(|new_settings| {
                                 let old_accounts = self
                                     .context

@@ -91,7 +91,7 @@ fn default_lookup_mechanism() -> melib::gpgme::LocateKey {
 
 impl Default for PGPSettings {
     fn default() -> Self {
-        PGPSettings {
+        Self {
             auto_verify_signatures: true,
             auto_decrypt: true,
             auto_sign: false,

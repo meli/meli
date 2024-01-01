@@ -24,7 +24,7 @@ use melib::{text::Truncate, Envelope, Error, Mail, Result};
 use super::{EnvelopeView, MailView, ViewSettings};
 use crate::{jobs::JoinHandle, mailbox_settings, Component, Context, ShortcutMaps, UIEvent};
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PendingReplyAction {
     Reply,
     ReplyToAuthor,
@@ -149,7 +149,7 @@ impl MailViewState {
             }),
             context.main_loop_handler.clone(),
         ));
-        self_.state = MailViewState::Loaded {
+        self_.state = Self::Loaded {
             env,
             bytes,
             env_view,
@@ -192,7 +192,7 @@ impl MailViewState {
 
 impl Default for MailViewState {
     fn default() -> Self {
-        MailViewState::Init {
+        Self::Init {
             pending_action: None,
         }
     }

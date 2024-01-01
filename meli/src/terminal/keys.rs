@@ -173,31 +173,31 @@ impl std::fmt::Display for Key {
 
 impl<'a> From<&'a String> for Key {
     fn from(v: &'a String) -> Self {
-        Key::Paste(v.to_string())
+        Self::Paste(v.to_string())
     }
 }
 
 impl From<TermionKey> for Key {
     fn from(k: TermionKey) -> Self {
         match k {
-            TermionKey::Backspace => Key::Backspace,
-            TermionKey::Left => Key::Left,
-            TermionKey::Right => Key::Right,
-            TermionKey::Up => Key::Up,
-            TermionKey::Down => Key::Down,
-            TermionKey::Home => Key::Home,
-            TermionKey::End => Key::End,
-            TermionKey::PageUp => Key::PageUp,
-            TermionKey::PageDown => Key::PageDown,
-            TermionKey::Delete => Key::Delete,
-            TermionKey::Insert => Key::Insert,
-            TermionKey::F(u) => Key::F(u),
-            TermionKey::Char(c) => Key::Char(c),
-            TermionKey::Alt(c) => Key::Alt(c),
-            TermionKey::Ctrl(c) => Key::Ctrl(c),
-            TermionKey::Null => Key::Null,
-            TermionKey::Esc => Key::Esc,
-            _ => Key::Char(' '),
+            TermionKey::Backspace => Self::Backspace,
+            TermionKey::Left => Self::Left,
+            TermionKey::Right => Self::Right,
+            TermionKey::Up => Self::Up,
+            TermionKey::Down => Self::Down,
+            TermionKey::Home => Self::Home,
+            TermionKey::End => Self::End,
+            TermionKey::PageUp => Self::PageUp,
+            TermionKey::PageDown => Self::PageDown,
+            TermionKey::Delete => Self::Delete,
+            TermionKey::Insert => Self::Insert,
+            TermionKey::F(u) => Self::F(u),
+            TermionKey::Char(c) => Self::Char(c),
+            TermionKey::Alt(c) => Self::Alt(c),
+            TermionKey::Ctrl(c) => Self::Ctrl(c),
+            TermionKey::Null => Self::Null,
+            TermionKey::Esc => Self::Esc,
+            _ => Self::Char(' '),
         }
     }
 }
@@ -399,27 +399,27 @@ impl Serialize for Key {
         S: Serializer,
     {
         match self {
-            Key::Backspace => serializer.serialize_str("Backspace"),
-            Key::Left => serializer.serialize_str("Left"),
-            Key::Right => serializer.serialize_str("Right"),
-            Key::Up => serializer.serialize_str("Up"),
-            Key::Down => serializer.serialize_str("Down"),
-            Key::Home => serializer.serialize_str("Home"),
-            Key::End => serializer.serialize_str("End"),
-            Key::PageUp => serializer.serialize_str("PageUp"),
-            Key::PageDown => serializer.serialize_str("PageDown"),
-            Key::Delete => serializer.serialize_str("Delete"),
-            Key::Insert => serializer.serialize_str("Insert"),
-            Key::Esc => serializer.serialize_str("Esc"),
-            Key::Char('\n') => serializer.serialize_str("Enter"),
-            Key::Char('\t') => serializer.serialize_str("Tab"),
-            Key::Char(c) => serializer.serialize_char(*c),
-            Key::F(n) => serializer.serialize_str(&format!("F{}", n)),
-            Key::Alt(c) => serializer.serialize_str(&format!("M-{}", c)),
-            Key::Ctrl(c) => serializer.serialize_str(&format!("C-{}", c)),
-            Key::Null => serializer.serialize_str("Null"),
-            Key::Mouse(mev) => mev.serialize(serializer),
-            Key::Paste(s) => serializer.serialize_str(s),
+            Self::Backspace => serializer.serialize_str("Backspace"),
+            Self::Left => serializer.serialize_str("Left"),
+            Self::Right => serializer.serialize_str("Right"),
+            Self::Up => serializer.serialize_str("Up"),
+            Self::Down => serializer.serialize_str("Down"),
+            Self::Home => serializer.serialize_str("Home"),
+            Self::End => serializer.serialize_str("End"),
+            Self::PageUp => serializer.serialize_str("PageUp"),
+            Self::PageDown => serializer.serialize_str("PageDown"),
+            Self::Delete => serializer.serialize_str("Delete"),
+            Self::Insert => serializer.serialize_str("Insert"),
+            Self::Esc => serializer.serialize_str("Esc"),
+            Self::Char('\n') => serializer.serialize_str("Enter"),
+            Self::Char('\t') => serializer.serialize_str("Tab"),
+            Self::Char(c) => serializer.serialize_char(*c),
+            Self::F(n) => serializer.serialize_str(&format!("F{}", n)),
+            Self::Alt(c) => serializer.serialize_str(&format!("M-{}", c)),
+            Self::Ctrl(c) => serializer.serialize_str(&format!("C-{}", c)),
+            Self::Null => serializer.serialize_str("Null"),
+            Self::Mouse(mev) => mev.serialize(serializer),
+            Self::Paste(s) => serializer.serialize_str(s),
         }
     }
 }

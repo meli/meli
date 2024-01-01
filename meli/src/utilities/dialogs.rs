@@ -94,7 +94,7 @@ impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static 
 impl<T: 'static + PartialEq + std::fmt::Debug + Clone + Sync + Send, F: 'static + Sync + Send>
     PartialEq for Selector<T, F>
 {
-    fn eq(&self, other: &Selector<T, F>) -> bool {
+    fn eq(&self, other: &Self) -> bool {
         self.entries == other.entries
     }
 }

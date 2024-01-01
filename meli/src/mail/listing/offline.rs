@@ -119,7 +119,7 @@ impl std::fmt::Display for OfflineListing {
 
 impl OfflineListing {
     pub fn new(cursor_pos: (AccountHash, MailboxHash)) -> Box<Self> {
-        Box::new(OfflineListing {
+        Box::new(Self {
             cursor_pos,
             _row_updates: SmallVec::new(),
             _selection: HashMap::default(),

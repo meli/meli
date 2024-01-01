@@ -37,7 +37,7 @@ impl std::fmt::Display for SVGScreenshotFilter {
 
 impl SVGScreenshotFilter {
     pub fn new() -> Self {
-        SVGScreenshotFilter {
+        Self {
             save_screenshot: false,
             id: ComponentId::default(),
         }
@@ -431,20 +431,22 @@ impl Component for SVGScreenshotFilter {
             kind: None,
         });
     }
+
     fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {
-        if let UIEvent::Input(Key::F(6)) = event {
+        if matches!(
+            event,
+            UIEvent::Input(Key::F(6)) | UIEvent::CmdInput(Key::F(6))
+        ) {
             self.save_screenshot = true;
             true
-        } else if let UIEvent::CmdInput(Key::F(6)) = event {
-            self.save_screenshot = true;
-            true
-        } else if let UIEvent::EmbeddedInput((Key::F(6), _)) = event {
+        } else if matches!(event, UIEvent::EmbeddedInput((Key::F(6), _))) {
             self.save_screenshot = true;
             false
         } else {
             false
         }
     }
+
     fn set_dirty(&mut self, _value: bool) {}
 
     fn is_dirty(&self) -> bool {

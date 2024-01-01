@@ -314,7 +314,7 @@ impl EmbeddedGrid {
 
     pub fn process_byte(&mut self, stdin: &mut std::fs::File, byte: u8) {
         let area = self.area();
-        let EmbeddedGrid {
+        let Self {
             ref mut cursor,
             ref mut scroll_region,
             ref mut terminal_size,

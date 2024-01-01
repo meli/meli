@@ -76,7 +76,7 @@ impl std::fmt::Display for ViewFilter {
 }
 
 impl ViewFilter {
-    pub fn new_html(body: &Attachment, context: &mut Context) -> Result<Self> {
+    pub fn new_html(body: &Attachment, context: &Context) -> Result<Self> {
         fn run(cmd: &str, args: &[&str], bytes: &[u8]) -> Result<String> {
             let mut html_filter = Command::new(cmd)
                 .args(args)
@@ -306,11 +306,7 @@ impl ViewFilter {
         })
     }
 
-    fn html_process_event(
-        _self: &mut ViewFilter,
-        event: &mut UIEvent,
-        context: &mut Context,
-    ) -> bool {
+    fn html_process_event(_self: &mut Self, event: &mut UIEvent, context: &mut Context) -> bool {
         if matches!(event, UIEvent::Input(key) if *key == context.settings.shortcuts.envelope_view.open_html)
         {
             let command = context
@@ -346,9 +342,9 @@ impl ViewFilter {
                         ))
                     }) {
                     Ok((p, child)) => {
-                        context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::UpdateSubStatus(command.to_string()),
-                        ));
+                        context
+                            .replies
+                            .push_back(UIEvent::StatusEvent(StatusEvent::UpdateSubStatus(command)));
                         context.temp_files.push(p);
                         context.children.push(child);
                     }

@@ -526,7 +526,7 @@ pub trait MailListingTrait: ListingTrait {
             match a {
                 ListingAction::SetSeen => {
                     if let Err(err) = account.set_flags(
-                        env_hashes.clone(),
+                        env_hashes,
                         mailbox_hash,
                         smallvec::smallvec![FlagOp::Set(Flag::SEEN)],
                     ) {
@@ -537,7 +537,7 @@ pub trait MailListingTrait: ListingTrait {
                 }
                 ListingAction::SetUnseen => {
                     if let Err(err) = account.set_flags(
-                        env_hashes.clone(),
+                        env_hashes,
                         mailbox_hash,
                         smallvec::smallvec![FlagOp::UnSet(Flag::SEEN)],
                     ) {
@@ -548,7 +548,7 @@ pub trait MailListingTrait: ListingTrait {
                 }
                 ListingAction::Tag(TagAction::Add(ref tag_str)) => {
                     if let Err(err) = account.set_flags(
-                        env_hashes.clone(),
+                        env_hashes,
                         mailbox_hash,
                         smallvec::smallvec![FlagOp::SetTag(tag_str.into())],
                     ) {
@@ -559,7 +559,7 @@ pub trait MailListingTrait: ListingTrait {
                 }
                 ListingAction::Tag(TagAction::Remove(ref tag_str)) => {
                     if let Err(err) = account.set_flags(
-                        env_hashes.clone(),
+                        env_hashes,
                         mailbox_hash,
                         smallvec::smallvec![FlagOp::UnSetTag(tag_str.into())],
                     ) {
@@ -972,11 +972,11 @@ enum MenuEntryCursor {
 }
 
 impl std::ops::Sub<MenuEntryCursor> for isize {
-    type Output = isize;
+    type Output = Self;
 
-    fn sub(self, other: MenuEntryCursor) -> isize {
+    fn sub(self, other: MenuEntryCursor) -> Self {
         if let MenuEntryCursor::Mailbox(v) = other {
-            v as isize - self
+            v as Self - self
         } else {
             self - 1
         }
@@ -2497,7 +2497,7 @@ impl Listing {
             })
             .collect();
         let first_account_hash = account_entries[0].hash;
-        let mut ret = Listing {
+        let mut ret = Self {
             component: Offline(OfflineListing::new((
                 first_account_hash,
                 MailboxHash::default(),
@@ -2635,7 +2635,7 @@ impl Listing {
     }
 
     /// Print a single account in the menu area.
-    fn print_account(&mut self, mut area: Area, aidx: usize, context: &mut Context) -> usize {
+    fn print_account(&mut self, mut area: Area, aidx: usize, context: &Context) -> usize {
         let account_y = self.menu.area().height() - area.height();
         #[derive(Clone, Copy, Debug)]
         struct Line {

@@ -19,7 +19,47 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#![deny(rustdoc::redundant_explicit_links)]
+#![deny(
+    rustdoc::redundant_explicit_links,
+    /* groups */
+    clippy::correctness,
+    clippy::suspicious,
+    clippy::complexity,
+    clippy::perf,
+    clippy::cargo,
+    clippy::nursery,
+    clippy::style,
+    /* restriction */
+    clippy::dbg_macro,
+    clippy::rc_buffer,
+    clippy::as_underscore,
+    clippy::assertions_on_result_states,
+    /* rustdoc */
+    rustdoc::broken_intra_doc_links,
+    /* pedantic */
+    //clippy::cast_lossless,
+    //clippy::cast_possible_wrap,
+    //clippy::ptr_as_ptr,
+    clippy::bool_to_int_with_if,
+    clippy::borrow_as_ptr,
+    clippy::cast_ptr_alignment,
+    clippy::large_futures,
+    clippy::waker_clone_wake,
+    clippy::unused_enumerate_index,
+    clippy::unnecessary_fallible_conversions,
+    clippy::struct_field_names,
+    clippy::manual_hash_one,
+    clippy::into_iter_without_iter,
+)]
+#![allow(
+    clippy::option_if_let_else,
+    clippy::missing_const_for_fn,
+    clippy::significant_drop_tightening,
+    clippy::multiple_crate_versions,
+    clippy::significant_drop_in_scrutinee,
+    clippy::cognitive_complexity,
+    clippy::manual_clamp
+)]
 
 //!
 //!  This crate contains the frontend stuff of the application. The application

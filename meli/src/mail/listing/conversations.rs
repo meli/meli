@@ -793,7 +793,7 @@ impl ConversationsListing {
                 if thread.has_attachments() { "📎" } else { "" },
                 if thread.snoozed() { "💤" } else { "" }
             )),
-            from: FromString(Address::display_name_slice(from).to_string()),
+            from: FromString(Address::display_name_slice(from)),
             tags: TagString(tags_string, colors),
         }
     }

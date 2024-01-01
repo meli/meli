@@ -86,7 +86,7 @@ impl ThreadView {
         focus: Option<ThreadViewFocus>,
         context: &mut Context,
     ) -> Self {
-        let mut view = ThreadView {
+        let mut view = Self {
             reversed: false,
             coordinates,
             thread_group,
@@ -147,10 +147,8 @@ impl ThreadView {
             {
                 self.entries[new_cursor].hidden = old_entries[old_cursor].hidden;
                 old_cursor += 1;
-                new_cursor += 1;
-            } else {
-                new_cursor += 1;
             }
+            new_cursor += 1;
             self.recalc_visible_entries();
         }
 
@@ -898,7 +896,10 @@ impl Component for ThreadView {
     }
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
-        if let (UIEvent::Action(Listing(OpenInNewTab)), false) = (&event, self.entries.is_empty()) {
+        if matches!(
+            (&event, self.entries.is_empty()),
+            (UIEvent::Action(Listing(OpenInNewTab)), false)
+        ) {
             // Handle this before self.mailview does
             let mut new_tab = Self::new(
                 self.coordinates,

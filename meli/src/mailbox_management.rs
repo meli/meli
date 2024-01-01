@@ -96,7 +96,7 @@ impl MailboxManager {
         let theme_default = crate::conf::value(context, "theme_default");
         let mut data_columns = DataColumns::default();
         data_columns.theme_config.set_single_theme(theme_default);
-        MailboxManager {
+        Self {
             cursor_pos: 0,
             new_cursor_pos: 0,
             account_hash,
@@ -117,7 +117,7 @@ impl MailboxManager {
         }
     }
 
-    fn initialize(&mut self, context: &mut Context) {
+    fn initialize(&mut self, context: &Context) {
         let account = &context.accounts[self.account_pos];
         self.length = account.mailbox_entries.len();
         let mut entries = account.mailbox_entries.clone();

@@ -141,13 +141,13 @@ pub fn encrypt_filter(
                             Default::default(),
                             ctx.encrypt(sign_keys, encrypt_keys, data)?.await?,
                         );
-                        a.content_disposition = ContentDisposition::from(r#"attachment; filename="msg.asc""#.as_bytes());
+                        a.content_disposition = ContentDisposition::from(br#"attachment; filename="msg.asc""#);
                         a
                 };
-                let mut a: AttachmentBuilder = AttachmentBuilder::new("Version: 1\n".as_bytes());
+                let mut a: AttachmentBuilder = AttachmentBuilder::new(b"Version: 1\n");
 
-                a.set_content_type_from_bytes("application/pgp-encrypted".as_bytes());
-                a.set_content_disposition(ContentDisposition::from("attachment".as_bytes()));
+                a.set_content_type_from_bytes(b"application/pgp-encrypted");
+                a.set_content_disposition(ContentDisposition::from(b"attachment"));
                 let parts = vec![a, sig_attachment.into()];
                 let boundary = ContentType::make_boundary(&parts);
                 Ok(Attachment::new(
