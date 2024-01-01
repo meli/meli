@@ -222,8 +222,9 @@ impl std::fmt::Display for MultipartType {
     }
 }
 
-impl From<&[u8]> for MultipartType {
-    fn from(val: &[u8]) -> Self {
+impl<B: AsRef<[u8]>> From<B> for MultipartType {
+    fn from(val: B) -> Self {
+        let val = val.as_ref();
         if val.eq_ignore_ascii_case(b"mixed") {
             Self::Mixed
         } else if val.eq_ignore_ascii_case(b"alternative") {
@@ -488,8 +489,9 @@ impl std::fmt::Display for ContentTransferEncoding {
         }
     }
 }
-impl From<&[u8]> for ContentTransferEncoding {
-    fn from(val: &[u8]) -> Self {
+impl<B: AsRef<[u8]>> From<B> for ContentTransferEncoding {
+    fn from(val: B) -> Self {
+        let val = val.as_ref();
         if val.eq_ignore_ascii_case(b"base64") {
             Self::Base64
         } else if val.eq_ignore_ascii_case(b"7bit") {
@@ -542,8 +544,9 @@ impl std::fmt::Display for ContentDispositionKind {
         }
     }
 }
-impl From<&[u8]> for ContentDisposition {
-    fn from(val: &[u8]) -> Self {
+impl<B: AsRef<[u8]>> From<B> for ContentDisposition {
+    fn from(val: B) -> Self {
+        let val = val.as_ref();
         crate::email::parser::attachments::content_disposition(val)
             .map(|(_, v)| v)
             .unwrap_or_default()

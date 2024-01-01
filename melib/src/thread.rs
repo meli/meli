@@ -74,8 +74,9 @@ macro_rules! uuid_hash_type {
             }
         }
 
-        impl From<&[u8]> for $n {
-            fn from(val: &[u8]) -> Self {
+        impl<B: AsRef<[u8]>> From<B> for $n {
+            fn from(val: B) -> Self {
+                let val = val.as_ref();
                 $n(Uuid::new_v5(&Uuid::NAMESPACE_URL, val))
             }
         }
