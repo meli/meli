@@ -42,7 +42,7 @@ fn test_build_draft() {
 
     let raw = raw.replace(boundary_str, "");
 
-    let mut gz = GzDecoder::new(include_bytes!("./data/generated_email.eml.gz").as_slice());
+    let mut gz = GzDecoder::new(include_bytes!("../data/generated_email.eml.gz").as_slice());
     let mut s = String::new();
     gz.read_to_string(&mut s).unwrap();
 
