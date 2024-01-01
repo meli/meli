@@ -941,6 +941,7 @@ impl CompactListing {
     ) -> EntryStrings {
         let thread = threads.thread_ref(hash);
         let mut tags_string = String::new();
+        let flags = root_envelope.flags();
         let mut colors: SmallVec<[_; 8]> = SmallVec::new();
         let account = &context.accounts[&self.cursor_pos.0];
         if account.backend_capabilities.supports_tags {
@@ -1004,7 +1005,26 @@ impl CompactListing {
                 SubjectString(subject)
             },
             flag: FlagString(format!(
-                "{selected}{snoozed}{unseen}{attachments}{whitespace}",
+                "{flag_passed}{flag_replied}{flag_seen}{flag_trashed}{flag_draft}{flag_flagged} \
+                 {selected}{snoozed}{unseen}{attachments}{whitespace}",
+                flag_passed = Some("P")
+                    .filter(|_| flags.contains(Flag::PASSED))
+                    .unwrap_or_default(),
+                flag_replied = Some("R")
+                    .filter(|_| flags.contains(Flag::REPLIED))
+                    .unwrap_or_default(),
+                flag_seen = Some("S")
+                    .filter(|_| flags.contains(Flag::SEEN))
+                    .unwrap_or_default(),
+                flag_trashed = Some("T")
+                    .filter(|_| flags.contains(Flag::TRASHED))
+                    .unwrap_or_default(),
+                flag_draft = Some("D")
+                    .filter(|_| flags.contains(Flag::DRAFT))
+                    .unwrap_or_default(),
+                flag_flagged = Some("F")
+                    .filter(|_| flags.contains(Flag::FLAGGED))
+                    .unwrap_or_default(),
                 selected = if self
                     .rows
                     .selection

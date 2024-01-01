@@ -524,7 +524,7 @@ pub trait MailListingTrait: ListingTrait {
             };
             let account = &mut context.accounts[&account_hash];
             match a {
-                ListingAction::SetSeen => {
+                ListingAction::Flag(FlagAction::Set(Flag::SEEN)) | ListingAction::SetSeen => {
                     if let Err(err) = account.set_flags(
                         env_hashes,
                         mailbox_hash,
@@ -535,11 +535,33 @@ pub trait MailListingTrait: ListingTrait {
                         ));
                     }
                 }
-                ListingAction::SetUnseen => {
+                ListingAction::Flag(FlagAction::Unset(Flag::SEEN)) | ListingAction::SetUnseen => {
                     if let Err(err) = account.set_flags(
                         env_hashes,
                         mailbox_hash,
                         smallvec::smallvec![FlagOp::UnSet(Flag::SEEN)],
+                    ) {
+                        context.replies.push_back(UIEvent::StatusEvent(
+                            StatusEvent::DisplayMessage(err.to_string()),
+                        ));
+                    }
+                }
+                ListingAction::Flag(FlagAction::Set(flag)) => {
+                    if let Err(err) = account.set_flags(
+                        env_hashes,
+                        mailbox_hash,
+                        smallvec::smallvec![FlagOp::Set(*flag)],
+                    ) {
+                        context.replies.push_back(UIEvent::StatusEvent(
+                            StatusEvent::DisplayMessage(err.to_string()),
+                        ));
+                    }
+                }
+                ListingAction::Flag(FlagAction::Unset(flag)) => {
+                    if let Err(err) = account.set_flags(
+                        env_hashes,
+                        mailbox_hash,
+                        smallvec::smallvec![FlagOp::UnSet(*flag)],
                     ) {
                         context.replies.push_back(UIEvent::StatusEvent(
                             StatusEvent::DisplayMessage(err.to_string()),
@@ -1635,6 +1657,7 @@ impl Component for Listing {
                         | Action::Listing(a @ ListingAction::CopyToOtherAccount(_, _))
                         | Action::Listing(a @ ListingAction::MoveToOtherAccount(_, _))
                         | Action::Listing(a @ ListingAction::ExportMbox(_, _))
+                        | Action::Listing(a @ ListingAction::Flag(_))
                         | Action::Listing(a @ ListingAction::Tag(_)) => {
                             let focused = self.component.get_focused_items(context);
                             self.component.perform_action(context, focused, a);

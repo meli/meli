@@ -265,6 +265,13 @@ Sqlite3 on the contrary at reasonable mailbox sizes should have a non noticable 
 .It
 .Li flags = \&"flags:\&" flag | \&"tags:\&" flag | \&"is:\&" flag
 .El
+.Sh FLAGS
+.Nm
+supports the basic maildir flags: passed, replied, seen, trashed, draft and flagged.
+Flags can be searched with the `flags:` prefix in a search query, and can be modified by
+.Command flag set FLAG
+and
+.Command flag unset FLAG
 .Sh TAGS
 .Nm
 supports tagging in notmuch and IMAP/JMAP backends.
