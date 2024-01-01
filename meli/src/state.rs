@@ -839,7 +839,7 @@ impl State {
                     title: None,
                     source: None,
                     body: "Message index rebuild failed: meli is not built with sqlite3 support."
-                        .to_string(),
+                        .into(),
                     kind: Some(NotificationType::Error(ErrorKind::None)),
                 });
             }

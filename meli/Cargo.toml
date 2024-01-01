@@ -31,7 +31,7 @@ indexmap = { version = "^1.6", features = ["serde-1"] }
 libc = { version = "0.2.125", default-features = false, features = ["extra_traits"] }
 libz-sys = { version = "1.1", features = ["static"], optional = true }
 linkify = { version = "^0.8", default-features = false }
-melib = { path = "../melib", version = "0.8.5-rc.3" }
+melib = { path = "../melib", version = "0.8.5-rc.3", features = ["unicode-algorithms"] }
 nix = { version = "^0.24", default-features = false }
 notify = { version = "4.0.1", default-features = false } # >:c
 num_cpus = "1.12.0"
@@ -54,7 +54,7 @@ version = "0.2.3"
 optional = true
 
 [features]
-default = ["sqlite3", "notmuch", "smtp", "dbus-notifications", "gpgme", "cli-docs", "jmap", "text-processing", "static"]
+default = ["sqlite3", "notmuch", "smtp", "dbus-notifications", "gpgme", "cli-docs", "jmap", "static"]
 notmuch = ["melib/notmuch"]
 jmap = ["melib/jmap"]
 sqlite3 = ["melib/sqlite3"]
@@ -64,7 +64,6 @@ regexp = ["dep:pcre2"]
 dbus-notifications = ["dep:notify-rust"]
 cli-docs = ["dep:flate2"]
 svgscreenshot = ["dep:svg_crate"]
-text-processing = ["melib/unicode-algorithms"]
 gpgme = ["melib/gpgme"]
 # Static / vendoring features.
 tls-static = ["melib/tls-static"]

@@ -101,6 +101,11 @@ fn run_app(opt: Opt) -> Result<()> {
         Some(SubCommand::EditConfig) => {
             return subcommands::edit_config();
         }
+        #[cfg(not(feature = "cli-docs"))]
+        Some(SubCommand::Man(ManOpt {})) => {
+            return Err(Error::new("error: this version of meli was not build with embedded documentation (cargo feature `cli-docs`). You might have it installed as manpages (eg `man meli`), otherwise check https://meli-email.org"));
+        }
+        #[cfg(feature = "cli-docs")]
         Some(SubCommand::Man(ManOpt { page, no_raw })) => {
             return subcommands::man(page, false).and_then(|s| subcommands::pager(s, no_raw));
         }
@@ -133,6 +138,13 @@ fn run_app(opt: Opt) -> Result<()> {
             println!("{}", temp_dir.display());
             return Ok(());
         }
+        #[cfg(not(feature = "cli-docs"))]
+        Some(SubCommand::InstallMan {
+            destination_path: _,
+        }) => {
+            return Err(Error::new("error: this version of meli was not build with embedded documentation (cargo feature `cli-docs`). You might have it installed as manpages (eg `man meli`), otherwise check https://meli-email.org"));
+        }
+        #[cfg(feature = "cli-docs")]
         Some(SubCommand::InstallMan { destination_path }) => {
             match args::manpages::ManPages::install(destination_path) {
                 Ok(p) => println!("Installed at {}.", p.display()),

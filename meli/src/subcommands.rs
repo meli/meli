@@ -134,7 +134,7 @@ pub fn pager(v: String, no_raw: Option<Option<bool>>) -> Result<()> {
 
 #[cfg(not(feature = "cli-docs"))]
 pub fn man(_: ManOpt) -> Result<()> {
-    Err(Error::new("error: this version of meli was not build with embedded documentation (cargo feature `cli-docs`). You might have it installed as manpages (eg `man meli`), otherwise check https://meli.delivery"))
+    Err(Error::new("error: this version of meli was not build with embedded documentation (cargo feature `cli-docs`). You might have it installed as manpages (eg `man meli`), otherwise check https://meli-email.org"))
 }
 
 pub fn compiled_with() -> Result<()> {

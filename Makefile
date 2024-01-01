@@ -24,6 +24,7 @@ TAGREF_BIN ?= tagref
 CARGO_ARGS ?=
 RUSTFLAGS ?= -D warnings -W unreachable-pub -W rust-2021-compatibility
 CARGO_SORT_BIN = cargo-sort
+CARGO_HACK_BIN = cargo-hack
 PRINTF = /usr/bin/printf
 
 # Options
@@ -118,6 +119,10 @@ test: test-docs
 .PHONY: test-docs
 test-docs:
 	@RUSTFLAGS='${RUSTFLAGS}' ${CARGO_BIN} test ${CARGO_ARGS} ${CARGO_COLOR}--target-dir="${CARGO_TARGET_DIR}" --all --doc
+
+.PHONY: test-feature-permutations
+test-feature-permutations:
+	$(CARGO_HACK_BIN) hack --feature-powerset
 
 .PHONY: check-deps
 check-deps:
