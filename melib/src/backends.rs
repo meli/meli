@@ -761,6 +761,11 @@ impl LazyCountSet {
     pub fn remove(&mut self, env_hash: EnvelopeHash) -> bool {
         self.set.remove(&env_hash)
     }
+
+    #[inline(always)]
+    pub fn contains(&self, value: &EnvelopeHash) -> bool {
+        self.set.contains(value)
+    }
 }
 
 pub struct IsSubscribedFn(pub Box<dyn Fn(&str) -> bool + Send + Sync>);
