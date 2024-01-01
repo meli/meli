@@ -5,7 +5,7 @@ env:
   CARGO_INCREMENTAL: 0
   CARGO_NET_RETRY: 10
   CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
-  RUSTFLAGS: "-D warnings -W unreachable-pub -W rust-2021-compatibility"
+  RUSTFLAGS: "-D warnings -W unreachable-pub -W rust-2021-compatibility -C debuginfo=0"
   RUSTUP_MAX_RETRIES: 10
   RUST_BACKTRACE: short
 

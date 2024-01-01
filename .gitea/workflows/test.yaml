@@ -5,7 +5,7 @@ env:
   CARGO_INCREMENTAL: 0
   CARGO_NET_RETRY: 10
   CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
-  RUSTFLAGS: "-D warnings -W unreachable-pub -W rust-2021-compatibility"
+  RUSTFLAGS: "-D warnings -W unreachable-pub -W rust-2021-compatibility -C debuginfo=0"
   RUSTUP_MAX_RETRIES: 10
   RUST_BACKTRACE: short
 
@@ -90,11 +90,14 @@ jobs:
         if: success() || failure()
         run: cargo test --all --no-fail-fast --all-features --no-run --locked
       - name: cargo test
-        if: success() || failure() # always run even if other steps fail, except when cancelled <https://stackoverflow.com/questions/58858429/how-to-run-a-github-actions-step-even-if-the-previous-step-fails-while-still-f>
         run: |
           cargo nextest run --all --no-fail-fast --all-features --future-incompat-report -E 'not (test(smtp::test::test_smtp))'
           #cargo test --all --no-fail-fast --all-features -- --nocapture --quiet
       - name: rustdoc build
-        if: success() || failure()
+        if: success() || failure() # always run even if other steps fail, except when cancelled <https://stackoverflow.com/questions/58858429/how-to-run-a-github-actions-step-even-if-the-previous-step-fails-while-still-f>
         run: |
           make build-rustdoc
+      - name: rustdoc tests
+        if: success() || failure()
+        run: |
+          make test-docs
