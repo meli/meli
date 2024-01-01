@@ -849,8 +849,8 @@ impl MailBackend for ImapType {
                     .await?;
                 if set_unseen {
                     for f in uid_store.mailboxes.lock().await.values() {
-                        if let Ok(mut unseen) = f.unseen.lock() {
-                            for env_hash in env_hashes.iter() {
+                        if let (Ok(mut unseen), Ok(exists)) = (f.unseen.lock(), f.exists.lock()) {
+                            for env_hash in env_hashes.iter().filter(|h| exists.contains(h)) {
                                 unseen.insert_new(env_hash);
                             }
                         };
