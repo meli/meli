@@ -120,35 +120,46 @@ impl ImapConnection {
                         .lock()
                         .unwrap()
                         .iter()
-                        .filter(|((mailbox_hash_, u), _)| {
-                            *mailbox_hash_ == mailbox_hash && !results.contains(u)
-                        })
+                        .filter(|((_, u), _)| !results.contains(u))
                         .map(|((_, uid), hash)| (*uid, *hash))
                         .collect::<Vec<(UID, crate::email::EnvelopeHash)>>();
+                    let mut mboxes_to_update = vec![];
                     for (deleted_uid, deleted_hash) in deleteds {
-                        mailbox.exists.lock().unwrap().remove(deleted_hash);
-                        mailbox.unseen.lock().unwrap().remove(deleted_hash);
-                        self.uid_store
-                            .uid_index
-                            .lock()
-                            .unwrap()
-                            .remove(&(mailbox_hash, deleted_uid));
-                        self.uid_store
-                            .hash_index
-                            .lock()
-                            .unwrap()
-                            .remove(&deleted_hash);
-                        events.push((
-                            deleted_uid,
-                            RefreshEvent {
-                                account_hash: self.uid_store.account_hash,
-                                mailbox_hash,
-                                kind: Remove(deleted_hash),
-                            },
-                        ));
+                        for (mailbox_hash, mbx) in self.uid_store.mailboxes.lock().await.iter_mut()
+                        {
+                            mbx.exists.lock().unwrap().remove(deleted_hash);
+                            mbx.unseen.lock().unwrap().remove(deleted_hash);
+                            let mut existed = self
+                                .uid_store
+                                .uid_index
+                                .lock()
+                                .unwrap()
+                                .remove(&(*mailbox_hash, deleted_uid))
+                                .is_some();
+                            existed |= self
+                                .uid_store
+                                .hash_index
+                                .lock()
+                                .unwrap()
+                                .remove(&deleted_hash)
+                                .is_some();
+                            if existed {
+                                mboxes_to_update.push(*mailbox_hash);
+                                events.push((
+                                    deleted_uid,
+                                    RefreshEvent {
+                                        account_hash: self.uid_store.account_hash,
+                                        mailbox_hash: *mailbox_hash,
+                                        kind: Remove(deleted_hash),
+                                    },
+                                ));
+                            }
+                        }
                     }
                     if *self.uid_store.keep_offline_cache.lock().unwrap() {
-                        cache_handle.update(mailbox_hash, &events)?;
+                        for mailbox_hash in mboxes_to_update {
+                            cache_handle.update(mailbox_hash, &events)?;
+                        }
                     }
                     for (_, event) in events {
                         self.add_refresh_event(event);
@@ -175,32 +186,41 @@ impl ImapConnection {
                     Some(v) => v,
                     None => return Ok(true),
                 };
-                mailbox.exists.lock().unwrap().remove(deleted_hash);
-                mailbox.unseen.lock().unwrap().remove(deleted_hash);
+                let mut mboxes_to_update = vec![];
+                for (mailbox_hash, mbx) in self.uid_store.mailboxes.lock().await.iter_mut() {
+                    if mbx.exists.lock().unwrap().remove(deleted_hash) {
+                        mboxes_to_update.push(*mailbox_hash);
+                    }
+                    mbx.unseen.lock().unwrap().remove(deleted_hash);
+                }
                 self.uid_store
                     .hash_index
                     .lock()
                     .unwrap()
                     .remove(&deleted_hash);
-                let mut event: [(UID, RefreshEvent); 1] = [(
-                    deleted_uid,
-                    RefreshEvent {
-                        account_hash: self.uid_store.account_hash,
-                        mailbox_hash,
-                        kind: Remove(deleted_hash),
-                    },
-                )];
-                if *self.uid_store.keep_offline_cache.lock().unwrap() {
-                    cache_handle.update(mailbox_hash, &event)?;
+                let events = mboxes_to_update
+                    .into_iter()
+                    .map(|mailbox_hash| {
+                        (
+                            mailbox_hash,
+                            [(
+                                deleted_uid,
+                                RefreshEvent {
+                                    account_hash: self.uid_store.account_hash,
+                                    mailbox_hash,
+                                    kind: Remove(deleted_hash),
+                                },
+                            )],
+                        )
+                    })
+                    .collect::<Vec<(_, [(UID, RefreshEvent); 1])>>();
+                for (mailbox_hash, pair) in events {
+                    if *self.uid_store.keep_offline_cache.lock().unwrap() {
+                        cache_handle.update(mailbox_hash, &pair)?;
+                    }
+                    let [(_, event)] = pair;
+                    self.add_refresh_event(event);
                 }
-                self.add_refresh_event(std::mem::replace(
-                    &mut event[0].1,
-                    RefreshEvent {
-                        account_hash: self.uid_store.account_hash,
-                        mailbox_hash,
-                        kind: Rescan,
-                    },
-                ));
             }
             UntaggedResponse::Exists(n) => {
                 debug!("exists {}", n);
@@ -505,9 +525,15 @@ impl ImapConnection {
                         temp
                     } {
                         if !flags.0.intersects(crate::email::Flag::SEEN) {
-                            mailbox.unseen.lock().unwrap().insert_new(env_hash);
+                            for mbx in self.uid_store.mailboxes.lock().await.values_mut() {
+                                if mbx.exists.lock().unwrap().contains(&env_hash) {
+                                    mbx.unseen.lock().unwrap().insert_new(env_hash);
+                                }
+                            }
                         } else {
-                            mailbox.unseen.lock().unwrap().remove(env_hash);
+                            for mbx in self.uid_store.mailboxes.lock().await.values_mut() {
+                                mbx.unseen.lock().unwrap().remove(env_hash);
+                            }
                         }
                         mailbox.exists.lock().unwrap().insert_new(env_hash);
                         if let Some(modseq) = modseq {
