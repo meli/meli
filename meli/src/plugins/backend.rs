@@ -250,7 +250,7 @@ impl PluginBackend {
             plugin,
             channel: Arc::new(Mutex::new(channel)),
             collection: Default::default(),
-            is_online: Arc::new(Mutex::new((now, Err(Error::new("Unitialized"))))),
+            is_online: Arc::new(Mutex::new((now, Err(Error::new("Uninitialized"))))),
         }))
     }
 

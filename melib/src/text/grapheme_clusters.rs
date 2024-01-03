@@ -233,7 +233,7 @@ pub fn word_break_string(s: &str, width: usize) -> Vec<&str> {
 //    let mut previous = start;
 //        let mut next = end
 //
-//        // Lookahead termintor for:
+//        // Lookahead terminator for:
 //        // GB10. (E_Base | EBG) Extend* ?	E_Modifier
 //        let mut e_modifier_index = all.last_index_of(E_Modifier)
 //        if(e_modifier_index > 1 &&
@@ -242,7 +242,7 @@ pub fn word_break_string(s: &str, width: usize) -> Vec<&str> {
 //            return Break
 //        }
 //
-//    // Lookahead termintor for:
+//    // Lookahead terminator for:
 //    // GB12. ^ (RI RI)* RI	?	RI
 //    // GB13. [^RI] (RI RI)* RI	?	RI
 //    let mut r_iIndex = all.last_index_of(Regional_Indicator)

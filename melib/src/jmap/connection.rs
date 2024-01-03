@@ -115,7 +115,7 @@ impl JmapConnection {
                     "Could not connect to JMAP server endpoint for {}. Is your server url setting \
                      correct? (i.e. \"jmap.mailserver.org\") (Note: only session resource \
                      discovery via /.well-known/jmap is supported. DNS SRV records are not \
-                     suppported.)\n\nError connecting to server: {}",
+                     supported)\n\nError connecting to server: {}",
                     &self.server_conf.server_url, &err
                 ))
                 .set_source(Some(Arc::new(err)));
@@ -143,7 +143,7 @@ impl JmapConnection {
                     "Could not connect to JMAP server endpoint for {}. Is your server url setting \
                      correct? (i.e. \"jmap.mailserver.org\") (Note: only session resource \
                      discovery via /.well-known/jmap is supported. DNS SRV records are not \
-                     suppported.)\n\nReply from server: {}",
+                     supported)\n\nReply from server: {}",
                     &self.server_conf.server_url, &err
                 ))
                 .set_source(Some(Arc::new(err)));
@@ -159,7 +159,7 @@ impl JmapConnection {
                     "Could not connect to JMAP server endpoint for {}. Is your server url setting \
                      correct? (i.e. \"jmap.mailserver.org\") (Note: only session resource \
                      discovery via /.well-known/jmap is supported. DNS SRV records are not \
-                     suppported.)\n\nReply from server: {}",
+                     supported)\n\nReply from server: {}",
                     &self.server_conf.server_url, &res_text
                 ))
                 .set_source(Some(Arc::new(err)));

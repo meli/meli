@@ -35,7 +35,7 @@ meli (0.7.1-1) bullseye; urgency=low
   - melib/nntp: implement refresh
   - melib/nntp: update total/new counters on new articles
   - melib/nntp: implement NNTP posting
-  - configs: throw error on extra unusued conf flags in some imap/nntp
+  - configs: throw error on extra unused conf flags in some imap/nntp
   - configs: throw error on missing `composing` section with explanation
 
   Fixed

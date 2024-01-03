@@ -591,7 +591,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - melib/nntp: implement refresh
 - melib/nntp: update total/new counters on new articles
 - melib/nntp: implement NNTP posting
-- configs: throw error on extra unusued conf flags in some imap/nntp
+- configs: throw error on extra unused conf flags in some imap/nntp
 - configs: throw error on missing `composing` section with explanation
 
 ### Fixed

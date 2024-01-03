@@ -1640,7 +1640,7 @@ impl Component for PlainListing {
                         //    threads.vec_inner_sort_by(&mut self.filtered_selection, self.sort,
                         // &account.collection);
                         //} else {
-                        //    self.refresh_mailbox(contex, falset);
+                        //    self.refresh_mailbox(context, false);
                         //}
                         return true;
                     }

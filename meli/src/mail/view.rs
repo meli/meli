@@ -665,7 +665,7 @@ impl Component for MailView {
                             /* autosend or open unsubscribe option */
                             let unsubscribe = actions.unsubscribe.as_ref().unwrap();
                             for option in unsubscribe.iter() {
-                                /* [ref:TODO]: Ask for confirmation before proceding with an action */
+                                /* [ref:TODO]: Ask for confirmation before proceeding with an action */
                                 match option {
                                     list_management::ListAction::Email(email) => {
                                         if let Ok(mailto) = Mailto::try_from(*email) {

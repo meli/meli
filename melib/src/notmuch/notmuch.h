@@ -1811,7 +1811,7 @@ notmuch_message_add_property (notmuch_message_t *message, const char *key, const
 /**
  * Remove a (key,value) pair from a message.
  *
- * It is not an error to remove a non-existant (key,value) pair
+ * It is not an error to remove a non-existent (key,value) pair
  *
  * @returns
  * - NOTMUCH_STATUS_ILLEGAL_ARGUMENT: *key* may not contain an '=' character.
@@ -1886,7 +1886,7 @@ typedef struct _notmuch_string_map_iterator notmuch_message_properties_t;
  *
  * Note that there's no explicit destructor needed for the
  * notmuch_message_properties_t object. (For consistency, we do
- * provide a notmuch_message_properities_destroy function, but there's
+ * provide a notmuch_message_properties_destroy function, but there's
  * no good reason to call it if the message is about to be destroyed).
  *
  * @since libnotmuch 4.4 (notmuch 0.23)

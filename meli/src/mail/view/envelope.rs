@@ -475,7 +475,7 @@ impl EnvelopeView {
                 } => {
                     if show_comments {
                         if description.is_empty() {
-                            acc.push_str("Succesfully decrypted.\n\n");
+                            acc.push_str("Successfully decrypted.\n\n");
                         } else {
                             acc.push_str(description);
                             acc.push_str("\n\n");

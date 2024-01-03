@@ -389,7 +389,7 @@ pub enum ContactEvent {
 
 #[derive(Debug)]
 pub enum ComposeEvent {
-    SetReceipients(Vec<melib::Address>),
+    SetRecipients(Vec<melib::Address>),
 }
 
 #[cfg(test)]

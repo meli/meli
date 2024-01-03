@@ -25,7 +25,7 @@ use socket2::{Domain, SockAddr, Socket};
 
 /// Opens a TCP connection to a remote host.
 ///
-/// If `addr` yelds multiple addresses, `connect` uses the algorithm
+/// If `addr` yields multiple addresses, `connect` uses the algorithm
 /// described in [RFC 8305 Happy Eyeballs Version 2: Better
 /// Connectivity Using
 /// Concurrency](https://datatracker.ietf.org/doc/html/rfc8305) to
@@ -116,7 +116,7 @@ impl HappyEyeballs {
     // remembered in `self` if it is the first to occur; it will be
     // the one returned if no connection can be established at all.
     //
-    // If the connection succeeds immediatly, returns
+    // If the connection succeeds immediately, returns
     // `AddOutcome::Connected(stream)`. Because of non-blocking and
     // the way TCP works, this should *not* happen.
     fn add(&mut self, saddr: SockAddr, domain: Domain) -> AddOutcome {

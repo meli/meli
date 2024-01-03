@@ -539,7 +539,7 @@ impl MailBackend for ImapType {
                     }
                     Ok(()) => {
                         log::trace!(
-                            "{} Watch reconnect attempt succesful",
+                            "{} Watch reconnect attempt successful",
                             uid_store.account_name
                         );
                         continue;
@@ -916,11 +916,11 @@ impl MailBackend for ImapType {
         Ok(Box::pin(async move {
             /* Must transform path to something the IMAP server will accept
              *
-             * Each root mailbox has a hierarchy delimeter reported by the LIST entry.
-             * All paths must use this delimeter to indicate children of this
+             * Each root mailbox has a hierarchy delimiter reported by the LIST entry.
+             * All paths must use this delimiter to indicate children of this
              * mailbox.
              *
-             * A new root mailbox should have the default delimeter, which can be found
+             * A new root mailbox should have the default delimiter, which can be found
              * out by issuing an empty LIST command as described in RFC3501:
              * C: A101 LIST "" ""
              * S: * LIST (\Noselect) "/" ""
@@ -984,7 +984,7 @@ impl MailBackend for ImapType {
                 new_hash,
                 new_mailbox_fut?.await.map_err(|err| {
                     Error::new(format!(
-                        "Mailbox create was succesful (returned `{}`) but listing mailboxes \
+                        "Mailbox create was successful (returned `{}`) but listing mailboxes \
                          afterwards returned `{}`",
                         String::from_utf8_lossy(&response),
                         err
@@ -1045,7 +1045,7 @@ impl MailBackend for ImapType {
             uid_store.mailboxes.lock().await.clear();
             new_mailbox_fut?.await.map_err(|err| {
                 format!(
-                    "Mailbox delete was succesful (returned `{}`) but listing mailboxes \
+                    "Mailbox delete was successful (returned `{}`) but listing mailboxes \
                      afterwards returned `{}`",
                     String::from_utf8_lossy(&response),
                     err
@@ -1150,7 +1150,7 @@ impl MailBackend for ImapType {
             uid_store.mailboxes.lock().await.clear();
             new_mailbox_fut?.await.map_err(|err| {
                 format!(
-                    "Mailbox rename was succesful (returned `{}`) but listing mailboxes \
+                    "Mailbox rename was successful (returned `{}`) but listing mailboxes \
                      afterwards returned `{}`",
                     String::from_utf8_lossy(&response),
                     err

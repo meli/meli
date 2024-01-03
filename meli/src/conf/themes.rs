@@ -1033,7 +1033,7 @@ impl Themes {
                 }
                 ThemeValue::Alias(ref ident) => {
                     if !theme.color_aliases.contains_key(ident.as_ref()) {
-                        Some((Some(key), "alias", "nonexistant color alias", ident))
+                        Some((Some(key), "alias", "nonexistent color alias", ident))
                     } else {
                         None
                     }
@@ -1050,7 +1050,7 @@ impl Themes {
                 }
                 ThemeValue::Alias(ref ident) => {
                     if !theme.attr_aliases.contains_key(ident.as_ref()) {
-                        Some((Some(key), "alias", "nonexistant color alias", ident))
+                        Some((Some(key), "alias", "nonexistent color alias", ident))
                     } else {
                         None
                     }
@@ -1066,7 +1066,7 @@ impl Themes {
                     }
                 } else if let ThemeValue::Alias(ref ident) = a.fg {
                     if !theme.color_aliases.contains_key(ident.as_ref()) {
-                        Some((Some(key), "fg alias", "nonexistant color alias", ident))
+                        Some((Some(key), "fg alias", "nonexistent color alias", ident))
                     } else {
                         None
                     }
@@ -1083,7 +1083,7 @@ impl Themes {
                     }
                 } else if let ThemeValue::Alias(ref ident) = a.bg {
                     if !theme.color_aliases.contains_key(ident.as_ref()) {
-                        Some((Some(key), "bg alias", "nonexistant color alias", ident))
+                        Some((Some(key), "bg alias", "nonexistent color alias", ident))
                     } else {
                         None
                     }
@@ -1103,7 +1103,7 @@ impl Themes {
                         Some((
                             Some(key),
                             "attrs alias",
-                            "nonexistant text attribute alias",
+                            "nonexistent text attribute alias",
                             ident,
                         ))
                     } else {
@@ -1141,7 +1141,7 @@ impl Themes {
                                     keys.push((
                                         Some(key),
                                         "fg alias",
-                                        "nonexistant color alias in `text_format_regexps`",
+                                        "nonexistent color alias in `text_format_regexps`",
                                         ident,
                                     ));
                                 }
@@ -1162,7 +1162,7 @@ impl Themes {
                                     keys.push((
                                         Some(key),
                                         "bg alias",
-                                        "nonexistant color alias in `text_format_regexps`",
+                                        "nonexistent color alias in `text_format_regexps`",
                                         ident,
                                     ));
                                 }
@@ -1183,7 +1183,7 @@ impl Themes {
                                     keys.push((
                                         Some(key),
                                         "attrs alias",
-                                        "nonexistant text attribute alias in `text_format_regexps`",
+                                        "nonexistent text attribute alias in `text_format_regexps`",
                                         ident,
                                     ));
                                 }
@@ -2146,7 +2146,7 @@ color_aliases= { "Jebediah" = "#b4da55" }
         ),
         Color::Rgb(180, 218, 85)
     );
-    /* MUST FAIL: Mispell color alias $Jebediah as $Jebedia */
+    /* MUST FAIL: Misspell color alias $Jebediah as $Jebedia */
     const TEST_INVALID_ALIAS_STR: &str = r##"[dark]
 color_aliases= { "Jebediah" = "#b4da55" }
 "mail.listing.tag_default" = { fg = "$Jebedia" }

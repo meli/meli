@@ -76,7 +76,7 @@ impl Component for SVGScreenshotFilter {
          *   rectangle element
          * inserted along with the `use` elements
          *
-         * Each row is arbritarily set at 17px high, and each character cell is 8
+         * Each row is arbitrarily set at 17px high, and each character cell is 8
          * pixels wide. Rectangle cells each have one extra pixel (so 18px *
          * 9px) in their dimensions in order to cover the spacing between
          * cells.
@@ -98,7 +98,7 @@ impl Component for SVGScreenshotFilter {
              * - Whenever the foreground color changes, emit a text element with the
              *   accumulated
              * text in the specific foreground color.
-             * - Whenever the backgrund color changes, emit a rectangle element filled
+             * - Whenever the background color changes, emit a rectangle element filled
              *   with the
              * specific background color.
              */

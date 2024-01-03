@@ -69,7 +69,7 @@ ioctl_write_ptr_bad!(
 );
 
 ioctl_none_bad!(
-    /// Set controling terminal fd for current session.
+    /// Set controlling terminal fd for current session.
     set_controlling_terminal,
     TIOCSCTTY
 );

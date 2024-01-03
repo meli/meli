@@ -797,7 +797,7 @@ pub trait MailListingTrait: ListingTrait {
                                         kind: Some(NotificationType::Error(err.kind)),
                                     },
                                     Ok(Some(Ok(path))) => UIEvent::Notification {
-                                        title: Some("Succesfully exported mbox".into()),
+                                        title: Some("Successfully exported mbox".into()),
                                         source: None,
                                         body: format!("Wrote to file {}", path.display()).into(),
                                         kind: Some(NotificationType::Info),
