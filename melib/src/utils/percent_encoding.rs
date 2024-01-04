@@ -29,7 +29,7 @@
 //!
 //! # Examples
 //!
-//! ```rust
+//! ```rust,no_run
 //! use melib::utils::percent_encoding::{
 //!     percent_decode_str, utf8_percent_encode, AsciiSet, CONTROLS,
 //! };
@@ -57,7 +57,7 @@ use std::{borrow::Cow, mem, slice, str};
 ///
 /// Use the `add` method of an existing set to define a new set. For example:
 ///
-/// ```rust
+/// ```rust,no_run
 /// use melib::utils::percent_encoding::{AsciiSet, CONTROLS};
 ///
 /// /// https://url.spec.whatwg.org/#fragment-percent-encode-set
@@ -491,5 +491,74 @@ fn decode_utf8_lossy(input: Cow<'_, [u8]>) -> Cow<'_, str> {
                 Cow::Owned(s) => Cow::Owned(s),
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    /// https://url.spec.whatwg.org/#fragment-percent-encode-set
+    const FRAGMENT: &AsciiSet = &NON_ALPHANUMERIC
+        .add(b' ')
+        .add(b'"')
+        .add(b'<')
+        .add(b'>')
+        .add(b'`');
+
+    #[test]
+    fn test_url_percent() {
+        assert_eq!(
+            utf8_percent_encode("foo <bar>", FRAGMENT).to_string(),
+            "foo%20%3Cbar%3E"
+        );
+        assert_eq!(
+            utf8_percent_encode("Betty's favorite language is Français", FRAGMENT).to_string(),
+            "Betty%27s%20favorite%20language%20is%20Fran%C3%A7ais"
+        );
+        // Roundtrip
+        assert_eq!(
+            percent_decode_str(
+                &utf8_percent_encode("Betty's favorite language is Français", FRAGMENT).to_string()
+            )
+            .decode_utf8()
+            .unwrap(),
+            "Betty's favorite language is Français"
+        );
+
+        assert_eq!(
+            percent_decode_str("foo%20%3Cbar%3E").decode_utf8().unwrap(),
+            "foo <bar>"
+        );
+
+        assert_eq!(
+            utf8_percent_encode("(45 * 2) + 90", FRAGMENT).to_string(),
+            "%2845%20%2A%202%29%20%2B%2090"
+        );
+        assert_eq!(
+            utf8_percent_encode("`console.log(value); if (!foo) { _bar(): }`", FRAGMENT)
+                .to_string(),
+            "%60console%2Elog%28value%29%3B%20if%20%28%21foo%29%20%7B%20%5Fbar%28%29%3A%20%7D%60"
+        );
+
+        assert_eq!(
+            utf8_percent_encode("\"it will all be alright !\", he said.", FRAGMENT).to_string(),
+            "%22it%20will%20all%20be%20alright%20%21%22%2C%20he%20said%2E"
+        );
+        assert_eq!(
+            percent_decode_str("a%C3%A7%C3%BAcar")
+                .decode_utf8()
+                .unwrap(),
+            "açúcar"
+        );
+        assert_eq!(
+            percent_decode_str("tor%C3%A7ut").decode_utf8().unwrap(),
+            "torçut"
+        );
+        assert_eq!(
+            percent_decode_str("JavaScript_%D1%88%D0%B5%D0%BB%D0%BB%D1%8B")
+                .decode_utf8()
+                .unwrap(),
+            "JavaScript_шеллы"
+        );
     }
 }
