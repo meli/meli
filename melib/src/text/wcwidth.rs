@@ -125,34 +125,6 @@ pub fn wcwidth(ucs: WChar) -> Option<usize> {
     }
 }
 
-#[test]
-fn test_wcwidth() {
-    assert_eq!(
-        &"abc\0".code_points().collect::<Vec<_>>(),
-        &[0x61, 0x62, 0x63, 0x0]
-    );
-    assert_eq!(&"●".code_points().collect::<Vec<_>>(), &[0x25cf]);
-    assert_eq!(&"📎".code_points().collect::<Vec<_>>(), &[0x1f4ce]);
-    assert_eq!(
-        &"𐼹𐼺𐼻𐼼𐼽".code_points().collect::<Vec<_>>(),
-        &[0x10F39, 0x10F3A, 0x10F3B, 0x10F3C, 0x10F3D]
-    ); // Sogdian alphabet
-    assert_eq!(
-        &"𐼹a𐼽b".code_points().collect::<Vec<_>>(),
-        &[0x10F39, 0x61, 0x10F3D, 0x62]
-    ); // Sogdian alphabet
-    assert_eq!(
-        &"📎\u{FE0E}".code_points().collect::<Vec<_>>(),
-        &[0x1f4ce, 0xfe0e]
-    );
-    use crate::text::grapheme_clusters::TextProcessing;
-    assert_eq!("●".grapheme_width(), 1);
-    assert_eq!("●📎".grapheme_width(), 3);
-    assert_eq!("●\u{FE0E}📎\u{FE0E}".grapheme_width(), 3);
-    assert_eq!("🎃".grapheme_width(), 2);
-    assert_eq!("👻".grapheme_width(), 2);
-}
-
 pub fn wcswidth(mut pwcs: WChar, mut n: usize) -> Option<usize> {
     let mut width = 0;
 
@@ -168,4 +140,40 @@ pub fn wcswidth(mut pwcs: WChar, mut n: usize) -> Option<usize> {
     }
 
     Some(width)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::text::grapheme_clusters::TextProcessing;
+
+    #[test]
+    fn test_wcwidth() {
+        assert_eq!(
+            &"abc\0".code_points().collect::<Vec<_>>(),
+            &[0x61, 0x62, 0x63, 0x0]
+        );
+        assert_eq!(&"●".code_points().collect::<Vec<_>>(), &[0x25cf]);
+        assert_eq!(&"📎".code_points().collect::<Vec<_>>(), &[0x1f4ce]);
+        assert_eq!(
+            &"𐼹𐼺𐼻𐼼𐼽".code_points().collect::<Vec<_>>(),
+            &[0x10F39, 0x10F3A, 0x10F3B, 0x10F3C, 0x10F3D]
+        ); // Sogdian alphabet
+        assert_eq!(
+            &"𐼹a𐼽b".code_points().collect::<Vec<_>>(),
+            &[0x10F39, 0x61, 0x10F3D, 0x62]
+        ); // Sogdian alphabet
+        assert_eq!(
+            &"📎\u{FE0E}".code_points().collect::<Vec<_>>(),
+            &[0x1f4ce, 0xfe0e]
+        );
+        assert_eq!("●".grapheme_width(), 1);
+        assert_eq!("●📎".grapheme_width(), 3);
+        assert_eq!("●\u{FE0E}📎\u{FE0E}".grapheme_width(), 3);
+        assert_eq!("🎃".grapheme_width(), 2);
+        assert_eq!("👻".grapheme_width(), 2);
+
+        assert_eq!("こんにちわ世界".grapheme_width(), 14);
+        assert_eq!("こ★ん■に●ち▲わ☆世◆界".grapheme_width(), 20);
+    }
 }
