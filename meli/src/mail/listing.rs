@@ -1960,6 +1960,25 @@ impl Component for Listing {
                             )));
                         return true;
                     }
+                    UIEvent::Input(ref key) => {
+                        return context
+                            .settings
+                            .shortcuts
+                            .listing
+                            .commands
+                            .iter()
+                            .any(|cmd| {
+                                if cmd.shortcut == *key {
+                                    for cmd in &cmd.command {
+                                        context
+                                            .replies
+                                            .push_back(UIEvent::Command(cmd.to_string()));
+                                    }
+                                    return true;
+                                }
+                                false
+                            });
+                    }
                     _ => {}
                 }
             }

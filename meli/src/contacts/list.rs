@@ -838,6 +838,23 @@ impl Component for ContactList {
                     self.movement = Some(PageMovement::End);
                     return true;
                 }
+                UIEvent::Input(ref key) => {
+                    return context
+                        .settings
+                        .shortcuts
+                        .contact_list
+                        .commands
+                        .iter()
+                        .any(|cmd| {
+                            if cmd.shortcut == *key {
+                                for cmd in &cmd.command {
+                                    context.replies.push_back(UIEvent::Command(cmd.to_string()));
+                                }
+                                return true;
+                            }
+                            false
+                        })
+                }
                 _ => {}
             }
         }

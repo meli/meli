@@ -789,6 +789,23 @@ impl Component for MailView {
                     .push_back(UIEvent::Action(Tab(New(Some(Box::new(new_tab))))));
                 return true;
             }
+            UIEvent::Input(ref key) => {
+                return context
+                    .settings
+                    .shortcuts
+                    .envelope_view
+                    .commands
+                    .iter()
+                    .any(|cmd| {
+                        if cmd.shortcut == *key {
+                            for cmd in &cmd.command {
+                                context.replies.push_back(UIEvent::Command(cmd.to_string()));
+                            }
+                            return true;
+                        }
+                        false
+                    })
+            }
             _ => {}
         }
         false

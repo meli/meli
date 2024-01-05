@@ -1013,6 +1013,23 @@ exit_entry = 'i'
 .\"
 .sp
 .Pp
+.Em commands
+.sp
+In addition, each shortcuts section supports a TOML array of commands to associate a key to an array of meli
+.Em COMMAND
+.sp
+.\"
+.\"
+.\"
+.Bd -literal
+[shortcuts.listing]
+commands = [ { command = [ "tag remove trash", "flag unset trash" ], shortcut = "D" },
+             { command = [ "tag add trash", "flag set trash" ], shortcut = "d" } ]
+.Ed
+.\"
+.\"
+.\"
+.Pp
 .Em general
 .Bl -tag -width 36n
 .It Ic toggle_help
