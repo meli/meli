@@ -88,6 +88,12 @@ impl DotAddressable for Shortcuts {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommandShortcut {
+    pub shortcut: Key,
+    pub command: String,
+}
+
 /// Create a struct holding all of a Component's shortcuts.
 #[macro_export]
 macro_rules! shortcut_key_values {
@@ -100,6 +106,7 @@ macro_rules! shortcut_key_values {
         #[serde(default)]
         #[serde(rename = $cname)]
         pub struct $name {
+            pub commands: Vec<CommandShortcut>,
             $(pub $fname : Key),*
         }
 
@@ -122,6 +129,7 @@ macro_rules! shortcut_key_values {
         impl Default for $name {
             fn default() -> Self {
                 Self {
+                    commands : vec![],
                     $($fname: $default),*
                 }
             }

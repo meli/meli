@@ -1940,6 +1940,25 @@ impl Component for Listing {
                         self.component.set_dirty(true);
                         return true;
                     }
+                    UIEvent::Input(ref key) => {
+                        return context
+                            .settings
+                            .shortcuts
+                            .listing
+                            .commands
+                            .iter()
+                            .any(|cmd| {
+                                if cmd.shortcut == *key {
+                                    for cmd in cmd.command.split(';') {
+                                        context
+                                            .replies
+                                            .push_back(UIEvent::Command(cmd.to_string()));
+                                    }
+                                    return true;
+                                }
+                                false
+                            });
+                    }
                     _ => return false,
                 }
                 return true;
