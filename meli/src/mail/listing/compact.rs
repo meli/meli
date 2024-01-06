@@ -2019,21 +2019,6 @@ impl Component for CompactListing {
             UIEvent::Resize => {
                 self.set_dirty(true);
             }
-            UIEvent::Input(Key::Esc)
-                if !self.unfocused()
-                    && self
-                        .rows
-                        .selection
-                        .values()
-                        .cloned()
-                        .any(std::convert::identity) =>
-            {
-                for v in self.rows.selection.values_mut() {
-                    *v = false;
-                }
-                self.set_dirty(true);
-                return true;
-            }
             UIEvent::Input(Key::Esc) if !self.unfocused() && !self.filter_term.is_empty() => {
                 self.set_coordinates((self.new_cursor_pos.0, self.new_cursor_pos.1));
                 self.refresh_mailbox(context, false);

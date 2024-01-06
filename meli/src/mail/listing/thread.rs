@@ -1585,21 +1585,6 @@ impl Component for ThreadListing {
             UIEvent::Resize => {
                 self.set_dirty(true);
             }
-            UIEvent::Input(Key::Esc)
-                if !self.unfocused()
-                    && self
-                        .rows
-                        .selection
-                        .values()
-                        .cloned()
-                        .any(std::convert::identity) =>
-            {
-                for v in self.rows.selection.values_mut() {
-                    *v = false;
-                }
-                self.set_dirty(true);
-                return true;
-            }
             UIEvent::Input(ref key)
                 if !self.unfocused()
                     && shortcut!(key == shortcuts[Shortcuts::LISTING]["select_entry"]) =>

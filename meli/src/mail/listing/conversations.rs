@@ -1468,19 +1468,6 @@ impl Component for ConversationsListing {
                 }
                 _ => {}
             },
-            UIEvent::Input(Key::Esc)
-                if !self.unfocused()
-                    && self
-                        .rows
-                        .selection
-                        .values()
-                        .cloned()
-                        .any(std::convert::identity) =>
-            {
-                self.rows.clear_selection();
-                self.set_dirty(true);
-                return true;
-            }
             UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Char(''))
                 if !self.unfocused() && !&self.filter_term.is_empty() =>
             {

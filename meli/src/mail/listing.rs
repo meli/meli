@@ -1661,14 +1661,21 @@ impl Component for Listing {
                         | Action::Listing(a @ ListingAction::Tag(_)) => {
                             let focused = self.component.get_focused_items(context);
                             self.component.perform_action(context, focused, a);
+                            let should_be_unselected: bool = matches!(
+                                a,
+                                ListingAction::Delete
+                                    | ListingAction::MoveTo(_)
+                                    | ListingAction::MoveToOtherAccount(_, _)
+                            );
                             let mut row_updates: SmallVec<[EnvelopeHash; 8]> = SmallVec::new();
                             for (k, v) in self.component.selection().iter_mut() {
                                 if *v {
-                                    *v = false;
+                                    *v = !should_be_unselected;
                                     row_updates.push(*k);
                                 }
                             }
                             self.component.row_updates().extend(row_updates);
+                            return true;
                         }
                         _ => {}
                     },
@@ -1867,6 +1874,7 @@ impl Component for Listing {
                             && self.component.modifier_command().is_some() =>
                     {
                         self.component.set_modifier_command(Some(Modifier::Union));
+                        return true;
                     }
                     UIEvent::Input(ref key)
                         if !self.component.unfocused()
@@ -1875,6 +1883,7 @@ impl Component for Listing {
                     {
                         self.component
                             .set_modifier_command(Some(Modifier::Difference));
+                        return true;
                     }
                     UIEvent::Input(ref key)
                         if !self.component.unfocused()
@@ -1885,12 +1894,14 @@ impl Component for Listing {
                     {
                         self.component
                             .set_modifier_command(Some(Modifier::Intersection));
+                        return true;
                     }
                     UIEvent::Input(ref key)
                         if self.component.unfocused()
                             && shortcut!(key == shortcuts[Shortcuts::LISTING]["next_entry"]) =>
                     {
                         self.component.next_entry(context);
+                        return true;
                     }
                     UIEvent::Input(ref key)
                         if self.component.unfocused()
@@ -1899,9 +1910,26 @@ impl Component for Listing {
                             ) =>
                     {
                         self.component.prev_entry(context);
+                        return true;
                     }
-                    _ => {}
+                    UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Alt(''))
+                        if !self.component.unfocused() =>
+                    {
+                        // Clear selection.
+                        let row_updates: SmallVec<[EnvelopeHash; 8]> =
+                            self.component.get_focused_items(context);
+                        for h in &row_updates {
+                            if let Some(val) = self.component.selection().get_mut(h) {
+                                *val = false;
+                            }
+                        }
+                        self.component.row_updates().extend(row_updates);
+                        self.component.set_dirty(true);
+                        return true;
+                    }
+                    _ => return false,
                 }
+                return true;
             }
         } else if self.focus == ListingFocus::Menu {
             match *event {
