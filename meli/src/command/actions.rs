@@ -59,6 +59,7 @@ pub enum ListingAction {
     OpenInNewTab,
     Tag(TagAction),
     Flag(FlagAction),
+    ClearSelection,
     ToggleThreadSnooze,
 }
 

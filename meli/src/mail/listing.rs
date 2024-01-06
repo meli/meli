@@ -1677,6 +1677,19 @@ impl Component for Listing {
                             self.component.row_updates().extend(row_updates);
                             return true;
                         }
+                        Action::Listing(ListingAction::ClearSelection) => {
+                            // Clear selection.
+                            let row_updates: SmallVec<[EnvelopeHash; 8]> =
+                                self.component.get_focused_items(context);
+                            for h in &row_updates {
+                                if let Some(val) = self.component.selection().get_mut(h) {
+                                    *val = false;
+                                }
+                            }
+                            self.component.row_updates().extend(row_updates);
+                            self.component.set_dirty(true);
+                            return true;
+                        }
                         _ => {}
                     },
                     UIEvent::Input(ref key)

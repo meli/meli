@@ -464,6 +464,26 @@ pub fn search(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
     Ok((input, Ok(Listing(Search(String::from(string))))))
 }
 pub fn select(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
+    #[inline]
+    fn clear_selection(input: &[u8]) -> Option<IResult<&[u8], Result<Action, CommandError>>> {
+        if !input.trim().starts_with(b"clear-selection") {
+            return None;
+        }
+        #[inline]
+        fn inner(input: &[u8]) -> IResult<&[u8], Result<Action, CommandError>> {
+            let mut check = arg_init! { min_arg:0, max_arg: 0, clear_selection};
+            let (input, _) = tag("clear-selection")(input.ltrim())?;
+            arg_chk!(start check, input);
+            arg_chk!(finish check, input);
+            let (input, _) = eof(input)?;
+            Ok((input, Ok(Listing(ListingAction::ClearSelection))))
+        }
+        Some(inner(input))
+    }
+    if let Some(retval) = clear_selection(input) {
+        return retval;
+    }
+
     let mut check = arg_init! { min_arg:1, max_arg: {u8::MAX}, select};
     let (input, _) = tag("select")(input.trim())?;
     arg_chk!(start check, input);

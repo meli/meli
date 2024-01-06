@@ -340,6 +340,11 @@ define_commands!([
                   tokens: &[One(Literal("search")), One(RestOfStringValue)],
                   parser: parser::search
                 },
+                { tags: ["clear-selection"],
+                  desc: "clear-selection",
+                  tokens: &[One(Literal("clear-selection"))],
+                  parser: parser::select
+                },
                 { tags: ["select"],
                   desc: "select <TERM>, selects envelopes matching with given term",
                   tokens: &[One(Literal("select")), One(RestOfStringValue)],
