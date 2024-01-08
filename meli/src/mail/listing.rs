@@ -1940,9 +1940,28 @@ impl Component for Listing {
                         self.component.set_dirty(true);
                         return true;
                     }
-                    _ => return false,
+                    UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Alt(''))
+                        if !self.cmd_buf.is_empty() =>
+                    {
+                        self.cmd_buf.clear();
+                        self.component.set_modifier_active(false);
+                        context
+                            .replies
+                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                        return true;
+                    }
+                    UIEvent::Input(Key::Char(c)) if c.is_ascii_digit() => {
+                        self.cmd_buf.push(*c);
+                        self.component.set_modifier_active(true);
+                        context
+                            .replies
+                            .push_back(UIEvent::StatusEvent(StatusEvent::BufSet(
+                                self.cmd_buf.clone(),
+                            )));
+                        return true;
+                    }
+                    _ => {}
                 }
-                return true;
             }
         } else if self.focus == ListingFocus::Menu {
             match *event {
