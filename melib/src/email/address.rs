@@ -20,7 +20,7 @@
  */
 
 //! Email addresses. Parsing functions are in
-//! [melib::email::parser::address](../parser/address/index.html).
+//! [melib::email::parser::address](super::parser::address).
 use std::{
     collections::HashSet,
     convert::TryFrom,

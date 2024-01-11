@@ -77,27 +77,22 @@
  */
 
 //! A crate that performs mail client operations such as
-//! - Hold an [`Envelope`](./email/struct.Envelope.html) with methods convenient
-//!   for mail client use. (see module [`email`](./email/index.html))
-//! - Abstract through mail storages through the
-//!   [`MailBackend`](./backends/trait.MailBackend.html) trait, and handle
-//!   read/writes/updates through it. (see module
-//!   [`backends`](./backends/index.html))
-//! - Decode attachments (see module
-//!   [`email::attachments`](./email/attachments/index.html))
-//! - Create new mail (see [`email::Draft`](./email/compose/struct.Draft.html))
-//! - Send mail with an SMTP client (see module [`smtp`](./smtp/index.html))
-//! - Manage an `addressbook` i.e. have contacts (see module
-//!   [`addressbook`](./addressbook/index.html))
+//! - Hold an [`Envelope`] with methods convenient for mail client use. (see
+//!   module [`email`])
+//! - Abstract through mail storages through the [`MailBackend`] trait, and
+//!   handle read/writes/updates through it. (see module [`backends`])
+//! - Decode attachments (see module [`email::attachments`])
+//! - Create new mail (see [`email::Draft`](email::compose::Draft))
+//! - Send mail with an SMTP client (see module [`smtp`])
+//! - Manage an `addressbook` i.e. have contacts (see module [`addressbook`])
 //! - Build thread structures out of a list of mail via their `In-Reply-To` and
-//!   `References` header values (see module [`thread`](./thread/index.html))
+//!   `References` header values (see module [`thread`])
 //!
 //! Other exports are
-//! - Basic mail account configuration to use with
-//!   [`backends`](./backends/index.html) (see module
-//!   [`conf`](./conf/index.html))
+//! - Basic mail account configuration to use with [`backends`] (see module
+//!   [`conf`])
 //! - A `debug` macro that works like `std::dbg` but for multiple threads. (see
-//!   [`debug` macro](./macro.debug.html))
+//!   [`debug` macro](debug!))
 
 #[macro_use]
 pub mod dbg {
