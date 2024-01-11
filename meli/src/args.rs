@@ -171,7 +171,7 @@ pub mod manpages {
                 .or_else(|| {
                     #[allow(deprecated)]
                     env::home_dir()
-                        .map(|p| p.join("local").join("share"))
+                        .map(|p| p.join(".local").join("share").join("man"))
                         .filter(|p| path_valid(p, &mut tries))
                 })
             else {
