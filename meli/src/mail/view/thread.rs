@@ -1103,8 +1103,8 @@ impl Component for ThreadView {
                 }
                 false
             }
-            UIEvent::Input(ref key) => {
-                return context
+            UIEvent::Input(ref key)
+                if context
                     .settings
                     .shortcuts
                     .thread_view
@@ -1118,9 +1118,13 @@ impl Component for ThreadView {
                             return true;
                         }
                         false
-                    })
+                    }) =>
+            {
+                true
             }
             _ => {
+                // [ref:VERIFY]: In what case do we need to forward a handled UIEvent to all
+                // entries?
                 if self
                     .entries
                     .iter_mut()

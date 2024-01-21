@@ -835,8 +835,8 @@ impl Component for Pager {
                         String::new(),
                     )));
             }
-            UIEvent::Input(ref key) => {
-                return context.settings.shortcuts.pager.commands.iter().any(|cmd| {
+            UIEvent::Input(ref key)
+                if context.settings.shortcuts.pager.commands.iter().any(|cmd| {
                     if cmd.shortcut == *key {
                         for cmd in &cmd.command {
                             context.replies.push_back(UIEvent::Command(cmd.to_string()));
@@ -844,7 +844,9 @@ impl Component for Pager {
                         return true;
                     }
                     false
-                })
+                }) =>
+            {
+                return true;
             }
             _ => {}
         }

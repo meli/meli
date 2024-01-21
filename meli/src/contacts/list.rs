@@ -838,8 +838,8 @@ impl Component for ContactList {
                     self.movement = Some(PageMovement::End);
                     return true;
                 }
-                UIEvent::Input(ref key) => {
-                    return context
+                UIEvent::Input(ref key)
+                    if context
                         .settings
                         .shortcuts
                         .contact_list
@@ -853,7 +853,9 @@ impl Component for ContactList {
                                 return true;
                             }
                             false
-                        })
+                        }) =>
+                {
+                    return true;
                 }
                 _ => {}
             }

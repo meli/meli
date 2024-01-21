@@ -789,8 +789,8 @@ impl Component for MailView {
                     .push_back(UIEvent::Action(Tab(New(Some(Box::new(new_tab))))));
                 return true;
             }
-            UIEvent::Input(ref key) => {
-                return context
+            UIEvent::Input(ref key)
+                if context
                     .settings
                     .shortcuts
                     .envelope_view
@@ -804,7 +804,9 @@ impl Component for MailView {
                             return true;
                         }
                         false
-                    })
+                    }) =>
+            {
+                return true;
             }
             _ => {}
         }
