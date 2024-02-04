@@ -21,14 +21,14 @@
 
 //! Basic mail account configuration to use with
 //! [`backends`](./backends/index.html)
-use std::collections::HashMap;
+use std::{collections::HashMap, path::Path};
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::{
     backends::SpecialUsageMailbox,
     email::Address,
-    error::{Error, Result},
+    error::{Error, ErrorKind, Result},
 };
 pub use crate::{SortField, SortOrder};
 
@@ -99,6 +99,34 @@ impl AccountSettings {
                  server_password_command",
             ))
         }
+    }
+
+    pub fn validate_config(&mut self) -> Result<()> {
+        #[cfg(feature = "vcard")]
+        {
+            if let Some(folder) = self.extra.remove("vcard_folder") {
+                let path = Path::new(&folder);
+
+                if !matches!(path.try_exists(), Ok(true)) {
+                    return Err(Error::new(format!(
+                        "`vcard_folder` path {} does not exist",
+                        path.display()
+                    ))
+                    .set_details("`vcard_folder` must be a path of a folder containing .vcf files")
+                    .set_kind(ErrorKind::Configuration));
+                }
+                if !path.is_dir() {
+                    return Err(Error::new(format!(
+                        "`vcard_folder` path {} is not a directory",
+                        path.display()
+                    ))
+                    .set_details("`vcard_folder` must be a path of a folder containing .vcf files")
+                    .set_kind(ErrorKind::Configuration));
+                }
+            }
+        }
+
+        Ok(())
     }
 }
 

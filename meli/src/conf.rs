@@ -555,6 +555,7 @@ This is required so that you don't accidentally start meli and find out later th
                     .collect(),
                 extra: extra.into_iter().collect(),
             };
+            s.validate_config()?;
             backends.validate_config(&lowercase_format, &mut s)?;
             if !s.extra.is_empty() {
                 return Err(Error::new(format!(
