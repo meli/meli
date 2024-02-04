@@ -31,7 +31,7 @@ use std::{collections::HashMap, convert::TryInto};
 
 use super::*;
 use crate::{
-    error::{Error, Result},
+    error::{Error, ErrorKind, Result},
     utils::parsec::{match_literal_anycase, one_or_more, peek, prefix, take_until, Parser},
 };
 
@@ -85,14 +85,21 @@ pub struct ContentLine {
 
 impl CardDeserializer {
     pub fn try_from_str(mut input: &str) -> Result<VCard<impl VCardVersion>> {
-        input = if (!input.starts_with(HEADER_CRLF) || !input.ends_with(FOOTER_CRLF))
-            && (!input.starts_with(HEADER_LF) || !input.ends_with(FOOTER_LF))
+        input = if (!input.starts_with(HEADER_CRLF)
+            || (!input.ends_with(FOOTER_CRLF) && !input.ends_with(FOOTER)))
+            && (!input.starts_with(HEADER_LF)
+                || (!input.ends_with(FOOTER_LF) && !input.ends_with(FOOTER)))
         {
             return Err(Error::new(format!(
                 "Error while parsing vcard: input does not start or end with correct header and \
-                 footer. input is:\n{:?}",
+                 footer: {:?}",
                 input
-            )));
+            ))
+            .set_kind(ErrorKind::ValueError)
+            .set_details(
+                "vcard file entries are expected to start with a `BEGIN:VCARD` line and end with \
+                 a `END:VCARD` line.",
+            ));
         } else if input.starts_with(HEADER_CRLF) {
             &input[HEADER_CRLF.len()..input.len() - FOOTER_CRLF.len()]
         } else {
@@ -156,13 +163,15 @@ impl CardDeserializer {
                 return Err(Error::new(format!(
                     "Error while parsing vcard: error at line {}, no colon. {:?}",
                     l, el
-                )));
+                ))
+                .set_kind(ErrorKind::ValueError));
             }
             if name.is_empty() {
                 return Err(Error::new(format!(
                     "Error while parsing vcard: error at line {}, no name for content line. {:?}",
                     l, el
-                )));
+                ))
+                .set_kind(ErrorKind::ValueError));
             }
             el.value = l[value_start..].replace("\\:", ":");
             ret.insert(name, el);
@@ -193,7 +202,7 @@ impl<V: VCardVersion> TryInto<Card> for VCard<V> {
         if let Some(val) = self.0.remove("FN") {
             card.set_name(val.value);
         } else {
-            return Err(Error::new("FN entry missing in VCard."));
+            return Err(Error::new("FN entry missing in VCard.").set_kind(ErrorKind::ValueError));
         }
         if let Some(val) = self.0.remove("NICKNAME") {
             card.set_additionalname(val.value);
