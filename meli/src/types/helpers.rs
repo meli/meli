@@ -23,7 +23,10 @@ use std::{
     fs,
     fs::OpenOptions,
     io::{Read, Write},
-    os::unix::fs::PermissionsExt,
+    os::{
+        fd::{FromRawFd, OwnedFd},
+        unix::fs::PermissionsExt,
+    },
     path::{Path, PathBuf},
 };
 
@@ -118,6 +121,18 @@ impl File {
         inner(path, bytes, delete_on_drop)
             .chain_err_summary(|| format!("Could not create file at path {}", path.display()))
     }
+}
+
+pub fn pipe() -> Result<(OwnedFd, OwnedFd)> {
+    nix::unistd::pipe()
+        .map(|(fd1, fd2)| unsafe { (OwnedFd::from_raw_fd(fd1), OwnedFd::from_raw_fd(fd2)) })
+        .map_err(|err| {
+            Error::new("Could not create pipe")
+                .set_source(Some(
+                    (Box::new(err) as Box<dyn std::error::Error + Send + Sync + 'static>).into(),
+                ))
+                .set_err_kind(ErrorKind::OSError)
+        })
 }
 
 #[cfg(test)]

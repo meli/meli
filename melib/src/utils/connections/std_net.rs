@@ -16,7 +16,6 @@
 use std::{
     io::{Error, ErrorKind, Result},
     net::{SocketAddr, TcpStream, ToSocketAddrs},
-    os::fd::AsRawFd,
     time::{Duration, Instant},
 };
 
@@ -160,11 +159,8 @@ impl HappyEyeballs {
             let (sock_addr, sock) = self.attempts[evt.key].take().expect("attempt exists");
             self.attempts_in_progress -= 1;
             self.poller.delete(&sock).expect("socket is in poll set");
-            match nix::sys::socket::getsockopt(
-                sock.as_raw_fd(),
-                nix::sys::socket::sockopt::SocketError,
-            ) {
-                Err(e) => self.set_error(e.into()),
+            match nix::sys::socket::getsockopt(&sock, nix::sys::socket::sockopt::SocketError) {
+                Err(err) => self.set_error(err.into()),
                 Ok(0) => {
                     if let Some(tcp) = self.socket_into_blocking_tcp_stream(sock) {
                         return Ok(Some(tcp));
@@ -174,7 +170,7 @@ impl HappyEyeballs {
                 Ok(_) => {}
             }
             match sock.connect(&sock_addr) {
-                Err(e) => self.set_error(e),
+                Err(err) => self.set_error(err),
                 Ok(()) => {
                     if let Some(tcp) = self.socket_into_blocking_tcp_stream(sock) {
                         return Ok(Some(tcp));
@@ -188,8 +184,8 @@ impl HappyEyeballs {
     fn socket_into_blocking_tcp_stream(&mut self, sock: Socket) -> Option<TcpStream> {
         match sock.set_nonblocking(false) {
             Ok(()) => Some(sock.into()),
-            Err(e) => {
-                self.set_error(e);
+            Err(err) => {
+                self.set_error(err);
                 None
             }
         }

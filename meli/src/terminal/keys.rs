@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::os::unix::io::{AsRawFd, RawFd};
+use std::os::fd::{AsFd, AsRawFd, OwnedFd};
 
 use crossbeam::{channel::Receiver, select};
 use nix::poll::{poll, PollFd, PollFlags};
@@ -236,11 +236,13 @@ pub enum InputCommand {
 pub fn get_events(
     mut closure: impl FnMut((Key, Vec<u8>)),
     rx: &Receiver<InputCommand>,
-    new_command_fd: RawFd,
+    new_command_fd: &OwnedFd,
     working: std::sync::Arc<()>,
 ) {
     let stdin = std::io::stdin();
-    let stdin_fd = PollFd::new(std::io::stdin().as_raw_fd(), PollFlags::POLLIN);
+    let stdin2 = std::io::stdin();
+    let stdin2_fd = stdin2.as_fd();
+    let stdin_fd = PollFd::new(&stdin2_fd, PollFlags::POLLIN);
     let new_command_pollfd = nix::poll::PollFd::new(new_command_fd, nix::poll::PollFlags::POLLIN);
     let mut input_mode = InputMode::Normal;
     let mut paste_buf = String::with_capacity(256);
@@ -296,10 +298,11 @@ pub fn get_events(
                 let mut error_fd_set = nix::sys::select::FdSet::new();
                 error_fd_set.insert(new_command_fd);
                 let timeval:  nix::sys::time::TimeSpec = nix::sys::time::TimeSpec::seconds(2);
-                if nix::sys::select::pselect(None, Some(&mut read_fd_set), None, Some(&mut error_fd_set), Some(&timeval), None).is_err() || error_fd_set.highest() == Some(new_command_fd) || read_fd_set.highest() != Some(new_command_fd) {
+                let pselect_result = nix::sys::select::pselect(None, Some(&mut read_fd_set), None, Some(&mut error_fd_set), Some(&timeval), None);
+                if pselect_result.is_err() || error_fd_set.highest().map(|bfd| bfd.as_raw_fd()) == Some(new_command_fd.as_raw_fd()) || read_fd_set.highest().map(|bfd| bfd.as_raw_fd()) != Some(new_command_fd.as_raw_fd()) {
                     continue 'poll_while;
                 };
-                let _ = nix::unistd::read(new_command_fd, buf.as_mut());
+                let _ = nix::unistd::read(new_command_fd.as_raw_fd(), buf.as_mut());
                 match cmd.unwrap() {
                     InputCommand::Kill => return,
                 }

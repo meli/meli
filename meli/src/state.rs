@@ -37,7 +37,7 @@
 use std::{
     collections::BTreeSet,
     env,
-    os::unix::io::RawFd,
+    os::fd::{AsRawFd, FromRawFd, OwnedFd},
     path::{Path, PathBuf},
     sync::Arc,
     thread,
@@ -59,7 +59,7 @@ use crate::{
 };
 
 struct InputHandler {
-    pipe: (RawFd, RawFd),
+    pipe: (OwnedFd, OwnedFd),
     rx: Receiver<InputCommand>,
     tx: Sender<InputCommand>,
     state_tx: Sender<ThreadEvent>,
@@ -76,17 +76,19 @@ impl InputHandler {
          * thread will receive it and die. */
         //let _ = self.rx.try_iter().count();
         let rx = self.rx.clone();
-        let pipe = self.pipe.0;
+        let pipe = nix::unistd::dup(self.pipe.0.as_raw_fd())
+            .expect("Fatal: Could not dup() input pipe file descriptor");
         let tx = self.state_tx.clone();
         thread::Builder::new()
             .name("input-thread".to_string())
             .spawn(move || {
+                let pipe = unsafe { OwnedFd::from_raw_fd(pipe) };
                 get_events(
                     |i| {
                         tx.send(ThreadEvent::Input(i)).unwrap();
                     },
                     &rx,
-                    pipe,
+                    &pipe,
                     working,
                 )
             })
@@ -95,7 +97,7 @@ impl InputHandler {
     }
 
     fn kill(&self) {
-        let _ = nix::unistd::write(self.pipe.1, &[1]);
+        let _ = nix::unistd::write(self.pipe.1.as_raw_fd(), &[1]);
         self.tx.send(InputCommand::Kill).unwrap();
     }
 
@@ -203,9 +205,7 @@ impl Context {
             crossbeam::channel::bounded(32 * ::std::mem::size_of::<ThreadEvent>());
         let job_executor = Arc::new(JobExecutor::new(sender.clone()));
         let input_thread = unbounded();
-        let input_thread_pipe = nix::unistd::pipe()
-            .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send + Sync + 'static>)
-            .unwrap();
+        let input_thread_pipe = crate::types::pipe().unwrap();
         let backends = Backends::new();
         let settings = Box::new(Settings::new().unwrap());
         let accounts = vec![{
@@ -321,8 +321,7 @@ impl State {
          * it from reading stdin, see get_events() for details
          */
         let input_thread = unbounded();
-        let input_thread_pipe = nix::unistd::pipe()
-            .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send + Sync + 'static>)?;
+        let input_thread_pipe = crate::types::pipe()?;
         let backends = Backends::new();
         let settings = Box::new(if let Some(settings) = settings {
             settings
