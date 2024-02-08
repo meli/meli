@@ -39,6 +39,7 @@ use crate::{
 
 extern crate notify;
 use std::{
+    borrow::Cow,
     collections::{hash_map::DefaultHasher, HashMap, HashSet},
     ffi::OsStr,
     fs,
@@ -1247,26 +1248,25 @@ impl MaildirType {
         }
         path.push("cur");
         {
-            let mut rand_buf = [0u8; 16];
-            let mut f =
-                fs::File::open("/dev/urandom").expect("Could not open /dev/urandom for reading");
-            f.read_exact(&mut rand_buf)
-                .expect("Could not read from /dev/urandom/");
-            let mut hostn_buf = String::with_capacity(256);
-            let mut f =
-                fs::File::open("/etc/hostname").expect("Could not open /etc/hostname for reading");
-            f.read_to_string(&mut hostn_buf)
-                .expect("Could not read from /etc/hostname");
-            let timestamp = std::time::SystemTime::now()
-                .duration_since(std::time::SystemTime::UNIX_EPOCH)
-                .unwrap()
-                .as_millis();
+            type BeBytes128 = [u8; 16];
+            debug_assert_eq!(std::mem::size_of::<u64>(), 8);
+            debug_assert_eq!(
+                std::mem::size_of::<BeBytes128>(),
+                2 * std::mem::size_of::<[u8; 8]>()
+            );
+            let mut rand_num: BeBytes128 = [0u8; 16];
+            rand_num[0..8].copy_from_slice(&crate::utils::random::random_u64().to_be_bytes());
+            rand_num[8..].copy_from_slice(&crate::utils::random::random_u64().to_be_bytes());
+            let hostname = crate::utils::hostname::hostname()
+                .ok()
+                .and_then(|osstr| osstr.into_string().ok().map(Cow::Owned))
+                .unwrap_or(Cow::Borrowed("localhost"));
             let mut filename = format!(
                 "{}.{:x}_{}.{}:2,",
-                timestamp,
-                u128::from_be_bytes(rand_buf),
+                crate::utils::random::clock_millis(),
+                u128::from_be_bytes(rand_num),
                 std::process::id(),
-                hostn_buf.trim()
+                hostname.trim()
             );
             if let Some(flags) = flags {
                 if !(flags & Flag::DRAFT).is_empty() {

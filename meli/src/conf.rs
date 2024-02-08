@@ -1262,7 +1262,7 @@ mod dotaddressable {
 
 #[test]
 fn test_config_parse() {
-    use std::{fmt::Write, fs, io::prelude::*, path::PathBuf};
+    use std::{fmt::Write, fs, path::PathBuf};
 
     struct ConfigFile {
         path: PathBuf,
@@ -1319,11 +1319,8 @@ send_mail = 'false'
 
     impl ConfigFile {
         fn new(content: &str) -> std::result::Result<Self, std::io::Error> {
-            let mut f = fs::File::open("/dev/urandom")?;
-            let mut buf = [0u8; 16];
-            f.read_exact(&mut buf)?;
             let mut filename = String::with_capacity(2 * 16);
-            for byte in &buf {
+            for byte in melib::utils::random::random_u64().to_be_bytes() {
                 write!(&mut filename, "{:02X}", byte).unwrap();
             }
             let mut path = std::env::temp_dir();

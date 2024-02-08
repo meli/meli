@@ -69,3 +69,10 @@ pub fn clock() -> u64 {
         .unwrap()
         .as_secs()
 }
+
+pub fn clock_millis() -> u128 {
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_millis()
+}

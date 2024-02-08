@@ -207,3 +207,31 @@ impl std::ops::Not for SortOrder {
         }
     }
 }
+
+pub mod hostname {
+    //! Get local hostname.
+    use crate::error::{Error, ErrorKind, IntoError, Result};
+    use crate::src_err_arc_wrap;
+    use std::io::Read;
+
+    /// Get local hostname with the `gethostname()` libc function.
+    pub fn hostname() -> Result<std::ffi::OsString> {
+        let retval = nix::unistd::gethostname().map_err(|err| {
+            Error::new("Could not discover local hostname")
+                .set_source(Some(src_err_arc_wrap! {err}))
+                .set_err_kind(ErrorKind::OSError)
+        });
+        if retval.is_err() {
+            let mut hostn_buf = String::with_capacity(256);
+            if matches!(
+                std::fs::File::open("/etc/hostname")
+                    .ok()
+                    .and_then(|mut f| f.read_to_string(&mut hostn_buf).ok()),
+                Some(n) if n > 0
+            ) {
+                return Ok(hostn_buf.into());
+            }
+        }
+        retval
+    }
+}
